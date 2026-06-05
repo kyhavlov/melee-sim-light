@@ -54,9 +54,21 @@ class _FakeBinding:
     def reseed_seed_rollout(self, _handle: _FakeHandle, _seed_bytes: np.ndarray) -> None:
         return None
 
+    def apply_replay_frame_rng(self, _handle: _FakeHandle, _seed_bytes: np.ndarray) -> None:
+        return None
+
     def step_input(self, handle: _FakeHandle, _prev_input: np.ndarray, _input: np.ndarray) -> None:
         handle.current = handle.outputs[handle.next_output]
         handle.next_output += 1
+
+    def step_input_replay_frame_rng(
+        self,
+        handle: _FakeHandle,
+        _seed_bytes: np.ndarray,
+        _prev_input: np.ndarray,
+        _input: np.ndarray,
+    ) -> None:
+        self.step_input(handle, _prev_input, _input)
 
     def write_compare(self, handle: _FakeHandle, out: np.ndarray) -> None:
         out[:] = np.frombuffer(handle.current.tobytes(order="C"), dtype=np.uint8).reshape(out.shape)

@@ -1196,6 +1196,39 @@ static PyObject* msl_reseed_seed_rollout(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_apply_replay_frame_rng(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  PyObject* seed_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OO", &handle_obj, &seed_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  PyArrayObject* seed = require_contiguous_array(seed_obj, NPY_UINT8, 2, "seed");
+  if (seed == NULL) {
+    return NULL;
+  }
+  if (PyArray_DIM(seed, 1) < (npy_intp)sizeof(MslSeed)) {
+    PyErr_SetString(PyExc_ValueError, "seed second dim too small for MslSeed");
+    return NULL;
+  }
+
+  const uint8_t* seed_bytes = (const uint8_t*)PyArray_DATA(seed);
+  const size_t stride = (size_t)PyArray_STRIDE(seed, 0);
+
+  const int err = msl_batch_apply_replay_frame_rng(h->batch, seed_bytes, stride);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_apply_replay_frame_rng failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_init_match(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -1400,6 +1433,60 @@ static PyObject* msl_step_input(PyObject* self, PyObject* args) {
   const int err = msl_batch_step_input(h->batch, prev_bytes, prev_stride, in_bytes, in_stride);
   if (err != 0) {
     PyErr_Format(PyExc_RuntimeError, "msl_batch_step_input failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_step_input_replay_frame_rng(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  PyObject* seed_obj = NULL;
+  PyObject* prev_input_obj = NULL;
+  PyObject* input_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOOO", &handle_obj, &seed_obj, &prev_input_obj, &input_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  PyArrayObject* seed = require_contiguous_array(seed_obj, NPY_UINT8, 2, "seed");
+  if (seed == NULL) {
+    return NULL;
+  }
+  PyArrayObject* prev_input = require_contiguous_array(prev_input_obj, NPY_UINT8, 2, "prev_input");
+  if (prev_input == NULL) {
+    return NULL;
+  }
+  PyArrayObject* input = require_contiguous_array(input_obj, NPY_UINT8, 2, "input");
+  if (input == NULL) {
+    return NULL;
+  }
+
+  if (PyArray_DIM(seed, 1) < (npy_intp)sizeof(MslSeed)) {
+    PyErr_SetString(PyExc_ValueError, "seed second dim too small for MslSeed");
+    return NULL;
+  }
+  if (PyArray_DIM(prev_input, 1) < (npy_intp)sizeof(MslInput) ||
+      PyArray_DIM(input, 1) < (npy_intp)sizeof(MslInput)) {
+    PyErr_SetString(PyExc_ValueError, "input second dim too small for MslInput");
+    return NULL;
+  }
+
+  const uint8_t* seed_bytes = (const uint8_t*)PyArray_DATA(seed);
+  const uint8_t* prev_bytes = (const uint8_t*)PyArray_DATA(prev_input);
+  const uint8_t* in_bytes = (const uint8_t*)PyArray_DATA(input);
+  const size_t seed_stride = (size_t)PyArray_STRIDE(seed, 0);
+  const size_t prev_stride = (size_t)PyArray_STRIDE(prev_input, 0);
+  const size_t in_stride = (size_t)PyArray_STRIDE(input, 0);
+
+  const int err = msl_batch_step_input_replay_frame_rng(
+      h->batch, seed_bytes, seed_stride, prev_bytes, prev_stride, in_bytes, in_stride);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_step_input_replay_frame_rng failed: %d", err);
     return NULL;
   }
 
@@ -3433,17 +3520,22 @@ static PyObject* msl_disruptive_scan(PyObject* self, PyObject* args) {
     for (int offset = 1; offset <= max_horizon && err == 0; offset++) {
       for (int lane = 0; lane < active_count; lane++) {
         const int j = starts[lane] + offset - 1;
+        memcpy(seed_bytes + (size_t)lane * sizeof(MslSeed),
+               samples_u8 + (size_t)j * sample_stride + seed_off, sizeof(MslSeed));
         memcpy(prev_input_bytes + (size_t)lane * sizeof(MslInput),
                samples_u8 + (size_t)j * sample_stride + prev_input_off, sizeof(MslInput));
         memcpy(input_bytes + (size_t)lane * sizeof(MslInput),
                samples_u8 + (size_t)j * sample_stride + input_off, sizeof(MslInput));
       }
+      msl_disr_fill_inactive(seed_bytes, active_count, batch_size, sizeof(MslSeed),
+                             sizeof(MslSeed));
       msl_disr_fill_inactive(prev_input_bytes, active_count, batch_size, sizeof(MslInput),
                              sizeof(MslInput));
       msl_disr_fill_inactive(input_bytes, active_count, batch_size, sizeof(MslInput),
                              sizeof(MslInput));
-      if (msl_batch_step_input(batch, prev_input_bytes, sizeof(MslInput), input_bytes,
-                               sizeof(MslInput)) != 0 ||
+      if (msl_batch_step_input_replay_frame_rng(batch, seed_bytes, sizeof(MslSeed),
+                                                prev_input_bytes, sizeof(MslInput), input_bytes,
+                                                sizeof(MslInput)) != 0 ||
           msl_batch_write_compare(batch, out_bytes, sizeof(MslCompare)) != 0) {
         err = -2;
         break;
@@ -6820,6 +6912,8 @@ static PyMethodDef methods[] = {
      "reseed_seed(handle, seed_bytes[batch, seed_stride])"},
     {"reseed_seed_rollout", msl_reseed_seed_rollout, METH_VARARGS,
      "reseed_seed_rollout(handle, seed_bytes[batch, seed_stride])"},
+    {"apply_replay_frame_rng", msl_apply_replay_frame_rng, METH_VARARGS,
+     "apply_replay_frame_rng(handle, seed_bytes[batch, seed_stride])"},
     {"init_match", msl_init_match, METH_VARARGS,
      "init_match(handle, match_config_bytes[batch, match_config_stride])"},
     {"init_match_masked", msl_init_match_masked, METH_VARARGS,
@@ -6832,6 +6926,8 @@ static PyMethodDef methods[] = {
      "CollData lanes without routing action owners."},
     {"step_input", msl_step_input, METH_VARARGS,
      "step_input(handle, prev_input_bytes, input_bytes)"},
+    {"step_input_replay_frame_rng", msl_step_input_replay_frame_rng, METH_VARARGS,
+     "step_input_replay_frame_rng(handle, seed_bytes, prev_input_bytes, input_bytes)"},
     {"debug_step_input_pre_combat", msl_debug_step_input_pre_combat, METH_VARARGS,
      "debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes) -> DEBUG-ONLY triage "
      "step. Advances/mutates state through pre-combat stages, deliberately skips combat_resolve(), "

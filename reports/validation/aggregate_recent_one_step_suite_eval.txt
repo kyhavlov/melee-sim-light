@@ -400,7 +400,7 @@ overall.float_norm_mae_p95: 0.00004789
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl ==
 Records: 8729  Players/scored per record: 2  Total player-frames: 17458
-mismatch.action_id: 2 / 17458 (0.000115)
+mismatch.action_id: 1 / 17458 (0.000057)
 mismatch.action_frame: 1 / 17458 (0.000057)
 mismatch.on_ground: 0 / 17458 (0.000000)
 mismatch.facing: 0 / 17458 (0.000000)
@@ -412,7 +412,7 @@ mismatch.hitstun: 0 / 17458 (0.000000)
 mismatch.l_cancel: 1 / 17458 (0.000057)
 mismatch.hurtbox_state: 2 / 17458 (0.000115)
 mismatch.ground_id: 0 / 17458 (0.000000)
-mismatch.animation_index: 2 / 17458 (0.000115)
+mismatch.animation_index: 1 / 17458 (0.000057)
 mismatch.instance_hit_by: 0 / 17458 (0.000000)
 mismatch.instance_id: 0 / 17458 (0.000000)
 mismatch.last_attack_landed: 0 / 17458 (0.000000)
@@ -438,8 +438,8 @@ err.item_pos_x: mae=0.002243 p95=0.000000 max=1.940910
 err.item_pos_y: mae=0.000001 p95=0.000000 max=0.000114
 err.item_vel_x: mae=0.000002 p95=0.000000 max=0.000234
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000060
-overall.discrete_mismatch: 30 / 1056209
-overall.strict_discrete_mismatch: 44 / 1056209
+overall.discrete_mismatch: 28 / 1056209
+overall.strict_discrete_mismatch: 42 / 1056209
 overall.ignored_discrete_mismatch: 14
 overall.float_norm_mae_p95: 0.00000893
 
@@ -490,7 +490,7 @@ overall.float_norm_mae_p95: 0.00003448
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl ==
 Records: 9689  Players/scored per record: 2  Total player-frames: 19378
-mismatch.action_id: 7 / 19378 (0.000361)
+mismatch.action_id: 6 / 19378 (0.000310)
 mismatch.action_frame: 4 / 19378 (0.000206)
 mismatch.on_ground: 0 / 19378 (0.000000)
 mismatch.facing: 0 / 19378 (0.000000)
@@ -502,7 +502,7 @@ mismatch.hitstun: 0 / 19378 (0.000000)
 mismatch.l_cancel: 0 / 19378 (0.000000)
 mismatch.hurtbox_state: 1 / 19378 (0.000052)
 mismatch.ground_id: 0 / 19378 (0.000000)
-mismatch.animation_index: 8 / 19378 (0.000413)
+mismatch.animation_index: 7 / 19378 (0.000361)
 mismatch.instance_hit_by: 0 / 19378 (0.000000)
 mismatch.instance_id: 1 / 19378 (0.000052)
 mismatch.last_attack_landed: 0 / 19378 (0.000000)
@@ -528,8 +528,8 @@ err.item_pos_x: mae=0.010542 p95=0.000000 max=10.000000
 err.item_pos_y: mae=0.000194 p95=0.000000 max=0.409171
 err.item_vel_x: mae=0.007426 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.001513 p95=0.000000 max=4.954213
-overall.discrete_mismatch: 53 / 1172369
-overall.strict_discrete_mismatch: 75 / 1172369
+overall.discrete_mismatch: 51 / 1172369
+overall.strict_discrete_mismatch: 73 / 1172369
 overall.ignored_discrete_mismatch: 22
 overall.float_norm_mae_p95: 0.00005513
 
@@ -760,7 +760,7 @@ overall.float_norm_mae_p95: 0.00001336
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
 Records: 12416  Players/scored per record: 2  Total player-frames: 24832
-mismatch.action_id: 3 / 24832 (0.000121)
+mismatch.action_id: 2 / 24832 (0.000081)
 mismatch.action_frame: 2 / 24832 (0.000081)
 mismatch.on_ground: 0 / 24832 (0.000000)
 mismatch.facing: 2 / 24832 (0.000081)
@@ -772,7 +772,7 @@ mismatch.hitstun: 1 / 24832 (0.000040)
 mismatch.l_cancel: 0 / 24832 (0.000000)
 mismatch.hurtbox_state: 3 / 24832 (0.000121)
 mismatch.ground_id: 0 / 24832 (0.000000)
-mismatch.animation_index: 3 / 24832 (0.000121)
+mismatch.animation_index: 2 / 24832 (0.000081)
 mismatch.instance_hit_by: 0 / 24832 (0.000000)
 mismatch.instance_id: 2 / 24832 (0.000081)
 mismatch.last_attack_landed: 1 / 24832 (0.000040)
@@ -798,8 +798,8 @@ err.item_pos_x: mae=0.000145 p95=0.000000 max=0.344872
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000021
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000152
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000008
-overall.discrete_mismatch: 41 / 1502336
-overall.strict_discrete_mismatch: 74 / 1502336
+overall.discrete_mismatch: 39 / 1502336
+overall.strict_discrete_mismatch: 72 / 1502336
 overall.ignored_discrete_mismatch: 33
 overall.float_norm_mae_p95: 0.00004108
 
@@ -1479,7 +1479,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00050131
 
 == suite summary ==
-overall.discrete_mismatch: 1885 / 35294369
-overall.strict_discrete_mismatch: 3385 / 35294369
+overall.discrete_mismatch: 1879 / 35294369
+overall.strict_discrete_mismatch: 3379 / 35294369
 overall.ignored_discrete_mismatch: 1500
 overall.float_norm_mae_p95: 0.00031811

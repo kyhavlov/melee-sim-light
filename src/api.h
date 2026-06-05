@@ -91,6 +91,18 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
 int msl_batch_reseed_seed_rollout(MslBatch* batch, const uint8_t* seed_bytes,
                                   size_t seed_stride_bytes);
 
+// Replay playback validation hook: apply the current replay row's frame-start RNG seed before
+// stepping. Normal RL/free-running step_input callers should not use this.
+int msl_batch_apply_replay_frame_rng(MslBatch* batch, const uint8_t* seed_bytes,
+                                     size_t seed_stride_bytes);
+
+// Replay playback validation step: apply the current replay row's frame-start RNG seed and then
+// advance one input frame. Normal RL/free-running step_input callers should not use this.
+int msl_batch_step_input_replay_frame_rng(MslBatch* batch, const uint8_t* seed_bytes,
+                                          size_t seed_stride_bytes, const uint8_t* prev_input_bytes,
+                                          size_t prev_input_stride_bytes,
+                                          const uint8_t* input_bytes, size_t input_stride_bytes);
+
 // Advance every lane by one frame.
 //
 // `prev_input_bytes` and `input_bytes` point at `batch_size` MslInput rows. The previous input row

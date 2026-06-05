@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import (
@@ -15,7 +16,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 def test_attackairb_damageflytop_runtime_predicate_matches_extracted_source_data() -> None:
@@ -1258,9 +1259,9 @@ def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_pr
 def test_specialairhi_damageflyroll_gate_uses_live_rollout_rng_stream_his_1598() -> None:
     # HIS rollout lock for ftCo_8008DCE0's generic severe-airborne DamageFlyRoll gate:
     # p1 is still in SpecialAirHi when p0's AttackAirB hits. SpecialAirHi is not excluded by
-    # Fighter_8006CDA4 or ftCo_8008DCE0, so the runtime rollout must admit the gate and consume the
-    # live RNG stream. The teacher-forced one-step seed remains a separate hidden stream-phase
-    # problem; this lock protects the free-running source owner that caused the HIS best/max red.
+    # Fighter_8006CDA4 or ftCo_8008DCE0, so replay playback must admit the gate from the current
+    # ProcessHit source and consume ftColl_80078538's normal BODY damage-effect prefix before the
+    # DamageFlyRoll Randf gate.
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     root = Path(__file__).resolve().parents[1]
@@ -1300,6 +1301,401 @@ def test_specialairhi_damageflyroll_gate_uses_live_rollout_rng_stream_his_1598()
         assert site1_count == (1 if rec == 1598 else 0), (
             f"unexpected DamageFlyRoll gate pulse at {rec}"
         )
+    assert _trace_site_count(
+        root / "reports/triage/his1598_specialairhi_damageflyroll_rollout.tsv",
+        start_record=0,
+        record=1598,
+        site_id=24,
+    ) == 4
+
+
+@pytest.mark.integration
+def test_his_replay_rollout_uses_current_frame_rng_seed_for_damageflyroll_4397() -> None:
+    # Rollout validation is replay playback: it feeds replay inputs and the replay frame-start RNG
+    # seed for each row. HIS rec4213 carries an unrelated LandingAirLw seed lane, but rec4397's
+    # DamageFlyRoll gate must sample from rec4397's own Slippi frame_pre_random_seed.
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HungryImportantSnake.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    start_seed = ds.samples[4213]["seed_t"]
+    target_seed = ds.samples[4397]["seed_t"]
+    target_ref = ds.samples[4397]["ref_t1"]
+    assert int(start_seed["action_id"][0]) == 74  # LandingAirLw
+    assert int(start_seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 1
+    assert int(target_seed["action_id"][0]) == 90  # DamageFlyN
+    assert int(target_ref["action_id"][0]) == 91  # DamageFlyRoll
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=4213,
+        window_records=(4397,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/his4213_replayfed_rng_rollout.tsv",
+    )
+    ref_row, out_row, site1_count = rows[4397]
+    for p in (0, 1):
+        _assert_transition_identity_lock_fields_match_ref(
+            out_row=out_row,
+            ref_row=ref_row,
+            record=4397,
+            p=p,
+    )
+    assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0]) == 91
+    assert site1_count == 1
+    with (root / "reports/triage/his4213_replayfed_rng_rollout.tsv").open("r", encoding="utf-8") as fh:
+        trace_rows = csv.DictReader(fh, delimiter="\t")
+        gate_row = next(
+            row for row in trace_rows if int(row["frame_id"]) == 4274 and int(row["site_id"]) == 1
+        )
+    assert int(gate_row["seed_in"]) == int(target_seed["frame_pre_random_seed"])
+
+
+@pytest.mark.integration
+def test_his_landingfallspecial_downattacku_current_hitcapsule_owns_damageflyroll_rng_7485() -> None:
+    # LandingFallSpecial frame 0 has no explicit replay seed lane for Fighter_8006CDA4, but this row
+    # enters damage through ftColl's selected current DownAttackU ground-sweep HitCapsule. That
+    # concrete source owns the hidden pre-gate consume before ftCo_8008DCE0's DamageFlyRoll gate.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_DownAttackU.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HungryImportantSnake.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 7485
+    victim = 0
+    attacker = 1
+    seed = ds.samples[record]["seed_t"]
+    ref = ds.samples[record]["ref_t1"]
+    assert int(seed["action_id"][victim]) == 43  # LandingFallSpecial
+    assert int(seed["action_frame"][victim]) == 0
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+    assert int(seed["action_id"][attacker]) == 187  # DownAttackU
+    assert int(ref["action_id"][victim]) == 91  # DamageFlyRoll
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (0, 0)
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, victim)
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=6815,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/his7485_landingfallspecial_downattacku_damageflyroll.tsv",
+    )
+    ref_row, out_row, site1_count = rows[record]
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+    assert _trace_site_count(
+        root / "reports/triage/his7485_landingfallspecial_downattacku_damageflyroll.tsv",
+        start_record=6815,
+        record=record,
+        site_id=5,
+    ) == 1
+    assert _trace_site_count(
+        root / "reports/triage/his7485_landingfallspecial_downattacku_damageflyroll.tsv",
+        start_record=6815,
+        record=record,
+        site_id=24,
+    ) == 4
+    assert _trace_site_count(
+        root / "reports/triage/his7485_landingfallspecial_downattacku_damageflyroll.tsv",
+        start_record=6815,
+        record=record,
+        site_id=6,
+    ) == 0
+    assert site1_count == 1
+    with (root / "reports/triage/his7485_landingfallspecial_downattacku_damageflyroll.tsv").open(
+        "r", encoding="utf-8"
+    ) as fh:
+        trace_rows = csv.DictReader(fh, delimiter="\t")
+        gate_row = next(
+            row for row in trace_rows if int(row["frame_id"]) == 7362 and int(row["site_id"]) == 1
+        )
+    assert int(gate_row["seed_in"]) == int(seed["frame_pre_random_seed"])
+
+    def mutate_victim_action(seed_t):
+        seed_t["action_id"][0, victim] = 42  # Landing: same grounded landing family, no owner.
+
+    _, _, mutated_out = _run_one_step_row(dataset_path, record, victim, seed_mutator=mutate_victim_action)
+    assert int(mutated_out["action_id"][victim]) != 91
+
+    def mutate_attacker_action(seed_t):
+        seed_t["action_id"][0, attacker] = 188  # DownForwardU: no authored DownAttackU source.
+
+    _, _, mutated_out = _run_one_step_row(dataset_path, record, victim, seed_mutator=mutate_attacker_action)
+    assert int(mutated_out["action_id"][victim]) != 91
+
+
+@pytest.mark.integration
+def test_landingairlw_without_live_source_owner_does_not_replay_feed_damageflyroll_iat_11154() -> None:
+    # Replay playback installs the current Slippi frame-start RNG seed, but it does not replay-feed
+    # hidden Fighter_8006CDA4 seed lanes every step. IAT rec11154 has a LandingAirLw victim and a
+    # replay seed-lane count on the row, but the rolled-out live state reaches the hit without a
+    # current selected pre-gate source owner. The BAir hb0/cap2 BODY source stays on the ordinary
+    # DamageFlyHi path instead of using LandingAirLw action shape to admit ftCo_8008DCE0's
+    # DamageFlyRoll RNG gate.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "ImpassionedAlarmedTarsier.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 11154
+    victim = 0
+    attacker = 1
+    seed = ds.samples[record]["seed_t"]
+    ref = ds.samples[record]["ref_t1"]
+    assert int(seed["action_id"][victim]) == 74  # LandingAirLw.
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 2
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
+    assert int(seed["action_frame"][attacker]) == 3
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (0, 2)
+    assert int(ref["action_id"][victim]) == 87  # DamageFlyHi, not DamageFlyRoll.
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=10975,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/iat11154_landingairlw_no_live_rng_owner.tsv",
+    )
+    ref_row, out_row, site1_count = rows[record]
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+    assert int(out_row["action_id"][victim]) == 87
+    assert site1_count == 0
+
+
+@pytest.mark.integration
+def test_normal_step_input_rollout_does_not_pull_future_replay_rng_his_7485() -> None:
+    # The replay RNG feed is a validation/playback hook, not normal RL/free-running behavior.
+    # Starting from HIS rec6815 and calling plain step_input through rec7485 keeps the internal RNG
+    # stream and still misses the replay's DamageFlyRoll branch.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HungryImportantSnake.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    def row_bytes(record: int, field: str, stride: int) -> np.ndarray:
+        return (
+            np.frombuffer(samples[record : record + 1][field].tobytes(order="C"), dtype=np.uint8)
+            .copy()
+            .reshape(1, stride)
+        )
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed_rollout(handle, row_bytes(6815, "seed_t", seed_stride))
+        for record in range(6815, 7486):
+            binding.step_input(
+                handle,
+                row_bytes(record, "prev_input_t", input_stride),
+                row_bytes(record, "input_t", input_stride),
+            )
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+    ref = samples[7485]["ref_t1"]
+    assert int(ref["action_id"][0]) == 91
+    assert int(out["action_id"][0]) != int(ref["action_id"][0])
+
+
+@pytest.mark.integration
+def test_jumpaerial_attackairb_cap1_does_not_admit_damageflyroll_tch_8437() -> None:
+    # JumpAerial + AttackAirB visible state is not enough to admit ftCo_8008DCE0's DamageFlyRoll
+    # gate. The retained site-8 carry requires the selected DmgLog BODY hurtcap provenance; TCH
+    # selects cap1, so it stays seed-owned and remains DamageFlyN.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # data/hurtcaps/{fox,falco}.json cap1/cap2
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "TubbyCurlyHerring.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 8437
+    attacker = 0
+    victim = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    ref = ds.samples[record]["ref_t1"]
+    assert int(seed["action_id"][victim]) == 27  # JumpAerialF
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+    assert int(ref["action_id"][victim]) == 88  # DamageFlyN, not DamageFlyRoll
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (1, 1)
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/tch8437_jumpaerial_cap1_damageflyroll_negative.tsv",
+    )
+    ref_row, out_row, site1_count = rows[record]
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+    assert site1_count == 0
+    assert _trace_site_count(
+        root / "reports/triage/tch8437_jumpaerial_cap1_damageflyroll_negative.tsv",
+        start_record=record,
+        record=record,
+        site_id=8,
+    ) == 0
+
+
+@pytest.mark.integration
+def test_jumpaerial_illusion_article_source_admits_damageflyroll_prh_7739() -> None:
+    # JumpAerial victim + no fighter HitCapsule source is still a valid DamageFlyRoll gate when
+    # the source is the generated Illusion/Phantasm side-special article. This is not the
+    # AttackAirB cap2 carry: item BODY damage reaches `combat_apply_item_hit` with no selected
+    # fighter HitCapsule/hurtcap, and the article kind comes from MSLITAR1.
+    # refs/melee/src/melee/it/items/itfoxillusion.c::{
+    #   itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys,itFoxIllusion_Logic14_DmgDealt}
+    # refs/melee/src/melee/it/itcoll.c::it_80272460
+    # data/items/articles/fox_falco.bin::MSLITAR1 side_special_illusion_itkind
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 7739
+    victim = 0
+    attacker = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    ref = ds.samples[record]["ref_t1"]
+    assert int(seed["action_id"][victim]) == 27  # JumpAerialF
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+    assert int(seed["action_id"][attacker]) in {351, 353}  # SpecialS/AirS side-special owner.
+    assert int(ref["action_id"][victim]) == 91  # DamageFlyRoll.
+    assert any(
+        int(item["exists"]) != 0
+        and int(item["owner"]) == attacker
+        and int(item["type"]) == 57  # Falco Phantasm, table-backed by MSLITAR1.
+        and int(item["state"]) < 2
+        for item in seed["items"]
+    )
+    with pytest.raises(AssertionError):
+        _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim)
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/prh7739_jumpaerial_illusion_article_damageflyroll.tsv",
+    )
+    ref_row, out_row, site1_count = rows[record]
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+    assert site1_count == 1
+    assert _trace_site_count(
+        root / "reports/triage/prh7739_jumpaerial_illusion_article_damageflyroll.tsv",
+        start_record=record,
+        record=record,
+        site_id=8,
+    ) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record, seed_action", [(12746, 88), (12748, 89)])
+def test_throwhi_damageflyn_lw_seed_rows_do_not_use_rollout_rng_fallback_cdo(
+    record: int, seed_action: int
+) -> None:
+    # CDO exposes active ThrowHi-owned DamageFlyN/Lw hitlag rows with no selected current
+    # HitCapsule and no explicit Fighter_8006CDA4 seed lane. Replay playback installs the row's
+    # frame-start RNG, so these exact seed rows must not use the older advanced-rollout fallback to
+    # admit DamageFlyRoll.
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowHi_Anim
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "CornyDelayedOkapi.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    victim = 0
+    attacker = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    ref = ds.samples[record]["ref_t1"]
+    assert int(seed["action_id"][victim]) == seed_action
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+    assert int(seed["action_id"][attacker]) == 221  # ThrowHi
+    assert int(ref["action_id"][victim]) == 89  # DamageFlyLw, not DamageFlyRoll
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / f"reports/triage/cdo{record}_throwhi_damagefly_seed_rng_negative.tsv",
+    )
+    ref_row, out_row, site1_count = rows[record]
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+    assert site1_count == 0
 
 
 @pytest.mark.integration

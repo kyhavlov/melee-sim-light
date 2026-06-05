@@ -58,6 +58,11 @@ def _run_rollout_to_record(binding: object, samples: np.ndarray, start: int, tar
     try:
         binding.reseed_seed(handle, seed_bytes)
         for record in range(start, target + 1):
+            step_seed_bytes = (
+                np.frombuffer(samples[record:record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, seed_stride)
+            )
             prev_input_bytes = (
                 np.frombuffer(samples[record:record + 1]["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
                 .copy()
@@ -68,7 +73,7 @@ def _run_rollout_to_record(binding: object, samples: np.ndarray, start: int, tar
                 .copy()
                 .reshape(1, input_stride)
             )
-            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.step_input_replay_frame_rng(handle, step_seed_bytes, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
     finally:
         binding.destroy(handle)
@@ -336,3 +341,109 @@ def test_aerial_shine_start_late_slot_grounded_attack_entry_rollout_uses_pair_ph
         float(ds.samples[target]["ref_t1"]["percent"][defender])
     )
     assert int(out["hitlag"][attacker]) == int(ds.samples[target]["ref_t1"]["hitlag"][attacker])
+
+
+@pytest.mark.integration
+def test_attacks4_guard_family_runtime_victim_latch_survives_late_payload_doubles() -> None:
+    # Doubles rec=2064 exercises a live AttackS4 script whose earlier GuardOn/GuardReflect shield
+    # contact inserted p2 into p0's HitCapsule.victims_1. The visible action_id is AttackHi3, but
+    # the source-owned hitbox script is AttackS4Hi (animation_index/msid=58); the late same-action
+    # create payload must preserve the runtime Guard-family victim latch so BODY fallthrough stays
+    # suppressed after GuardReflect exits to Guard.
+    #
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / _GAT_DOUBLES
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(ds_path))
+    start = 1179
+    target = 2064
+    attacker = 0
+    defender = 2
+
+    assert int(ds.samples[target]["seed_t"]["action_id"][attacker]) == 56  # visible AttackHi3
+    assert int(ds.samples[target]["seed_t"]["animation_index"][attacker]) == 58  # AttackS4Hi script
+    assert int(ds.samples[target]["seed_t"]["action_id"][defender]) == 182  # GuardReflect
+    assert int(ds.samples[target]["ref_t1"]["action_id"][defender]) == 179  # Guard
+
+    out = _run_rollout_to_record(
+        binding, ds.samples, start, target, num_players=int(ds.header["num_players"])
+    )
+    for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id"):
+        assert int(out[field][defender]) == int(ds.samples[target]["ref_t1"][field][defender]), field
+    assert float(out["percent"][defender]) == pytest.approx(
+        float(ds.samples[target]["ref_t1"]["percent"][defender])
+    )
+
+
+@pytest.mark.integration
+def test_attacks4_first_payload_guardreflect_still_shield_hits_cnm() -> None:
+    # Negative for the late AttackS4 latch: CNM rec=646 is the first AttackS4Hi payload
+    # (action_frame 4), where GuardReflect should still take the shield set-off instead of
+    # preserving a stale victims_1 latch from an earlier payload.
+    #
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(ds_path))
+    start = 0
+    target = 646
+    attacker = 0
+    defender = 1
+
+    assert int(ds.samples[target]["seed_t"]["action_id"][attacker]) == 56
+    assert int(ds.samples[target]["seed_t"]["animation_index"][attacker]) == 58
+    assert int(ds.samples[target]["seed_t"]["action_frame"][attacker]) == 4
+    assert int(ds.samples[target]["seed_t"]["action_id"][defender]) == 182
+    assert int(ds.samples[target]["ref_t1"]["action_id"][defender]) == 181
+
+    out = _run_rollout_to_record(
+        binding, ds.samples, start, target, num_players=int(ds.header["num_players"])
+    )
+    for field in ("action_id", "action_frame", "hitlag", "instance_id"):
+        assert int(out[field][defender]) == int(ds.samples[target]["ref_t1"][field][defender]), field
+    assert float(out["shield_hp"][defender]) == pytest.approx(
+        float(ds.samples[target]["ref_t1"]["shield_hp"][defender])
+    )
+
+
+@pytest.mark.integration
+def test_attacks4_runtime_victim_latch_does_not_suppress_specialhi_body_his() -> None:
+    # Negative for the Guard-family latch above: HIS rec=1413 uses the same AttackS4Hi script
+    # source (visible AttackHi3, msid=58), but the victim is SpecialHi, not a Guard-family
+    # shield/contact owner. The runtime victims_1 preservation must not suppress this real BODY hit.
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(ds_path))
+    start = 0
+    target = 1413
+    attacker = 0
+    defender = 1
+
+    assert int(ds.samples[target]["seed_t"]["action_id"][attacker]) == 56
+    assert int(ds.samples[target]["seed_t"]["animation_index"][attacker]) == 58
+    assert int(ds.samples[target]["seed_t"]["action_id"][defender]) == 359  # SpecialAirHi
+    assert int(ds.samples[target]["ref_t1"]["action_id"][defender]) == 90  # DamageFlyTop
+
+    out = _run_rollout_to_record(
+        binding, ds.samples, start, target, num_players=int(ds.header["num_players"])
+    )
+    for field in ("action_id", "hitlag", "hitstun", "instance_hit_by"):
+        assert int(out[field][defender]) == int(ds.samples[target]["ref_t1"][field][defender]), field
+    assert float(out["percent"][defender]) == pytest.approx(
+        float(ds.samples[target]["ref_t1"]["percent"][defender])
+    )

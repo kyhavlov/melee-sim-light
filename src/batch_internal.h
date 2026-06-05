@@ -60,6 +60,10 @@ struct MslBatch {
   // seed during this step. Used to arbitrate with broader replay-frame RNG clock owners without
   // adding a replay schema lane.
   uint8_t* rollout_yoshi_shyguy_spawn_rng_installed;  // [batch]
+  // Runtime-only replay playback marker: validation installed the current replay row's
+  // frame_pre_random_seed before this step. This disables old synthetic replay-clock advancement
+  // while preserving source-site admission through rollout_clock_rng_owned.
+  uint8_t* replay_frame_rng_applied;  // [batch]
   // Replay validation rollout reseed mode. This stays true for `reseed_seed_rollout` even when the
   // RNG owner itself stays seed-owned; runtime uses it to advance frame-indexed stage/object owners
   // such as Randall without advancing frame_pre_random_seed.

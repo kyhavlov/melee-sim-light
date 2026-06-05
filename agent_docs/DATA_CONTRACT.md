@@ -712,18 +712,21 @@ Source/generation:
   stage/object owners consume the current simulated frame rather than the reseed row. The immediate
   source-backed owner is Yoshi's Story Randall: `data/stages/bin/grst.bin::MSLSTG01`
   `platform_path` records are sampled by `src/stage_collision.c` from the live frame clock.
-- `reseed_seed_rollout()` advances `frame_pre_random_seed` only for explicit replay-frame RNG-clock
-  owners. The no-live-Heiho Yoshi Shy Guy scheduler no longer uses the generic `+0x10000` frame
-  clock; it installs `stage_yoshi_shyguy_spawn_rng_seed_u32` at the zero-timer callback. Other
-  data-backed blaster capture/throw episodes still use replay-frame RNG clock ownership, including
-  post-detach victims that remain in same-source throw-laser hitstun while a live owner blaster
-  article proves the `ftFx_Throw_Anim` / `itFoxlaser` callback episode. This is rollout-only
-  metadata ownership: normal
-  `reseed_seed()` keeps `frame_id` / `frame_pre_random_seed` seed-owned after the preprocessing
-  phase choice above initializes the simulated frame's source RNG seed, while validation rollout
-  carries `frame_id` for all replay rollouts and carries the Slippi frame-start RNG seed only through
-  source-owned consumers. The Shy Guy rollout owner clears immediately after `grStory_801E3418`
-  consumes the spawn-frame RNG stream or when live Heiho items make the scheduler return.
+- `reseed_seed_rollout()` advances `frame_id` for replay playback, but canonical rollout
+  validation now installs the current replay row's `frame_pre_random_seed` before every step through
+  the batched replay-frame RNG hook. This matches Slippi replay playback: replay inputs and replay
+  frame-start RNG are both authoritative. Normal `reseed_seed()` / free-running `step_input` does
+  not call that hook and keeps the internally modeled HSD stream.
+- `rollout_clock_rng_owned` remains a source-site admission marker for modeled replay-frame RNG
+  owners, but when the replay-frame hook was applied for the step, `msl_batch_commit_rollout_clock_rng`
+  does not advance the old synthetic `+0x10000` bridge. The no-live-Heiho Yoshi Shy Guy scheduler
+  installs `stage_yoshi_shyguy_spawn_rng_seed_u32` at the zero-timer callback when that explicit
+  lane exists; otherwise it consumes the already-installed replay frame seed. Other data-backed
+  blaster capture/throw episodes still use replay-frame RNG clock ownership as source proof,
+  including post-detach victims that remain in same-source throw-laser hitstun while a live owner
+  blaster article proves the `ftFx_Throw_Anim` / `itFoxlaser` callback episode. The Shy Guy rollout
+  owner clears immediately after `grStory_801E3418` consumes the spawn-frame RNG stream or when live
+  Heiho items make the scheduler return.
 
 Decomp contract:
 - `refs/slippi-ssbm-asm/Recording/SendFrameStart.s`.

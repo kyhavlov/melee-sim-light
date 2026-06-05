@@ -327,9 +327,10 @@ def collect_dataset_top_rollout_float_offenders(
         binding.reseed_seed_rollout(handle, seed_bytes)
 
     def step(j: int) -> None:
+        seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
         prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
         input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
-        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.step_input_replay_frame_rng(handle, seed_bytes, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
 
     def discrete_matches(j: int) -> bool:

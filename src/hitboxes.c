@@ -17,6 +17,7 @@
 #include "move_tables.h"
 #include "msl_math.h"
 #include "mtx34.h"
+#include "shielddesc_geometry.h"
 #include "specialhi_pose.h"
 #include "staling.h"
 #include "trigger_input.h"
@@ -249,6 +250,65 @@ static inline uint8_t hitboxes_hitlist_has_victims1_entry(const MslHitlistCapsul
   for (size_t i = 0; i < (size_t)MSL_HITLIST_VICTIM_CAP; i++) {
     if (!msl_hitlist_victim_is_empty(hit->victims_1[i].kind_slot)) {
       return 1u;
+    }
+  }
+  return 0u;
+}
+
+static inline uint8_t hitboxes_seed_bridge_is_guard_transition_owner(uint16_t action_id);
+
+static inline uint8_t hitboxes_runtime_guard_shield_overlaps_hitbox(const MslBatch* batch, int bi,
+                                                                    int attacker, int hb,
+                                                                    int defender, float hx,
+                                                                    float hy, float hz, float hr) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || attacker < 0 ||
+      attacker >= batch->config.num_players || defender < 0 ||
+      defender >= batch->config.num_players || hb < 0 || hb >= (int)MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  const size_t d_idx = msl_idx_player(bi, defender);
+  if (batch->state.shield_radius[d_idx] <= 0.0f) {
+    return 0u;
+  }
+  const MslGuardReflectOwner guard_reflect_owner = msl_guard_reflect_owner_resolve(batch, d_idx);
+  if (guard_reflect_owner.reflectdesc_only) {
+    return 0u;
+  }
+  const uint8_t shield_desc_envelope_ready = !guard_reflect_owner.shield_entry_no_submotion;
+  return msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
+      batch, bi, attacker, defender, hb, hx, hy, hz, hr, batch->state.shield_x[d_idx],
+      batch->state.shield_y[d_idx], batch->state.shield_z[d_idx], batch->state.shield_radius[d_idx],
+      /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx], shield_desc_envelope_ready,
+      /*shield_extent_bridge_active=*/0u, NULL);
+}
+
+static inline uint8_t hitboxes_hitlist_has_runtime_guard_victims1_entry(
+    const MslBatch* batch, int bi, int attacker, int hb, float hx, float hy, float hz, float hr,
+    const MslHitlistCapsule* hit) {
+  if (batch == NULL || hit == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  for (size_t i = 0; i < (size_t)MSL_HITLIST_VICTIM_CAP; i++) {
+    const MslHitlistVictimEntry* e = &hit->victims_1[i];
+    if (msl_hitlist_victim_is_empty(e->kind_slot)) {
+      continue;
+    }
+    if (msl_hitlist_victim_kind(e->kind_slot) != (uint8_t)MSL_HITLIST_VICTIM_KIND_FIGHTER) {
+      continue;
+    }
+    if (e->id32 != MSL_HITLIST_FIGHTER_ID32_SEED_DENSE) {
+      const uint8_t victim = msl_hitlist_victim_slot(e->kind_slot);
+      if (victim < batch->config.num_players) {
+        const size_t v_idx = msl_idx_player(bi, (int)victim);
+        const uint16_t victim_action = batch->state.action_id[v_idx];
+        const uint16_t victim_seed_prev = batch->state.seed_prev_action_id[v_idx];
+        if (victim_seed_prev == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+            hitboxes_seed_bridge_is_guard_transition_owner(victim_action) &&
+            !hitboxes_runtime_guard_shield_overlaps_hitbox(batch, bi, attacker, hb, (int)victim, hx,
+                                                           hy, hz, hr)) {
+          return 1u;
+        }
+      }
     }
   }
   return 0u;
@@ -901,6 +961,49 @@ static inline uint8_t hitboxes_apply_specialhi_local_xrotn(const MslBatch* batch
   *io_x = ax0 + (px * c) + (cross_x * s) + (axis_x * dot * (1.0f - c));
   *io_y = ay0 + (py * c) + (cross_y * s) + (axis_y * dot * (1.0f - c));
   *io_z = az0 + (pz * c) + (cross_z * s) + (axis_z * dot * (1.0f - c));
+  return 1u;
+}
+
+static inline uint8_t hitboxes_event_world_capsule(const MslBatch* batch, size_t idx,
+                                                   uint8_t char_id, uint16_t msid,
+                                                   uint16_t pose_frame, const MslHitboxEvent* ev,
+                                                   float* out_x, float* out_y, float* out_z,
+                                                   float* out_r) {
+  if (batch == NULL || ev == NULL || out_x == NULL || out_y == NULL || out_z == NULL ||
+      out_r == NULL) {
+    return 0u;
+  }
+  float m[12];
+  if (anim_pose_get_matrix(char_id, msid, pose_frame, ev->bone_part_id, m) != 0) {
+    return 0u;
+  }
+  const float scale_y = batch->state.fighter_scale_y[idx];
+  const MslCharParams* chp = msl_char_params(char_id);
+  const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
+                                  ? chp->model_scaling
+                                  : 1.0f;
+  const float model_scale = scale_y * model_scaling;
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  const float off[3] = {ev->x, ev->y, ev->z};
+  float cx = 0.0f;
+  float cy = 0.0f;
+  float cz = 0.0f;
+  msl_mtx34_mul_point(m, off, &cx, &cy, &cz);
+  cx *= model_scale;
+  cy *= model_scale;
+  cz *= model_scale;
+  (void)hitboxes_apply_specialhi_local_xrotn(batch, idx, char_id, msid, pose_frame,
+                                             ev->bone_part_id, facing_dir, model_scale, &cx, &cy,
+                                             &cz);
+  *out_x = batch->state.pos_x[idx] + facing_dir * cz;
+  *out_y = batch->state.pos_y[idx] + cy;
+  *out_z = batch->state.pos_z[idx] - facing_dir * cx;
+
+  float radius = ev->radius;
+  if (!msl_hitbox_ignore_fighter_scale(ev->u16_6)) {
+    radius *= scale_y;
+  }
+  *out_r = radius;
   return 1u;
 }
 
@@ -1974,6 +2077,12 @@ void hitboxes_refresh(MslBatch* batch) {
             }
             if (!copied) {
               const size_t dst_i = idx_hitbox(bi, p, hb);
+              float event_hx = batch->state.hitbox_x[dst_i];
+              float event_hy = batch->state.hitbox_y[dst_i];
+              float event_hz = batch->state.hitbox_z[dst_i];
+              float event_hr = batch->state.hitbox_radius[dst_i];
+              (void)hitboxes_event_world_capsule(batch, idx, char_id, msid, pose_frame, ev,
+                                                 &event_hx, &event_hy, &event_hz, &event_hr);
               if (hitboxes_seed_bridge_create_edge_guard_admission_dense_applies(batch, bi, p,
                                                                                  new_g)) {
                 hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(batch, bi, p, (int)hb,
@@ -2005,6 +2114,23 @@ void hitboxes_refresh(MslBatch* batch) {
                 // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
                 // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
                 hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, (int)hb, new_g);
+              } else if (hitboxes_hitlist_has_runtime_guard_victims1_entry(
+                             batch, bi, p, (int)hb, event_hx, event_hy, event_hz, event_hr,
+                             &batch->state.fighter_hitlist[dst_i]) &&
+                         msl_motion_state_class_has(batch->state.char_id[idx], msid,
+                                                    MSL_MS_CLASS_ATTACK_S4) &&
+                         batch->state.prev_action_id[idx] == action_id) {
+                // Runtime-populated HitCapsule victims_1 preservation:
+                // if a live shield-path collision has already inserted a Guard-family fighter
+                // victim in this slot, a reconstructed same-action AttackS4 enable edge must not
+                // erase that source-owned list when the current ShieldDesc no longer overlaps the
+                // HitCapsule. Current shield overlaps still take ftColl_80076CBC/GuardSetOff
+                // normally; dense seed materialization and non-shield BODY victims stay excluded
+                // by the predicate above.
+                // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+                // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80078C70}
+                // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80008688,lbColl_8000ACFC}
+                batch->state.fighter_hitlist_init_gen[dst_i] = hitlist_gen;
               } else if (hitboxes_no_clear_attackairlw_dense_seed_initializes_hitcapsule(
                              batch, bi, p, (int)hb, new_g)) {
                 // Replay-rollout start can enter one script tick before the same-group DAir

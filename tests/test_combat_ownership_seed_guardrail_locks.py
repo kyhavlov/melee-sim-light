@@ -318,13 +318,16 @@ def _run_rollout_window_rows_with_trace(
         binding.reseed_seed_rollout(handle, seed_bytes)
         for rec in range(start_record, max(window_records) + 1):
             row = samples[rec : rec + 1]
+            seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, seed_stride
+            )
             prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
                 1, input_stride
             )
             input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
                 1, input_stride
             )
-            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.step_input_replay_frame_rng(handle, seed_bytes, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             if rec in window_records:
                 window_out[rec] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()

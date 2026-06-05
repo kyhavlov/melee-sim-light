@@ -262,12 +262,20 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
     case (uint16_t)MSL_ACT_RUN:
     case (uint16_t)MSL_ACT_JUMP_AERIAL_F:
     case (uint16_t)MSL_ACT_JUMP_AERIAL_B:
-    case (uint16_t)MSL_ACT_LANDING_AIR_LW:
     case (uint16_t)MSL_ACT_ATTACK_HI4:
     case (uint16_t)MSL_ACT_ATTACK_LW3:
     case (uint16_t)MSL_ACT_FX_SPECIAL_LW_END:
     case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
       return 1u;
+    case (uint16_t)MSL_ACT_LANDING_AIR_LW:
+      // LandingAirLw visible state alone is not a Fighter_8006CDA4 stream-phase owner. Exact
+      // replay rows with hidden pre-gate HSD_Randi advances return above through the explicit seed
+      // lane; runtime rows must prove a concrete selected ProcessHit source such as the authored
+      // DownAttackU recovery sweep before admitting ftCo_8008DCE0's DamageFlyRoll HSD_Randf gate.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+      return 0u;
     case (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI:
       // Exact replay rows keep the HSD_Randf phase seed-owned. Free-running rollout must still use
       // the current ProcessHit source owner before admitting this pre-action; visible
@@ -280,8 +288,26 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
       if (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u) {
         return 1u;
       }
+      const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
+      const uint8_t replay_frame_rng_applied =
+          (batch->replay_frame_rng_applied != NULL && batch->replay_frame_rng_applied[bi] != 0u)
+              ? 1u
+              : 0u;
+      const uint8_t advanced_past_reseed =
+          (batch->replay_rollout_seed_frame_id != NULL &&
+           batch->state.frame_id[bi] != batch->replay_rollout_seed_frame_id[bi])
+              ? 1u
+              : 0u;
+      if (replay_frame_rng_applied != 0u && advanced_past_reseed == 0u) {
+        // Replay playback installs the current row's Slippi frame-start RNG before each step.
+        // Exact DamageFlyN/Lw ThrowHi hitlag seed rows without an explicit source lane therefore
+        // remain seed-owned at the DamageFlyRoll gate. Later frames in the same rollout segment can
+        // still use the advanced source-owned ThrowHi clock path below.
+        // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+        return 0u;
+      }
       if (batch->state.hitlag[d_idx] != 0u && batch->state.hitstun[d_idx] != 0u) {
-        const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
         const int num_players = (int)batch->config.num_players;
         const int attacker = msl_damage_source_local_slot_from_port0(
             batch, (int)bi, num_players, batch->state.last_hit_by[d_idx]);

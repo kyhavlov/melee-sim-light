@@ -2,19 +2,6 @@
   "version": 1,
   "rollout_first_mismatch_exceptions": [
     {
-      "dataset": "Game_20260514T181413.msl",
-      "record": 2629,
-      "player": 0,
-      "field": "action_id",
-      "subindex": -1,
-      "seed": 21,
-      "out": 91,
-      "ref": 88,
-      "seeded_break": false,
-      "category": "open_magnify_camera",
-      "reason": "Reviewed package-boundary residual: offscreen magnifier/camera percent ownership can perturb this non-RL gameplay action selection. Keep raw validation visible; treat as accepted only for discrete rollout completion review."
-    },
-    {
       "dataset": "Game_20260515T182447_frozenps.msl",
       "record": 4665,
       "player": 0,
@@ -39,45 +26,6 @@
       "seeded_break": true,
       "category": "open_rng_phase_top_blast_deadupfall",
       "reason": "Reviewed 182447 burn-down seeded retry residual: DamageFlyTop crosses the top blast boundary and ftCo_800D3158 selects DeadUpFall vs DeadUpStar through HSD_Randi(100)+1 / Camera_8003010C. The deterministic pre-gate state is the same top-blast DamageFlyTop setup; exact HSD stream phase is out of scope for RL 1.0 replay rollout matching."
-    },
-    {
-      "dataset": "HungryImportantSnake.msl",
-      "record": 4397,
-      "player": 0,
-      "field": "action_id",
-      "subindex": -1,
-      "seed": 90,
-      "out": 88,
-      "ref": 91,
-      "seeded_break": false,
-      "category": "open_rng_phase_damageflyroll",
-      "reason": "Reviewed HIS burn-down residual: DamageFlyN vs DamageFlyRoll is the ftCo_8008DCE0 / Fighter_8006CDA4 exact RNG stream phase gate, which is out of scope for RL 1.0 exact replay matching."
-    },
-    {
-      "dataset": "HungryImportantSnake.msl",
-      "record": 7485,
-      "player": 0,
-      "field": "action_id",
-      "subindex": -1,
-      "seed": 43,
-      "out": 88,
-      "ref": 91,
-      "seeded_break": false,
-      "category": "open_rng_phase_damageflyroll",
-      "reason": "Reviewed HIS burn-down residual: DamageFlyN vs DamageFlyRoll is the ftCo_8008DCE0 / Fighter_8006CDA4 exact RNG stream phase gate, which is out of scope for RL 1.0 exact replay matching."
-    },
-    {
-      "dataset": "HungryImportantSnake.msl",
-      "record": 7485,
-      "player": 0,
-      "field": "action_id",
-      "subindex": -1,
-      "seed": 43,
-      "out": 88,
-      "ref": 91,
-      "seeded_break": true,
-      "category": "open_rng_phase_damageflyroll",
-      "reason": "Reviewed HIS burn-down seeded retry residual: DamageFlyN vs DamageFlyRoll is the ftCo_8008DCE0 / Fighter_8006CDA4 exact RNG stream phase gate, which is out of scope for RL 1.0 exact replay matching."
     }
   ],
   "rollout_float_annotations": [

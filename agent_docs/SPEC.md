@@ -454,12 +454,19 @@ Process:
 Notes:
 - This is “teacher-forced” evaluation: it answers “is our one-step transition function correct on the support of real gameplay states?”
 - Reseeding must be deterministic and should avoid “cheating” by copying fields that the simulator is supposed to derive (e.g., if we track derived timers, we should seed only what is observable/authoritative for that frame).
-- `validation_report_diff` red classification treats rollout streak-distribution reshuffles as clean only when both
-  `first_mismatch_total` and `streak_count` are non-regressing for the same report/section. The raw movement list still
-  prints median/best/max regressions, but they are not hard/distribution/unclassified reds under that policy because no
-  new first mismatch or streak is introduced. One-step `float_norm_mae_p95` movements are likewise clean only when the
-  corresponding discrete and strict-discrete counts are non-regressing. This is a validation semantics change, not
-  gameplay proof; gameplay changes still require source/data-backed owners and focused controls.
+- Rollout validation is replay playback, not free-running RL: the harness feeds replay inputs and
+  the replay row's `frame_pre_random_seed` before every rollout step. Runtime/free-running
+  `step_input` keeps the internally modeled HSD RNG stream; only replay validation/playback calls
+  the replay-frame RNG install hook.
+- `validation_report_diff` red classification treats rollout validation-semantics reshuffles as
+  clean only when the relevant `first_mismatch_total` and `streak_count` are both non-regressing.
+  New per-replay `rollout.first_mismatch_total` or `rollout.streak_count` regressions remain hard
+  reds even if suite totals improve. The raw movement list still prints streak-shape and best-length
+  regressions; those are not hard/distribution/unclassified reds when the mismatch/streak counts are
+  non-regressing. One-step `float_norm_mae_p95` movements are likewise clean only when the
+  corresponding discrete and strict-discrete counts are non-regressing. This is validation semantics
+  accounting, not gameplay proof; gameplay changes still require source/data-backed owners and
+  focused controls.
 
 Known teacher-forcing limitations (must be tracked and eventually removed, not treated as “engine truth”):
 - Input-history tilt timers (`x670`/`x671`), TURN internals (`frames_to_turn`/`has_turned`), and KneeBend internals (`jump_input`/`is_short_hop`) are derived during preprocessing and are part of the seed schema.
@@ -5860,16 +5867,32 @@ BODY collision-space residual split and rejected seed bridge:
   - `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox`
 - LandingAirLw frame 1..15 can also reach a one-consume `Fighter_8006CDA4` pre-gate phase before
   `ftCo_8008DCE0`'s DamageFlyRoll gate, but free-running rollout only admits that phase from a
-  concrete current `ProcessHit` source: the defender is still in LandingAirLw before damage entry,
-  the selected DmgLog source names an active attacker HitCapsule, and the authored payload matches
-  the extracted common DownAttackU ground-sweep hitboxes (`damage=6`, Sakurai angle, `kbg=50`,
-  `bkb=80`). Visible LandingAirLw or DownAttackU action shape alone is not enough to advance the RNG
-  stream. `GAT:11134` locks the positive; the adjacent trace rows remain cold for the hidden
-  pre-gate site. Source anchors:
+  concrete current `ProcessHit` source: the selected DmgLog source names an active attacker
+  HitCapsule, and the authored payload matches the extracted common DownAttackU ground-sweep
+  hitboxes (`damage=6`, Sakurai angle, `kbg=50`, `bkb=80`). KneeBend -> LandingFallSpecial's first
+  callback has no replay seed-lane marker, but it shares the same current source path when
+  DownAttackU hits it into damage entry; the selected normal BODY damage source owns
+  ftColl_80078538's four-call damage-effect prefix before the one Fighter_8006CDA4 pre-gate advance.
+  Runtime proves that entry with `seed_prev_action_id` KneeBend and the bounded post-timebase
+  first-callback frame. Visible LandingAirLw,
+  LandingFallSpecial, or DownAttackU action shape alone is not enough to advance the RNG stream, and
+  stale LandingAirLw seed metadata alone does not own the later replay-frame rollout clock.
+  `GAT:11134` and `HIS:7485` lock positives; `HIS:4213->4397` locks stale LandingAirLw clock
+  suppression; adjacent trace rows remain cold for the hidden pre-gate site. Source anchors:
   `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
   `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`, and
   `data/moves/{fox,falco}.json::moves.ftCo_SM_DownAttackU.events.create_hitbox`.
+- JumpAerial victims can also enter the `DamageFlyRoll` gate through Illusion/Phantasm article BODY
+  damage. This is separate from the `JumpAerial -> AttackAirB` cap2 BODY carry: the item path enters
+  `combat_apply_item_hit` with no selected fighter HitCapsule/hurtcap source. Runtime admits this
+  only when the source item type is the generated MSLITAR1 side-special illusion article kind, the
+  item state is a damaging state 0/1, and the owner is in the side-special source family. This keeps
+  the TCH cap1 fighter-BAir negative seed-owned while closing the PRH Phantasm article row. Source
+  anchors: `refs/melee/src/melee/it/items/itfoxillusion.c::{
+  itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys,itFoxIllusion_Logic14_DmgDealt}`,
+  `refs/melee/src/melee/it/itcoll.c::it_80272460`, and
+  `data/items/articles/fox_falco.bin::MSLITAR1 side_special_illusion_itkind`.
 - FoD grounded KneeBend severe-airborne entries use the same immediate seed-frame reconstruction
   for grIzumi validation rows where the hidden stream phase is replay-visible. The KneeBend slice
   stays scoped to FoD until non-FoD variants have a separate source owner; it is not backfilled and

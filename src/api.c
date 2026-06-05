@@ -649,6 +649,12 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
   memset(batch->rollout_yoshi_shyguy_spawn_rng_installed, 0, (size_t)batch_size * sizeof(uint8_t));
+  batch->replay_frame_rng_applied = (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
+  if (batch->replay_frame_rng_applied == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->replay_frame_rng_applied, 0, (size_t)batch_size * sizeof(uint8_t));
   batch->replay_rollout_reseeded = (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
   if (batch->replay_rollout_reseeded == NULL) {
     msl_batch_destroy(batch);
@@ -848,6 +854,7 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch->camera_mode);
   alloc_free(batch->replay_rollout_seed_frame_id);
   alloc_free(batch->replay_rollout_reseeded);
+  alloc_free(batch->replay_frame_rng_applied);
   alloc_free(batch->rollout_yoshi_shyguy_spawn_rng_installed);
   alloc_free(batch->rollout_clock_rng_owned);
   alloc_free(batch->match_init_seed_scratch);
@@ -884,6 +891,7 @@ static void msl_batch_copy_runtime_lane(MslBatch* dst, const MslBatch* src, int3
 
   MSL_BATCH_COPY_FIELD(rollout_clock_rng_owned, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(rollout_yoshi_shyguy_spawn_rng_installed, uint8_t, 1u);
+  MSL_BATCH_COPY_FIELD(replay_frame_rng_applied, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_rollout_reseeded, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_rollout_seed_frame_id, int32_t, 1u);
   MSL_BATCH_COPY_FIELD(camera_mode, uint8_t, 1u);
@@ -1324,11 +1332,18 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
       // batch: Slippi exposes one frame-start stream, and without that second gate's hidden
       // Fighter_8006CDA4 phase, advancing the global seed for the seeded victim can perturb the
       // unrelated gate.
+      //
+      // LandingAirLw's seed lane is only source-owned for one-step reconstruction and current
+      // ProcessHit admission; a stale LandingAirLw row without that live DownAttackU hit source
+      // must not own the later global rollout RNG clock.
       // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
       if (!msl_seed_has_other_unseeded_damageflyroll_gate_candidate(seed, active_players, victim)) {
-        return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
+        if (seed->action_id[victim] != (uint16_t)MSL_ACT_LANDING_AIR_LW) {
+          return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
+        }
       }
     }
     if (attacker < 0 || attacker == victim) {
@@ -3502,6 +3517,25 @@ int msl_batch_reseed_seed_rollout(MslBatch* batch, const uint8_t* seed_bytes,
                                     (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED);
 }
 
+int msl_batch_apply_replay_frame_rng(MslBatch* batch, const uint8_t* seed_bytes,
+                                     size_t seed_stride_bytes) {
+  if (batch == NULL || seed_bytes == NULL) {
+    return EINVAL;
+  }
+  if (seed_stride_bytes < sizeof(MslSeed)) {
+    return EINVAL;
+  }
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    const MslSeed* seed =
+        (const MslSeed*)(const void*)(seed_bytes + (size_t)bi * seed_stride_bytes);
+    batch->state.frame_pre_random_seed[(size_t)bi] = seed->frame_pre_random_seed;
+    if (batch->replay_frame_rng_applied != NULL) {
+      batch->replay_frame_rng_applied[bi] = 1u;
+    }
+  }
+  return 0;
+}
+
 static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
   if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
     return;
@@ -3540,10 +3574,23 @@ static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
     if (batch->rollout_yoshi_shyguy_spawn_rng_installed != NULL) {
       batch->rollout_yoshi_shyguy_spawn_rng_installed[bi] = 0u;
     }
+    const uint8_t replay_frame_rng_applied =
+        (batch->replay_frame_rng_applied != NULL && batch->replay_frame_rng_applied[bi] != 0u) ? 1u
+                                                                                               : 0u;
+    if (batch->replay_frame_rng_applied != NULL) {
+      batch->replay_frame_rng_applied[bi] = 0u;
+    }
     if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_NONE) {
       continue;
     }
     if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+      if (replay_frame_rng_applied != 0u) {
+        // Replay validation playback has already installed the next step's authoritative Slippi
+        // frame-start RNG seed through msl_batch_apply_replay_frame_rng. Keep the clock owner as a
+        // source-site admission marker, but do not advance the old synthetic +0x10000 bridge.
+        // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+        continue;
+      }
       if (yoshi_spawn_installed != 0u) {
         // A broader replay-frame RNG owner can coexist with Yoshi's no-live stage scheduler. On
         // the exact `grStory_801E3418` spawn frame, the explicit spawn seed is already the
@@ -3576,6 +3623,18 @@ int msl_batch_step_input(MslBatch* batch, const uint8_t* prev_input_bytes,
   }
   msl_batch_commit_rollout_clock_rng(batch);
   return 0;
+}
+
+int msl_batch_step_input_replay_frame_rng(MslBatch* batch, const uint8_t* seed_bytes,
+                                          size_t seed_stride_bytes, const uint8_t* prev_input_bytes,
+                                          size_t prev_input_stride_bytes,
+                                          const uint8_t* input_bytes, size_t input_stride_bytes) {
+  int err = msl_batch_apply_replay_frame_rng(batch, seed_bytes, seed_stride_bytes);
+  if (err != 0) {
+    return err;
+  }
+  return msl_batch_step_input(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
+                              input_stride_bytes);
 }
 
 static uint8_t msl_is_dead_from_stocks(uint8_t stocks) { return stocks == 0 ? 1 : 0; }
