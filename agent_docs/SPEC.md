@@ -5780,6 +5780,40 @@ BODY collision-space residual split and rejected seed bridge:
   grounded Attack* range; it does not backfill those grounded-entry rows across earlier frames, and
   runtime clears an unconsumed marker at frame end. This is exact reseed support, not source-closed
   RNG ownership for free-running grounded gameplay.
+- PJO extends that source-owned DamageFlyRoll stream model with three current-hit owners that do
+  not depend on replay row identity:
+  - Grounded `Dash` hit by weak `AttackAirB`: runtime admits one `Fighter_8006CDA4` pre-gate
+    consume only when the defender's pre-hit action is Dash, the defender has no hitlag/hitstun,
+    the current DmgLog source is a different fighter, and the selected source HitCapsule payload
+    matches extracted weak BAir (`damage=9`, `angle=361`, `kbg=100`, `bkb=0`) from
+    `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox`. This closes PJO
+    `rec2654`. Negative controls keep unrelated action-shape rows off the owner: the test suite
+    traces only the selected weak-BAir current source, keeps cap/source controls outside the
+    DamageFlyTop owner, and validates aggregate PPA/doubles rows that would regress if visible BAir
+    or Dash shape alone advanced the stream.
+  - Grounded Catch-family interrupted by strong `AttackAirN`: runtime admits one pre-gate consume
+    only when the captured pre-action is a Catch-family state, the defender was grounded before
+    damage, the current ProcessHit source is a different fighter, and the selected source
+    HitCapsule payload matches extracted strong NAir (`hb0..2`, `damage=12`, `angle=361`,
+    `kbg=100`, `bkb=10`). This closes PJO `rec5097`. The proof deliberately uses current DmgLog
+    source payload plus grounded Catch-family pre-state, not stale `last_hit_by` or visible
+    post-entry hitstun. Controls cover the extracted strong-NAir payload table and PJO's trace site
+    count; adjacent grounded-entry lanes still require their own seed/current-source proof.
+  - Active `DamageFlyTop` hit by first-create strong `AttackAirB` hb1/cap0: runtime admits the
+    two decomp-visible `Fighter_8006CDA4` pre-gate consumes only when the selected DmgLog source is
+    authored strong BAir hb1, the selected hurtcap is cap0/root-body, and the victim carries the
+    live `mv.co.damage.x14` jump-buffer lane from the current DamageFlyTop episode. This closes PJO
+    `rec5448`. The x14 requirement is the source-owned narrowing that prevents hb1/cap0 from
+    becoming a generic root/body or action-shape selector. Negative controls keep PPA `rec7566` and
+    doubles `Game_20260509T152622 rec3301` on their original path because they also select hb1/cap0
+    but do not carry the live x14 source lane; cap12/XRotN `SpecialAirHi` PPA `rec7332` is also
+    locked out of the SpecialAirHi DamageFlyRoll admission path.
+  Source anchors:
+  - `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_Damage_IASA}`
+  - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`
+  - `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox`
+  - `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox`
 - LandingAirLw frame 1..15 can also reach a one-consume `Fighter_8006CDA4` pre-gate phase before
   `ftCo_8008DCE0`'s DamageFlyRoll gate, but free-running rollout only admits that phase from a
   concrete current `ProcessHit` source: the defender is still in LandingAirLw before damage entry,
@@ -6544,11 +6578,32 @@ BODY collision-space residual split and rejected seed bridge:
     runtime site ids exist for replay-clock accounting. QGD not affected on FD.
   - FoD platform scheduler: Fountain platform random scheduler; sites `17..22`; runtime site ids
     exist for platform replay-clock accounting. QGD not affected on FD.
-  - Wait animation variant: common Wait random animation variant; site `3`; runtime site id exists.
-    QGD not affected in the selected rows.
+  - Wait animation variant: common Wait random animation variant via `ftCo_8008A7A8` /
+    `ftwaitanim.c::getAnimID`, site `3`; runtime site id exists. Replay-frame seed ownership is
+    valid only after modeled same-frame source-prefix consumers have been applied. It is not a
+    generic replay-seed bridge: ordinary replay rows still keep frame RNG seed-owned unless a
+    source path proves both callback order and all earlier same-frame RNG consumers that affect
+    `getAnimID`. PJO `rec3012` is a positive with no earlier-player DeadUpStar prefix; QGD
+    `rec4435` is the regression control where an earlier player's DeadUpStar effect prefix must be
+    consumed before the later Wait callback. QGD not affected in the selected rows.
+  - DeadUpStar effect prefix before later-player Wait: `ftCo_DeadUpStar_Anim` phase-1 completion
+    dispatches effect kind `0x42D`, which creates particle generator `0x121`; that generator layer
+    consumes exactly two HSD RNG steps before later players' `Fighter_procUpdate` callbacks can
+    reach Wait `getAnimID`. Runtime models this as site `25`
+    (`MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX`) with two `combat_rng_consume_step_site` calls for
+    each lower-index player currently in `DeadUpStar` before the Wait player. The prefix is bounded
+    by normal player callback order inside one frame: only players with index `< wait_player` can
+    have already run their DeadUpStar animation callback, and later players cannot affect the
+    current Wait callback's RNG phase. Negative controls prove PJO's Wait row receives zero prefix
+    when the DeadUpStar player is later in callback order, while QGD's earlier-player DeadUpStar
+    row consumes the two-step prefix.
   - Pseudo-random SFX and electric clank: common pseudo-SFX site `4` and
     `ftColl_800784B4` electric clank SFX site `2`; runtime site ids exist. QGD not affected.
 - Source anchors:
+  - `refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}`
+  - `refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim`
+  - `refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch`
+  - `refs/melee/src/sysdolphin/baselib/particle.c`
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`
   - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`
   - `refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}`

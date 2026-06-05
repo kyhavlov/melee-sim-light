@@ -39,13 +39,44 @@
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
+static inline void locomotion_consume_deadupstar_effect_prefix_before_wait(MslBatch* batch, int bi,
+                                                                           int player) {
+  if (batch == NULL || bi < 0 || player <= 0 || player > (int)MSL_MAX_PLAYERS) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (player > num_players) {
+    return;
+  }
+  for (int p = 0; p < player; p++) {
+    const size_t idx = msl_idx_player(bi, p);
+    if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_DEAD_UP_STAR) {
+      continue;
+    }
+    // DeadUpStar_Anim's phase-1 completion spawns async effect kind 0x42D before later players'
+    // Fighter_procUpdate callbacks run. That dispatch creates generator 0x121; the particle
+    // generator layer owns HSD_Randf/HSD_Rand consumers before a later terminal Wait callback can
+    // call getAnimID's HSD_Randi(100). Replay-frame seeds expose only the frame-boundary seed, so
+    // this bounded player-order prefix is modeled at the Wait site instead of broad global effect
+    // RNG reconstruction.
+    // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
+    // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
+    // refs/melee/src/sysdolphin/baselib/particle.c
+    combat_rng_consume_step_site(batch, bi, MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX);
+    combat_rng_consume_step_site(batch, bi, MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX);
+  }
+}
+
 static inline uint16_t choose_wait_anim_variant(MslBatch* batch, int bi, const MslCharParams* ch,
                                                 uint16_t current_anim) {
-  if (batch == NULL || batch->rollout_clock_rng_owned == NULL ||
-      batch->rollout_clock_rng_owned[bi] != (uint8_t)MSL_ROLLOUT_CLOCK_HSD_RAND_STREAM) {
-    // Replay seeds expose frame boundary RNG state, not the exact hidden stream phase for idle
-    // animation roulette. Do not turn exact replay one-step rows into RNG-phase mismatches; true
-    // free-running match-init rollouts own the HSD stream and take the source branch below.
+  const uint8_t rng_owner =
+      (batch != NULL && batch->rollout_clock_rng_owned != NULL && bi >= 0 && bi < batch->batch_size)
+          ? batch->rollout_clock_rng_owned[bi]
+          : (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
+  if (rng_owner != (uint8_t)MSL_ROLLOUT_CLOCK_HSD_RAND_STREAM &&
+      rng_owner != (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+    // Only source-owned HSD streams, or replay-frame seeds whose same-frame prefix sites have been
+    // modeled by the caller, can select a fresh idle animation here.
     return current_anim;
   }
   if (ch == NULL || ch->wait_anim_choice_count == 0u) {
@@ -2262,6 +2293,21 @@ void locomotion_update_anim_callbacks_pre_input(MslBatch* batch) {
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
         }
+      } else if (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                 action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) {
+        const uint32_t anim = batch->state.animation_index[idx];
+        if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu &&
+            anim_finished(char_id, (uint16_t)anim, batch->state.anim_frame_f32[idx])) {
+          // JumpAerial_Anim runs before current-frame IASA. On terminal aerial-jump frames it
+          // enters FallAerial with Ft_MF_None, clearing fp->fall_fast before FallAerial_IASA can
+          // immediately consume AttackAir/EscapeAir input in the same Fighter_procUpdate.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{
+          //   ftCo_JumpAerial_Anim,ftCo_JumpAerial_IASA}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::ftCo_FallAerial_Enter
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL_AERIAL;
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL_AERIAL;
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        }
       }
     }
   }
@@ -4080,8 +4126,15 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
 
-        if (action_id == MSL_ACT_WAIT &&
-            anim_finished(cid, (uint16_t)MSL_SM_WAIT1_0, batch->state.anim_frame_f32[idx])) {
+        const uint8_t replay_wait_rng_owner =
+            (batch->rollout_clock_rng_owned != NULL &&
+             batch->rollout_clock_rng_owned[bi] == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED)
+                ? 1u
+                : 0u;
+        const uint32_t wait_anim = replay_wait_rng_owner != 0u ? batch->state.animation_index[idx]
+                                                               : (uint32_t)MSL_SM_WAIT1_0;
+        if (action_id == MSL_ACT_WAIT && wait_anim <= 0xFFFFu &&
+            anim_finished(cid, (uint16_t)wait_anim, batch->state.anim_frame_f32[idx])) {
           // Wait_Anim does not simply let the AObj loop carry the visible frame past the end.
           // It calls ftCo_8008A7A8, which restarts the current/selected wait subanimation through
           // ftCo_8008A6D8 / ftAnim_8006EBE8. Character WaitStruct tables provide the weighted
@@ -4091,6 +4144,9 @@ void locomotion_update_pre(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Anim
           // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}
           // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+          if (replay_wait_rng_owner != 0u) {
+            locomotion_consume_deadupstar_effect_prefix_before_wait(batch, bi, p);
+          }
           batch->state.animation_index[idx] =
               choose_wait_anim_variant(batch, bi, ch, (uint16_t)batch->state.animation_index[idx]);
           msl_anim_timebase_restart(batch, idx, 0.0f, 1.0f);

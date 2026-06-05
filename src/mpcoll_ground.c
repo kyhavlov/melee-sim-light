@@ -14060,6 +14060,37 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.coll_desired_ecb_bottom_rel_y[idx] <= k_floor_y_bias)
                 ? 1u
                 : 0u;
+        const uint8_t suppress_fresh_jumpaerial_downheld_nonplatform_stale_land =
+            // Fresh JumpAerial -> EscapeAir may enter the collision callback before Fighter_procMap,
+            // but a restored/no-owner non-platform publication still requires a source root/bottom
+            // producer. Keep this rejection on the decomp-authored down-held input owner: steep
+            // downward EscapeAir rows are still below the accepted floor in the callback-local
+            // source state, while shallow diagonal air-dodges continue through the ordinary
+            // EscapeAir_Coll hard-floor publication path.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
+            //   ftCo_80099A58,ftCo_80099A9C,ftCo_EscapeAir_Coll}
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,
+            //   mpColl_80044838_Floor}
+            (c != NULL && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed != 0u &&
+             !msl_escapeair_locked_bottom_owner_any(
+                 batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+             batch->state.action_frame[idx] <= 3 &&
+             (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+              batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
+             batch->state.seed_prev_action_frame[idx] <= 1 &&
+             stick_i8_to_unit(batch->state.input_main_y[idx]) <=
+                 c->platform_air_land_stick_y_threshold &&
+             stick_i8_to_unit(batch->state.prev_input_main_y[idx]) <=
+                 c->platform_air_land_stick_y_threshold &&
+             !stage_collision_floor_line_is_platform(stage_id, ground_id) &&
+             !resolved_line_has_platform_transform &&
+             !escapeair_live_nonplatform_root_floor_authority &&
+             escapeair_floor_producer_authority_in == 0u && final_landing_lift >= 0.0f &&
+             batch->state.coll_substep_prev_pos_y[idx] < contact_y &&
+             batch->state.coll_substep_cur_pos_y[idx] < contact_y)
+                ? 1u
+                : 0u;
         const uint8_t suppress_locked_escapeair_missing_bottom_owner_land =
             // A replay seed with CollData_X130_Locked but no preserved desired-bottom owner cannot
             // prove that mpColl_80044628_Floor reached the source bottom-sweep precondition. If the
@@ -14184,7 +14215,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
             .sustained_same_ledge_lock =
                 suppress_sustained_escapeair_same_ledge_lock_land ||
                 suppress_sustained_escapeair_adjacent_ledge_without_allow_interrupt,
-            .locked_missing_bottom_owner = suppress_locked_escapeair_missing_bottom_owner_land,
+            .locked_missing_bottom_owner =
+                suppress_locked_escapeair_missing_bottom_owner_land ||
+                suppress_fresh_jumpaerial_downheld_nonplatform_stale_land,
             .locked_desired_platform_without_bottom_sweep =
                 suppress_locked_desired_platform_without_bottom_sweep,
             .locked_desired_nonplatform_without_bottom_sweep =

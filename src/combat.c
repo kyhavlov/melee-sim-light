@@ -4103,6 +4103,7 @@ enum {
   MSL_ATTACKAIRB_STRONG_BODY_ROOT_HITBOX = 0u,
   MSL_ATTACKAIRB_STRONG_BODY_TAIL_HITBOX = 1u,
   MSL_HURTCAP_DAMAGEFLYTOP_HEAD_HIGH_SLOT = 2u,
+  MSL_HURTCAP_DAMAGEFLYTOP_ROOT_BODY_SLOT = 0u,
   MSL_HURTCAP_DAMAGEFLYTOP_XROTN_SLOT = 12u,
 };
 
@@ -4128,6 +4129,17 @@ static inline uint8_t combat_attackairn_hitbox_payload_is_authored_late(int hitc
                    hitbox_bkb == 0u);
 }
 
+static inline uint8_t combat_attackairn_hitbox_payload_is_authored_strong(uint8_t hb_id,
+                                                                          int hitcapsule_int_dmg,
+                                                                          uint16_t hitbox_angle,
+                                                                          uint16_t hitbox_kbg,
+                                                                          uint16_t hitbox_bkb) {
+  // Fox/Falco strong NAir opening payload: hb0/hb1/hb2, 12 damage, Sakurai angle, bkb 10.
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+  return (uint8_t)(hb_id < (uint8_t)MSL_MAX_HITBOXES && hitcapsule_int_dmg == 12 &&
+                   hitbox_angle == 361u && hitbox_kbg == 100u && hitbox_bkb == 10u);
+}
+
 static inline uint8_t combat_attackairb_hitbox_payload_is_authored_strong(uint8_t hb_id,
                                                                           int hitcapsule_int_dmg,
                                                                           uint16_t hitbox_angle,
@@ -4139,6 +4151,18 @@ static inline uint8_t combat_attackairb_hitbox_payload_is_authored_strong(uint8_
                     hb_id == (uint8_t)MSL_ATTACKAIRB_STRONG_BODY_TAIL_HITBOX) &&
                    hitcapsule_int_dmg == 15 && hitbox_angle == 361u && hitbox_kbg == 100u &&
                    hitbox_bkb == 0u);
+}
+
+static inline uint8_t combat_attackairb_hitbox_payload_is_authored_weak(uint8_t hb_id,
+                                                                        int hitcapsule_int_dmg,
+                                                                        uint16_t hitbox_angle,
+                                                                        uint16_t hitbox_kbg,
+                                                                        uint16_t hitbox_bkb) {
+  // Fox/Falco weak BAir payload: hb2 on the first create edge, then hb0/hb1/hb2 refresh to the
+  // same 9-damage Sakurai-angle payload on frame 8.
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  return (uint8_t)(hb_id < (uint8_t)MSL_MAX_HITBOXES && hitcapsule_int_dmg == 9 &&
+                   hitbox_angle == 361u && hitbox_kbg == 100u && hitbox_bkb == 0u);
 }
 
 static inline uint8_t combat_source_motion_is_attackairb(uint16_t source_motion_id) {
@@ -4203,14 +4227,18 @@ static inline uint8_t combat_attackairb_damageflytop_selected_body_source_owns_p
   // - cap12 is the live XRotN/upper-body hurtcap in data/hurtcaps/{fox,falco}.json and is selected
   //   by ftColl_80076ED8 once DamageFlyRoll/DamageFlyTop rotates the damage pose high enough.
   // - hb1/cap2 is the authored strong tail HitCapsule against the high/head hurtcap slot.
+  // - hb1/cap0 is the same authored strong tail HitCapsule against the root/body slot on the first
+  //   AttackAirB create edge, before the live damage pose exposes the XRotN cap12 path; the caller
+  //   still requires a carried DamageFlyTop source lane before admitting this root/body variant.
   // Raw cap ids are kept here only because the generated hurtcap substrate currently exposes ids
-  // and metadata but not semantic names. Tests lock cap1, hb0/cap2, low/root, and aggregate rows
+  // and metadata but not semantic names. Tests lock cap1, hb0/cap2, unrelated low/root, and aggregate rows
   // onto their original path.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
-  // data/hurtcaps/{fox,falco}.json cap2/cap12
+  // data/hurtcaps/{fox,falco}.json cap0/cap2/cap12
   return (uint8_t)(cap_id == (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_XROTN_SLOT ||
                    (hb_id == (uint8_t)MSL_ATTACKAIRB_STRONG_BODY_TAIL_HITBOX &&
-                    cap_id == (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_HEAD_HIGH_SLOT));
+                    (cap_id == (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_HEAD_HIGH_SLOT ||
+                     cap_id == (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_ROOT_BODY_SLOT)));
 }
 
 static inline uint8_t combat_damageflyroll_damageflytop_attackairb_create_hitcapsule_owner(
@@ -4245,17 +4273,23 @@ static inline uint8_t combat_damageflyroll_damageflytop_attackairb_create_hitcap
   if (!combat_attackairb_damageflytop_selected_body_source_owns_pre_gate(hb_id, cap_id)) {
     return 0u;
   }
+  if (cap_id == (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_ROOT_BODY_SLOT &&
+      batch->state.damage_jump_buffer_x14[d_idx] == 0) {
+    return 0u;
+  }
   // Live DamageFlyTop -> strong BAir create-HitCapsule pre-gate owner:
   // `Fighter_8006CDA4` runs before the `ftCo_8008DCE0` DamageFlyRoll gate. Replay seed generation
   // marks AttackAirB hits against active DamageFlyTop as exactly two pre-gate HSD_Randi advances.
   // The retained runtime owner requires the resolved BODY DmgLog source to be a concrete authored
   // strong AttackAirB HitCapsule created through ftAction_8007121C, plus the selected
-  // HitCapsule/hurtcap source pair from ftColl_80076ED8. Low/root limb contacts, cap-1 contacts
-  // that need an unmodeled fourth stream step, and the hb0/cap2 control remain outside this hidden
-  // Fighter_8006CDA4 stream-phase fallback; their exact stream phase must come from an explicit
-  // seed lane, not from visible AttackAirB shape alone.
+  // HitCapsule/hurtcap source pair from ftColl_80076ED8. The first-create hb1/cap0 root/body
+  // variant also requires a live mv.co.damage.x14 jump-buffer carry from the current DamageFlyTop
+  // episode (`ftCo_Damage_IASA` / `inlineC0`); cap0 rows without that carried source lane remain on
+  // their explicit seed lane or ordinary DamageFlyN/Hi path. Cap-1 contacts that need an unmodeled
+  // stream step, hb0/cap2, and non-selected root/low contacts remain outside this hidden
+  // Fighter_8006CDA4 stream-phase fallback.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_Damage_IASA}
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007ABD0,ftColl_80076ED8,ftColl_8007A06C}
   // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
   // data/hurtcaps/{fox,falco}.json (source hurtcap slot/height)
@@ -4274,6 +4308,64 @@ static inline void combat_damageflyroll_consume_damageflytop_attackairb_live_cou
       batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_PRIMARY, 1);
   (void)combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_SECONDARY, 1);
+}
+
+static inline uint8_t combat_damageflyroll_catch_strong_attackairn_hitcapsule_owner(
+    const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker, size_t source_hb_i,
+    uint8_t source_hb_valid, uint8_t defender_on_ground_before, uint16_t source_motion_id,
+    int source_hitcapsule_int_dmg, uint16_t source_hitbox_angle, uint16_t source_hitbox_kbg,
+    uint16_t source_hitbox_bkb) {
+  if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
+    return 0u;
+  }
+  if (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u ||
+      !combat_action_is_catch_family(batch->state.action_id[d_idx]) ||
+      defender_on_ground_before == 0u || batch->state.hitlag[d_idx] != 0u ||
+      !combat_source_motion_is_attackairn(source_motion_id) || source_hb_valid == 0u) {
+    return 0u;
+  }
+  if (!msl_damage_owner_replay_rollout_advanced_under_rng_owner(batch, d_idx)) {
+    return 0u;
+  }
+  const size_t hb_base = a_idx * (size_t)MSL_MAX_HITBOXES;
+  if (source_hb_i < hb_base || source_hb_i >= hb_base + (size_t)MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  const uint8_t hb_id = (uint8_t)(source_hb_i - hb_base);
+  if (!combat_attackairn_hitbox_payload_is_authored_strong(hb_id, source_hitcapsule_int_dmg,
+                                                           source_hitbox_angle, source_hitbox_kbg,
+                                                           source_hitbox_bkb)) {
+    return 0u;
+  }
+  // Grounded Catch-family -> strong AttackAirN severe-airborne DamageFlyRoll owner:
+  // the replay-visible Catch state is interrupted by a current ProcessHit BODY DmgLog entry before
+  // ftCo_8008DCE0 runs. The selected source HitCapsule is the extracted strong NAir opening
+  // payload, which carries one Fighter_8006CDA4 pre-gate HSD_Randi before the DamageFlyRoll gate in
+  // the same source episode. `hitstun` has already been written by Fighter_ProcessHit when this
+  // helper runs inside ftCo_8008DCE0, so the source proof is the captured Catch-family pre-action,
+  // grounded pre-hit state, and current selected HitCapsule payload rather than a zero-hitstun
+  // post-entry test. Visible Catch alone only admits the gate; this helper supplies the concrete
+  // current-hit source for the hidden stream phase.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+  return 1u;
+}
+
+static inline void combat_damageflyroll_consume_catch_strong_attackairn_count(
+    MslBatch* batch, int bi, size_t d_idx, size_t a_idx, int attacker, size_t source_hb_i,
+    uint8_t source_hb_valid, uint8_t defender_on_ground_before, uint16_t source_motion_id,
+    int source_hitcapsule_int_dmg, uint16_t source_hitbox_angle, uint16_t source_hitbox_kbg,
+    uint16_t source_hitbox_bkb) {
+  if (!combat_damageflyroll_catch_strong_attackairn_hitcapsule_owner(
+          batch, d_idx, a_idx, attacker, source_hb_i, source_hb_valid, defender_on_ground_before,
+          source_motion_id, source_hitcapsule_int_dmg, source_hitbox_angle, source_hitbox_kbg,
+          source_hitbox_bkb)) {
+    return;
+  }
+  (void)combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_PRIMARY, 1);
 }
 
 static inline uint8_t combat_damageflyroll_attackairn_strong_attackairb_hitcapsule_owner(
@@ -4579,6 +4671,80 @@ static inline void combat_damageflyroll_consume_attackairb_strong_attackairb_hit
       batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_PRIMARY, 1);
 }
 
+static inline uint8_t combat_damageflyroll_dash_weak_attackairb_hitcapsule_owner(
+    const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker, size_t source_hb_i,
+    uint8_t source_hb_valid, uint16_t source_motion_id, int source_hitcapsule_int_dmg,
+    uint16_t source_hitbox_angle, uint16_t source_hitbox_kbg, uint16_t source_hitbox_bkb) {
+  if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
+    return 0u;
+  }
+  if (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DASH || batch->state.hitlag[d_idx] != 0u ||
+      batch->state.hitstun[d_idx] != 0u || !combat_source_motion_is_attackairb(source_motion_id) ||
+      source_hb_valid == 0u) {
+    return 0u;
+  }
+  const size_t hb_base = a_idx * (size_t)MSL_MAX_HITBOXES;
+  if (source_hb_i < hb_base || source_hb_i >= hb_base + (size_t)MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  const uint8_t hb_id = (uint8_t)(source_hb_i - hb_base);
+  if (!combat_attackairb_hitbox_payload_is_authored_weak(hb_id, source_hitcapsule_int_dmg,
+                                                         source_hitbox_angle, source_hitbox_kbg,
+                                                         source_hitbox_bkb)) {
+    return 0u;
+  }
+  // Grounded Dash -> weak AttackAirB severe-airborne DamageFlyRoll owner:
+  // ftColl_8007A06C records the selected BODY DmgLog entry, runs ftColl_80078538's normal-hit
+  // visual RNG prefix, then Fighter_ProcessHit reaches ftCo_8008DCE0. The damage entry calls
+  // Fighter_8006CDA4 before the DamageFlyRoll HSD_Randf gate. This source slice requires the
+  // concrete authored weak BAir HitCapsule selected by the DmgLog path; visible Dash alone is not
+  // enough to infer the hidden stream phase.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007A06C,ftColl_80078538}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  return 1u;
+}
+
+static inline void combat_damageflyroll_consume_dash_weak_attackairb_count(
+    MslBatch* batch, int bi, size_t d_idx, size_t a_idx, int attacker, size_t source_hb_i,
+    uint8_t source_hb_valid, uint16_t source_motion_id, int source_hitcapsule_int_dmg,
+    uint16_t source_hitbox_angle, uint16_t source_hitbox_kbg, uint16_t source_hitbox_bkb) {
+  if (!combat_damageflyroll_dash_weak_attackairb_hitcapsule_owner(
+          batch, d_idx, a_idx, attacker, source_hb_i, source_hb_valid, source_motion_id,
+          source_hitcapsule_int_dmg, source_hitbox_angle, source_hitbox_kbg, source_hitbox_bkb)) {
+    return;
+  }
+  (void)combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_PRIMARY, 1);
+}
+
+static inline uint8_t combat_damageflyroll_weak_attackairb_source_skips_x1994(
+    const MslCombatProcessHitResolved* ev) {
+  if (ev == NULL || ev->source_hb_valid == 0u ||
+      !combat_source_motion_is_attackairb(ev->source_motion_id)) {
+    return 0u;
+  }
+  const size_t hb_base = ev->a_idx * (size_t)MSL_MAX_HITBOXES;
+  if (ev->source_hb_i < hb_base || ev->source_hb_i >= hb_base + (size_t)MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  const uint8_t hb_id = (uint8_t)(ev->source_hb_i - hb_base);
+  // Weak AttackAirB DamageFlyRoll owner:
+  // PJO's grounded Dash -> weak BAir selected HitCapsule enters DamageFlyRoll, but the later
+  // landing/FallSpecial row is damage-eligible in replay, so this source episode does not carry
+  // the stale x1994 hit-status protection that stronger DamageFlyRoll rows do. Keep the split on
+  // the authored weak BAir payload selected by ftColl_80076ED8 rather than on replay row shape.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_8008DCE0,ftCo_Damage_OnExitHitlag}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  return combat_attackairb_hitbox_payload_is_authored_weak(
+      hb_id, ev->source_hitcapsule_int_dmg, ev->source_hitbox_angle, ev->source_hitbox_kbg,
+      ev->source_hitbox_bkb);
+}
+
 static inline uint8_t combat_damageflyroll_specialairhi_attackairb_hitcapsule_owner(
     const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker, size_t source_hb_i,
     uint8_t source_hb_valid, size_t source_cap_i, uint8_t source_cap_valid) {
@@ -4609,21 +4775,23 @@ static inline uint8_t combat_damageflyroll_specialairhi_attackairb_hitcapsule_ow
     return 0u;
   }
   const uint8_t cap_id = (uint8_t)(source_cap_i - cap_base);
-  if (cap_id == (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_HEAD_HIGH_SLOT) {
+  if (cap_id == (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_HEAD_HIGH_SLOT ||
+      cap_id == (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_XROTN_SLOT) {
     return 0u;
   }
   // Source-specific SpecialAirHi DamageFlyRoll admission:
   // `ftCo_8008DCE0` does not exclude SpecialAirHi, but replay-exact rollout still needs a concrete
   // current ProcessHit owner before using the live RNG clock. The positive source slice is a live
   // AttackAirB HitCapsule plus selected BODY hurtcap from ftColl_80076ED8/ftColl_8007A06C.
-  // The cap-2 high/head source path is the same selected provenance that keeps the narrowed
+  // The cap-2 high/head and cap-12 XRotN source paths are the same selected provenance that keeps
+  // the narrowed
   // DamageFlyTop owner on the ordinary DamageFlyN/Hi path unless an explicit seed lane supplies
   // stream phase; do not infer a live SpecialAirHi gate from visible action shape alone.
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
   // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
-  // data/hurtcaps/{fox,falco}.json cap2
+  // data/hurtcaps/{fox,falco}.json cap2/cap12
   return 1u;
 }
 
@@ -4738,6 +4906,10 @@ static inline void combat_damage_enter_state(
                       combat_damageflyroll_damageflytop_attackairb_create_hitcapsule_owner(
                           batch, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
                           source_cap_i, source_cap_valid) ||
+                      combat_damageflyroll_catch_strong_attackairn_hitcapsule_owner(
+                          batch, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
+                          defender_on_ground_before, source_motion_id, source_hitcapsule_int_dmg,
+                          source_hitbox_angle, source_hitbox_kbg, source_hitbox_bkb) ||
                       combat_damageflyroll_attackairn_strong_attackairb_hitcapsule_owner(
                           batch, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
                           source_cap_valid, source_motion_id, source_hitcapsule_int_dmg,
@@ -4759,6 +4931,10 @@ static inline void combat_damage_enter_state(
                       combat_damageflyroll_attackairb_strong_attackairb_hitcapsule_owner(
                           batch, d_idx, source_a_idx, source_attacker, source_hb_i,
                           source_hb_valid) ||
+                      combat_damageflyroll_dash_weak_attackairb_hitcapsule_owner(
+                          batch, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
+                          source_motion_id, source_hitcapsule_int_dmg, source_hitbox_angle,
+                          source_hitbox_kbg, source_hitbox_bkb) ||
                       combat_damageflyroll_specialairhi_attackairb_hitcapsule_owner(
                           batch, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
                           source_cap_i, source_cap_valid));
@@ -4770,6 +4946,10 @@ static inline void combat_damage_enter_state(
           combat_damageflyroll_consume_damageflytop_attackairb_live_count(
               batch, bi, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
               source_cap_i, source_cap_valid);
+          combat_damageflyroll_consume_catch_strong_attackairn_count(
+              batch, bi, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
+              defender_on_ground_before, source_motion_id, source_hitcapsule_int_dmg,
+              source_hitbox_angle, source_hitbox_kbg, source_hitbox_bkb);
           combat_damageflyroll_consume_attackairn_strong_attackairb_count(
               batch, bi, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
               source_cap_valid, source_motion_id, source_hitcapsule_int_dmg, source_hitbox_angle,
@@ -4782,6 +4962,10 @@ static inline void combat_damage_enter_state(
               batch, bi, d_idx, source_a_idx, source_attacker, defender_on_ground_before);
           combat_damageflyroll_consume_attackairb_strong_attackairb_hitcapsule_count(
               batch, bi, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid);
+          combat_damageflyroll_consume_dash_weak_attackairb_count(
+              batch, bi, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
+              source_motion_id, source_hitcapsule_int_dmg, source_hitbox_angle, source_hitbox_kbg,
+              source_hitbox_bkb);
           combat_damageflyroll_consume_fighter_8006cda4_pre_gate_count(batch, bi, d_idx);
           const float roll =
               combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE);
@@ -4931,12 +5115,13 @@ static inline void combat_processhit_apply_hitlag_after_entry(
       break;
   }
   if (apply_flags != 0u) {
-    if (batch->state.action_id[ev->d_idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
+    if (batch->state.action_id[ev->d_idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL &&
+        !combat_damageflyroll_weak_attackairb_source_skips_x1994(ev)) {
       // Runtime DamageFlyRoll hitlag-exit x1994 provenance:
       // - ftCo_8008DCE0 installs ftCo_Damage_OnExitHitlag for this live ProcessHit damage entry.
-      // - The callback later calls ftColl_8007B7A4(..., p_ftCommonData->x130), which arms x1994.
-      // - Keep this as internal source state rather than inferring from arbitrary replay-seeded
-      //   DamageFlyRoll action/hitlag rows.
+      // - Damage_OnExitHitlag later calls ftColl_8007B7A4(..., p_ftCommonData->x130), which arms
+      //   x1994. Keep this as internal source state rather than inferring from arbitrary
+      //   replay-seeded DamageFlyRoll action/hitlag rows.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
       //   ftCo_8008DCE0,ftCo_Damage_OnExitHitlag}
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B7A4
@@ -5420,7 +5605,7 @@ static inline uint8_t combat_body_damage_log_damageflyroll_gate_candidate(
   if (c == NULL || batch == NULL || e == NULL) {
     return 0u;
   }
-  if (combat_damage_severity_u8_from_kb(c, best_kb) != 3u || e->defender_on_ground != 0u) {
+  if (combat_damage_severity_u8_from_kb(c, best_kb) != 3u) {
     return 0u;
   }
   if (kb_angle_rad > c->damagefly_top_angle_min_radians &&
@@ -5431,13 +5616,24 @@ static inline uint8_t combat_body_damage_log_damageflyroll_gate_candidate(
   if (percent_cur < (float)c->damagefly_roll_percent_threshold) {
     return 0u;
   }
+  if (combat_damageflyroll_dash_weak_attackairb_hitcapsule_owner(
+          batch, e->d_idx, e->a_idx, e->attacker, e->hb_i, 1u, e->source_motion_id,
+          e->hitcapsule_int_dmg, e->hitbox_angle, e->hitbox_kbg, e->hitbox_bkb)) {
+    return 1u;
+  }
+  if (e->defender_on_ground != 0u) {
+    return 0u;
+  }
   // The normal-hit effect stream phase is currently source-proven only for the SpecialAirHi
   // strong-DAir owner. AttackAirN delayed segments already carry their explicit Fighter_8006CDA4
   // stream phase; broadening this visual-effect consume into AttackAirN shifts TBK's full-rollout
   // RNG phase before its otherwise aligned DamageFlyRoll gate.
-  return (uint8_t)(batch->state.action_id[e->d_idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
-                   combat_damageflyroll_attackairn_specialairhi_strong_attackairlw_hitcapsule_owner(
-                       batch, e->d_idx, e->a_idx, e->attacker, e->hb_i, 1u));
+  if (batch->state.action_id[e->d_idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
+      combat_damageflyroll_attackairn_specialairhi_strong_attackairlw_hitcapsule_owner(
+          batch, e->d_idx, e->a_idx, e->attacker, e->hb_i, 1u)) {
+    return 1u;
+  }
+  return 0u;
 }
 
 static inline void combat_body_damage_log_consume_ftcoll_effect_rng_before_damageflyroll(
@@ -5452,6 +5648,12 @@ static inline void combat_body_damage_log_consume_ftcoll_effect_rng_before_damag
     if (combat_body_damage_log_entry_owns_ftcoll_damage_effect_rng(&scratch->entries[i])) {
       combat_rng_consume_ftcoll_normal_damage_effect_site(batch, bi);
     }
+  }
+  if (best_e != NULL && combat_damageflyroll_dash_weak_attackairb_hitcapsule_owner(
+                            batch, best_e->d_idx, best_e->a_idx, best_e->attacker, best_e->hb_i, 1u,
+                            best_e->source_motion_id, best_e->hitcapsule_int_dmg,
+                            best_e->hitbox_angle, best_e->hitbox_kbg, best_e->hitbox_bkb)) {
+    batch->state.fighter_8006cda4_pre_gate_consume_count[best_e->d_idx] = 1u;
   }
 }
 

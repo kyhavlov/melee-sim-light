@@ -46,6 +46,15 @@ def test_attackairb_damageflytop_runtime_predicate_matches_extracted_source_data
         assert int(cap12["height"]) == 1
         assert float(cap12["scale"]) == pytest.approx(1.62, abs=1e-6)
 
+        nair_events = moves["moves"]["ftCo_SM_AttackAirN"]["events"]
+        nair_creates = [ev for ev in nair_events if ev["kind"] == "create_hitbox"]
+        nair_strong = [
+            (int(ev["frame"]), int(ev["data"]["hitbox"]["hitbox_id"]))
+            for ev in nair_creates
+            if float(ev["data"]["hitbox"]["damage"]) == pytest.approx(12.0)
+        ]
+        assert nair_strong == [(4, 0), (4, 1), (4, 2)]
+
 
 def _trace_site_count(trace_path: Path, *, start_record: int, record: int, site_id: int) -> int:
     total = 0
@@ -992,6 +1001,36 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             88,
         ),
         (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl",
+            5448,
+            1,
+            0,
+            1,
+            0,
+            91,
+            91,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            7566,
+            1,
+            0,
+            1,
+            0,
+            88,
+            88,
+        ),
+        (
+            "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl",
+            3301,
+            1,
+            0,
+            1,
+            0,
+            88,
+            88,
+        ),
+        (
             "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
             2461,
             0,
@@ -1059,9 +1098,10 @@ def test_attackairb_damageflytop_runtime_phase_requires_selected_hurtcap_provena
 ) -> None:
     # Runtime fallback for AttackAirB -> DamageFlyTop Fighter_8006CDA4 phase is owned by the
     # selected ftColl_80076ED8 BODY source, not just visible AttackAirB shape. TBK's remaining
-    # rows select cap-12 or hb1/cap-2 source pairs from data/hurtcaps/{fox,falco}.json; aggregate
-    # low/root, cap-1, and hb0/cap2 selected pairs stay on their ordinary DamageFlyN/Hi source path
-    # unless an explicit seed lane supplies stream phase.
+    # rows select cap-12, hb1/cap-2, or first-create hb1/cap-0 source pairs from
+    # data/hurtcaps/{fox,falco}.json; aggregate low/root, cap-1, and hb0/cap2 selected pairs stay
+    # on their ordinary DamageFlyN/Hi source path unless an explicit seed lane supplies stream
+    # phase.
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
@@ -1073,6 +1113,11 @@ def test_attackairb_damageflytop_runtime_phase_requires_selected_hurtcap_provena
 
     got_hb, got_cap = _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim)
     assert (got_hb, got_cap) == (selected_hb, selected_cap)
+    seed_row = read_dataset(str(dataset_path)).samples[record]["seed_t"]
+    if dataset_rel.endswith("PutridJoyousOryx.msl") and record == 5448:
+        assert int(seed_row["damage_jump_buffer_x14"][victim]) > 0
+    if record in {3301, 7566}:
+        assert int(seed_row["damage_jump_buffer_x14"][victim]) == 0
 
     def _clear_seed_phase(seed_t):
         seed_t["fighter_8006cda4_pre_gate_consume_count"][0, victim] = 0
@@ -1085,6 +1130,128 @@ def test_attackairb_damageflytop_runtime_phase_requires_selected_hurtcap_provena
     )
     assert int(ref_row["action_id"][victim]) == expected_ref_action
     assert int(out_row["action_id"][victim]) == expected_out_action
+
+
+@pytest.mark.integration
+def test_specialairhi_damageflyroll_gate_rejects_attackairb_cap12_xrotn_owner_ppa_7332() -> None:
+    # SpecialAirHi current-hit DamageFlyRoll admission requires a concrete selected BODY owner, but
+    # cap12/XRotN is the high-pose DamageFlyTop provenance path used by the narrowed AttackAirB
+    # owner. It must stay seed-owned / ordinary DamageFlyN here rather than using visible
+    # SpecialAirHi shape to enter DamageFlyRoll.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    # data/hurtcaps/{fox,falco}.json cap12
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 7332
+    attacker = 1
+    victim = 0
+    got_hb, got_cap = _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim)
+    assert (got_hb, got_cap) == (0, 12)
+
+    seed, ref_row, out_row = _run_one_step_row(
+        dataset_path, record, victim, rng_damage_fly_roll_gate=True
+    )
+    assert int(seed["action_id"][victim]) == 356  # SpecialAirHi.
+    assert int(ref_row["action_id"][victim]) == int(out_row["action_id"][victim]) == 88
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/ppa7332_specialairhi_cap12_reject.tsv",
+    )
+    ref_roll, out_roll, site1_count = rows[record]
+    assert site1_count == 0
+    assert int(ref_roll["action_id"][victim]) == int(out_roll["action_id"][victim]) == 88
+
+
+@pytest.mark.integration
+def test_pjo_rollout_rng_sites_are_source_owned_without_exceptions() -> None:
+    # PJO RAW-CLEAN RNG closure in validator-shaped rollout:
+    # - rec2654: weak AttackAirB current-hit owner consumes the pre-gate Fighter_8006CDA4 site once.
+    # - rec3012: Wait terminal animation variant consumes ftwaitanim's HSD_Randi(100).
+    # - rec5097: grounded Catch is interrupted by current strong AttackAirN; hitstun is already
+    #   installed when ftCo_8008DCE0 selects DamageFlyRoll, so the source proof is the captured
+    #   Catch-family pre-action plus the selected strong NAir HitCapsule.
+    # - rec5448: active DamageFlyTop selects first-create strong AttackAirB hb1/cap0 and consumes
+    #   the two pre-gate Fighter_8006CDA4 stream sites.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    trace_path = root / "reports/triage/pjo_rollout_rng_sites_source_owned.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=0,
+        window_records=(2654, 3012, 5097, 5448),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    for rec in (2654, 3012, 5097, 5448):
+        ref_row, out_row, _ = rows[rec]
+        for p in (0, 1):
+            for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+                got = int(out_row[field][p])
+                exp = int(ref_row[field][p])
+                assert got == exp, f"record={rec} p={p} field={field} expected={exp} got={got}"
+
+    assert _trace_site_count(trace_path, start_record=0, record=2654, site_id=5) == 1
+    assert _trace_site_count(trace_path, start_record=0, record=3012, site_id=3) == 1
+    assert _trace_site_count(trace_path, start_record=0, record=3012, site_id=25) == 0
+    assert _trace_site_count(trace_path, start_record=0, record=5097, site_id=5) == 1
+    assert _trace_site_count(trace_path, start_record=0, record=5448, site_id=5) == 1
+    assert _trace_site_count(trace_path, start_record=0, record=5448, site_id=6) == 1
+
+
+@pytest.mark.integration
+def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_prefix() -> None:
+    # QGD rec4435 is the regression control for replay-frame Wait RNG admission: p0's earlier
+    # same-frame DeadUpStar_Anim source callback spawns effect kind 0x42D/generator 0x121 before p1
+    # reaches Wait_Anim/getAnimID. PJO rec3012 has DeadUpStar after the Wait player in callback
+    # order, so it must not receive this prefix.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
+    # refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
+    # refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    trace_path = root / "reports/triage/qgd_wait_deadupstar_effect_prefix_rng.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=0,
+        window_records=(4435,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, _ = rows[4435]
+    assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0]) == 4
+    assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]) == 14
+    assert int(out_row["animation_index"][1]) == int(ref_row["animation_index"][1]) == 2
+    assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=25) == 2
+    assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=3) == 1
 
 
 @pytest.mark.integration

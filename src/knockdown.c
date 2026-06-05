@@ -268,6 +268,42 @@ static inline void snap_root_y_to_ground_line_on_damage_land(MslBatch* batch, si
   batch->state.pos_y[idx] = y + 0.0001f;
 }
 
+static inline uint8_t damagefly_frame_start_locked_carried_floor_contact_source(
+    const MslBatch* batch, size_t bi, size_t idx) {
+  if (batch == NULL || !isfinite(batch->state.floor_sweep_prev_pos_y[idx])) {
+    return 0u;
+  }
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id == 0xFFFFu) {
+    return 0u;
+  }
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  MslStageFloorLine world_line = {0};
+  if (!stage_collision_floor_line_world(batch, (int)bi, &g->lines[(size_t)line_idx], &world_line)) {
+    return 0u;
+  }
+  float floor_y = world_line.y0;
+  if (fabsf(world_line.x1 - world_line.x0) > 0.0001f) {
+    floor_y = ((world_line.y1 - world_line.y0) * (batch->state.pos_x[idx] - world_line.x0) /
+               (world_line.x1 - world_line.x0)) +
+              world_line.y0;
+  }
+
+  // Frame-start DamageFly rows can run the delegated DamageFall_IASA stick-Fall branch from the
+  // carried floor/root owner before the current input timer increment is visible to that source
+  // callback. Keep the owner on actual floor-line/source-root contact instead of a stage band.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044838_Floor,mpColl_80047E14}
+  // data/stages/bin/*.bin::MSLSTG01 floor segments/platform transforms
+  return (batch->state.pos_y[idx] < floor_y) ? 1u : 0u;
+}
+
 static inline uint8_t anim_is_finished(uint8_t cid, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(cid, msid);
   if (!(end > 0.0f)) {
@@ -1123,7 +1159,7 @@ static inline uint8_t common_damage_ground_floor_loss_should_missfoot(const MslB
 static inline void enter_missfoot_from_damage_floor_loss(MslBatch* batch, const MslCharParams* ch,
                                                          size_t idx);
 static inline uint8_t damagefall_iasa_try_stick_fall(MslBatch* batch, const MslCommonParams* c,
-                                                     size_t idx);
+                                                     size_t idx, uint8_t rewind_held_x);
 static inline uint8_t is_damage_air_submotion(uint32_t smid);
 static inline uint8_t is_common_damage_submotion(uint32_t smid);
 static inline uint8_t is_damage_fly_submotion(uint32_t smid);
@@ -1348,7 +1384,15 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           if (damage_air_try_jump_aerial(batch, c, ch, idx, 0u, 0u)) {
             continue;
           }
-          if (damagefall_iasa_try_stick_fall(batch, c, idx)) {
+          const uint8_t rewind_carried_floor_x670 =
+              (batch->state.damage_jump_buffer_x14[idx] != 0u &&
+               batch->state.last_hit_by[idx] == 0u &&
+               (batch->state.state_flags_221c_frame_start[idx] &
+                (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN) == 0u &&
+               damagefly_frame_start_locked_carried_floor_contact_source(batch, (size_t)bi, idx))
+                  ? 1u
+                  : 0u;
+          if (damagefall_iasa_try_stick_fall(batch, c, idx, rewind_carried_floor_x670)) {
             continue;
           }
         }
@@ -2161,18 +2205,32 @@ static inline void enter_fall_from_damagefall_iasa(MslBatch* batch, size_t idx) 
 }
 
 static inline uint8_t damagefall_iasa_try_stick_fall(MslBatch* batch, const MslCommonParams* c,
-                                                     size_t idx) {
+                                                     size_t idx, uint8_t rewind_held_x) {
   if (batch == NULL || c == NULL) {
     return 0u;
   }
   const float stick_x =
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
   uint8_t x670_for_iasa = batch->state.tilt_timer_x[idx];
-  // The x670 timer is updated in Fighter_Spaghetti_8006AD10 before `input_cb`, so
-  // ftCo_DamageFall_IASA observes the incremented current-frame timer. Do not rewind held
-  // same-direction stick from 1 back to 0; p_ftCommonData->x214 uses a strict less-than gate.
+  // The x670 timer is updated in Fighter_Spaghetti_8006AD10 before `input_cb`, so ordinary
+  // DamageFall_IASA observes the incremented current-frame timer. The only retained rewind is the
+  // frame-start DamageFly carried-floor owner, where the source DamageFly_IASA callback consumes
+  // the held X direction before the post-input timer increment.
   // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+  if (rewind_held_x != 0u) {
+    const float prev_stick_x =
+        apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
+    if (stick_x >= c->lstick_tilt_x_thresh) {
+      if (prev_stick_x >= c->lstick_tilt_x_thresh && x670_for_iasa > 0u && x670_for_iasa < 0xFEu) {
+        x670_for_iasa = (uint8_t)(x670_for_iasa - 1u);
+      }
+    } else if (stick_x <= -c->lstick_tilt_x_thresh) {
+      if (prev_stick_x <= -c->lstick_tilt_x_thresh && x670_for_iasa > 0u && x670_for_iasa < 0xFEu) {
+        x670_for_iasa = (uint8_t)(x670_for_iasa - 1u);
+      }
+    }
+  }
 
   if (msl_absf(stick_x) >= c->damagefall_fall_stick_x_threshold &&
       x670_for_iasa < c->damagefall_fall_tilt_max_frames) {

@@ -275,10 +275,12 @@ def _run_rollout_window_rows_with_trace(
     ds_path: Path,
     *,
     start_record: int,
-    window_records: tuple[int, int, int],
+    window_records: tuple[int, ...],
     rng_damage_fly_roll_gate: bool | None,
     trace_path: Path,
     seed_mutator=None,
+    ucf_enabled: bool | None = None,
+    ucf_cardinals_1_0_enabled: bool | None = None,
 ) -> dict[int, tuple[np.void, np.void, int]]:
     ds = read_dataset(str(ds_path))
     samples = ds.samples
@@ -305,7 +307,12 @@ def _run_rollout_window_rows_with_trace(
         os.environ["MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE"] = "1"
     os.environ["MSL_RNG_TRACE_PATH"] = str(trace_path)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    init_kwargs = {"batch_size": 1, "num_players": int(ds.header["num_players"])}
+    if ucf_enabled is not None:
+        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
+    if ucf_cardinals_1_0_enabled is not None:
+        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
+    handle = binding.init(**init_kwargs)
     window_out: dict[int, np.void] = {}
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
