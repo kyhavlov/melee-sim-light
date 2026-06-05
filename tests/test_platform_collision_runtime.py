@@ -53,8 +53,10 @@ ACT_GUARD = 0x00B3
 ACT_GUARD_SET_OFF = 0x00B5
 ACT_GUARD_REFLECT = 0x00B6
 ACT_DAMAGE_FLY_N = 0x0058
+ACT_DAMAGE_FLY_ROLL = 0x005B
 ACT_DAMAGE_N_1 = 0x004E
 ACT_DAMAGE_N_2 = 0x004F
+ACT_DAMAGE_LW_2 = 0x0052
 ACT_DAMAGE_LW_3 = 0x0053
 ACT_DAMAGE_HI_2 = 0x004C
 ACT_DAMAGE_AIR_1 = 0x0054
@@ -71,6 +73,7 @@ ACT_PASS = 0x00F4
 ACT_OTTOTTO = 0x00F5
 ACT_OTTOTTO_WAIT = 0x00F6
 ACT_CLIFF_JUMP_SLOW2 = 0x0105
+ACT_CLIFF_JUMP_QUICK2 = 0x0107
 ACT_CLIFF_CATCH = 0x00FC
 ACT_CLIFF_WAIT = 0x00FD
 ACT_ATTACK_AIR_N = 0x0041
@@ -8113,6 +8116,326 @@ def _step_one_replay_row(ds, record: int):
         return out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
     finally:
         msl_binding.destroy(handle)
+
+
+def _step_one_replay_row_rollout(ds, record: int):
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    row = ds.samples[record]
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        msl_binding.reseed_seed_rollout(
+            handle,
+            np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8)
+            .copy()
+            .reshape(1, seed_stride),
+        )
+        msl_binding.step_input(
+            handle,
+            np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+            .copy()
+            .reshape(1, input_stride),
+            np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8)
+            .copy()
+            .reshape(1, input_stride),
+        )
+        msl_binding.write_compare(handle, out)
+        return out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+    finally:
+        msl_binding.destroy(handle)
+
+
+def _replay_input_bytes(ds, record: int, field: str) -> np.ndarray:
+    import msl_binding
+
+    input_stride = int(msl_binding.sizes()["input"])
+    return (
+        np.frombuffer(ds.samples[record][field].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, input_stride)
+    )
+
+
+def test_yoshi_jumpaerial_static_platform_release_lands_without_live_floor_skip_replay_lock() -> None:
+    # CNM rec2913: JumpAerial_Coll uses ft_800835B0 -> mpColl_80044628_Floor with
+    # ftCo_80096CC8 as the platform callback. Source checks the current callback-visible stick, not
+    # stale previous-frame stick, so a released-stick row with no live CollData.floor_skip can publish
+    # Landing on Yoshi's static soft platform.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
+    dataset_path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 2913
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == STAGE_YOSHI
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(row["seed_t"]["floor_skip_segment_valid_u8"][p]) == 0
+    assert int(row["prev_input_t"]["p"]["main_y"][p]) <= -45
+    assert int(row["input_t"]["p"]["main_y"][p]) > -45
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
+    assert int(row["ref_t1"]["ground_id"][p]) == 5
+
+    out = _step_one_replay_row_rollout(ds, record)
+    ref = row["ref_t1"]
+
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+def test_yoshi_jumpaerial_static_platform_live_floor_skip_still_rejects_release() -> None:
+    # Negative boundary for the same owner: if CollData.floor_skip actually names the static
+    # platform, mpColl_80044628_Floor must keep rejecting it even after the stick has released.
+    dataset_path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 2913
+    p = 1
+    seed = np.array(ds.samples[record]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
+    seed["floor_skip_segment_valid_u8"][0, p] = np.uint8(1)
+    seed["floor_skip_segment_id_u16"][0, p] = np.uint16(5)
+
+    out = _step_once_rollout(
+        seed,
+        _replay_input_bytes(ds, record, "prev_input_t"),
+        _replay_input_bytes(ds, record, "input_t"),
+    )
+
+    assert int(out["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == 6
+    assert float(out["pos_y"][p]) == pytest.approx(12.770088, abs=2e-4)
+
+
+@pytest.mark.parametrize(("record", "p", "action_id"), [(1138, 0, ACT_JUMP_AERIAL_B), (1403, 0, ACT_JUMP_AERIAL_F)])
+def test_yoshi_jumpaerial_static_platform_prior_downheld_crossing_carries_hidden_floor_skip(
+    record: int, p: int, action_id: int
+) -> None:
+    # Replay-prefix rows can begin after a down-held JumpAerial callback has already crossed below a
+    # static Yoshi platform and called mpUpdateFloorSkip, even though that hidden CollData field is
+    # not serialized. These controls prove the retained owner is the source floor-skip carry from a
+    # prior ECB-bottom crossing, not a generic released-stick platform rejection.
+    dataset_path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == STAGE_YOSHI
+    assert int(row["seed_t"]["action_id"][p]) == action_id
+    assert int(row["seed_t"]["floor_skip_segment_valid_u8"][p]) == 0
+    assert int(row["prev_input_t"]["p"]["main_y"][p]) <= -45
+    assert int(row["input_t"]["p"]["main_y"][p]) > -45
+    assert int(row["ref_t1"]["action_id"][p]) == action_id
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _step_one_replay_row_rollout(ds, record)
+    ref = row["ref_t1"]
+
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+def _cnm_dataset():
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+    return read_dataset(str(path))
+
+
+def _agg_dataset():
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+    return read_dataset(str(path))
+
+
+@pytest.mark.integration
+def test_cnm_throwhi_laser_deferred_shyguy_item_body_owner_replay_real() -> None:
+    # CNM rec1870: Fox ThrowHi's final laser pulse first overlaps a Yoshi Shy Guy item, but source
+    # item damage is deferred to the fighter BODY owner when the same-source fighter hit is the
+    # unique damage owner. The row must keep the fighter damage result rather than materializing a
+    # separate stale item hit.
+    # refs/melee/src/melee/it/items/itheiho.c
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    ds = _cnm_dataset()
+    record = 1870
+    row = ds.samples[record]
+    p = 1
+    assert int(row["seed_t"]["stage_id"]) == STAGE_YOSHI
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+
+    out = _step_one_replay_row_rollout(ds, record)
+    ref = row["ref_t1"]
+
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "state_flags"):
+        np.testing.assert_array_equal(out[field], ref[field], err_msg=field)
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert float(out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_cnm_shyguy_knocked_state_carries_source_hitcapsule_body_owner_replay_real() -> None:
+    # CNM rec3356/3357: a knocked-state Shy Guy carries its selected source HitCapsule through
+    # item hitlag. BODY damage remains owned by that source HitCapsule, including stale damage, and
+    # not by a generic item overlap.
+    # refs/melee/src/melee/it/items/itheiho.c
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    ds = _cnm_dataset()
+    for record in (3356, 3357):
+        out = _step_one_replay_row_rollout(ds, record)
+        ref = ds.samples[record]["ref_t1"]
+        for field in ("action_id", "animation_index", "hitlag", "hitstun", "state_flags"):
+            np.testing.assert_array_equal(out[field], ref[field], err_msg=f"{record}:{field}")
+
+
+@pytest.mark.integration
+def test_cnm_speciallw_start_damageflyroll_rng_source_owner_replay_real() -> None:
+    # CNM rec7490: grounded Reflector startup hb0 is the current ProcessHit source for a severe
+    # DamageLw -> DamageFlyRoll gate. The selected source payload is the extracted 5-damage
+    # Reflector startup HitCapsule; no Fighter_8006CDA4 pre-gate RNG consume occurs before the
+    # DamageFlyRoll HSD_Randf gate.
+    # data/moves/fox.json::specials_by_msid["313"].events.create_hitbox
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    ds = _cnm_dataset()
+    record = 7490
+    row = ds.samples[record]
+    p = 1
+    assert int(row["seed_t"]["action_id"][0]) == ACT_SQUAT
+    assert int(row["ref_t1"]["action_id"][0]) == ACT_FX_SPECIAL_LW_START
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_LW_2
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_DAMAGE_FLY_ROLL
+
+    out = _step_one_replay_row_rollout(ds, record)
+    ref = row["ref_t1"]
+
+    assert int(out["action_id"][p]) == ACT_DAMAGE_FLY_ROLL
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "state_flags"):
+        np.testing.assert_array_equal(out[field], ref[field], err_msg=field)
+
+    low_percent_seed = np.array(row["seed_t"], dtype=SEED_DTYPE).reshape((1,))
+    low_percent_seed["percent"][0, p] = np.float32(50.0)
+    low_percent_out = _step_once_rollout(
+        low_percent_seed,
+        _replay_input_bytes(ds, record, "prev_input_t"),
+        _replay_input_bytes(ds, record, "input_t"),
+    )
+    assert int(low_percent_out["action_id"][p]) == ACT_DAMAGE_FLY_N
+
+
+@pytest.mark.integration
+def test_cnm_damageflyn_clears_stale_jab_combo_bit_but_terminal_damageflytop_carries() -> None:
+    # CNM rec7796: fresh DamageFlyN entry from Wait has no set_jab_combo source owner, so stale
+    # seeded fp+0x2218_b1 clears. Terminal DamageFlyTop controls at rec7311/8294 keep the raw byte
+    # carry and prove this is not a blanket Damage* clear.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    ds = _cnm_dataset()
+    clear_row = ds.samples[7796]
+    clear_out = _step_one_replay_row_rollout(ds, 7796)
+    assert int(clear_row["seed_t"]["state_flags"][0][0]) & 0x40
+    assert int(clear_row["seed_t"]["action_id"][0]) == ACT_WAIT
+    assert int(clear_row["ref_t1"]["action_id"][0]) == ACT_DAMAGE_FLY_N
+    assert int(clear_out["state_flags"][0][0]) == int(clear_row["ref_t1"]["state_flags"][0][0])
+    assert int(clear_out["state_flags"][0][0]) & 0x40 == 0
+
+    for record, p, source_action in (
+        (7311, 0, ACT_DOWN_BOUND_D),
+        (8294, 1, ACT_DASH),
+    ):
+        row = ds.samples[record]
+        out = _step_one_replay_row_rollout(ds, record)
+        assert int(row["seed_t"]["action_id"][p]) == source_action
+        assert int(row["ref_t1"]["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+        assert int(row["seed_t"]["state_flags"][p][0]) & 0x40
+        assert int(out["state_flags"][p][0]) & 0x40
+        assert int(out["state_flags"][p][0]) == int(row["ref_t1"]["state_flags"][p][0])
+
+
+@pytest.mark.integration
+def test_cnm_specialhi_source_flagged_wall_suppresses_push_only_air_envelope() -> None:
+    # CNM rec2799: late Firefox is inside the source bound-delay phase, but the Yoshi right wall is
+    # a source-flagged MapJoint chain. Without a direct wall-hug candidate, the extra rotated-ECB
+    # right-wall envelope must not publish a sideways correction.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall
+    # data/stages/bin/grst.bin::MSLSTG01 segment.lo_flags/joint_id
+    ds = _cnm_dataset()
+    start = 2783
+    record = 2799
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == STAGE_YOSHI
+    assert int(row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_HI
+    assert int(row["seed_t"]["seed_prev_action_frame"][p]) >= 15
+
+    out = _rollout_replay_to_record(ds, start, record)
+    ref = row["ref_t1"]
+
+    assert int(out["action_id"][p]) == ACT_FX_SPECIAL_AIR_HI
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-4)
+    assert float(ref["pos_x"][p]) < 56.0
+
+
+@pytest.mark.integration
+def test_agg_specialhi_base_wall_still_publishes_right_air_envelope() -> None:
+    # AGG rec2625 is the adjacent negative: the FD lip is a base zero-flag/static-joint wall chain,
+    # so the source-completion right-wall envelope still publishes the mpColl sideways correction.
+    ds = _agg_dataset()
+    start = 2603
+    record = 2625
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == STAGE_FD
+    assert int(row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_HI
+    assert int(row["seed_t"]["seed_prev_action_frame"][p]) >= 15
+
+    out = _rollout_replay_to_record(ds, start, record)
+    ref = row["ref_t1"]
+
+    assert int(out["action_id"][p]) == ACT_FX_SPECIAL_AIR_HI
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-4)
+    assert float(ref["pos_x"][p]) > float(row["seed_t"]["pos_x"][p] + row["seed_t"]["speed_air_x_self"][p])
 
 
 def _rollout_replay_to_record(ds, start_record: int, target_record: int):

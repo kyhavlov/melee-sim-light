@@ -2200,6 +2200,31 @@ static inline uint8_t grounded_action_allows_platform_carry_y_correction(uint16_
   if (msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_COLL)) {
     return 1u;
   }
+  if (msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL) ||
+      msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL)) {
+    // Phase-3 grounded floor persistence also covers `ft_800827A0` users such as EscapeF/B/N:
+    // the callback writes CollData.cur_pos back after `mpColl_8004B2DC`, whose floor traversal
+    // consumes mpLib_8004DD90_Floor's signed correction when the current floor remains valid.
+    // This is still bounded to generated-slope/platform correction by the callers below.
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104}
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004B4B0}
+    // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class2 COMMON_GROUNDED_B2DC/B4B0_COLL)
+    return 1u;
+  }
+  if (action_id == (uint16_t)MSL_ACT_ESCAPE_F || action_id == (uint16_t)MSL_ACT_ESCAPE_B ||
+      action_id == (uint16_t)MSL_ACT_ESCAPE_N) {
+    // The current MSLMSO01 class2 table does not expose EscapeF/B/N as common grounded B2DC, but
+    // source does: EscapeF/B call `ftCo_Escape_Coll`, EscapeN calls `ftCo_EscapeN_Coll`, and both
+    // delegate to `ft_80084104 -> ft_800827A0 -> mpColl_8004B2DC` before writing CollData.cur_pos
+    // back to the fighter. Keep this as a named source owner until the extractor promotes the
+    // class bit, rather than using a replay-row or stage predicate.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
+    //   ftCo_Escape_Coll,ftCo_EscapeN_Coll}
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800827A0}
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B2DC
+    return 1u;
+  }
   return msl_motion_state_common_class_has(action_id,
                                            MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL);
 }
@@ -2238,6 +2263,27 @@ static inline uint8_t grounded_action_allows_height_platform_y_correction(uint16
   enum { MSL_FT_MOVE_ID_SPECIAL_N = 18u };
   return (uint8_t)(attack_id_move_id_from_action(char_id, action_id) ==
                    (uint16_t)MSL_FT_MOVE_ID_SPECIAL_N);
+}
+
+static inline uint8_t grounded_action_allows_b108_generated_slope_y_correction(uint16_t action_id,
+                                                                               uint8_t char_id) {
+  // Source/table-backed B108 floor persistence owner:
+  // ft_80083F88 delegates through ft_80082708 -> mpColl_8004B108, whose CollData.cur_pos
+  // writeback consumes mpLib_8004DD90_Floor's signed correction. Keep this separate from
+  // transformed-platform carry: downed/passive callbacks should not inherit moving-platform
+  // deltas, but they still follow generated legal-stage slopes while their current floor remains
+  // valid.
+  //
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+  // refs/melee/src/melee/mp/{mpcoll.c::mpColl_8004B108,mplib.c::mpLib_8004DD90_Floor}
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class FT80083F88_GROUND_TO_AIR_COLL)
+  if (msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL)) {
+    return 1u;
+  }
+  if (msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL)) {
+    return 1u;
+  }
+  return msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_FX_SPECIALS_GROUND_B108_COLL);
 }
 
 static inline uint8_t grounded_action_allows_stage_object_platform_carry(uint16_t action_id) {
@@ -2709,6 +2755,17 @@ static inline uint8_t grounded_persistence_allows_signed_dd90_y_correction(
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
     // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
     // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor}
+    // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    return 1u;
+  }
+  if (generated_slope_owner && grounded_action_allows_b108_generated_slope_y_correction(
+                                   action_id, batch->state.char_id[idx])) {
+    // Yoshi's Story exposes generated hard-floor slopes where `ft_80083F88 -> mpColl_8004B108`
+    // callbacks keep grounded CollData.cur_pos pinned to the current floor as overlap nudge or
+    // ground motion moves the root along the slope. This admits only signed DD90 slope projection,
+    // not the moving-platform carry deliberately excluded from downed/passive owners above.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_Passive_Coll
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
     // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
     return 1u;
   }
@@ -7547,10 +7604,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // - ftCommon_8007D5D4 sets fp->ecb_lock and CollData_X130_Locked on ground->air transitions.
         // - mpColl_LoadECB_inline preserves desired_ecb.bottom while locked.
         // - Fall fastfall rows in `Fall_Coll` (`ft_800831CC` -> `mpColl_80047E14`), EscapeAir,
-        //   AttackAir, Damage/DamageFly, and the Fox/Falco aerial special callbacks above can also
-        //   resolve grounded contact during this lock window. Jump/JumpAerial, non-fastfall Fall,
-        //   MissFoot, and FallSpecial have distinct floor callback-phase owners and are not part
-        //   of this retained floor slice.
+        //   AttackAir, Damage/DamageFly, and Fox/Falco aerial special callbacks can also resolve
+        //   contact during this lock window. Jump/JumpAerial, non-fastfall Fall, MissFoot, and
+        //   FallSpecial have distinct floor callback-phase owners and are not part of this retained
+        //   floor slice.
         // - Shine narrows this to frame-start SpecialAirLwLoop/End owners; otherwise
         //   SpecialAirLwStart_Anim can change to Loop before collision and incorrectly inherit
         //   the loop/end floor-contact policy on the startup handoff frame.
@@ -13698,14 +13755,37 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 : 0u;
         const float jumpaerial_static_platform_pose_bottom_y =
             y + mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_bias_next, 0u);
+        const uint8_t jumpaerial_static_platform_current_rejects =
+            (c != NULL && stick_i8_to_unit(batch->state.input_main_y[idx]) <=
+                              c->platform_air_land_stick_y_threshold)
+                ? 1u
+                : 0u;
+        const uint8_t jumpaerial_static_platform_prior_rejected =
+            (c != NULL && !jumpaerial_static_platform_current_rejects &&
+             stick_i8_to_unit(batch->state.prev_input_main_y[idx]) <=
+                 c->platform_air_land_stick_y_threshold &&
+             prev_bottom_y > (contact_y + k_floor_y_bias) &&
+             (y - batch->state.speed_y_self[idx]) +
+                     mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame, 0u) <
+                 (contact_y - k_floor_y_bias))
+                ? 1u
+                : 0u;
+        const uint8_t jumpaerial_static_platform_floor_skip_active =
+            (batch->state.floor_skip_segment_id != NULL &&
+             batch->state.floor_skip_segment_id[idx] == ground_id &&
+             stage_collision_floor_line_is_platform(stage_id, ground_id)) ||
+                    jumpaerial_static_platform_prior_rejected
+                ? 1u
+                : 0u;
         const uint8_t suppress_jumpaerial_static_platform_from_below_final_land =
             // JumpAerial_Coll reaches final floor projection only after mpColl_80044628_Floor has
-            // accepted a floor through ftCo_80096CC8. When a just-released platform pass has already
-            // carried the JumpAerial root below a static soft platform and the generated pose ECB
-            // bottom is now shallowly below that platform, the zero-bottom/root result mode can
-            // synthesize Landing from a floor the source callback is still rejecting. No-pass rows
-            // whose live pose bottom remains above the platform keep the ordinary landing path even
-            // when their roots are below it.
+            // accepted a floor through ftCo_80096CC8. A static soft-platform rejection is
+            // source-owned only when the current callback stick is below x25C, or when CollData
+            // already carries that platform as floor_skip. Direct replay rows do not serialize that
+            // hidden floor_skip every frame, so recover the same owner only when the previous
+            // down-held callback's ECB-bottom sweep had already crossed below this static platform.
+            // Previous-stick input by itself is not a hidden source lane; released-stick rows whose
+            // prior callback endpoint was still above the platform publish ordinary Landing.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
             // refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
@@ -13715,10 +13795,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
              (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
               action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
              prev_action_id == action_id &&
-             (stick_i8_to_unit(batch->state.input_main_y[idx]) <=
-                  c->platform_air_land_stick_y_threshold ||
-              stick_i8_to_unit(batch->state.prev_input_main_y[idx]) <=
-                  c->platform_air_land_stick_y_threshold) &&
+             (jumpaerial_static_platform_current_rejects ||
+              jumpaerial_static_platform_floor_skip_active) &&
              jumpaerial_static_platform_pose_bottom_y < (contact_y - k_floor_y_bias) &&
              batch->state.speed_y_self[idx] < 0.0f)
                 ? 1u

@@ -643,6 +643,22 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B1;
         }
       }
+      if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N && prev_action == (uint16_t)MSL_ACT_WAIT &&
+          batch->state.prev_action_frame[idx] >= 0 &&
+          batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
+        // LandingFallSpecial -> Wait -> DamageFlyN x2218_b1 clear:
+        // the replay prefix can begin on the frame-0 Wait handoff from LandingFallSpecial. Wait has
+        // no set_jab_combo command source, and this landing-special handoff does not carry a live
+        // source owner for fp+0x2218_b1 into the destination DamageFlyN row. Do not apply this to
+        // continued Wait or Escape/Passive -> Wait prefixes: those aggregate controls keep the raw
+        // source byte.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_ProcessHit_8006D1EC}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Anim
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+        f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B1;
+      }
       batch->state.state_flags[flags_2218_i] = f2218;
 
       // 0x221A: HasIntangOrInvinc + isFastFalling.

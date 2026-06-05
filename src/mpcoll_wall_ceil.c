@@ -348,6 +348,36 @@ static inline uint8_t specialhi_launch_uses_runtime_xrotn_ecb(uint8_t char_id, u
   }
 }
 
+static inline uint8_t specialhi_right_wall_push_only_envelope_suppresses(
+    const MslBatch* batch, size_t idx, const MslStageWallLine* envelope_line, uint8_t char_id,
+    uint16_t action_id, uint8_t has_hug) {
+  if (batch == NULL || envelope_line == NULL || has_hug != 0u ||
+      !specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id) ||
+      batch->state.seed_prev_action_id[idx] != action_id) {
+    return 0u;
+  }
+  const MslCharParams* ch = msl_char_params(char_id);
+  if (ch == NULL || ch->firefox_bound_delay_frames == 0u ||
+      batch->state.seed_prev_action_frame[idx] < (int16_t)ch->firefox_bound_delay_frames) {
+    return 0u;
+  }
+  if (envelope_line->lo_flags == 0u || envelope_line->joint_id == 0) {
+    return 0u;
+  }
+  // SpecialAirHi_Coll first calls `ft_CheckGroundAndLedge`, then reacts to the env flags that
+  // mpColl published. The retained right-wall air-envelope extension closes the base static wall
+  // lip case, but it must not fabricate a no-hug publication across a source-flagged MapJoint wall
+  // chain after the Firefox bound-delay owner is active. Those walls stay on the direct
+  // mpLib_8004E684_RightWall candidate path; a push-only envelope is not enough proof.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_IsBound}
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall
+  // refs/melee/src/melee/mp/types.h::{MapLine,MapJoint}
+  // data/characters/{fox,falco}.json::firefox_bound_delay_frames
+  // data/stages/bin/*.bin::MSLSTG01 segment.lo_flags/joint_id
+  return 1u;
+}
+
 static inline uint8_t mpcoll_damagefly_wall_asdi_latch_action(uint16_t action_id) {
   return msl_motion_state_common_class3_has(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
 }
@@ -3809,14 +3839,18 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                                             batch->state.pos_x[idx], batch->state.pos_y[idx],
                                             &envelope_x, &envelope_line_idx, &envelope_nx,
                                             &envelope_ny)) {
-            const float dx = envelope_x - batch->state.pos_x[idx];
-            MslMpcollWallResult wall = mpcoll_wall_result_make(
-                MSL_WALL_RIGHT, use_specialhi_right_envelope ? 0u : candidates.has_hug,
-                MSL_MPCOLL_WALL_RESULT_AIR_ENVELOPE,
-                rwg->lines[(size_t)envelope_line_idx].segment_i, dx, candidates.first_ix,
-                candidates.first_iy, envelope_nx, envelope_ny);
-            mpcoll_commit_wall_result(batch, idx, &wall);
-            ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
+            const MslStageWallLine* envelope_line = &rwg->lines[(size_t)envelope_line_idx];
+            if (!specialhi_right_wall_push_only_envelope_suppresses(
+                    batch, idx, envelope_line, char_id, action_id, candidates.has_hug)) {
+              const float dx = envelope_x - batch->state.pos_x[idx];
+              MslMpcollWallResult wall = mpcoll_wall_result_make(
+                  MSL_WALL_RIGHT, use_specialhi_right_envelope ? 0u : candidates.has_hug,
+                  MSL_MPCOLL_WALL_RESULT_AIR_ENVELOPE,
+                  rwg->lines[(size_t)envelope_line_idx].segment_i, dx, candidates.first_ix,
+                  candidates.first_iy, envelope_nx, envelope_ny);
+              mpcoll_commit_wall_result(batch, idx, &wall);
+              ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
+            }
           }
         }
         if (batch->state.wall_kind[idx] == 0 && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
