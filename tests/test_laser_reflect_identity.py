@@ -44,6 +44,10 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
             static float item_reflect_damage_mul[MSL_MAX_ITEMS];
             static uint8_t item_stale_damage_valid[MSL_MAX_ITEMS];
             static float item_stale_damage_mul[MSL_MAX_ITEMS];
+            static uint8_t item_reflect_body_owner_port[MSL_MAX_ITEMS];
+            static uint16_t item_reflect_body_attack_id[MSL_MAX_ITEMS];
+            static uint16_t item_reflect_body_attack_instance[MSL_MAX_ITEMS];
+            static uint8_t item_reflect_body_damage_valid[MSL_MAX_ITEMS];
             static uint8_t item_pending_reflect_owner_port[MSL_MAX_ITEMS];
             static uint16_t item_pending_reflect_instance_id[MSL_MAX_ITEMS];
             static uint8_t item_reflect_transfer_seed_port[MSL_MAX_ITEMS];
@@ -58,7 +62,12 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
             static uint8_t item_misc2[MSL_MAX_ITEMS];
             static uint8_t item_misc3[MSL_MAX_ITEMS];
             static uint16_t instance_id[MSL_MAX_PLAYERS];
+            static uint16_t attack_id[MSL_MAX_PLAYERS];
+            static uint16_t attack_instance[MSL_MAX_PLAYERS];
             static float pos_x[MSL_MAX_PLAYERS];
+            static uint8_t stale_queue_index[MSL_MAX_PLAYERS];
+            static uint16_t stale_move_id[MSL_MAX_PLAYERS * MSL_STALE_QUEUE_SIZE];
+            static uint16_t stale_attack_instance[MSL_MAX_PLAYERS * MSL_STALE_QUEUE_SIZE];
 
             static int almost(float a, float b) {
               return fabsf(a - b) < 0.00001f;
@@ -72,6 +81,10 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               batch.state.item_reflect_damage_mul = item_reflect_damage_mul;
               batch.state.item_stale_damage_valid = item_stale_damage_valid;
               batch.state.item_stale_damage_mul = item_stale_damage_mul;
+              batch.state.item_reflect_body_owner_port = item_reflect_body_owner_port;
+              batch.state.item_reflect_body_attack_id = item_reflect_body_attack_id;
+              batch.state.item_reflect_body_attack_instance = item_reflect_body_attack_instance;
+              batch.state.item_reflect_body_damage_valid = item_reflect_body_damage_valid;
               batch.state.item_pending_reflect_owner_port = item_pending_reflect_owner_port;
               batch.state.item_pending_reflect_instance_id = item_pending_reflect_instance_id;
               batch.state.item_reflect_transfer_seed_port = item_reflect_transfer_seed_port;
@@ -86,7 +99,12 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               batch.state.item_misc2 = item_misc2;
               batch.state.item_misc3 = item_misc3;
               batch.state.instance_id = instance_id;
+              batch.state.attack_id = attack_id;
+              batch.state.attack_instance = attack_instance;
               batch.state.pos_x = pos_x;
+              batch.state.stale_queue_index = stale_queue_index;
+              batch.state.stale_move_id = stale_move_id;
+              batch.state.stale_attack_instance = stale_attack_instance;
             }
 
             int main(void) {
@@ -96,6 +114,10 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               msl_item_reflect_clear_all_lanes(&batch, 0u);
               assert(almost(item_reflect_damage_mul[0], 1.0f));
               assert(item_stale_damage_valid[0] == 0u);
+              assert(item_reflect_body_owner_port[0] == MSL_ITEM_REFLECT_NO_PORT);
+              assert(item_reflect_body_attack_id[0] == MSL_FT_MOVE_ID_DEFAULT);
+              assert(item_reflect_body_attack_instance[0] == 0u);
+              assert(item_reflect_body_damage_valid[0] == 0u);
               assert(item_pending_reflect_owner_port[0] == MSL_ITEM_REFLECT_NO_PORT);
               assert(item_reflect_transfer_seed_port[0] == MSL_ITEM_REFLECT_NO_PORT);
               assert(item_shield_bounce_seed_valid[0] == 0u);
@@ -130,12 +152,18 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               item_vel_x[0] = 4.0f;
               item_vel_y[0] = -2.0f;
               item_direction[0] = 1.0f;
+              attack_id[1] = 55u;
+              attack_instance[1] = 222u;
               msl_item_reflect_apply_immediate_transfer(&batch, 0u, 1u, 1, 0.5f, 2.0f);
               assert(item_owner[0] == 1);
               assert(item_instance_id[0] == 222u);
               assert(almost(item_vel_x[0], -8.0f));
               assert(almost(item_vel_y[0], 4.0f));
               assert(almost(item_direction[0], -1.0f));
+              assert(item_reflect_body_owner_port[0] == 1u);
+              assert(item_reflect_body_attack_id[0] == 55u);
+              assert(item_reflect_body_attack_instance[0] == 222u);
+              assert(item_reflect_body_damage_valid[0] == 0u);
 
               item_owner[0] = 0;
               item_vel_x[0] = 3.0f;
@@ -268,7 +296,7 @@ def _common_attr(name: str) -> float:
 
 
 def _load_laser_shot_itkind_and_first_offset_x_and_lifetime(char_id_target: int) -> tuple[int, float, int]:
-    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2..v6).
+    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2..v7).
     path = "data/items/lasers.bin"
     if not Path(path).exists():
         pytest.skip(f"missing local artifact: {path}")
@@ -276,13 +304,13 @@ def _load_laser_shot_itkind_and_first_offset_x_and_lifetime(char_id_target: int)
     if buf[:8] != b"MSLLASR1":
         raise AssertionError(f"{path}: bad magic")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if ver not in (1, 2, 3, 4, 5, 6):
+    if ver not in (1, 2, 3, 4, 5, 6, 7):
         raise AssertionError(f"{path}: unsupported ver={ver}")
     (count,) = struct.unpack_from("<H", buf, 12)
     off = 16
 
     # Record packing (see tools/extraction/extract_lasers.py::_pack_record).
-    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254, 6: 218}[int(ver)]
+    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254, 6: 218, 7: 226}[int(ver)]
 
     for _ in range(int(count)):
         base = off
@@ -317,7 +345,7 @@ def _load_laser_shot_itkind_and_first_offset_x_and_lifetime(char_id_target: int)
 
 
 def _load_laser_shot_size_and_offsets_x(char_id_target: int) -> tuple[float, tuple[float, ...]]:
-    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2..v6).
+    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2..v7).
     path = Path("data/items/lasers.bin")
     if not path.exists():
         pytest.skip(f"missing local artifact: {path}")
@@ -325,11 +353,11 @@ def _load_laser_shot_size_and_offsets_x(char_id_target: int) -> tuple[float, tup
     if buf[:8] != b"MSLLASR1":
         raise AssertionError(f"{path}: bad magic")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if ver not in (1, 2, 3, 4, 5, 6):
+    if ver not in (1, 2, 3, 4, 5, 6, 7):
         raise AssertionError(f"{path}: unsupported ver={ver}")
     (count,) = struct.unpack_from("<H", buf, 12)
     off = 16
-    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254, 6: 218}[int(ver)]
+    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254, 6: 218, 7: 226}[int(ver)]
 
     for _ in range(int(count)):
         base = off

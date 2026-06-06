@@ -10,6 +10,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 _AGG = Path("datasets/aggregate_recent/replays/validation/aggregate_recent")
 _IAT = _AGG / "ImpassionedAlarmedTarsier.msl"
+_PPA = _AGG / "PriceyPartialAlbatross.msl"
 
 ACT_LANDING_AIR_N = 70
 ACT_FALL = 29
@@ -128,3 +129,26 @@ def test_damage_grounded_floor_index_traverses_from_ledge_to_main_floor() -> Non
     assert int(ref["ground_id"][p]) == 1
     assert int(out["ground_id"][p]) == 1
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-4)
+
+
+@pytest.mark.integration
+def test_damagefly_floor_projection_uses_current_bottom_contact_ppa_5056() -> None:
+    # PPA rollout lock for DamageFly floor publication:
+    # current DamageFly collision may publish DownBound only when the loaded current ECB bottom
+    # actually reaches the hard floor. The retained mpColl owner rejects stale/carried root-only
+    # projection while preserving the real floor-contact row at rec5056.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044948_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / _PPA
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {_PPA}")
+
+    out, ref = _rollout_to_record(dataset_path=dataset_path, start=5053, target=5056)
+    p = 0
+    assert int(ref["action_id"][p]) == 183  # DownBoundU
+    assert int(out["action_id"][p]) == 183
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-4)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-4)

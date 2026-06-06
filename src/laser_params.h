@@ -60,6 +60,12 @@ typedef struct MslLaserParams {
   uint8_t hitbox_offsets_x_count;
   float hitbox_offsets_x[MSL_LASER_MAX_HITBOX_OFFS_X];
 
+  // Optional state-0 script damage update (`set_hitbox_damage`):
+  // it_80279544 calls it_80272460 on the selected HitCapsule after creation.
+  float damage_update_damage;
+  uint16_t damage_update_hitbox_mask;
+  uint8_t damage_update_frame;
+
   // Alternate hitbox params for item msid/state=1 (ItemStateDesc[1].xC_script).
   //
   // Decomp: blaster shots can be spawned with msid=0 or msid=1 via itfoxlaser.c:

@@ -2003,6 +2003,14 @@ static inline uint8_t active_damage_hard_floor_projection_source_accepted(
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
   // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044948_Floor}
+  if (is_damage_fly_collision_action(batch->state.action_id[idx])) {
+    float bottom_floor_y = 0.0f;
+    return (uint8_t)((floor_line_y_at_x_for_env(batch, bi, g, out_line_idx, cur_bottom_x,
+                                                &bottom_floor_y) &&
+                      cur_bottom_y <= (bottom_floor_y + k_floor_y_bias))
+                         ? 1u
+                         : 0u);
+  }
   if (batch->state.tilt_timer_y_frame_start[idx] < c->sdi_tilt_max_frames) {
     return 1u;
   }
@@ -10282,15 +10290,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 batch, bi, g, prefer_line_idx, batch->state.pos_x[idx], batch->state.pos_y[idx],
                 &root_y_corr, &floor_nx, &floor_ny);
             float root_bottom_floor_y = 0.0f;
+            const uint8_t root_current_bottom_floor_hit =
+                (uint8_t)((root_line_idx >= 0 &&
+                           floor_line_y_at_x_for_env(batch, bi, g, root_line_idx, cur_bottom_x,
+                                                     &root_bottom_floor_y) &&
+                           cur_bottom_y <= (root_bottom_floor_y + k_floor_y_bias))
+                              ? 1u
+                              : 0u);
             const uint8_t root_bottom_floor_hit =
-                (batch->state.tilt_timer_y_frame_start[idx] < c->sdi_tilt_max_frames)
-                    ? 1u
-                    : (uint8_t)((root_line_idx >= 0 &&
-                                 floor_line_y_at_x_for_env(batch, bi, g, root_line_idx,
-                                                           cur_bottom_x, &root_bottom_floor_y) &&
-                                 cur_bottom_y <= (root_bottom_floor_y + k_floor_y_bias))
-                                    ? 1u
-                                    : 0u);
+                (is_damage_fly_collision_action(action_id) ||
+                 batch->state.tilt_timer_y_frame_start[idx] >= c->sdi_tilt_max_frames)
+                    ? root_current_bottom_floor_hit
+                    : 1u;
             if (root_line_idx >= 0 && root_y_corr >= 0.0f &&
                 !g->lines[(size_t)root_line_idx].is_ledge &&
                 floor_x_within_line_bounds(batch, bi, g, root_line_idx, batch->state.pos_x[idx]) &&

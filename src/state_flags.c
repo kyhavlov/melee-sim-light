@@ -206,18 +206,6 @@ static inline uint8_t state_flags_magnify_live_fighter_action(uint16_t action_id
   }
 }
 
-static inline uint8_t state_flags_magnify_runtime_visibility_action(uint16_t action_id) {
-  // Replay rollout fresh-start ownership is bounded to DamageFlyHi/N rows whose source-visible
-  // x221F_b0 proves ftLib_80086A8C admitted the current camera subject to the magnifying-glass
-  // display. Other live fighter actions can consume a seeded nonzero x1910 episode in timers.c, but
-  // they cannot start a zero-counter rollout episode from camera geometry alone.
-  // refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
-  // refs/melee/src/melee/ft/ftlib.c::{ftLib_800866DC,ftLib_80086A8C}
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_HI ||
-                   action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N);
-}
-
 static inline uint8_t state_flags_camera_point_inside_stage_cam_bounds(const MslBatch* batch,
                                                                        size_t idx) {
   if (batch == NULL) {
@@ -257,6 +245,60 @@ static inline uint8_t state_flags_camera_below_stage_cam_bounds(const MslBatch* 
     return 0u;
   }
   return (uint8_t)(batch->state.camera_target_world_y_f32[idx] < cam.bottom);
+}
+
+static inline uint8_t state_flags_root_outside_stage_cam_bounds(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  MslStageBounds cam = {0};
+  if (!stage_collision_get_cam_bounds_world(batch->state.stage_id[idx / MSL_MAX_PLAYERS], &cam)) {
+    return 0u;
+  }
+  const float x = batch->state.pos_x[idx];
+  const float y = batch->state.pos_y[idx];
+  return (uint8_t)(x < cam.left || x > cam.right || y < cam.bottom || y > cam.top);
+}
+
+static inline uint8_t state_flags_root_outside_stage_cam_horizontal_bounds(const MslBatch* batch,
+                                                                           size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  MslStageBounds cam = {0};
+  if (!stage_collision_get_cam_bounds_world(batch->state.stage_id[idx / MSL_MAX_PLAYERS], &cam)) {
+    return 0u;
+  }
+  const float x = batch->state.pos_x[idx];
+  return (uint8_t)(x < cam.left || x > cam.right);
+}
+
+static inline uint8_t state_flags_magnify_runtime_visibility_owner(const MslBatch* batch,
+                                                                   size_t idx, uint16_t action_id) {
+  // Replay rollout fresh-start ownership follows the source magnifying-glass offscreen producer:
+  // ifMagnify_802FC7C0 tests Player_80036978 world position against Stage_GetCamBounds* and
+  // Fighter_procUpdate consumes that is_offscreen bit for fp->dmg.x1910.
+  //
+  // The full ifMagnify camera/HUD state is still hidden, so keep the zero-counter reconstruction to
+  // source-proven action/boundary families:
+  // - DamageFlyHi/N: root outside any camera bound,
+  // - DamageFlyRoll: horizontal left/right root exits only. Top/right DamageFlyRoll rows in PPA's
+  //   same segment keep x1910 at zero, so vertical Roll exits remain seed-owned until a fuller
+  //   ifMagnify state model exists.
+  // Nonzero seed episodes continue through timers.c using the ordinary live-fighter gate.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  // refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FC7C0,ifMagnify_802FC998}
+  // refs/melee/src/melee/stage/stage.c::Stage_GetCamBounds*
+  if (state_flags_magnify_live_fighter_action(action_id) == 0u) {
+    return 0u;
+  }
+  if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_HI || action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N) {
+    return state_flags_root_outside_stage_cam_bounds(batch, idx);
+  }
+  if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
+    return state_flags_root_outside_stage_cam_horizontal_bounds(batch, idx);
+  }
+  return 0u;
 }
 
 static inline void state_flags_refresh_camera_target_from_pose(MslBatch* batch, size_t idx) {
@@ -1339,34 +1381,16 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // data/stages/final_destination.json: cam_bounds_world
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
       }
-      const uint8_t damage_fly_magnify_start_supported =
-          (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_HI ||
-           action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N)
-              ? 1u
-              : 0u;
-      const uint8_t damage_fly_magnify_requires_seed_visible =
-          (state_flags_is_damage_fly_action(action_id) != 0u &&
-           (damage_fly_magnify_start_supported == 0u ||
-            (f221f & (uint8_t)MSL_STATE_FLAG_221F_B0) == 0u))
-              ? 1u
-              : 0u;
-      if (batch->state.camera_target_live_pose_valid[idx] != 0u &&
-          !batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] &&
-          state_flags_camera_overlap_stage_cam_bounds(batch, idx, 15.0f) &&
-          state_flags_magnify_runtime_visibility_action(action_id) != 0u &&
-          damage_fly_magnify_requires_seed_visible == 0u) {
-        // Runtime Firefox/Firebird camera visibility owner:
-        // - ftCamera_UpdateCameraBox/ftLib_800866DC refresh the current camera subject point,
-        // - ftLib_80086A8C sets x221F_b0 when Camera_80030CD8 reports the subject point is
-        //   off-screen while Camera_80030CFC still admits it to the magnifying-glass display,
-        // - the magnify damage timer consumes this companion owner before it starts a replay-rollout
-        //   counter from zero. DamageFlyHi/N can start a fresh source-visible offscreen episode; the
-        //   Lw/Top/Roll families stay out of this fresh-start owner because their replay-hidden hit
-        //   pose can differ from the visible DamageFly animation point used by the lightweight matrix
-        //   reconstruction, while nonzero seeded x1910 episodes remain consumed by timers.c.
+      if (state_flags_magnify_runtime_visibility_owner(batch, idx, action_id) != 0u) {
+        // Runtime magnifying-glass damage owner:
+        // - ifMagnify_802FC7C0 marks player is_offscreen from Player_80036978 world position versus
+        //   Stage_GetCamBounds*,
+        // - Fighter_procUpdate consumes ifMagnify_802FC998 to tick fp->dmg.x1910,
+        // - replay-rollout zero-counter starts therefore use root-position stage-camera bounds, not
+        //   a replay row id or the camera-target bone overlap used by x221F_b0 publication.
         // refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
-        // refs/melee/src/melee/ft/ftlib.c::{ftLib_800866DC,ftLib_80086A8C}
-        // refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030CFC}
+        // refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FC7C0,ifMagnify_802FC998}
+        // refs/melee/src/melee/stage/stage.c::Stage_GetCamBounds*
         if (replay_rollout != 0u) {
           f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
         }

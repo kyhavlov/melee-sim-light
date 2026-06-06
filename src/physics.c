@@ -1391,7 +1391,25 @@ static inline void physics_compute_guardsetoff_turnover_player_nudge(
             ? physics_action_is_guardsetoff_turnover_owner(batch->state.action_id[idx],
                                                            batch->state.seed_prev_action_id[idx])
             : 0u;
-    if (!guardsetoff_turnover_from_prev && !guardsetoff_turnover_from_promoted_seed_prev) {
+    // GuardSetOff -> Guard -> EscapeN same-proc turnover:
+    // - GuardSetOff_Anim can promote to Guard in Fighter_8006A360.
+    // - The common overlap pass (`ftCommon_8007E0E4`) then runs before Fighter_procUpdate's Guard
+    //   IASA can enter EscapeN through `ftCo_8009980C`.
+    // - Preserve exactly that source-owned nudge; ordinary/stale EscapeN rows stay outside this
+    //   helper.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    //   ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_8009980C,ftCo_800998EC}
+    // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    const uint8_t guardsetoff_turnover_escape_n_from_guard =
+        (batch->state.action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_N &&
+         batch->state.action_frame[idx] <= 1 &&
+         batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD &&
+         batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF)
+            ? 1u
+            : 0u;
+    if (!guardsetoff_turnover_from_prev && !guardsetoff_turnover_from_promoted_seed_prev &&
+        !guardsetoff_turnover_escape_n_from_guard) {
       continue;
     }
 

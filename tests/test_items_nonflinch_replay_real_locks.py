@@ -18,18 +18,18 @@ def _load_laser_state_terms_by_item_type(
     item_type: int,
     state: int,
 ) -> tuple[int, int, int, int]:
-    # MSLLASR1 v4..v6 layout owned by tools/extraction/extract_lasers.py.
+    # MSLLASR1 v4..v7 layout owned by tools/extraction/extract_lasers.py.
     # Docs: agent_docs/DATA_CONTRACT.md
     path = root / "data" / "items" / "lasers.bin"
     buf = path.read_bytes()
     assert buf[:8] == b"MSLLASR1"
     version = struct.unpack_from("<I", buf, 8)[0]
-    assert version in (4, 5, 6)
+    assert version in (4, 5, 6, 7)
     count = struct.unpack_from("<H", buf, 12)[0]
     off = 16
-    rec_bytes = 218 if version >= 6 else 254
+    rec_bytes = 226 if version >= 7 else (218 if version >= 6 else 254)
     state0_off = 42 if version >= 6 else 78
-    state1_off = state0_off + 24 + 16 * 4
+    state1_off = 138 if version >= 7 else state0_off + 24 + 16 * 4
     for _ in range(int(count)):
         shot_itkind = struct.unpack_from("<H", buf, off + 2)[0]
         if int(shot_itkind) == int(item_type):

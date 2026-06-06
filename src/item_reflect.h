@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "batch_internal.h"
+#include "staling.h"
 
 enum {
   MSL_ITEM_REFLECT_NO_PORT = 0xFFu,
@@ -19,6 +20,10 @@ static inline void msl_item_reflect_clear_runtime_lanes(MslBatch* batch, size_t 
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
   // refs/melee/src/melee/it/item.c::Item_80269F14
   batch->state.item_reflect_damage_mul[item_idx] = 1.0f;
+  batch->state.item_reflect_body_owner_port[item_idx] = (uint8_t)MSL_ITEM_REFLECT_NO_PORT;
+  batch->state.item_reflect_body_attack_id[item_idx] = (uint16_t)MSL_FT_MOVE_ID_DEFAULT;
+  batch->state.item_reflect_body_attack_instance[item_idx] = 0u;
+  batch->state.item_reflect_body_damage_valid[item_idx] = 0u;
   batch->state.item_pending_reflect_owner_port[item_idx] = (uint8_t)MSL_ITEM_REFLECT_NO_PORT;
   batch->state.item_pending_reflect_instance_id[item_idx] = 0u;
 }
@@ -45,6 +50,10 @@ static inline void msl_item_reflect_set_damage_mul(MslBatch* batch, size_t item_
     return;
   }
   batch->state.item_reflect_damage_mul[item_idx] = (damage_mul > 0.0f) ? damage_mul : 1.0f;
+  batch->state.item_reflect_body_owner_port[item_idx] = (uint8_t)MSL_ITEM_REFLECT_NO_PORT;
+  batch->state.item_reflect_body_attack_id[item_idx] = (uint16_t)MSL_FT_MOVE_ID_DEFAULT;
+  batch->state.item_reflect_body_attack_instance[item_idx] = 0u;
+  batch->state.item_reflect_body_damage_valid[item_idx] = 0u;
   // Item_80269F14 rebuilds the reflected item's HitCapsule damage through it_80272460. Clear the
   // pre-reflect stale scalar so the rebuilt owner path can use the current owner's stale table
   // instead of the projectile's original spawn-time lane.
@@ -244,6 +253,30 @@ static inline void msl_item_reflect_apply_immediate_transfer(MslBatch* batch, si
   batch->state.item_owner[item_idx] = (int8_t)reflector_port;
   batch->state.item_instance_id[item_idx] = batch->state.instance_id[reflector_idx];
   msl_item_reflect_set_damage_mul(batch, item_idx, damage_mul);
+  const uint16_t reflector_attack_id = batch->state.attack_id[reflector_idx];
+  const uint16_t reflector_attack_instance = batch->state.attack_instance[reflector_idx];
+  if (reflector_attack_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT && reflector_attack_instance != 0u) {
+    uint8_t prior_stale_source_seen = 0u;
+    const size_t stale_base = reflector_idx * (size_t)MSL_STALE_QUEUE_SIZE;
+    for (int i = 0; i < MSL_STALE_QUEUE_SIZE; i++) {
+      if (batch->state.stale_move_id[stale_base + (size_t)i] == reflector_attack_id) {
+        prior_stale_source_seen = 1u;
+        break;
+      }
+    }
+    // Reflected BODY stale owner:
+    // ftColl_80077464 transfers the item to the reflector, but Slippi keeps item->xD88/xD8C
+    // public fields spawn-latched. Runtime carries the reflector stale owner until the next BODY
+    // hit consumes it. The first reflected hit records this owner only after its public item damage;
+    // later reflected hits with a prior same-move stale entry may use the hidden owner for damage.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    // refs/melee/src/melee/it/item.c::Item_80269F14
+    // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+    batch->state.item_reflect_body_owner_port[item_idx] = (uint8_t)reflector_port;
+    batch->state.item_reflect_body_attack_id[item_idx] = reflector_attack_id;
+    batch->state.item_reflect_body_attack_instance[item_idx] = reflector_attack_instance;
+    batch->state.item_reflect_body_damage_valid[item_idx] = prior_stale_source_seen;
+  }
   const float mul = (speed_mul > 0.0f) ? speed_mul : 1.0f;
   const float new_vx = -batch->state.item_vel_x[item_idx] * mul;
   const float new_vy = -batch->state.item_vel_y[item_idx] * mul;

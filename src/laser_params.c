@@ -95,7 +95,7 @@ int laser_params_init(void) {
   const uint32_t version = read_u32_le(p);
   p += 4;
   if (version != 1 && version != 2 && version != 3 && version != 4 && version != 5 &&
-      version != 6) {
+      version != 6 && version != 7) {
     alloc_free(buf);
     return -1;
   }
@@ -107,7 +107,8 @@ int laser_params_init(void) {
   // Record layout source:
   // - agent_docs/DATA_CONTRACT.md (MSLLASR1)
   // - tools/extraction/extract_lasers.py
-  const size_t record_bytes = (version >= 6)   ? 218u
+  const size_t record_bytes = (version >= 7)   ? 226u
+                              : (version >= 6) ? 218u
                               : (version >= 3) ? 254u
                               : (version == 2) ? 166u
                                                : 158u;
@@ -189,11 +190,16 @@ int laser_params_init(void) {
     for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
       rec.hitbox_offsets_x[i] = read_f32_le(p + off + (size_t)i * 4);
     }
+    off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X * 4u;
+    if (version >= 7) {
+      rec.damage_update_damage = read_f32_le(p + off);
+      rec.damage_update_hitbox_mask = read_u16_le(p + off + 4);
+      rec.damage_update_frame = p[off + 6];
+      off += 8u;
+    }
 
     // Optional msid/state=1 hitbox params (MSLLASR1 v3+). For older versions, fall back to state0.
     if (version >= 3) {
-      off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X * 4u;
-
       rec.state1_damage = read_f32_le(p + off);
       rec.state1_size = read_f32_le(p + off + 4);
       rec.state1_angle = read_u16_le(p + off + 8);

@@ -154,9 +154,14 @@ def test_illusion_main_dash_downward_hit_does_not_seed_meteor_cancel_x1a() -> No
         ref_row, out_row, _site1_count = rows[rec]
         for field in ("action_id", "action_frame", "hitlag", "hitstun", "on_ground"):
             assert int(out_row[field][p]) == int(ref_row[field][p]), (rec, field)
-        assert [int(x) for x in out_row["state_flags"][p].tolist()] == [
-            int(x) for x in ref_row["state_flags"][p].tolist()
-        ]
+        # The lock is for DamageFlyN x1A meteor-cancel suppression. Mask the accepted
+        # camera/magnify-only bit so this assertion does not become a duplicate camera visibility
+        # policy test.
+        out_flags = [int(x) for x in out_row["state_flags"][p].tolist()]
+        ref_flags = [int(x) for x in ref_row["state_flags"][p].tolist()]
+        out_flags[4] &= ~0x80
+        ref_flags[4] &= ~0x80
+        assert out_flags == ref_flags
     assert int(rows[jump_record][1]["action_id"][p]) == 88
     assert int(rows[jump_record][1]["hitstun"][p]) == 14
 

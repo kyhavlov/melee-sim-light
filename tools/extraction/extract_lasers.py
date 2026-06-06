@@ -43,6 +43,9 @@ class LaserRecord:
     laser_zero_kb_damage_class: int
     hitbox_x138_mask: int
     hitbox_offsets_x: tuple[float, ...]
+    laser_damage_update_frame: int
+    laser_damage_update_hitbox_mask: int
+    laser_damage_update_damage: float
     laser_state1_damage: float
     laser_state1_size: float
     laser_state1_angle: int
@@ -134,6 +137,9 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
         ),
         hitbox_x138_mask=int(laser.get("laser_hitbox_x138_mask", 0)),
         hitbox_offsets_x=hitbox_offsets_x,
+        laser_damage_update_frame=int(laser.get("laser_damage_update_frame", 0)),
+        laser_damage_update_hitbox_mask=int(laser.get("laser_damage_update_hitbox_mask", 0)),
+        laser_damage_update_damage=float(laser.get("laser_damage_update_damage", 0.0)),
         laser_state1_damage=float(laser.get("laser_state1_damage", laser.get("laser_damage", 0.0))),
         laser_state1_size=float(laser.get("laser_state1_size", laser.get("laser_size", 0.0))),
         laser_state1_angle=int(laser.get("laser_state1_angle", laser.get("laser_angle", 0))),
@@ -165,7 +171,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
     offs1 = list(rec.state1_hitbox_offsets_x)[:MAX_HITBOX_OFFS]
     offs1 += [0.0] * (MAX_HITBOX_OFFS - len(offs1))
 
-    # Layout is documented in agent_docs/DATA_CONTRACT.md (MSLLASR1 v6).
+    # Layout is documented in agent_docs/DATA_CONTRACT.md (MSLLASR1 v7).
     out = bytearray()
     out += struct.pack(
         "<BBHHHHHHHHHff3fH",
@@ -207,6 +213,13 @@ def _pack_record(rec: LaserRecord) -> bytes:
         int(rec.hitbox_x138_mask) & 0xFFFF,
     )
     out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in offs0])
+    out += struct.pack(
+        "<fHBB",
+        _f32(rec.laser_damage_update_damage),
+        int(rec.laser_damage_update_hitbox_mask) & 0xFFFF,
+        int(rec.laser_damage_update_frame) & 0xFF,
+        0,
+    )
 
     sd1 = int(rec.laser_state1_shield_damage)
     if sd1 < -128:
@@ -245,7 +258,7 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("wb") as f:
         f.write(b"MSLLASR1")
-        f.write(struct.pack("<I", 6))
+        f.write(struct.pack("<I", 7))
         f.write(struct.pack("<H", len(recs)))
         f.write(struct.pack("<H", 0))
         for r in recs:

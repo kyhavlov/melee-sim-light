@@ -6663,23 +6663,23 @@ BODY collision-space residual split and rejected seed bridge:
     exist for platform replay-clock accounting. QGD not affected on FD.
   - Wait animation variant: common Wait random animation variant via `ftCo_8008A7A8` /
     `ftwaitanim.c::getAnimID`, site `3`; runtime site id exists. Replay-frame seed ownership is
-    valid only after modeled same-frame source-prefix consumers have been applied. It is not a
-    generic replay-seed bridge: ordinary replay rows still keep frame RNG seed-owned unless a
-    source path proves both callback order and all earlier same-frame RNG consumers that affect
-    `getAnimID`. PJO `rec3012` is a positive with no earlier-player DeadUpStar prefix; QGD
-    `rec4435` is the regression control where an earlier player's DeadUpStar effect prefix must be
-    consumed before the later Wait callback. QGD not affected in the selected rows.
-  - DeadUpStar effect prefix before later-player Wait: `ftCo_DeadUpStar_Anim` phase-1 completion
-    dispatches effect kind `0x42D`, which creates particle generator `0x121`; that generator layer
-    consumes exactly two HSD RNG steps before later players' `Fighter_procUpdate` callbacks can
-    reach Wait `getAnimID`. Runtime models this as site `25`
-    (`MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX`) with two `combat_rng_consume_step_site` calls for
-    each lower-index player currently in `DeadUpStar` before the Wait player. The prefix is bounded
-    by normal player callback order inside one frame: only players with index `< wait_player` can
-    have already run their DeadUpStar animation callback, and later players cannot affect the
-    current Wait callback's RNG phase. Negative controls prove PJO's Wait row receives zero prefix
-    when the DeadUpStar player is later in callback order, while QGD's earlier-player DeadUpStar
-    row consumes the two-step prefix.
+    valid only after modeled source-prefix consumers have been applied. It is not a generic
+    replay-seed bridge: ordinary replay rows still keep frame RNG seed-owned unless a source path
+    proves callback order and earlier RNG consumers that affect `getAnimID`. PJO `rec3012` is the
+    positive for an active DeadUpStar phase-1 effect prefix without an earlier-player creation
+    prefix; QGD `rec4435` is the control where both the active phase-1 effect prefix and the
+    earlier-player creation prefix must be consumed before the later Wait callback.
+  - DeadUpStar effect prefix before Wait: active DeadUpStar phase 1 owns a live async generator
+    before fighter Wait callbacks can reach `getAnimID`. Runtime models this bounded active effect
+    as one site `25` (`MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX`) step for each other player in
+    `DeadUpStar` with `match_flow_timer > dead_up_star_phase2_frames` on a terminal Wait RNG row.
+    Separately, `ftCo_DeadUpStar_Anim` phase-1 completion dispatches effect kind `0x42D`, creating
+    particle generator `0x121`; the creation dispatch contributes the older two-step same-frame
+    prefix before later players' `Fighter_procUpdate` callbacks. That creation prefix is bounded by
+    normal player callback order: only players with index `< wait_player` can have already run the
+    DeadUpStar animation callback. PJO's later-player row therefore receives one active-effect
+    prefix and zero creation-prefix steps; QGD's earlier-player row receives one active-effect
+    prefix plus the two-step creation prefix.
   - Pseudo-random SFX and electric clank: common pseudo-SFX site `4` and
     `ftColl_800784B4` electric clank SFX site `2`; runtime site ids exist. QGD not affected.
 - Magnifying-glass damage counter owner:

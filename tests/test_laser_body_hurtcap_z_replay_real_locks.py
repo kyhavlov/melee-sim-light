@@ -98,6 +98,34 @@ def test_falco_laser_airborne_fall_z_lane_respects_same_attack_hitlist_carry() -
     assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
 
 
+def test_fox_laser_state0_script_damage_update_hits_for_two_damage_ppa() -> None:
+    # PPA rec1151 is a state0 Fox laser after the article script updates only hb1's HitCapsule
+    # damage from 3 to 2. Runtime damage is owned by the extracted item script update lane, not by
+    # stale state or replay-row percent fitting; the adjacent rec1150 laser remains alive with no
+    # BODY hit yet.
+    # refs/melee/src/melee/it/it_2725.c::it_80275158
+    # data/items/lasers.bin (MSLLASR1 v7 damage_update_* fields)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed_pre, ref_pre, out_pre = _run_one_step_row(dataset_path, 1150, 1)
+    assert int(seed_pre["items"][2]["type"]) == 54  # Fox laser.
+    assert int(seed_pre["items"][2]["state"]) == 0
+    assert float(out_pre["percent"][1]) == pytest.approx(float(ref_pre["percent"][1]), abs=1e-6)
+    assert float(ref_pre["percent"][1]) == pytest.approx(float(seed_pre["percent"][1]), abs=1e-6)
+
+    seed, ref, out = _run_one_step_row(dataset_path, 1151, 1)
+    assert int(seed["items"][2]["type"]) == 54
+    assert int(seed["items"][2]["state"]) == 0
+    assert float(ref["percent"][1] - seed["percent"][1]) == pytest.approx(2.0, abs=1e-6)
+    assert float(out["percent"][1]) == pytest.approx(float(ref["percent"][1]), abs=1e-6)
+    assert int(out["last_attack_landed"][0]) == int(ref["last_attack_landed"][0])
+
+
 @pytest.mark.integration
 def test_fox_laser_specialairn_landing_damagefall_body_uses_lbcoll_radius() -> None:
     # SpecialAirNLoop -> Landing handoff positive:

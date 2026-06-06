@@ -426,6 +426,28 @@ class _HitCase:
             expect_ref_hitstun=30,
             note="reflected hit C",
         ),
+        _HitCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            record=4124,
+            spawn_id=44,
+            item_type=55,
+            reflected_owner=1,
+            target_p=0,
+            expect_ref_hitlag=0,
+            expect_ref_hitstun=0,
+            note="PPA same-source hitlist negative: reflected laser stays alive",
+        ),
+        _HitCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            record=4189,
+            spawn_id=48,
+            item_type=55,
+            reflected_owner=0,
+            target_p=1,
+            expect_ref_hitlag=4,
+            expect_ref_hitstun=9,
+            note="PPA reflected BODY hit uses reflector stale owner",
+        ),
     ],
 )
 def test_reflected_laser_hit_rows_and_adjacent_controls_lock_replay_real(case: _HitCase) -> None:

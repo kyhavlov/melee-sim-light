@@ -1302,10 +1302,19 @@ typedef struct MslStateSoA {
   //   refs/melee/src/melee/it/item.c::Item_80269F14
   //   refs/melee/src/melee/it/itcoll.c::it_80272460
   float* item_reflect_damage_mul;  // [batch * MSL_MAX_ITEMS]
-  float* item_timer;               // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_hitlag;            // [batch * MSL_MAX_ITEMS]
-  uint32_t* item_spawn_id;         // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_misc0;             // [batch * MSL_MAX_ITEMS]
+  // Runtime-only reflected BODY damage attribution. Slippi keeps item->xD88/xD8C spawn-latched,
+  // but Item_80269F14 rebuilds the reflected HitCapsule damage product under the reflector's
+  // current attack identity before a later BODY hit consumes it.
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  uint8_t* item_reflect_body_owner_port;        // [batch * MSL_MAX_ITEMS], 0xFF = none
+  uint16_t* item_reflect_body_attack_id;        // [batch * MSL_MAX_ITEMS]
+  uint16_t* item_reflect_body_attack_instance;  // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_reflect_body_damage_valid;      // [batch * MSL_MAX_ITEMS]
+  float* item_timer;                            // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_hitlag;                         // [batch * MSL_MAX_ITEMS]
+  uint32_t* item_spawn_id;                      // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_misc0;                          // [batch * MSL_MAX_ITEMS]
   uint8_t* item_misc1;
   uint8_t* item_misc2;
   uint8_t* item_misc3;

@@ -1685,7 +1685,7 @@ Supported runtime contract:
 - Multi-set dynamic state requires a future set-indexed runtime/seed surface before the loader
   contract can be widened.
 
-## `data/items/lasers.bin` (MSLLASR1 v6)
+## `data/items/lasers.bin` (MSLLASR1 v7)
 
 Purpose: compact, init-time-loadable Fox/Falco blaster laser article tables (spawn +
 projectile + hitbox params). SpecialN command-script shoot pulses are owned by MSLFTSC1 and cached
@@ -1721,10 +1721,10 @@ Decomp semantics (source pointers):
 Binary layout (little-endian):
 - Header:
   - `magic[8] = "MSLLASR1"`
-  - `version: u32 = 6`
+  - `version: u32 = 7`
   - `record_count: u16` (currently 2: Fox + Falco)
   - `reserved: u16 = 0`
-- Records (`record_count` entries), fixed-size:
+- Records (`record_count` entries), fixed-size 226 bytes:
   - `char_id: u8` (Slippi/GALE01 character id: Fox=1, Falco=22)
   - `pad0: u8 = 0`
   - `shot_itkind: u16` (`ftFox_DatAttrs.x1C_FOX_BLASTER_SHOT_ITKIND`)
@@ -1741,6 +1741,7 @@ Binary layout (little-endian):
   - `spawn_off_xyz: 3 * f32` (bone-local offset used by `lb_8000B1CC` in `ftFx_SpecialN_FtGetHoldJoint`;
     decomp constant, not a DAT attr)
   - `lifetime_frames: u16` (rounded from `FoxLaserAttr.lifetime`)
+  - State 0 HitCapsule block:
   - `laser_damage: f32` (from laser article hitbox script)
   - `laser_size: f32` (hitbox size/radius from laser article hitbox script)
   - `laser_angle: u16` (degrees; from laser article hitbox script)
@@ -1754,6 +1755,25 @@ Binary layout (little-endian):
   - `hitbox_x138_mask: u16` (bit `i` is `item->x5D4_hitboxes[i].x138` for the corresponding scripted hitbox)
   - `pad3: u8[2] = 0`
   - `hitbox_offsets_x[16]: 16 * f32` X offsets of consecutive hitboxes along the beam (from the article state script)
+  - v7 script damage-update block:
+    - `damage_update_damage: f32`
+    - `damage_update_hitbox_mask: u16` (bit `i` selects state0 scripted hitbox id `i`)
+    - `damage_update_frame: u8` (article age/frame where the script's `set_hitbox_damage` becomes visible)
+    - `reserved: u8 = 0`
+  - State 1 HitCapsule block:
+    - `laser_state1_damage: f32`
+    - `laser_state1_size: f32`
+    - `laser_state1_angle: u16`
+    - `laser_state1_kbg: u16`
+    - `laser_state1_wsk: u16`
+    - `laser_state1_bkb: u16`
+    - `laser_state1_shield_damage: i8`
+    - `laser_state1_element: u8`
+    - `laser_state1_zero_kb_damage_class: u8`
+    - `state1_hitbox_offsets_x_count: u8` (<= 16)
+    - `state1_hitbox_x138_mask: u16`
+    - `state1_pad: u8[2] = 0`
+    - `state1_hitbox_offsets_x[16]: 16 * f32`
 
 Version notes:
 - v1: no start/end msids and no state=1 params.
@@ -1765,11 +1785,20 @@ Version notes:
   19 and `hitbox_x138_mask` at bytes 20..21. Record size remains 254 bytes.
 - v6: removes SpecialN command-script shoot frames; runtime uses MSLFTSC1 `set_cmd_var(idx=2)`
   events through `move_tables`. Record size is 218 bytes.
+- v7: inserts the 8-byte script damage-update block between the state0 offset table and state1
+  HitCapsule block. This is the first version carrying laser script `set_hitbox_damage` ownership:
+  runtime uses `damage_update_{damage,hitbox_mask,frame}` to model the article-script
+  `it_80279544 -> it_80272460` damage update path for selected state0 hitboxes before item BODY
+  damage resolution. Record size is 226 bytes.
 
 Runtime semantics (current C-core policy):
 - The simulator uses `spawn_bone_part_id` + `spawn_off_xyz` with `anim_pose_get_matrix(...)` to compute world spawn points.
 - New laser items are allocated in a fixed 15-slot pool with deterministic (stable) ordering matching dataset sorting:
   `(instance_id, spawn_id, type)`.
+- For MSLLASR1 v7, state0 laser BODY damage is `laser_damage` until `damage_update_frame`, then
+  hitbox ids covered by `damage_update_hitbox_mask` use `damage_update_damage`. This matches the
+  source article script writing a new HitCapsule damage value before `it_80272460` computes stale
+  damage for the item hit.
 - `laser_zero_kb_damage_class` is derived from the laser article HitCapsule KB tuple. The script
   loader writes kbg/wsk/bkb into `HitCapsule.x24/x28/x2C`; item BODY contact writes percent-temp in
   `ftColl_80077C60`; and `Fighter_ProcessHit_8006D1EC` enters Damage* only when applied KB is

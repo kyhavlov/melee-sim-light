@@ -50,10 +50,10 @@ def _laser_record_by_char(char_id_target: int) -> tuple[int, int, int, int, int,
     buf = path.read_bytes()
     assert buf[:8] == b"MSLLASR1"
     (version,) = struct.unpack_from("<I", buf, 8)
-    assert version == 6
+    assert version in (6, 7)
     (count,) = struct.unpack_from("<H", buf, 12)
     off = 16
-    record_bytes = 218
+    record_bytes = 226 if version >= 7 else 218
     for _ in range(int(count)):
         base = off
         char_id = int(buf[base])

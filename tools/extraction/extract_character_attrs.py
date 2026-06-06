@@ -57,13 +57,13 @@ def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
     # FoxLaserAttr.scale (it/items/itfoxlaser.c): max visual stretch for the beam.
     out["laser_scale_max"] = float(_f32_be(pl_buf, special_abs + 0x04))
 
-    def _extract_state_hitbox(state_index: int) -> tuple[dict, list[dict]] | None:
+    def _extract_state_hitbox(state_index: int) -> tuple[dict, list[dict], list] | None:
         # ItemStateDesc stride is 0x10 (it/types.h). xC_script is at offset 0x0C.
         # refs/melee/src/melee/it/types.h::ItemStateDesc
         script_abs = arc.ptr32(states_abs + 0x0C + int(state_index) * 0x10)
         if script_abs == arc.data_base:
             return None
-        events = _parse_subaction_events(arc, script_abs, max_frames=8, max_steps_per_frame=500)
+        events = _parse_subaction_events(arc, script_abs, max_frames=80, max_steps_per_frame=500)
         hitboxes: list[dict] = []
         for ev in events:
             if ev.kind == "create_hitbox":
@@ -73,14 +73,14 @@ def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
         hb0 = hitboxes[0] if hitboxes else None
         if not isinstance(hb0, dict):
             return None
-        return hb0, hitboxes
+        return hb0, hitboxes, events
 
     # State 0 is spawned by it_8029C6A4 (msid=0).
     # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6A4
     st0 = _extract_state_hitbox(0)
     if st0 is None:
         return out
-    hb0, hbs0 = st0
+    hb0, hbs0, evs0 = st0
 
     out["laser_damage"] = float(hb0.get("damage", 0.0))
     out["laser_size"] = float(hb0.get("size", 0.0))
@@ -106,12 +106,39 @@ def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
             pass
     out["laser_hitbox_offsets_x"] = x_offs0
     out["laser_hitbox_x138_mask"] = int(x138_mask0)
+    # State-0 Fox blaster scripts update already-created HitCapsule damage on a later script
+    # frame. Preserve the compact first uniform set_hitbox_damage group so runtime can consume
+    # `it_80279544 -> it_80272460` without a local item-kind/action predicate.
+    damage_update_frame: int | None = None
+    damage_update_damage: float | None = None
+    damage_update_mask = 0
+    for ev in evs0:
+        if ev.kind != "set_hitbox_damage":
+            continue
+        try:
+            frame_i = int(ev.frame)
+            idx_i = int(ev.data.get("idx", -1))
+            damage_f = float(ev.data.get("damage", 0.0))
+        except Exception:
+            continue
+        if idx_i < 0 or idx_i >= 16 or not damage_f > 0.0:
+            continue
+        if damage_update_frame is None:
+            damage_update_frame = frame_i
+            damage_update_damage = damage_f
+        if frame_i != damage_update_frame or abs(float(damage_update_damage) - damage_f) > 1e-6:
+            continue
+        damage_update_mask |= 1 << idx_i
+    if damage_update_frame is not None and damage_update_damage is not None:
+        out["laser_damage_update_frame"] = int(damage_update_frame)
+        out["laser_damage_update_damage"] = float(damage_update_damage)
+        out["laser_damage_update_hitbox_mask"] = int(damage_update_mask)
 
     # State 1 is spawned by it_8029C6CC (msid=1).
     # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
     st1 = _extract_state_hitbox(1)
     if st1 is not None:
-        hb1, hbs1 = st1
+        hb1, hbs1, _evs1 = st1
         out["laser_state1_damage"] = float(hb1.get("damage", 0.0))
         out["laser_state1_size"] = float(hb1.get("size", 0.0))
         out["laser_state1_angle"] = int(hb1.get("angle", 0))

@@ -2752,12 +2752,12 @@ def _laser_shot_item_kinds(path: Path) -> tuple[int, ...]:
         raise ValueError(f"{path}: invalid MSLLASR1 header")
     version = struct.unpack_from("<I", buf, 8)[0]
     count = struct.unpack_from("<H", buf, 12)[0]
-    if version not in (4, 5, 6):
+    if version not in (4, 5, 6, 7):
         raise ValueError(f"{path}: unsupported MSLLASR1 version {version}")
     # tools/extraction/extract_lasers.py::_pack_record starts each record with:
     #   char_id, shot_itkind, gun_itkind, spawn_bone_part_id
     # followed by the fixed-size laser parameter payload consumed by src/laser_params.c.
-    record_size = 218 if version >= 6 else 254
+    record_size = 226 if version >= 7 else (218 if version >= 6 else 254)
     off = 16
     out: list[int] = []
     for _ in range(int(count)):

@@ -153,6 +153,177 @@ static inline float item_hitcapsule_stale_damage_mul(const MslBatch* batch, size
   return staling_multiplier_for_move(batch, owner_idx, attack_id);
 }
 
+static inline uint8_t item_reflector_owner_is_shine_callback_state(uint16_t action_id);
+
+static inline float item_laser_script_hitcapsule_damage(const MslLaserParams* lp,
+                                                        uint8_t laser_state, uint8_t hitbox_id,
+                                                        float laser_age_frames) {
+  if (lp == NULL) {
+    return 0.0f;
+  }
+  if (laser_state != 0u) {
+    return lp->state1_damage;
+  }
+  float damage = lp->damage;
+  if (lp->damage_update_frame != 0u && lp->damage_update_damage > 0.0f &&
+      hitbox_id < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X &&
+      (lp->damage_update_hitbox_mask & (uint16_t)(1u << hitbox_id)) != 0u &&
+      laser_age_frames >= (float)lp->damage_update_frame) {
+    // Source command owner:
+    // Fox state-0 blaster script creates 3-damage HitCapsules, then `set_hitbox_damage` rewrites
+    // hitboxes 0..2 to 2 damage on frame 17. Consume the generated MSLLASR1 v7 lane by selected
+    // HitCapsule id rather than item kind or replay row.
+    // refs/melee/src/melee/it/it_2725.c::{it_802790C0,it_80279544}
+    // refs/melee/src/melee/it/itcoll.c::it_80272460
+    damage = lp->damage_update_damage;
+  }
+  return damage;
+}
+
+static inline int item_reflected_laser_unique_previous_owner(const MslBatch* batch, int bi,
+                                                             int current_owner,
+                                                             uint16_t item_attack_id) {
+  if (batch == NULL || current_owner < 0 || current_owner >= (int)batch->config.num_players) {
+    return -1;
+  }
+  if (batch->config.num_players == 2u) {
+    return current_owner == 0 ? 1 : 0;
+  }
+  int candidate = -1;
+  for (int p = 0; p < (int)batch->config.num_players; p++) {
+    if (p == current_owner) {
+      continue;
+    }
+    const size_t p_idx = msl_idx_player(bi, p);
+    if (batch->state.last_attack_landed[p_idx] != (uint8_t)item_attack_id) {
+      continue;
+    }
+    if (candidate >= 0) {
+      return -1;
+    }
+    candidate = p;
+  }
+  return candidate;
+}
+
+static inline uint8_t item_laser_reflected_body_damage_owner(
+    const MslBatch* batch, int bi, size_t item_idx, int owner, float script_damage,
+    uint16_t* io_attack_id, uint16_t* io_attack_instance, float* io_damage, float* io_stale_mult) {
+  if (batch == NULL || io_attack_id == NULL || io_attack_instance == NULL || io_damage == NULL ||
+      io_stale_mult == NULL || owner < 0 || owner >= (int)batch->config.num_players ||
+      !(script_damage > 0.0f)) {
+    return 0u;
+  }
+  const float reflect_mul = batch->state.item_reflect_damage_mul[item_idx];
+  if (!(reflect_mul > 1.0f)) {
+    return 0u;
+  }
+  const size_t owner_idx = msl_idx_player(bi, owner);
+  if (!item_reflector_owner_is_shine_callback_state(batch->state.action_id[owner_idx]) ||
+      batch->state.attack_id[owner_idx] == (uint16_t)MSL_FT_MOVE_ID_DEFAULT ||
+      batch->state.attack_instance[owner_idx] == 0u ||
+      *io_attack_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT) {
+    return 0u;
+  }
+  if (*io_attack_instance == 0u) {
+    return 0u;
+  }
+  const uint16_t owner_attack_id = batch->state.attack_id[owner_idx];
+  if (owner_attack_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT ||
+      (uint16_t)(*io_attack_instance + 1u) != batch->state.attack_instance[owner_idx]) {
+    return 0u;
+  }
+  const int prev_owner =
+      item_reflected_laser_unique_previous_owner(batch, bi, owner, *io_attack_id);
+  if (prev_owner < 0) {
+    return 0u;
+  }
+  const size_t prev_owner_idx = msl_idx_player(bi, prev_owner);
+  // Immediate source reflect callback damage rebuild:
+  // - the incoming item HitCapsule.damage has already been staled through it_80272460 for the
+  //   previous projectile owner,
+  // - Item_80269F14 rebuilds raw reflected damage from that staled float and item->xC6C,
+  // - the subsequent BODY damage/stale queue owner is the reflector's current shine move id.
+  // The item attack instance must be the immediate predecessor of the reflector instance; older
+  // reflected articles carry their own source-owned damage product and must not be rebuilt again.
+  // Slippi keeps item->xD88/xD8C spawn-latched, so this is a hidden damage-product owner only.
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_CreateReflectHit}
+  const float prev_stale =
+      staling_multiplier_for_move(batch, prev_owner_idx, (uint16_t)*io_attack_id);
+  const float tmp = (script_damage * prev_stale * reflect_mul) + 0.99f;
+  uint32_t raw_damage = 0u;
+  if (tmp > 0.0f) {
+    raw_damage = (uint32_t)tmp;
+  }
+  if (raw_damage == 0u) {
+    raw_damage = 1u;
+  }
+  *io_attack_id = owner_attack_id;
+  *io_attack_instance = batch->state.attack_instance[owner_idx];
+  *io_damage = (float)raw_damage;
+  *io_stale_mult = staling_multiplier_for_move(batch, owner_idx, *io_attack_id);
+  return 1u;
+}
+
+static inline uint8_t item_laser_runtime_reflected_body_damage_owner(
+    const MslBatch* batch, int bi, size_t item_idx, int owner, float* io_damage,
+    uint16_t* io_attack_id, uint16_t* io_attack_instance, float* io_stale_mult) {
+  if (batch == NULL || io_damage == NULL || io_attack_id == NULL || io_attack_instance == NULL ||
+      io_stale_mult == NULL || owner < 0 || owner >= (int)batch->config.num_players ||
+      !(batch->state.item_reflect_damage_mul[item_idx] > 1.0f) ||
+      batch->state.item_reflect_body_damage_valid[item_idx] == 0u ||
+      batch->state.item_reflect_body_owner_port[item_idx] != (uint8_t)owner) {
+    return 0u;
+  }
+  const uint16_t attack_id = batch->state.item_reflect_body_attack_id[item_idx];
+  const uint16_t attack_instance = batch->state.item_reflect_body_attack_instance[item_idx];
+  if (attack_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT || attack_instance == 0u) {
+    return 0u;
+  }
+  const int prev_owner =
+      item_reflected_laser_unique_previous_owner(batch, bi, owner, *io_attack_id);
+  if (prev_owner < 0) {
+    return 0u;
+  }
+  const size_t prev_owner_idx = msl_idx_player(bi, prev_owner);
+  const float prev_stale = staling_multiplier_for_move(batch, prev_owner_idx, *io_attack_id);
+  const float tmp =
+      (*io_damage * prev_stale * batch->state.item_reflect_damage_mul[item_idx]) + 0.99f;
+  uint32_t raw_damage = 0u;
+  if (tmp > 0.0f) {
+    raw_damage = (uint32_t)tmp;
+  }
+  if (raw_damage == 0u) {
+    raw_damage = 1u;
+  }
+  const size_t owner_idx = msl_idx_player(bi, owner);
+  *io_attack_id = attack_id;
+  *io_attack_instance = attack_instance;
+  *io_damage = (float)raw_damage;
+  *io_stale_mult = staling_multiplier_for_move(batch, owner_idx, attack_id);
+  return 1u;
+}
+
+static inline void item_laser_commit_reflected_body_stale_owner(MslBatch* batch, int bi,
+                                                                size_t item_idx, int owner) {
+  if (batch == NULL || owner < 0 || owner >= (int)batch->config.num_players ||
+      batch->state.item_reflect_body_owner_port[item_idx] != (uint8_t)owner) {
+    return;
+  }
+  const uint16_t attack_id = batch->state.item_reflect_body_attack_id[item_idx];
+  const uint16_t attack_instance = batch->state.item_reflect_body_attack_instance[item_idx];
+  if (attack_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT && attack_instance != 0u) {
+    const size_t owner_idx = msl_idx_player(bi, owner);
+    staling_queue_update(batch, owner_idx, attack_id, attack_instance);
+  }
+  batch->state.item_reflect_body_owner_port[item_idx] = (uint8_t)MSL_ITEM_REFLECT_NO_PORT;
+  batch->state.item_reflect_body_attack_id[item_idx] = (uint16_t)MSL_FT_MOVE_ID_DEFAULT;
+  batch->state.item_reflect_body_attack_instance[item_idx] = 0u;
+  batch->state.item_reflect_body_damage_valid[item_idx] = 0u;
+}
+
 static inline uint8_t item_spawn_has_unique_same_source_damage_victim(const MslBatch* batch, int bi,
                                                                       int owner) {
   if (batch == NULL || owner < 0 || owner >= (int)batch->config.num_players) {
@@ -287,6 +458,10 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint8_t, batch->state.item_stale_damage_valid);
   SWAP(float, batch->state.item_stale_damage_mul);
   SWAP(float, batch->state.item_reflect_damage_mul);
+  SWAP(uint8_t, batch->state.item_reflect_body_owner_port);
+  SWAP(uint16_t, batch->state.item_reflect_body_attack_id);
+  SWAP(uint16_t, batch->state.item_reflect_body_attack_instance);
+  SWAP(uint8_t, batch->state.item_reflect_body_damage_valid);
   SWAP(float, batch->state.item_timer);
   SWAP(uint8_t, batch->state.item_hitlag);
   SWAP(uint32_t, batch->state.item_spawn_id);
@@ -5342,6 +5517,7 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
       }
+      item_laser_commit_reflected_body_stale_owner(batch, bi, ii, owner);
       if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
         if (defender_guard_reflect_no_submotion_body_handoff) {
           item_guard_reflect_restore_anim_drain(batch, d_idx);
@@ -7633,7 +7809,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80077C60}
         // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
         // refs/melee/src/melee/it/itcoll.c::it_80272460
-        float dmg = lp->damage;
+        float dmg =
+            item_laser_script_hitcapsule_damage(lp, laser_state, hit_hb_id, laser_age_frames);
         dmg = msl_item_reflect_damage_lane(batch, ii, dmg);
         combat_apply_item_phantom_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
                                       batch->state.item_instance_id[ii], dmg, lp->element);
@@ -7779,8 +7956,19 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // - Fighter_ProcessHit_8006D1EC (percent add, hitlag, hitstun, damage-state entry)
       // - ftColl_80076CBC (getEnvDmg pattern)
       // refs/melee/src/melee/ft/fighter.c and refs/melee/src/melee/ft/ftcoll.c
-      float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
-      dmg = msl_item_reflect_damage_lane(batch, ii, dmg);
+      float dmg = item_laser_script_hitcapsule_damage(lp, laser_state, hit_hb_id, laser_age_frames);
+      uint16_t body_attack_id = batch->state.item_attack_id[ii];
+      uint16_t body_attack_instance = batch->state.item_attack_instance[ii];
+      float body_stale_mult = laser_body_stale_mult;
+      if (item_laser_runtime_reflected_body_damage_owner(batch, bi, ii, owner, &dmg,
+                                                         &body_attack_id, &body_attack_instance,
+                                                         &body_stale_mult) != 0u) {
+        // Runtime Item_80269F14 reflect callback already supplied the hidden reflected BODY owner.
+      } else if (item_laser_reflected_body_damage_owner(batch, bi, ii, owner, dmg, &body_attack_id,
+                                                        &body_attack_instance, &dmg,
+                                                        &body_stale_mult) == 0u) {
+        dmg = msl_item_reflect_damage_lane(batch, ii, dmg);
+      }
       const uint16_t angle = (laser_state == 0u) ? lp->angle : lp->state1_angle;
       const uint16_t kbg = (laser_state == 0u) ? lp->kbg : lp->state1_kbg;
       const uint16_t wsk = (laser_state == 0u) ? lp->wsk : lp->state1_wsk;
@@ -7791,14 +7979,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint8_t defender_guardon_reflect_body_undo_recharge =
           item_guardon_reflect_body_hit_undoes_action_recharge(batch, d_idx);
       const MslItemHitResult res = combat_apply_item_hit(
-          batch, bi, owner, def, batch->state.item_attack_id[ii],
-          batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
-          batch->state.item_type[ii], laser_state, dmg, angle, kbg, wsk, bkb, hit_hurt_height,
-          element, laser_body_stale_mult, batch->state.item_pos_x[ii], batch->state.item_vel_x[ii],
-          1u);
+          batch, bi, owner, def, body_attack_id, body_attack_instance,
+          batch->state.item_instance_id[ii], batch->state.item_type[ii], laser_state, dmg, angle,
+          kbg, wsk, bkb, hit_hurt_height, element, body_stale_mult, batch->state.item_pos_x[ii],
+          batch->state.item_vel_x[ii], 1u);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
       }
+      item_laser_commit_reflected_body_stale_owner(batch, bi, ii, owner);
       if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
         if (defender_guard_reflect_no_submotion_body_handoff) {
           item_guard_reflect_restore_anim_drain(batch, d_idx);

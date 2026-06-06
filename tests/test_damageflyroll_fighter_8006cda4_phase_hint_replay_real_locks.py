@@ -571,6 +571,55 @@ def test_qgd_damageflyroll_site8_uses_current_processhit_source_not_stale_last_h
 
 
 @pytest.mark.integration
+def test_side_special_article_body_hit_admits_damageflyroll_without_fighter_effect_prefix() -> None:
+    # FEH rec10192 locks the item-article BODY route into Fighter_ProcessHit. The source owner is
+    # the generated Illusion/Phantasm article kind, not the victim's Wait pre-action and not a
+    # fighter BODY DmgLog entry. It reaches ftCo_8008DCE0's DamageFlyRoll gate without the normal
+    # fighter BODY ftColl_80078538 damage-effect RNG prefix.
+    # refs/melee/src/melee/it/items/itfoxillusion.c::{itFoxIllusion_Logic14_DmgDealt,it_8029CFF0}
+    # refs/melee/src/melee/it/itcoll.c::it_80272460
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # data/items/articles/fox_falco.bin (MSLITAR1 side_special_illusion_itkind)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[10192]["seed_t"]
+    assert int(seed["action_id"][0]) == 14  # Wait
+    assert int(seed["action_id"][1]) == 352  # FxSpecialAirSHit
+    article = seed["items"][0]
+    assert int(article["exists"]) == 1
+    assert int(article["type"]) == 57
+    assert int(article["state"]) == 1
+    assert int(article["owner"]) == 1
+    assert int(article["attack_id"]) == 19
+
+    trace_path = root / "reports/triage/feh10192_side_special_article_damageflyroll_lock.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=10192,
+        window_records=(10192,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+
+    ref_row, out_row, site1_count = rows[10192]
+    assert site1_count == 1
+    assert _trace_site_count(trace_path, start_record=10192, record=10192, site_id=24) == 0
+    assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0]) == 91
+    assert int(out_row["hitlag"][0]) == int(ref_row["hitlag"][0])
+    assert int(out_row["hitstun"][0]) == int(ref_row["hitstun"][0])
+
+
+@pytest.mark.integration
 def test_throwhi_capture_episode_rollout_clock_reaches_delayed_damageflyroll_gate() -> None:
     # Replay-real rollout lock for the TBK capture -> ThrowHi -> throw-laser -> DamageFlyRoll
     # episode selected from the F26 disruptive cluster.
@@ -1013,6 +1062,16 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
         ),
         (
             "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            4024,
+            1,
+            0,
+            1,
+            0,
+            91,
+            91,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
             7566,
             1,
             0,
@@ -1117,8 +1176,13 @@ def test_attackairb_damageflytop_runtime_phase_requires_selected_hurtcap_provena
     seed_row = read_dataset(str(dataset_path)).samples[record]["seed_t"]
     if dataset_rel.endswith("PutridJoyousOryx.msl") and record == 5448:
         assert int(seed_row["damage_jump_buffer_x14"][victim]) > 0
+        assert int(seed_row["state_flags"][attacker][0]) & 0x40
+    if dataset_rel.endswith("PriceyPartialAlbatross.msl") and record == 4024:
+        assert int(seed_row["damage_jump_buffer_x14"][victim]) == 0
+        assert int(seed_row["state_flags"][attacker][0]) & 0x40 == 0
     if record in {3301, 7566}:
         assert int(seed_row["damage_jump_buffer_x14"][victim]) == 0
+        assert int(seed_row["state_flags"][attacker][0]) & 0x40
 
     def _clear_seed_phase(seed_t):
         seed_t["fighter_8006cda4_pre_gate_consume_count"][0, victim] = 0
@@ -1174,6 +1238,40 @@ def test_specialairhi_damageflyroll_gate_rejects_attackairb_cap12_xrotn_owner_pp
 
 
 @pytest.mark.integration
+def test_specialairs_damageflyroll_gate_uses_attackairb_create_edge_root_body_owner_ppa_6123() -> None:
+    # PPA rec6123 covers the side-special startup gate owner:
+    # - defender is airborne SpecialAirS with no Fighter_8006CDA4 pre-gate seed count,
+    # - ftColl selected the current create-edge strong AttackAirB hb1/root-body HitCapsule,
+    # - this admits only the DamageFlyRoll gate; it does not synthesize pre-gate consumes and is not
+    #   inferred from visible SpecialAirS state alone.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    # data/hurtcaps/{fox,falco}.json cap0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 6123
+    attacker = 0
+    victim = 1
+    got_hb, got_cap = _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim)
+    assert (got_hb, got_cap) == (1, 0)
+    seed_row = read_dataset(str(dataset_path)).samples[record]["seed_t"]
+    assert int(seed_row["action_id"][victim]) == 351  # FxSpecialAirS
+    assert int(seed_row["on_ground"][victim]) == 0
+    assert int(seed_row["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+
+    _, ref_row, out_row = _run_one_step_row(
+        dataset_path, record, victim, rng_damage_fly_roll_gate=True
+    )
+    assert int(ref_row["action_id"][victim]) == int(out_row["action_id"][victim]) == 91
+
+
+@pytest.mark.integration
 def test_pjo_rollout_rng_sites_are_source_owned_without_exceptions() -> None:
     # PJO RAW-CLEAN RNG closure in validator-shaped rollout:
     # - rec2654: weak AttackAirB current-hit owner consumes the pre-gate Fighter_8006CDA4 site once.
@@ -1214,7 +1312,7 @@ def test_pjo_rollout_rng_sites_are_source_owned_without_exceptions() -> None:
 
     assert _trace_site_count(trace_path, start_record=0, record=2654, site_id=5) == 1
     assert _trace_site_count(trace_path, start_record=0, record=3012, site_id=3) == 1
-    assert _trace_site_count(trace_path, start_record=0, record=3012, site_id=25) == 0
+    assert _trace_site_count(trace_path, start_record=0, record=3012, site_id=25) == 1
     assert _trace_site_count(trace_path, start_record=0, record=5097, site_id=5) == 1
     assert _trace_site_count(trace_path, start_record=0, record=5448, site_id=5) == 1
     assert _trace_site_count(trace_path, start_record=0, record=5448, site_id=6) == 1
@@ -1222,10 +1320,11 @@ def test_pjo_rollout_rng_sites_are_source_owned_without_exceptions() -> None:
 
 @pytest.mark.integration
 def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_prefix() -> None:
-    # QGD rec4435 is the regression control for replay-frame Wait RNG admission: p0's earlier
-    # same-frame DeadUpStar_Anim source callback spawns effect kind 0x42D/generator 0x121 before p1
-    # reaches Wait_Anim/getAnimID. PJO rec3012 has DeadUpStar after the Wait player in callback
-    # order, so it must not receive this prefix.
+    # QGD rec4435 is the regression control for replay-frame Wait RNG admission: p0's active
+    # DeadUpStar phase-1 effect owns one pre-fighter generator consume, then p0's earlier same-frame
+    # DeadUpStar_Anim source callback can add the bounded creation prefix before p1 reaches
+    # Wait_Anim/getAnimID. PJO rec3012 is the later-player control: it receives only the active
+    # phase-1 effect prefix, not the earlier-player creation prefix.
     # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
     # refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
     # refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
@@ -1251,7 +1350,7 @@ def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_pr
     assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0]) == 4
     assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]) == 14
     assert int(out_row["animation_index"][1]) == int(ref_row["animation_index"][1]) == 2
-    assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=25) == 2
+    assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=25) == 3
     assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=3) == 1
 
 

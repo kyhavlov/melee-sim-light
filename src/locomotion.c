@@ -42,12 +42,34 @@ static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
 static inline void locomotion_consume_deadupstar_effect_prefix_before_wait(MslBatch* batch, int bi,
                                                                            int player) {
-  if (batch == NULL || bi < 0 || player <= 0 || player > (int)MSL_MAX_PLAYERS) {
+  if (batch == NULL || bi < 0 || player < 0 || player > (int)MSL_MAX_PLAYERS) {
     return;
   }
+  const MslCommonParams* c = msl_common_params();
   const int num_players = (int)batch->config.num_players;
   if (player > num_players) {
     return;
+  }
+  if (c != NULL) {
+    for (int p = 0; p < num_players; p++) {
+      if (p == player) {
+        continue;
+      }
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_DEAD_UP_STAR) {
+        continue;
+      }
+      if (batch->state.match_flow_timer[idx] <= (uint8_t)c->dead_up_star_phase2_frames) {
+        continue;
+      }
+      // Active DeadUpStar phase-1 owns a live async generator before fighter Wait_Anim can sample
+      // getAnimID's HSD_Randi(100). This is separate from the same-frame creation prefix below:
+      // phase-1 rows carry `match_flow_timer > dead_up_star_phase2_frames`.
+      // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
+      // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
+      // refs/melee/src/sysdolphin/baselib/particle.c
+      combat_rng_consume_step_site(batch, bi, MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX);
+    }
   }
   for (int p = 0; p < player; p++) {
     const size_t idx = msl_idx_player(bi, p);

@@ -36,12 +36,12 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 == datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1075
-rollout.streak_count: 42
-rollout.streak_len.median: 152
-rollout.streak_len.p90: 475
+rollout.streak_count: 41
+rollout.streak_len.median: 159
+rollout.streak_len.p90: 482
 rollout.streak_len.p95: 548
 rollout.streak_len.max: 1075
-rollout.first_mismatch_total: 42
+rollout.first_mismatch_total: 41
 rollout.first_mismatch_seeded_total: 23
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -52,16 +52,16 @@ rollout.float_top_downstream:
   1. percent max_err=12 rec=6924 p=0 seed/ref/out=15.28/15.28/27.28 actions=90/90/86 category=downstream_discrete_mismatch
   2. pos_x max_err=10.62 rec=6634 p=2 seed/ref/out=22.8141/22.8141/12.1941 actions=179/179/181 category=downstream_discrete_mismatch
   3. shield_hp max_err=10.5 rec=6634 p=2 seed/ref/out=52.09/51.81/41.31 actions=179/179/181 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4333
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4578
 
 == suite summary ==
-overall.rollout.streak_count: 42
-overall.rollout.streak_len.median: 152
-overall.rollout.streak_len.p90: 475
+overall.rollout.streak_count: 41
+overall.rollout.streak_len.median: 159
+overall.rollout.streak_len.p90: 482
 overall.rollout.streak_len.p95: 548
 overall.rollout.streak_len.max: 1075
 overall.rollout.best_len.max: 1075
-overall.rollout.first_mismatch_total: 42
+overall.rollout.first_mismatch_total: 41
 overall.rollout.first_mismatch_seeded_total: 23
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
@@ -72,4 +72,4 @@ overall.rollout.float_top_downstream:
   1. percent max_err=12 rec=6924 p=0 seed/ref/out=15.28/15.28/27.28 actions=90/90/86 category=downstream_discrete_mismatch
   2. pos_x max_err=10.62 rec=6634 p=2 seed/ref/out=22.8141/22.8141/12.1941 actions=179/179/181 category=downstream_discrete_mismatch
   3. shield_hp max_err=10.5 rec=6634 p=2 seed/ref/out=52.09/51.81/41.31 actions=179/179/181 category=downstream_discrete_mismatch
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4333
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4578
