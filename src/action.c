@@ -1368,6 +1368,9 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   const uint16_t a0 = batch->state.action_id[idx];
   const float a0_anim_frame = batch->state.anim_frame_f32[idx];
   batch->state.guard_x10_frame_start[idx] = batch->state.guard_x10[idx];
+  if (a0 != (uint16_t)MSL_ACT_GUARD_ON) {
+    batch->state.guard_on_cliff_end_source[idx] = 0u;
+  }
   enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
   const uint8_t guard_on_fresh_entry_from_non_shield_snapshot =
       // Decomp ownership: input callbacks run once per fighter per frame (Fighter_procUpdate).
@@ -1410,6 +1413,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     batch->state.guard_x10[idx] = 0;
     batch->state.lightshield_amount[idx] = 0.0f;
     batch->state.guard_entry_via_wait_callback[idx] = 0u;
+    batch->state.guard_on_cliff_end_source[idx] = 0u;
     batch->state.guard_entry_via_dash_91ad8[idx] = 0u;
   }
   batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;

@@ -1605,15 +1605,27 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         // refs/melee/src/melee/ft/ftmotionstates.c (ftCo_MS_PassiveStandF / ftCo_MS_PassiveStandB)
         batch->state.animation_index[idx] = (uint32_t)msid;
         if (anim_is_finished(cid, msid, anim_frame)) {
-          // Decomp: ftCo_PassiveStand_Anim ends through ft_8008A2BC, so the destination Wait state
-          // still owns same-frame Wait_IASA/Phys ordering. This is required for held-down input to
-          // enter Squat immediately on the tech-stand end frame.
+          // Decomp: ftCo_PassiveStand_Phys is still the source Phys callback for the terminal
+          // PassiveStandF/B row, even when ftCo_PassiveStand_Anim has just entered Wait through
+          // ft_8008A2BC. Preserve that TransN-owned ground-velocity lane before the destination
+          // Wait IASA subset runs; the shared physics pass will integrate the final visible state
+          // using this source-owned velocity.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::{
+          //   ftCo_PassiveStand_Anim,ftCo_PassiveStand_Phys}
+          // refs/melee/src/melee/ft/ft_081B.c::{ft_80084FA8,ft_80085030}
+          if (msl_anim_uses_root_motion(cid, msid) != 0u &&
+              down_roll_apply_phys_transn(batch, c, ch, idx) != 0u) {
+            // TransN applied.
+          } else {
+            down_apply_phys_friction(batch, c, ch, idx);
+          }
+          // The destination Wait state still owns same-frame Wait_IASA ordering. This is required
+          // for held-down input to enter Squat immediately on the tech-stand end frame.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Anim
           // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
           enter_wait(batch, idx);
           anim_end_wait_try_enter_squat_subset(batch, c, idx);
-          down_apply_phys_friction(batch, c, ch, idx);
         } else if (msl_anim_uses_root_motion(cid, msid) != 0u) {
           // Decomp: ft_80085030 uses fp->x6A4_transNOffset.z * facing_dir as the target ground
           // velocity when fp->x594_b0 indicates TransN motion is active. PassiveStandF/B animations

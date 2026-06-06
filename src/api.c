@@ -2146,6 +2146,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.guard_special_enable_timer_x1c[idx] = seed->guard_special_enable_timer_x1c[p];
       batch->state.guard_release_latched_xc[idx] = seed->guard_release_latched_xc[p] ? 1 : 0;
       batch->state.guard_x10[idx] = seed->guard_x10[p];
+      batch->state.guard_on_cliff_end_source[idx] = 0u;
       batch->state.lightshield_amount[idx] = seed->lightshield_amount[p];
       batch->state.guard_setoff_hitlag_damage_min[idx] = seed->guard_setoff_hitlag_damage_min[p];
       batch->state.combat_shield_hit_int_damage[idx] = seed->combat_shield_hit_int_damage[p];

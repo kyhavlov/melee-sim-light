@@ -256,6 +256,7 @@ static inline uint8_t hitboxes_hitlist_has_victims1_entry(const MslHitlistCapsul
 }
 
 static inline uint8_t hitboxes_seed_bridge_is_guard_transition_owner(uint16_t action_id);
+static inline uint8_t hitboxes_seed_bridge_is_guard_admission_source(uint16_t action_id);
 
 static inline uint8_t hitboxes_runtime_guard_shield_overlaps_hitbox(const MslBatch* batch, int bi,
                                                                     int attacker, int hb,
@@ -309,6 +310,46 @@ static inline uint8_t hitboxes_hitlist_has_runtime_guard_victims1_entry(
           return 1u;
         }
       }
+    }
+  }
+  return 0u;
+}
+
+static inline uint8_t hitboxes_hitlist_has_runtime_guard_admission_victims1_entry(
+    const MslBatch* batch, int bi, int attacker, const MslHitlistCapsule* hit) {
+  if (batch == NULL || hit == NULL || bi < 0 || bi >= batch->batch_size || attacker < 0 ||
+      attacker >= (int)MSL_MAX_PLAYERS) {
+    return 0u;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return 0u;
+  }
+  for (size_t i = 0; i < (size_t)MSL_HITLIST_VICTIM_CAP; i++) {
+    const MslHitlistVictimEntry* e = &hit->victims_1[i];
+    if (msl_hitlist_victim_is_empty(e->kind_slot) ||
+        msl_hitlist_victim_kind(e->kind_slot) != (uint8_t)MSL_HITLIST_VICTIM_KIND_FIGHTER) {
+      continue;
+    }
+    const uint8_t victim = msl_hitlist_victim_slot(e->kind_slot);
+    if (victim >= (uint8_t)batch->config.num_players || victim == (uint8_t)attacker) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, (int)victim);
+    const uint16_t stored_iid = e->id16;
+    if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx] &&
+        hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                          batch->state.action_id[v_idx])) {
+      continue;
+    }
+    const float trigger =
+        msl_trigger_unit_from_input(batch->state.input_buttons[v_idx], batch->state.input_l[v_idx],
+                                    batch->state.input_r[v_idx]);
+    if (batch->state.on_ground[v_idx] != 0u && batch->state.hitlag[v_idx] == 0u &&
+        batch->state.hitstun[v_idx] == 0u && batch->state.shield_radius[v_idx] <= 0.0f &&
+        trigger > c->trigger_deadzone &&
+        hitboxes_seed_bridge_is_guard_admission_source(batch->state.action_id[v_idx])) {
+      return 1u;
     }
   }
   return 0u;
@@ -2029,6 +2070,31 @@ void hitboxes_refresh(MslBatch* batch) {
           const uint8_t hb = ev->hitbox_id;
           pose_create_count[hb] = (uint8_t)(pose_create_count[hb] + 1u);
           const uint8_t new_g = hitlist_hit_group_from_u16_7(ev->u16_7);
+          const size_t dst_i = idx_hitbox(bi, p, hb);
+          if (!capsule_enabled[hb] && action_id == (uint16_t)MSL_ACT_ATTACK_AIR_F &&
+              ev->frame == first_create_frame[hb] &&
+              batch->state.hitbox_capsule_group[dst_i] == new_g &&
+              hitboxes_hitlist_has_runtime_guard_admission_victims1_entry(
+                  batch, bi, p, &batch->state.fighter_hitlist[dst_i]) &&
+              msl_motion_state_has_motion_flag(char_id, action_id, MSL_MOTION_FLAG_SKIP_HIT)) {
+            // Source HitCapsule.victims_1 carry on AttackAirF's first create edge:
+            // Fighter_ChangeMotionState with Ft_MF_SkipHit preserves x914 HitCapsule payload even
+            // when the local script snapshot has not reconstructed this slot as enabled yet. If the
+            // exact slot still names a live grounded shield-admission victim, ftColl_800768A0 should
+            // treat the source capsule as present so ftColl_80078C70/lbColl_8000ACFC suppresses the
+            // same-fighter rehit before ShieldDesc/BODY tests.
+            //
+            // The owner is slot-local and source-data bounded: the event must be the extracted
+            // AttackAirF first create_hitbox, the hit_group must match the preserved capsule group,
+            // and the victim must be in the GuardOn admission callback lane with shield input but no
+            // ShieldDesc yet. Later Fair refreshes against ordinary Guard are intentionally excluded.
+            // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
+            // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008440}
+            // data/scripts/{fox,falco}.bin (MSLFTSC1 ftCo_SM_AttackAirF create_hitbox)
+            capsule_enabled[hb] = 1u;
+            capsule_group[hb] = new_g;
+          }
           const uint8_t had_old = capsule_enabled[hb] ? 1u : 0u;
           const uint8_t old_g = had_old ? capsule_group[hb] : 0u;
           uint8_t x43_b2_next = had_old ? x43_b2_cur[hb] : 0u;
@@ -2061,7 +2127,6 @@ void hitboxes_refresh(MslBatch* batch) {
               if (batch->state.fighter_hitlist_init_gen[src_i] != hitlist_gen) {
                 hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, src, src_g);
               }
-              const size_t dst_i = idx_hitbox(bi, p, hb);
               hitlist_capsule_copy(&batch->state.fighter_hitlist[src_i],
                                    &batch->state.fighter_hitlist[dst_i]);
               batch->state.fighter_hitlist_init_gen[dst_i] = hitlist_gen;
@@ -2076,7 +2141,6 @@ void hitboxes_refresh(MslBatch* batch) {
               break;
             }
             if (!copied) {
-              const size_t dst_i = idx_hitbox(bi, p, hb);
               float event_hx = batch->state.hitbox_x[dst_i];
               float event_hy = batch->state.hitbox_y[dst_i];
               float event_hz = batch->state.hitbox_z[dst_i];

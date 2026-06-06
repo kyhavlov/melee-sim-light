@@ -984,12 +984,13 @@ none are retained as validation safety.
   current callback's bottom sweep. The obsolete fresh hard-floor same-floor guard was deleted.
 - Test/proof: `tests/test_platform_collision_runtime.py`,
   `tests/test_locomotion_attackair_landing_contact_y_regression.py`,
-  `tests/test_nonfd_action_entry_platform_pass_locks.py`.
+  `tests/test_nonfd_action_entry_platform_pass_locks.py`,
+  `tests/test_shield_contact_seed_owner_replay_real_locks.py`.
 
 | Kind | Exact guard name(s) |
 | --- | --- |
-| Reject bit | `MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED`, `MSL_MPCOLL_REJECT_FALLSPECIAL_PLATFORM_NO_SOURCE_BOTTOM`, `MSL_MPCOLL_REJECT_FALL_SAME_FLOOR_EARLY`, `MSL_MPCOLL_REJECT_FALL_TRANSFORMED_PLATFORM_FASTFALL` |
-| Suppression | `suppress_fall_ledge_floor_first_root_crossing`, `suppress_fall_same_floor_early_final_land`, `suppress_fall_transformed_platform_fastfall_land`, `suppress_fallspecial_b_transformed_platform_skip`, `suppress_fallspecial_entry_af3_land`, `suppress_fallspecial_first_sustained_current_ecb_land`, `suppress_fallspecial_platform_final_without_source_bottom`, `suppress_fallspecial_platform_first_root_crossing`, `suppress_fallspecial_same_floor_early_root_crossing`, `suppress_projected_fallspecial_first_sustained_land` |
+| Reject bit | `MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED`, `MSL_MPCOLL_REJECT_FALLSPECIAL_PLATFORM_NO_SOURCE_BOTTOM`, `MSL_MPCOLL_REJECT_FALL_SAME_FLOOR_EARLY`, `MSL_MPCOLL_REJECT_FALL_SHALLOW_TERMINAL_HARD_FLOOR`, `MSL_MPCOLL_REJECT_FALL_TRANSFORMED_PLATFORM_FASTFALL` |
+| Suppression | `suppress_fall_ledge_floor_first_root_crossing`, `suppress_fall_same_floor_early_final_land`, `suppress_fall_shallow_terminal_hard_floor_land`, `suppress_fall_transformed_platform_fastfall_land`, `suppress_fallspecial_b_transformed_platform_skip`, `suppress_fallspecial_entry_af3_land`, `suppress_fallspecial_first_sustained_current_ecb_land`, `suppress_fallspecial_platform_final_without_source_bottom`, `suppress_fallspecial_platform_first_root_crossing`, `suppress_fallspecial_same_floor_early_root_crossing`, `suppress_projected_fallspecial_first_sustained_land` |
 
 #### Phase 5 Owner Accounting: JumpAerial / Common Air
 

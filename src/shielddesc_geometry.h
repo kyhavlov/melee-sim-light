@@ -18,10 +18,18 @@
 #include "msl_math.h"
 #include "mtx34.h"
 #include "shield_tilt_table.h"
+#include "state_flags.h"
 
 static inline size_t msl_shielddesc_idx_hitbox(int bi, int p, int hb_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
          (size_t)hb_i;
+}
+
+static inline size_t msl_shielddesc_idx_hitbox_victim(int bi, int p, int hb_i, int victim) {
+  return (((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
+          (size_t)hb_i) *
+             (size_t)MSL_MAX_PLAYERS +
+         (size_t)victim;
 }
 
 static inline float msl_shielddesc_model_scale_for_idx(const MslBatch* batch, size_t idx) {
@@ -306,6 +314,62 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
        batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_AIR_LW)
           ? 1u
           : 0u;
+  const uint8_t defender_flags_2218 =
+      batch->state
+          .state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+  // Strong AttackAirLw fresh-HitCapsule vs no-submotion Guard ShieldDesc extent:
+  // - ftAction_8007121C/ftColl_8007AD18 create the strong DAir HitCapsules on this callback edge,
+  //   and lbColl_80007BCC forwards the ShieldDesc.size/extent lane into lbColl_80006E58.
+  // - Keep this to the authored 12-damage strong DAir create edge while the defender has no raw
+  //   x2218 command/behavior lane. Rows with x2218 allow/behavior command bits stay on their
+  //   existing point-sample/seeded ShieldDesc miss owners.
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/ft/types.h::Fighter::x2218
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  const uint8_t attackairlw_strong_no_submotion_guard_extent_lane =
+      (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD &&
+       batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] == UINT32_MAX &&
+       (defender_flags_2218 &
+        (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                  MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR)) == 0u &&
+       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
+       batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_AIR_LW &&
+       batch->state.hitbox_enable_edge[hb_i] && batch->state.hitbox_damage[hb_i] == 12.0f)
+          ? 1u
+          : 0u;
+  const uint8_t shield_seed_kind =
+      batch->state.combat_shield_contact_hb_kind[msl_shielddesc_idx_hitbox_victim(bi, attacker,
+                                                                                  hb_id, defender)];
+  const int16_t attackair_first_create_frame = move_tables_attackair_first_create_hitbox_frame(
+      batch->state.char_id[a_idx], batch->state.action_id[a_idx]);
+  // Weak AttackAirB HitCapsule vs tilted no-submotion Guard ShieldDesc:
+  // - Fox/Falco BAir share the authored 9-damage late create phase across hb0/hb1/hb2. When
+  //   Guard's submotion is not replay-visible, `ftCo_Guard_Anim -> ftCo_80091E78` still samples the
+  //   live tilted shield JObj, and lbColl_80007BCC forwards the ShieldDesc extent into the same
+  //   matrix narrowphase.
+  // - Keep this to the per-HitCapsule weak BAir source, tilted Guard, persistent capsule rows, and
+  //   either source shield-contact seed provenance or the first post-create collision callback. The
+  //   seed lane proves this pair/hitbox belongs to a ShieldDesc contact owner; the live post-create
+  //   lane covers rollout playback where hidden shield-contact kind is not fed every frame. The
+  //   create callback itself and later persistent tilted controls without seed provenance remain on
+  //   their existing BODY path.
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_Guard_Anim,ftCo_80091E78}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  const uint8_t attackairb_weak_tail_tilted_guard_extent_lane =
+      (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD &&
+       batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] == UINT32_MAX &&
+       fabsf(batch->state.guard_tilt_x4[d_idx]) > FLT_EPSILON &&
+       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
+       batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_AIR_B &&
+       (shield_seed_kind != 0u ||
+        (batch->state.hitbox_prev_enabled[hb_i] != 0u && attackair_first_create_frame >= 0 &&
+         batch->state.action_frame[a_idx] == (int16_t)(attackair_first_create_frame + 1))) &&
+       batch->state.hitbox_prev_enabled[hb_i] && batch->state.hitbox_damage[hb_i] == 9.0f)
+          ? 1u
+          : 0u;
   // No-submotion GuardOn entry/raise rows can expose a recreated ShieldDesc before Slippi exposes
   // a settled Guard submotion. Keep the ShieldDesc.size term on source create/enable edges only;
   // persistent aerial capsules have replay-real miss controls and must stay on the ordinary matrix
@@ -345,7 +409,9 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
   const float shield_desc_term =
       ((shield_desc_lane_active &&
         (guardon_entry_enable_edge_size_lane || attackairlw_fresh_guardon_shielddesc_size_lane ||
-         guardreflect_expired_no_submotion_enable_edge_size_lane)) ||
+         guardreflect_expired_no_submotion_enable_edge_size_lane ||
+         attackairlw_strong_no_submotion_guard_extent_lane ||
+         attackairb_weak_tail_tilted_guard_extent_lane)) ||
        guardreflect_expired_no_submotion_attackairlw_persistent_size_lane)
           ? shield_desc_world_r
           : 0.0f;
@@ -354,7 +420,8 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
       (shield_desc_envelope_ready && !guardreflect_final_x14_no_submotion &&
        (!guardon_already_shielding_no_submotion || guardon_raise_no_tilt_extent_lane) &&
        (batch->state.hitbox_enable_edge[hb_i] || shield_extent_bridge_active ||
-        guardon_raise_no_tilt_extent_lane))
+        guardon_raise_no_tilt_extent_lane || attackairlw_strong_no_submotion_guard_extent_lane ||
+        attackairb_weak_tail_tilted_guard_extent_lane))
           ? 1u
           : 0u;
   // The real helper forwards `lbColl_804D7A34 * defender_scale` into the full matrix narrowphase.
@@ -367,8 +434,11 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
                                             a_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START))
                                               ? 1u
                                               : 0u;
-  const float shield_extent_scale =
-      (shield_extent_bridge_active || shine_start_enable_edge) ? 1.0f : 0.2f;
+  const float shield_extent_scale = (shield_extent_bridge_active || shine_start_enable_edge ||
+                                     attackairlw_strong_no_submotion_guard_extent_lane ||
+                                     attackairb_weak_tail_tilted_guard_extent_lane)
+                                        ? 1.0f
+                                        : 0.2f;
   const float shield_extent_env_r =
       shield_extent_lane_active ? (shield_desc_world_r * shield_extent_scale) : 0.0f;
   // Tilted GuardOn raise-shield vs the authored 9-damage late AttackAirLw capsule uses the

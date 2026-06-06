@@ -585,6 +585,14 @@ typedef struct MslStateSoA {
   // GuardOn/spotdodge handoff window, where prev_action_id no longer identifies the callback
   // source, then is consumed so later GuardOn rows cannot stale-carry entry provenance.
   uint8_t* guard_entry_via_wait_callback;
+  // Runtime-only source marker for CliffClimb/Attack/Escape option end -> Wait_IASA -> GuardOn.
+  // Fighter shield pair-order can keep the fresh no-submotion ShieldDesc out of a later-slot
+  // same-frame grounded Reflector pass for this cliff callback owner only; ordinary GuardOn entry
+  // sources stay on the normal ShieldDesc path.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0}
+  uint8_t* guard_on_cliff_end_source;
   // Runtime-only marker for GuardOn entered through Dash_IASA's `dash.x4 != 0` handoff into the
   // mid `ftCo_80091AD8` helper. Projectile item collision for that handoff frame has already
   // passed before the ShieldDesc is eligible in vanilla, so same-step item shield precedence must

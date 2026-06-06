@@ -491,6 +491,7 @@ enum {
 #define MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED (UINT64_C(1) << 29)
 #define MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM (UINT64_C(1) << 30)
 #define MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM (UINT64_C(1) << 31)
+#define MSL_MPCOLL_REJECT_FALL_SHALLOW_TERMINAL_HARD_FLOOR (UINT64_C(1) << 32)
 typedef enum MslMpcollFloorRejectRestore {
   MSL_MPCOLL_FLOOR_REJECT_RESTORE_NONE = 0u,
   MSL_MPCOLL_FLOOR_REJECT_RESTORE_KEEP_CURRENT = 1u,
@@ -13883,6 +13884,36 @@ void mpcoll_ground_apply(MslBatch* batch) {
               (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u)
                 ? 1u
                 : 0u;
+        const uint8_t suppress_fall_shallow_terminal_hard_floor_land =
+            // Fall_Coll shallow hard-floor publication guard:
+            // when frame-0 Fall_Coll starts below a generated terminal-cardinal hard floor but the
+            // current ECB bottom is still inside the one-unit floor neighborhood, the
+            // callback-local mpColl_80044838_Floor owner can keep non-fastfall Fall airborne until
+            // the next deeper callback. Require the Fall script x2218 allow/B1 phase and the source
+            // frame-0 predecessor to avoid borrowing the guard for later Fall rows or
+            // DamageAir-entry Fall rows whose callback-local damage ECB already owns a deeper floor
+            // publication. Fastfall and deeper bottom penetrations continue through the ordinary
+            // landing path.
+            // data/stages/bin/*.bin::MSLSTG01 floor flags/links/platform-transform metadata
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+            // refs/melee/src/melee/ft/types.h::Fighter::x2218
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044838_Floor}
+            (action_id == (uint16_t)MSL_ACT_FALL &&
+             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_FALL &&
+             batch->state.seed_prev_action_frame[idx] == 0 && batch->state.fall_fast[idx] == 0u &&
+             batch->state.speed_y_self[idx] < 0.0f &&
+             ((batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                        (size_t)MSL_STATE_FLAGS_2218_INDEX] &
+               (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1)) ==
+              (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1)) &&
+             final_ground_line_idx >= 0 && (size_t)final_ground_line_idx < g->line_count &&
+             floor_line_is_terminal_cardinal_hard_floor(batch, bi, g, stage_id,
+                                                        final_ground_line_idx) &&
+             ground_id == seed_ground_id && ground_id == batch->state.ground_id[idx] &&
+             !stage_collision_floor_line_is_platform(stage_id, ground_id) &&
+             y < (contact_y - k_floor_y_bias) && cur_bottom_y > (contact_y - k_ecb_vertical_unit))
+                ? 1u
+                : 0u;
         const float final_landing_lift = contact_y - cur_bottom_y;
         const float escapeair_entry_bottom_rel0 = msl_ecb_bottom_rel_y(char_id, anim, 0);
         const uint8_t suppress_fallspecial_first_sustained_current_ecb_land =
@@ -14404,6 +14435,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
             MSL_MPCOLL_REJECT_FALL_LOOP_WRAP_STAGE_OBJECT_FLOOR_TO_HARD_FLOOR,
             MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
             (uint32_t)MSL_MPCOLL_PHASE_PLATFORM_PASS);
+        mpcoll_floor_reject_add_if_state(&final_floor_reject,
+                                         suppress_fall_shallow_terminal_hard_floor_land,
+                                         MSL_MPCOLL_REJECT_FALL_SHALLOW_TERMINAL_HARD_FLOOR,
+                                         MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
+                                         (uint32_t)MSL_MPCOLL_PHASE_PLATFORM_PASS);
         mpcoll_floor_reject_add_escapeair_final_owners(&final_floor_reject,
                                                        &escapeair_final_owners);
         mpcoll_floor_reject_add_if_state(&final_floor_reject,

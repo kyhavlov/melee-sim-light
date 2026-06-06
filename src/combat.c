@@ -2913,6 +2913,48 @@ static inline uint8_t combat_defer_late_slot_same_frame_speciallw_entry_hit(
   return 1u;
 }
 
+static inline uint8_t combat_defer_late_slot_same_frame_speciallw_guardon_shield_hit(
+    const MslBatch* batch, size_t a_idx, size_t d_idx, int attacker, int defender) {
+  if (batch == NULL || attacker <= defender) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[a_idx];
+  if (action != (uint16_t)MSL_ACT_FX_SPECIAL_LW_START) {
+    return 0u;
+  }
+  if (batch->state.prev_action_id[a_idx] == action) {
+    return 0u;
+  }
+  const uint16_t attacker_prev_action = batch->state.prev_action_id[a_idx];
+  if (batch->state.frame_start_on_ground[a_idx] == 0u ||
+      (attacker_prev_action != (uint16_t)MSL_ACT_SQUAT &&
+       attacker_prev_action != (uint16_t)MSL_ACT_SQUAT_WAIT &&
+       attacker_prev_action != (uint16_t)MSL_ACT_SQUAT_RV)) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON ||
+      batch->state.action_frame[d_idx] >= 0) {
+    return 0u;
+  }
+  if (batch->state.guard_on_cliff_end_source[d_idx] == 0u) {
+    return 0u;
+  }
+
+  // Fighter shield pair-order + cliff no-submotion GuardOn owner:
+  // - ftColl_80078C70 walks fighter pairs in entity order and consumes ShieldDesc/HitCapsule
+  //   state for the current owner pair. When a later-slot fighter enters grounded Reflector from
+  //   Squat-family IASA, the freshly-created HitCapsule can miss an earlier-slot ShieldDesc that
+  //   came from the same source proc's CliffClimb/Attack/Escape end -> Wait_IASA -> GuardOn
+  //   handoff. Ordinary no-submotion GuardOn entries keep the normal ShieldDesc path.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_GuardOn_Anim,ftCo_80091A4C,ftCo_80092450}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+  return 1u;
+}
+
 static inline uint8_t combat_guard_reflect_active_x14_reflectdesc_blocks_hitshield(
     const MslBatch* batch, size_t idx, float overlap_margin) {
   if (batch == NULL) {
@@ -6661,14 +6703,15 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   float defender_facing_dir_1 =
       (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one;
   if (item_damage_facing_owner_valid != 0u &&
-      !(lp != NULL && item_state == (uint8_t)1u &&
+      !(same_frame_throw_laser_item_damage_topoff != 0u &&
         batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_HI)) {
     // Retained item-position facing owner scope:
     // ftColl_8007A06C's item branch uses item position for stationary/slow item damage and item
     // velocity once the item reaches ItemCommonData->x78. Callers only set this flag for live item
-    // BODY collision records whose item pos/velocity are the collision owner's values; same-frame
-    // synthetic spawn bridges and ThrowHi's explicit thrower-facing state1 owner keep their
-    // narrower source-owner lanes.
+    // BODY collision records whose item pos/velocity are the collision owner's values. ThrowHi
+    // state1 blaster articles still enter through this live item BODY owner once the shot exists;
+    // same-frame top-off rows that merge a second laser into the current Damage entry keep the
+    // narrower thrower-facing owner below.
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
     // refs/melee/src/melee/it/itcoll.c (case 2 item damage direction)
     // refs/melee/src/melee/it/types.h::ItemCommonData::x78_float
@@ -6697,11 +6740,12 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
     defender_facing_dir_1 = batch->state.facing[d_idx] ? one : -one;
   }
-  // Keep ThrowHi's thrower-facing ownership scoped to the initial full state1 refresh. Later
-  // top-off overlaps (+1 hitlag frame) stay on the generic BODY facing lane.
+  // Keep ThrowHi's synthetic thrower-facing bridge scoped to same-frame top-off rows whose second
+  // state1 laser merges into the current Damage entry instead of owning a fresh item-damage
+  // direction. Full live item BODY rows continue through the item pos/velocity owner above.
   if (lp != NULL && item_state == (uint8_t)1u &&
       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_HI &&
-      d_hl > (uint16_t)(d_hl_prev + 1u)) {
+      same_frame_throw_laser_item_damage_topoff != 0u) {
     const float thrower_facing_dir = batch->state.facing[a_idx] ? one : -one;
     defender_facing_dir_1 = -thrower_facing_dir;
   }
@@ -8282,8 +8326,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // Teacher-forced accepted ShieldDesc lane. A value of 2 is derived only when the replay
           // proves the full shield-hit admission result at t+1 (GuardSetOff plus hitlag), not just
           // the geometric bubble overlap. That proof includes the hidden lbColl_8000ACFC
-          // victims_1 decision which is otherwise approximated by the dense group hitlist seed, so
-          // it may override stale group suppression for this reseeded frame.
+          // victims_1 decision which is otherwise approximated by the dense group hitlist seed.
           //
           // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
           // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
@@ -8309,6 +8352,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                   batch, c, bi, attacker, defender, hb_id, defender_iid, shx, shy, shz, shr,
                   shield_desc_envelope_ready, shield_extent_bridge_active,
                   guard_reflect_reflectdesc_only, clank_skip_hb)) {
+            continue;
+          }
+          if (shield_seed_kind == 0u &&
+              combat_defer_late_slot_same_frame_speciallw_guardon_shield_hit(batch, a_idx, d_idx,
+                                                                             attacker, defender)) {
             continue;
           }
 

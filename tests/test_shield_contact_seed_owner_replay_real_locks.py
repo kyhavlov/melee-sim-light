@@ -112,6 +112,58 @@ def _run_rollout_window_with_seed_mutator(
     return samples["ref_t1"][stop], out
 
 
+def _run_rollout_records_replay_frame_rng(
+    dataset_path: Path,
+    start: int,
+    records: tuple[int, ...],
+    *,
+    ucf_enabled: bool = False,
+    ucf_cardinals_1_0_enabled: bool = False,
+) -> dict[int, tuple[np.void, np.void]]:
+    import msl_binding
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
+        raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
+        return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=int(ucf_enabled),
+        ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
+    )
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8, order="C")
+    got: dict[int, tuple[np.void, np.void]] = {}
+    try:
+        msl_binding.reseed_seed_rollout(handle, field_bytes(start, seed_off, seed_stride))
+        for record in range(int(start), max(records) + 1):
+            msl_binding.step_input_replay_frame_rng(
+                handle,
+                field_bytes(record, seed_off, seed_stride),
+                field_bytes(record, prev_off, input_stride),
+                field_bytes(record, input_off, input_stride),
+            )
+            if record in records:
+                msl_binding.write_compare(handle, out_bytes)
+                got[record] = (
+                    out_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy(),
+                    samples["ref_t1"][record].copy(),
+                )
+    finally:
+        msl_binding.destroy(handle)
+    return got
+
+
 @pytest.mark.integration
 def test_guardreflect_final_x14_live_x18_blocks_early_attackairn_setoff_182447() -> None:
     # Final-x14 / live-x18 GuardReflect shield-hit boundary:
@@ -775,6 +827,134 @@ def test_late_attackairf_frozen_guard_shield_miss_clears_stale_dense_hitlist() -
     )
     assert int(out_without_shield_miss["action_id"][defender]) == 179
     assert int(out_without_shield_miss["hitlag"][defender]) == 0
+
+
+@pytest.mark.integration
+def test_hvg_full_rollout_attackairf_and_fall_floor_boundaries_raw_clean() -> None:
+    # HVG full-rollout closure controls:
+    # - 5544/5553: p1 AttackAirB first create edge must accept p0's tilted Guard ShieldDesc hit
+    #   from live source geometry, without per-frame teacher-forced shield-contact seed lanes.
+    # - 7970: p1 AttackAirF first create edge must preserve the exact runtime HitCapsule victims_1
+    #   entry for p0's fresh GuardOn admission, suppressing BODY fallthrough.
+    # - 8747/8748: non-fastfall Fall over Final Destination's generated terminal-cardinal hard
+    #   floor stays airborne while the callback-local current ECB bottom is still in the shallow
+    #   floor neighborhood, then lands on the next deeper callback.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    got = _run_rollout_records_replay_frame_rng(
+        dataset_path,
+        0,
+        (5544, 5553, 7970, 8747, 8748),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    out_5544, ref_5544 = got[5544]
+    assert int(ref_5544["action_id"][0]) == 181  # GuardSetOff.
+    assert int(out_5544["action_id"][0]) == int(ref_5544["action_id"][0])
+    assert int(out_5544["hitlag"][0]) == int(ref_5544["hitlag"][0]) == 5
+
+    out_5553, ref_5553 = got[5553]
+    assert int(ref_5553["action_id"][0]) == 181
+    assert int(out_5553["action_id"][0]) == int(ref_5553["action_id"][0])
+
+    out_7970, ref_7970 = got[7970]
+    assert int(ref_7970["action_id"][0]) == 178  # GuardOn.
+    assert int(out_7970["action_id"][0]) == int(ref_7970["action_id"][0])
+    assert int(out_7970["hitlag"][0]) == int(ref_7970["hitlag"][0]) == 0
+
+    out_8747, ref_8747 = got[8747]
+    assert int(ref_8747["action_id"][0]) == 29  # Fall, not early Landing.
+    assert int(out_8747["action_id"][0]) == int(ref_8747["action_id"][0])
+    assert int(out_8747["on_ground"][0]) == int(ref_8747["on_ground"][0]) == 0
+    assert float(out_8747["pos_y"][0]) == pytest.approx(float(ref_8747["pos_y"][0]))
+
+    out_8748, ref_8748 = got[8748]
+    assert int(ref_8748["action_id"][0]) == 42  # Landing.
+    assert int(out_8748["action_id"][0]) == int(ref_8748["action_id"][0])
+    assert int(out_8748["on_ground"][0]) == int(ref_8748["on_ground"][0]) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [5529, 7966, 8226, 8748])
+def test_hvg_fall_terminal_hard_floor_landing_controls(record: int) -> None:
+    # Controls for the shallow hard-floor guard retained for HVG:8747.
+    # - 5529: deeper non-fastfall Fall bottom penetration lands.
+    # - 7966: DamageAir-entry Fall owns a deeper callback-local ECB and lands.
+    # - 8226: fastfall Fall lands despite a shallow visible Fall pose.
+    # - 8748: the same HVG Fall episode lands on the next deeper callback.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    _seed, ref, out = _run_one_step_row(dataset_path, record, 0)
+    assert int(ref["action_id"][0]) == 42
+    assert int(out["action_id"][0]) == int(ref["action_id"][0])
+    assert int(out["on_ground"][0]) == int(ref["on_ground"][0]) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(("record", "player"), [(3733, 0), (5853, 3)])
+def test_doubles_later_fall_terminal_hard_floor_lands(record: int, player: int) -> None:
+    # Boundary for the HVG:8747 frame-0 Fall_Coll hard-floor guard: later Fall callbacks with the
+    # same x2218 allow/B1 script phase publish Landing through the ordinary mpColl_80044838_Floor
+    # path instead of borrowing the first-callback shallow-bottom rejection.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, record, player)
+    assert int(seed["seed_prev_action_id"][player]) == 29
+    assert int(seed["seed_prev_action_frame"][player]) > 0
+    assert int(ref["action_id"][player]) == 42
+    assert int(out["action_id"][player]) == int(ref["action_id"][player])
+    assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 1
+
+
+@pytest.mark.integration
+def test_hvg_fall_terminal_hard_floor_shallow_bottom_stays_airborne() -> None:
+    # Positive for the retained Fall_Coll shallow hard-floor rejection:
+    # HVG:8747's current ECB bottom is still within the one-unit hard-floor neighborhood, so
+    # source stays in Fall for one more callback instead of publishing Landing immediately.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    _seed, ref, out = _run_one_step_row(dataset_path, 8747, 0)
+    assert int(ref["action_id"][0]) == 29  # Fall.
+    assert int(out["action_id"][0]) == int(ref["action_id"][0])
+    assert int(out["on_ground"][0]) == int(ref["on_ground"][0]) == 0
+    assert float(out["pos_y"][0]) == pytest.approx(float(ref["pos_y"][0]))
 
 
 @pytest.mark.integration
@@ -1727,6 +1907,59 @@ def test_guardon_no_submotion_persistent_attackairb_sweep_does_not_use_entry_siz
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
     assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 0
     assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_cliff_end_guardon_marker_does_not_stale_carry_to_later_guardon_shield_hit() -> None:
+    # Stale-carry negative for guard_on_cliff_end_source:
+    # - HVG:1185 starts in CliffClimbQuick and enters no-submotion GuardOn through the cliff-end
+    #   Wait_IASA -> GuardOn source path; HVG:1188 stays GuardOn when a later-slot grounded Shine
+    #   cannot use that same-frame ShieldDesc owner.
+    # - The marker is runtime-only and must clear after the GuardOn lifecycle. A later ordinary
+    #   no-submotion GuardOn shield-hit decision at HVG:1486 must therefore accept GuardSetOff; a
+    #   stale marker would incorrectly defer the Shine shield hit and leave p0 in GuardOn.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardOn_Anim,ftCo_80091A4C,ftCo_80092450}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    defender = 0
+    attacker = 1
+    assert int(ds.samples[1185]["seed_t"]["action_id"][defender]) == 255  # CliffClimbQuick.
+    assert int(ds.samples[1486]["seed_t"]["action_id"][defender]) == 178  # GuardOn.
+    assert int(ds.samples[1486]["seed_t"]["seed_prev_action_id"][defender]) == 178
+
+    got = _run_rollout_records_replay_frame_rng(
+        dataset_path,
+        1185,
+        (1188, 1486),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    out_cliff, ref_cliff = got[1188]
+    assert int(ref_cliff["action_id"][defender]) == 178
+    assert int(out_cliff["action_id"][defender]) == int(ref_cliff["action_id"][defender])
+    assert int(out_cliff["hitlag"][defender]) == int(ref_cliff["hitlag"][defender]) == 0
+
+    out_later, ref_later = got[1486]
+    assert int(ref_later["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out_later["action_id"][defender]) == int(ref_later["action_id"][defender])
+    assert int(out_later["hitlag"][defender]) == int(ref_later["hitlag"][defender]) == 5
+    assert int(out_later["hitlag"][attacker]) == int(ref_later["hitlag"][attacker]) == 5
+    assert float(out_later["shield_hp"][defender]) == pytest.approx(
+        float(ref_later["shield_hp"][defender])
+    )
 
 
 @pytest.mark.integration
