@@ -6,6 +6,7 @@
 #include "anim_timebase.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "move_tables.h"
 #include "mtx34.h"
 
 // Fighter_Part ids (GALE01).
@@ -132,6 +133,76 @@ static inline int pose_part_origin_world_f32_facing_yrot90(
   *out_y = ly + fighter_pos_y;
   *out_z = lz + fighter_pos_z;
   return 0;
+}
+
+static inline int pose_part_origin_world_f32_without_transn_facing_yrot90(
+    float* out_x, float* out_y, float* out_z, const MslBatch* batch, size_t player_idx,
+    uint32_t anim_u32, float anim_frame_f32, uint16_t part_id, float fighter_pos_x,
+    float fighter_pos_y, float fighter_pos_z, float fighter_scale_y, uint8_t facing_u8) {
+  if (out_x == NULL || out_y == NULL || out_z == NULL || batch == NULL || anim_u32 > 0xFFFFu) {
+    return -1;
+  }
+
+  float m[12];
+  if (anim_pose_get_collision_matrix_f32(batch, player_idx, (uint16_t)anim_u32, anim_frame_f32,
+                                         part_id, m) != 0) {
+    return -1;
+  }
+  float transn[3] = {0.0f, 0.0f, 0.0f};
+  if (anim_pose_get_transn_f32(batch->state.char_id[player_idx], (uint16_t)anim_u32, anim_frame_f32,
+                               transn) != 0) {
+    return -1;
+  }
+
+  const float zero[3] = {0.0f, 0.0f, 0.0f};
+  float lx = 0.0f, ly = 0.0f, lz = 0.0f;
+  msl_mtx34_mul_point(m, zero, &lx, &ly, &lz);
+  lx -= transn[0];
+  ly -= transn[1];
+  lz -= transn[2];
+
+  const float facing_dir = facing_u8 ? 1.0f : -1.0f;
+  const float rx = facing_dir * lz;
+  const float rz = -facing_dir * lx;
+  lx = rx;
+  lz = rz;
+
+  lx *= fighter_scale_y;
+  ly *= fighter_scale_y;
+  lz *= fighter_scale_y;
+
+  *out_x = lx + fighter_pos_x;
+  *out_y = ly + fighter_pos_y;
+  *out_z = lz + fighter_pos_z;
+  return 0;
+}
+
+static inline uint8_t throwf_release_uses_callback_local_transn_source(const MslBatch* batch,
+                                                                       size_t owner_idx,
+                                                                       uint8_t rel_hit_idx) {
+  if (batch == NULL || rel_hit_idx != 0u ||
+      batch->state.action_id[owner_idx] != (uint16_t)MSL_ACT_THROW_F) {
+    return 0u;
+  }
+
+  MslThrowHitboxParams p = {0};
+  if (!move_tables_throw_hitbox_params(batch->state.char_id[owner_idx], (uint16_t)MSL_ACT_THROW_F,
+                                       rel_hit_idx, &p)) {
+    return 0u;
+  }
+
+  // Falco's authored ThrowF release hit has a distinct payload from Fox's:
+  // - Falco: damage 3, angle 45, kbg 135, wsk 0, bkb 35.
+  // - Fox:   damage 3, angle 45, kbg 130, wsk 0, bkb 35.
+  //
+  // This is a move-data owner for the same-callback release-anchor source path below, not a
+  // character-pair proxy. The runtime asks whether the current ThrowF script payload is the source
+  // variant that samples FtPart_TransN2 before grounded ThrowF Phys consumes the current TransN
+  // lane.
+  // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowF"].events.set_throw_hitbox(idx=0)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+  return (uint8_t)(p.damage == 3.0f && p.angle == 45u && p.kbg == 135u && p.wsk == 0u &&
+                   p.bkb == 35u);
 }
 
 static inline int pose_transn_f32(float out_xyz[3], uint8_t char_id, uint32_t anim_u32,
@@ -616,7 +687,11 @@ void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int bi, in
   }
 
   const size_t oidx = msl_idx_player(bi, owner_p);
-  if (action != (uint16_t)MSL_ACT_THROWN_B || owner_pose_facing == batch->state.facing[oidx]) {
+  const uint8_t throwf_owner_before_victim_release =
+      (uint8_t)(action == (uint16_t)MSL_ACT_THROWN_F && owner_p < victim_p &&
+                throwf_release_uses_callback_local_transn_source(batch, oidx, 0u));
+  if (throwf_owner_before_victim_release == 0u &&
+      (action != (uint16_t)MSL_ACT_THROWN_B || owner_pose_facing == batch->state.facing[oidx])) {
     grab_attachment_apply_thrown_anchor_now(batch, bi, victim_p, owner_p);
     return;
   }
@@ -630,17 +705,43 @@ void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int bi, in
     owner_anchor_part = och->grab_capture_anchor_part_id;
   }
   const float owner_scale_y = pose_model_scale_y(batch, oidx);
-  // Release consume samples the post-advance float owner JObj pose in the Throw Anim callback.
-  // When set_throw_flags flip and release cross on the same script frame, the scalar facing flips
-  // for post-frame state but the already-interpreted release JObj pose still uses the pre-flip
-  // facing snapshot.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
-  // data/moves/{fox,falco}.json moves["ftCo_SM_Throw{F,B,Hi}"].events set_throw_flags
-  (void)pose_part_origin_world_f32_facing_yrot90(
-      &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx], release_anim_frame,
-      owner_anchor_part, batch->state.pos_x[oidx], batch->state.pos_y[oidx],
-      batch->state.pos_z[oidx], owner_scale_y, owner_pose_facing);
+  if (throwf_owner_before_victim_release != 0u) {
+    // ThrowF release owner:
+    // ftCo_800DD724 consumes `set_throw_flags(hit_idx=0)` during the thrower's Anim callback, then
+    // ftCo_800DDDE4 samples the thrower FtPart_TransN2 joint before grounded ThrowF Phys consumes
+    // the current TransN root delta via ft_80085004/ft_80085030. The live collision matrix can
+    // include that current TransN lane, while MSL's fighter root already carries the replay-visible
+    // pre-Phys cur_pos. Subtract the extracted float TransN tail so the release snapshot keeps the
+    // source JObj pose without double-counting root motion.
+    //
+    // Keep this to the authored Falco ThrowF release-hit payload. Fox's data-backed ThrowF release
+    // uses the normal attached helper in aggregate controls. This only applies when the thrower GObj
+    // runs before the victim GObj; owner-after-victim release rows have already run the victim's
+    // callback and stay on the normal attached helper.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+    // refs/melee/src/melee/ft/ft_084E.c::{ft_80085004,ft_80085030}
+    // refs/melee/src/melee/ft/ftanim.c (x68C_transNPos/x6A4_transNOffset split)
+    // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowF"].events set_throw_hitbox/set_throw_flags
+    if (pose_part_origin_world_f32_without_transn_facing_yrot90(
+            &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx], release_anim_frame,
+            owner_anchor_part, batch->state.pos_x[oidx], batch->state.pos_y[oidx],
+            batch->state.pos_z[oidx], owner_scale_y, batch->state.facing[oidx]) != 0) {
+      grab_attachment_apply_thrown_anchor_now(batch, bi, victim_p, owner_p);
+      return;
+    }
+  } else {
+    // Release consume samples the post-advance float owner JObj pose in the Throw Anim callback.
+    // When set_throw_flags flip and release cross on the same script frame, the scalar facing flips
+    // for post-frame state but the already-interpreted release JObj pose still uses the pre-flip
+    // facing snapshot.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    // data/moves/{fox,falco}.json moves["ftCo_SM_Throw{F,B,Hi}"].events set_throw_flags
+    (void)pose_part_origin_world_f32_facing_yrot90(
+        &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx], release_anim_frame,
+        owner_anchor_part, batch->state.pos_x[oidx], batch->state.pos_y[oidx],
+        batch->state.pos_z[oidx], owner_scale_y, owner_pose_facing);
+  }
   (void)az;
   const float scale_y = attachment_offset_scale_y(batch, vidx);
   if (!(scale_y > 0.0f)) {

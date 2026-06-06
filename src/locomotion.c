@@ -4876,16 +4876,18 @@ void locomotion_update_pre(MslBatch* batch) {
         // Decomp call site example: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c:43-66.
         uint8_t turn_analog_guard_facing_flipped = 0u;
         if (action_id == MSL_ACT_TURN && action_id_start == MSL_ACT_TURN &&
-            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_LANDING &&
+            (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_LANDING ||
+             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_WAIT) &&
             batch->state.action_frame[idx] <= 2 && !batch->state.turn_has_turned[idx] &&
             (stick_x * facing_dir) <= c->turn_stick_x_threshold &&
             (buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) == 0u &&
             msl_trigger_unit_from_input(batch->state.input_buttons[idx], batch->state.input_l[idx],
                                         batch->state.input_r[idx]) > c->trigger_deadzone) {
-          // Landing -> Turn -> analog GuardOn hidden facing handoff:
+          // Landing/Wait -> Turn -> analog GuardOn hidden facing handoff:
           // - Turn_IASA normally restores `fp->facing_dir` before the guard checks, but replay-real
-          //   first-frame Landing->Turn analog-shield rows can expose the destination GuardOn with
-          //   the turn-facing lane when the current stick still satisfies the source turn threshold.
+          //   first-frame Landing/Wait->Turn analog-shield rows can expose the destination GuardOn
+          //   with the turn-facing lane when the current stick still satisfies the source turn
+          //   threshold.
           // - Keep digital LR/Z powershield rows on the ordinary GuardReflect path; those controls
           //   stay seed-facing.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA

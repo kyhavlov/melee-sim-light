@@ -412,6 +412,7 @@ static inline void enter_jump_aerial_basic(MslBatch* batch, size_t idx, const Ms
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
   //   ftFx_SpecialAirLwLoop_IASA,ftFx_SpecialAirLwTurn_IASA,ftFx_SpecialAirLwEnd_Anim}
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  batch->state.pos_z[idx] = 0.0f;
   const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
   const uint16_t ground_id = batch->state.ground_id[idx];
   if (batch->state.coll_desired_ecb_bottom_valid[idx] != 0u && ground_id != 0xFFFFu &&

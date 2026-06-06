@@ -652,6 +652,29 @@ static inline uint8_t is_damage_ground_collision_action(uint16_t a) {
   return msl_damage_owner_is_damage_ground_action(a);
 }
 
+static inline uint8_t is_common_damage_ground_pose_ecb_action(uint16_t a) {
+  // Common DamageHi/N/Lw actions share `ftCo_Damage_Coll` and use the generated Damage pose ECB
+  // after CollData_X130 unlock. Keep this explicit because the post-unlock loaded-pose owner is a
+  // narrower callback-local state than the broad Damage collision class.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 DAMAGE_GROUND
+  switch (a) {
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t is_capture_lw_allow_ground_to_air_collision_action(uint16_t a) {
   // Low capture callbacks use `ft_8008403C -> ft_80082708 -> mpColl_8004B108`, so grounded
   // rows may receive a downward floor projection after `fn_800DAD18` moves the victim XRotN
@@ -1679,9 +1702,28 @@ static inline uint8_t mpcoll_materialize_active_damage_hitlag_stay_airborne_floo
       ctx->batch->state.pos_y[ctx->idx] >= (floor_y - k_floor_y_bias)) {
     return 0u;
   }
+  const uint8_t common_damage_post_unlock_pose_bottom_above_floor =
+      // Same post-unlock DamageHi/N/Lw loaded-pose owner as the runtime floor-sweep path: after
+      // CollData_X130 unlock, stale zero-bottom current ECB state is not enough to prove a
+      // stay-airborne FloorHug contact. The generated Damage pose bottom must reach the carried
+      // hard floor before `mpColl_80044948_Floor` can project the root while leaving ground_or_air
+      // airborne. Require runtime floor-sweep provenance so one-step replay seeds with only a
+      // serialized CollData endpoint do not borrow a live callback owner.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+      // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044948_Floor}
+      (damage_post_hitlag_owner && is_common_damage_ground_pose_ecb_action(ctx->action_id) &&
+       mpcoll_floor_sweep_prev_root_is_runtime_owned(ctx->batch, ctx->idx) &&
+       (ctx->batch->state.pos_y[ctx->idx] +
+        mpcoll_pose_ecb_bottom_rel_y(ctx->char_id, ctx->anim, ctx->ecb_frame, 0u)) >
+           (floor_y + k_floor_y_bias))
+          ? 1u
+          : 0u;
   const uint8_t damage_carried_hard_floor_authority =
       (damage_post_hitlag_owner && ctx->batch->state.ground_id[ctx->idx] != 0xFFFFu &&
        line->segment_i == ctx->batch->state.ground_id[ctx->idx] &&
+       !common_damage_post_unlock_pose_bottom_above_floor &&
        mpcoll_floor_sweep_prev_root_is_source_owned(ctx->batch, ctx->idx) &&
        floor_x_within_line_bounds(ctx->batch, ctx->bi, ctx->floor_graph, ctx->prefer_floor_line_idx,
                                   ctx->batch->state.pos_x[ctx->idx]) &&
@@ -8638,7 +8680,31 @@ void mpcoll_ground_apply(MslBatch* batch) {
         }
       }
 
-      if (!on_ground && was_grounded && prefer_line_idx >= 0) {
+      const uint8_t common_damage_post_unlock_pose_bottom_owner =
+          // Sustained airborne DamageHi/N/Lw after CollData_X130 unlock:
+          // `ftCommon_8007D5D4` starts the ground-to-air common Damage episode with a zero-bottom
+          // ECB lock, but `Fighter_procMap` decrements and clears CollData_X130 before later
+          // `ftCo_Damage_Coll -> ft_80081DD4 -> mpColl_LoadECB_inline(flags=6)` callbacks. Once
+          // the same Damage episode reaches a post-decrement lock counter of zero, source collision
+          // consumes the generated Damage pose bottom instead of the stale zero-bottom/root handoff
+          // still present in CollData.floor. Require live runtime floor-sweep provenance so
+          // teacher-forced one-step seeds keep their existing replay-owned CollData endpoint.
+          //
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_UnlockECB}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044628_Floor}
+          // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 DAMAGE_GROUND + DAMAGE_COMMON_COLL
+          (is_common_damage_ground_pose_ecb_action(action_id) &&
+           batch->state.on_ground[idx] == 0u && batch->state.hitlag[idx] == 0u &&
+           batch->state.hitstun[idx] != 0u && ecb_lock_timer == 0u &&
+           mpcoll_floor_sweep_prev_root_is_runtime_owned(batch, idx))
+              ? 1u
+              : 0u;
+
+      if (!on_ground && was_grounded && prefer_line_idx >= 0 &&
+          !common_damage_post_unlock_pose_bottom_owner) {
         float y_corr = 0.0f;
         const int out_line_idx =
             msl_mplib_8004dd90_floor(batch, bi, g, prefer_line_idx, cur_bottom_x, cur_bottom_y,
@@ -8857,10 +8923,19 @@ void mpcoll_ground_apply(MslBatch* batch) {
                  batch->state.action_frame[idx] <= 1)
                     ? 1u
                     : 0u;
+            const float shared_sweep_prev_bottom_y =
+                common_damage_post_unlock_pose_bottom_owner
+                    ? (prev_y + mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_prev, 0u))
+                    : prev_bottom_y;
+            const float shared_sweep_cur_bottom_y =
+                common_damage_post_unlock_pose_bottom_owner
+                    ? (y + mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_cur, 0u))
+                    : cur_bottom_y;
             // Decomp: mpCheckFloor's horizontal intersection helper is gated on non-rising segments
             // (ay >= by), so equality must be allowed (horizontal motion with vy==0 can still sweep).
             // refs/melee/src/melee/mp/mplib.c::mpCheckFloor (the `if (ay >= by && mpLineIntersectionH(...))` gate)
-            const uint8_t can_sweep = (uint8_t)(cur_bottom_y <= prev_bottom_y);
+            const uint8_t can_sweep =
+                (uint8_t)(shared_sweep_cur_bottom_y <= shared_sweep_prev_bottom_y);
             const int floor_sweep_skip_line_idx =
                 // mpCheckFloor checks the current CollData.floor.index. The generic lite-sim pass
                 // skips the preferred line because ordinary floor.index projection has already
@@ -8893,16 +8968,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                     : (uint8_t)MSL_MPCOLL_FLOOR_PROBE_OWNER_AIR_47E14)),
                   source_phases, prefer_line_idx,
                   (uint8_t)MSL_MPCOLL_FLOOR_PROBE_REJECT_NO_BOTTOM_SWEEP);
-              mpcoll_floor_probe_bottom_interval(&mpcoll_ctx, prev_bottom_x, prev_bottom_y,
-                                                 cur_bottom_x, cur_bottom_y);
+              mpcoll_floor_probe_bottom_interval(&mpcoll_ctx, prev_bottom_x,
+                                                 shared_sweep_prev_bottom_y, cur_bottom_x,
+                                                 shared_sweep_cur_bottom_y);
             }
             const uint8_t shared_floor_sweep_hit =
                 (!landing_release_skip_floor_sweep && !is_common_fallspecial_action(action_id) &&
                  can_sweep &&
                  mpcoll_collect_bottom_sweep_floor_result(
-                     batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y, cur_bottom_x,
-                     cur_bottom_y, skip_platform_segment_i, prefer_line_idx,
-                     floor_sweep_skip_line_idx, c, &floor_sweep))
+                     batch, idx, bi, g, stage_id, prev_bottom_x, shared_sweep_prev_bottom_y,
+                     cur_bottom_x, shared_sweep_cur_bottom_y, skip_platform_segment_i,
+                     prefer_line_idx, floor_sweep_skip_line_idx, c, &floor_sweep))
                     ? 1u
                     : 0u;
             if (floor_probe_shared_candidate) {
@@ -11265,10 +11341,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
             contact_y = batch->state.pos_y[idx];
           }
         }
+        const float raw_sweep_prev_bottom_y =
+            common_damage_post_unlock_pose_bottom_owner
+                ? (prev_y + mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_prev, 0u))
+                : prev_bottom_y;
+        const float raw_sweep_cur_bottom_y =
+            common_damage_post_unlock_pose_bottom_owner
+                ? (y + mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_cur, 0u))
+                : cur_bottom_y;
         // Decomp: mpCheckFloor's horizontal intersection helper is gated on non-rising segments
         // (`ay >= by`), so upward sweeps should not report a floor crossing.
         // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
-        const uint8_t can_sweep = (uint8_t)(cur_bottom_y <= prev_bottom_y);
+        const uint8_t can_sweep = (uint8_t)(raw_sweep_cur_bottom_y <= raw_sweep_prev_bottom_y);
         const uint8_t escapeair_sustained_floorhug_airborne =
             // Sustained horizontal EscapeAir can stay airborne while sliding at FD's floor bias.
             // This is still EscapeAir_Coll ownership, not a generic mpLib_8004DD90_Floor resting
@@ -11338,9 +11422,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
         MslMpcollFloorSweepResult raw_floor_sweep = {0};
         if (!on_ground && !active_damage_hitlag_airborne_floor_contact &&
             !damage_active_hitlag_downward_sdi_airborne_owner && can_sweep &&
-            mpcoll_collect_bottom_sweep_hit(
-                batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y, cur_bottom_x,
-                cur_bottom_y, skip_platform_segment_i, prefer_line_idx, -1, c, &raw_floor_sweep)) {
+            mpcoll_collect_bottom_sweep_hit(batch, idx, bi, g, stage_id, prev_bottom_x,
+                                            raw_sweep_prev_bottom_y, cur_bottom_x,
+                                            raw_sweep_cur_bottom_y, skip_platform_segment_i,
+                                            prefer_line_idx, -1, c, &raw_floor_sweep)) {
           hit_line_idx = raw_floor_sweep.hit_line_idx;
           ix = raw_floor_sweep.hit_x;
           iy = raw_floor_sweep.hit_y;

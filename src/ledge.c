@@ -15,6 +15,7 @@
 #include "common_params.h"
 #include "guard_lifecycle.h"
 #include "input_axis.h"
+#include "jump_input.h"
 #include "locomotion.h"
 #include "match_flow.h"
 #include "stage_collision.h"
@@ -172,6 +173,58 @@ static inline uint16_t cliff_submotion_for_action(uint16_t a) {
 }
 
 static inline float facing_dir(uint8_t facing) { return facing ? 1.0f : -1.0f; }
+
+static inline uint16_t ledge_jump_aerial_action_from_stick(const MslCommonParams* c, float stick_x,
+                                                           float face_dir) {
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  return (stick_x * face_dir) > -c->jump_back_x_threshold ? MSL_ACT_JUMP_AERIAL_F
+                                                          : MSL_ACT_JUMP_AERIAL_B;
+}
+
+static inline uint8_t ledge_try_terminal_cliffjump2_fall_jumpaerial_iasa(MslBatch* batch,
+                                                                         const MslCommonParams* c,
+                                                                         const MslCharParams* ch,
+                                                                         size_t idx) {
+  if (batch == NULL || c == NULL || ch == NULL || batch->state.jumps_left[idx] == 0u) {
+    return 0u;
+  }
+  const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+  const float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const uint8_t jump_input = ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0u ||
+                              (stick_y >= c->tap_jump_threshold &&
+                               batch->state.tilt_timer_y[idx] < c->tap_jump_tilt_max_frames))
+                                 ? 1u
+                                 : 0u;
+  if (!jump_input) {
+    return 0u;
+  }
+
+  // Terminal CliffJump2 -> Fall -> JumpAerial same-callback owner:
+  // `ftCo_CliffJump2_Anim` enters Fall when the cliff-jump animation expires. The later IASA phase
+  // in the same Fighter_procUpdate then runs Fall_IASA and can consume the current jump input
+  // through `ftCo_JumpAerial_Enter_Basic` before Phys/Coll. This is not CliffJump2 IASA
+  // (`ftCo_CliffJump2_IASA` is empty); it is the destination Fall callback observing the same
+  // frame's post-input tap/button jump.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::{
+  //   ftCo_CliffJump2_Anim,ftCo_CliffJump2_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  const float face_dir = facing_dir(batch->state.facing[idx]);
+  const uint16_t act = ledge_jump_aerial_action_from_stick(c, stick_x, face_dir);
+  batch->state.action_id[idx] = act;
+  batch->state.animation_index[idx] =
+      (uint32_t)(act == (uint16_t)MSL_ACT_JUMP_AERIAL_F ? MSL_SM_JUMP_AERIAL_F
+                                                        : MSL_SM_JUMP_AERIAL_B);
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
+  batch->state.speed_y_self[idx] = ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
+  batch->state.tilt_timer_y[idx] = 0xFEu;
+  batch->state.fall_fast[idx] = 0u;
+  batch->state.jumps_left[idx]--;
+  return 1u;
+}
 
 static inline void cliff_hold_phys_snap(MslBatch* batch, int bi, size_t idx, uint16_t smid);
 
@@ -1016,6 +1069,8 @@ void ledge_update_pre_physics(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Anim
           batch->state.prev_action_id[idx] = a;
           enter_fall_keep_fastfall(batch, idx);
+          const MslCharParams* ch_terminal = msl_char_params(batch->state.char_id[idx]);
+          (void)ledge_try_terminal_cliffjump2_fall_jumpaerial_iasa(batch, c, ch_terminal, idx);
           a = batch->state.action_id[idx];
         }
       } else if (a == (uint16_t)MSL_ACT_CLIFF_CLIMB_SLOW ||

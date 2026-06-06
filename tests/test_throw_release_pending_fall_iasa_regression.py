@@ -333,6 +333,104 @@ def test_throw_release_pending_victim_position_context_shape(record: int) -> Non
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("start_record", "target_record"),
+    [
+        (2178, 2181),
+        (5578, 5581),
+    ],
+)
+def test_throwf_owner_before_victim_release_uses_callback_local_transn_anchor_tch(
+    start_record: int, target_record: int
+) -> None:
+    # Owner-before-victim grounded ThrowF release anchor:
+    # - The thrower's Anim callback consumes `set_throw_flags(hit_idx=0)` before the victim
+    #   callback runs in slot order.
+    # - `ftCo_800DDDE4` samples FtPart_TransN2 before grounded ThrowF Phys consumes TransN through
+    #   `ft_80085004/ft_80085030`, so this same-callback owner uses the callback-local TransN
+    #   subtracted matrix for the release point.
+    # - This is specifically owner slot < victim slot; owner-after-victim controls below stay on
+    #   the established attached-release path.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowF_Anim,ftCo_800DD724,ftCo_800DDDE4}
+    # refs/melee/src/melee/ft/ftparts.c::ft_80085004
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][target_record]
+    owner = 0
+    victim = 1
+    assert int(seed["action_id"][owner]) == 219  # ThrowF.
+    assert int(seed["action_id"][victim]) == 239  # ThrownF.
+    assert int(seed["action_frame"][owner]) == 10
+    assert owner < victim
+
+    out_by_record = _run_rollout_records(dataset_path, start_record, (target_record,))
+    out, ref = out_by_record[target_record]
+
+    assert int(ref["action_id"][victim]) == 88  # DamageFlyN.
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim])
+    assert int(out["action_frame"][victim]) == int(ref["action_frame"][victim])
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 0
+    assert float(out["pos_x"][victim]) == pytest.approx(float(ref["pos_x"][victim]), abs=2e-5)
+    assert float(out["pos_y"][victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=2e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "start_record", "target_record"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            3404,
+            3407,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.msl",
+            4485,
+            4488,
+        ),
+    ],
+)
+def test_throwf_owner_after_victim_release_keeps_attached_anchor_controls(
+    dataset_rel: str, start_record: int, target_record: int
+) -> None:
+    # Owner-after-victim negative controls for the ThrowF release anchor:
+    # these rows have the victim slot before the thrower slot, so the victim callback has already
+    # run by the time the thrower release script fires. They must not use the owner-before-victim
+    # callback-local TransN-subtracted anchor.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][target_record]
+    victim = 0
+    owner = 1
+    assert int(seed["action_id"][owner]) == 219  # ThrowF.
+    assert int(seed["action_id"][victim]) == 239  # ThrownF.
+    assert victim < owner
+
+    out_by_record = _run_rollout_records(dataset_path, start_record, (target_record,))
+    out, ref = out_by_record[target_record]
+
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim])
+    assert int(out["action_frame"][victim]) == int(ref["action_frame"][victim])
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 0
+    assert float(out["pos_x"][victim]) == pytest.approx(float(ref["pos_x"][victim]), abs=2e-5)
+    assert float(out["pos_y"][victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=2e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("record", "ref_action_id", "max_pos_x_err", "max_pos_y_err"),
     [
         (1456, 88, 4.0, 0.021),

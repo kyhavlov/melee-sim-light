@@ -370,6 +370,28 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
        batch->state.hitbox_prev_enabled[hb_i] && batch->state.hitbox_damage[hb_i] == 9.0f)
           ? 1u
           : 0u;
+  // Strong AttackAirB root HitCapsule vs tilted GuardOn raise ShieldDesc.size:
+  // - At the create edge, ftAction_8007121C has just published the authored 15-damage BAir root
+  //   capsule (hb0) before ftColl_80078C70 checks ShieldDesc.
+  // - lbColl_80007BCC includes ShieldDesc.size in the matrix narrowphase. The reduced simulator
+  //   proxy needs that size term for the root capsule boundary, but should not also add the broader
+  //   extent term or apply it to hb1 tail controls; those over-block adjacent BODY/source-order
+  //   rows in aggregate validation.
+  // - The no-submotion GuardOn x10/tilt owner is the same ftCo_80091E78 live ShieldDesc pose above;
+  //   this predicate is per-HitCapsule source data (hb0, strong 15-damage BAir create edge), not a
+  //   replay row or character-pair selector.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  const uint8_t attackairb_strong_root_guardon_raise_size_lane =
+      (guardon_raise_shield_no_submotion_attackair_x10 &&
+       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
+       batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_AIR_B &&
+       batch->state.hitbox_enable_edge[hb_i] && hb_id == 0 &&
+       batch->state.hitbox_damage[hb_i] == 15.0f)
+          ? 1u
+          : 0u;
   // No-submotion GuardOn entry/raise rows can expose a recreated ShieldDesc before Slippi exposes
   // a settled Guard submotion. Keep the ShieldDesc.size term on source create/enable edges only;
   // persistent aerial capsules have replay-real miss controls and must stay on the ordinary matrix
@@ -411,7 +433,8 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
         (guardon_entry_enable_edge_size_lane || attackairlw_fresh_guardon_shielddesc_size_lane ||
          guardreflect_expired_no_submotion_enable_edge_size_lane ||
          attackairlw_strong_no_submotion_guard_extent_lane ||
-         attackairb_weak_tail_tilted_guard_extent_lane)) ||
+         attackairb_weak_tail_tilted_guard_extent_lane ||
+         attackairb_strong_root_guardon_raise_size_lane)) ||
        guardreflect_expired_no_submotion_attackairlw_persistent_size_lane)
           ? shield_desc_world_r
           : 0.0f;

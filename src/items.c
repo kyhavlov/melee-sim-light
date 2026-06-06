@@ -4839,6 +4839,69 @@ static void laser_spawn_apply_throwlw_attached_body_callback(MslBatch* batch, in
   }
 }
 
+static inline uint8_t throwb_startup_laser_late_owner_damagefly_phys_delta(
+    const MslBatch* batch, int bi, int owner, int victim, float* out_dx, float* out_dy) {
+  if (out_dx != NULL) {
+    *out_dx = 0.0f;
+  }
+  if (out_dy != NULL) {
+    *out_dy = 0.0f;
+  }
+  if (batch == NULL || out_dx == NULL || out_dy == NULL || owner <= victim) {
+    return 0u;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  const size_t v_idx = msl_idx_player(bi, victim);
+  if (batch->state.action_id[o_idx] != (uint16_t)MSL_ACT_THROW_B ||
+      !msl_damage_owner_is_damagefly_action(batch->state.action_id[v_idx]) ||
+      batch->state.on_ground[v_idx] != 0u || batch->state.hitlag_pre_timer[v_idx] != 0u ||
+      batch->state.hitlag[v_idx] != 0u || batch->state.hitstun[v_idx] == 0u ||
+      !msl_damage_source_victim_port_matches_attacker(batch, v_idx, o_idx, owner)) {
+    return 0u;
+  }
+
+  const MslCommonParams* c = msl_common_params();
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[v_idx]);
+  if (c == NULL || ch == NULL) {
+    return 0u;
+  }
+
+  float kb_x = batch->state.speed_x_attack[v_idx];
+  float kb_y = batch->state.speed_y_attack[v_idx];
+  if (kb_x != 0.0f || kb_y != 0.0f) {
+    const float kb_mag = sqrtf(kb_x * kb_x + kb_y * kb_y);
+    const float decay = c->knockback_frame_decay;
+    if (kb_mag < decay) {
+      kb_x = 0.0f;
+      kb_y = 0.0f;
+    } else {
+      const float kb_angle = atan2f(kb_y, kb_x);
+      kb_x -= decay * cosf(kb_angle);
+      kb_y -= decay * sinf(kb_angle);
+    }
+  }
+
+  float self_y = batch->state.speed_y_self[v_idx] - ch->grav;
+  if (self_y < -ch->terminal_vel) {
+    self_y = -ch->terminal_vel;
+  }
+
+  // Later-port ThrowB startup pulse order:
+  // - Fighter callback order lets the earlier victim's DamageFly Phys run before the later
+  //   thrower's ftFx_Throw_Anim consumes the frame-15 blaster command.
+  // - The state1 laser BODY callback then installs the new Damage* hitlag/KB after that old
+  //   DamageFly displacement. Since this simulator resolves the spawned item before the later
+  //   physics pass, add only the already-owned old DamageFly displacement and latch hitlag so the
+  //   newly installed laser hit does not integrate again in the same frame.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Phys
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,itFoxlaser_UnkMotion1_Coll}
+  *out_dx = batch->state.speed_air_x_self[v_idx] + kb_x;
+  *out_dy = self_y + kb_y;
+  return 1u;
+}
+
 static void laser_spawn_apply_falco_throwb_startup_body_callback(MslBatch* batch, int bi, int owner,
                                                                  int slot,
                                                                  const MslLaserParams* lp) {
@@ -4865,6 +4928,10 @@ static void laser_spawn_apply_falco_throwb_startup_body_callback(MslBatch* batch
       item_type_is_falco_laser(batch->state.item_type[ii]) == 0u) {
     return;
   }
+  float source_damagefly_dx = 0.0f;
+  float source_damagefly_dy = 0.0f;
+  const uint8_t late_owner_damagefly_phys = throwb_startup_laser_late_owner_damagefly_phys_delta(
+      batch, bi, owner, victim, &source_damagefly_dx, &source_damagefly_dy);
 
   // Falco ThrowB startup same-frame BODY callback:
   // - ftAction emits the frame-15 throw_flags_b0 command and ftFx_Throw_Anim spawns a state1
@@ -4885,6 +4952,11 @@ static void laser_spawn_apply_falco_throwb_startup_body_callback(MslBatch* batch
       batch->state.item_type[ii], batch->state.item_state[ii], lp->state1_damage, lp->state1_angle,
       lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element, -1.0f,
       batch->state.item_pos_x[ii], batch->state.item_vel_x[ii], 0u);
+  if (res != MSL_ITEM_HIT_NONE && late_owner_damagefly_phys != 0u) {
+    batch->state.pos_x[v_idx] += source_damagefly_dx;
+    batch->state.pos_y[v_idx] += source_damagefly_dy;
+    batch->state.hitlag_started_frame[v_idx] = 1u;
+  }
   if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
     item_slot_clear(batch, ii);
     return;

@@ -1910,6 +1910,89 @@ def test_guardon_no_submotion_persistent_attackairb_sweep_does_not_use_entry_siz
 
 
 @pytest.mark.integration
+def test_continuing_guardon_strong_attackairb_create_edge_uses_shielddesc_size_tch() -> None:
+    # Runtime-positive boundary for continuing GuardOn raise-shield ShieldDesc.size:
+    # - TCH:5992 has p0 already in no-submotion GuardOn with mv.co.guard.x10 live and a tilted
+    #   shield target, while p1 creates the authored strong AttackAirB root/tail capsules.
+    # - The source ShieldDesc matrix path accepts hb0 through the ShieldDesc.size term before the
+    #   lower-index BODY capsule can claim DamageFlyHi. Persistent BAir remains covered by the
+    #   negative above; low-tilt create-edge controls are covered below.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    attacker = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][5992]
+
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert int(seed["seed_prev_action_id"][defender]) == 178
+    assert int(seed["guard_x10"][defender]) != 0
+    assert float(seed["guard_tilt_x4"][defender]) > 0.0
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
+    assert int(seed["action_frame"][attacker]) == 3
+    assert all(int(seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 2 for hb in range(4))
+
+    ref, out = _run_rollout_window(dataset_path, 5988, 5992)
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 8
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 8
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]), abs=1e-3)
+
+
+@pytest.mark.integration
+def test_continuing_guardon_low_tilt_strong_attackairb_create_edge_does_not_use_size_tvr() -> None:
+    # Negative for the strong BAir GuardOn create-edge size lane:
+    # TVR:3996 is the same authored AttackAirB create edge against continuing no-submotion GuardOn,
+    # but the live GuardOn tilt magnitude is near-neutral and the source row remains GuardOn. This
+    # proves the retained TCH lane is not a broad action/frame shield-hit bridge.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091E78
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    attacker = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][3996]
+
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert int(seed["seed_prev_action_id"][defender]) == 178
+    assert int(seed["guard_x10"][defender]) != 0
+    assert 0.0 < float(seed["guard_tilt_x4"][defender]) < 0.05
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
+    assert int(seed["action_frame"][attacker]) == 3
+
+    ref, out = _run_rollout_window(dataset_path, 3992, 3996)
+    assert int(ref["action_id"][defender]) == 178  # GuardOn.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]), abs=1e-3)
+
+
+@pytest.mark.integration
 def test_cliff_end_guardon_marker_does_not_stale_carry_to_later_guardon_shield_hit() -> None:
     # Stale-carry negative for guard_on_cliff_end_source:
     # - HVG:1185 starts in CliffClimbQuick and enters no-submotion GuardOn through the cliff-end

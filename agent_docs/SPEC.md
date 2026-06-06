@@ -3696,6 +3696,16 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
     ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Enter}`,
     `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044628_Floor}`.
+  - TCH ThrowF owner-before-victim release anchor:
+    - `ftCo_800DD724` consumes `set_throw_flags(hit_idx=0)` during the thrower's Anim callback. If
+      the thrower slot runs before the victim slot, the victim can observe the release in its
+      remaining same-frame callbacks. For the authored Falco ThrowF release payload, `ftCo_800DDDE4`
+      samples the thrower `FtPart_TransN2` release point before grounded ThrowF Phys consumes the
+      current TransN root delta through `ft_80085004/ft_80085030`, so runtime uses the
+      callback-local, TransN-subtracted `FtPart_TransN2` matrix. The retained predicate is bounded
+      by extracted ThrowF hit payload (`data/moves/falco.json` hit_idx0 KBG 135 vs Fox KBG 130),
+      not character id or character pair. TCH:2181/5581 lock the positive; Fox/Fox owner-before and
+      owner-after controls stay on the normal attached-release path.
   - Blaster gun lifetime runtime slice:
     - `ftFx_SpecialNEnd_Anim` clears `fp->fv.fx.x222C_blasterGObj` before leaving
       SpecialNEnd through `ft_8008A2BC`; the gun article's
@@ -6332,6 +6342,12 @@ BODY collision-space residual split and rejected seed bridge:
   `lbColl_80007BCC` extent proxy for some near-boundary sphere/segment overlap rows while the full
   source JObj/extent narrowphase remains open. Positive: DSG:6313. Negatives:
   DSG:6311/6312, IAT GuardOn entry, HVG AttackAirB, FSP Shine lightshield.
+  TCH narrows this further for strong `AttackAirB`: only hb0 on the create edge admits the
+  `ShieldDesc.size` term. That is the source edge where `ftAction_8007121C` has just published the
+  authored 15-damage root capsule before `ftColl_80078C70`; it is not a license to widen hb1/tail
+  capsules or add the broader extent proxy. The broad hb1/extent variant was rejected because it
+  over-admitted adjacent GuardOn BODY/source-order rows. TCH:5992 locks hb0 size positive; TVR:3996
+  and persistent BAir controls lock the rejected low-tilt and non-create-edge boundaries.
   Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,
   ftCo_GuardOn_Anim,ftCo_80091E78}`, `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`,
   `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC`.
