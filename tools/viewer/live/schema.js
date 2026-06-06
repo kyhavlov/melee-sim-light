@@ -19,7 +19,7 @@ export const SUPPORTED_STAGES = Object.freeze([
 export const MATCH_CONFIG_SIZE = 36;
 export const INPUT_SIZE = 32;
 export const COMPARE_SIZE = 1022;
-export const STAGE_STATE_SIZE = 24;
+export const STAGE_STATE_SIZE = 38;
 export const SHIELD_BUBBLES_SIZE = 64;
 export const ITEM_SIZE = 48;
 
@@ -115,7 +115,11 @@ export const stageStateOffsets = {
   fodHeight: 0,
   fodValid: 8,
   fodSource: 10,
-  randallExists: 12,
-  randallX: 16,
-  randallY: 20,
+  fodSchedulerPhase: 12,
+  fodSchedulerValid: 14,
+  fodSchedulerTimer: 16,
+  fodSchedulerTarget: 20,
+  randallExists: 28,
+  randallX: 30,
+  randallY: 34,
 };
