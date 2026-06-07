@@ -559,7 +559,21 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
             const float scl = c->shield_sdi_mul * (lstick_full_x * sdi_step_mul);
             batch->state.pos_x[idx] += ny * scl;
             batch->state.pos_y[idx] += -nx * scl;
-            batch->state.tilt_timer_x[idx] = 254u;
+            const uint8_t guardsetoff_replay_visible_first_carry =
+                (batch->state.guard_setoff_hitlag_damage_min[idx] > c->sdi_tilt_max_frames &&
+                 batch->state.hitlag[idx] > c->sdi_tilt_max_frames)
+                    ? 1u
+                    : 0u;
+            if (guardsetoff_replay_visible_first_carry == 0u) {
+              batch->state.tilt_timer_x[idx] = 254u;
+            }
+            // Keep `tilt_timer_x` on the replay-visible Fighter_Spaghetti input-history lane only
+            // for the long active-hitlag GuardSetOff first-carry owner. ftCo_80093240 writes
+            // callback-local x670=254 after consuming SDI, but long x19A4-owned shield-hit episodes
+            // can still expose the same input segment on Slippi's next post-frame row; short
+            // episodes have no source-visible carry tick left and use the callback-local reset.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093240
+            // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
           }
         }
         continue;

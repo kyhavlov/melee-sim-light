@@ -591,8 +591,8 @@ static inline float msl_ftco_800d0ec8_basic_landing_threshold(const MslCommonPar
                                                               float fighter_scale_y) {
   // refs/melee/src/melee/ft/ftchangeparam.c::ftCo_800D0EC8
   const float scale_y = fighter_scale_y > 0.0f ? fighter_scale_y : 1.0f;
-  return -msl_ftco_calc_y_scaled_knockback(c->basic_landing_wait_gravity_mult_x30, scale_y,
-                                           c->basic_landing_wait_scale_param_x310);
+  return -msl_ftco_calc_y_scaled_knockback(c->basic_landing_wait_scale_param_x310, scale_y,
+                                           c->basic_landing_wait_gravity_mult_x30);
 }
 
 static inline uint8_t msl_ftco_80082b1c_enters_wait(const MslCommonParams* c, float fighter_scale_y,

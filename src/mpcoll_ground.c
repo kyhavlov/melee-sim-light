@@ -492,6 +492,7 @@ enum {
 #define MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM (UINT64_C(1) << 30)
 #define MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM (UINT64_C(1) << 31)
 #define MSL_MPCOLL_REJECT_FALL_SHALLOW_TERMINAL_HARD_FLOOR (UINT64_C(1) << 32)
+#define MSL_MPCOLL_REJECT_ESCAPEAIR_JUMPAERIAL_SOFT_OWNER_EARLY_DIRECT_LAND (UINT64_C(1) << 33)
 typedef enum MslMpcollFloorRejectRestore {
   MSL_MPCOLL_FLOOR_REJECT_RESTORE_NONE = 0u,
   MSL_MPCOLL_FLOOR_REJECT_RESTORE_KEEP_CURRENT = 1u,
@@ -1561,6 +1562,10 @@ static inline void mpcoll_floor_reject_add_escapeair_final_owners(
   mpcoll_floor_reject_add_if_state(
       packet, owners->locked_desired_nonplatform_without_bottom_sweep,
       MSL_MPCOLL_REJECT_LOCKED_DESIRED_NONPLATFORM_WITHOUT_BOTTOM_SWEEP,
+      MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u, phase);
+  mpcoll_floor_reject_add_if_state(
+      packet, owners->escapeair_jumpaerial_soft_owner_early_direct_land,
+      MSL_MPCOLL_REJECT_ESCAPEAIR_JUMPAERIAL_SOFT_OWNER_EARLY_DIRECT_LAND,
       MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u, phase);
   mpcoll_floor_reject_add_if_state(packet, owners->kneebend_ledge_missing_owner,
                                    MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE,
@@ -14389,6 +14394,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 ? 1u
                 : 0u;
         const uint8_t runtime_live_jumpaerial_nonplatform_root_crossing =
+            // Live JumpAerial -> EscapeAir hard-floor owner can publish the later nonplatform root
+            // crossing from the carried desired-bottom lane. The soft/platform owner is different:
+            // it is a platform/transform pass-through from the entry callback, so crossing a
+            // nonplatform hard floor still requires current `EscapeAir_Coll` floor-producer
+            // authority before final publication.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor,mpColl_800471F8}
             (msl_escapeair_locked_bottom_owner_is_live_jumpaerial(
                  batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
              ecb_lock_timer_seed > 1u &&
@@ -14423,6 +14436,41 @@ void mpcoll_ground_apply(MslBatch* batch) {
                  batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
              batch->state.coll_desired_ecb_bottom_rel_y[idx] > k_floor_y_bias &&
              (y + batch->state.coll_desired_ecb_bottom_rel_y[idx]) > (contact_y + k_floor_y_bias))
+                ? 1u
+                : 0u;
+        const float jumpaerial_f_frame2_bottom_rel_y =
+            msl_ecb_bottom_rel_y(char_id, (uint32_t)MSL_SM_JUMP_AERIAL_F, 2);
+        const float jumpaerial_b_frame2_bottom_rel_y =
+            msl_ecb_bottom_rel_y(char_id, (uint32_t)MSL_SM_JUMP_AERIAL_B, 2);
+        const uint8_t carried_desired_bottom_is_jumpaerial_frame2 =
+            (fabsf(batch->state.coll_desired_ecb_bottom_rel_y[idx] -
+                   jumpaerial_f_frame2_bottom_rel_y) <= k_floor_y_bias ||
+             fabsf(batch->state.coll_desired_ecb_bottom_rel_y[idx] -
+                   jumpaerial_b_frame2_bottom_rel_y) <= k_floor_y_bias)
+                ? 1u
+                : 0u;
+        const uint8_t suppress_escapeair_jumpaerial_soft_owner_early_direct_land =
+            // EscapeAir_Coll reaches `ft_80082C74 -> mpColl_800471F8`. A JumpAerial frame-2
+            // soft/platform desired-bottom owner can survive into the EscapeAir callback, but that
+            // owner only proves the carried soft/platform support probe; it does not authorize a
+            // direct hard-floor publication from root projection while no current EscapeAir floor
+            // producer has accepted the hard floor. The per-frame probe bits are consumed/rewritten
+            // during the floor pass, so this final guard is anchored on the generated JumpAerial
+            // frame-2 bottom owner rather than the transient reject-bit snapshot. Frame-0/1
+            // desired-bottom owners stay on the ordinary publication path.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+            // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+            (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+             batch->state.coll_desired_ecb_bottom_locked_owner[idx] ==
+                 (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_SOFT_OR_TRANSFORM &&
+             carried_desired_bottom_is_jumpaerial_frame2 != 0u &&
+             escapeair_floor_producer_authority_in == 0u &&
+             !stage_collision_floor_line_is_platform(stage_id, ground_id) &&
+             !resolved_line_has_platform_transform &&
+             batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+             batch->state.coll_desired_ecb_bottom_rel_y[idx] > k_floor_y_bias)
                 ? 1u
                 : 0u;
         const uint8_t suppress_kneebend_escapeair_missing_ledge_owner_final_land =
@@ -14471,6 +14519,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 suppress_locked_desired_platform_without_bottom_sweep,
             .locked_desired_nonplatform_without_bottom_sweep =
                 suppress_locked_desired_nonplatform_without_bottom_sweep,
+            .escapeair_jumpaerial_soft_owner_early_direct_land =
+                suppress_escapeair_jumpaerial_soft_owner_early_direct_land,
             .kneebend_ledge_missing_owner =
                 suppress_kneebend_escapeair_missing_ledge_owner_final_land,
             .jumpaerial_high_lift_ledge = suppress_jumpaerial_escapeair_high_lift_ledge_final_land,

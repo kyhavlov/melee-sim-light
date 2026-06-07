@@ -3644,9 +3644,9 @@ static inline uint8_t item_should_keep_existing_powershield_reflect_owner(
 }
 
 static inline uint8_t item_should_commit_guardon_followup_powershield_reflect_owner(
-    const MslBatch* batch, size_t d_idx, int def, float x0, float y0, float x, float y, float vx,
-    float laser_age_frames, float laser_radius, float laser_scale_z) {
-  (void)def;
+    const MslBatch* batch, size_t item_idx, size_t d_idx, int def, int item_owner, float x0,
+    float y0, float x, float y, float vx, float laser_age_frames, float laser_radius,
+    float laser_scale_z) {
   if (batch == NULL || !(laser_age_frames > 0.0f)) {
     return 0u;
   }
@@ -3655,9 +3655,30 @@ static inline uint8_t item_should_commit_guardon_followup_powershield_reflect_ow
     return 0u;
   }
   if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT ||
-      batch->state.animation_index[d_idx] != UINT32_MAX || batch->state.action_frame[d_idx] >= 0 ||
-      batch->state.guard_reflect_timer_x14_seed[d_idx] != 0u ||
-      batch->state.guard_reflect_timer_x18_seed[d_idx] != 0u) {
+      batch->state.animation_index[d_idx] != UINT32_MAX || batch->state.action_frame[d_idx] >= 0) {
+    return 0u;
+  }
+  const uint8_t fresh_no_seed_timer_followup =
+      (batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+       batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u)
+          ? 1u
+          : 0u;
+  const uint8_t same_owner_final_x14_followup =
+      ((item_owner == def || batch->state.item_reflect_damage_mul[item_idx] != 1.0f) &&
+       batch->state.guard_reflect_origin_guardon[d_idx] != 0u &&
+       batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u &&
+       batch->state.guard_reflect_timer_x18_seed[d_idx] > 0u)
+          ? 1u
+          : 0u;
+  const uint8_t active_guardon_reflectdesc_followup =
+      (batch->state.guard_reflect_origin_guardon[d_idx] != 0u &&
+       batch->state.guard_reflect_timer_x14_seed[d_idx] > 1u &&
+       batch->state.guard_reflect_timer_x18_seed[d_idx] > 0u &&
+       batch->state.guard_reflect_timer_x14[d_idx] > 0u)
+          ? 1u
+          : 0u;
+  if (fresh_no_seed_timer_followup == 0u && same_owner_final_x14_followup == 0u &&
+      active_guardon_reflectdesc_followup == 0u) {
     return 0u;
   }
   const uint8_t same_step_guardon_reflect_entry =
@@ -3702,6 +3723,9 @@ static inline uint8_t item_should_commit_guardon_followup_powershield_reflect_ow
   //   ftCo_8009370C.
   // - The laser is already in its item collision callback once the first post-anim age is visible;
   //   newly spawned age-zero articles stay on their separate spawn-frame owner helpers.
+  // - Final-x14 rows can keep the reflected-owner transfer only when the item is already defender-
+  //   owned or the seeded item-reflect damage multiplier proves an existing reflected-owner
+  //   snapshot. Opponent-owned/default-multiplier final-x14 rows stay on the HitShield handoff lane.
   // - Runtime same-step GuardOn -> GuardReflect rows expose the source entry through
   //   `guard_reflect_origin_guardon && guard_reflect_entered_this_frame`, plus the retained
   //   Landing-entry GuardOn latch when the visible intermediate action is GuardOn.
@@ -3712,7 +3736,7 @@ static inline uint8_t item_should_commit_guardon_followup_powershield_reflect_ow
   // `lbColl_80007BCC` uses the item HitCapsule sweep and the same broad source extent consumed by
   // the aged ReflectDesc lane before ftColl_80077464 writes the reflected-owner snapshot.
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
-  // refs/melee/src/melee/it/item.c::Item_80269F14
+  // refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
   const float hit_r = item_laser_reflect_hit_radius(laser_radius, laser_scale_z);
   enum { MSL_LBCOLL_HIT_RESULT_EXTENT = 20 };
   const float reflect_extent = reflect_r * (float)MSL_LBCOLL_HIT_RESULT_EXTENT;
@@ -3720,8 +3744,15 @@ static inline uint8_t item_should_commit_guardon_followup_powershield_reflect_ow
   if (fabsf(y - reflect_y) > scaled_lane_r) {
     return 0u;
   }
-  return item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, hit_r, reflect_x,
-                                                reflect_y, reflect_z, reflect_extent);
+  if (!item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, hit_r, reflect_x, reflect_y,
+                                              reflect_z, reflect_extent)) {
+    return 0u;
+  }
+  if (active_guardon_reflectdesc_followup != 0u || same_owner_final_x14_followup != 0u) {
+    return item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, hit_r, reflect_x,
+                                                  reflect_y, reflect_z, reflect_r);
+  }
+  return 1u;
 }
 
 typedef enum MslLaserCollisionSpaceLane {
@@ -5946,7 +5977,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
       const uint8_t fresh_guardon_reflect_owner_commit_before_shielddesc =
           item_should_commit_guardon_followup_powershield_reflect_owner(
-              batch, d_idx, def, x0, y0, x, y, vx, laser_age_frames, sr, laser_scale_z);
+              batch, ii, d_idx, def, owner, x0, y0, x, y, vx, laser_age_frames, sr, laser_scale_z);
       if ((flags_221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) == 0u &&
           (item_should_commit_aged_powershield_reflect_owner(
                batch, ii, d_idx, def, x0, y0, x, y, vx, laser_age_frames, sr, laser_scale_z) ||
@@ -6144,6 +6175,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         float shield_bounce_source_vy = 0.0f;
         float shield_hit_contact_x = x;
         float shield_hit_contact_y = y;
+        const uint8_t guard_reflect_final_x14_same_owner_reflect_keepalive =
+            (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+             batch->state.action_frame[d_idx] < 0 &&
+             batch->state.animation_index[d_idx] == UINT32_MAX &&
+             batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u &&
+             (owner == def || batch->state.item_reflect_damage_mul[ii] != 1.0f))
+                ? 1u
+                : 0u;
         // Decomp call-chain anchors:
         // - itFoxlaser_UnkMotion1_Phys snapshots pre-move position (`foxlaser.pos = item->pos`).
         // - it_8029C4D4 runs collision using (prev_pos, cur_pos) and dispatches the hit callback.
@@ -6423,6 +6462,17 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           if (!this_hit) {
             continue;
           }
+          if (guard_reflect_final_x14_same_owner_reflect_keepalive) {
+            // Same-owner final-x14 GuardReflect keepalive:
+            // The laser is already on the reflected item callback lane (`Item_80269F14`) while x14
+            // is still visible, proven either by defender ownership or the seeded reflected damage
+            // multiplier. Do not reinterpret that callback as a new opponent-projectile ShieldDesc
+            // hit (`Item_80269DC8`). Opponent-owned/default-multiplier final-x14 lasers still follow
+            // the HitShield handoff.
+            // refs/melee/src/melee/it/item.c::Item_80269F14
+            // refs/melee/src/melee/it/item.c::Item_80269DC8
+            continue;
+          }
           shield_hit = 1u;
           if (shield_hit_contact_x == x && shield_hit_contact_y == y) {
             shield_hit_contact_x = sx;
@@ -6504,8 +6554,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             shield_bounce_best_vy = trial_bounce_vy;
           }
         }
-        if (!shield_hit && item_laser_no_submotion_guard_entry_shielddesc_root_x_owner(
-                               batch, d_idx, shield_bounce_seed_valid)) {
+        if (!shield_hit && !guard_reflect_final_x14_same_owner_reflect_keepalive &&
+            item_laser_no_submotion_guard_entry_shielddesc_root_x_owner(batch, d_idx,
+                                                                        shield_bounce_seed_valid)) {
           const float root_shx = batch->state.pos_x[d_idx];
           for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X; oi++) {
             const float off_x =
@@ -6650,7 +6701,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                 ? 1u
                 : 0u;
         if (!shield_hit && laser_age_frames > 1.0f && guard_reflect_pure_final_x14_hitshield &&
-            common != NULL && common->powershield_reflect_size > 0.0f) {
+            !guard_reflect_final_x14_same_owner_reflect_keepalive && common != NULL &&
+            common->powershield_reflect_size > 0.0f) {
           float reflect_y = 0.0f;
           if (item_guard_reflect_bone_y(batch, d_idx, &reflect_y)) {
             const float reflect_r =
@@ -6975,7 +7027,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               const uint8_t reflect_vertical_overlap = (fabsf(y_delta) <= reflect_lane_r) ? 1u : 0u;
               powershield_reflect_desc_overlap = reflect_vertical_overlap;
               if (y_delta < -reflect_lane_r ||
-                  (guard_reflect_pure_final_x14_hitshield && reflect_vertical_overlap)) {
+                  (guard_reflect_pure_final_x14_hitshield && reflect_vertical_overlap &&
+                   !guard_reflect_final_x14_same_owner_reflect_keepalive)) {
                 // GuardReflect HitShield discriminator:
                 // - lasers below the shield-bone ReflectDesc lane hit shield instead of reflect,
                 // - the final x14 tick inside that lane can hand off to Item_80269DC8 HitShield
@@ -6992,7 +7045,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               }
             }
           }
-          if (can_powershield_reflect && guard_reflect_frozen_final_seed_shield_overlap) {
+          if (can_powershield_reflect && guard_reflect_frozen_final_seed_shield_overlap &&
+              !guard_reflect_final_x14_same_owner_reflect_keepalive) {
             // Final frozen x14 shield-contact handoff:
             // - at the last visible GuardReflect tick, current shield-bubble contact is owned by
             //   Item_80269DC8 HitShield rather than ftColl_80077464 reflect transfer,
@@ -7014,7 +7068,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           const uint8_t guardon_followup_reflect_owner_commit =
               (can_powershield_reflect &&
                item_should_commit_guardon_followup_powershield_reflect_owner(
-                   batch, d_idx, def, x0, y0, x, y, vx, laser_age_frames, sr, laser_scale_z))
+                   batch, ii, d_idx, def, owner, x0, y0, x, y, vx, laser_age_frames, sr,
+                   laser_scale_z))
                   ? 1u
                   : 0u;
           const uint8_t guardon_followup_reflect_miss_keepalive =

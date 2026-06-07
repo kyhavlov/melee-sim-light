@@ -21,6 +21,7 @@ BUTTON_R = 0x0020
 ACT_ESCAPE_AIR = 236
 ACT_LANDING_FALL_SPECIAL = 43
 ACT_FALL_SPECIAL = 35
+ACT_WAIT = 14
 ACT_JUMP_AERIAL_F = 27
 ACT_JUMP_AERIAL_B = 28
 ACT_KNEE_BEND = 24
@@ -1270,7 +1271,7 @@ def test_pass_specialairn_platform_floor_skip_handoff_stays_airborne() -> None:
 @pytest.mark.integration
 def test_pass_specialairn_platform_floor_skip_handoff_requires_carried_platform() -> None:
     # Negative coverage: the retained owner is the callback-local floor_skip from the carried
-    # platform floor.index, not a broad SpecialAirN action gate.
+    # platform floor.index, not a broad SpecialAirN action gate or unconditional platform land.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
@@ -1289,7 +1290,7 @@ def test_pass_specialairn_platform_floor_skip_handoff_requires_carried_platform(
         seed["ground_id"][0, p] = np.uint16(0xFFFF)
 
     out = _run_one_step(ds, record, seed_mutator=remove_carried_platform)
-    assert int(out["action_id"][p]) == ACT_LANDING
+    assert int(out["action_id"][p]) == ACT_WAIT
     assert int(out["on_ground"][p]) == 1
 
 

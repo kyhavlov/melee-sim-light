@@ -22,6 +22,7 @@ typedef struct MslEscapeAirFinalPublicationOwners {
   uint8_t locked_missing_bottom_owner;
   uint8_t locked_desired_platform_without_bottom_sweep;
   uint8_t locked_desired_nonplatform_without_bottom_sweep;
+  uint8_t escapeair_jumpaerial_soft_owner_early_direct_land;
   uint8_t kneebend_ledge_missing_owner;
   uint8_t jumpaerial_high_lift_ledge;
   uint8_t jumpaerial_static_platform_overstep;

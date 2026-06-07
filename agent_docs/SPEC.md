@@ -2280,7 +2280,7 @@ Grounded motion-entry timing notes:
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA`.
 - Fall/Jump/JumpAerial/MissFoot and Fox/Falco aerial blaster floor contact use the shared
   `ft_80082B1C` Wait-vs-Landing velocity split. The threshold is `ftCo_800D0EC8(fp)`, computed via
-  `ftCo_CalcYScaledKnockback(Fighter_804D6524->x30, fp->x34_scale.y, p_ftCommonData->x310)`.
+  `ftCo_CalcYScaledKnockback(p_ftCommonData->x310, fp->x34_scale.y, Fighter_804D6524->x30)`.
   Runtime consumes the extracted `data/common/ft_common_data.json` keys
   `basic_landing_wait_gravity_mult_x30` and `basic_landing_wait_scale_param_x310` through
   `src/common_params.h::msl_ftco_80082b1c_enters_wait`; this owner remains a narrow checkpoint and
@@ -2895,7 +2895,14 @@ Fox/Falco special-owner split (2026-04-17):
     side platform; countdown <= 2 is the retained side-platform publication phase. That owner is
     restricted to generated `MSLSTG01` height-transform platforms with source-trusted live height;
     ordinary stages and ground-jump airdodges without a height-platform line remain on the existing
-    airborne guards.
+    airborne guards. Later `EscapeAir` callbacks can also carry a live JumpAerial frame-2
+    soft/platform `desired_ecb.bottom` owner. That provenance is valid for platform-domain support
+    contacts, but it is not a source hard-floor producer: `EscapeAir_Coll -> ft_80082C74 ->
+    mpColl_800471F8` still must produce the non-platform hard floor before final
+    `LandingFallSpecial` publication. Runtime therefore rejects only direct hard-floor final
+    publication with the generated JumpAerialF/B frame-2 bottom, live soft/transform owner, no
+    current EscapeAir floor-producer authority, and a non-platform/non-transform final floor.
+    Platform landings with the same lineage remain admitted.
     Sources: `data/motion_state/owners/{fox,falco}.bin::MSLMSO01`,
     `data/stages/bin/griz.json::platform_transforms`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA`,
@@ -5845,14 +5852,21 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}`
   - `refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`
-- `SpecialHiFall` victims use the same DamageFlyRoll RNG gate only on the current AttackAirB
-  HitCapsule enable edge. PPA `7185` protects the create-edge positive, while PPA `7019` protects
-  the steady already-active BAir negative even though its next raw RNG sample is below
-  `p_ftCommonData->x240`; the source predicate is hitbox enable-edge / victim-list ownership, not
-  a broader `SpecialHiFall` action admission.
+- `SpecialHiFall` victims use the same DamageFlyRoll RNG gate through two bounded AttackAirB
+  owners. The entry-window owner is still the visible terminal pre-action gate: after replay seed
+  frame advancement, SpecialHiFall callback frames through
+  `MSL_DAMAGEFLYROLL_SPECIALHIFALL_ENTRY_ENABLE_EDGE_FRAME_MAX` can consume the current BAir
+  enable-edge path. Later SpecialHiFall rows must instead prove the selected DmgLog HitCapsule in
+  `combat.c`; a live BAir enable edge in another capsule is not sufficient. PPA `7185` and MVP
+  `4156` protect selected/create-edge positives, TVR `6927` protects the entry-window terminal
+  positive, and PPA `7019` plus MVP `1718` protect steady/late negatives even when an unrelated
+  BAir edge or favorable raw RNG sample is present. The source predicate is callback window plus
+  selected HitCapsule/victim-list ownership, not a broader `SpecialHiFall` action admission.
   Source anchors:
   - `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076808,ftColl_800768A0}`
+  - `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    ftFx_SpecialHiFall_Anim,ftFx_SpecialHiFall_Phys,ftFx_SpecialHiFall_Coll}`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`
 - AttackAirN pre-action victims can also reach the same `ftCo_8008DCE0` DamageFlyRoll gate, but
   only under the explicit `Fighter_8006CDA4` stream-phase seed. Replay-seeded rollouts keep that
@@ -6662,6 +6676,15 @@ BODY collision-space residual split and rejected seed bridge:
   refs/melee/src/melee/ft/ft_081B.c::{ft_80084F3C,ft_80084104}).
 - `DownWait* -> DownStand*` stays on `ftCo_800980BC`'s explicit `input.x668 & HSD_PAD_LR` /
   analog-trigger edge owner; physical Z alone does not enter DownStand.
+- Frame-0 downed hitbox scripts are not all same-callback owned. DamageFly/DamageFall floor
+  contact enters `DownBound*` through `ftCo_80090184 -> ftCo_80097D40`, which changes motion state
+  and initializes downed state but does not immediately run `ftAnim_8006EBA4` before the current
+  combat pass. `DownBound*`/`DownWait* -> DownStand*` enters through `ftCo_80098160`, which only
+  calls `Fighter_ChangeMotionState(..., Ft_MF_None, ...)`; frame-0 `DownStand*` hitbox commands are
+  likewise owned by the next Anim callback. This is distinct from downed options that explicitly
+  tick scripts at entry, such as `ftCo_80098324` (`DownFoward*`/`DownBack*`) and `ftCo_8009856C`
+  (`DownAttack*`). MVP `rec7600`/`rec7626` lock the positive no-fabricated-hit cases; existing
+  DownAttack replay locks keep the immediate-script adjacent owner.
 - DownDamage contact preserves the downed victim's visible facing from `ftCo_8009F184`, but
   `ftCo_8008DCE0` uses the collision-owned `dmg.facing_dir_1` lane for knockback velocity. Reverse
   shine on a downed victim therefore can launch opposite the victim's visible downed facing.
@@ -6681,11 +6704,14 @@ BODY collision-space residual split and rejected seed bridge:
   `EscapeAir_Coll` publication owner when the post-Anim JumpAerial IASA sweep remains above a
   non-platform floor and the following EscapeAir callback crosses that desired bottom through the
   floor. Runtime preserves the live JumpAerial desired-bottom owner across the EscapeAir entry even
-  when the visible carried floor id is stale/off-domain, then allows the following Yoshi's Story
-  sloped ledge floor crossing to publish `LandingFallSpecial` through `ft_80082C74`. Sustained
-  EscapeAir continuations cannot reuse that source slice unless the current callback reestablishes a
-  fresh desired-bottom crossing. The 182447 frozen-PS replay and CNM Yoshi rollout locks cover the
-  positive `EscapeAir -> LandingFallSpecial` floor rows.
+  when the visible carried floor id is stale/off-domain, then allows source-owned sloped ledge floor
+  crossings to publish `LandingFallSpecial` through `ft_80082C74`. Sustained EscapeAir continuations
+  cannot reuse that source slice unless the current callback reestablishes a fresh desired-bottom
+  crossing; ordinary hard-floor continuation rows require live `EscapeAir_Coll` floor-producer
+  authority before final publication. The 182447 frozen-PS replay and CNM Yoshi rollout locks cover
+  the positive `EscapeAir -> LandingFallSpecial` floor rows, MVP `rec787` covers the adjacent
+  platform landing with the same JumpAerial frame-2 lineage, LDW/STM locks cover unrelated
+  hard-floor EscapeAir landings, and MVP `rec3104` locks the hard-floor direct-publication negative.
 - Airborne `DownBound*` floor-loss uses the active CollData.floor segment, not a stage side-ledge
   proxy. `ftCo_DownBound_Coll -> ft_80082708 -> mpColl_8004B108` can enter Fall from ordinary
   side-ledge floor loss and generated stage-object platform endpoints, but a soft-platform
@@ -6813,16 +6839,20 @@ BODY collision-space residual split and rejected seed bridge:
   - The seed lane `magnify_damage_counter_x1910` is still the primary replay owner because
     `Camera_80031144`, `Player_GetMoreFlagsBit3`, and ifMagnify state are hidden. Runtime consumes
     nonzero seeded episodes and admits fresh replay-rollout zero-counter starts only for the
-    bounded DamageFlyHi/N source-visible owner: x221F_b0 already live, plus either a horizontal
-    left/right root exit or a camera-target offscreen row whose current horizontal knockback
-    trajectory reaches a side camera bound within one x1910 damage interval. Vertical/top exits with
-    no side-bound trajectory and DamageFlyLw/Top/Roll cannot fresh-start from visible pose
+    bounded DamageFly source-visible owner: x221F_b0 already live, plus either a DamageFlyHi/N
+    horizontal left/right root exit, a DamageFlyHi/N camera-target offscreen row whose current
+    horizontal knockback reaches a side camera bound within one x1910 damage interval, or a
+    DamageFlyLw horizontal root exit. DamageFlyLw is admitted only from the root-horizontal
+    `ifMagnify_802FC7C0` bound, not from camera-target trajectory or vertical/top exits. Vertical
+    exits with no side-bound trajectory and DamageFlyTop cannot fresh-start from visible pose
     reconstruction and may only consume nonzero seeded episodes.
   - MGS locks: `rec2919` (DamageFlyN -> SpecialAirNLoop percent tick) and `rec5687` (DamageFlyHi
     episode feeding the later hitstun boundary). PPA `rec7652 -> 7808` locks the camera-target
     offscreen plus horizontal-trajectory owner that starts before root has crossed the right camera
-    bound. DCC controls: `rec9362/9685` keep DamageFlyTop/Lw visible rows from starting an unproven
-    x1910 episode.
+    bound. MVP `rec1614 -> 1672 -> 1718` locks the DamageFlyLw horizontal root-exit start that
+    carries through SpecialHiHoldAir/SpecialAirHi before the later hitstun boundary. DCC controls:
+    `rec9362/9685` keep DamageFlyTop visible rows from starting an unproven x1910 episode, while
+    BHH `rec5620 -> 5671` keeps vertical/top DamageFlyN exits rejected.
 - Source anchors:
   - `refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}`
   - `refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim`

@@ -1073,7 +1073,7 @@ def test_wait_guard_entry_overlap_nudge_not_generic_guardon_floor_loss() -> None
     )
 
     # The overlap nudge/floor-loss admission is tied to the current-frame Wait-callback entry
-    # marker. A steady GuardOn seed at the same edge must not inherit the DownStand/Wait source
-    # overlap gate.
+    # marker. A steady GuardOn seed at the same edge may still take ordinary grounded edge-snap
+    # position ownership, but it must not inherit the DownStand/Wait source floor-loss gate.
     assert int(out["action_id"][1]) != 251
-    np.testing.assert_allclose(float(out["pos_x"][1]), 63.31345748901367, atol=1e-6)
+    np.testing.assert_allclose(float(out["pos_x"][1]), 63.34754943847656, atol=1e-6)

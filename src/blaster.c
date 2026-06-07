@@ -960,16 +960,21 @@ void blaster_update_pre_physics(MslBatch* batch) {
               // generic Up/Neutral special dispatchers. This simulator runs special dispatch after
               // locomotion, so frame-start Walk/Wait rows may already have become Dash; keep Side-B
               // available below, but block Up-B/Neutral-B from the current Dash/RunBrake owner.
+              // Turn_IASA has the same split for Up/Neutral: it calls SpecialS and SpecialLw
+              // dispatchers, then attacks/catch, but never ftCo_800D6824. Keep Neutral/Up-B out of
+              // steady Turn while preserving Side-B here and Shine in shine_update_pre_physics().
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
-              if (a != (uint16_t)MSL_ACT_DASH && a != (uint16_t)MSL_ACT_RUN_BRAKE) {
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+              if (a != (uint16_t)MSL_ACT_DASH && a != (uint16_t)MSL_ACT_RUN_BRAKE &&
+                  a != (uint16_t)MSL_ACT_TURN) {
                 enter_specialhi_hold(batch, idx, ms, ch, on_ground);
               }
               break;
             case MSL_SPACIE_B_SPECIAL_NEUTRAL:
               if (lp != NULL) {
-                if (on_ground &&
-                    (a == (uint16_t)MSL_ACT_DASH || a == (uint16_t)MSL_ACT_RUN_BRAKE)) {
+                if (on_ground && (a == (uint16_t)MSL_ACT_DASH || a == (uint16_t)MSL_ACT_RUN_BRAKE ||
+                                  a == (uint16_t)MSL_ACT_TURN)) {
                   break;
                 }
                 if (!on_ground) {

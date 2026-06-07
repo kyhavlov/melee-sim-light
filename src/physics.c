@@ -936,6 +936,20 @@ static inline uint8_t physics_floor_line_contains_or_connects_to_nudged_x(
   return 0u;
 }
 
+static inline uint8_t physics_action_uses_generated_b2dc_edge_snap_callback(uint16_t action_id) {
+  if (msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_FT800827A0_EDGE_SNAP_COLL)) {
+    // Generated MSLMSO01 owner for grounded callbacks that route to `ft_800827A0`, directly or
+    // through wrappers such as `ft_80084104` / `ft_800841B8`. Common player nudge runs before
+    // Fighter_procUpdate and the Coll callback, so these actions may consume an outward x450 nudge
+    // through the source endpoint-snap path instead of dropping it at the current floor span.
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104,ft_800841B8}
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor}
+    // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 FT800827A0_EDGE_SNAP_COLL)
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t physics_action_uses_ft80084280_ottotto_edge_callback(uint16_t action_id) {
   if (msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR_COLL)) {
     return 1u;
@@ -1274,6 +1288,9 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
         }
         if (!physics_floor_line_contains_or_connects_to_nudged_x(
                 floor_graph, self_line, batch->state.pos_x[idx] + nudge_x) &&
+            !(physics_action_uses_generated_b2dc_edge_snap_callback(source_action) &&
+              physics_nudge_exits_floor_span(floor_graph, self_line, batch->state.pos_x[idx],
+                                             nudge_x)) &&
             !(physics_action_uses_ft80084280_ottotto_edge_callback(source_action) &&
               physics_nudge_reaches_facing_edge(floor_graph, self_line, batch->state.pos_x[idx],
                                                 nudge_x, batch->state.facing[idx])) &&
@@ -1386,7 +1403,9 @@ static inline void physics_compute_guardsetoff_turnover_player_nudge(
     const uint8_t guardsetoff_turnover_from_prev = physics_action_is_guardsetoff_turnover_owner(
         batch->state.action_id[idx], batch->state.prev_action_id[idx]);
     const uint8_t guardsetoff_turnover_from_promoted_seed_prev =
-        (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD &&
+        ((batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD ||
+          (batch->state.action_id[idx] == (uint16_t)MSL_ACT_KNEE_BEND &&
+           batch->state.action_frame[idx] <= 1)) &&
          batch->state.prev_action_id[idx] != (uint16_t)MSL_ACT_GUARD_SET_OFF)
             ? physics_action_is_guardsetoff_turnover_owner(batch->state.action_id[idx],
                                                            batch->state.seed_prev_action_id[idx])
@@ -1397,8 +1416,13 @@ static inline void physics_compute_guardsetoff_turnover_player_nudge(
     //   IASA can enter EscapeN through `ftCo_8009980C`.
     // - Preserve exactly that source-owned nudge; ordinary/stale EscapeN rows stay outside this
     //   helper.
+    // - The same callback phase can continue through Guard/Wait IASA into KneeBend after the
+    //   common overlap pass. The first replay-visible KneeBend row still carries
+    //   seed_prev_action_id=GuardSetOff, while the x450 nudge was owned before KneeBend's current
+    //   Phys/Coll callbacks.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     //   ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Enter
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_8009980C,ftCo_800998EC}
     // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
     const uint8_t guardsetoff_turnover_escape_n_from_guard =

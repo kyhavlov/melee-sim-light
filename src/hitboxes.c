@@ -409,6 +409,56 @@ static inline uint8_t hitboxes_motion_state_entry_preserves_hitcapsules(
   return 1u;
 }
 
+static inline uint8_t hitboxes_downed_entry_defers_frame0_hitbox_script(
+    const MslBatch* batch, size_t idx, uint16_t action_id, uint8_t motion_entered_this_frame) {
+  if (batch == NULL || motion_entered_this_frame == 0u) {
+    return 0u;
+  }
+  if (action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U || action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) {
+    switch (batch->state.prev_action_id[idx]) {
+      case (uint16_t)MSL_ACT_DAMAGE_FLY_HI:
+      case (uint16_t)MSL_ACT_DAMAGE_FLY_N:
+      case (uint16_t)MSL_ACT_DAMAGE_FLY_LW:
+      case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP:
+      case (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL:
+      case (uint16_t)MSL_ACT_DAMAGE_FALL:
+        // DamageFly/DamageFall floor contact enters DownBound from the collision callback via
+        // ftCo_80090184 -> ftCo_80097D40. That path changes motion state and initializes downed
+        // state, but does not immediately call ftAnim_8006EBA4 before the current combat pass.
+        // DownBound's frame-0 hitbox script is therefore owned by the next non-hitlag Anim
+        // callback, unlike explicit entry functions such as Shine that run ftAnim immediately
+        // after entry.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_80097D40,ftCo_DownBound_Anim}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        return 1u;
+      default:
+        return 0u;
+    }
+  }
+  if (action_id == (uint16_t)MSL_ACT_DOWN_STAND_U || action_id == (uint16_t)MSL_ACT_DOWN_STAND_D) {
+    switch (batch->state.prev_action_id[idx]) {
+      case (uint16_t)MSL_ACT_DOWN_BOUND_U:
+      case (uint16_t)MSL_ACT_DOWN_BOUND_D:
+      case (uint16_t)MSL_ACT_DOWN_WAIT_U:
+      case (uint16_t)MSL_ACT_DOWN_WAIT_D:
+        // DownBound/DownWait enters DownStand through ftCo_80098160, which only calls
+        // Fighter_ChangeMotionState(..., Ft_MF_None, ...) and does not immediately run
+        // ftAnim_8006EBA4. Keep frame-0 DownStand hitbox commands owned by the next Anim callback.
+        // Adjacent downed options that call ftAnim at entry, such as ftCo_80098324
+        // DownFoward/DownBack and ftCo_8009856C DownAttack, stay on the normal create path.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::{ftCo_800980BC,ftCo_80098160}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_DownBound_Anim,ftCo_DownWait_Anim,ftCo_DownWait_IASA}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098324
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_8009856C
+        return 1u;
+      default:
+        return 0u;
+    }
+  }
+  return 0u;
+}
+
 static inline uint8_t hitboxes_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
                                                          int attacker);
 
@@ -1770,6 +1820,10 @@ void hitboxes_refresh(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::{
         //   ftCo_LandingAir_EnterWithMsidLag,ftCo_LandingAir_Anim}
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        continue;
+      }
+      if (hitboxes_downed_entry_defers_frame0_hitbox_script(batch, idx, action_id,
+                                                            motion_entered_this_frame)) {
         continue;
       }
 

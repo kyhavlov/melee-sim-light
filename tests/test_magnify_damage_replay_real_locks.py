@@ -265,9 +265,49 @@ def test_magnify_rollout_ppa_damageflyn_horizontal_trajectory_starts_counter() -
 
 
 @pytest.mark.integration
-def test_magnify_rollout_dcc_damagefly_lw_top_visible_rows_do_not_start_episode() -> None:
+def test_magnify_rollout_mvp_damageflylw_horizontal_root_exit_starts_counter() -> None:
+    # MVP starts a magnifying-glass damage episode while DamageFlyLw's live root crosses the right
+    # camera bound. The x1910 counter then carries through SpecialHiHoldAir -> SpecialAirHi and
+    # reaches the 1% tick before the later SpecialHiFall hitstun boundary. The owner is the
+    # root-horizontal ifMagnify source bound, not the later SpecialHi action shape.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FC7C0,ifMagnify_802FC998}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    start = 1600
+    visible_record = 1614
+    tick_record = 1672
+    hit_record = 1718
+
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 89  # DamageFlyLw.
+    assert int(visible_seed["magnify_damage_counter_x1910"][p]) == 1
+    assert int(ds.samples[visible_record - 1]["seed_t"]["magnify_damage_counter_x1910"][p]) == 0
+    assert int(visible_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 0
+    assert int(visible_seed["state_flags"][p, 4]) & 0x80
+
+    tick_ref = ds.samples[tick_record]["ref_t1"]
+    tick_out = _run_rollout(ds, start, tick_record)
+    assert float(tick_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]), abs=1e-5)
+
+    hit_ref = ds.samples[hit_record]["ref_t1"]
+    hit_out = _run_rollout(ds, start, hit_record)
+    assert float(hit_out["percent"][p]) == pytest.approx(float(hit_ref["percent"][p]), abs=1e-5)
+    assert int(hit_out["hitstun"][p]) == int(hit_ref["hitstun"][p]) == 65
+
+
+@pytest.mark.integration
+def test_magnify_rollout_dcc_damagefly_top_visible_rows_do_not_start_episode() -> None:
     # DCC has source-visible DamageFlyTop rows with camera point outside but no ifMagnify damage
-    # tick. Fresh DamageFly starts are therefore limited to the Hi/N source-visible owner; Lw/Top/Roll
+    # tick. Fresh DamageFly starts are therefore limited to the Hi/N source-visible owner, the
+    # DamageFlyLw horizontal-root owner, and the DamageFlyRoll horizontal-root owner; DamageFlyTop
     # rows can only consume an already-seeded nonzero x1910 episode.
     # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
     # refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998

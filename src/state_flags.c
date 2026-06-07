@@ -308,7 +308,7 @@ static inline uint8_t state_flags_magnify_runtime_visibility_owner(const MslBatc
   // source-proven action/boundary families:
   // - DamageFlyHi/N: horizontal left/right root exits, or camera-target offscreen rows whose current
   //   horizontal knockback reaches a side camera bound within one x1910 damage interval,
-  // - DamageFlyRoll: horizontal left/right root exits only.
+  // - DamageFlyLw and DamageFlyRoll: horizontal left/right root exits only.
   // Top exits can publish x221F_b0 through ftLib_80086A8C while hidden ifMagnify/player gates keep
   // x1910 at zero, so vertical exits remain seed-owned until a fuller ifMagnify state model exists.
   // Nonzero seed episodes continue through timers.c using the ordinary live-fighter gate.
@@ -324,6 +324,9 @@ static inline uint8_t state_flags_magnify_runtime_visibility_owner(const MslBatc
     }
     return state_flags_magnify_camera_target_horizontal_trajectory_owner(batch, msl_common_params(),
                                                                          idx);
+  }
+  if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_LW) {
+    return state_flags_root_outside_stage_cam_horizontal_bounds(batch, idx);
   }
   if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
     return state_flags_root_outside_stage_cam_horizontal_bounds(batch, idx);

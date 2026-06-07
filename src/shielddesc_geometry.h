@@ -338,6 +338,24 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
        batch->state.hitbox_enable_edge[hb_i] && batch->state.hitbox_damage[hb_i] == 12.0f)
           ? 1u
           : 0u;
+  // Weak Fox AttackAirLw multihit vs no-submotion Guard ShieldDesc miss:
+  // - Fox DAir repeatedly recreates the authored 3/2-damage multihit pair on frames 5/8/11/...;
+  //   source `lbColl_80007BCC` checks the live ShieldDesc matrix against the new HitCapsule and
+  //   can miss even when the simulator's reduced enable-edge extent proxy overlaps.
+  // - Keep the generic enable-edge extent out of this weak multihit Guard boundary. Falco's
+  //   12-damage strong DAir owner and GuardOn/GuardReflect source-size lanes remain explicit above.
+  // data/moves/fox.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  const uint8_t attackairlw_weak_multihit_guard_enable_edge_extent_reject =
+      (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD &&
+       batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] == UINT32_MAX &&
+       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
+       batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_AIR_LW &&
+       batch->state.hitbox_enable_edge[hb_i] &&
+       (batch->state.hitbox_damage[hb_i] == 3.0f || batch->state.hitbox_damage[hb_i] == 2.0f))
+          ? 1u
+          : 0u;
   const uint8_t shield_seed_kind =
       batch->state.combat_shield_contact_hb_kind[msl_shielddesc_idx_hitbox_victim(bi, attacker,
                                                                                   hb_id, defender)];
@@ -442,6 +460,7 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
   const uint8_t shield_extent_lane_active =
       (shield_desc_envelope_ready && !guardreflect_final_x14_no_submotion &&
        (!guardon_already_shielding_no_submotion || guardon_raise_no_tilt_extent_lane) &&
+       !attackairlw_weak_multihit_guard_enable_edge_extent_reject &&
        (batch->state.hitbox_enable_edge[hb_i] || shield_extent_bridge_active ||
         guardon_raise_no_tilt_extent_lane || attackairlw_strong_no_submotion_guard_extent_lane ||
         attackairb_weak_tail_tilted_guard_extent_lane))
