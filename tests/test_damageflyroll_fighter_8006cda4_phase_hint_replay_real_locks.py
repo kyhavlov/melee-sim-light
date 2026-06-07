@@ -1704,6 +1704,173 @@ def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_pr
 
 
 @pytest.mark.integration
+def test_frozenps_top_blast_replay_frame_rng_selects_deadupfall_4665() -> None:
+    # Top-blast replay-frame RNG owner:
+    # Game_20260515T182447_frozenps:4665 crosses the top blast line from DamageFlyTop with
+    # aligned deterministic pre-gate state. Source `ftCo_800D3158` then samples
+    # `HSD_Randi(100)+1`; under replay playback the current row's Slippi frame-start seed is the
+    # authoritative stream input, so rollout must consume site 23 and choose DeadUpFall.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "Game_20260515T182447_frozenps.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    trace_path = root / "reports/triage/frozenps_top_blast_deadupfall_rng.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=4541,
+        window_records=(4665,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, _site1_count = rows[4665]
+    assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0]) == 6
+    assert _trace_site_count(trace_path, start_record=4541, record=4665, site_id=23) == 1
+
+
+@pytest.mark.integration
+def test_frozenps_top_blast_plain_step_does_not_pull_replay_frame_rng_4665() -> None:
+    # Negative boundary: ordinary step_input / RL-style stepping must not pull the replay row's
+    # frame-start RNG as hidden future state. Without `step_input_replay_frame_rng`, the top-blast
+    # site remains seed/internal-stream owned and this direct rollout step stays on DeadUpStar.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "Game_20260515T182447_frozenps.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[4665:4666]
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out_row = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+    ref_row = row["ref_t1"][0]
+    assert int(ref_row["action_id"][0]) == 6
+    assert int(out_row["action_id"][0]) == 4
+
+
+@pytest.mark.integration
+def test_top_blast_replay_frame_rng_rejects_later_player_without_prefix_owner_qgd_6480() -> None:
+    # Player-order prefix control:
+    # QGD:6480 has p1 in a top-blast DamageFlyTop source row whose raw frame-start seed would choose
+    # DeadUpFall. The source callback reaches p1 after p0's same-frame fighter callback
+    # opportunities, so replay validation must not admit the raw p1 top-blast RNG site until those
+    # earlier-player prefix owners are explicitly modeled. This keeps the source outcome DeadUpStar
+    # rather than fitting a broad current-row top-blast predicate.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 6480
+    trace_path = root / "reports/triage/qgd_top_blast_later_player_prefix_negative.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, _site1_count = rows[record]
+    assert int(ref_row["action_id"][1]) == 4
+    assert int(out_row["action_id"][1]) == 4
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=23) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "top_player", "note"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            2653,
+            0,
+            "other-player Wait getAnimID prefix",
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            7810,
+            0,
+            "other-player Fighter_8006CDA4 prefix lane",
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            10272,
+            0,
+            "other-player attack-script/combat RNG prefix",
+        ),
+    ],
+)
+def test_top_blast_replay_frame_rng_rejects_known_pre_matchflow_prefixes(
+    dataset_rel: str, record: int, top_player: int, note: str
+) -> None:
+    # Prefix controls for p0 top-blast rows:
+    # These rows have raw frame-start seeds that would choose DeadUpFall, but the other fighter owns
+    # a same-frame RNG prefix before match-flow reaches ftCo_800D3158. Runtime must reject site 23
+    # until that prefix is modeled, leaving the source DeadUpStar outcome intact.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+    # refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078538,ftColl_8007699C}
+    del note
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    trace_path = root / f"reports/triage/top_blast_prefix_negative_{record}.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, _site1_count = rows[record]
+    assert int(ref_row["action_id"][top_player]) == 4
+    assert int(out_row["action_id"][top_player]) == 4
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=23) == 0
+
+
+@pytest.mark.integration
 def test_specialairhi_damageflyroll_gate_uses_live_rollout_rng_stream_his_1598() -> None:
     # HIS rollout lock for ftCo_8008DCE0's generic severe-airborne DamageFlyRoll gate:
     # p1 is still in SpecialAirHi when p0's AttackAirB hits. SpecialAirHi is not excluded by

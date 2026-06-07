@@ -64,6 +64,10 @@ struct MslBatch {
   // frame_pre_random_seed before this step. This disables old synthetic replay-clock advancement
   // while preserving source-site admission through rollout_clock_rng_owned.
   uint8_t* replay_frame_rng_applied;  // [batch]
+  // Runtime-only replay playback source-site marker: the current replay row is in the
+  // ftCo_800D3158 top-blast gate pre-state, so site 23 may consume the just-installed
+  // frame_pre_random_seed. This is intentionally narrower than replay_frame_rng_applied.
+  uint8_t* replay_frame_top_blast_rng_owned;  // [batch]
   // Replay validation rollout reseed mode. This stays true for `reseed_seed_rollout` even when the
   // RNG owner itself stays seed-owned; runtime uses it to advance frame-indexed stage/object owners
   // such as Randall without advancing frame_pre_random_seed.

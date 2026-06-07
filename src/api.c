@@ -655,6 +655,13 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
   memset(batch->replay_frame_rng_applied, 0, (size_t)batch_size * sizeof(uint8_t));
+  batch->replay_frame_top_blast_rng_owned =
+      (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
+  if (batch->replay_frame_top_blast_rng_owned == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->replay_frame_top_blast_rng_owned, 0, (size_t)batch_size * sizeof(uint8_t));
   batch->replay_rollout_reseeded = (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
   if (batch->replay_rollout_reseeded == NULL) {
     msl_batch_destroy(batch);
@@ -855,6 +862,7 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch->replay_rollout_seed_frame_id);
   alloc_free(batch->replay_rollout_reseeded);
   alloc_free(batch->replay_frame_rng_applied);
+  alloc_free(batch->replay_frame_top_blast_rng_owned);
   alloc_free(batch->rollout_yoshi_shyguy_spawn_rng_installed);
   alloc_free(batch->rollout_clock_rng_owned);
   alloc_free(batch->match_init_seed_scratch);
@@ -892,6 +900,7 @@ static void msl_batch_copy_runtime_lane(MslBatch* dst, const MslBatch* src, int3
   MSL_BATCH_COPY_FIELD(rollout_clock_rng_owned, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(rollout_yoshi_shyguy_spawn_rng_installed, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_frame_rng_applied, uint8_t, 1u);
+  MSL_BATCH_COPY_FIELD(replay_frame_top_blast_rng_owned, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_rollout_reseeded, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_rollout_seed_frame_id, int32_t, 1u);
   MSL_BATCH_COPY_FIELD(camera_mode, uint8_t, 1u);
@@ -1199,6 +1208,105 @@ static inline uint8_t msl_seed_has_fod_platform_scheduler_rng_owner(const MslSee
   return 0u;
 }
 
+static inline uint8_t msl_seed_has_pre_matchflow_rng_prefix(const MslSeed* seed, int active_players,
+                                                            int top_blast_player);
+
+static inline uint8_t msl_seed_has_top_blast_deadupfall_rng_owner(const MslSeed* seed,
+                                                                  int active_players) {
+  if (seed == NULL) {
+    return 0u;
+  }
+  MslStageBounds blast_bounds = {0};
+  if (stage_collision_get_blast_bounds_world(seed->stage_id, &blast_bounds) == 0u) {
+    return 0u;
+  }
+  const MslCommonParams* common = msl_common_params();
+  if (common == NULL) {
+    return 0u;
+  }
+  const float top_kb_threshold = common->dead_up_kb_vel_threshold;
+  for (int p = 0; p < active_players; p++) {
+    if (seed->action_id[p] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
+        (seed->on_ground[p] == 0u && seed->speed_y_attack[p] <= top_kb_threshold)) {
+      continue;
+    }
+    if (p != 0) {
+      // Fighter callbacks run in player order. Later-player top-blast rows may have same-frame
+      // HSD consumers from earlier fighters before ftCo_800D3158 reaches this player. Until that
+      // prefix ledger is modeled, only player 0 owns the raw replay frame-start seed at site 23.
+      // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+      // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+      continue;
+    }
+    if (msl_seed_has_pre_matchflow_rng_prefix(seed, active_players, p) != 0u) {
+      continue;
+    }
+    // Replay rows are frame-start state. ftCo_800D3158 runs after the frame's DamageFlyTop
+    // movement has published the live position, so the current replay row owns site 23 when the
+    // row is already above the blast line or its visible DamageFlyTop velocities deterministically
+    // cross it this step.
+    // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFlyTop_Phys
+    const float predicted_y = seed->pos_y[p] + seed->speed_y_attack[p] + seed->speed_y_self[p];
+    if (seed->pos_y[p] > blast_bounds.top || predicted_y > blast_bounds.top) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static inline uint8_t msl_seed_has_pre_matchflow_rng_prefix(const MslSeed* seed, int active_players,
+                                                            int top_blast_player) {
+  if (seed == NULL) {
+    return 1u;
+  }
+  for (int p = 0; p < active_players; p++) {
+    if (p == top_blast_player) {
+      continue;
+    }
+    if (seed->action_id[p] == (uint16_t)MSL_ACT_WAIT) {
+      // ftWaitAnim can consume HSD_Randi(100)+1 during the fighter anim callback before
+      // match-flow reaches ftCo_800D3158. Reject raw top-blast seed ownership until the exact
+      // same-frame Wait prefix has been modeled for this row.
+      // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}
+      return 1u;
+    }
+    if (seed->fighter_8006cda4_pre_gate_consume_count[p] != 0u) {
+      // Explicit seed lane for Fighter_8006CDA4's HSD_Randi pre-gate consumers.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+      return 1u;
+    }
+    const uint16_t action = seed->action_id[p];
+    if ((action >= (uint16_t)MSL_ACT_ATTACK_11 && action <= (uint16_t)MSL_ACT_ATTACK_LW4) ||
+        (action >= (uint16_t)MSL_ACT_ATTACK_AIR_N && action <= (uint16_t)MSL_ACT_ATTACK_AIR_LW)) {
+      // Attack command scripts and collision callbacks run before match-flow and include known HSD
+      // prefix families: pseudo-random SFX commands, ftColl damage-effect rolls, electric clank
+      // SFX, and Fighter_8006CDA4. Do not let a later top-blast death consume the raw frame seed
+      // until those source prefixes are explicitly modeled for this row.
+      // data/scripts/{fox,falco}.bin (MSLFTSC1 attack command timelines)
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078538,ftColl_8007699C}
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+      return 1u;
+    }
+    if (seed->animation_index[p] <= 0xFFFFu && seed->action_frame[p] >= 0) {
+      uint8_t random_ranges[1] = {0};
+      const uint8_t pulse_n = move_tables_special_pseudo_random_sfx_ranges_crossed(
+          seed->char_id[p], (uint16_t)seed->animation_index[p], (float)seed->action_frame[p],
+          (float)(seed->action_frame[p] + 1), random_ranges, 1u);
+      if (pulse_n != 0u && random_ranges[0] != 0u) {
+        // Command opcode 38 (`ftAction_80071FC8`) consumes HSD_Randi(random_range) on the
+        // extracted script timeline before match-flow. The top-blast site must wait for a modeled
+        // prefix rather than consuming the raw replay frame seed.
+        // data/scripts/{fox,falco}.bin (MSLFTSC1 pseudo_random_sfx events)
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
+        return 1u;
+      }
+    }
+  }
+  return 0u;
+}
+
 static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const MslSeed* seed,
                                                                        int active_players) {
   if (seed == NULL) {
@@ -1303,24 +1411,16 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
       return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
   }
-  MslStageBounds blast_bounds = {0};
-  const uint8_t have_blast_bounds =
-      stage_collision_get_blast_bounds_world(seed->stage_id, &blast_bounds);
-  const MslCommonParams* common_params = msl_common_params();
-  const float top_kb_threshold =
-      common_params != NULL ? common_params->dead_up_kb_vel_threshold : 0.0f;
+  if (msl_seed_has_top_blast_deadupfall_rng_owner(seed, active_players) != 0u) {
+    // Replay rollout clock ownership for the top-blast DeadUpFall selection:
+    // ftCo_800D3158 consumes HSD_Randi(100)+1 from the frame-start HSD stream after any modeled
+    // same-frame prefix consumers. This admits the causal stream without deriving an offset from
+    // the future DeadUpStar/DeadUpFall label.
+    // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+    // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
+  }
   for (int victim = 0; victim < active_players; victim++) {
-    if (seed->action_id[victim] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP && have_blast_bounds != 0u &&
-        seed->pos_y[victim] > blast_bounds.top &&
-        (seed->on_ground[victim] != 0u || seed->speed_y_attack[victim] > top_kb_threshold)) {
-      // Replay rollout clock ownership for the top-blast DeadUpFall selection:
-      // ftCo_800D3158 consumes HSD_Randi(100)+1 from the frame-start HSD stream after any modeled
-      // same-frame prefix consumers. This admits the causal stream without deriving an offset from
-      // the future DeadUpStar/DeadUpFall label.
-      // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
-      // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
-      return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
-    }
     const int attacker = msl_damage_source_seed_local_slot_from_port0(seed, active_players,
                                                                       seed->last_hit_by[victim]);
     if (seed->fighter_8006cda4_pre_gate_consume_count[victim] >= 1u &&
@@ -3533,6 +3633,10 @@ int msl_batch_apply_replay_frame_rng(MslBatch* batch, const uint8_t* seed_bytes,
     if (batch->replay_frame_rng_applied != NULL) {
       batch->replay_frame_rng_applied[bi] = 1u;
     }
+    if (batch->replay_frame_top_blast_rng_owned != NULL) {
+      batch->replay_frame_top_blast_rng_owned[bi] =
+          msl_seed_has_top_blast_deadupfall_rng_owner(seed, (int)batch->config.num_players);
+    }
   }
   return 0;
 }
@@ -3580,6 +3684,9 @@ static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
                                                                                                : 0u;
     if (batch->replay_frame_rng_applied != NULL) {
       batch->replay_frame_rng_applied[bi] = 0u;
+    }
+    if (batch->replay_frame_top_blast_rng_owned != NULL) {
+      batch->replay_frame_top_blast_rng_owned[bi] = 0u;
     }
     if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_NONE) {
       continue;

@@ -9,6 +9,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 STAGE_FD = 32
 CHAR_FOX = 1
 ACT_WAIT = 14
+ACT_DASH = 20
 ACT_DAMAGE_FLY_TOP = 90
 ACT_DEAD_UP_STAR = 4
 ACT_DEAD_UP_FALL = 6
@@ -43,6 +44,7 @@ def _step_once(
     seed: np.ndarray,
     *,
     replay_rollout: bool = False,
+    replay_frame_rng_step: bool = False,
     hsd_rng_owned: bool = False,
     camera_mode: int = CAMERA_MODE_GAME,
 ) -> np.void:
@@ -78,7 +80,10 @@ def _step_once(
             # replay outcome lane.
             # refs/melee/src/melee/cm/camera.c::Camera_8003010C
             msl_binding.debug_set_camera_mode(handle, 0, int(camera_mode))
-        msl_binding.step_input(handle, prev_inp, inp)
+        if replay_frame_rng_step:
+            msl_binding.step_input_replay_frame_rng(handle, seed_bytes, prev_inp, inp)
+        else:
+            msl_binding.step_input(handle, prev_inp, inp)
         msl_binding.write_compare(handle, out)
         return out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
     finally:
@@ -133,9 +138,10 @@ def test_replay_reseeded_top_blast_keeps_deadupstar_without_rng_offset_lane() ->
 
 
 def test_replay_rollout_top_blast_consumes_causal_frame_seed_without_future_label() -> None:
-    # Replay rollout owns the frame-start RNG seed and modeled prefix consumers only. With no prefix
-    # consumers in this synthetic row, seed 0 causally produces HSD_Randi(100)+1 == 1 and enters
-    # DeadUpFall. This is not an offset search and does not inspect ref_t1.action_id.
+    # Replay playback owns the current row's frame-start RNG seed and modeled prefix consumers only
+    # through the combined replay-frame RNG step API. With no prefix consumers in this synthetic
+    # row, seed 0 causally produces HSD_Randi(100)+1 == 1 and enters DeadUpFall. This is not an
+    # offset search and does not inspect ref_t1.action_id.
     # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
     # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
     seed = _seed_base()
@@ -144,8 +150,9 @@ def test_replay_rollout_top_blast_consumes_causal_frame_seed_without_future_labe
     seed["animation_index"][0, 0] = np.uint32(SM_DAMAGE_FALL)
     seed["pos_y"][0, 0] = np.float32(190.0)
     seed["speed_y_attack"][0, 0] = np.float32(3.0)
+    seed["action_id"][0, 1] = np.uint16(ACT_DASH)
 
-    out = _step_once(seed, replay_rollout=True)
+    out = _step_once(seed, replay_rollout=True, replay_frame_rng_step=True)
     assert int(out["action_id"][0]) == ACT_DEAD_UP_FALL
     assert int(out["stocks"][0]) == 4
 

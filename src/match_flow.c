@@ -663,25 +663,25 @@ static inline uint8_t top_blast_selects_dead_up_fall(MslBatch* batch, int bi, si
   }
   (void)idx;
   // ftCo_800D3158 consumes the global HSD RNG stream at the live top-blast callback. Match-init
-  // rollouts own the continuous HSD stream; replay rollouts own the Slippi frame-start seed and any
-  // prefix consumers this sim has modeled before match_flow_update_post_physics reaches this branch.
-  // Do not phase this draw from future DeadUpStar/DeadUpFall labels.
+  // rollouts own the continuous HSD stream. Replay playback/validation owns the current Slippi
+  // frame-start seed only when the current replay row is itself in the source top-blast pre-state;
+  // a generic replay-frame RNG install is not enough proof. Do not phase this draw from future
+  // DeadUpStar/DeadUpFall labels.
   // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
   // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
   // refs/melee/src/melee/cm/camera.c::Camera_8003010C
   if (batch->rollout_clock_rng_owned == NULL) {
     return 0u;
   }
+  const uint8_t replay_frame_top_blast_rng_owned =
+      (batch->replay_frame_top_blast_rng_owned != NULL &&
+       batch->replay_frame_top_blast_rng_owned[bi] != 0u)
+          ? 1u
+          : 0u;
   const uint8_t rng_owner = batch->rollout_clock_rng_owned[bi];
   if (rng_owner != (uint8_t)MSL_ROLLOUT_CLOCK_HSD_RAND_STREAM &&
-      rng_owner != (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+      replay_frame_top_blast_rng_owned == 0u) {
     return 0u;
-  }
-  if (rng_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
-    if (batch->replay_rollout_seed_frame_id == NULL ||
-        batch->state.frame_id[bi] != batch->replay_rollout_seed_frame_id[bi]) {
-      return 0u;
-    }
   }
   const int32_t roll =
       combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_DEAD_UP_FALL_SELECT, 100) + 1;

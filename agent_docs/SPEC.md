@@ -2196,14 +2196,20 @@ Match-flow closure notes:
   has started. Source: `refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim`.
 - DeadUpFall top-blast selection uses `p_ftCommonData->x520` as the percent threshold after
   `HSD_Randi(100)+1`. Runtime consumes that source RNG site in `ftCo_800D3158` when the batch owns
-  the modeled HSD RNG stream (`init_match` / simulator-owned rollouts). Replay rollout may also
-  consume it on the immediate reseed frame, where Slippi's frame-start seed and the sim's modeled
-  same-frame prefix consumers are available; later replay-rollout frames do not use the validation
-  replay clock as an HSD-stream substitute. The live `Camera_8003010C()` predicate is modeled as
-  per-batch camera mode (`0 = normal`, `1 = CAMERA_FREE`); CAMERA_FREE forces DeadUpStar after the
-  source RNG draw. Replay one-step seeds expose the frame-start random seed but not all same-frame
-  prefix consumers or live camera mode, so replay-future DeadUpStar/DeadUpFall labels must not
-  choose or phase this RNG draw. No camera-bounds proxy is retained.
+  the modeled HSD RNG stream (`init_match` / simulator-owned rollouts). Replay playback validation
+  also consumes the site from the current row's Slippi frame-start seed, but only when
+  `step_input_replay_frame_rng` installs replay RNG for a current replay row that is already
+  source-owned by `DamageFlyTop` top-blast state: above the extracted blast line, or visibly
+  crossing it this step under the row's DamageFlyTop velocities. This direct raw-seed admission is
+  currently bounded to player 0 with no other known same-frame pre-match-flow RNG prefix. Rejected
+  prefixes include other-player Wait `getAnimID`, explicit `Fighter_8006CDA4` seed lanes,
+  MSLFTSC1 pseudo-random SFX pulses, and other-player attack scripts/collision callbacks that can
+  own damage-effect, clank-SFX, or `Fighter_8006CDA4` prefixes before match-flow. Later-player
+  top-blast rows require an explicit earlier-player prefix ledger before site 23 can consume the raw
+  frame-start seed. Plain `step_input` / RL-style stepping does not pull future replay RNG. The live
+  `Camera_8003010C()` predicate is modeled as per-batch camera mode (`0 = normal`, `1 =
+  CAMERA_FREE`); CAMERA_FREE forces DeadUpStar after the source RNG draw. No camera-bounds proxy or
+  future DeadUpStar/DeadUpFall label phasing is retained.
 - DeadUpFall/HitCamera phase timing is source-owned by the following ftCommonData fields. The sim
   derives the existing `match_flow_timer` lane causally from action-prefix history for DeadUpFall
   actions `6/7/8/9/10`, uses `x524/x528` for the DeadUpFall -> HitCamera countdown, and uses
@@ -6672,11 +6678,18 @@ BODY collision-space residual split and rejected seed bridge:
   `ftCo_DeadUpFall_Anim` case that calls `ftCo_800D34E0` for stock loss. MSL uses the shared
   DeadUpFall phase countdown from `data/common/ft_common_data.json` so the post-frame that first
   loses stock also carries x221F_b1; the preceding phase-3 hold stays clear.
-- Top-blast DeadUpFall vs DeadUpStar selection remains exact RNG-stream-phase debt. The source gate
-  is `ftCo_800D3158` using `HSD_Randi(100)+1` and `Camera_8003010C`; deterministic pre-gate
-  top-blast DamageFlyTop state is modeled, but replay-exact HSD RNG phase is outside RL 1.0
-  rollout closure. Reviewed residual rows are kept in `replays/validation_exceptions.json` as
-  report-level approved exceptions, not simulator behavior.
+- Top-blast DeadUpFall vs DeadUpStar selection: `ftCo_800D3158` consumes `HSD_Randi(100)+1` at
+  site `23` after the live top-blast `DamageFlyTop` callback reaches the extracted blast line, then
+  applies `p_ftCommonData->x520` and `Camera_8003010C`. Replay playback validation may use the
+  current row's Slippi frame-start seed only when the replay row itself owns that source pre-state:
+  frame-start `DamageFlyTop` is already above the line or its visible DamageFlyTop velocities cross
+  it during the same step. Direct raw-seed admission is bounded to player 0 because later players
+  can have same-frame HSD prefix consumers from earlier fighter callbacks before reaching
+  `ftCo_800D3158`; those later-player rows remain rejected until the prefix owners are modeled. Even
+  player-0 rows reject when another fighter has a known pre-match-flow RNG prefix family in the same
+  row: Wait `getAnimID`, explicit `Fighter_8006CDA4`, MSLFTSC1 pseudo-random SFX, or attack-script /
+  combat RNG. This is a bounded source-site owner, not a generic replay-seed bridge or future
+  DeadUpStar/DeadUpFall label phase.
 - RNG site ledger (runtime site ids are from `src/batch_internal.h`):
   - DamageFlyRoll gate: `ftCo_8008DCE0` severe airborne damage, after pre-gate consumers; site `1`
     (`MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE`); runtime supported for the current subset. QGD affected.
@@ -6700,8 +6713,10 @@ BODY collision-space residual split and rejected seed bridge:
   - JumpAerial/AttackAirB carry consume: current `ProcessHit`/DmgLog source before the
     DamageFlyRoll gate; site `8`; runtime now uses the current hit source rather than stale
     victim `last_hit_by`. QGD affected at records 5747 and 7715.
-  - Top-blast selection: `ftCo_800D3158` `HSD_Randi(100)+1`; site `23`; runtime site exists, but
-    full replay stream phase remains residual. QGD not currently affected.
+  - Top-blast selection: `ftCo_800D3158` `HSD_Randi(100)+1`; site `23`; runtime consumes the site
+    from the modeled HSD stream in free-running sim and from the current Slippi frame-start seed in
+    replay playback validation when `step_input_replay_frame_rng` installs that seed. Plain
+    `step_input` does not pull replay RNG. QGD not currently affected.
   - Yoshi Shy Guy scheduler/spawn: Yoshi stage item scheduler `HSD_Randi` calls; sites `9..16`;
     runtime site ids exist for replay-clock accounting. QGD not affected on FD.
   - FoD platform scheduler: Fountain platform random scheduler; sites `17..22`; runtime site ids
