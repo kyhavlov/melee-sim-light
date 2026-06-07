@@ -40,6 +40,36 @@
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
+enum {
+  MSL_DEADUPSTAR_STARTUP_EFFECT_PREFIX_MAX_ACTION_FRAME = 8,
+};
+
+static inline uint8_t locomotion_deadupstar_startup_effect_rng_active(const MslBatch* batch,
+                                                                      const MslCommonParams* c,
+                                                                      size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_DEAD_UP_STAR) {
+    return 0u;
+  }
+  if (batch->state.match_flow_timer[idx] <= (uint8_t)c->dead_up_star_phase2_frames) {
+    return 0u;
+  }
+  // DeadUpStar entry/early Anim owns a short-lived async visual generator before fighter Wait_Anim
+  // can sample getAnimID. Source spawns effect kind 0x42D -> generator 0x121 from
+  // ftCo_DeadUpStar_Anim; the generator bytecode/data is not extracted yet, so runtime admits only
+  // the bounded startup window observed while that generator is source-live. Stale later phase-1
+  // rows must not carry this prefix.
+  // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_800D40B8,ftCo_DeadUpStar_Anim}
+  // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
+  // refs/melee/src/melee/ef/eflib.c::efLib_CreateGenerator case 0x121
+  // refs/melee/src/sysdolphin/baselib/particle.c
+  return batch->state.action_frame[idx] <= MSL_DEADUPSTAR_STARTUP_EFFECT_PREFIX_MAX_ACTION_FRAME
+             ? 1u
+             : 0u;
+}
+
 static inline void locomotion_consume_deadupstar_effect_prefix_before_wait(MslBatch* batch, int bi,
                                                                            int player) {
   if (batch == NULL || bi < 0 || player < 0 || player > (int)MSL_MAX_PLAYERS) {
@@ -56,15 +86,12 @@ static inline void locomotion_consume_deadupstar_effect_prefix_before_wait(MslBa
         continue;
       }
       const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_DEAD_UP_STAR) {
+      if (!locomotion_deadupstar_startup_effect_rng_active(batch, c, idx)) {
         continue;
       }
-      if (batch->state.match_flow_timer[idx] <= (uint8_t)c->dead_up_star_phase2_frames) {
-        continue;
-      }
-      // Active DeadUpStar phase-1 owns a live async generator before fighter Wait_Anim can sample
+      // Active DeadUpStar startup owns a live async generator before fighter Wait_Anim can sample
       // getAnimID's HSD_Randi(100). This is separate from the same-frame creation prefix below:
-      // phase-1 rows carry `match_flow_timer > dead_up_star_phase2_frames`.
+      // only early phase-1 rows carry the startup generator prefix.
       // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
       // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
       // refs/melee/src/sysdolphin/baselib/particle.c
@@ -4817,13 +4844,30 @@ void locomotion_update_pre(MslBatch* batch) {
         // - Landing_IASA runs the same grounded interrupt subset after the landing-lag gate.
         // - Squat_IASA checks ftCo_Catch_CheckInput before ftCo_80091A4C, but SquatWait/SquatRv do
         //   not.
+        // - Turn_IASA temporarily exposes mv.co.turn.facing_after before Catch_CheckInput when the
+        //   visible turn has not completed; if Catch enters, Fighter_ChangeMotionState keeps that
+        //   facing for the new Catch motion.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
-        if ((action_id == MSL_ACT_WAIT || action_is_walk(action_id) || action_id == MSL_ACT_TURN ||
-             action_id == MSL_ACT_SQUAT ||
+        if (action_id == MSL_ACT_TURN && action_id_start == MSL_ACT_TURN) {
+          uint8_t turn_catch_facing_flipped = 0u;
+          if (!batch->state.turn_has_turned[idx]) {
+            batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
+            facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+            turn_catch_facing_flipped = 1u;
+          }
+          if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+            continue;
+          }
+          if (turn_catch_facing_flipped) {
+            batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
+            facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+          }
+        }
+        if ((action_id == MSL_ACT_WAIT || action_is_walk(action_id) || action_id == MSL_ACT_SQUAT ||
              (action_id == MSL_ACT_LANDING &&
               batch->state.anim_frame_f32[idx] >= (float)ch->landing_lag_frames)) &&
             grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {

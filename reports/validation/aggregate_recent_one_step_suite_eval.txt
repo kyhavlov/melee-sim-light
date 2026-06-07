@@ -85,25 +85,25 @@ overall.float_norm_mae_p95: 0.00003741
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl ==
 Records: 10174  Players/scored per record: 2  Total player-frames: 20348
-mismatch.action_id: 4 / 20348 (0.000197)
-mismatch.action_frame: 2 / 20348 (0.000098)
-mismatch.on_ground: 1 / 20348 (0.000049)
-mismatch.facing: 2 / 20348 (0.000098)
+mismatch.action_id: 0 / 20348 (0.000000)
+mismatch.action_frame: 0 / 20348 (0.000000)
+mismatch.on_ground: 0 / 20348 (0.000000)
+mismatch.facing: 0 / 20348 (0.000000)
 mismatch.stocks: 0 / 20348 (0.000000)
-mismatch.jumps_left: 1 / 20348 (0.000049)
+mismatch.jumps_left: 0 / 20348 (0.000000)
 mismatch.is_dead: 0 / 20348 (0.000000)
-mismatch.hitlag: 3 / 20348 (0.000147)
-mismatch.hitstun: 1 / 20348 (0.000049)
+mismatch.hitlag: 0 / 20348 (0.000000)
+mismatch.hitstun: 0 / 20348 (0.000000)
 mismatch.l_cancel: 0 / 20348 (0.000000)
 mismatch.hurtbox_state: 5 / 20348 (0.000246)
 mismatch.ground_id: 0 / 20348 (0.000000)
-mismatch.animation_index: 4 / 20348 (0.000197)
-mismatch.instance_hit_by: 1 / 20348 (0.000049)
-mismatch.instance_id: 3 / 20348 (0.000147)
-mismatch.last_attack_landed: 1 / 20348 (0.000049)
-mismatch.combo_count: 1 / 20348 (0.000049)
+mismatch.animation_index: 0 / 20348 (0.000000)
+mismatch.instance_hit_by: 0 / 20348 (0.000000)
+mismatch.instance_id: 1 / 20348 (0.000049)
+mismatch.last_attack_landed: 0 / 20348 (0.000000)
+mismatch.combo_count: 0 / 20348 (0.000000)
 mismatch.last_hit_by: 8 / 20348 (0.000393)
-mismatch.state_flags: 9 / 101740 (0.000088)
+mismatch.state_flags: 5 / 101740 (0.000049)
 mismatch.item_exists: 0 / 152610 (0.000000)
 mismatch.item_type: 0 / 152610 (0.000000)
 mismatch.item_state: 0 / 152610 (0.000000)
@@ -111,22 +111,22 @@ mismatch.item_owner: 0 / 152610 (0.000000)
 mismatch.item_instance_id: 0 / 152610 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 25 / 20348 (0.001229)
 err.pos_x: mae=0.000404 p95=0.000000 max=0.494659
-err.pos_y: mae=0.000617 p95=0.000000 max=4.176683
-err.speed_air_x_self: mae=0.000012 p95=0.000000 max=0.240000
-err.speed_ground_x_self: mae=0.000121 p95=0.000000 max=2.404796
-err.speed_y_self: mae=0.000541 p95=0.000000 max=2.940000
-err.speed_x_attack: mae=0.000073 p95=0.000000 max=1.493569
-err.speed_y_attack: mae=0.000360 p95=0.000000 max=7.323956
-err.percent: mae=0.000898 p95=0.000000 max=18.000000
+err.pos_y: mae=0.000412 p95=0.000000 max=2.940002
+err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000168
+err.speed_ground_x_self: mae=0.000003 p95=0.000000 max=0.054000
+err.speed_y_self: mae=0.000403 p95=0.000000 max=2.940000
+err.speed_x_attack: mae=0.000000 p95=0.000000 max=0.000001
+err.speed_y_attack: mae=0.000000 p95=0.000000 max=0.000001
+err.percent: mae=0.000013 p95=0.000000 max=0.269997
 err.shield_hp: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_x: mae=0.007725 p95=0.000000 max=3.789993
 err.item_pos_y: mae=0.000002 p95=0.000000 max=0.000114
 err.item_vel_x: mae=0.000005 p95=0.000000 max=0.000234
 err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000060
-overall.discrete_mismatch: 46 / 1231054
-overall.strict_discrete_mismatch: 71 / 1231054
+overall.discrete_mismatch: 19 / 1231054
+overall.strict_discrete_mismatch: 44 / 1231054
 overall.ignored_discrete_mismatch: 25
-overall.float_norm_mae_p95: 0.00004740
+overall.float_norm_mae_p95: 0.00001427
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl ==
 Records: 9856  Players/scored per record: 2  Total player-frames: 19712
@@ -650,7 +650,7 @@ mismatch.item_state: 1 / 113145 (0.000009)
 mismatch.item_owner: 1 / 113145 (0.000009)
 mismatch.item_instance_id: 1 / 113145 (0.000009)
 ignored_mismatch.state_flags[4]&0x80: 23 / 15086 (0.001525)
-err.pos_x: mae=0.000508 p95=0.000000 max=0.307808
+err.pos_x: mae=0.000506 p95=0.000000 max=0.307808
 err.pos_y: mae=0.000206 p95=0.000000 max=2.940002
 err.speed_air_x_self: mae=0.000006 p95=0.000000 max=0.080000
 err.speed_ground_x_self: mae=0.000012 p95=0.000000 max=0.080000
@@ -1479,7 +1479,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00050131
 
 == suite summary ==
-overall.discrete_mismatch: 1865 / 35294369
-overall.strict_discrete_mismatch: 3365 / 35294369
+overall.discrete_mismatch: 1838 / 35294369
+overall.strict_discrete_mismatch: 3338 / 35294369
 overall.ignored_discrete_mismatch: 1500
-overall.float_norm_mae_p95: 0.00031714
+overall.float_norm_mae_p95: 0.00031604

@@ -186,8 +186,8 @@ def test_magnify_rollout_mgs_damagefly_hi_n_source_visible_episode_ticks() -> No
     # - DamageFlyN -> SpecialAirNLoop reaches the 60th offscreen frame at rec2919.
     # - DamageFlyHi -> SpecialLwEnd/AttackAirN reaches the later hit with the +1 percent already
     #   applied, which is the rec5687 hitstun boundary.
-    # DamageFly fresh starts require the source-visible x221F_b0 bit and the point-only
-    # Camera_80030CD8 lane; this is not an action/row proxy.
+    # DamageFly fresh starts require the source-visible x221F_b0 bit and a horizontal root exit
+    # through the point-only Camera_80030CD8 lane; this is not an action/row proxy.
     # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
     # refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
     # refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030CFC}
@@ -225,6 +225,46 @@ def test_magnify_rollout_mgs_damagefly_hi_n_source_visible_episode_ticks() -> No
 
 
 @pytest.mark.integration
+def test_magnify_rollout_ppa_damageflyn_horizontal_trajectory_starts_counter() -> None:
+    # PPA starts a DamageFlyN magnify episode when the camera target leaves the camera while the
+    # current horizontal knockback trajectory is already carrying the fighter toward the right
+    # camera bound. Root x is still inside on the first offscreen-camera-target row, so this guards
+    # against reducing ifMagnify ownership to root-only bounds. The later SpecialAirHi hitstun
+    # boundary proves the +1 percent tick was applied before damage scaling.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FC7C0,ifMagnify_802FC998}
+    # refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030CFC}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    start = 7585
+    first_offscreen = 7590
+    tick_record = 7652
+    hit_record = 7808
+
+    first_seed = ds.samples[first_offscreen]["seed_t"]
+    assert int(first_seed["action_id"][p]) == 88  # DamageFlyN.
+    assert int(first_seed["magnify_damage_counter_x1910"][p]) == 0
+    assert int(first_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 0
+    assert int(first_seed["state_flags"][p, 4]) & 0x80
+
+    tick_ref = ds.samples[tick_record]["ref_t1"]
+    tick_out = _run_rollout(ds, start, tick_record)
+    assert float(tick_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]), abs=1e-5)
+
+    hit_ref = ds.samples[hit_record]["ref_t1"]
+    hit_out = _run_rollout(ds, start, hit_record)
+    assert float(hit_out["percent"][p]) == pytest.approx(float(hit_ref["percent"][p]), abs=1e-5)
+    assert int(hit_out["hitstun"][p]) == int(hit_ref["hitstun"][p]) == 73
+
+
+@pytest.mark.integration
 def test_magnify_rollout_dcc_damagefly_lw_top_visible_rows_do_not_start_episode() -> None:
     # DCC has source-visible DamageFlyTop rows with camera point outside but no ifMagnify damage
     # tick. Fresh DamageFly starts are therefore limited to the Hi/N source-visible owner; Lw/Top/Roll
@@ -251,3 +291,35 @@ def test_magnify_rollout_dcc_damagefly_lw_top_visible_rows_do_not_start_episode(
     hit_out = _run_rollout(ds, 9300, hit_record)
     assert float(hit_out["percent"][p]) == pytest.approx(float(hit_ref["percent"][p]), abs=1e-5)
     assert int(hit_out["hitstun"][p]) == int(hit_ref["hitstun"][p]) == 122
+
+
+@pytest.mark.integration
+def test_magnify_rollout_bhh_damageflyn_top_exit_does_not_start_zero_counter_episode() -> None:
+    # BHH has visible x221F_b0/offscreen rows during DamageFlyN, but this episode leaves through the
+    # top/vertical camera boundary and does not run an ifMagnify damage tick. Fresh zero-counter
+    # DamageFly starts are limited to source-visible horizontal exits; vertical exits stay
+    # seed-owned until a nonzero x1910 episode is proven.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998
+    # refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030CFC}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    start = 5609
+    visible_record = 5620
+    stop = 5671
+    p = 0
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 88  # DamageFlyN.
+    assert int(visible_seed["magnify_damage_counter_x1910"][p]) == 0
+    assert int(visible_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 0
+    assert int(visible_seed["state_flags"][p, 4]) & 0x80
+
+    ref = ds.samples[stop]["ref_t1"]
+    out = _run_rollout(ds, start, stop)
+    assert float(out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-5)

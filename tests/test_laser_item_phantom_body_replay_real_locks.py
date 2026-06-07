@@ -60,6 +60,7 @@ class _Case:
 
 
 _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
+_BF = "datasets/aggregate_recent/replays/validation/battlefield_recent"
 
 
 @pytest.mark.integration
@@ -70,11 +71,21 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             dataset_rel=f"{_AGG}/TubbyCurlyHerring.msl",
             record=8969,
             player=1,
-            seed_action=27,  # Fall
+            seed_action=27,  # JumpAerialF
             ref_hitlag=3,
             ref_hitstun=0,
             ref_percent_delta=0.0,
-            note="Fall laser phantom writes hitlag/attribution and keeps projectile alive",
+            note="JumpAerialF laser phantom writes hitlag/attribution and keeps projectile alive",
+        ),
+        _Case(
+            dataset_rel=f"{_BF}/DelayedSuperbGuanaco.msl",
+            record=2526,
+            player=0,
+            seed_action=27,  # JumpAerialF
+            ref_hitlag=3,
+            ref_hitstun=0,
+            ref_percent_delta=0.0,
+            note="JumpAerialF laser phantom still writes hitlag with stale reflect-behavior carry",
         ),
         _Case(
             dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.msl",
@@ -87,24 +98,34 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="SpecialAirNLoop laser phantom writes hitlag/attribution and keeps projectile alive",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/TubbyCurlyHerring.msl",
-            record=8968,
+            dataset_rel=f"{_AGG}/BlondHardHippopotamus.msl",
+            record=7270,
             player=1,
-            seed_action=27,  # adjacent Fall no-contact row
+            seed_action=25,  # JumpF
             ref_hitlag=0,
             ref_hitstun=0,
             ref_percent_delta=0.0,
-            note="adjacent Fall negative before phantom keeps baseline",
+            note="JumpF stale reflect-behavior laser phantom remains attribution-only",
+        ),
+        _Case(
+            dataset_rel=f"{_AGG}/TubbyCurlyHerring.msl",
+            record=8968,
+            player=1,
+            seed_action=27,  # adjacent JumpAerialF no-contact row
+            ref_hitlag=0,
+            ref_hitstun=0,
+            ref_percent_delta=0.0,
+            note="adjacent JumpAerialF negative before phantom keeps baseline",
         ),
         _Case(
             dataset_rel=f"{_AGG}/TubbyCurlyHerring.msl",
             record=8970,
             player=1,
-            seed_action=27,  # following Fall full BODY hit
+            seed_action=27,  # following JumpAerialF full BODY hit
             ref_hitlag=3,
             ref_hitstun=9,
             ref_percent_delta=2.94,
-            note="following Fall full BODY hit still consumes projectile",
+            note="following JumpAerialF full BODY hit still consumes projectile",
         ),
         _Case(
             dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.msl",

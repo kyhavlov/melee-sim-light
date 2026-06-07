@@ -230,6 +230,22 @@ class _DamageFlyRoll8006CDA4Case:
             note="AttackHi4 carry uses explicit zero-consume DamageFlyRoll phase (BHH aggregate)",
         ),
         _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            target_record=2105,
+            victim_port=1,
+            expect_seed_count=2,
+            expect_action_id=91,
+            note="strong AttackAirB root BODY x14 DamageFlyTop carry reaches DamageFlyRoll (BHH)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            target_record=6057,
+            victim_port=0,
+            expect_seed_count=2,
+            expect_action_id=88,
+            note="Catch-shaped late AttackAirN carry consumes Fighter_8006CDA4 prefix without rolling (BHH)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
             dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
             target_record=4024,
             victim_port=0,
@@ -478,6 +494,10 @@ def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
         _, _, _, timing = _run_pre_combat_debug_row(dataset_path, int(case.target_record), attacker, 0)
         assert int(timing["enable_edge"]) == int(case.expect_hb0_enable_edge), case.note
 
+    if "BlondHardHippopotamus.msl" in case.dataset_rel and int(case.target_record) == 6057:
+        hb_id, cap_id = _selected_body_hitbox_hurtcap(dataset_path, int(case.target_record), 1, 0)
+        assert (hb_id, cap_id) == (0, 1), case.note
+
     _, ref_row, out_row = _run_one_step_row(dataset_path, int(case.target_record), victim)
     assert int(out_row["action_id"][victim]) == int(case.expect_action_id), case.note
     if int(case.expect_action_id) == int(ref["action_id"][victim]):
@@ -488,6 +508,49 @@ def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
                 record=int(case.target_record),
                 p=p,
             )
+
+
+@pytest.mark.integration
+def test_bhh_kneebend_attacks3_runtime_prefix_reaches_damageflyroll_gate() -> None:
+    # BHH rec5889 is not an explicit seed-count row: the source owner is the selected AttackS3 BODY
+    # HitCapsule against a victim that has already entered KneeBend before ProcessHit resolves.
+    # Runtime therefore owns the same-frame ftColl effect prefix plus the bounded Fighter_8006CDA4
+    # pre-gate prefix before ftCo_8008DCE0 samples DamageFlyRoll.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80078538,ftColl_8007A06C}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 5889
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["action_id"][0]) == 39  # Squat.
+    assert int(seed["action_id"][1]) == 53  # AttackS3.
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 0
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, 1, 0) == (0, 0)
+
+    trace_path = root / "reports/triage/bhh5889_kneebend_attacks3_runtime_prefix.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=5860,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, site1_count = rows[record]
+    assert site1_count == 1
+    assert _trace_site_count(trace_path, start_record=5860, record=record, site_id=24) == 4
+    assert _trace_site_count(trace_path, start_record=5860, record=record, site_id=5) == 5
+    assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0]) == 91
+    assert int(out_row["hitlag"][0]) == int(ref_row["hitlag"][0])
+    assert int(out_row["hitstun"][0]) == int(ref_row["hitstun"][0])
 
 
 @pytest.mark.integration
@@ -1320,11 +1383,10 @@ def test_pjo_rollout_rng_sites_are_source_owned_without_exceptions() -> None:
 
 @pytest.mark.integration
 def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_prefix() -> None:
-    # QGD rec4435 is the regression control for replay-frame Wait RNG admission: p0's active
-    # DeadUpStar phase-1 effect owns one pre-fighter generator consume, then p0's earlier same-frame
-    # DeadUpStar_Anim source callback can add the bounded creation prefix before p1 reaches
-    # Wait_Anim/getAnimID. PJO rec3012 is the later-player control: it receives only the active
-    # phase-1 effect prefix, not the earlier-player creation prefix.
+    # QGD rec4435 is the regression control for replay-frame Wait RNG admission: p0's earlier
+    # same-frame DeadUpStar_Anim source callback adds the bounded creation prefix before p1 reaches
+    # Wait_Anim/getAnimID. BHH rec10161 is the stale-late negative: a later DeadUpStar phase-1 row
+    # must not keep carrying the startup generator prefix.
     # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
     # refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
     # refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
@@ -1350,8 +1412,30 @@ def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_pr
     assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0]) == 4
     assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]) == 14
     assert int(out_row["animation_index"][1]) == int(ref_row["animation_index"][1]) == 2
-    assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=25) == 3
+    assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=25) == 2
     assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=3) == 1
+
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "BlondHardHippopotamus.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    trace_path = root / "reports/triage/bhh_wait_deadupstar_stale_late_rng.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=0,
+        window_records=(10161,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, _ = rows[10161]
+    assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0]) == 14
+    assert int(out_row["animation_index"][0]) == int(ref_row["animation_index"][0]) == 2
+    assert _trace_site_count(trace_path, start_record=0, record=10161, site_id=25) == 0
+    assert _trace_site_count(trace_path, start_record=0, record=10161, site_id=3) == 1
 
 
 @pytest.mark.integration

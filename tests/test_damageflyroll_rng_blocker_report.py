@@ -244,7 +244,7 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
     assert float(pos["site1_roll"]) < float(pos["roll_threshold"])
     assert int(pos["phase_advance_to_lt_threshold"]) == 0
     assert pos["site1_roll_window"][0] == pytest.approx(0.26458740234375)
-    assert tuple(pos["modeled_pre_gate_site_counts"]) == (0, 0, 0, 0, 0, 0, 0)
+    assert tuple(pos["modeled_pre_gate_site_counts"]) == (0, 0, 0, 1, 1, 0, 0)
     assert not bool(pos["requires_unmodeled_pre_gate_consumer"])
     assert tuple(pos["compatible_fighter_8006cda4_total_consumes"]) == tuple()
     assert tuple(pos["fighter_8006cda4_compatible_families"]) == tuple()

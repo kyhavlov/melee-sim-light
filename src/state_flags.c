@@ -273,6 +273,31 @@ static inline uint8_t state_flags_root_outside_stage_cam_horizontal_bounds(const
   return (uint8_t)(x < cam.left || x > cam.right);
 }
 
+static inline uint8_t state_flags_magnify_camera_target_horizontal_trajectory_owner(
+    const MslBatch* batch, const MslCommonParams* c, size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  if (batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] != 0u) {
+    return 0u;
+  }
+  MslStageBounds cam = {0};
+  if (!stage_collision_get_cam_bounds_world(batch->state.stage_id[idx / MSL_MAX_PLAYERS], &cam)) {
+    return 0u;
+  }
+  const float x = batch->state.pos_x[idx];
+  const float vx = batch->state.speed_air_x_self[idx] + batch->state.speed_ground_x_self[idx] +
+                   batch->state.speed_x_attack[idx];
+  const float horizon = (float)c->magnify_damage_interval_frames;
+  if (vx > 0.0f && x <= cam.right && x + vx * horizon > cam.right) {
+    return 1u;
+  }
+  if (vx < 0.0f && x >= cam.left && x + vx * horizon < cam.left) {
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t state_flags_magnify_runtime_visibility_owner(const MslBatch* batch,
                                                                    size_t idx, uint16_t action_id) {
   // Replay rollout fresh-start ownership follows the source magnifying-glass offscreen producer:
@@ -281,10 +306,11 @@ static inline uint8_t state_flags_magnify_runtime_visibility_owner(const MslBatc
   //
   // The full ifMagnify camera/HUD state is still hidden, so keep the zero-counter reconstruction to
   // source-proven action/boundary families:
-  // - DamageFlyHi/N: root outside any camera bound,
-  // - DamageFlyRoll: horizontal left/right root exits only. Top/right DamageFlyRoll rows in PPA's
-  //   same segment keep x1910 at zero, so vertical Roll exits remain seed-owned until a fuller
-  //   ifMagnify state model exists.
+  // - DamageFlyHi/N: horizontal left/right root exits, or camera-target offscreen rows whose current
+  //   horizontal knockback reaches a side camera bound within one x1910 damage interval,
+  // - DamageFlyRoll: horizontal left/right root exits only.
+  // Top exits can publish x221F_b0 through ftLib_80086A8C while hidden ifMagnify/player gates keep
+  // x1910 at zero, so vertical exits remain seed-owned until a fuller ifMagnify state model exists.
   // Nonzero seed episodes continue through timers.c using the ordinary live-fighter gate.
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
   // refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FC7C0,ifMagnify_802FC998}
@@ -293,7 +319,11 @@ static inline uint8_t state_flags_magnify_runtime_visibility_owner(const MslBatc
     return 0u;
   }
   if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_HI || action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N) {
-    return state_flags_root_outside_stage_cam_bounds(batch, idx);
+    if (state_flags_root_outside_stage_cam_horizontal_bounds(batch, idx) != 0u) {
+      return 1u;
+    }
+    return state_flags_magnify_camera_target_horizontal_trajectory_owner(batch, msl_common_params(),
+                                                                         idx);
   }
   if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
     return state_flags_root_outside_stage_cam_horizontal_bounds(batch, idx);

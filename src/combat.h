@@ -56,6 +56,11 @@ void combat_apply_item_phantom_hit(MslBatch* batch, int batch_index, int attacke
                                    uint16_t item_attack_id, uint16_t item_instance_id, float damage,
                                    uint8_t element);
 
+// Apply the source attribution/victim-ring side of an item phantom BODY contact when source
+// no-damage guards suppress hitlag/damage-state entry.
+void combat_apply_item_phantom_attribution(MslBatch* batch, int batch_index, int attacker,
+                                           int defender, uint16_t item_instance_id);
+
 // Apply an item->fighter SHIELD hit (shield HP depletion + GuardSetOff + defender hitlag).
 //
 // Intended for simple projectiles (e.g. Fox/Falco blaster lasers) where the item itself would

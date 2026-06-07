@@ -3508,6 +3508,13 @@ static inline MslMpcollCarriedCliffLedgeFloorAuthority mpcoll_carried_cliff_ledg
        ecb_lock_timer_seed >= 5u)
           ? 1u
           : 0u;
+  const MslCommonParams* common = msl_common_params();
+  const uint8_t jumpaerial_first_cliff_cooldown_phase =
+      (common != NULL && jumpaerial_entry_provenance && a.current_floor_matches &&
+       batch->state.ledge_cooldown[idx] >=
+           (uint8_t)(common->ledge_cooldown_frames > 5u ? common->ledge_cooldown_frames - 5u : 0u))
+          ? 1u
+          : 0u;
   a.live_bottom_sweep_authority =
       (a.callback_bottom_root_accepted && producer_start_span_source_owned &&
        !jumpaerial_entry_provenance && current_floor_lock_still_source_owned)
@@ -3546,7 +3553,8 @@ static inline MslMpcollCarriedCliffLedgeFloorAuthority mpcoll_carried_cliff_ledg
         (desired_bottom_owner_seeded && desired_bottom_source_valid &&
          a.desired_bottom_crosses_carried_floor) ||
         a.live_bottom_sweep_authority || a.live_desired_bottom_authority ||
-        (jumpaerial_entry_provenance && a.desired_bottom_reaches_carried_floor &&
+        (jumpaerial_entry_provenance && !jumpaerial_first_cliff_cooldown_phase &&
+         a.desired_bottom_reaches_carried_floor &&
          (batch->state.seed_prev_action_frame[idx] <= 1 || allow_interrupt_source))))
           ? 1u
           : 0u;
@@ -7697,6 +7705,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           use_locked_desired_ecb_bottom
               ? batch->state.coll_desired_ecb_bottom_rel_y[idx]
               : mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_cur, lock_bottom_to_zero);
+      const float frame_start_desired_bottom_rel_y =
+          batch->state.coll_desired_ecb_bottom_rel_y[idx];
       const float facing_dir_for_ecb = batch->state.facing[idx] ? 1.0f : -1.0f;
       MslEcbWorldPoints desired_ecb_points = {0};
       msl_ecb_world_points_sample(&desired_ecb_points, char_id, anim, ecb_frame_cur,
@@ -14660,13 +14670,31 @@ void mpcoll_ground_apply(MslBatch* batch) {
               ? msl_escapeair_locked_bottom_owner_preserve_or_seeded(
                     batch->state.coll_desired_ecb_bottom_locked_owner[idx])
               : 0u;
+      const uint8_t escapeair_airborne_jumpaerial_cliff_locked_bottom_carry =
+          // Fresh JumpAerial -> EscapeAir ledge exits can reject the first carried-floor
+          // publication while still carrying source CollData_X130 desired-bottom state into the
+          // next EscapeAir_Coll callback. Preserve only if the final publication left the fighter
+          // airborne; once the carried ledge floor is actually published, the grounded transition
+          // clears the lock.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800471F8}
+          (escapeair_episode.active && seed_prev_action_is_jumpaerial && c != NULL &&
+           batch->state.ledge_cooldown[idx] >=
+               (uint8_t)(c->ledge_cooldown_frames > 5u ? c->ledge_cooldown_frames - 5u : 0u) &&
+           batch->state.on_ground[idx] == 0u && batch->state.cliff_ledge_floor_segment_id != NULL &&
+           batch->state.cliff_ledge_floor_segment_id[idx] != 0xFFFFu &&
+           fabsf(frame_start_desired_bottom_rel_y) > k_floor_y_bias)
+              ? 1u
+              : 0u;
       if (!stored_locked_desired_bottom_owner && ecb_lock_active &&
           ((escapeair_episode.active &&
             ((stage_has_height_platform_transform &&
               msl_escapeair_locked_bottom_owner_is_seeded(
                   batch->state.coll_desired_ecb_bottom_locked_owner[idx])) ||
              batch->state.coll_desired_ecb_bottom_locked_owner[idx] ==
-                 (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_SOFT_OR_TRANSFORM)) ||
+                 (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_SOFT_OR_TRANSFORM ||
+             escapeair_airborne_jumpaerial_cliff_locked_bottom_carry)) ||
            (stage_has_height_platform_transform &&
             (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
              action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B)) ||
@@ -14685,9 +14713,22 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
         // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80045B74_LeftWall}
         msl_ecb_world_points_preserve_desired_bottom_rel_y(
-            &stored_desired_ecb_points, x, y, batch->state.coll_desired_ecb_bottom_rel_y[idx]);
+            &stored_desired_ecb_points, x, y,
+            escapeair_airborne_jumpaerial_cliff_locked_bottom_carry
+                ? frame_start_desired_bottom_rel_y
+                : batch->state.coll_desired_ecb_bottom_rel_y[idx]);
         stored_locked_desired_bottom_owner = msl_escapeair_locked_bottom_owner_preserve_or_seeded(
             batch->state.coll_desired_ecb_bottom_locked_owner[idx]);
+        if (escapeair_airborne_jumpaerial_cliff_locked_bottom_carry) {
+          stored_locked_desired_bottom_owner =
+              (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130;
+        }
+      }
+      if (escapeair_airborne_jumpaerial_cliff_locked_bottom_carry && ecb_lock_active) {
+        msl_ecb_world_points_preserve_desired_bottom_rel_y(&stored_desired_ecb_points, x, y,
+                                                           frame_start_desired_bottom_rel_y);
+        stored_locked_desired_bottom_owner =
+            (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130;
       }
       const float active_damage_hitlag_contact_floor_y = batch->state.ground_contact_y[idx];
       const uint8_t active_damage_hitlag_floor_contact_carry =

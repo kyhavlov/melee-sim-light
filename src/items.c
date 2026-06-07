@@ -2679,6 +2679,38 @@ static inline uint8_t laser_exact_lbcoll_body_contact_admits_candidate(
   return 1u;
 }
 
+static inline uint8_t laser_item_phantom_hitlag_suppressed_by_reflect_behavior_carry(
+    const MslBatch* batch, size_t d_idx, uint8_t laser_state, float overlap_amount,
+    const MslCommonParams* common) {
+  if (batch == NULL || common == NULL || laser_state != 0u || !(overlap_amount > 0.0f) ||
+      overlap_amount > common->phantom_overlap_max_x7a8 || batch->state.on_ground[d_idx] != 0u ||
+      batch->state.hurtbox_state[d_idx] != 0u || batch->state.hitlag[d_idx] != 0u ||
+      batch->state.hitstun[d_idx] != 0u) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[d_idx];
+  if (action_id != (uint16_t)MSL_ACT_JUMP_F && action_id != (uint16_t)MSL_ACT_JUMP_B) {
+    return 0u;
+  }
+  const uint8_t flags_2218 =
+      batch->state
+          .state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+  if ((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) == 0u ||
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) != 0u) {
+    return 0u;
+  }
+  // Item phantom attribution-only source guard:
+  // ftColl_80077C60 registers the item HitCapsule victim ring before checking the no-damage guards
+  // (`x1988`, `x198C`, `x221D_b6`, and selected hurtcap state). A stale reflect-behavior carry can
+  // therefore publish item source attribution for a tiny item overlap without starting
+  // Fighter_ProcessHit phantom hitlag. Keep this to the early JumpF/JumpB source state: settled
+  // JumpAerial* rows still run the phantom-hitlag path even when stale fp+0x2218_b5 is serialized.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077C60,ftColl_8007B868}
+  // refs/melee/src/melee/it/itcoll.c::it_8026FC00
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+  return 1u;
+}
+
 static inline uint8_t laser_airborne_body_uses_flattened_hurt_z(const MslBatch* batch, size_t d_idx,
                                                                 uint8_t laser_state,
                                                                 uint16_t item_type,
@@ -7812,8 +7844,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         float dmg =
             item_laser_script_hitcapsule_damage(lp, laser_state, hit_hb_id, laser_age_frames);
         dmg = msl_item_reflect_damage_lane(batch, ii, dmg);
-        combat_apply_item_phantom_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
-                                      batch->state.item_instance_id[ii], dmg, lp->element);
+        if (laser_item_phantom_hitlag_suppressed_by_reflect_behavior_carry(
+                batch, d_idx, laser_state, body_overlap_amount, common)) {
+          combat_apply_item_phantom_attribution(batch, bi, owner, def,
+                                                batch->state.item_instance_id[ii]);
+        } else {
+          combat_apply_item_phantom_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+                                        batch->state.item_instance_id[ii], dmg, lp->element);
+        }
         const uint16_t def_iid_post = batch->state.instance_id[d_idx];
         if (hit_hb_id != 0xFFu) {
           hitlist_register_item_hitbox_fighter(batch, bi, it, (int)hit_hb_id, def, def_iid_post,

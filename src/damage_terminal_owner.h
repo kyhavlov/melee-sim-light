@@ -10,7 +10,10 @@
 #include "motion_state_owners.h"
 #include "move_tables.h"
 
-enum { MSL_DAMAGE_OWNER_FOX_DYNAMIC_TAIL_PART_ID = 18 };
+enum {
+  MSL_DAMAGE_OWNER_FOX_DYNAMIC_TAIL_PART_ID = 18,
+  MSL_DAMAGE_OWNER_DAMAGEFLYTOP_XROTN_HURTCAP_SLOT = 12,
+};
 
 static inline uint8_t msl_damage_owner_is_damagefly_action(uint16_t action_id) {
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY);
@@ -209,6 +212,34 @@ static inline uint8_t msl_damage_owner_attackairlw_damageflytop_fox_tail_rejects
   // data/hurtcaps/fox.bin cap12 -> FtPart 18
   // data/anims/fox.dyn.bin (SSDYNN01 collision-owner index, part 18 in root 17 chain)
   return (batch->state.hitlag[d_idx] == 0u) ? 1u : 0u;
+}
+
+static inline uint8_t msl_damage_owner_attackhi4_damageflytop_xrotn_rejects_body(
+    const MslBatch* batch, size_t hb_i, size_t a_idx, size_t d_idx, uint8_t hb_id, uint8_t cap_id) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_HI4 || hb_id > 1u ||
+      cap_id != (uint8_t)MSL_DAMAGE_OWNER_DAMAGEFLYTOP_XROTN_HURTCAP_SLOT ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u ||
+      batch->state.instance_hit_by[d_idx] == 0u ||
+      batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx]) {
+    return 0u;
+  }
+  // Terminal DamageFlyTop / strong AttackHi4 XRotN rejection:
+  // Fox strong UpSmash's hb0/hb1 create payload is extracted as 18 damage, angle 80, KBG 112,
+  // BKB 30.
+  // A terminal DamageFlyTop victim can keep a stale dynamic XRotN/tail part matrix after its damage
+  // callback episode has ended; do not turn that matrix-only overlap into a new BODY hit unless the
+  // victim source instance already belongs to this attacker. The predicate is payload + generated
+  // selected cap12/XRotN provenance, not character pair or replay row.
+  // data/moves/fox.json::moves.ftCo_SM_AttackHi4.events.create_hitbox
+  // data/hurtcaps/{fox,falco}.json cap12 -> XRotN upper-body dynamic part
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+  return (uint8_t)(batch->state.hitbox_damage[hb_i] == 18.0f &&
+                   batch->state.hitbox_angle[hb_i] == 80u &&
+                   batch->state.hitbox_kbg[hb_i] == 112u && batch->state.hitbox_bkb[hb_i] == 30u);
 }
 
 static inline uint8_t msl_damage_owner_replay_rollout_advanced_under_rng_owner(

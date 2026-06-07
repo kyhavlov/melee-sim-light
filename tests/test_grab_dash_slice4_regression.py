@@ -17,6 +17,7 @@ _BUTTON_R = 0x0020
 
 _ACT_WAIT = 14
 _ACT_DASH = 20
+_ACT_TURN = 18
 _ACT_KNEE_BEND = 24
 _ACT_CATCH = 212
 _ACT_CATCH_PULL = 213
@@ -153,13 +154,16 @@ def _run_rollout_to_record(dataset_path: Path, *, start_record: int, target_reco
         ).reshape(1, seed_stride)
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, target_record + 1):
+            seed_bytes[:] = np.frombuffer(
+                samples[record]["seed_t"].tobytes(order="C"), dtype=np.uint8
+            ).reshape(1, seed_stride)
             prev_input_bytes[:] = np.frombuffer(
                 samples[record]["prev_input_t"].tobytes(order="C"), dtype=np.uint8
             ).reshape(1, input_stride)
             input_bytes[:] = np.frombuffer(
                 samples[record]["input_t"].tobytes(order="C"), dtype=np.uint8
             ).reshape(1, input_stride)
-            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.step_input_replay_frame_rng(handle, seed_bytes, prev_input_bytes, input_bytes)
 
         binding.write_compare(handle, out_compare_bytes)
         out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
@@ -167,6 +171,50 @@ def _run_rollout_to_record(dataset_path: Path, *, start_record: int, target_reco
         return samples[target_record], out, ref
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_turn_catch_entry_uses_turn_facing_after_until_later_terminal_turn() -> None:
+    # Turn_IASA temporarily exposes mv.co.turn.facing_after before Catch_CheckInput. If the Catch
+    # branch succeeds, Fighter_ChangeMotionState carries that facing into Catch instead of restoring
+    # the old visible Turn facing. The later Catch anim-end Wait/Turn decision must therefore see
+    # the Catch-entry facing, not a stale pre-turn facing byte.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_Catch_CheckInput,ftCo_800D8C54}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    ds = read_dataset(str(dataset_path))
+    catch_record = 7031
+    terminal_record = 7061
+    p = 1
+    catch_seed = ds.samples[catch_record]["seed_t"]
+    catch_ref = ds.samples[catch_record]["ref_t1"]
+    assert int(catch_seed["action_id"][p]) == _ACT_TURN
+    assert int(catch_seed["action_frame"][p]) == 4
+    assert int(catch_seed["facing"][p]) == 0
+    assert _grab_attempt_edge(ds.samples[catch_record : catch_record + 1], p)
+    assert int(catch_ref["action_id"][p]) == _ACT_CATCH
+    assert int(catch_ref["facing"][p]) == 1
+
+    _, catch_out, _ = _run_rollout_to_record(
+        dataset_path, start_record=6908, target_record=catch_record
+    )
+    assert int(catch_out["action_id"][p]) == _ACT_CATCH
+    assert int(catch_out["facing"][p]) == 1
+
+    terminal_seed, terminal_out, terminal_ref = _run_rollout_to_record(
+        dataset_path, start_record=6908, target_record=terminal_record
+    )
+    assert int(terminal_seed["seed_t"]["action_id"][p]) == _ACT_CATCH
+    assert int(terminal_seed["seed_t"]["facing"][p]) == 1
+    assert int(terminal_out["action_id"][p]) == int(terminal_ref["action_id"][p]) == _ACT_TURN
+    assert int(terminal_out["facing"][p]) == int(terminal_ref["facing"][p]) == 1
 
 
 @pytest.mark.integration

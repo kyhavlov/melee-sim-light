@@ -237,11 +237,12 @@ Source/generation:
   derivation and runtime exclude dead/rebirth/entry states from this magnifying-glass approximation.
 - Replay-seeded validation rollouts consume a nonzero backfilled counter until it ticks or becomes
   ineligible. Fresh zero-counter starts are blocked from raw replay-visible camera bits alone except
-  for the bounded DamageFlyHi/N source-visible owner: runtime must have x221F_b0 live, the
-  point-only `Camera_80030CD8` predicate outside stage camera bounds, and the
-  `Camera_80030CFC(..., 15)` magnify overlap admission. DamageFlyLw/Top/Roll rows remain negative
-  controls because their replay-hidden hit pose can differ from the lightweight visible-pose
-  reconstruction; those rows may only consume already-seeded nonzero x1910 episodes.
+  for the bounded DamageFlyHi/N source-visible owner: runtime must have x221F_b0 live and either a
+  horizontal left/right root exit or a camera-target offscreen row whose current horizontal
+  knockback trajectory reaches a side camera bound within one x1910 damage interval. Vertical/top
+  exits with no side-bound trajectory and DamageFlyLw/Top/Roll rows remain negative controls
+  because their replay-hidden hit pose can differ from the lightweight visible-pose reconstruction;
+  those rows may only consume already-seeded nonzero x1910 episodes.
   The RL1 profile intentionally ignores the camera-box visibility bit, so the explicit hidden
   counter/source-owner pair is the rollout owner for magnify damage, not raw
   `state_flags[4]&0x80`.

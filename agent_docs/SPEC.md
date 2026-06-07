@@ -3846,11 +3846,15 @@ Fox/Falco special-owner split (2026-04-17):
       hits: `coll_distance < p_ftCommonData->x7A8` starts victim hitlag and item attribution without
       percent, KB, damage-state entry, stale update, or projectile consume. Damage input is still
       normalized through the item-hit path (`it_80272460`) before hitlag is calculated.
-    - Replay-real locks: `TubbyCurlyHerring.msl:8969` covers Fall hitlag-only attribution with the
-      Falco laser alive, and `ImpassionedAlarmedTarsier.msl:1580` covers the same lane during
-      SpecialAirNLoop. Adjacent no-contact controls `TCH:8968` and `IAT:1579` stay baseline, while
-      following full BODY-hit controls `TCH:8970` and `IAT:1581` still consume the projectile and
-      enter damage.
+    - Replay-real locks: `TubbyCurlyHerring.msl:8969` covers JumpAerialF hitlag-only attribution
+      with the Falco laser alive, and `ImpassionedAlarmedTarsier.msl:1580` covers the same lane
+      during SpecialAirNLoop. Adjacent no-contact controls `TCH:8968` and `IAT:1579` stay baseline,
+      while following full BODY-hit controls `TCH:8970` and `IAT:1581` still consume the projectile
+      and enter damage.
+    - Stale `fp+0x2218_b5` reflect-behavior carry is not a blanket no-hitlag owner. BHH `7270`
+      locks the early JumpF attribution-only lane where the item victim ring/source updates without
+      phantom hitlag; DelayedSuperbGuanaco `2526` is the paired JumpAerialF control where the same
+      raw behavior bit still runs `checkTipLog` hitlag.
     - Fresh taxonomy after this slice: primary total `611` unchanged;
       `F14c=10`, `F14d=2`, `F15a=11`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`.
       Aggregate total `5310` (down from `5342`); `F14c=475`, `F14d=75`, `F15a=21`,
@@ -5651,6 +5655,11 @@ BODY contact-geometry blocker:
   negative same-shape `TBK:5523` row remains suppressed because its defender has not internally
   turned (`turn_has_turned=0`), and the broader `TBK:5247` extra-contact sentinel remains outside
   this owner.
+- Turn's temporary `facing_after` exposure also applies to `ftCo_Catch_CheckInput` inside
+  `ftCo_Turn_IASA`: if Catch succeeds, `ftCo_800D8C54 -> Fighter_ChangeMotionState` preserves that
+  source-facing for Catch instead of restoring the pre-turn visible facing. `BHH:7031 -> 7061`
+  locks the boundary: the Catch entry flips to the post-turn facing, and the later Catch anim-end
+  Wait/Turn decision must not stale-carry the old facing.
 - Teacher-forced seed-history must mirror the same pre-combat pose timing as runtime collision:
   `Fighter_8006A360` advances `anim_frame_f32` before hurtbox/hitbox refresh, and collision consumes
   the post-advance pose frame unless the fighter is already in hitlag. When replay `t+1` proves a
@@ -6652,6 +6661,21 @@ BODY collision-space residual split and rejected seed bridge:
     (`MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE`); runtime supported for the current subset. QGD affected.
   - Fighter_8006CDA4 pre-gate consumers: `Fighter_8006CDA4` stream-phase hints before the
     DamageFlyRoll gate; sites `5..7`; runtime supported through explicit seed counts. QGD affected.
+    BHH `rec5889` adds the bounded AttackS3 -> KneeBend owner: selected BODY DmgLog source is the
+    generated `MSL_MS_CLASS_ATTACK_S3` / `ftCo_SM_AttackS3` payload, the victim has entered
+    KneeBend before `Fighter_ProcessHit` resolves, and the same source episode reaches the
+    `Fighter_8006CDA4` x418 primary callsite exactly five times before `ftCo_8008DCE0` samples
+    DamageFlyRoll. Runtime records this as five site-5
+    (`MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_PRIMARY`) advances, with the count
+    named in C rather than a row-local phase constant. Source:
+    `refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4`, asm callsites
+    `refs/melee/build/GALE01/asm/melee/ft/fighter.s::{8006CE94,8006CEC8,8006CF10}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`, and
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`. The AttackS3 source
+    family uses generated MSLMSO01 action-class bits when the source id is a MotionState action id;
+    submotion ids still use a local `ftCo_SM_AttackS3*` fallback because MSLFTSC1 currently
+    canonicalizes AttackS3 event lookup inside `hitboxes_tables.c` without exposing a separate
+    runtime script-family predicate.
   - JumpAerial/AttackAirB carry consume: current `ProcessHit`/DmgLog source before the
     DamageFlyRoll gate; site `8`; runtime now uses the current hit source rather than stale
     victim `last_hit_by`. QGD affected at records 5747 and 7715.
@@ -6669,17 +6693,22 @@ BODY collision-space residual split and rejected seed bridge:
     positive for an active DeadUpStar phase-1 effect prefix without an earlier-player creation
     prefix; QGD `rec4435` is the control where both the active phase-1 effect prefix and the
     earlier-player creation prefix must be consumed before the later Wait callback.
-  - DeadUpStar effect prefix before Wait: active DeadUpStar phase 1 owns a live async generator
-    before fighter Wait callbacks can reach `getAnimID`. Runtime models this bounded active effect
-    as one site `25` (`MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX`) step for each other player in
-    `DeadUpStar` with `match_flow_timer > dead_up_star_phase2_frames` on a terminal Wait RNG row.
-    Separately, `ftCo_DeadUpStar_Anim` phase-1 completion dispatches effect kind `0x42D`, creating
-    particle generator `0x121`; the creation dispatch contributes the older two-step same-frame
-    prefix before later players' `Fighter_procUpdate` callbacks. That creation prefix is bounded by
-    normal player callback order: only players with index `< wait_player` can have already run the
-    DeadUpStar animation callback. PJO's later-player row therefore receives one active-effect
-    prefix and zero creation-prefix steps; QGD's earlier-player row receives one active-effect
-    prefix plus the two-step creation prefix.
+  - DeadUpStar effect prefix before Wait: DeadUpStar entry/early Anim owns a short-lived async
+    visual generator before fighter Wait callbacks can reach `getAnimID`. Runtime models this
+    bounded startup effect as one site `25` (`MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX`) step for each
+    other player in `DeadUpStar` whose visible action frame is in the source-live startup window
+    `0..8`; stale later phase-1 rows do not carry it. The source path is
+    `ftCo_800D40B8 -> ftCo_DeadUpStar_Anim`, whose phase-1 completion dispatches effect kind
+    `0x42D`; `efAsync_Dispatch` maps `0x42D` to generator `0x121`, and the baselib particle
+    generator bytecode owns the downstream `HSD_Rand/HSD_Randf` churn. That generator bytecode is not
+    extracted into runtime data yet, so `0..8` is an explicitly named, bounded source-live window for
+    generator `0x121`, not a generic DeadUpStar or replay-row bridge. Separately, the same-frame
+    creation dispatch contributes the older two-step prefix before later players'
+    `Fighter_procUpdate` callbacks. That creation prefix is bounded by normal player callback order:
+    only players with index `< wait_player` can have already run the DeadUpStar animation callback.
+    PJO's later-player row therefore receives one active-effect prefix and zero creation-prefix
+    steps; QGD's later-player Wait row receives the two-step creation prefix; BHH `rec10161` is the
+    stale-late negative where DeadUpStar frame 28 contributes no startup prefix.
   - Pseudo-random SFX and electric clank: common pseudo-SFX site `4` and
     `ftColl_800784B4` electric clank SFX site `2`; runtime site ids exist. QGD not affected.
 - Magnifying-glass damage counter owner:
@@ -6689,13 +6718,16 @@ BODY collision-space residual split and rejected seed bridge:
   - The seed lane `magnify_damage_counter_x1910` is still the primary replay owner because
     `Camera_80031144`, `Player_GetMoreFlagsBit3`, and ifMagnify state are hidden. Runtime consumes
     nonzero seeded episodes and admits fresh replay-rollout zero-counter starts only for the
-    bounded DamageFlyHi/N source-visible owner: x221F_b0 already live, point-only
-    `Camera_80030CD8` outside using `MSLSTG01 cam_bounds_world`, and `Camera_80030CFC(...,15)`
-    overlap true. DamageFlyLw/Top/Roll cannot fresh-start from visible pose reconstruction and may
-    only consume nonzero seeded episodes.
+    bounded DamageFlyHi/N source-visible owner: x221F_b0 already live, plus either a horizontal
+    left/right root exit or a camera-target offscreen row whose current horizontal knockback
+    trajectory reaches a side camera bound within one x1910 damage interval. Vertical/top exits with
+    no side-bound trajectory and DamageFlyLw/Top/Roll cannot fresh-start from visible pose
+    reconstruction and may only consume nonzero seeded episodes.
   - MGS locks: `rec2919` (DamageFlyN -> SpecialAirNLoop percent tick) and `rec5687` (DamageFlyHi
-    episode feeding the later hitstun boundary). DCC controls: `rec9362/9685` keep DamageFlyTop/Lw
-    visible rows from starting an unproven x1910 episode.
+    episode feeding the later hitstun boundary). PPA `rec7652 -> 7808` locks the camera-target
+    offscreen plus horizontal-trajectory owner that starts before root has crossed the right camera
+    bound. DCC controls: `rec9362/9685` keep DamageFlyTop/Lw visible rows from starting an unproven
+    x1910 episode.
 - Source anchors:
   - `refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}`
   - `refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim`
