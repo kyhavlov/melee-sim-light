@@ -302,6 +302,7 @@ static inline void cache_prev_action_state(MslBatch* batch) {
       batch->state.prev_action_id[idx] = batch->state.action_id[idx];
       batch->state.prev_action_frame[idx] = batch->state.action_frame[idx];
       batch->state.frame_start_action_id[idx] = batch->state.action_id[idx];
+      batch->state.frame_start_hitstun[idx] = batch->state.hitstun[idx];
       batch->state.frame_start_animation_index[idx] = batch->state.animation_index[idx];
       batch->state.frame_start_attack_id[idx] = batch->state.attack_id[idx];
       batch->state.frame_start_attack_instance[idx] = batch->state.attack_instance[idx];

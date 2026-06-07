@@ -2020,6 +2020,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.frame_start_action_id[idx] = seed->action_id[p];
       batch->state.frame_start_animation_index[idx] = seed->animation_index[p];
       batch->state.frame_start_instance_id[idx] = seed->instance_id[p];
+      batch->state.frame_start_hitstun[idx] = seed->hitstun[p];
       batch->state.ground_contact_x[idx] = 0.0f;
       batch->state.ground_contact_y[idx] = 0.0f;
       batch->state.ground_normal_x[idx] = 0.0f;

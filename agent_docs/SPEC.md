@@ -5905,6 +5905,14 @@ BODY collision-space residual split and rejected seed bridge:
     doubles `Game_20260509T152622 rec3301` on their original path because they also select hb1/cap0
     but do not carry the live x14 source lane; cap12/XRotN `SpecialAirHi` PPA `rec7332` is also
     locked out of the SpecialAirHi DamageFlyRoll admission path.
+  - Active `DamageFlyTop` hit by strong `AttackAirB` hb0/cap0 has a separate primary-only
+    stream owner when the live callback phase proves the current `DamageFlyTop` episode:
+    `DamageFlyTop` decrements `mv.co.damage.x14` before `ProcessHit`, so runtime admits exactly one
+    `Fighter_8006CDA4` primary consume only when selected DmgLog provenance is authored strong BAir
+    hb0/root-body, `x14 + 1 == frame_start_hitstun`, and raw `fp+0x2218_b1` is still published.
+    IAT `rec10332` locks the positive; adjacent hb0/root-body rows without that callback-phase
+    proof stay on their existing seed-owned or two-consume paths. This is source/callback
+    provenance, not a visible AttackAirB/DamageFlyTop or replay-row predicate.
   Source anchors:
   - `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_Damage_IASA}`
@@ -6433,6 +6441,17 @@ BODY collision-space residual split and rejected seed bridge:
   Runtime loads x94 from `data/characters/{fox,falco}.json::firefox_bound_angle_degrees`; TCH
   6989/6990/6998 locks the angle boundary and later `SpecialHiFall -> CliffCatch` rollout
   dependency.
+- For live-ECB `ft_80084DB0` left-wall endpoint persistence, source only keeps a persisted wall
+  while `mpLib_8004E398_LeftWall` projects inside the carried wall span. The runtime clear is
+  intentionally limited to replay rollouts that have advanced past their seed frame, where MSL's
+  free-running collision state can carry a stale endpoint contact. One-step replay seeds already
+  contain vanilla's current wall state and must not be overwritten by this hidden-state repair; that
+  preserves field-level `err.pos_x` parity for frozen PS, FoD, PPA, GAT, and Yoshi aggregate
+  controls. At exact endpoints, away-from-left-wall SpecialHi launch rows clear stale rollout wall
+  contact; true SpecialHi rows with leftward/into-wall self velocity keep wall correction and the
+  collision-facing write above. IAT 9143->9157 locks the rollout stale-clear positive, IAT 9149
+  locks the one-step authoritative-contact negative, and CNM 7032, CDO 8509, and EWT 7592 lock the
+  SpecialHi leftward negatives.
 - Up-B and aerial Side-B recovery exits consume all jumps through `ftCo_80096900(..., unk=true)`:
   grounded source states take `ftCommon_8007D60C`, while airborne source states take
   `ftCommon_UseAllJumps`. Recovery FallSpecial therefore must not allow a later X/Y press to become
@@ -6710,6 +6729,46 @@ BODY collision-space residual split and rejected seed bridge:
     submotion ids still use a local `ftCo_SM_AttackS3*` fallback because MSLFTSC1 currently
     canonicalizes AttackS3 event lookup inside `hitboxes_tables.c` without exposing a separate
     runtime script-family predicate.
+    IAT `rec10332` adds the active DamageFlyTop strong-BAir hb0/root-body primary owner: selected
+    DmgLog provenance must be authored strong BAir hb0/cap0, `mv.co.damage.x14` must be one
+    callback tick below frame-start hitstun after `DamageFlyTop`'s callback decrement, and raw
+    `fp+0x2218_b1` must still be live. That source proof owns exactly one site-5 primary consume;
+    root/body rows without the callback-phase proof keep their existing seed-owned or multi-consume
+    paths.
+    IAT also locks a set of source-owned current-hit DamageFlyRoll owners whose visible victim
+    actions are not sufficient proof. Each owner requires `ftColl_80076ED8`'s selected BODY DmgLog
+    source, extracted hitbox payload, selected hurtcap slot, zero replay-fed
+    `fighter_8006cda4_pre_gate_consume_count`, and the named site-count ledger below; changing the
+    source motion removes the runtime prefix in focused tests.
+    - `FallSpecial` victim + `AttackAirF` source (`IAT:2347`): selected mid ForwardAir hb0/cap2
+      head-high payload (Falco 9/361/100/10 from
+      `data/moves/falco.json::ftCo_SM_AttackAirF`) owns the normal ftColl effect prefix and exactly
+      one site-5 primary consume before the gate.
+    - Early `JumpF`/`JumpB` victim + strong `AttackAirN` source (`IAT:4194`): selected strong NAir
+      hb1/cap0 root-body payload owns the normal effect prefix and exactly seven site-5 primary
+      consumes. The count is a source-owner ledger entry for the bounded same-callback jump/NAir
+      ProcessHit episode, not a replay phase constant.
+    - `SpecialAirHi` victim + strong `AttackLw4` source (`IAT:7632`): selected strong down-smash
+      hb1/cap0 payload owns exactly two site-5 primary consumes; broad SpecialAirHi state or
+      down-smash action shape without the selected source remains rejected.
+    - `SpecialAirNLoop` victim + strong `AttackAirLw` meteor source (`IAT:8874`): selected Falco
+      DAir meteor hb0/cap6 payload admits the DamageFlyRoll gate from the normal ftColl effect
+      prefix, with zero Fighter_8006CDA4 primary consumes.
+    - Grounded `Catch`-family victim + `AttackAirF` source (`IAT:10734`): selected mid ForwardAir
+      hb0/cap0 root-body payload owns the normal effect prefix and exactly three site-5 primary
+      consumes.
+    - `KneeBend` / same-callback `KneeBend -> JumpF` victim + weak `AttackAirB` source
+      (`IAT:10974`): selected weak BAir hb1/cap1 payload owns the normal effect prefix and exactly
+      three site-5 primary consumes.
+    Source paths:
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80078538,ftColl_8007A06C}`,
+    `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim`,
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Phys`, and
+    extracted `data/moves/{fox,falco}.json` / `data/hurtcaps/{fox,falco}.json`. Focused locks:
+    `test_iat_damageflyroll_runtime_owners_are_selected_source_owned` and
+    `test_damageflyroll_to_damagefall_uses_frame_start_hitstun_one_tick_boundary`.
   - JumpAerial/AttackAirB carry consume: current `ProcessHit`/DmgLog source before the
     DamageFlyRoll gate; site `8`; runtime now uses the current hit source rather than stale
     victim `last_hit_by`. QGD affected at records 5747 and 7715.

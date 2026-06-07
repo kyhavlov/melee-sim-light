@@ -5521,6 +5521,8 @@ void locomotion_update_pre(MslBatch* batch) {
               } else if (turn_attack_facing_flipped &&
                          batch->state.turn_frames_to_turn[idx] + 1u == ch->turn_frames &&
                          batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
+                         (batch->state.seed_prev_action_frame[idx] >= 2 ||
+                          batch->state.input_main_y[idx] >= 0) &&
                          j_in == MSL_JUMP_INPUT_XY &&
                          batch->state.input_main_y[idx] >
                              (int8_t)(-c->smash_stick_threshold * (float)MSL_STICK_MAX_I8) &&
@@ -5534,7 +5536,10 @@ void locomotion_update_pre(MslBatch* batch) {
                 // hidden facing. Exact one-step rows are seed-owned and must use the explicit
                 // `turn_kneebend_facing_override_u8` lane; this fallback reconstructs only
                 // free-running replay rollout segments after the hidden lane was not serialized at
-                // the reseed boundary. L-stick tap-jump rows stay on the restored-facing path.
+                // the reseed boundary. The reconstruction mirrors the extracted-lane boundary:
+                // first-tick Turn rows from a one-frame Wait prefix with a low/down XY edge and no
+                // visible next-row facing change stay on the restored-facing path, as do L-stick
+                // tap-jump rows.
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
                 turn_kb_source_face = turn_facing_after;
@@ -6361,9 +6366,19 @@ void locomotion_update_pre(MslBatch* batch) {
       uint8_t is_air_loco = msl_action_is_air_locomotion(action_id) ? 1 : 0;
       // DamageFall has its own IASA chain (ftCo_DamageFall_IASA), including JumpAerial input
       // (ftCo_800CB870). This simulator models that subset in the shared airborne IASA block below,
-      // so include DamageFall in the local gate here.
+      // so include DamageFall in the local gate here. The only suppressed same-callback handoff is
+      // terminal DamageFlyRoll -> DamageFall with no live x14 jump-buffer lane; if x14 is live,
+      // DamageFall_IASA can still consume the buffered jump immediately.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-      if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL) {
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineC0
+      const uint8_t damagefall_entered_from_damageflyroll_anim =
+          (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FALL &&
+                    batch->state.frame_start_action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL &&
+                    batch->state.frame_start_hitstun[idx] == 1u &&
+                    batch->state.action_frame[idx] <= 0 &&
+                    batch->state.damage_jump_buffer_x14[idx] == 0u);
+      if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL &&
+          damagefall_entered_from_damageflyroll_anim == 0u) {
         is_air_loco = 1;
       }
       uint8_t is_attack_air = action_is_attackair(action_id) ? 1 : 0;

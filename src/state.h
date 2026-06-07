@@ -321,6 +321,9 @@ typedef struct MslStateSoA {
   // Internal-only frame-start action snapshot. Some callback-local owners publish a later action
   // before item/fighter collision still consumes the frame-start source episode.
   uint16_t* frame_start_action_id;
+  // Internal-only frame-start Damage hitstun snapshot. DamageFlyRoll_Anim decrements and tests
+  // this motion-var lane inside its Anim callback, before later shared timer/IASA consumers.
+  uint16_t* frame_start_hitstun;
   // Replay-true previous action snapshot (t-1 -> t), seeded from dataset history for entry-shaped
   // one-step rows. Separate from the runtime cache below.
   uint16_t* seed_prev_action_id;

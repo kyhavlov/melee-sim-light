@@ -56,6 +56,70 @@ def test_attackairb_damageflytop_runtime_predicate_matches_extracted_source_data
         ]
         assert nair_strong == [(4, 0), (4, 1), (4, 2)]
 
+        fair_events = moves["moves"]["ftCo_SM_AttackAirF"]["events"]
+        fair_creates = [ev for ev in fair_events if ev["kind"] == "create_hitbox"]
+        fair_mid = [
+            (
+                int(ev["frame"]),
+                int(ev["data"]["hitbox"]["hitbox_id"]),
+                int(ev["data"]["hitbox"]["damage"]),
+                int(ev["data"]["hitbox"]["angle"]),
+                int(ev["data"]["hitbox"]["kbg"]),
+                int(ev["data"]["hitbox"]["bkb"]),
+            )
+            for ev in fair_creates
+            if int(ev["data"]["hitbox"]["damage"]) in {8, 9}
+        ]
+        expected_fair_mid = [(6, 0, 9, 361, 100, 10), (6, 1, 9, 361, 100, 10)]
+        if char_name == "fox":
+            expected_fair_mid = []
+        else:
+            expected_fair_mid.extend([(16, 0, 8, 361, 100, 10), (16, 1, 8, 361, 100, 10)])
+        assert fair_mid == expected_fair_mid
+
+        dair_events = moves["moves"]["ftCo_SM_AttackAirLw"]["events"]
+        dair_creates = [ev for ev in dair_events if ev["kind"] == "create_hitbox"]
+        dair_meteor = [
+            (
+                int(ev["frame"]),
+                int(ev["data"]["hitbox"]["hitbox_id"]),
+                int(ev["data"]["hitbox"]["damage"]),
+                int(ev["data"]["hitbox"]["angle"]),
+                int(ev["data"]["hitbox"]["kbg"]),
+                int(ev["data"]["hitbox"]["bkb"]),
+            )
+            for ev in dair_creates
+            if int(ev["data"]["hitbox"]["damage"]) in {9, 12}
+        ]
+        expected_dair_meteor = []
+        if char_name == "falco":
+            expected_dair_meteor = [
+                (5, 0, 12, 290, 100, 10),
+                (5, 1, 12, 290, 100, 10),
+                (15, 0, 9, 290, 100, 20),
+                (15, 1, 9, 290, 100, 20),
+            ]
+        assert dair_meteor == expected_dair_meteor
+
+        dsmash_events = moves["moves"]["ftCo_SM_AttackLw4"]["events"]
+        dsmash_creates = [ev for ev in dsmash_events if ev["kind"] == "create_hitbox"]
+        dsmash_strong = [
+            (
+                int(ev["frame"]),
+                int(ev["data"]["hitbox"]["hitbox_id"]),
+                int(ev["data"]["hitbox"]["damage"]),
+                int(ev["data"]["hitbox"]["angle"]),
+                int(ev["data"]["hitbox"]["kbg"]),
+                int(ev["data"]["hitbox"]["bkb"]),
+            )
+            for ev in dsmash_creates
+            if int(ev["data"]["hitbox"]["hitbox_id"]) in {0, 1}
+        ]
+        expected_dsmash_strong = [(6, 0, 15, 25, 65, 20), (6, 1, 15, 25, 65, 20)]
+        if char_name == "falco":
+            expected_dsmash_strong = [(6, 0, 16, 25, 70, 20), (6, 1, 16, 25, 70, 20)]
+        assert dsmash_strong == expected_dsmash_strong
+
 
 def _trace_site_count(trace_path: Path, *, start_record: int, record: int, site_id: int) -> int:
     total = 0
@@ -768,6 +832,233 @@ def test_bhh_kneebend_attacks3_runtime_prefix_reaches_damageflyroll_gate() -> No
     assert int(out_row["hitstun"][0]) == int(ref_row["hitstun"][0])
 
 
+@dataclass(frozen=True)
+class _IATDamageFlyRollRuntimeOwnerCase:
+    owner: str
+    record: int
+    victim: int
+    attacker: int
+    victim_action: int
+    attacker_action: int
+    selected_hb: int
+    selected_cap: int
+    site5_count: int
+    site24_count: int
+    source_action_negative: int
+    note: str
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    [
+        _IATDamageFlyRollRuntimeOwnerCase(
+            owner="FallSpecial/AttackAirF",
+            record=2347,
+            victim=0,
+            attacker=1,
+            victim_action=35,
+            attacker_action=66,
+            selected_hb=0,
+            selected_cap=2,
+            site5_count=1,
+            site24_count=4,
+            source_action_negative=65,
+            note="mid ForwardAir hb0 against cap2/head-high owns one Fighter_8006CDA4 primary",
+        ),
+        _IATDamageFlyRollRuntimeOwnerCase(
+            owner="Jump/AttackAirN",
+            record=4194,
+            victim=1,
+            attacker=0,
+            victim_action=25,
+            attacker_action=65,
+            selected_hb=1,
+            selected_cap=0,
+            site5_count=7,
+            site24_count=4,
+            source_action_negative=66,
+            note="early JumpF strong NAir hb1 against cap0/root-body owns seven primaries",
+        ),
+        _IATDamageFlyRollRuntimeOwnerCase(
+            owner="SpecialAirHi/AttackLw4",
+            record=7632,
+            victim=0,
+            attacker=1,
+            victim_action=356,
+            attacker_action=64,
+            selected_hb=1,
+            selected_cap=0,
+            site5_count=2,
+            site24_count=0,
+            source_action_negative=65,
+            note="SpecialAirHi struck by strong down-smash hb1/cap0 owns two primaries",
+        ),
+        _IATDamageFlyRollRuntimeOwnerCase(
+            owner="SpecialAirN/AttackAirLw",
+            record=8874,
+            victim=1,
+            attacker=0,
+            victim_action=345,
+            attacker_action=69,
+            selected_hb=0,
+            selected_cap=6,
+            site5_count=0,
+            site24_count=4,
+            source_action_negative=65,
+            note="SpecialAirNLoop struck by strong DAir meteor hb0/cap6 admits the gate via effect prefix",
+        ),
+        _IATDamageFlyRollRuntimeOwnerCase(
+            owner="Catch/AttackAirF",
+            record=10734,
+            victim=0,
+            attacker=1,
+            victim_action=212,
+            attacker_action=66,
+            selected_hb=0,
+            selected_cap=0,
+            site5_count=3,
+            site24_count=4,
+            source_action_negative=65,
+            note="grounded Catch struck by mid ForwardAir hb0/cap0 owns three primaries",
+        ),
+        _IATDamageFlyRollRuntimeOwnerCase(
+            owner="KneeBend/weak AttackAirB",
+            record=10974,
+            victim=0,
+            attacker=1,
+            victim_action=24,
+            attacker_action=67,
+            selected_hb=1,
+            selected_cap=1,
+            site5_count=3,
+            site24_count=4,
+            source_action_negative=65,
+            note="KneeBend struck by weak BackAir hb1/cap1 owns three primaries",
+        ),
+    ],
+)
+def test_iat_damageflyroll_runtime_owners_are_selected_source_owned(
+    case: _IATDamageFlyRollRuntimeOwnerCase,
+) -> None:
+    # Each retained IAT runtime owner is locked on the concrete selected DmgLog source:
+    # hitbox payload/source motion from extracted move data, selected BODY hurtcap provenance from
+    # ftColl_80076ED8, and the named RNG site ledger count. Mutating the attacker action keeps the
+    # visible victim row but removes the selected source-motion owner, proving this is not a
+    # replay-row or action-shape bridge.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80078538,ftColl_8007A06C}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "ImpassionedAlarmedTarsier.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[case.record]["seed_t"]
+    assert int(seed["action_id"][case.victim]) == int(case.victim_action), case.owner
+    assert int(seed["action_id"][case.attacker]) == int(case.attacker_action), case.owner
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][case.victim]) == 0, case.owner
+    assert _selected_body_hitbox_hurtcap(
+        dataset_path, case.record, case.attacker, case.victim
+    ) == (case.selected_hb, case.selected_cap), case.note
+
+    trace_path = root / f"reports/triage/iat{case.record}_{case.owner.lower().replace('/', '_')}.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=case.record,
+        window_records=(case.record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, site1_count = rows[case.record]
+    assert site1_count == 1, case.note
+    assert (
+        _trace_site_count(trace_path, start_record=case.record, record=case.record, site_id=5)
+        == case.site5_count
+    ), case.note
+    assert (
+        _trace_site_count(trace_path, start_record=case.record, record=case.record, site_id=24)
+        == case.site24_count
+    ), case.note
+    assert int(out_row["action_id"][case.victim]) == int(ref_row["action_id"][case.victim]) == 91
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(
+            out_row=out_row,
+            ref_row=ref_row,
+            record=case.record,
+            p=p,
+        )
+
+    def mutate_source_motion(seed_t):
+        seed_t["action_id"][0, case.attacker] = case.source_action_negative
+
+    negative_trace_path = (
+        root / f"reports/triage/iat{case.record}_{case.owner.lower().replace('/', '_')}_negative.tsv"
+    )
+    negative_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=case.record,
+        window_records=(case.record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=negative_trace_path,
+        seed_mutator=mutate_source_motion,
+    )
+    _, _, negative_site1_count = negative_rows[case.record]
+    assert negative_site1_count == 0, case.note
+    assert (
+        _trace_site_count(
+            negative_trace_path, start_record=case.record, record=case.record, site_id=5
+        )
+        == 0
+    ), case.note
+    assert (
+        _trace_site_count(
+            negative_trace_path, start_record=case.record, record=case.record, site_id=24
+        )
+        == 0
+    ), case.note
+
+
+@pytest.mark.integration
+def test_damageflyroll_to_damagefall_uses_frame_start_hitstun_one_tick_boundary() -> None:
+    # TCH rec3251 starts in DamageFlyRoll with one hitstun tick left and enters DamageFall through
+    # DamageFlyRoll_Anim. Raising the replay seed hitstun to two ticks changes only the frame-start
+    # hitstun lane and keeps the row in DamageFlyRoll, proving the hidden lane models the one-tick
+    # callback boundary rather than a generic DamageFlyRoll/DamageFall shortcut.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_DamageFlyRoll_Anim,ftCo_DamageFlyRoll_Phys}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "TubbyCurlyHerring.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 3251
+    player = 1
+    seed, ref_row, out_row = _run_one_step_row(dataset_path, record, player)
+    assert int(seed["action_id"][player]) == 91  # DamageFlyRoll.
+    assert int(seed["hitstun"][player]) == 1
+    assert int(out_row["action_id"][player]) == int(ref_row["action_id"][player]) == 38
+
+    def extend_frame_start_hitstun(seed_t):
+        seed_t["hitstun"][0, player] = 2
+
+    _, _, extended_out = _run_one_step_row(
+        dataset_path, record, player, seed_mutator=extend_frame_start_hitstun
+    )
+    assert int(extended_out["action_id"][player]) == 91
+
+
 @pytest.mark.integration
 def test_gat_top_f26_rollout_advances_replay_frame_rng_clock_to_delayed_damageflyroll() -> None:
     # Replay-reseeded validation rollouts must advance Slippi's frame-start RNG clock instead of
@@ -1349,6 +1640,16 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             91,
         ),
         (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl",
+            10332,
+            1,
+            0,
+            0,
+            0,
+            91,
+            91,
+        ),
+        (
             "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
             7566,
             1,
@@ -1458,6 +1759,12 @@ def test_attackairb_damageflytop_runtime_phase_requires_selected_hurtcap_provena
     if dataset_rel.endswith("PriceyPartialAlbatross.msl") and record == 4024:
         assert int(seed_row["damage_jump_buffer_x14"][victim]) == 0
         assert int(seed_row["state_flags"][attacker][0]) & 0x40 == 0
+    if dataset_rel.endswith("ImpassionedAlarmedTarsier.msl") and record == 10332:
+        assert int(seed_row["damage_jump_buffer_x14"][victim]) > 0
+        # At frame start the replay seed has x14 aligned to hitstun; during the runtime step the
+        # DamageFlyTop callback decrements x14 once before ProcessHit reaches the DamageFlyRoll gate.
+        assert int(seed_row["damage_jump_buffer_x14"][victim]) == int(seed_row["hitstun"][victim])
+        assert int(seed_row["state_flags"][victim][0]) & 0x40
     if record in {3301, 7566}:
         assert int(seed_row["damage_jump_buffer_x14"][victim]) == 0
         assert int(seed_row["state_flags"][attacker][0]) & 0x40
@@ -1473,6 +1780,50 @@ def test_attackairb_damageflytop_runtime_phase_requires_selected_hurtcap_provena
     )
     assert int(ref_row["action_id"][victim]) == expected_ref_action
     assert int(out_row["action_id"][victim]) == expected_out_action
+
+
+@pytest.mark.integration
+def test_damageflytop_attackairb_root_x14_primary_owner_closes_iat_10332_rollout() -> None:
+    # IAT rec10332 is an active DamageFlyTop victim hit by selected strong BAir hb0/root-body.
+    # The live DamageFlyTop callback has decremented mv.co.damage.x14 once before ProcessHit, so
+    # x14 is one tick below frame-start hitstun. That callback-phase proof admits exactly the
+    # primary Fighter_8006CDA4 consume before ftCo_8008DCE0's DamageFlyRoll gate; visible
+    # AttackAirB/DamageFlyTop shape alone remains covered by the table-driven negatives above.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_Damage_IASA}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "ImpassionedAlarmedTarsier.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 10332
+    victim = 0
+    attacker = 1
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["action_id"][victim]) == 90  # DamageFlyTop.
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 1
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (0, 0)
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=10209,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/iat10332_damageflytop_bair_root_x14_primary.tsv",
+    )
+    ref_row, out_row, site1_count = rows[record]
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+    assert int(out_row["action_id"][victim]) == 91
+    assert site1_count == 1
 
 
 @pytest.mark.integration

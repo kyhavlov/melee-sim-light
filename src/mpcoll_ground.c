@@ -9412,6 +9412,37 @@ void mpcoll_ground_apply(MslBatch* batch) {
              damage_hitlag_exit_floor_precondition)
                 ? 1u
                 : 0u;
+        float damage_hitlag_exit_source_prev_floor_y = 0.0f;
+        const uint8_t damage_hitlag_exit_source_prev_above_floor =
+            (damage_hitlag_exit_floor_y_valid &&
+             isfinite(batch->state.floor_sweep_prev_pos_x[idx]) &&
+             isfinite(batch->state.floor_sweep_prev_pos_y[idx]) &&
+             floor_line_y_at_x_for_env(batch, bi, g, prefer_line_idx,
+                                       batch->state.floor_sweep_prev_pos_x[idx],
+                                       &damage_hitlag_exit_source_prev_floor_y) &&
+             floor_x_within_line_bounds(batch, bi, g, prefer_line_idx,
+                                        batch->state.floor_sweep_prev_pos_x[idx]) &&
+             batch->state.floor_sweep_prev_pos_y[idx] >
+                 (damage_hitlag_exit_source_prev_floor_y + k_floor_y_bias))
+                ? 1u
+                : 0u;
+        const uint8_t suppress_damageflyroll_hitlag_exit_floor_land =
+            // DamageFlyRoll hitlag-exit floor owner:
+            // Fighter_8006A1BC runs ftCo_Damage_OnExitHitlag as hitlag reaches zero; absent a
+            // proven floorhug/resting-floor owner above, the following DamageFlyRoll_Coll callback
+            // must not let the generic floor projection publish DownBound from the frozen low roll
+            // pose on the same frame. Bound this to rows whose callback-entry floor sweep root was
+            // still above the selected source floor line so root-on-floor hitlag-exit rows can
+            // publish DownBound.
+            // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+            //   ftCo_Damage_OnExitHitlag,ftCo_DamageFlyRoll_Coll}
+            (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL &&
+             batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u &&
+             damage_hitlag_exit_source_prev_above_floor &&
+             batch->state.speed_y_attack[idx] < 0.0f && damage_hitlag_exit_projection_owner == 0u)
+                ? 1u
+                : 0u;
         // DamageFlyRoll ownership lane for this floor-projection pass:
         // - keep x221C_b6-gated roll handling after hitlag-exit callback consumption,
         // - avoid re-running this lane on the same frame that Fighter_8006D10C consumes
@@ -12387,6 +12418,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
               fall_no_floor_shallow_fastfall_contact || escapeair_sustained_floorhug_airborne ||
               escapeair_fresh_horizontal_floorhug_airborne || specialhi_bound_entry_airborne ||
               suppress_damageflyroll_shallow_land || suppress_damageair_attackair_entry_land ||
+              suppress_damageflyroll_hitlag_exit_floor_land ||
               suppress_locomotion_attackair_entry_platform_land ||
               suppress_escapeair_entry_locked_platform_land ||
               suppress_downheld_transformed_platform_land ||
@@ -12762,6 +12794,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                          suppress_active_damage_hitlag_bottom_above_floor_land ||
                          damage_active_hitlag_root_below_bottom_above_floor_owner ||
                          damage_active_hitlag_downward_sdi_airborne_owner ||
+                         suppress_damageflyroll_hitlag_exit_floor_land ||
                          suppress_damageflyroll_below_floor_active_hitlag_land) {
                 if (suppress_projected_specialairhi_floor_angle_land) {
                   // SpecialAirHi_Coll consumes ft_CheckGroundAndLedge -> mpColl_800473CC. Source
@@ -12825,6 +12858,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
               //   ftCo_DownDamage_Phys,ftCo_DownDamage_Coll}
               // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
               if (!suppress_active_damage_hitlag_land &&
+                  !suppress_damageflyroll_hitlag_exit_floor_land &&
                   !suppress_damageflyroll_below_floor_active_hitlag_land &&
                   msl_mpcoll_80044838_floor_edge_snap_from_bottom(
                       batch, bi, g, hit_line_idx, cur_bottom_x, cur_bottom_y, 0u, &ground_id,

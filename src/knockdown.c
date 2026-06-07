@@ -450,6 +450,23 @@ static inline void damage_clear_terminal_post_hitlag_buffers(MslBatch* batch, si
       (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 }
 
+static inline void damage_anim_clear_terminal_hitstun(MslBatch* batch, const MslCommonParams* c,
+                                                      size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp: DamageFlyRoll_Anim calls ftCo_8008F744 before testing x221C_b6 and entering
+  // DamageFall through ftCo_80090780. Keep this local to terminal Anim-callback ownership rather
+  // than moving the shared Fighter_8006A360 timer pass.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_DamageFlyRoll_Anim,ftCo_8008F744}
+  batch->state.hitstun[idx] = 0u;
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+  batch->state.combo_timer_x2098[idx] =
+      (c != NULL) ? c->combo_timer_post_hitstun_frames : (uint16_t)0;
+}
+
 static inline void enter_squat(MslBatch* batch, size_t idx);
 
 static inline uint8_t damage_ground_try_enter_kneebend_from_wait_iasa(MslBatch* batch,
@@ -1315,11 +1332,17 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           batch->state.animation_index[idx] = damage_msid_u32;
         }
 
-        const uint8_t in_hitstun = (batch->state.hitstun[idx] > 0) ? 1u : 0u;
-        const uint8_t iasa_locked = damage_iasa_lockout_x221c_b6(batch, idx);
+        const uint8_t fly_roll = (a0 == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) ? 1u : 0u;
+        uint8_t in_hitstun = (batch->state.hitstun[idx] > 0) ? 1u : 0u;
+        uint8_t iasa_locked = damage_iasa_lockout_x221c_b6(batch, idx);
         uint8_t anim_done = 0u;
         if (damage_msid_u32 <= 0xFFFFu) {
           anim_done = anim_is_finished(cid, (uint16_t)damage_msid_u32, anim_frame);
+        }
+        if (fly_roll && batch->state.frame_start_hitstun[idx] == 1u && iasa_locked) {
+          damage_anim_clear_terminal_hitstun(batch, c, idx);
+          in_hitstun = 0u;
+          iasa_locked = 0u;
         }
 
         // Decomp transition gates:
@@ -1331,7 +1354,6 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         // Callback ordering parity:
         // - This block is already under the non-hitlag path via `hitlag_started_frame` gate above,
         //   matching fighter update ordering for anim callbacks.
-        const uint8_t fly_roll = (a0 == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) ? 1u : 0u;
         const uint8_t should_enter_damage_fall =
             fly_roll ? (uint8_t)(!in_hitstun && !iasa_locked)
                      : (uint8_t)(!in_hitstun && !iasa_locked && anim_done);

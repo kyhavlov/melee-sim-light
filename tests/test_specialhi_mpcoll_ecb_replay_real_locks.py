@@ -48,6 +48,22 @@ G18447 = (
     "datasets/aggregate_recent/replays/validation/aggregate_recent/"
     "Game_20260515T182447_frozenps.msl"
 )
+IAT = (
+    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+    "ImpassionedAlarmedTarsier.msl"
+)
+CNM = (
+    "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+    "CheeryNumbMonkey.msl"
+)
+CDO = (
+    "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+    "CornyDelayedOkapi.msl"
+)
+EWT = (
+    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+    "ElatedWearyTermite.msl"
+)
 
 
 def _run_row(
@@ -136,7 +152,12 @@ def _collision_contact_dtype() -> np.dtype:
 
 
 def _run_rollout_rows(
-    start_record: int, end_record: int, dataset_rel: str = QGD, *, rollout_seed: bool = False
+    start_record: int,
+    end_record: int,
+    dataset_rel: str = QGD,
+    *,
+    rollout_seed: bool = False,
+    replay_frame_rng: bool = False,
 ) -> dict[int, tuple[np.void, np.void, np.void]]:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -164,11 +185,19 @@ def _run_rollout_rows(
         else:
             binding.reseed_seed(handle, _bytes("seed_t", 0, seed_stride))
         for i, record in enumerate(range(start_record, end_record + 1)):
-            binding.step_input(
-                handle,
-                _bytes("prev_input_t", i, input_stride),
-                _bytes("input_t", i, input_stride),
-            )
+            if replay_frame_rng:
+                binding.step_input_replay_frame_rng(
+                    handle,
+                    _bytes("seed_t", i, seed_stride),
+                    _bytes("prev_input_t", i, input_stride),
+                    _bytes("input_t", i, input_stride),
+                )
+            else:
+                binding.step_input(
+                    handle,
+                    _bytes("prev_input_t", i, input_stride),
+                    _bytes("input_t", i, input_stride),
+                )
             binding.write_compare(handle, out_bytes)
             binding.debug_write_collision_contacts(handle, contact_bytes)
             got = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
@@ -322,6 +351,67 @@ def test_specialairhi_left_wall_collision_facing_enables_tch_cliffcatch_rollout(
     assert int(got_6998_r["action_id"][p]) == int(ref_6998_r["action_id"][p]) == 252
     assert int(got_6998_r["facing"][p]) == int(ref_6998_r["facing"][p]) == 1
     assert int(contacts_6998_r["coll_env_flags"][p]) & 0x01000000
+
+
+@pytest.mark.integration
+def test_ft80084db0_left_wall_endpoint_one_step_keeps_authoritative_replay_contact() -> None:
+    # One-step replay seeds already contain vanilla's current wall state. The stale endpoint-clear
+    # owner must not erase that authoritative seed state; otherwise broad one-step pos_x metrics
+    # regress across unrelated replays.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+    seed, ref, got, contacts = _run_row(9149, IAT)
+    p = 0
+
+    assert int(seed["action_id"][p]) == 356
+    assert float(seed["speed_air_x_self"][p]) > 0.0
+    assert int(got["action_id"][p]) == int(ref["action_id"][p]) == 356
+    assert int(contacts["wall_kind"][p]) == 1
+    assert float(got["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_ft80084db0_left_wall_endpoint_rollout_stale_contact_clears_iat_wall_contact() -> None:
+    # IAT's free-running SpecialAirHi launch segment can carry MSL's stale persisted left-wall
+    # endpoint after replay rollout has advanced past the seed frame. Source clears that endpoint
+    # instead of re-clamping through it; broad wall persistence later lets the aerial blaster
+    # landing frame hit the runner in rollout.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+    rows = _run_rollout_rows(9143, 9157, IAT, rollout_seed=True, replay_frame_rng=True)
+    got_9149, ref_9149, contacts_9149 = rows[9149]
+    got_9157, ref_9157, contacts_9157 = rows[9157]
+    p = 0
+
+    assert int(got_9149["action_id"][p]) == int(ref_9149["action_id"][p]) == 356
+    assert int(contacts_9149["wall_kind"][p]) == 1
+    assert int(got_9157["action_id"][p]) == int(ref_9157["action_id"][p]) == 356
+    assert int(contacts_9157["wall_kind"][p]) == 0
+    assert float(got_9157["pos_x"][p]) == pytest.approx(float(ref_9157["pos_x"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (CNM, 7032, 1),
+        (CDO, 8509, 1),
+        (EWT, 7592, 0),
+    ],
+)
+def test_specialairhi_leftward_endpoint_keeps_wall_facing_controls(
+    dataset_rel: str, record: int, p: int
+) -> None:
+    # Negative boundary for the endpoint-clear owner: true SpecialAirHi rows whose self velocity is
+    # leftward/into the left wall still consume the wall correction and collision-facing write.
+    # These are not the stale away-from-wall endpoint case above.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+    seed, ref, got, _contacts = _run_row(record, dataset_rel)
+
+    assert int(seed["action_id"][p]) == 356
+    assert float(seed["speed_air_x_self"][p]) <= 0.0
+    assert int(got["facing"][p]) == int(ref["facing"][p]) == 0
+    assert float(got["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
 
 
 @pytest.mark.integration
