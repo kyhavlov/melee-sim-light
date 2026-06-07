@@ -511,6 +511,221 @@ def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
 
 
 @pytest.mark.integration
+def test_fsp_speciallwend_strong_attackairb_runtime_prefix_is_selected_source_owned() -> None:
+    # FSP rec1338 is a grounded Reflector-end victim struck by the selected strong BackAir hb0
+    # HitCapsule against cap2/head-high. Clearing the explicit one-step seed lane still reaches
+    # DamageFlyRoll because the current ProcessHit source owns one Fighter_8006CDA4 primary
+    # pre-gate consume. FSP rec2627 is the already-live weak hb2/cap2 sibling and owns the normal
+    # ftColl effect prefix plus all three Fighter_8006CDA4 callsites. FSP rec2933 keeps the same
+    # broad SpecialLwEnd/AttackAirB action shape, but selected create-edge weak hb2/cap2 does not
+    # own that continuing-HitCapsule prefix and remains DamageFlyHi.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwEnd_Anim
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    victim = 0
+    attacker = 1
+    strong_record = 1338
+    continuing_weak_record = 2627
+    weak_record = 2933
+    strong_seed = ds.samples[strong_record]["seed_t"]
+    continuing_weak_seed = ds.samples[continuing_weak_record]["seed_t"]
+    weak_seed = ds.samples[weak_record]["seed_t"]
+    assert int(strong_seed["action_id"][victim]) == 363  # SpecialLwEnd.
+    assert int(strong_seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 1
+    assert _selected_body_hitbox_hurtcap(dataset_path, strong_record, attacker, victim) == (0, 2)
+    assert int(ds.samples[strong_record]["ref_t1"]["action_id"][victim]) == 91
+    assert int(continuing_weak_seed["action_id"][victim]) == 363
+    assert int(continuing_weak_seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 1
+    assert _selected_body_hitbox_hurtcap(dataset_path, continuing_weak_record, attacker, victim) == (
+        2,
+        2,
+    )
+    assert int(ds.samples[continuing_weak_record]["ref_t1"]["action_id"][victim]) == 91
+    assert int(weak_seed["action_id"][victim]) == 363
+    assert int(weak_seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+    assert _selected_body_hitbox_hurtcap(dataset_path, weak_record, attacker, victim) == (2, 2)
+    assert int(ds.samples[weak_record]["ref_t1"]["action_id"][victim]) == 87
+
+    def clear_seed_count(seed_t):
+      seed_t["fighter_8006cda4_pre_gate_consume_count"][0, victim] = 0
+
+    strong_trace = root / "reports/triage/fsp1338_speciallwend_bair_runtime_prefix.tsv"
+    strong_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=strong_record,
+        window_records=(strong_record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=strong_trace,
+        seed_mutator=clear_seed_count,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    ref_row, out_row, site1_count = strong_rows[strong_record]
+    assert site1_count == 1
+    assert _trace_site_count(strong_trace, start_record=strong_record, record=strong_record, site_id=5) == 1
+    assert _trace_site_count(strong_trace, start_record=strong_record, record=strong_record, site_id=6) == 0
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(
+            out_row=out_row,
+            ref_row=ref_row,
+            record=strong_record,
+            p=p,
+        )
+
+    continuing_weak_trace = root / "reports/triage/fsp2627_speciallwend_continuing_weak_bair.tsv"
+    continuing_weak_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=continuing_weak_record,
+        window_records=(continuing_weak_record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=continuing_weak_trace,
+        seed_mutator=clear_seed_count,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    ref_row, out_row, site1_count = continuing_weak_rows[continuing_weak_record]
+    assert site1_count == 1
+    assert (
+        _trace_site_count(
+            continuing_weak_trace,
+            start_record=continuing_weak_record,
+            record=continuing_weak_record,
+            site_id=24,
+        )
+        == 4
+    )
+    assert (
+        _trace_site_count(
+            continuing_weak_trace,
+            start_record=continuing_weak_record,
+            record=continuing_weak_record,
+            site_id=5,
+        )
+        == 1
+    )
+    assert (
+        _trace_site_count(
+            continuing_weak_trace,
+            start_record=continuing_weak_record,
+            record=continuing_weak_record,
+            site_id=6,
+        )
+        == 1
+    )
+    assert (
+        _trace_site_count(
+            continuing_weak_trace,
+            start_record=continuing_weak_record,
+            record=continuing_weak_record,
+            site_id=7,
+        )
+        == 1
+    )
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(
+            out_row=out_row,
+            ref_row=ref_row,
+            record=continuing_weak_record,
+            p=p,
+        )
+
+    weak_trace = root / "reports/triage/fsp2933_speciallwend_weak_bair_runtime_negative.tsv"
+    weak_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=weak_record,
+        window_records=(weak_record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=weak_trace,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    ref_row, out_row, site1_count = weak_rows[weak_record]
+    assert site1_count == 1
+    assert _trace_site_count(weak_trace, start_record=weak_record, record=weak_record, site_id=24) == 0
+    assert _trace_site_count(weak_trace, start_record=weak_record, record=weak_record, site_id=5) == 0
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(
+            out_row=out_row,
+            ref_row=ref_row,
+            record=weak_record,
+            p=p,
+        )
+
+
+@pytest.mark.integration
+def test_fsp_attacklw3_late_attackhi4_runtime_prefix_is_selected_source_owned() -> None:
+    # FSP rec5391 has a grounded AttackLw3 victim struck by the selected late AttackHi4 hb0/cap2
+    # source. Clearing the explicit one-step seed lane still reaches DamageFlyRoll because that
+    # concrete DmgLog source owns one Fighter_8006CDA4 primary pre-gate consume. Mutating the
+    # victim out of AttackLw3 keeps the same hit source but removes the owner.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackHi4.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 5391
+    victim = 0
+    attacker = 1
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["action_id"][victim]) == 57  # AttackLw3.
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 1
+    assert int(seed["action_id"][attacker]) == 63  # AttackHi4.
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (0, 2)
+    assert int(ds.samples[record]["ref_t1"]["action_id"][victim]) == 91
+
+    def clear_seed_count(seed_t):
+        seed_t["fighter_8006cda4_pre_gate_consume_count"][0, victim] = 0
+
+    trace_path = root / "reports/triage/fsp5391_attacklw3_attackhi4_runtime_prefix.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+        seed_mutator=clear_seed_count,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    ref_row, out_row, site1_count = rows[record]
+    assert site1_count == 1
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=5) == 1
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=6) == 0
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(
+            out_row=out_row,
+            ref_row=ref_row,
+            record=record,
+            p=p,
+        )
+
+    def mutate_victim_action(seed_t):
+        clear_seed_count(seed_t)
+        seed_t["action_id"][0, victim] = 20  # Dash: grounded but not AttackLw3 source state.
+
+    _, _, mutated_out = _run_one_step_row(dataset_path, record, victim, seed_mutator=mutate_victim_action)
+    assert int(mutated_out["action_id"][victim]) != 91
+
+
+@pytest.mark.integration
 def test_bhh_kneebend_attacks3_runtime_prefix_reaches_damageflyroll_gate() -> None:
     # BHH rec5889 is not an explicit seed-count row: the source owner is the selected AttackS3 BODY
     # HitCapsule against a victim that has already entered KneeBend before ProcessHit resolves.
@@ -1298,6 +1513,56 @@ def test_specialairhi_damageflyroll_gate_rejects_attackairb_cap12_xrotn_owner_pp
     ref_roll, out_roll, site1_count = rows[record]
     assert site1_count == 0
     assert int(ref_roll["action_id"][victim]) == int(out_roll["action_id"][victim]) == 88
+
+
+@pytest.mark.integration
+def test_fsp_specialairhi_attackairb_cap2_current_payload_enters_damageflyroll() -> None:
+    # SpecialAirHi current-hit DamageFlyRoll admission:
+    # - FSP 11707 selects weak BackAir hb2/cap2 against SpecialAirHi.
+    # - FSP 11924 selects strong BackAir hb1/cap2 against SpecialAirHi.
+    # cap2/head-high is admitted only for these concrete selected BAir payloads: early weak hb2 and
+    # strong hb1. The existing AGG 2864 late weak hb1 seed-frame negative and nearby PPA 7332
+    # cap12/XRotN negative remain ordinary DamageFlyHi/N.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    victim = 0
+    attacker = 1
+    cases = ((11707, (2, 2), 5), (11924, (1, 2), 6))
+    ds = read_dataset(str(dataset_path))
+    for record, selected, expected_hitlag in cases:
+        assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == selected
+        seed = ds.samples[record]["seed_t"]
+        ref_row = ds.samples[record]["ref_t1"]
+        assert int(seed["action_id"][victim]) == 356  # SpecialAirHi.
+        assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
+        assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+        assert int(ref_row["action_id"][victim]) == 91
+        assert int(ref_row["hitlag"][victim]) == expected_hitlag
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=5391,
+        window_records=(11707, 11924),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/fsp_specialairhi_cap2_bair_owner.tsv",
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    for record, _selected, expected_hitlag in cases:
+        ref_roll, out_roll, site1_count = rows[record]
+        assert site1_count == 1
+        assert int(ref_roll["action_id"][victim]) == int(out_roll["action_id"][victim]) == 91
+        assert int(out_roll["hitlag"][victim]) == expected_hitlag
 
 
 @pytest.mark.integration

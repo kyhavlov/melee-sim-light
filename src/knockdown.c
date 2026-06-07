@@ -1656,9 +1656,23 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           enter_wait(batch, idx);
 
           // Same-frame Wait IASA subset after roll end (decomp-shaped ordering).
-          // Wait IASA includes pre-guard held-shield spotdodge (ftCo_80099794), guard entry
-          // (ftCo_80091A4C), and squat entry (ftCo_800D5FB0).
+          // Wait IASA checks grounded attacks before pre-guard held-shield spotdodge
+          // (ftCo_80099794), guard entry (ftCo_80091A4C), and squat entry (ftCo_800D5FB0).
+          // Keep the AttackLw3 source entry inside this roll-end callback bundle instead of
+          // deferring it to the later generic locomotion pass; the bundle owns the same-frame
+          // ft_8008A2BC -> Wait -> Wait_IASA instance-id order.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+          const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+          const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
+                                               c->lstick_deadzone_x);
+          const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
+                                               c->lstick_deadzone_y);
+          const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+          if (locomotion_grounded_a_attack_try_enter_from_wait_iasa(
+                  batch, c, idx, buttons_pressed, stick_x, stick_y, batch->state.tilt_timer_x[idx],
+                  batch->state.tilt_timer_y[idx], facing_dir)) {
+            continue;
+          }
           const uint8_t wait_spotdodge = wait_iasa_try_enter_spotdodge_before_guard(batch, c, idx);
           if (!wait_spotdodge) {
             guard_update_grounded(batch, c, idx, 1);

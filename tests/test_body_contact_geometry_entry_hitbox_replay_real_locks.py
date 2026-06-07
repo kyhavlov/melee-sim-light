@@ -1870,13 +1870,59 @@ def test_landingairn_float_aobj_hurtcaps_reject_false_attackdash_tch_1816() -> N
 
 @pytest.mark.integration
 def test_fox_attackdash_static_collision_pose_rejects_false_attackairhi_fsp_7078() -> None:
-    # Fox AttackDash is a negative control for SSDYNN01 v4's collision-owner index:
-    # - Fox part 18 is in ftData.x2C's dynamic chain, but AttackDash is not marked as a dynamic
-    #   collision-owner submotion in the generated table.
-    # - This row stays exact with the static SSANIM collision matrix, proving the runtime does not
-    #   hardcode AttackDash into the dynamic-chain owner outside extracted data.
-    # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,lb_8001044C}
+    # AttackAirHi vs AttackDash allow-interrupt tail boundary:
+    # - FSP:7078 has the selected late AttackAirHi hb2 source overlapping only the defender's
+    #   part-18 tail cap while grounded AttackDash has crossed its generated allow_interrupt event.
+    # - Clear the seeded HitCapsule victim rings before stepping so this lock exercises the BODY
+    #   geometry owner directly; otherwise one-step replay seed state can mask the false contact.
+    # - The adjacent FSP:5765 positive keeps pre-allow-interrupt AttackDash BODY admission intact,
+    #   and FSP:7080 remains the later Wait-frame UpAir hit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
+    #   ftCo_AttackDash_Anim,ftCo_AttackDash_IASA,ftCo_AttackDash_Coll}
     # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirHi/events.ftCo_SM_AttackDash
+    # data/hurtcaps/{fox,falco}.json cap12 -> FtPart 18
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[7078:7079]["seed_t"].copy()
+    attacker = 0
+    defender = 1
+    assert int(seed["action_id"][0, attacker]) == 68  # AttackAirHi
+    assert int(seed["action_id"][0, defender]) == 50  # AttackDash
+    assert int(ds.samples[7080]["ref_t1"]["action_id"][defender]) == 90  # DamageFlyTop.
+    seed["combat_hitlist_cd"][0, attacker, :, defender] = np.uint16(0)
+    seed["combat_hitlist_victim_iid"][0, attacker, :, defender] = np.uint16(0)
+    seed["combat_hitlist_hb_valid"][0, attacker, :] = np.uint8(0)
+    seed["combat_hitlist_hb_cd"][0, attacker, :, defender] = np.uint16(0)
+    seed["combat_hitlist_hb_victim_iid"][0, attacker, :, defender] = np.uint16(0)
+
+    out, ref = _step_one_row_with_seed(dataset_path, 7078, seed)
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
+def test_attackairlw_attackdash_allow_interrupt_tail_rejects_high_capsule_fsp_1270() -> None:
+    # AttackAirLw vs AttackDash allow-interrupt tail boundary:
+    # - FSP:1270 has Fox AttackAirLw hb0/hb1 active against a grounded Fox AttackDash defender
+    #   exactly at the generated AttackDash allow_interrupt phase.
+    # - Source rejects the part-18 tail/hb0 BODY owner and keeps the lower same-group hb1/body
+    #   contact eligible, producing the 2-damage hitlag/percent lane.
+    # - This is bounded by extracted data, not a row branch: data/moves/{fox,falco}.json provides
+    #   the AttackAirLw same-group 3/2-damage payload and AttackDash allow_interrupt event, while
+    #   data/hurtcaps/{fox,falco}.json identifies cap12 as part 18. The nearby FSP:5765 positive
+    #   and FSP:7078 negative keep the broader AttackDash collision-pose policy unchanged.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
+    #   ftCo_AttackDash_Anim,ftCo_AttackDash_IASA,ftCo_AttackDash_Coll}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
@@ -1886,18 +1932,24 @@ def test_fox_attackdash_static_collision_pose_rejects_false_attackairhi_fsp_7078
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")
 
-    _seed, out, ref = _step_one_row(dataset_path, 7078)
+    seed, out, ref = _step_one_row(dataset_path, 1270)
+    attacker = 0
     defender = 1
-    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
-        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+    assert int(seed["action_id"][attacker]) == 69  # AttackAirLw
+    assert int(seed["action_id"][defender]) == 50  # AttackDash
+    assert int(ref["action_id"][defender]) == 79  # DamageN2
+    assert float(ref["percent"][defender]) == 25.0
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "percent", "instance_hit_by", "last_hit_by"):
+        np.testing.assert_array_equal(out[field], ref[field], err_msg=f"field={field}")
 
 
 @pytest.mark.integration
 def test_fox_attackdash_static_collision_pose_rejects_false_attackairhi_fsp_7078_rollout() -> None:
     # Rollout-mode negative lock for the former AttackDash frame-34 over-admit:
-    # FSP:7078 has the same visible AttackDash family as the positive frame-34 slice, but it is
-    # after allow_interrupt and must keep the static collision pose. This proves rollout/free-run
-    # code no longer depends on a replay_rollout_reseeded gate to reject the false AttackAirHi hit.
+    # FSP:7078/7079 has the same visible AttackDash family as the positive frame-34 slice, but it
+    # is after allow_interrupt and must reject the part-18 tail-only AttackAirHi hb2 BODY contact
+    # through the frame-0 AttackDash -> Wait callback boundary. FSP:7080 is the later ordinary
+    # Wait-frame UpAir hit and remains positive.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
     #   ftCo_AttackDash_Anim,ftCo_AttackDash_IASA,ftCo_AttackDash_Coll}
     # Source of timing windows: data/scripts/{fox,falco}.bin (MSLFTSC1).
@@ -1910,11 +1962,58 @@ def test_fox_attackdash_static_collision_pose_rejects_false_attackairhi_fsp_7078
         pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
-    seed = ds.samples[7078:7079]["seed_t"].copy()
-    out, ref = _step_one_row_with_seed(dataset_path, 7078, seed)
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    start_record = 5391
+    target_records = {7079, 7080}
+    target_record = max(target_records)
+    seed = ds.samples[start_record : start_record + 1]["seed_t"].copy()
+    seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        rows: dict[int, tuple[np.void, np.void]] = {}
+        for record in range(start_record, target_record + 1):
+            row = ds.samples[record : record + 1]
+            prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            frame_seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, seed_stride
+            )
+            binding.step_input_replay_frame_rng(handle, frame_seed_bytes, prev_input_bytes, input_bytes)
+            if record in target_records:
+                binding.write_compare(handle, out_compare_bytes)
+                rows[record] = (
+                    out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy(),
+                    row["ref_t1"][0].copy(),
+                )
+    finally:
+        binding.destroy(handle)
+
     defender = 1
+    assert set(rows) == target_records
+    out, ref = rows[7079]
+    assert int(ref["action_id"][defender]) == 14  # Wait, not same-frame DamageFlyTop.
     for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
-        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+        assert int(out[field][defender]) == int(ref[field][defender]), f"record=7079 field={field}"
+    out, ref = rows[7080]
+    assert int(ref["action_id"][defender]) == 90  # Later ordinary Wait-frame DamageFlyTop hit.
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"record=7080 field={field}"
 
 
 @pytest.mark.integration

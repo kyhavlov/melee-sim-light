@@ -2352,12 +2352,16 @@ void physics_integrate(MslBatch* batch) {
                      physics_action_is_grounded_common_damage_phys(action_id)) {
             if ((action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
                  action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) &&
-                physics_action_is_damage_fly(batch->state.seed_prev_action_id[idx])) {
+                (physics_action_is_damage_fly(batch->state.seed_prev_action_id[idx]) ||
+                 batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FALL)) {
               // DownBound has already run its source Phys callback in knockdown_update_pre_physics.
-              // On the first frame after DamageFly_Coll enters DownBound, routing the row through
-              // this generic ground-friction bucket would apply ft_80084F3C twice.
+              // On the first frame after DamageFly_Coll or DamageFall_Coll enters DownBound,
+              // routing the row through this generic ground-friction bucket would apply
+              // ft_80084F3C twice.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
               //   ftCo_DamageFly_Coll,ftCo_80090184}
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::{
+              //   ftCo_DamageFall_Coll,ftCo_80090984}
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Phys
             } else if (action_id == (uint16_t)MSL_ACT_REBOUND &&
                        batch->state.rebound_ground_accel_2[idx] != 0.0f) {

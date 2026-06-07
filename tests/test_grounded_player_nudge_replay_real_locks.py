@@ -18,6 +18,8 @@ STAGE_FD = 32
 CHAR_FOX = 1
 ACT_GUARD = 179
 ACT_GUARD_SET_OFF = 181
+ACT_DAMAGE_FALL = 38
+ACT_DOWN_BOUND_D = 191
 
 
 def _size(sizes: dict[str, int], key: str) -> int:
@@ -54,6 +56,50 @@ def _run_rollout_window(dataset_path: Path, start: int, stop: int) -> tuple[np.v
         for record in range(start, stop + 1):
             binding.step_input(
                 handle,
+                field_bytes(record, prev_off, input_stride),
+                field_bytes(record, input_off, input_stride),
+            )
+            binding.write_compare(handle, out_bytes)
+        out = out_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy()
+    finally:
+        binding.destroy(handle)
+    return samples["ref_t1"][stop].copy(), out
+
+
+def _run_aggregate_rollout_window(dataset_path: Path, start: int, stop: int) -> tuple[np.void, np.void]:
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    sizes = binding.sizes()
+    seed_stride = _size(sizes, "seed")
+    input_stride = _size(sizes, "input")
+    compare_stride = _size(sizes, "compare")
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+    raw = samples.view(np.uint8).reshape(len(samples), -1)
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8, order="C")
+
+    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
+        return np.array(
+            raw[record : record + 1, off : off + stride],
+            dtype=np.uint8,
+            order="C",
+            copy=True,
+        )
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, field_bytes(start, seed_off, seed_stride))
+        for record in range(start, stop + 1):
+            binding.step_input_replay_frame_rng(
+                handle,
+                field_bytes(record, seed_off, seed_stride),
                 field_bytes(record, prev_off, input_stride),
                 field_bytes(record, input_off, input_stride),
             )
@@ -136,6 +182,45 @@ def test_guardsetoff_turnover_nudge_uses_promoted_seed_prev_action_on_rollout() 
     # The exact position guards both halves of the boundary: missing seed-prev provenance leaves the
     # row +0.3000 too far right, while double-counting common + turnover nudge would overshoot left.
     assert float(ref["pos_x"][p]) == pytest.approx(22.10211181640625, abs=2e-6)
+
+
+@pytest.mark.integration
+def test_damagefall_to_downboundd_first_frame_friction_not_double_applied_fsp_9392() -> None:
+    # FSP rollout lock for the DamageFall_Coll -> DownBoundD landing owner:
+    # - DamageFall_Coll routes through ftCo_80090984 into the same DownBound entry ladder used by
+    #   DamageFly floor contact.
+    # - The first DownBoundD frame has already run DownBound_Phys / ft_80084F3C once; the generic
+    #   grounded friction bucket must not apply a second step before publishing gr_vel.
+    # - The immediate 9392 gr_vel/pos_x check protects the source owner. The downstream 9553
+    #   GuardSetOff check proves the repaired position reaches the real shield contact without a
+    #   shield-geometry shortcut.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::{
+    #   ftCo_DamageFall_Coll,ftCo_80090984}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Phys
+    # refs/melee/src/melee/ft/ft_084E.c::ft_80084F3C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    seed_9392 = ds.samples["seed_t"][9392]
+    assert int(seed_9392["action_id"][1]) == ACT_DOWN_BOUND_D
+    assert int(seed_9392["seed_prev_action_id"][1]) == ACT_DAMAGE_FALL
+
+    ref_9392, out_9392 = _run_aggregate_rollout_window(dataset_path, 0, 9392)
+    assert int(out_9392["action_id"][1]) == int(ref_9392["action_id"][1]) == ACT_DOWN_BOUND_D
+    assert int(out_9392["action_frame"][1]) == int(ref_9392["action_frame"][1]) == 1
+    assert float(out_9392["speed_ground_x_self"][1]) == pytest.approx(
+        float(ref_9392["speed_ground_x_self"][1]), abs=2e-6
+    )
+    assert float(out_9392["pos_x"][1]) == pytest.approx(float(ref_9392["pos_x"][1]), abs=8e-6)
+
+    ref_9553, out_9553 = _run_aggregate_rollout_window(dataset_path, 0, 9553)
+    assert int(out_9553["action_id"][0]) == int(ref_9553["action_id"][0]) == ACT_GUARD_SET_OFF
+    assert int(out_9553["hitlag"][0]) == int(ref_9553["hitlag"][0]) == 7
 
 
 def test_common_grounded_player_nudge_exact_overlap_uses_player_order() -> None:

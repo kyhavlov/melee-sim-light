@@ -1485,6 +1485,27 @@ Prefer completing these projects in order rather than “patching symptoms” in
      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`,
      `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox`.
+   - SpecialLwEnd -> continuing weak AttackAirB DamageFlyRoll RNG owner:
+     Grounded Reflector end rows can take damage from an already-live weak Back-Air HitCapsule
+     selected by `ftColl_80076ED8/ftColl_8007A06C` against the victim's cap2/head-high hurtcap.
+     This owner is admitted only from selected DmgLog HitCapsule/hurtcap provenance: defender
+     `SpecialLwEnd`, grounded-before/no-hitlag, current source motion AttackAirB, selected cap2,
+     live non-create-edge HitCapsule, and the authored weak BAir payload (9 damage, Sakurai angle,
+     kbg 100, bkb 0). The source prefix is fixed by call order, not replay phase fitting:
+     `ftColl_80078538` performs four normal-hit visual-effect `HSD_Randi` draws, then
+     `Fighter_ProcessHit_8006D1EC -> Fighter_8006CDA4` reaches the primary, secondary, and tertiary
+     pre-gate `HSD_Randi` callsites once each before `ftCo_8008DCE0` samples the DamageFlyRoll
+     `HSD_Randf` gate. Create-edge weak BAir rows, strong BAir rows, non-cap2 hurtcaps, one-step
+     seed-owned rows, and visible Reflector-end/Back-Air action shapes without selected source
+     provenance remain negative controls. Lock: `FavorableSuperficialPig.msl`.
+     Source anchors:
+     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078538,ftColl_8007A06C,ftColl_80076ED8}`,
+     `refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80078538`,
+     `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`,
+     `refs/melee/build/GALE01/asm/melee/ft/fighter.s::Fighter_8006CDA4`,
+     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
+     `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox`,
+     `data/hurtcaps/{fox,falco}.json`.
    - AttackAirLw -> active DamageFlyTop dynamic-tail BODY boundary:
      Fox's dynamic tail-chain collision owner (FtPart 18) can reject Falco DAir BODY candidates
      while the victim remains in active DamageFlyTop hitstun. The hb0 terminal reject stays bounded
