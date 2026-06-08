@@ -1706,7 +1706,23 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
       // Decomp: Guard IASA exits to GuardOff only once (xC && x10==0).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{inlineC0,ftCo_GuardOn_IASA,ftCo_Guard_IASA}
-      if (batch->state.guard_release_latched_xc[idx] && x10_pre == 0) {
+      const uint8_t guardon_no_submotion_release_x10_cleared_by_anim =
+          // Source order is GuardOn_Anim before GuardOn_IASA. On no-submotion GuardOn snapshots,
+          // the frame-start release latch can coexist with x10==1; when a same-frame jump input is
+          // present, source ticks x10 to zero in GuardOn_Anim and inlineC0 exits to GuardOff before
+          // ftCo_800CB024 can consume that jump press. Keep the older pre-decrement x10 gate for
+          // ordinary release countdown rows with no competing jump input.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_GuardOn_Anim,ftCo_800925A4,inlineC0,ftCo_GuardOn_IASA}
+          (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.animation_index[idx] == UINT32_MAX &&
+           batch->state.action_frame[idx] < 0 && !shield_held_inputs &&
+           batch->state.guard_release_latched_xc[idx] && x10_pre == 1u &&
+           guard_jump_oos_has_input(batch, c, idx) != 0u)
+              ? 1u
+              : 0u;
+      if (batch->state.guard_release_latched_xc[idx] &&
+          (x10_pre == 0 || guardon_no_submotion_release_x10_cleared_by_anim)) {
         if (a0 == (uint16_t)MSL_ACT_GUARD_ON) {
           // Seed-snapshot bridge for GuardOn no-submotion rows:
           // - GALE01 ordering is GuardOn_Anim then GuardOn_IASA.

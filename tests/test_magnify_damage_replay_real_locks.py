@@ -47,7 +47,7 @@ def _field_bytes(samples: np.ndarray, record: int, field: str, stride: int) -> n
     )
 
 
-def _run_rollout(ds, start: int, stop: int) -> np.void:
+def _run_rollout(ds, start: int, stop: int, *, replay_frame_lanes: bool = False) -> np.void:
     binding = pytest.importorskip("msl_binding")
     samples = ds.samples
     sizes = binding.sizes()
@@ -65,11 +65,19 @@ def _run_rollout(ds, start: int, stop: int) -> np.void:
     try:
         binding.reseed_seed_rollout(handle, _field_bytes(samples, start, "seed_t", seed_stride))
         for record in range(start, stop + 1):
-            binding.step_input(
-                handle,
-                _field_bytes(samples, record, "prev_input_t", input_stride),
-                _field_bytes(samples, record, "input_t", input_stride),
-            )
+            if replay_frame_lanes:
+                binding.step_input_replay_frame_rng(
+                    handle,
+                    _field_bytes(samples, record, "seed_t", seed_stride),
+                    _field_bytes(samples, record, "prev_input_t", input_stride),
+                    _field_bytes(samples, record, "input_t", input_stride),
+                )
+            else:
+                binding.step_input(
+                    handle,
+                    _field_bytes(samples, record, "prev_input_t", input_stride),
+                    _field_bytes(samples, record, "input_t", input_stride),
+                )
             binding.write_compare(handle, out_compare_bytes)
     finally:
         binding.destroy(handle)
@@ -304,11 +312,96 @@ def test_magnify_rollout_mvp_damageflylw_horizontal_root_exit_starts_counter() -
 
 
 @pytest.mark.integration
+def test_magnify_rollout_lim_damageflyhi_local_episode_resets_when_camera_inside() -> None:
+    # LIM's early DamageFlyHi episode publishes x221F_b0 for the magnifying-glass camera subject,
+    # but Slippi's hidden x1910 counter remains zero and the source visibility clears before the
+    # 60-frame damage interval. Fighter_procUpdate resets fp->dmg.x1910 whenever
+    # ifMagnify_802FC998 is false, so a runtime-started local counter must not force x221F_b0 across
+    # the later Jump/SpecialHiHoldAir rows after the replay camera lane has returned inside.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "LawfulInsistentMeerkat.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    source_record = 296
+    inside_record = 320
+    no_tick_record = 353
+
+    source_seed = ds.samples[source_record]["seed_t"]
+    assert int(source_seed["action_id"][p]) == 88  # DamageFlyHi.
+    assert int(source_seed["magnify_damage_counter_x1910"][p]) == 0
+    assert int(source_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 0
+    assert int(ds.samples[source_record]["ref_t1"]["state_flags"][p, 4]) & 0x80
+
+    inside_seed = ds.samples[inside_record]["seed_t"]
+    assert int(inside_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 1
+    assert (int(inside_seed["state_flags"][p, 4]) & 0x80) == 0
+
+    no_tick_ref = ds.samples[no_tick_record]["ref_t1"]
+    no_tick_out = _run_rollout(ds, 0, no_tick_record)
+    assert float(no_tick_out["percent"][p]) == pytest.approx(
+        float(no_tick_ref["percent"][p]), abs=1e-5
+    )
+    assert (int(no_tick_out["state_flags"][p, 4]) & 0x80) == 0
+
+
+@pytest.mark.integration
+def test_magnify_rollout_lim_damageflytop_early_visible_episode_ticks() -> None:
+    # LIM exposes a source camera-box visibility start on DamageFlyTop frame 8: ftLib_80086A8C has
+    # already set fp->x221F_b0, but the replay-derived camera-target-inside lane is still true and
+    # the hidden x1910 seed lane remains zero. Replay playback feeds the replay-visible x221F_b0
+    # source bit each frame; the fresh start is bounded by that bit plus the raw x2218_b2
+    # DamageFlyTop source-episode provenance. This is the create-edge visibility owner, not a
+    # generic DamageFlyTop top-exit bridge.
+    # refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "LawfulInsistentMeerkat.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    start = 2326
+    visible_record = 2559
+    tick_record = 2618
+    p = 0
+
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 90  # DamageFlyTop.
+    assert int(visible_seed["action_frame"][p]) == 8
+    assert int(visible_seed["magnify_damage_counter_x1910"][p]) == 0
+    assert int(visible_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 1
+    assert int(visible_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(visible_seed["state_flags"][p, 0]) & 0x20
+    assert int(visible_seed["state_flags"][p, 4]) & 0x80
+
+    tick_ref = ds.samples[tick_record]["ref_t1"]
+    plain_out = _run_rollout(ds, start, tick_record)
+    assert float(plain_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]) - 1.0, abs=1e-5)
+
+    tick_out = _run_rollout(ds, start, tick_record, replay_frame_lanes=True)
+    assert float(tick_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
 def test_magnify_rollout_dcc_damagefly_top_visible_rows_do_not_start_episode() -> None:
-    # DCC has source-visible DamageFlyTop rows with camera point outside but no ifMagnify damage
-    # tick. Fresh DamageFly starts are therefore limited to the Hi/N source-visible owner, the
-    # DamageFlyLw horizontal-root owner, and the DamageFlyRoll horizontal-root owner; DamageFlyTop
-    # rows can only consume an already-seeded nonzero x1910 episode.
+    # DCC has later source-visible DamageFlyTop rows with camera point outside, but it does not
+    # expose the early frame-8 x221F_b0 create-edge that owns LIM's x1910 start. The later terminal
+    # percent change in this segment is the DCC phantom/tip-log source owner, not a magnifying-glass
+    # runtime episode, so this rollout must not start a generic DamageFlyTop top-exit counter.
     # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
     # refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998
     root = Path(__file__).resolve().parents[1]
@@ -320,6 +413,13 @@ def test_magnify_rollout_dcc_damagefly_top_visible_rows_do_not_start_episode() -
 
     ds = read_dataset(str(dataset_path))
     p = 1
+    early_top = ds.samples[9291]["seed_t"]
+    assert int(early_top["action_id"][p]) == 90  # DamageFlyTop.
+    assert int(early_top["action_frame"][p]) == 8
+    assert int(early_top["magnify_damage_counter_x1910"][p]) == 0
+    assert (int(early_top["state_flags"][p, 0]) & 0x20) == 0
+    assert (int(early_top["state_flags"][p, 4]) & 0x80) == 0
+
     visible_top = ds.samples[9362]["seed_t"]
     assert int(visible_top["action_id"][p]) == 90  # DamageFlyTop.
     assert int(visible_top["magnify_damage_counter_x1910"][p]) == 0

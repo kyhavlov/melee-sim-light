@@ -48,7 +48,7 @@ rollout.float_top_errors:
   1. pos_x max_err=3.24182 rec=3604 p=1 seed/ref/out=79.1667/83.6153/80.3735 actions=356/356/356 category=unclassified
   2. pos_y max_err=0.163157 rec=4879 p=0 seed/ref/out=-14.4/-14.2368/-14.4 actions=253/254/254 category=unclassified
   3. speed_air_x_self max_err=0.000168457 rec=7328 p=0 seed/ref/out=0/0/0.000168457 actions=60/60/60 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:7302
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:179
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl ==
 rollout.status: RAW-CLEAN
@@ -65,7 +65,7 @@ rollout.float_top_errors:
   1. pos_y max_err=1.875 rec=3576 p=1 seed/ref/out=0.0001/0.000100017/-1.8749 actions=193/193/193 category=unclassified
   2. pos_x max_err=1.8666 rec=4811 p=1 seed/ref/out=-86.5657/-86.5657/-88.4323 actions=202/202/202 category=unclassified
   3. percent max_err=1.46 rec=1053 p=1 seed/ref/out=56.44/56.44/57.9 actions=90/90/90 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:7147
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:194
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl ==
 rollout.status: RAW-CLEAN
@@ -82,7 +82,7 @@ rollout.float_top_errors:
   1. pos_x max_err=1.83195 rec=8499 p=0 seed/ref/out=84.5119/85.9328/84.1008 actions=356/356/356 category=unclassified
   2. percent max_err=1 rec=8445 p=0 seed/ref/out=61.1/62.1/61.1 actions=354/354/354 category=unclassified
   3. shield_hp max_err=0.700001 rec=2565 p=1 seed/ref/out=59.16/58.18/57.48 actions=182/181/181 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:9933
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:193
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260514T181413.msl ==
 rollout.status: RAW-CLEAN
@@ -99,7 +99,7 @@ rollout.float_top_errors:
   1. pos_x max_err=5.96229 rec=951 p=0 seed/ref/out=78.0179/83.9753/78.013 actions=356/356/356 category=unclassified
   2. percent max_err=1 rec=2454 p=0 seed/ref/out=89.5214/89.5214/90.5214 actions=90/90/90 category=unclassified
   3. shield_hp max_err=0.00224304 rec=1917 p=1 seed/ref/out=57.535/57.42/57.4222 actions=179/24/24 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:130
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:21
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260515T182447_frozenps.msl ==
 rollout.status: RAW-CLEAN
@@ -116,7 +116,7 @@ rollout.float_top_errors:
   1. pos_y max_err=110.6 rec=4793 p=0 seed/ref/out=181.114/181.114/70.5137 actions=7/7/7 category=unclassified
   2. pos_x max_err=4.80666 rec=5348 p=1 seed/ref/out=-88.9429/-91.2425/-86.4358 actions=356/356/356 category=unclassified
   3. speed_y_self max_err=1.7 rec=4732 p=0 seed/ref/out=0/0/-1.7 actions=7/7/7 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4255
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:862
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl ==
 rollout.status: RAW-CLEAN
@@ -133,7 +133,7 @@ rollout.float_top_errors:
   1. percent max_err=2 rec=4004 p=1 seed/ref/out=126.81/127.81/125.81 actions=38/38/38 category=unclassified
   2. pos_x max_err=1.66988 rec=4623 p=0 seed/ref/out=-87.3436/-87.695/-86.0251 actions=38/38/38 category=unclassified
   3. pos_y max_err=0.186949 rec=9036 p=0 seed/ref/out=-16.5/-16.3131/-16.5 actions=253/254/254 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:8596
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:219
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl ==
 rollout.status: RAW-CLEAN
@@ -150,7 +150,7 @@ rollout.float_top_errors:
   1. pos_x max_err=1.30004 rec=6302 p=1 seed/ref/out=83.0184/84.9889/83.6889 actions=356/356/356 category=unclassified
   2. percent max_err=1 rec=2569 p=1 seed/ref/out=137/138/137 actions=38/38/38 category=unclassified
   3. shield_hp max_err=0.209999 rec=810 p=1 seed/ref/out=60/59.79/60 actions=178/235/235 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:6822
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:155
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl ==
 rollout.status: RAW-CLEAN
@@ -165,9 +165,9 @@ rollout.first_mismatch_seeded_total: 0
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=1.29269 rec=8983 p=1 seed/ref/out=-88.5364/-88.5638/-87.2711 actions=345/345/345 category=unclassified
-  2. percent max_err=1 rec=6478 p=1 seed/ref/out=104.61/105.61/104.61 actions=29/29/29 category=unclassified
+  2. percent max_err=1 rec=6417 p=1 seed/ref/out=100.61/100.61/101.61 actions=84/84/84 category=unclassified
   3. speed_ground_x_self max_err=0.78 rec=4005 p=0 seed/ref/out=0.86/0/0.78 actions=360/365/365 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:9298
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:222
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl ==
 rollout.status: NOT-CLEAN
@@ -188,7 +188,7 @@ rollout.float_top_downstream:
   1. percent max_err=12 rec=8358 p=0 seed/ref/out=0/0/12 actions=178/181/76 category=downstream_discrete_mismatch
   2. shield_hp max_err=11.9 rec=7420 p=1 seed/ref/out=54.47/54.19/42.29 actions=178/178/181 category=downstream_discrete_mismatch
   3. pos_x max_err=8.93192 rec=6468 p=0 seed/ref/out=54.6814/45.7495/54.6814 actions=90/223/90 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4247
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:194
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
 rollout.status: NOT-CLEAN
@@ -209,7 +209,7 @@ rollout.float_top_downstream:
   1. percent max_err=12 rec=7278 p=1 seed/ref/out=112.12/124.12/112.12 actions=182/87/182 category=downstream_discrete_mismatch
   2. shield_hp max_err=8.4 rec=365 p=1 seed/ref/out=60/59.72/51.32 actions=178/178/181 category=downstream_discrete_mismatch
   3. speed_y_attack max_err=3.67658 rec=7278 p=1 seed/ref/out=0/3.67658/0 actions=182/87/182 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5414
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:215
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
 rollout.status: RAW-CLEAN
@@ -225,8 +225,8 @@ rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=3.375 rec=2659 p=0 seed/ref/out=0.000100136/-3.3749/9.98974e-05 actions=90/90/90 category=unclassified
   2. pos_x max_err=1.48581 rec=2412 p=0 seed/ref/out=-86.5991/-88.5759/-87.0901 actions=86/86/86 category=unclassified
-  3. percent max_err=1 rec=7649 p=0 seed/ref/out=147.89/147.89/148.89 actions=88/88/88 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:6666
+  3. percent max_err=1 rec=1135 p=0 seed/ref/out=122.73/122.73/123.73 actions=345/345/345 category=unclassified
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:214
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
 rollout.status: RAW-CLEAN
@@ -243,7 +243,7 @@ rollout.float_top_errors:
   1. percent max_err=1.66 rec=305 p=0 seed/ref/out=9.28/10.94/9.28 actions=90/90/90 category=unclassified
   2. pos_x max_err=0.725571 rec=5396 p=1 seed/ref/out=81.1631/87.4777/86.7521 actions=356/356/356 category=unclassified
   3. pos_y max_err=0.163157 rec=5254 p=0 seed/ref/out=-14.4/-14.2368/-14.4 actions=253/256/256 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4366
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:164
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
 rollout.status: RAW-CLEAN
@@ -260,7 +260,7 @@ rollout.float_top_errors:
   1. pos_x max_err=5.35205 rec=2692 p=0 seed/ref/out=80.6063/84.8995/79.5475 actions=356/356/356 category=unclassified
   2. speed_x_attack max_err=2.19308 rec=270 p=0 seed/ref/out=-1.09159/1.09654/-1.09654 actions=85/85/85 category=unclassified
   3. percent max_err=1 rec=12408 p=0 seed/ref/out=89.24/90.24/89.24 actions=38/38/38 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:10897
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:363
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl ==
 rollout.status: NOT-CLEAN
@@ -281,7 +281,7 @@ rollout.float_top_downstream:
   1. percent max_err=18 rec=11784 p=1 seed/ref/out=116.52/116.52/134.52 actions=29/29/90 category=downstream_discrete_mismatch
   2. shield_hp max_err=10.5 rec=4591 p=1 seed/ref/out=60/59.72/49.22 actions=178/178/181 category=downstream_discrete_mismatch
   3. speed_y_attack max_err=8.37927 rec=11784 p=1 seed/ref/out=0/0/8.37927 actions=29/29/90 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4907
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:136
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/LoyalDishonestWren.msl ==
 rollout.status: RAW-CLEAN
@@ -298,7 +298,7 @@ rollout.float_top_errors:
   1. pos_x max_err=4.408 rec=3583 p=1 seed/ref/out=70.429/70.429/74.837 actions=354/354/354 category=unclassified
   2. speed_air_x_self max_err=0.38 rec=3563 p=1 seed/ref/out=0.065/0.032/0.412 actions=29/354/354 category=unclassified
   3. shield_hp max_err=0.000480652 rec=3316 p=1 seed/ref/out=60/59.8367/59.8362 actions=178/178/178 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3533
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:83
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl ==
 rollout.status: RAW-CLEAN
@@ -315,7 +315,7 @@ rollout.float_top_errors:
   1. percent max_err=1 rec=1671 p=0 seed/ref/out=92.45/92.45/93.45 actions=354/356/356 category=unclassified
   2. pos_x max_err=0.302223 rec=7293 p=1 seed/ref/out=-107.189/-107.538/-107.236 actions=27/27/27 category=unclassified
   3. pos_y max_err=0.0567341 rec=7658 p=0 seed/ref/out=0.000100002/0.665649/0.608915 actions=226/239/239 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:6655
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:157
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.status: RAW-CLEAN
@@ -332,7 +332,7 @@ rollout.float_top_errors:
   1. pos_x max_err=3.08841 rec=2613 p=1 seed/ref/out=73.5924/80.2222/77.1337 actions=356/356/356 category=unclassified
   2. pos_y max_err=1.12705 rec=6622 p=0 seed/ref/out=-30.8362/-31.0282/-32.1552 actions=354/354/354 category=unclassified
   3. percent max_err=1 rec=6115 p=0 seed/ref/out=146.735/147.735/146.735 actions=38/38/38 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5379
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:169
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.status: RAW-CLEAN
@@ -347,9 +347,9 @@ rollout.first_mismatch_seeded_total: 0
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=11.4627 rec=3136 p=0 seed/ref/out=-122.431/-123.558/-135.021 actions=247/0/0 category=unclassified
-  2. speed_air_x_self max_err=0.64325 rec=3126 p=0 seed/ref/out=0.632875/0.64325/0 actions=247/247/247 category=unclassified
-  3. shield_hp max_err=0.282024 rec=944 p=0 seed/ref/out=49.9524/50.0224/50.3044 actions=182/75/75 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:8684
+  2. percent max_err=1 rec=11422 p=1 seed/ref/out=126.66/126.66/127.66 actions=27/27/27 category=unclassified
+  3. speed_air_x_self max_err=0.64325 rec=3126 p=0 seed/ref/out=0.632875/0.64325/0 actions=247/247/247 category=unclassified
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:229
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.status: RAW-CLEAN
@@ -366,7 +366,7 @@ rollout.float_top_errors:
   1. pos_x max_err=3.80643 rec=9373 p=0 seed/ref/out=82.0671/86.3517/82.5452 actions=356/356/356 category=unclassified
   2. percent max_err=1 rec=765 p=1 seed/ref/out=101.48/101.48/102.48 actions=29/29/29 category=unclassified
   3. speed_y_self max_err=0.6 rec=3128 p=1 seed/ref/out=-3.4/-3.4/-2.8 actions=86/42/42 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:9237
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:268
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.status: RAW-CLEAN
@@ -383,7 +383,7 @@ rollout.float_top_errors:
   1. pos_x max_err=0.423203 rec=2030 p=0 seed/ref/out=-87.599/-88.0314/-88.4546 actions=27/27/27 category=unclassified
   2. shield_hp max_err=0.209999 rec=6802 p=1 seed/ref/out=60/59.79/60 actions=178/235/235 category=unclassified
   3. speed_air_x_self max_err=0.000421375 rec=1251 p=0 seed/ref/out=2.04/-0.365898/-0.366319 actions=181/181/181 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5157
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:169
 
 == datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl ==
 rollout.status: NOT-CLEAN
@@ -404,7 +404,8 @@ rollout.float_top_downstream:
   1. pos_x max_err=102.951 rec=5966 p=1 seed/ref/out=-86.7898/-88.1059/14.8449 actions=88/88/191 category=downstream_discrete_mismatch
   2. percent max_err=12 rec=2620 p=0 seed/ref/out=143.81/143.81/155.81 actions=361/361/88 category=downstream_discrete_mismatch
   3. pos_y max_err=11.6131 rec=5966 p=1 seed/ref/out=12.9104/11.622/0.0089 actions=88/88/191 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3526
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1596
+rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl ==
 rollout.status: NOT-CLEAN
@@ -425,28 +426,29 @@ rollout.float_top_downstream:
   1. pos_x max_err=23.2 rec=2231 p=1 seed/ref/out=10.7119/10.9119/-12.2881 actions=14/14/14 category=downstream_discrete_mismatch
   2. pos_y max_err=8.75049 rec=2231 p=0 seed/ref/out=45.4749/42.6749/51.4254 actions=28/28/42 category=downstream_discrete_mismatch
   3. shield_hp max_err=8.4 rec=6801 p=1 seed/ref/out=55.52/55.24/46.84 actions=179/179/181 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2427
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:885
+rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 2542
-rollout.streak_count: 26
-rollout.streak_len.median: 212
-rollout.streak_len.p90: 949
+rollout.streak_count: 25
+rollout.streak_len.median: 219
+rollout.streak_len.p90: 1024
 rollout.streak_len.p95: 1161
 rollout.streak_len.max: 2542
-rollout.first_mismatch_total: 25
+rollout.first_mismatch_total: 24
 rollout.first_mismatch_seeded_total: 7
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=7.59922 rec=6443 p=1 seed/ref/out=64.9651/66.0932/58.4939 actions=236/236/236 category=unclassified
-  2. percent max_err=1 rec=7197 p=0 seed/ref/out=4/4/3 actions=0/0/0 category=unclassified
+  2. percent max_err=1 rec=7195 p=0 seed/ref/out=4/4/3 actions=0/0/0 category=unclassified
   3. pos_y max_err=0.674896 rec=4681 p=1 seed/ref/out=45.6939/50.002/49.3271 actions=91/91/91 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=14 rec=7605 p=1 seed/ref/out=50.26/64.26/50.26 actions=67/90/67 category=downstream_discrete_mismatch
   2. pos_y max_err=8.99222 rec=8874 p=0 seed/ref/out=14.2829/19.8751/10.8829 actions=68/73/68 category=downstream_discrete_mismatch
   3. pos_x max_err=8.222 rec=6444 p=1 seed/ref/out=66.0932/65.4449/57.2229 actions=236/236/43 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3777
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1199
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl ==
 rollout.status: RAW-CLEAN
@@ -462,8 +464,8 @@ rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=4.27399 rec=4090 p=1 seed/ref/out=-92.9568/-92.2663/-87.9923 actions=27/27/27 category=unclassified
   2. percent max_err=1 rec=2918 p=1 seed/ref/out=123.16/123.16/124.16 actions=345/345/345 category=unclassified
-  3. speed_y_self max_err=0.477068 rec=2904 p=0 seed/ref/out=-1.93729/0.477068/0 actions=43/43/43 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4216
+  3. pos_y max_err=0.372225 rec=1888 p=1 seed/ref/out=0.3751/0.00287497/0.3751 actions=191/191/191 category=unclassified
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:531
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl ==
 rollout.status: NOT-CLEAN
@@ -484,7 +486,8 @@ rollout.float_top_downstream:
   1. percent max_err=15 rec=1261 p=1 seed/ref/out=26.46/26.46/41.46 actions=25/25/86 category=downstream_discrete_mismatch
   2. pos_y max_err=7.53591 rec=10955 p=1 seed/ref/out=-3.68725/1.4584/-6.07752 actions=88/199/88 category=downstream_discrete_mismatch
   3. shield_hp max_err=7 rec=9873 p=0 seed/ref/out=58.04/57.76/50.76 actions=178/179/181 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3649
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:808
+rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl ==
 rollout.status: NOT-CLEAN
@@ -505,7 +508,7 @@ rollout.float_top_downstream:
   1. percent max_err=13.35 rec=3980 p=0 seed/ref/out=131.36/144.71/131.36 actions=90/91/90 category=downstream_discrete_mismatch
   2. shield_hp max_err=7.7 rec=3902 p=1 seed/ref/out=59.72/59.44/51.74 actions=178/178/181 category=downstream_discrete_mismatch
   3. speed_x_attack max_err=4.54633 rec=3980 p=0 seed/ref/out=0.280998/-4.27066/0.275667 actions=90/91/90 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:8221
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1658
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl ==
 rollout.status: NOT-CLEAN
@@ -526,7 +529,7 @@ rollout.float_top_downstream:
   1. percent max_err=15 rec=773 p=1 seed/ref/out=17/17/32 actions=27/27/86 category=downstream_discrete_mismatch
   2. shield_hp max_err=11.9 rec=4364 p=1 seed/ref/out=51.6/51.32/39.42 actions=178/178/181 category=downstream_discrete_mismatch
   3. speed_y_attack max_err=4.54661 rec=4225 p=1 seed/ref/out=0/-4.54661/0 actions=26/88/26 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5291
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1284
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl ==
 rollout.status: NOT-CLEAN
@@ -547,7 +550,7 @@ rollout.float_top_downstream:
   1. percent max_err=16 rec=12278 p=0 seed/ref/out=166.71/182.71/166.71 actions=366/90/369 category=downstream_discrete_mismatch
   2. pos_x max_err=9.50063 rec=11504 p=0 seed/ref/out=-102.418/-101.947/-92.4459 actions=29/29/252 category=downstream_discrete_mismatch
   3. speed_y_attack max_err=7.32839 rec=12278 p=0 seed/ref/out=0/7.32839/0 actions=366/90/369 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5453
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1679
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl ==
 rollout.status: RAW-CLEAN
@@ -563,8 +566,8 @@ rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=3.32372 rec=1091 p=1 seed/ref/out=-57.6626/-59.1495/-55.8258 actions=251/251/251 category=unclassified
   2. percent max_err=1 rec=7901 p=0 seed/ref/out=93.54/93.54/94.54 actions=354/354/354 category=unclassified
-  3. pos_y max_err=0.474316 rec=2639 p=1 seed/ref/out=-0.645508/-1.11997/-0.64565 actions=24/43/43 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:7125
+  3. shield_hp max_err=0.209999 rec=1994 p=1 seed/ref/out=60/59.79/60 actions=178/235/235 category=unclassified
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:577
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl ==
 rollout.status: RAW-CLEAN
@@ -581,28 +584,24 @@ rollout.float_top_errors:
   1. shield_hp max_err=0.0699997 rec=232 p=1 seed/ref/out=59.72/59.79/59.72 actions=181/29/29 category=unclassified
   2. pos_x max_err=7.62939e-06 rec=264 p=1 seed/ref/out=42.3085/44.4622/44.4622 actions=20/20/20 category=unclassified
   3. pos_y max_err=1.90735e-06 rec=19 p=1 seed/ref/out=28/28.0449/28.0449 actions=322/323/323 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl ==
-rollout.status: NOT-CLEAN
-rollout.best_len: 1357
-rollout.streak_count: 15
-rollout.streak_len.median: 257
-rollout.streak_len.p90: 1040
-rollout.streak_len.p95: 1357
-rollout.streak_len.max: 1357
-rollout.first_mismatch_total: 14
-rollout.first_mismatch_seeded_total: 5
+rollout.status: RAW-CLEAN
+rollout.best_len: 5984
+rollout.streak_count: 1
+rollout.streak_len.median: 5984
+rollout.streak_len.p90: 5984
+rollout.streak_len.p95: 5984
+rollout.streak_len.max: 5984
+rollout.first_mismatch_total: 0
+rollout.first_mismatch_seeded_total: 0
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_x max_err=6.15126 rec=5338 p=0 seed/ref/out=-32.6214/-31.1214/-24.9701 actions=20/20/20 category=unclassified
-  2. speed_ground_x_self max_err=1.48 rec=5327 p=0 seed/ref/out=-0.3/-1.675/-0.195 actions=20/20/20 category=unclassified
-  3. speed_air_x_self max_err=1.28 rec=5328 p=0 seed/ref/out=-0.075/-1.595/-0.315 actions=20/20/20 category=unclassified
-rollout.float_top_downstream:
-  1. percent max_err=9 rec=4919 p=0 seed/ref/out=42.97/42.97/51.97 actions=53/53/77 category=downstream_discrete_mismatch
-  2. pos_y max_err=8.55118 rec=2803 p=1 seed/ref/out=-8.00955/-16.9747/-8.4235 actions=251/252/251 category=downstream_discrete_mismatch
-  3. speed_y_self max_err=4.23933 rec=185 p=1 seed/ref/out=-0.0266667/4.186/-0.0533333 actions=366/27/366 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2680
+  1. pos_x max_err=1.5651 rec=2248 p=0 seed/ref/out=30.7453/31.3233/32.8884 actions=90/90/90 category=unclassified
+  2. percent max_err=1 rec=5897 p=0 seed/ref/out=98.49/99.49/98.49 actions=90/90/90 category=unclassified
+  3. pos_y max_err=0.981716 rec=5983 p=0 seed/ref/out=49.3143/48.4978/47.5161 actions=88/1/1 category=unclassified
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:321
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl ==
 rollout.status: NOT-CLEAN
@@ -618,22 +617,23 @@ rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=36.0083 rec=7055 p=0 seed/ref/out=56.5205/55.9905/19.9822 actions=35/0/0 category=unclassified
   2. pos_y max_err=5.63058 rec=1483 p=0 seed/ref/out=34.5357/33.3588/27.7282 actions=88/88/88 category=unclassified
-  3. percent max_err=1 rec=9334 p=0 seed/ref/out=118.29/119.29/118.29 actions=354/354/354 category=unclassified
+  3. percent max_err=1 rec=9333 p=0 seed/ref/out=118.29/118.29/119.29 actions=354/354/354 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=13.8 rec=3512 p=0 seed/ref/out=85.88/85.88/99.68 actions=178/181/87 category=downstream_discrete_mismatch
   2. shield_hp max_err=12.6 rec=6967 p=0 seed/ref/out=58.32/45.44/58.04 actions=178/181/178 category=downstream_discrete_mismatch
   3. speed_y_attack max_err=4.3698 rec=7748 p=1 seed/ref/out=0/0/4.3698 actions=20/20/88 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2719
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:559
+rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == suite summary ==
-overall.rollout.streak_count: 283
-overall.rollout.streak_len.median: 333
-overall.rollout.streak_len.p90: 1912
-overall.rollout.streak_len.p95: 7295
+overall.rollout.streak_count: 268
+overall.rollout.streak_len.median: 341
+overall.rollout.streak_len.p90: 2110
+overall.rollout.streak_len.p95: 7543
 overall.rollout.streak_len.max: 12416
 overall.rollout.best_len.max: 12416
-overall.rollout.first_mismatch_total: 258
-overall.rollout.first_mismatch_seeded_total: 105
+overall.rollout.first_mismatch_total: 243
+overall.rollout.first_mismatch_seeded_total: 100
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=116.809 rec=7120 p=1 seed/ref/out=36.0399/34.1441/150.953 actions=7/7/7 category=unclassified
@@ -643,4 +643,5 @@ overall.rollout.float_top_downstream:
   1. pos_x max_err=102.951 rec=5966 p=1 seed/ref/out=-86.7898/-88.1059/14.8449 actions=88/88/191 category=downstream_discrete_mismatch
   2. percent max_err=18 rec=11784 p=1 seed/ref/out=116.52/116.52/134.52 actions=29/29/90 category=downstream_discrete_mismatch
   3. shield_hp max_err=12.6 rec=6967 p=0 seed/ref/out=58.32/45.44/58.04 actions=178/181/178 category=downstream_discrete_mismatch
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:177710
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:15505
+overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:7

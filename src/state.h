@@ -803,6 +803,11 @@ typedef struct MslStateSoA {
   // Runtime-only one-frame walk physics owner for Wait_IASA rows that only reach Walk on the raw
   // stick lane from ftWalkCommon_800DFC70.
   uint8_t* walk_use_raw_input_once;
+  // Runtime-only Dash_Enter marker. Dash can re-enter Dash from Dash_IASA without changing
+  // action_id, but ftCo_Dash_Phys still consumes the entry x0 lane on that frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{
+  //   ftCo_Dash_CheckInput,ftCo_Dash_Enter,ftCo_Dash_Phys}
+  uint8_t* dash_entered_this_frame;
   // Turn dash-out latch (decomp: fp->mv.co.turn.x8).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_IASA,fn_800C9C2C}
   int8_t* turn_x8;          // -1/0/+1

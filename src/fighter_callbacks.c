@@ -308,6 +308,7 @@ static inline void cache_prev_action_state(MslBatch* batch) {
       batch->state.frame_start_attack_instance[idx] = batch->state.attack_instance[idx];
       batch->state.frame_start_instance_id[idx] = batch->state.instance_id[idx];
       batch->state.frame_start_on_ground[idx] = batch->state.on_ground[idx] ? 1u : 0u;
+      batch->state.dash_entered_this_frame[idx] = 0u;
     }
   }
 }

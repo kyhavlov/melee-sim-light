@@ -301,6 +301,7 @@ MSL_STATE_FIELD(landing_fallspecial_allow_interrupt, uint8_t, bp, (size_t)MSL_MA
 MSL_STATE_FIELD(turn_has_turned, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(turn_frames_to_turn, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(walk_use_raw_input_once, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(dash_entered_this_frame, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(turn_x8, int8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(lr_press_timer, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(x672_input_timer, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)

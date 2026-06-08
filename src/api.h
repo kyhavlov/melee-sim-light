@@ -96,8 +96,11 @@ int msl_batch_reseed_seed_rollout(MslBatch* batch, const uint8_t* seed_bytes,
 int msl_batch_apply_replay_frame_rng(MslBatch* batch, const uint8_t* seed_bytes,
                                      size_t seed_stride_bytes);
 
-// Replay playback validation step: apply the current replay row's frame-start RNG seed and then
-// advance one input frame. Normal RL/free-running step_input callers should not use this.
+// Replay playback validation step: apply current replay row frame-start lanes that are
+// authoritative in replay playback, then advance one input frame. This includes frame-start RNG
+// and the replay-visible x221F_b0 camera-box visibility bit used by magnify ownership. The
+// standalone msl_batch_apply_replay_frame_rng helper remains RNG-only. Normal RL/free-running
+// step_input callers should not use this.
 int msl_batch_step_input_replay_frame_rng(MslBatch* batch, const uint8_t* seed_bytes,
                                           size_t seed_stride_bytes, const uint8_t* prev_input_bytes,
                                           size_t prev_input_stride_bytes,
@@ -894,8 +897,8 @@ typedef struct MslSeed {
   // - Runtime Fighter_procUpdate model increments this counter while offscreen and applies the
   //   source-owned 1% magnifying-glass damage when it reaches the interval. Replay-seeded rollouts
   //   consume nonzero backfilled counter episodes. Fresh zero-counter starts remain blocked except
-  //   for the bounded DamageFlyHi/N owner where runtime has a source-visible x221F_b0 bit, a
-  //   point-outside Camera_80030CD8 result, and a Camera_80030CFC overlap admission.
+  //   for bounded DamageFly owners where runtime has source-visible camera-box/offscreen evidence
+  //   such as horizontal root/trajectory exits or replay-fed DamageFlyTop x221F_b0 publication.
   //
   // Fallback:
   // - 0 means no elapsed offscreen frames; live/non-replay starts build the counter causally.

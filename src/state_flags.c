@@ -298,8 +298,47 @@ static inline uint8_t state_flags_magnify_camera_target_horizontal_trajectory_ow
   return 0u;
 }
 
+static inline uint8_t state_flags_magnify_damageflytop_local_episode_visible_owner(
+    const MslBatch* batch, size_t idx, uint8_t flags_221f) {
+  if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
+      batch->state.magnify_damage_counter_x1910[idx] == 0u ||
+      (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0) == 0u) {
+    return 0u;
+  }
+  const uint8_t flags_2218 =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+  const uint8_t flags_221c =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  return (uint8_t)(((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u &&
+                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u &&
+                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) == 0u &&
+                    (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B0) == 0u)
+                       ? 1u
+                       : 0u);
+}
+
+static inline uint8_t state_flags_magnify_damageflytop_source_visible_owner(const MslBatch* batch,
+                                                                            size_t idx,
+                                                                            uint8_t flags_221f) {
+  if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
+      batch->state.action_frame[idx] != 9 || (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0) == 0u) {
+    return 0u;
+  }
+  const uint8_t flags_2218 =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+  const uint8_t flags_221c =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  return (uint8_t)(((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u &&
+                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u &&
+                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) == 0u &&
+                    (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B0) == 0u)
+                       ? 1u
+                       : 0u);
+}
+
 static inline uint8_t state_flags_magnify_runtime_visibility_owner(const MslBatch* batch,
-                                                                   size_t idx, uint16_t action_id) {
+                                                                   size_t idx, uint16_t action_id,
+                                                                   uint8_t flags_221f) {
   // Replay rollout fresh-start ownership follows the source magnifying-glass offscreen producer:
   // ifMagnify_802FC7C0 tests Player_80036978 world position against Stage_GetCamBounds* and
   // Fighter_procUpdate consumes that is_offscreen bit for fp->dmg.x1910.
@@ -309,9 +348,11 @@ static inline uint8_t state_flags_magnify_runtime_visibility_owner(const MslBatc
   // - DamageFlyHi/N: horizontal left/right root exits, or camera-target offscreen rows whose current
   //   horizontal knockback reaches a side camera bound within one x1910 damage interval,
   // - DamageFlyLw and DamageFlyRoll: horizontal left/right root exits only.
-  // Top exits can publish x221F_b0 through ftLib_80086A8C while hidden ifMagnify/player gates keep
-  // x1910 at zero, so vertical exits remain seed-owned until a fuller ifMagnify state model exists.
-  // Nonzero seed episodes continue through timers.c using the ordinary live-fighter gate.
+  // - DamageFlyTop: only when the source x221F_b0 camera-box visibility bit is live on the first
+  //   replay-visible frame after the DamageFlyTop camera-box publication. Vertical/top pose
+  //   thresholds are intentionally not used.
+  // Nonzero DamageFlyTop seed/local episodes continue through the explicit x1910/x221F lane below.
+  // Nonzero seed/local episodes continue through timers.c using the ordinary live-fighter gate.
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
   // refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FC7C0,ifMagnify_802FC998}
   // refs/melee/src/melee/stage/stage.c::Stage_GetCamBounds*
@@ -330,6 +371,9 @@ static inline uint8_t state_flags_magnify_runtime_visibility_owner(const MslBatc
   }
   if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
     return state_flags_root_outside_stage_cam_horizontal_bounds(batch, idx);
+  }
+  if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP) {
+    return state_flags_magnify_damageflytop_source_visible_owner(batch, idx, flags_221f);
   }
   return 0u;
 }
@@ -579,6 +623,20 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         } else {
           f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
         }
+      }
+      if (action_id >= (uint16_t)MSL_ACT_CAPTURE_PULLED_HI &&
+          action_id <= (uint16_t)MSL_ACT_CAPTURE_PULLED_LW &&
+          (prev_action == (uint16_t)MSL_ACT_DASH ||
+           batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_DASH)) {
+        // Dash -> CapturePulled allow_interrupt clear:
+        // CapturePulled{Hi,Lw} carries command bits such as x2218_b2 from the pulled source path,
+        // but the Dash-interrupted destination does not own fp->allow_interrupt. Clear only
+        // x2218_b0 for that Dash entry owner; other CapturePulled rows can carry source 0x80 from
+        // their interrupted motion/callback lane.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+        //   ftCo_CapturePulledHi_Anim,ftCo_CapturePulledLw_Anim}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
       }
       const uint16_t prev_action_2218 = batch->state.prev_action_id[idx];
       // Jab command ownership (fp+0x2218 x2218_b1/x2218_b2):
@@ -1414,7 +1472,18 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // data/stages/final_destination.json: cam_bounds_world
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
       }
-      if (state_flags_magnify_runtime_visibility_owner(batch, idx, action_id) != 0u) {
+      const uint8_t magnify_runtime_visibility_owner =
+          state_flags_magnify_runtime_visibility_owner(batch, idx, action_id, f221f);
+      const uint8_t magnify_damageflytop_local_visible_owner =
+          state_flags_magnify_damageflytop_local_episode_visible_owner(batch, idx, f221f);
+      const uint8_t magnify_replay_local_episode =
+          (replay_rollout != 0u && batch->state.magnify_damage_counter_x1910[idx] != 0u &&
+           batch->state.magnify_damage_seed_episode_active[idx] == 0u &&
+           (batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] == 0u ||
+            magnify_damageflytop_local_visible_owner != 0u))
+              ? 1u
+              : 0u;
+      if (magnify_runtime_visibility_owner != 0u) {
         // Runtime magnifying-glass damage owner:
         // - ifMagnify_802FC7C0 marks player is_offscreen from Player_80036978 world position versus
         //   Stage_GetCamBounds*,
@@ -1428,6 +1497,15 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
         }
         batch->state.magnify_damage_runtime_visibility_owner[idx] = 1u;
+      } else if (magnify_replay_local_episode != 0u) {
+        // A runtime-started replay-rollout x1910 episode can carry only while the current replay
+        // camera lane still proves the magnify offscreen source. `Fighter_procUpdate` resets
+        // fp->dmg.x1910 whenever `ifMagnify_802FC998` is false, so a nonzero local counter is not
+        // itself visibility proof after the source camera lane returns inside.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+        // refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998
+        f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
+        batch->state.magnify_damage_runtime_visibility_owner[idx] = 0u;
       } else if (!batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx]) {
         batch->state.magnify_damage_runtime_visibility_owner[idx] = 0u;
       } else {
@@ -1435,6 +1513,11 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         if (batch->state.magnify_damage_counter_x1910[idx] == 0u) {
           batch->state.magnify_damage_seed_episode_active[idx] = 0u;
         }
+      }
+      if (replay_rollout != 0u && magnify_runtime_visibility_owner == 0u &&
+          magnify_replay_local_episode == 0u &&
+          batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] != 0u) {
+        f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B0;
       }
       batch->state.state_flags[flags_221c_i] = f221c;
       batch->state.state_flags[flags_221f_i] = f221f;

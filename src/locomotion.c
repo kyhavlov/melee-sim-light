@@ -176,6 +176,10 @@ static inline uint8_t walk_check_input_accepts(const MslCommonParams* c, float s
                                                float facing_dir);
 static inline uint8_t spacie_speciallw_pressed(const MslCommonParams* c, uint8_t char_id,
                                                uint16_t buttons_pressed, float stick_y);
+static inline uint8_t spacie_speciallw_preempts_common_air_iasa(const MslCommonParams* c,
+                                                                uint8_t char_id,
+                                                                uint16_t buttons_pressed,
+                                                                float stick_y);
 static inline uint8_t spacie_speciallw_wait_iasa_pressed_edge(const MslCommonParams* c,
                                                               uint8_t char_id,
                                                               uint16_t buttons_pressed,
@@ -1081,6 +1085,19 @@ static inline float landing_root_y_from_mpcoll_contact(const MslBatch* batch, si
   if (fabsf(world.x1 - world.x0) > 0.0001f) {
     floor_y = world.y0 + ((world.y1 - world.y0) * (batch->state.pos_x[idx] - world.x0) /
                           (world.x1 - world.x0));
+  }
+  if (!g->lines[(size_t)line_idx].is_platform &&
+      !stage_collision_floor_line_has_platform_transform(stage_id, batch->state.ground_id[idx]) &&
+      fabsf(world.y1 - world.y0) > 0.0001f) {
+    // Generated/static slope landing-entry owner:
+    // The collision callback has already accepted the current floor id before entering Landing*.
+    // When the scratch contact_y is stale, source `mpLib_8004DD90_Floor` still projects the root
+    // onto the accepted sloped floor line. Use the data-backed line plane for static hard-floor
+    // slopes rather than preserving the stale flat contact.
+    // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter
+    // data/stages/bin/*.bin::MSLSTG01 floor line endpoints
+    return floor_y + k_mplib_floor_y_bias;
   }
 
   const float contact_y = batch->state.ground_contact_y[idx];
@@ -2661,7 +2678,14 @@ static inline void enter_missfoot_from_ground_floor_loss(MslBatch* batch, const 
   batch->state.on_ground[idx] = 0u;
   batch->state.fall_fast[idx] = 0u;
   batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0u;
-  batch->state.speed_y_self[idx] = 0.0f;
+  batch->state.ecb_lock_timer[idx] = 10u;
+  batch->state.coll_desired_ecb_bottom_locked_owner[idx] = 0u;
+  // `ftCo_8009F39C` clears only fp->x8c_kb_vel.y before entering MissFoot. It preserves
+  // fp->self_vel.y, then, because the source caller is still GA_Ground, calls
+  // ftCommon_8007D5D4 to clear gr_vel and lock CollData. Grounded slope movement therefore carries
+  // the already-projected self-velocity into MissFoot while KB y is reset.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_8009F39C
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
   batch->state.speed_y_attack[idx] = 0.0f;
   if (batch->state.speed_air_x_self[idx] > ch->air_drift_max) {
     batch->state.speed_air_x_self[idx] = ch->air_drift_max;
@@ -3333,6 +3357,26 @@ static inline void common_pass_enter(MslBatch* batch, const MslCommonParams* c,
   if (batch == NULL || c == NULL || ch == NULL) {
     return;
   }
+  const uint16_t source_action = batch->state.action_id[idx];
+  if (action_is_grounded_guard_state(source_action)) {
+    // Guard/GuardOn/GuardReflect platform-pass source order:
+    // - Fighter_8006A360 runs the common grounded fighter-overlap nudge
+    //   (`ftCommon_8007E0E4` -> `ftCommon_8007DD7C`, xF8_playerNudgeVel.x) before
+    //   Fighter_procUpdate reaches the Guard IASA tail.
+    // - Guard_IASA can then enter Pass via ftCo_8009A080/ftCo_8009A228, clearing ground before this
+    //   simulator's later shared physics nudge pass would see the original grounded Guard owner.
+    // Preserve only the already-computed source nudge for the platform-pass entry frame; ordinary
+    // Guard rows that stay grounded continue through physics_compute_grounded_player_nudge().
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    //   ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardReflect_IASA}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_8009A080,ftCo_8009A228}
+    // data/common/ft_common_data.json::player_nudge_x
+    const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+    const int p = (int)(idx % (size_t)MSL_MAX_PLAYERS);
+    batch->state.pos_x[idx] += ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
+  }
   // Soft-platform Pass entry:
   // - ftCo_8009A228 calls ftCommon_8007D5D4, ftCommon_ClampAirDrift, writes self_vel.y=x46C,
   //   enters ftCo_MS_Pass, and calls mpUpdateFloorSkip.
@@ -3456,19 +3500,28 @@ static inline uint8_t walk_check_input_accepts(const MslCommonParams* c, float s
 
 static inline uint8_t spacie_speciallw_pressed(const MslCommonParams* c, uint8_t char_id,
                                                uint16_t buttons_pressed, float stick_y) {
-  // Fox/Falco aerial common IASA checks ftCo_SpecialAir_CheckInput before ftCo_80099A58
-  // (EscapeAir). The simulator's Reflector owner runs after locomotion, so local locomotion IASA
-  // source-order guards must leave B+down reflector input unconsumed for that later source owner.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
   return (c != NULL && shine_char_supports_reflector(char_id) &&
           (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
           stick_y <= -c->special_stick_y_threshold)
              ? 1u
              : 0u;
+}
+
+static inline uint8_t spacie_speciallw_preempts_common_air_iasa(const MslCommonParams* c,
+                                                                uint8_t char_id,
+                                                                uint16_t buttons_pressed,
+                                                                float stick_y) {
+  // Fox/Falco aerial common IASA checks ftCo_SpecialAir_CheckInput before ftCo_80099A58
+  // (EscapeAir), ftCo_AttackAir_CheckItemThrowInput, and ftCo_800CB870 (JumpAerial). The
+  // simulator's Reflector owner runs after locomotion, so local locomotion IASA source-order guards
+  // must leave B+down reflector input unconsumed for that later source owner.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
+  return spacie_speciallw_pressed(c, char_id, buttons_pressed, stick_y);
 }
 
 static inline uint8_t spacie_speciallw_wait_iasa_pressed_edge(const MslCommonParams* c,
@@ -6022,6 +6075,9 @@ void locomotion_update_pre(MslBatch* batch) {
                   batch->state.tilt_timer_x[idx] = 0xFEu;
                   dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, ch, idx);
                   dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
+                  if (fabsf(batch->state.speed_ground_x_self[idx]) < 0.5f) {
+                    batch->state.dash_entered_this_frame[idx] = 1u;
+                  }
                   dash_checkinput_entered_dash = 1u;
                   action_id = (uint16_t)MSL_ACT_DASH;
                 }
@@ -6455,9 +6511,9 @@ void locomotion_update_pre(MslBatch* batch) {
              action_is_fall_like(action_id) || action_id == (uint16_t)MSL_ACT_PASS)
                 ? 1
                 : 0;
-        const uint8_t speciallw_preempts_escapeair =
-            spacie_speciallw_pressed(c, cid, buttons_pressed, stick_y);
-        if (allow_escape_air && !speciallw_preempts_escapeair &&
+        const uint8_t speciallw_preempts_common_air_iasa =
+            spacie_speciallw_preempts_common_air_iasa(c, cid, buttons_pressed, stick_y);
+        if (allow_escape_air && !speciallw_preempts_common_air_iasa &&
             escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
           continue;
         }
@@ -6520,7 +6576,7 @@ void locomotion_update_pre(MslBatch* batch) {
              action_id == MSL_ACT_FALL_SPECIAL_B)
                 ? 0u
                 : 1u;
-        if (allow_jump_aerial &&
+        if (allow_jump_aerial && !speciallw_preempts_common_air_iasa &&
             locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, stick_x,
                                                   facing_dir, 1u)) {
           tilt_timer_y = 0xFEu;

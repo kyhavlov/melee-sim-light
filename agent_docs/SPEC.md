@@ -2861,6 +2861,19 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}`,
     `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
     and `data/stages/bin/griz.json::platform_transforms`.
+  - Same-frame `JumpAerial_IASA -> AttackAir` can likewise enter `AttackAir_Coll` before
+    `Fighter_procMap` publishes a new CollData pose. On static soft platforms, runtime may use the
+    pre-entry JumpAerial CollData ECB bottom as the previous endpoint for the first
+    `mpColl_80044628_Floor` sweep, but only when `CollData_X130_Locked` is not live; active ECB
+    locks remain their own source owner and keep adjacent Dream Land rows airborne through the
+    entered aerial. This owner is bounded by the generated JumpAerial source action, the entered
+    AttackAir callback family, a real static-platform sweep hit, and an unlocked CollData ECB lane.
+    Sources:
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
+    `refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}`,
+    and
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor}`.
   - Same-frame `JumpAerial -> EscapeAir` keeps the pre-entry JumpAerial `CollData.ecb` as
     `prev_ecb` for the EscapeAir map callback. Runtime reconstructs that bottom point from the
     generated `MSLMSO01` submotion id for the frame-start JumpAerial action instead of sampling the
@@ -6843,16 +6856,83 @@ BODY collision-space residual split and rejected seed bridge:
     horizontal left/right root exit, a DamageFlyHi/N camera-target offscreen row whose current
     horizontal knockback reaches a side camera bound within one x1910 damage interval, or a
     DamageFlyLw horizontal root exit. DamageFlyLw is admitted only from the root-horizontal
-    `ifMagnify_802FC7C0` bound, not from camera-target trajectory or vertical/top exits. Vertical
-    exits with no side-bound trajectory and DamageFlyTop cannot fresh-start from visible pose
-    reconstruction and may only consume nonzero seeded episodes.
+    `ifMagnify_802FC7C0` bound, not from camera-target trajectory or vertical/top exits. DamageFlyTop
+    has one additional source-owned fresh-start owner: replay playback feeds the replay-visible
+    `fp+0x221F_b0` camera-box visibility bit from the current row, and the first DamageFlyTop step
+    after that publication can start x1910 when the raw `fp+0x2218_b2` DamageFlyTop source-episode
+    provenance is still live. This owner is bounded by source x221F visibility, DamageFlyTop
+    action-frame 9 after the replay-visible publication, x2218_b2, and rejects the separate raw
+    `fp+0x2218_b5` reflect-behavior lane plus current selected-victim x221C_b0 rows. It deliberately
+    does not use camera-y, velocity, or vertical/top pose thresholds. DCC `rec6326/6386` are the
+    controls proving that x2218_b2 plus DamageFlyTop is not sufficient by itself. Later DamageFlyTop
+    visible/top rows cannot fresh-start from visible pose reconstruction and may only consume a
+    nonzero seeded x1910 episode, a still-source-visible runtime-started local episode, or their
+    separate terminal damage owners.
+    `Fighter_procUpdate` resets `fp->dmg.x1910` whenever `ifMagnify_802FC998` is false, so a
+    runtime-started local counter is not its own visibility proof after the replay camera lane
+    returns inside; LIM's early DamageFlyHi -> Jump/SpecialHiHoldAir stretch is the negative.
   - MGS locks: `rec2919` (DamageFlyN -> SpecialAirNLoop percent tick) and `rec5687` (DamageFlyHi
     episode feeding the later hitstun boundary). PPA `rec7652 -> 7808` locks the camera-target
     offscreen plus horizontal-trajectory owner that starts before root has crossed the right camera
     bound. MVP `rec1614 -> 1672 -> 1718` locks the DamageFlyLw horizontal root-exit start that
-    carries through SpecialHiHoldAir/SpecialAirHi before the later hitstun boundary. DCC controls:
-    `rec9362/9685` keep DamageFlyTop visible rows from starting an unproven x1910 episode, while
-    BHH `rec5620 -> 5671` keeps vertical/top DamageFlyN exits rejected.
+    carries through SpecialHiHoldAir/SpecialAirHi before the later hitstun boundary. LIM
+    `rec2559 -> 2618` locks the replay-visible DamageFlyTop `x221F_b0` owner. DCC controls:
+    `rec9291/9362/9685` keep later DamageFlyTop visible rows from starting an unproven x1910
+    episode or double-counting the terminal phantom/tip-log owner, while BHH `rec5620 -> 5671`
+    keeps vertical/top DamageFlyN exits rejected.
+- LIM rollout owner pass:
+  - Dash -> Dash same-action re-entry: `ftCo_Dash_IASA` can call
+    `ftCo_Dash_CheckInput -> ftCo_Dash_Enter(gobj, 1)` from an existing Dash when the current
+    same-facing stick flick is fresh. Because `action_id` remains Dash, runtime carries a one-frame
+    `Dash_Enter` marker so `ftCo_Dash_Phys` consumes the entry `mv.co.dash.x0` lane instead of the
+    steady Dash acceleration lane. The visible self velocity/position use the callback-local Dash
+    terminal scalar, while post-frame `gr_vel` receives the authored dash-initial-velocity xE8
+    update. LIM `rec5327 -> rec5433/5435` is the rollout-positive; the adjacent Dash continuation
+    row remains ordinary steady Dash.
+  - JumpAerial -> AttackAir static-platform entry: `JumpAerial_IASA` can publish AttackAir before
+    Fighter_procMap, but `AttackAir_Coll -> ft_80082C74` still consumes the frame-start JumpAerial
+    CollData/ECB bottom for the bottom sweep. Runtime admits this only for a current AttackAir entry
+    whose frame-start/previous/seed provenance is JumpAerial, whose source ECB bottom is deeper than
+    the entered AttackAir bottom, and whose accepted floor is a static soft platform rather than a
+    transformed stage object. LIM `rec4967` is the positive; sustained EscapeAir/AttackAir
+    hard-floor controls remain on their existing owners.
+  - No-lock JumpAerial -> EscapeAir static-platform handoff: the same callback-local CollData
+    lifetime applies when `JumpAerial_IASA` enters EscapeAir and no `CollData_X130_Locked` seed lane
+    is live. `EscapeAir_Coll -> ft_80082C74` can consume the carried JumpAerial bottom against a
+    static Yoshi side platform and enter `LandingFallSpecial`; transformed/late EscapeAir rows stay
+    on their existing locked/current-ECB owners. LIM `rec1085` is the positive.
+  - Expired no-submotion GuardOn lightshield ShieldDesc owner: `GuardOn_Anim` can transition
+    through `ftCo_800928CC` after x10 expires while the live `lightshield_amount` and tilted
+    ShieldDesc from `ftCo_800925A4/ftCo_80091E78` still own same-frame fighter collision. Runtime
+    keeps that owner bounded to no-submotion GuardOn/Guard rows with `guard_x10 == 0`, latched
+    lightshield, shield tilt, and live shield-family provenance, letting same-frame grounded Shine
+    resolve as shield contact instead of BODY. LIM `rec3561` is the positive; GuardReflect/Shine
+    BODY controls remain in the shared shield lock suite.
+  - GuardOn release x10 ordering: `GuardOn_Anim` decrements/clears `mv.co.guard.x10` before the
+    release latch reaches `inlineC0`. A no-submotion GuardOn with latched release and same-frame jump
+    input can therefore enter `GuardOff` before the jump fallback runs; the adjacent prior row with
+    x10 still live remains GuardOn. LIM `rec2379` is the positive and `rec2378` is the stale-early
+    negative.
+  - AttackAirN late hb0 vs early GuardOff source-clear carry: AttackAirN is `Ft_MF_SkipHit`, so
+    `Fighter_ChangeMotionState` preserves x914 HitCapsule victim rings on aerial entry. The late
+    hb0 create phase keeps hit_group 0, so without an authoritative per-HitCapsule empty seed,
+    `ftAction_8007121C/ftColl_800768A0` does not prove the list was cleared. Early GuardOff advances
+    Slippi's visible instance id but not the source fighter object pointer stored in `HitVictim`;
+    live x18C8 source-clear attribution or stale dense victims_1 provenance can still prove
+    `lbColl_8000ACFC` should suppress full BODY damage. Runtime bounds this to replay rollout,
+    AttackAirN hb0, generated late-create phase, early GuardOff frames, no hitlag/hitstun, and
+    source-clear/stale-dense proof. LIM `rec2382..2384` is the positive; later GuardOff and other
+    aerials stay on normal BODY admission.
+  - Common Damage -> Landing slope ground-KB scalar: `Damage_Coll` can enter `Landing` without the
+    down-damage CCE8 owner. On Landing's first grounded update, source initializes `xF0_ground_kb_vel`
+    from the live horizontal KB projected through the current floor tangent, which keeps first-frame
+    Landing integration exact on sloped floors. LIM `rec2081` and `rec4896` are positives.
+  - Other LIM source owners retained in this pass are decomp/data-bounded completions: strong
+    AttackAirLw selected high BODY hurtcap vs lower-cap BODY candidate selection, DamageFly
+    hitlag-exit terminal ledge endpoint persistence, Guard-origin Pass floor-loss nudge, current
+    MSLSTG01 floor-normal projection for LandingFallSpecial, MissFoot floor-loss self-velocity carry,
+    CapturePulled allow-interrupt clear, and DownBound/Passive hidden xF0 ground-KB scalar
+    reconstruction.
 - Source anchors:
   - `refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}`
   - `refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim`
@@ -6879,6 +6959,11 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_Coll`
   - `refs/melee/src/melee/ft/ft_081B.c::ft_800845B4`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_8009F39C`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_IASA,ftCo_Dash_CheckInput,ftCo_Dash_Enter,ftCo_Dash_Phys}`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800925A4,ftCo_80091E78,ftCo_800928CC}`
+  - `refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}`
+  - `refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::{ftCo_800DE9B8,ftCo_800DE9D8,ftCo_800DEAE8,ftCo_AppealS_Anim}`
   - `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA`

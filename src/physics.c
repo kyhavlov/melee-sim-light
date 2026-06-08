@@ -188,6 +188,38 @@ static inline float physics_ground_friction_mul_for_floor(const MslBatch* batch,
   return friction_mul;
 }
 
+static inline uint8_t physics_try_stage_floor_normal_for_current_line(const MslBatch* batch,
+                                                                      size_t bi, size_t idx,
+                                                                      float* nx_out,
+                                                                      float* ny_out) {
+  if (batch == NULL || nx_out == NULL || ny_out == NULL || bi >= (size_t)batch->batch_size) {
+    return 0u;
+  }
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id == 0xFFFFu) {
+    return 0u;
+  }
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const MslStageFloorGraph* graph = stage_collision_get_floor_graph(stage_id);
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (graph == NULL || line_idx < 0 || (size_t)line_idx >= graph->line_count) {
+    return 0u;
+  }
+  MslStageFloorLine world = graph->lines[(size_t)line_idx];
+  if (!stage_collision_floor_line_world(batch, (int)bi, &graph->lines[(size_t)line_idx], &world)) {
+    return 0u;
+  }
+  const float dx = world.x1 - world.x0;
+  const float dy = world.y1 - world.y0;
+  const float len = sqrtf(dx * dx + dy * dy);
+  if (len <= 0.000001f) {
+    return 0u;
+  }
+  *nx_out = -dy / len;
+  *ny_out = dx / len;
+  return 1u;
+}
+
 static inline uint8_t physics_action_uses_ground_kb_scalar_entry_projection(uint16_t action_id) {
   // Decomp: DownBound and neutral Passive floor-contact entries call ftCommon_8007CCE8, which
   // initializes hidden xF0_ground_kb_vel from x8c_kb_vel.x before rebuilding the public KB vector
@@ -205,11 +237,43 @@ static inline uint8_t physics_action_uses_ground_kb_scalar_entry_projection(uint
                        : 0u);
 }
 
-static inline float physics_ground_kb_scalar_for_decay(MslBatch* batch, uint16_t action_id,
-                                                       float kb_x, float kb_y, float tangent_x,
-                                                       float tangent_y) {
+static inline uint8_t physics_landing_from_common_damage_initializes_ground_kb_scalar_from_x(
+    const MslBatch* batch, size_t idx, uint16_t action_id, float kb_y, float tangent_y) {
+  if (batch == NULL || action_id != (uint16_t)MSL_ACT_LANDING ||
+      batch->state.action_frame[idx] > 1 || fabsf(kb_y) <= 0.000001f ||
+      fabsf(tangent_y) <= 0.000001f) {
+    return 0u;
+  }
+  // Common Damage -> Landing on a slope:
+  // `ftCo_Damage_Coll` can enter `ftCo_Landing_Enter_Basic` through the common floor-contact path.
+  // Landing entry calls `ftCommon_8007D7FC`, but does not call `ftCommon_8007CCE8`. On the next
+  // Fighter_procUpdate ground branch, source sees `xF0_ground_kb_vel==0`, initializes it from the
+  // still-visible airborne `x8c_kb_vel.x`, decays that scalar, then rebuilds `x8c_kb_vel` from the
+  // floor tangent. Reseed exposes only the public vector, so dotting the airborne vector against the
+  // slope would double-count the vertical component. Bound this to the first Landing frame after
+  // generated common-Damage provenance; sustained Landing rows already carry projected public KB.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+  //   ftCo_Landing_Enter_Basic,ftCo_Landing_Enter}
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007CCE8}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  return (uint8_t)((msl_motion_state_common_class_has(batch->state.prev_action_id[idx],
+                                                      MSL_MS_CLASS_DAMAGE_COMMON) != 0u ||
+                    msl_motion_state_common_class_has(batch->state.seed_prev_action_id[idx],
+                                                      MSL_MS_CLASS_DAMAGE_COMMON) != 0u)
+                       ? 1u
+                       : 0u);
+}
+
+static inline float physics_ground_kb_scalar_for_decay(MslBatch* batch, size_t idx,
+                                                       uint16_t action_id, float kb_x, float kb_y,
+                                                       float tangent_x, float tangent_y) {
   if (batch != NULL && physics_action_uses_ground_kb_scalar_entry_projection(action_id) != 0u &&
       fabsf(kb_y) <= 0.000001f && fabsf(tangent_y) > 0.000001f) {
+    return kb_x;
+  }
+  if (physics_landing_from_common_damage_initializes_ground_kb_scalar_from_x(
+          batch, idx, action_id, kb_y, tangent_y) != 0u) {
     return kb_x;
   }
   return kb_x * tangent_x + kb_y * tangent_y;
@@ -260,7 +324,7 @@ static inline void physics_apply_knockback_decay(MslBatch* batch, size_t bi, siz
     const float tangent_x = ny;
     const float tangent_y = -nx;
     float ground_kb =
-        physics_ground_kb_scalar_for_decay(batch, action_id, kb_x, kb_y, tangent_x, tangent_y);
+        physics_ground_kb_scalar_for_decay(batch, idx, action_id, kb_x, kb_y, tangent_x, tangent_y);
     const float friction = physics_ground_friction_mul_for_floor(batch, bi, idx) * ch->gr_friction *
                            c->ground_kb_friction_mul;
 
@@ -1635,6 +1699,52 @@ static inline uint8_t physics_is_match_flow_airborne(uint16_t action_id) {
   }
 }
 
+static inline uint8_t physics_damagefly_hitlag_exit_terminal_ledge_endpoint_owner(
+    const MslBatch* batch, size_t idx) {
+  if (batch == NULL || !physics_action_is_damage_fly(batch->state.action_id[idx]) ||
+      batch->state.hitlag_pre_timer[idx] == 0u || batch->state.hitlag[idx] != 0u ||
+      batch->state.ground_id[idx] == 0xFFFFu || batch->state.speed_y_attack[idx] > 0.0f) {
+    return 0u;
+  }
+
+  const int bi = (int)(idx / (size_t)batch->config.num_players);
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const int line_idx = stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  if (!line->fighter_solid || !line->is_ledge || line->is_platform ||
+      stage_collision_floor_line_has_platform_transform(stage_id, line->segment_i)) {
+    return 0u;
+  }
+
+  enum { MSL_MPLIB_ENDPOINT_EXTENSION_UNITS = 1 };
+  const float root_x = batch->state.floor_sweep_prev_pos_x[idx];
+  if (!isfinite(root_x)) {
+    return 0u;
+  }
+
+  // Same source owner as timers.c::damagefly_hitlag_exit_terminal_ledge_endpoint_owner:
+  // the hitlag-exit DamageFly callback consumes a terminal ledge-floor endpoint through
+  // `ft_80081DD4 -> mpColl_800473CC`, so this callback row updates gravity/KB decay but does not
+  // publish the lateral/root displacement term across the ledge seam. Upward KB rows are not this
+  // owner: source leaves the floor through ordinary DamageFly integration before any DownBound
+  // publication.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // refs/melee/src/melee/mp/{mpcoll.c,mplib.c}::{mpColl_800473CC,mpLib_8004ED5C}
+  // data/stages/bin/*.bin::MSLSTG01 floor ledge/link metadata
+  const uint8_t near_prev_endpoint =
+      (uint8_t)(line->prev < 0 &&
+                fabsf(root_x - line->x0) <= (float)MSL_MPLIB_ENDPOINT_EXTENSION_UNITS);
+  const uint8_t near_next_endpoint =
+      (uint8_t)(line->next < 0 &&
+                fabsf(root_x - line->x1) <= (float)MSL_MPLIB_ENDPOINT_EXTENSION_UNITS);
+  return (uint8_t)(near_prev_endpoint || near_next_endpoint);
+}
+
 static inline uint8_t ftCommon_CheckFallFast(const MslCommonParams* c, float stick_y, float vy,
                                              uint8_t* io_fall_fast,
                                              uint8_t* io_x671_timer_lstick_tilt_y) {
@@ -2441,7 +2551,13 @@ void physics_integrate(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_Enter,ftCo_Dash_Phys}
             // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
             // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-            if (prev_action_id != (uint16_t)MSL_ACT_DASH) {
+            if (prev_action_id != (uint16_t)MSL_ACT_DASH ||
+                batch->state.dash_entered_this_frame[idx] != 0u) {
+              // Dash_IASA can call ftCo_Dash_Enter(gobj, 1) from an existing Dash. The action id
+              // does not change, but source still seeds mv.co.dash.x0 and ftCo_Dash_Phys consumes
+              // the entry lane before Fighter_procUpdate applies xE8 to post-frame gr_vel.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{
+              //   ftCo_Dash_CheckInput,ftCo_Dash_Enter,ftCo_Dash_Phys}
               grounded_self_vel_for_frame = gr_vel;
               use_grounded_self_vel_for_frame = 1u;
               const float init_vel = facing_dir * ch->dash_initial_velocity;
@@ -2453,6 +2569,7 @@ void physics_integrate(MslBatch* batch) {
                 // Otherwise x0 = init_vel - gr_vel, so post-add resolves exactly to init_vel.
                 gr_vel = init_vel;
               }
+              batch->state.dash_entered_this_frame[idx] = 0u;
             } else {
               const float accel =
                   stick_x * ch->dash_run_acceleration_a +
@@ -2550,6 +2667,27 @@ void physics_integrate(MslBatch* batch) {
         //   ftCo_DownBound_Phys,ftCo_DownBound_Coll}
         float floor_nx = batch->state.ground_normal_x[idx];
         float floor_ny = batch->state.ground_normal_y[idx];
+        if (action_id == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL &&
+            batch->state.ground_id[idx] != 0xFFFFu) {
+          float stage_floor_nx = 0.0f;
+          float stage_floor_ny = 1.0f;
+          if (physics_try_stage_floor_normal_for_current_line(batch, bi, idx, &stage_floor_nx,
+                                                              &stage_floor_ny) &&
+              (fabsf(stage_floor_nx - floor_nx) > 0.000001f ||
+               fabsf(stage_floor_ny - floor_ny) > 0.000001f)) {
+            // LandingFallSpecial shares the common grounded Phys callback. Source projects
+            // `fp->gr_vel` through the current CollData.floor.normal during
+            // `ftCommon_ApplyGroundMovement`; when replay reseed exposes the new floor id before
+            // the matching normal lane, use the generated MSLSTG01 line normal for that same
+            // current floor.
+            // refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_LandingFallSpecial
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Phys
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
+            // data/stages/bin/*.bin::MSLSTG01 floor endpoints
+            floor_nx = stage_floor_nx;
+            floor_ny = stage_floor_ny;
+          }
+        }
         if (floor_nx == 0.0f && floor_ny == 0.0f) {
           floor_ny = 1.0f;
         }
@@ -2606,14 +2744,20 @@ void physics_integrate(MslBatch* batch) {
       const float vy_self = batch->state.speed_y_self[idx];
       const float vx_kb = batch->state.speed_x_attack[idx];
       const float vy_kb = batch->state.speed_y_attack[idx];
+      const uint8_t damagefly_terminal_ledge_endpoint_owner =
+          physics_damagefly_hitlag_exit_terminal_ledge_endpoint_owner(batch, idx);
 
       // Position integration uses the (possibly-updated) self velocity plus the separate knockback
       // velocity term, matching GALE01 `Fighter_procUpdate` integration shape.
       // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
       batch->state.pos_x[idx] += vx_self;
-      batch->state.pos_x[idx] += vx_kb;
+      if (!damagefly_terminal_ledge_endpoint_owner) {
+        batch->state.pos_x[idx] += vx_kb;
+      }
       batch->state.pos_y[idx] += vy_self;
-      batch->state.pos_y[idx] += vy_kb;
+      if (!damagefly_terminal_ledge_endpoint_owner) {
+        batch->state.pos_y[idx] += vy_kb;
+      }
       batch->state.pos_x[idx] += atk_shield_kb_x;
       batch->state.pos_y[idx] += atk_shield_kb_y;
       physics_apply_combo_push_timer(batch, c, idx);

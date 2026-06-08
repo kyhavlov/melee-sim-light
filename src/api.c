@@ -3642,6 +3642,36 @@ int msl_batch_apply_replay_frame_rng(MslBatch* batch, const uint8_t* seed_bytes,
   return 0;
 }
 
+static int msl_batch_apply_replay_frame_camera_box_visibility(MslBatch* batch,
+                                                              const uint8_t* seed_bytes,
+                                                              size_t seed_stride_bytes) {
+  if (batch == NULL || seed_bytes == NULL) {
+    return EINVAL;
+  }
+  if (seed_stride_bytes < sizeof(MslSeed)) {
+    return EINVAL;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    const MslSeed* seed =
+        (const MslSeed*)(const void*)(seed_bytes + (size_t)bi * seed_stride_bytes);
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const uint8_t visible = seed->camera_box_visible_x221f_b0[p] ? 1u : 0u;
+      batch->state.camera_box_visible_x221f_b0[idx] = visible;
+      uint8_t* f221f =
+          &batch->state
+               .state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221F_INDEX];
+      if (visible != 0u) {
+        *f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
+      } else {
+        *f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B0;
+      }
+    }
+  }
+  return 0;
+}
+
 static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
   if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
     return;
@@ -3739,6 +3769,10 @@ int msl_batch_step_input_replay_frame_rng(MslBatch* batch, const uint8_t* seed_b
                                           size_t prev_input_stride_bytes,
                                           const uint8_t* input_bytes, size_t input_stride_bytes) {
   int err = msl_batch_apply_replay_frame_rng(batch, seed_bytes, seed_stride_bytes);
+  if (err != 0) {
+    return err;
+  }
+  err = msl_batch_apply_replay_frame_camera_box_visibility(batch, seed_bytes, seed_stride_bytes);
   if (err != 0) {
     return err;
   }

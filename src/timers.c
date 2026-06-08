@@ -280,6 +280,54 @@ static inline uint8_t damage_timer_down_damage_action(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_DOWN_DAMAGE_U || a == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) ? 1u : 0u;
 }
 
+static inline uint8_t damagefly_hitlag_exit_terminal_ledge_endpoint_owner(const MslBatch* batch,
+                                                                          size_t idx) {
+  if (batch == NULL || !damage_post_hitlag_cb_damagefly_action(batch->state.action_id[idx]) ||
+      batch->state.hitlag_pre_timer[idx] == 0u || batch->state.hitlag[idx] != 0u ||
+      batch->state.ground_id[idx] == 0xFFFFu || batch->state.speed_y_attack[idx] > 0.0f) {
+    return 0u;
+  }
+
+  const int bi = (int)(idx / (size_t)batch->config.num_players);
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const int line_idx = stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  if (!line->fighter_solid || !line->is_ledge || line->is_platform ||
+      stage_collision_floor_line_has_platform_transform(stage_id, line->segment_i)) {
+    return 0u;
+  }
+
+  enum { MSL_MPLIB_ENDPOINT_EXTENSION_UNITS = 1 };
+  const float root_x = batch->state.floor_sweep_prev_pos_x[idx];
+  if (!isfinite(root_x)) {
+    return 0u;
+  }
+
+  // DamageFly hitlag-exit terminal ledge owner:
+  // ftCo_Damage_OnExitHitlag mutates the root before `ftCo_DamageFly_Coll -> ft_80081DD4 ->
+  // mpColl_800473CC`. At terminal ledge-floor endpoints, mpLib's source floor query consumes the
+  // carried CollData floor endpoint within its one-unit endpoint-extension window, so the callback
+  // row does not publish a lateral ASDI/KB root displacement across the ledge seam. Upward KB rows
+  // leave the floor through ordinary DamageFly integration and are not this owner. Keep this bound
+  // to MSLSTG01 ledge-floor metadata and the hitlag-exit frame-start root; ordinary DamageFly exits
+  // and non-terminal floor rows still use generic ASDI/KB integration.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // refs/melee/src/melee/mp/{mpcoll.c,mplib.c}::{mpColl_800473CC,mpLib_8004ED5C}
+  // data/stages/bin/*.bin::MSLSTG01 floor ledge/link metadata
+  const uint8_t near_prev_endpoint =
+      (uint8_t)(line->prev < 0 &&
+                fabsf(root_x - line->x0) <= (float)MSL_MPLIB_ENDPOINT_EXTENSION_UNITS);
+  const uint8_t near_next_endpoint =
+      (uint8_t)(line->next < 0 &&
+                fabsf(root_x - line->x1) <= (float)MSL_MPLIB_ENDPOINT_EXTENSION_UNITS);
+  return (uint8_t)(near_prev_endpoint || near_next_endpoint);
+}
+
 static inline void damage_hitlag_exit_wall_project_asdi(const MslBatch* batch, size_t idx,
                                                         float* dx, float* dy) {
   if (batch == NULL || dx == NULL || dy == NULL ||
@@ -442,7 +490,9 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
           cstick_full_x * cstick_full_x + cstick_full_y * cstick_full_y;
       const uint8_t use_cstick = (cstick_full_mag_sq >= sdi_radius_sq) ? 1u : 0u;
       const uint8_t use_lstick = (lstick_full_mag_sq >= sdi_radius_sq) ? 1u : 0u;
-      if (!use_cstick && !use_lstick) {
+      const uint8_t terminal_ledge_endpoint_owner =
+          damagefly_hitlag_exit_terminal_ledge_endpoint_owner(batch, idx);
+      if (terminal_ledge_endpoint_owner || (!use_cstick && !use_lstick)) {
         // DI/LSI still apply on hitlag exit even when ASDI stick displacement does not.
       } else {
         const float dx = (use_cstick ? cstick_full_x : lstick_full_x) * asdi_step_mul;
@@ -697,6 +747,26 @@ static inline uint8_t timers_magnify_live_fighter_action(uint16_t action_id) {
   }
 }
 
+static inline uint8_t timers_magnify_damageflytop_local_episode_visible_owner(const MslBatch* batch,
+                                                                              size_t idx,
+                                                                              uint8_t flags_221f) {
+  if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
+      batch->state.magnify_damage_counter_x1910[idx] == 0u ||
+      (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0) == 0u) {
+    return 0u;
+  }
+  const uint8_t flags_2218 =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+  const uint8_t flags_221c =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  return (uint8_t)(((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u &&
+                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u &&
+                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) == 0u &&
+                    (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B0) == 0u)
+                       ? 1u
+                       : 0u);
+}
+
 void timers_update_magnify_damage_post_frame(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -735,9 +805,18 @@ void timers_update_magnify_damage_post_frame(MslBatch* batch) {
            batch->state.magnify_damage_counter_x1910[idx] != 0u)
               ? 1u
               : 0u;
+      const uint8_t replay_local_episode_offscreen =
+          (replay_rollout != 0u && batch->state.magnify_damage_counter_x1910[idx] != 0u &&
+           batch->state.magnify_damage_seed_episode_active[idx] == 0u &&
+           (batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] == 0u ||
+            timers_magnify_damageflytop_local_episode_visible_owner(batch, idx, flags_221f) != 0u))
+              ? 1u
+              : 0u;
       const uint8_t offscreen =
-          (seed_episode_offscreen != 0u ||
-           batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] == 0u)
+          (seed_episode_offscreen != 0u || replay_local_episode_offscreen != 0u ||
+           batch->state.magnify_damage_runtime_visibility_owner[idx] != 0u ||
+           (replay_rollout == 0u &&
+            batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] == 0u))
               ? 1u
               : 0u;
       if (!visible || !offscreen || disabled ||
