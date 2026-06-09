@@ -1331,7 +1331,9 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
 
         const int other_line =
             stage_collision_floor_line_index(stage_id, batch->state.ground_id[oidx]);
-        if (!physics_floor_lines_adjacent_or_equal(floor_graph, self_line, other_line)) {
+        const uint8_t floor_adjacent =
+            physics_floor_lines_adjacent_or_equal(floor_graph, self_line, other_line);
+        if (!floor_adjacent) {
           continue;
         }
 
@@ -1351,30 +1353,36 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
         } else {
           nudge_x = player_nudge_x_step;
         }
-        if (!physics_floor_line_contains_or_connects_to_nudged_x(
-                floor_graph, self_line, batch->state.pos_x[idx] + nudge_x) &&
-            !(physics_action_uses_generated_b2dc_edge_snap_callback(source_action) &&
-              physics_nudge_exits_floor_span(floor_graph, self_line, batch->state.pos_x[idx],
-                                             nudge_x)) &&
-            !(physics_action_uses_ft80084280_ottotto_edge_callback(source_action) &&
-              physics_nudge_reaches_facing_edge(floor_graph, self_line, batch->state.pos_x[idx],
-                                                nudge_x, batch->state.facing[idx])) &&
-            !(physics_action_uses_player_nudge_ft80083f88_ground_to_air_coll(batch, idx,
-                                                                             source_action) &&
-              (physics_nudge_reaches_facing_edge(floor_graph, self_line, batch->state.pos_x[idx],
-                                                 nudge_x, batch->state.facing[idx]) ||
-               (physics_action_uses_downwait_player_nudge_floor_loss(batch, idx, source_action) &&
-                physics_nudge_exits_floor_span(floor_graph, self_line, batch->state.pos_x[idx],
-                                               nudge_x)))) &&
-            !(physics_action_uses_common_damage_floor_loss_nudge(source_action) &&
-              physics_nudge_exits_floor_span(floor_graph, self_line, batch->state.pos_x[idx],
-                                             nudge_x)) &&
-            !(physics_action_uses_guard_player_nudge_floor_loss(source_action) &&
-              physics_nudge_exits_guard_missfoot_edge(floor_graph, self_line,
-                                                      batch->state.pos_x[idx], nudge_x,
-                                                      batch->state.facing[idx])) &&
-            !physics_guard_entry_from_wait_nudge_can_feed_floor_loss(batch, floor_graph, self_line,
-                                                                     idx, nudge_x)) {
+        const uint8_t nudge_x_admitted =
+            (uint8_t)(floor_adjacent &&
+                      (physics_floor_line_contains_or_connects_to_nudged_x(
+                           floor_graph, self_line, batch->state.pos_x[idx] + nudge_x) ||
+                       (physics_action_uses_generated_b2dc_edge_snap_callback(source_action) &&
+                        physics_nudge_exits_floor_span(floor_graph, self_line,
+                                                       batch->state.pos_x[idx], nudge_x)) ||
+                       (physics_action_uses_ft80084280_ottotto_edge_callback(source_action) &&
+                        physics_nudge_reaches_facing_edge(floor_graph, self_line,
+                                                          batch->state.pos_x[idx], nudge_x,
+                                                          batch->state.facing[idx])) ||
+                       (physics_action_uses_player_nudge_ft80083f88_ground_to_air_coll(
+                            batch, idx, source_action) &&
+                        (physics_nudge_reaches_facing_edge(floor_graph, self_line,
+                                                           batch->state.pos_x[idx], nudge_x,
+                                                           batch->state.facing[idx]) ||
+                         (physics_action_uses_downwait_player_nudge_floor_loss(batch, idx,
+                                                                               source_action) &&
+                          physics_nudge_exits_floor_span(floor_graph, self_line,
+                                                         batch->state.pos_x[idx], nudge_x)))) ||
+                       (physics_action_uses_common_damage_floor_loss_nudge(source_action) &&
+                        physics_nudge_exits_floor_span(floor_graph, self_line,
+                                                       batch->state.pos_x[idx], nudge_x)) ||
+                       (physics_action_uses_guard_player_nudge_floor_loss(source_action) &&
+                        physics_nudge_exits_guard_missfoot_edge(floor_graph, self_line,
+                                                                batch->state.pos_x[idx], nudge_x,
+                                                                batch->state.facing[idx])) ||
+                       physics_guard_entry_from_wait_nudge_can_feed_floor_loss(
+                           batch, floor_graph, self_line, idx, nudge_x)));
+        if (!nudge_x_admitted) {
           continue;
         }
         out_nudge_x[p] += nudge_x;

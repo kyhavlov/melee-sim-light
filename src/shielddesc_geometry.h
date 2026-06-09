@@ -418,6 +418,32 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
   const uint8_t guardon_entry_enable_edge_size_lane =
       (guardon_entry_no_submotion && batch->state.hitbox_enable_edge[hb_i]) ? 1u : 0u;
+  // Same-callback Landing shield-entry ShieldDesc.size sweep:
+  // - Landing_IASA can enter GuardOn through ftCo_80091A4C / ftCo_800924C0 or powershield
+  //   GuardReflect through ftCo_80091A4C / ftCo_800939B4 / ftCo_80093A50 after the hidden
+  //   grounded-overlap Z-depth owner has separated the fighters.
+  // - Both entry paths create ShieldDesc before fighter collision; ftColl_80078C70 then checks the
+  //   live ShieldDesc against the persistent AttackHi3 hb1 HitCapsule sweep (x58->x4C). The
+  //   accepted boundary needs the source ShieldDesc.size term, but stays bounded to the authored
+  //   9-damage AttackHi3 hb1 sweep and the same-callback Landing shield-entry owner. Other Landing
+  //   shield-entry attacks keep their existing controls.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0,ftCo_800939B4,ftCo_80093A50}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackHi3.events.create_hitbox
+  const uint8_t landing_guard_entry_attackhi3_hb1_sweep_size_lane =
+      (((batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+         batch->state.guard_on_entered_this_frame[d_idx] != 0u) ||
+        (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+         msl_guard_reflect_is_locomotion_entry_snapshot(batch, d_idx) != 0u)) &&
+       batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_LANDING &&
+       batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] == UINT32_MAX &&
+       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_HI3 &&
+       batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_HI3 && hb_id == 1 &&
+       batch->state.hitbox_prev_enabled[hb_i] && batch->state.hitbox_damage[hb_i] == 9.0f)
+          ? 1u
+          : 0u;
   // Once x14 has expired, ftCo_80093BC0 has recreated ShieldDesc, but the retained size term is
   // still limited to create/pose-create edges with x18 already gone. Broadening this to sustained
   // no-submotion GuardReflect rows over-admits near-rim shield hits.
@@ -452,7 +478,8 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
          guardreflect_expired_no_submotion_enable_edge_size_lane ||
          attackairlw_strong_no_submotion_guard_extent_lane ||
          attackairb_weak_tail_tilted_guard_extent_lane ||
-         attackairb_strong_root_guardon_raise_size_lane)) ||
+         attackairb_strong_root_guardon_raise_size_lane ||
+         landing_guard_entry_attackhi3_hb1_sweep_size_lane)) ||
        guardreflect_expired_no_submotion_attackairlw_persistent_size_lane)
           ? shield_desc_world_r
           : 0.0f;

@@ -61,6 +61,7 @@ class _Case:
 
 _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
 _BF = "datasets/aggregate_recent/replays/validation/battlefield_recent"
+_PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
 
 
 @pytest.mark.integration
@@ -118,6 +119,16 @@ _BF = "datasets/aggregate_recent/replays/validation/battlefield_recent"
             note="adjacent JumpAerialF negative before phantom keeps baseline",
         ),
         _Case(
+            dataset_rel=f"{_PS}/ThisVioletRaccoon.msl",
+            record=9511,
+            player=0,
+            seed_action=27,  # JumpAerialF
+            ref_hitlag=0,
+            ref_hitstun=0,
+            ref_percent_delta=0.0,
+            note="JumpAerialF cap12 tail-only shallow laser contact waits for deeper BODY",
+        ),
+        _Case(
             dataset_rel=f"{_AGG}/TubbyCurlyHerring.msl",
             record=8970,
             player=1,
@@ -126,6 +137,26 @@ _BF = "datasets/aggregate_recent/replays/validation/battlefield_recent"
             ref_hitstun=9,
             ref_percent_delta=2.94,
             note="following JumpAerialF full BODY hit still consumes projectile",
+        ),
+        _Case(
+            dataset_rel=f"{_PS}/ThisVioletRaccoon.msl",
+            record=9512,
+            player=0,
+            seed_action=27,  # following JumpAerialF full BODY hit
+            ref_hitlag=3,
+            ref_hitstun=9,
+            ref_percent_delta=2.79,
+            note="following JumpAerialF cap12 tail laser BODY hit still consumes projectile",
+        ),
+        _Case(
+            dataset_rel=f"{_PS}/ThisVioletRaccoon.msl",
+            record=11488,
+            player=0,
+            seed_action=27,  # JumpAerialF
+            ref_hitlag=3,
+            ref_hitstun=9,
+            ref_percent_delta=2.64,
+            note="earlier Falco laser hb1 cap12 tail contact remains BODY-eligible",
         ),
         _Case(
             dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.msl",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -660,6 +661,83 @@ def test_stm_attacklw4_strong_attackairn_zero_marker_is_selected_source_owned() 
     assert _trace_site_count(trace_path, start_record=record, record=record, site_id=6) == 0
     assert _trace_site_count(trace_path, start_record=record, record=record, site_id=7) == 0
     assert _trace_site_count(trace_path, start_record=record, record=record, site_id=24) == 0
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(
+            out_row=out_row,
+            ref_row=ref_row,
+            record=record,
+            p=p,
+        )
+
+
+@pytest.mark.integration
+def test_tvr_attackhi4_weak_attackairb_selected_contact_owns_damageflyroll_prefix() -> None:
+    # TVR rec11016 has p0 grounded AttackHi4 struck by p1 weak BackAir. The selected BODY contact
+    # is the authored weak BAir hb1 against hurtcap slot 3; that concrete DmgLog source owns the
+    # normal-hit effect prefix plus five Fighter_8006CDA4 primary consumes before
+    # ftCo_8008DCE0's DamageFlyRoll gate. The neighboring rec11015 row has the same actions before
+    # contact and must not pre-admit damage.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80078538,ftColl_8007A06C}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    victim = 0
+    attacker = 1
+    record = 11016
+    seed = ds.samples[record]["seed_t"]
+    ref = ds.samples[record]["ref_t1"]
+    assert int(seed["action_id"][victim]) == 63  # AttackHi4.
+    assert int(seed["on_ground"][victim]) == 1
+    assert int(seed["hitlag"][victim]) == 0
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (1, 3)
+    assert int(ref["action_id"][victim]) == 91  # DamageFlyRoll.
+
+    combat_c = (root / "src/combat.c").read_text(encoding="utf-8")
+    helper = re.search(
+        r"static inline uint8_t combat_damageflyroll_attackhi4_weak_attackairb_hitcapsule_owner"
+        r"\([\s\S]*?\n}\n\nstatic inline void "
+        r"combat_damageflyroll_consume_attackhi4_weak_attackairb_count",
+        combat_c,
+    )
+    assert helper is not None
+    helper_body = helper.group(0)
+    assert "(void)source_cap_i" not in helper_body
+    assert "(void)source_cap_valid" not in helper_body
+    assert "source_cap_valid == 0u" in helper_body
+    assert "cap_id != 3u" in helper_body
+
+    trace_path = root / "reports/triage/tvr11016_attackhi4_weak_bair_damageflyroll.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=10893,
+        window_records=(11015, 11016),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    ref_prev, out_prev, prev_site1 = rows[11015]
+    assert prev_site1 == 0
+    assert int(out_prev["action_id"][victim]) == int(ref_prev["action_id"][victim]) == 63
+
+    ref_row, out_row, site1_count = rows[record]
+    assert site1_count == 1
+    assert _trace_site_count(trace_path, start_record=10893, record=record, site_id=24) == 4
+    assert _trace_site_count(trace_path, start_record=10893, record=record, site_id=5) == 5
+    assert _trace_site_count(trace_path, start_record=10893, record=record, site_id=6) == 0
+    assert _trace_site_count(trace_path, start_record=10893, record=record, site_id=7) == 0
     for p in (0, 1):
         _assert_transition_lock_fields_match_ref(
             out_row=out_row,
@@ -1805,7 +1883,7 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             0,
             1,
             91,
-            88,
+            91,
         ),
         (
             "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
@@ -1830,12 +1908,12 @@ def test_attackairb_damageflytop_runtime_phase_requires_selected_hurtcap_provena
     expected_ref_action: int,
     expected_out_action: int,
 ) -> None:
-    # Runtime fallback for AttackAirB -> DamageFlyTop Fighter_8006CDA4 phase is owned by the
-    # selected ftColl_80076ED8 BODY source, not just visible AttackAirB shape. TBK's remaining
-    # rows select cap-12, hb1/cap-2, or first-create hb1/cap-0 source pairs from
-    # data/hurtcaps/{fox,falco}.json; aggregate low/root, cap-1, and hb0/cap2 selected pairs stay
-    # on their ordinary DamageFlyN/Hi source path unless an explicit seed lane supplies stream
-    # phase.
+    # Runtime fallback for AttackAirB -> DamageFlyTop stream phase is owned by the selected
+    # ftColl_80076ED8 BODY source, not just visible AttackAirB shape. TBK/PJO/IAT/TVR rows select
+    # specific cap12, hb1/cap2, hb1/cap0, hb0/cap0, or terminal hb0/cap1 source pairs from
+    # data/hurtcaps/{fox,falco}.json; aggregate unrelated low/root, hb0/cap2, and JumpAerial cap1
+    # selected pairs stay on their ordinary DamageFlyN/Hi source path unless an explicit seed lane
+    # supplies stream phase.
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
@@ -1922,6 +2000,73 @@ def test_damageflytop_attackairb_root_x14_primary_owner_closes_iat_10332_rollout
 
 
 @pytest.mark.integration
+def test_damageflytop_attackairb_hb0_cap1_effect_prefix_closes_tvr_4541_rollout() -> None:
+    # TVR rec4541 is active DamageFlyTop hit by selected authored strong BAir hb0/cap1. That
+    # source owns ftColl_80078538's normal-hit visual-effect prefix before ftCo_8008DCE0 samples
+    # DamageFlyRoll, but owns no Fighter_8006CDA4 pre-gate prefix. Mutating the victim out of
+    # DamageFlyTop removes this owner and keeps JumpAerial cap1 outside the bridge.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_Damage_IASA}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80078538,ftColl_8007A06C}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    # data/hurtcaps/{fox,falco}.json cap1
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 4541
+    victim = 1
+    attacker = 0
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["action_id"][victim]) == 90  # DamageFlyTop.
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
+    assert int(seed["damage_jump_buffer_x14"][victim]) == 0
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (0, 1)
+
+    trace_path = root / "reports/triage/tvr4541_damageflytop_bair_hb0_cap1_effect_prefix.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, site1_count = rows[record]
+    assert site1_count == 1
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=24) == 4
+    for site_id in (5, 6, 7):
+        assert _trace_site_count(trace_path, start_record=record, record=record, site_id=site_id) == 0
+    assert int(out_row["action_id"][victim]) == int(ref_row["action_id"][victim]) == 91
+
+    def mutate_victim_action(seed_t):
+        seed_t["action_id"][0, victim] = 27  # JumpAerialF: cap1 is covered by the TCH negative.
+
+    negative_trace = (
+        root / "reports/triage/tvr4541_damageflytop_bair_hb0_cap1_effect_prefix_negative.tsv"
+    )
+    negative_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=negative_trace,
+        seed_mutator=mutate_victim_action,
+    )
+    _negative_ref, negative_out, negative_site1_count = negative_rows[record]
+    assert negative_site1_count == 0
+    assert _trace_site_count(negative_trace, start_record=record, record=record, site_id=24) == 0
+    assert int(negative_out["action_id"][victim]) != 91
+
+
+@pytest.mark.integration
 def test_specialairhi_damageflyroll_gate_rejects_attackairb_cap12_xrotn_owner_ppa_7332() -> None:
     # SpecialAirHi current-hit DamageFlyRoll admission requires a concrete selected BODY owner, but
     # cap12/XRotN is the high-pose DamageFlyTop provenance path used by the narrowed AttackAirB
@@ -1962,31 +2107,32 @@ def test_specialairhi_damageflyroll_gate_rejects_attackairb_cap12_xrotn_owner_pp
 
 
 @pytest.mark.integration
-def test_fsp_specialairhi_attackairb_cap2_current_payload_enters_damageflyroll() -> None:
+def test_specialhi_attackairb_cap2_current_payload_enters_damageflyroll() -> None:
     # SpecialAirHi current-hit DamageFlyRoll admission:
     # - FSP 11707 selects weak BackAir hb2/cap2 against SpecialAirHi.
     # - FSP 11924 selects strong BackAir hb1/cap2 against SpecialAirHi.
     # cap2/head-high is admitted only for these concrete selected BAir payloads: early weak hb2 and
     # strong hb1. The existing AGG 2864 late weak hb1 seed-frame negative and nearby PPA 7332
-    # cap12/XRotN negative remain ordinary DamageFlyHi/N.
+    # cap12/XRotN negative remain ordinary DamageFlyHi/N. TVR's SpecialHiFall hb1/cap2 row remains
+    # open in this checkpoint and is not claimed as closed.
     # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
     # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = (
+    fsp_dataset_path = (
         root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+    if not fsp_dataset_path.exists():
+        pytest.skip("missing local SpecialHi DamageFlyRoll dataset")
 
     victim = 0
     attacker = 1
     cases = ((11707, (2, 2), 5), (11924, (1, 2), 6))
-    ds = read_dataset(str(dataset_path))
+    ds = read_dataset(str(fsp_dataset_path))
     for record, selected, expected_hitlag in cases:
-        assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == selected
+        assert _selected_body_hitbox_hurtcap(fsp_dataset_path, record, attacker, victim) == selected
         seed = ds.samples[record]["seed_t"]
         ref_row = ds.samples[record]["ref_t1"]
         assert int(seed["action_id"][victim]) == 356  # SpecialAirHi.
@@ -1996,7 +2142,7 @@ def test_fsp_specialairhi_attackairb_cap2_current_payload_enters_damageflyroll()
         assert int(ref_row["hitlag"][victim]) == expected_hitlag
 
     rows = _run_rollout_window_rows_with_trace(
-        dataset_path,
+        fsp_dataset_path,
         start_record=5391,
         window_records=(11707, 11924),
         rng_damage_fly_roll_gate=True,
@@ -2095,10 +2241,10 @@ def test_pjo_rollout_rng_sites_are_source_owned_without_exceptions() -> None:
 @pytest.mark.integration
 def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_prefix() -> None:
     # QGD rec4435 is the regression control for replay-frame Wait RNG admission: p0's earlier
-    # same-frame DeadUpStar_Anim source callback adds the bounded creation prefix before p1 reaches
-    # Wait_Anim/getAnimID. STM rec10395 is the direct rollout-clock positive for an active
-    # DeadUpStar startup prefix on the current replay row. BHH rec10161 is the stale-late negative:
-    # a later DeadUpStar phase-1 row must not keep carrying the startup generator prefix.
+    # same-frame DeadUpStar_Anim source callback adds the bounded two-step creation prefix plus the
+    # live generator step before p1 reaches Wait_Anim/getAnimID. STM rec10395 is the direct
+    # rollout-clock positive for the same late phase-1 generator window. BHH rec10161 is the
+    # stale-late negative: a later DeadUpStar action-frame row must not keep carrying the prefix.
     # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
     # refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
     # refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
@@ -2124,7 +2270,7 @@ def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_pr
     assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0]) == 4
     assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]) == 14
     assert int(out_row["animation_index"][1]) == int(ref_row["animation_index"][1]) == 2
-    assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=25) == 2
+    assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=25) == 3
     assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=3) == 1
 
     dataset_rel = (

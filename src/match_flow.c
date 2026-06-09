@@ -428,6 +428,19 @@ static inline void enter_eliminated_dead_slot(MslBatch* batch, size_t idx) {
   msl_anim_timebase_seed(batch, idx, 0.0f, 0.0f);
 }
 
+static inline void match_flow_apply_stock_loss(MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.stocks[idx] == 0u) {
+    return;
+  }
+  // Decomp: the death-flow stock-loss callback resets the player's stale-move table before
+  // calling Player_LoseStock. Apply that reset at stock-loss time, not only at later Rebirth, so
+  // next-stock rollout hits cannot stale against the previous stock's move table.
+  // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D34E0
+  // refs/melee/src/melee/pl/plstale.c::plStale_ResetStaleMoveTableForPlayer
+  staling_queue_reset_for_player(batch, idx);
+  batch->state.stocks[idx] = (uint8_t)(batch->state.stocks[idx] - 1u);
+}
+
 static inline void enter_rebirth_wait(MslBatch* batch, size_t idx, uint32_t stage_id, int port0) {
   if (batch == NULL) {
     return;
@@ -878,9 +891,7 @@ void match_flow_update_pre_anim(MslBatch* batch) {
             // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
             // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2FC
             match_flow_zero_common_velocities(batch, idx);
-            if (batch->state.stocks[idx] > 0) {
-              batch->state.stocks[idx] = (uint8_t)(batch->state.stocks[idx] - 1);
-            }
+            match_flow_apply_stock_loss(batch, idx);
           }
         } else if (match_flow_is_dead_up_fall_hitcamera_action(a)) {
           const int phase4 = (int)c->dead_up_fall_phase4_frames;
@@ -897,9 +908,7 @@ void match_flow_update_pre_anim(MslBatch* batch) {
           if (phase4 > 0 && (int)prev_t == phase4 + 1) {
             // ftCo_DeadUpFall_Anim case 3 performs the stock-loss side effect at phase-3 expiry.
             // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_800D34E0}
-            if (batch->state.stocks[idx] > 0) {
-              batch->state.stocks[idx] = (uint8_t)(batch->state.stocks[idx] - 1);
-            }
+            match_flow_apply_stock_loss(batch, idx);
           }
         }
         // Death -> Rebirth.
@@ -1168,9 +1177,7 @@ void match_flow_update_post_physics(MslBatch* batch) {
       // - Blastzone check: refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
       // - Stock loss: refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D34E0
       if (death != (uint16_t)MSL_ACT_DEAD_UP_STAR && death != (uint16_t)MSL_ACT_DEAD_UP_FALL) {
-        if (batch->state.stocks[idx] > 0) {
-          batch->state.stocks[idx] = (uint8_t)(batch->state.stocks[idx] - 1);
-        }
+        match_flow_apply_stock_loss(batch, idx);
       }
 
       if (death == (uint16_t)MSL_ACT_DEAD_UP_FALL) {

@@ -17,6 +17,8 @@ ACT_GUARD_OFF = 180
 ACT_GUARD_SET_OFF = 181
 ACT_GUARD_REFLECT = 182
 ACT_KNEE_BEND = 24
+ACT_LANDING = 42
+ACT_FALL = 20
 ACT_ATTACK_12 = 45
 ACT_ATTACK_DASH = 50
 ACT_ATTACK_HI3 = 56
@@ -445,18 +447,20 @@ def test_attacklw4_wait_iasa_admits_guard_without_locomotion_input(
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("rel_path", "record", "p"),
+    ("rel_path", "record", "p", "seed_x672"),
     [
         (
             "datasets/aggregate_recent/replays/validation/battlefield_recent/"
             "DelayedSuperbGuanaco.msl",
             10422,
             0,
+            1,
         ),
         (
             "datasets/aggregate_recent/replays/validation/aggregate_recent/"
             "PutridJoyousOryx.msl",
             6451,
+            1,
             1,
         ),
         (
@@ -464,18 +468,29 @@ def test_attacklw4_wait_iasa_admits_guard_without_locomotion_input(
             "TubbyCurlyHerring.msl",
             11674,
             0,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.msl",
+            7503,
+            0,
+            0,
         ),
     ],
 )
 def test_guardon_iasa_powershield_uses_frame_start_x672_replay_locks(
-    rel_path: str, record: int, p: int
+    rel_path: str, record: int, p: int, seed_x672: int
 ) -> None:
     # GuardOn_IASA's ftCo_80093694 gate reads the LR edge and x672 trigger timer from the same
     # callback-visible input-history phase. Replay-real no-submotion GuardOn rows with a digital
-    # L/R edge while the analog trigger is already held expose x672 == 1 at the boundary; incrementing
-    # the trigger timer before this gate misses the source GuardReflect handoff.
+    # L/R edge while the analog trigger is already held expose x672 <= 1 at the boundary;
+    # incrementing the trigger timer before this gate misses the source GuardReflect handoff.
+    # The TVR LandingFallSpecial case is the same ftCo_80091A4C owner after Landing_IASA's source
+    # selectors miss; steady shield-owned GuardOn rows stay covered by the negative below.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     #   ftCo_GuardOn_IASA,ftCo_80093694,ftCo_8009388C}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
     # refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
     dataset_path = _dataset(rel_path)
     ds = read_dataset(str(dataset_path))
@@ -490,7 +505,7 @@ def test_guardon_iasa_powershield_uses_frame_start_x672_replay_locks(
         ACT_GUARD_SET_OFF,
         ACT_GUARD_REFLECT,
     }
-    assert int(seed["x672_input_timer"][p]) == 1
+    assert int(seed["x672_input_timer"][p]) == seed_x672
 
     _, ref_t1, out_t1 = _run_one_step_row(dataset_path, record, p)
     assert int(ref_t1["action_id"][p]) == ACT_GUARD_REFLECT
@@ -549,6 +564,101 @@ def test_guardon_iasa_powershield_x672_window_negative_replay_lock(
     _, ref_t1, out_t1 = _run_one_step_row(dataset_path, record, p)
     assert int(ref_t1["action_id"][p]) == ACT_GUARD_ON
     assert int(out_t1["action_id"][p]) != ACT_GUARD_REFLECT
+
+
+@pytest.mark.integration
+def test_guardon_no_submotion_steady_shield_does_not_reenter_guardreflect_tvr() -> None:
+    # TVR:4031 is a steady no-submotion GuardOn snapshot: seed_prev is already shield-owned, and
+    # source has already advanced mv.co.guard.x0 beyond the ftCo_80093694 powershield-reflect entry
+    # window. A fresh digital R edge in the replay row must not make every hidden no-submotion
+    # GuardOn snapshot look like a new ftCo_80091A4C entry. Fresh non-shield no-submotion entries
+    # stay covered by test_guardon_iasa_powershield_uses_frame_start_x672_replay_locks.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardOn_Anim,ftCo_GuardOn_IASA,ftCo_80093694}
+    dataset_path = _dataset(
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    record = 4031
+    p = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["action_id"][p]) == ACT_GUARD_ON
+    assert int(seed["seed_prev_action_id"][p]) == ACT_GUARD_ON
+    assert int(seed["action_frame"][p]) < 0
+    assert int(seed["animation_index"][p]) == 0xFFFFFFFF
+    assert int(ds.samples[record]["input_t"]["p"]["buttons"][p]) & 0x0020  # R edge.
+
+    _, ref_t1, out_t1 = _run_one_step_row(dataset_path, record, p)
+    assert int(ref_t1["action_id"][p]) == ACT_GUARD_ON
+    assert int(out_t1["action_id"][p]) == ACT_GUARD_ON
+    assert int(out_t1["hitlag"][p]) == int(ref_t1["hitlag"][p]) == 0
+
+
+@pytest.mark.integration
+def test_landing_guard_entry_uses_frame_start_x672_before_current_l_press_tvr() -> None:
+    # TVR:5891 rolls into Landing with replay-visible x672 already stale in the seed row, then the
+    # current row presses digital L while the shield hit lands. The source trigger-history update
+    # has made the live x672 byte powershield-eligible by the time Landing_IASA delegates to
+    # ftCo_80091A4C, so the callback first enters GuardReflect/ReflectDesc and the same collision
+    # pass immediately converts it to GuardSetOff. Grounded overlap Z-depth and the Landing-entry
+    # ShieldDesc.size sweep then let the AttackHi3 hb1 shield contact publish GuardSetOff while
+    # preserving x221C_b1/b2 from the powershield timer owner.
+    # Dash controls stay separate because Dash_IASA has its own early/mid/late guard-entry owner.
+    # refs/melee/src/melee/ft/fighter.c (x672 trigger-history update)
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    dataset_path = _dataset(
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    target_record = 5891
+    p = 0
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[target_record]["seed_t"]
+    assert int(seed["action_id"][p]) == ACT_LANDING
+    assert int(seed["x672_input_timer"][p]) == 254
+    assert int(ds.samples[target_record]["input_t"]["p"]["buttons"][p]) & 0x0040  # L edge.
+
+    _, out_t1, ref_t1 = _run_rollout_to_record(
+        dataset_path, start_record=5768, target_record=target_record
+    )
+    assert int(ref_t1["action_id"][p]) == ACT_GUARD_SET_OFF
+    assert int(out_t1["action_id"][p]) == ACT_GUARD_SET_OFF
+    assert int(out_t1["hitlag"][p]) == int(ref_t1["hitlag"][p]) == 6
+    assert int(out_t1["state_flags"][p][3]) == int(ref_t1["state_flags"][p][3]) == 0x60
+
+
+@pytest.mark.integration
+def test_fall_guard_entry_uses_post_deadzone_x650_for_x672_tvr() -> None:
+    # Fighter input maintenance zeroes fp->input.x650 when it is <= p_ftCommonData->x10 before the
+    # x672 trigger-history block compares against the lower powershield threshold x18. TVR:9685 has
+    # a raw previous analog trigger in (x18, x10] plus a current digital R edge; source resets x672
+    # to 0 and the following shield-entry helper admits GuardReflect. Treating the raw analog
+    # trigger as live would stale-carry x672=2 and fall through to GuardOn.
+    # refs/melee/src/melee/ft/fighter.c:1868-1890 and :2019-2050
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    dataset_path = _dataset(
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    record = 9685
+    p = 1
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    seed = row["seed_t"]
+    assert int(seed["action_id"][p]) == ACT_FALL
+    assert int(seed["x672_input_timer"][p]) == 2
+    assert int(row["prev_input_t"]["p"]["buttons"][p]) & 0x0020 == 0
+    assert int(row["input_t"]["p"]["buttons"][p]) & 0x0020  # R edge.
+    prev_trigger = max(int(row["prev_input_t"]["p"]["l"][p]), int(row["prev_input_t"]["p"]["r"][p])) / 255.0
+    assert 0.25 < prev_trigger <= 0.30000001192092896
+
+    _, ref_t1, out_t1 = _run_one_step_row(
+        dataset_path, record, p, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+    assert int(ref_t1["action_id"][p]) == ACT_GUARD_REFLECT
+    assert int(out_t1["action_id"][p]) == ACT_GUARD_REFLECT
 
 
 @pytest.mark.integration

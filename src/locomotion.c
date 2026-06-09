@@ -41,17 +41,6 @@
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
-static inline uint8_t locomotion_deadupstar_startup_effect_rng_active(const MslBatch* batch,
-                                                                      const MslCommonParams* c,
-                                                                      size_t idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  return msl_deadupstar_startup_effect_prefix_active(batch->state.action_id[idx],
-                                                     batch->state.action_frame[idx],
-                                                     batch->state.match_flow_timer[idx], c);
-}
-
 static inline void locomotion_consume_deadupstar_effect_prefix_before_wait(MslBatch* batch, int bi,
                                                                            int player) {
   if (batch == NULL || bi < 0 || player < 0 || player > (int)MSL_MAX_PLAYERS) {
@@ -68,14 +57,16 @@ static inline void locomotion_consume_deadupstar_effect_prefix_before_wait(MslBa
         continue;
       }
       const size_t idx = msl_idx_player(bi, p);
-      if (!locomotion_deadupstar_startup_effect_rng_active(batch, c, idx)) {
+      if (msl_deadupstar_active_effect_prefix_before_wait(
+              batch->state.action_id[idx], batch->state.action_frame[idx],
+              batch->state.match_flow_timer[idx], c) == 0u) {
         continue;
       }
-      // Active DeadUpStar startup owns a live async generator before fighter Wait_Anim can sample
-      // getAnimID's HSD_Randi(100). This is separate from the same-frame creation prefix below:
-      // only early phase-1 rows carry the startup generator prefix.
+      // Active DeadUpStar effect generator owns one RNG step before fighter Wait_Anim can sample
+      // getAnimID's HSD_Randi(100). This is separate from the same-frame creation prefix below.
       // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
       // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
+      // refs/melee/src/melee/ef/eflib.c::efLib_CreateGenerator case 0x121
       // refs/melee/src/sysdolphin/baselib/particle.c
       combat_rng_consume_step_site(batch, bi, MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX);
     }
@@ -101,10 +92,20 @@ static inline void locomotion_consume_deadupstar_effect_prefix_before_wait(MslBa
 
 static inline uint16_t choose_wait_anim_variant(MslBatch* batch, int bi, const MslCharParams* ch,
                                                 uint16_t current_anim) {
-  const uint8_t rng_owner =
+  uint8_t rng_owner =
       (batch != NULL && batch->rollout_clock_rng_owned != NULL && bi >= 0 && bi < batch->batch_size)
           ? batch->rollout_clock_rng_owned[bi]
           : (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
+  if (batch != NULL && batch->replay_frame_rng_applied != NULL && bi >= 0 &&
+      bi < batch->batch_size && batch->replay_frame_rng_applied[bi] != 0u) {
+    // Replay validation/playback installs Slippi's frame-start RNG seed before this frame's
+    // source callbacks run. That current-row seed owns source RNG sites such as Wait getAnimID
+    // even if the rollout began from match init and still carries HSD_STREAM metadata.
+    // Normal step_input/free-running sim never sets replay_frame_rng_applied.
+    // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
+    rng_owner = (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
+  }
   if (rng_owner != (uint8_t)MSL_ROLLOUT_CLOCK_HSD_RAND_STREAM &&
       rng_owner != (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
     // Only source-owned HSD streams, or replay-frame seeds whose same-frame prefix sites have been
@@ -4211,8 +4212,9 @@ void locomotion_update_pre(MslBatch* batch) {
         }
 
         const uint8_t replay_wait_rng_owner =
-            (batch->rollout_clock_rng_owned != NULL &&
-             batch->rollout_clock_rng_owned[bi] == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED)
+            ((batch->rollout_clock_rng_owned != NULL &&
+              batch->rollout_clock_rng_owned[bi] == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) ||
+             (batch->replay_frame_rng_applied != NULL && batch->replay_frame_rng_applied[bi] != 0u))
                 ? 1u
                 : 0u;
         const uint32_t wait_anim = replay_wait_rng_owner != 0u ? batch->state.animation_index[idx]

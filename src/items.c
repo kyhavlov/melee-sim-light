@@ -39,6 +39,13 @@ enum {
   MSL_ITEM_HIDDEN_CALLBACK_CLEAR = 1u << 0u,
 };
 
+enum {
+  // The generated hurtcap substrate exposes Fighter_Part ids but not semantic body-region labels.
+  // Fox/Falco cap12 is anchored to FtPart 18, the dynamic tail chain used by lbColl body tests.
+  // data/hurtcaps/{fox,falco}.json cap12 -> FtPart 18.
+  MSL_ITEM_HURTCAP_FOX_FALCO_TAIL_PART_ID = 18,
+};
+
 static inline uint8_t slippi_metadata_low_byte_from_f32(float v) {
   uint32_t bits = 0;
   memcpy(&bits, &v, sizeof(bits));
@@ -2627,10 +2634,62 @@ static inline uint8_t laser_grounded_body_landing_fall_special_exact_z_owner(
   return 1u;
 }
 
+static inline uint8_t laser_tail_shallow_body_contact_rejected(
+    const MslBatch* batch, size_t d_idx, uint16_t item_type, uint8_t laser_state, uint8_t hit_hb_id,
+    float laser_radius, int cap_i, float overlap_amount) {
+  if (batch != NULL && laser_state == 0u && item_type_is_falco_laser(item_type) != 0u &&
+      laser_radius > 0.0f && overlap_amount <= laser_radius &&
+      batch->state.on_ground[d_idx] == 0u && batch->state.hurtbox_state[d_idx] == 0u &&
+      batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u) {
+    const MslHurtCap* caps = NULL;
+    uint16_t cap_count = 0u;
+    const uint8_t char_id = batch->state.char_id[d_idx];
+    const uint8_t cap_is_tail =
+        (hurtcaps_get(char_id, &caps, &cap_count) == 0 && caps != NULL && cap_i >= 0 &&
+         (uint16_t)cap_i < cap_count &&
+         caps[cap_i].bone_part_id == (uint16_t)MSL_ITEM_HURTCAP_FOX_FALCO_TAIL_PART_ID)
+            ? 1u
+            : 0u;
+    const uint16_t action_id = batch->state.action_id[d_idx];
+    const uint8_t flags_2218 = batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                                        (size_t)MSL_STATE_FLAGS_2218_INDEX];
+    const uint8_t reflect_behavior_only =
+        ((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) != 0u &&
+         (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) == 0u)
+            ? 1u
+            : 0u;
+    if (cap_is_tail != 0u &&
+        ((hit_hb_id == 0u &&
+          (action_id == (uint16_t)MSL_ACT_JUMP_F || action_id == (uint16_t)MSL_ACT_JUMP_B) &&
+          reflect_behavior_only != 0u) ||
+         (hit_hb_id >= 2u && action_id >= (uint16_t)MSL_ACT_JUMP_AERIAL_F &&
+          action_id <= (uint16_t)MSL_ACT_JUMP_AERIAL_B))) {
+      // Source-owned shallow item BODY rejection:
+      // - state0 Falco laser HitCapsules are authored in MSLLASR1 with four offsets and a radius;
+      //   ftColl_8007925C tests each one against extracted hurtcaps via lbColl_8000805C.
+      // - The shallow edge owner is only admitted for the extracted FtPart-18 tail hurtcap and for
+      //   overlaps no deeper than the laser HitCapsule radius. Early JumpF/B additionally requires
+      //   the source reflect-behavior carry, while JumpAerial* is limited to the trailing half of
+      //   the authored laser offsets. Deeper overlaps continue to normal BODY damage.
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+      // data/items/lasers.bin (MSLLASR1 state0 size/offsets)
+      // data/hurtcaps/{fox,falco}.bin cap12 -> FtPart 18.
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static inline uint8_t laser_exact_lbcoll_body_contact_admits_candidate(
     const MslBatch* batch, size_t d_idx, const MslCommonParams* common, uint8_t hurt_height,
-    float overlap_amount, float laser_prev_scale_z, float laser_scale_z, uint16_t item_type) {
+    float overlap_amount, float laser_prev_scale_z, float laser_scale_z, uint16_t item_type,
+    uint8_t laser_state, uint8_t hit_hb_id, float laser_radius, int cap_i) {
   if (!(overlap_amount > 0.0f)) {
+    return 0u;
+  }
+  if (laser_tail_shallow_body_contact_rejected(batch, d_idx, item_type, laser_state, hit_hb_id,
+                                               laser_radius, cap_i, overlap_amount)) {
     return 0u;
   }
   if (common != NULL && overlap_amount <= common->phantom_overlap_max_x7a8) {
@@ -6203,6 +6262,16 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
              batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT)
                 ? 1u
                 : 0u;
+        const uint8_t guard_reflect_terminal_x10_point_sample =
+            (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD &&
+             batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+             batch->state.guard_x10_frame_start[d_idx] == 1u &&
+             batch->state.guard_x10[d_idx] == 0u &&
+             batch->state.guard_reflect_timer_x14[d_idx] == 0u &&
+             batch->state.guard_reflect_timer_x18[d_idx] == 0u && laser_state == 0u &&
+             item_type_is_falco_laser(batch->state.item_type[ii]) != 0u && laser_age_frames > 1.0f)
+                ? 1u
+                : 0u;
         // Keep the early geometry lane ownership-consistent with the later GuardSetOff owner gate by
         // sharing the same collision-time powershield-active predicate and stale-x18 suppression
         // before we narrow the late locomotion snapshot.
@@ -6375,7 +6444,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         const uint8_t shield_uses_point_sample =
             ((defender_guard_hold_no_submotion_snapshot &&
               !guard_hold_current_segment_carried_laser) ||
-             guard_on_landing_carried_live_article_point_sample)
+             guard_on_landing_carried_live_article_point_sample ||
+             guard_reflect_terminal_x10_point_sample)
                 ? 1u
                 : 0u;
         const float shield_probe_x = shield_uses_point_sample ? x0 : x;
@@ -6389,10 +6459,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // replay-visible live-article bits alone do not authorize a fresh shield sweep. Source
           // item collision consumes the carried point sample from the article callback state
           // exposed by the post-frame row; fresh SpecialN-loop rows keep the current-segment path.
+          // Terminal GuardReflect x10=1 follows the same sample boundary: GuardReflect_Anim chains
+          // through GuardOn_Anim into Guard at the post-frame, but that final no-submotion
+          // GuardReflect callback does not expose the next laser segment to ShieldDesc until the
+          // following settled Guard row.
           // refs/melee/src/melee/it/items/itfoxlaser.c::{
           //   itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-          //   ftCo_GuardOn_Anim,ftCo_800928CC}
+          //   ftCo_GuardReflect_Anim,ftCo_GuardOn_Anim,ftCo_800928CC}
           off_n = 0u;
         }
         // Decomp consumes one shared scaleZ transform chain for laser collision spaces
@@ -7572,7 +7646,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                     &body_overlap_amount, &exact_evaluated, use_landing_fall_special_exact_z) &&
                 laser_exact_lbcoll_body_contact_admits_candidate(
                     batch, d_idx, common, hit_hurt_height, body_overlap_amount, laser_prev_scale_z,
-                    laser_scale_z, batch->state.item_type[ii])) {
+                    laser_scale_z, batch->state.item_type[ii], laser_state, oi, sr, (int)ci)) {
               hit = 1;
               hit_from_exact_lbcoll = 1u;
               hit_hb_id = oi;
@@ -7591,6 +7665,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           if (item_swept_sphere_capsule_overlap_amount(
                   batch, bi, def, hx0, hy0, hx1, hy1, sr, (int)ci, &hit_hurt_height,
                   &body_overlap_amount, flatten_body_hurt_z, 1.0f)) {
+            if (laser_tail_shallow_body_contact_rejected(batch, d_idx, batch->state.item_type[ii],
+                                                         laser_state, oi, sr, (int)ci,
+                                                         body_overlap_amount)) {
+              continue;
+            }
             hit = 1;
             hit_hb_id = oi;
             break;
@@ -7620,7 +7699,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                       &body_overlap_amount, &exact_evaluated, use_landing_fall_special_exact_z) &&
                   laser_exact_lbcoll_body_contact_admits_candidate(
                       batch, d_idx, common, hit_hurt_height, body_overlap_amount,
-                      laser_prev_scale_z, laser_scale_z, batch->state.item_type[ii])) {
+                      laser_prev_scale_z, laser_scale_z, batch->state.item_type[ii], laser_state,
+                      0u, sr, (int)ci)) {
                 hit = 1;
                 hit_from_exact_lbcoll = 1u;
                 hit_hb_id = 0u;
@@ -7637,6 +7717,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             if (item_swept_sphere_capsule_overlap_amount(
                     batch, bi, def, hx0, hy0, x, y, sr, (int)ci, &hit_hurt_height,
                     &body_overlap_amount, flatten_body_hurt_z, 1.0f)) {
+              if (laser_tail_shallow_body_contact_rejected(batch, d_idx, batch->state.item_type[ii],
+                                                           laser_state, 0u, sr, (int)ci,
+                                                           body_overlap_amount)) {
+                continue;
+              }
               hit = 1;
               hit_hb_id = 0u;
               break;
@@ -7884,10 +7969,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // - Passive keeps colanim hit status (`Ft_MF_KeepColAnimHitStatus`) across the tech motion;
         //   on replay-proven Fox-laser contacts, a same-frame Passive overlap can be hidden
         //   invulnerability ownership rather than an item BODY consume.
-        // - Keep this scoped to Fox laser rows; Falco Passive contacts remain on the normal BODY
-        //   consume path.
+        // - Keep this scoped to scaled-overlap false positives: if the authored item HitCapsule
+        //   offset sample still overlaps before FoxLaser's visual scaleZ stretch, the source item
+        //   callback owns a real BODY consume and damage handoff.
+        // - Falco Passive contacts remain on the normal BODY consume path.
         // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_Passive
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
         continue;
       }

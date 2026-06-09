@@ -98,6 +98,92 @@ def test_falco_laser_airborne_fall_z_lane_respects_same_attack_hitlist_carry() -
     assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
 
 
+def test_tvr_jumpf_reflect_behavior_shallow_laser_contact_waits_for_deep_body() -> None:
+    # TVR:3905/3906 covers early JumpF with stale reflect-behavior state and a Falco laser exact
+    # lbColl edge candidate. The shallow frame must not consume the shot; the next deeper overlap
+    # owns the normal BODY hit. This protects the source owner from becoming a broad JumpF or
+    # laser-age suppressor.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    # data/items/lasers.bin (MSLLASR1 laser_size/state0 HitCapsule)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    shallow_seed, shallow_ref, shallow_out = _run_one_step_row(dataset_path, 3905, 0)
+    p = 0
+    assert int(shallow_seed["action_id"][p]) == 25  # JumpF
+    assert int(shallow_seed["items"][0]["type"]) == 55  # Falco laser
+    assert int(shallow_seed["items"][0]["instance_id"]) == 772
+    assert int(shallow_ref["action_id"][p]) == 25
+    assert int(shallow_out["action_id"][p]) == 25
+    assert int(shallow_out["hitlag"][p]) == int(shallow_ref["hitlag"][p]) == 0
+    assert int(shallow_out["items"][0]["exists"]) == int(shallow_ref["items"][0]["exists"]) == 1
+
+    deep_seed, deep_ref, deep_out = _run_one_step_row(dataset_path, 3906, 0)
+    assert int(deep_seed["action_id"][p]) == 25  # JumpF
+    assert int(deep_seed["items"][0]["type"]) == 55
+    assert int(deep_seed["items"][0]["instance_id"]) == 772
+    assert int(deep_ref["action_id"][p]) == 84  # DamageAir1
+    assert int(deep_out["action_id"][p]) == 84
+    assert int(deep_out["hitlag"][p]) == int(deep_ref["hitlag"][p]) == 4
+    assert int(deep_out["items"][0]["exists"]) == int(deep_ref["items"][0]["exists"]) == 0
+
+
+def test_tvr_jumpaerial_tail_laser_shallow_contact_waits_for_deep_body() -> None:
+    # TVR:9511/9512 covers the state0 Falco-laser trailing-half HitCapsule against extracted
+    # cap12/FtPart-18 tail. The shallow edge frame must stay in JumpAerialF with the laser alive,
+    # while the next deeper overlap consumes the projectile. TVR:11488 is an adjacent younger hb1
+    # candidate that must remain BODY-eligible, proving this is not a generic cap12 suppressor.
+    # refs/melee/src/melee/it/itcoll.c::it_8027137C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
+    # data/items/lasers.bin (MSLLASR1 state0 size/offsets)
+    # data/hurtcaps/{fox,falco}.bin cap12 -> FtPart 18.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    shallow_seed, shallow_ref, shallow_out = _run_one_step_row(dataset_path, 9511, 0)
+    p = 0
+    slot = 1
+    assert int(shallow_seed["action_id"][p]) == 27  # JumpAerialF
+    assert int(shallow_seed["items"][slot]["type"]) == 55  # Falco laser
+    assert int(shallow_seed["items"][slot]["instance_id"]) == 1959
+    assert int(shallow_ref["action_id"][p]) == 27
+    assert int(shallow_out["action_id"][p]) == 27
+    assert int(shallow_out["hitlag"][p]) == int(shallow_ref["hitlag"][p]) == 0
+    assert int(shallow_out["items"][slot]["exists"]) == int(shallow_ref["items"][slot]["exists"]) == 1
+
+    deep_seed, deep_ref, deep_out = _run_one_step_row(dataset_path, 9512, 0)
+    assert int(deep_seed["action_id"][p]) == 27
+    assert int(deep_seed["items"][slot]["type"]) == 55
+    assert int(deep_seed["items"][slot]["instance_id"]) == 1959
+    assert int(deep_ref["action_id"][p]) == 84  # DamageAir1
+    assert int(deep_out["action_id"][p]) == 84
+    assert int(deep_out["hitlag"][p]) == int(deep_ref["hitlag"][p]) == 3
+    assert int(deep_out["items"][slot]["exists"]) == int(deep_ref["items"][slot]["exists"]) == 0
+
+    younger_seed, younger_ref, younger_out = _run_one_step_row(dataset_path, 11488, 0)
+    assert int(younger_seed["action_id"][p]) == 27
+    assert int(younger_seed["items"][slot]["type"]) == 55
+    assert int(younger_seed["items"][slot]["instance_id"]) == 2449
+    assert int(younger_ref["action_id"][p]) == 84
+    assert int(younger_out["action_id"][p]) == 84
+    assert int(younger_out["hitlag"][p]) == int(younger_ref["hitlag"][p]) == 3
+
+
 def test_fox_laser_state0_script_damage_update_hits_for_two_damage_ppa() -> None:
     # PPA rec1151 is a state0 Fox laser after the article script updates only hb1's HitCapsule
     # damage from 3 to 2. Runtime damage is owned by the extracted item script update lane, not by

@@ -1165,48 +1165,48 @@ overall.float_norm_mae_p95: 0.00006390
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl ==
 Records: 12475  Players/scored per record: 2  Total player-frames: 24950
-mismatch.action_id: 8 / 24950 (0.000321)
-mismatch.action_frame: 7 / 24950 (0.000281)
+mismatch.action_id: 1 / 24950 (0.000040)
+mismatch.action_frame: 3 / 24950 (0.000120)
 mismatch.on_ground: 0 / 24950 (0.000000)
 mismatch.facing: 1 / 24950 (0.000040)
 mismatch.stocks: 0 / 24950 (0.000000)
 mismatch.jumps_left: 0 / 24950 (0.000000)
 mismatch.is_dead: 0 / 24950 (0.000000)
-mismatch.hitlag: 5 / 24950 (0.000200)
-mismatch.hitstun: 3 / 24950 (0.000120)
+mismatch.hitlag: 2 / 24950 (0.000080)
+mismatch.hitstun: 1 / 24950 (0.000040)
 mismatch.l_cancel: 1 / 24950 (0.000040)
 mismatch.hurtbox_state: 3 / 24950 (0.000120)
 mismatch.ground_id: 0 / 24950 (0.000000)
-mismatch.animation_index: 6 / 24950 (0.000240)
-mismatch.instance_hit_by: 4 / 24950 (0.000160)
-mismatch.instance_id: 7 / 24950 (0.000281)
-mismatch.last_attack_landed: 4 / 24950 (0.000160)
-mismatch.combo_count: 1 / 24950 (0.000040)
+mismatch.animation_index: 1 / 24950 (0.000040)
+mismatch.instance_hit_by: 2 / 24950 (0.000080)
+mismatch.instance_id: 3 / 24950 (0.000120)
+mismatch.last_attack_landed: 2 / 24950 (0.000080)
+mismatch.combo_count: 0 / 24950 (0.000000)
 mismatch.last_hit_by: 16 / 24950 (0.000641)
-mismatch.state_flags: 21 / 124750 (0.000168)
-mismatch.item_exists: 4 / 187125 (0.000021)
-mismatch.item_type: 4 / 187125 (0.000021)
+mismatch.state_flags: 10 / 124750 (0.000080)
+mismatch.item_exists: 1 / 187125 (0.000005)
+mismatch.item_type: 1 / 187125 (0.000005)
 mismatch.item_state: 0 / 187125 (0.000000)
-mismatch.item_owner: 4 / 187125 (0.000021)
-mismatch.item_instance_id: 4 / 187125 (0.000021)
+mismatch.item_owner: 1 / 187125 (0.000005)
+mismatch.item_instance_id: 1 / 187125 (0.000005)
 ignored_mismatch.state_flags[4]&0x80: 119 / 24950 (0.004770)
 err.pos_x: mae=0.000185 p95=0.000000 max=3.090805
 err.pos_y: mae=0.000474 p95=0.000000 max=2.280000
-err.speed_air_x_self: mae=0.000044 p95=0.000000 max=0.809250
-err.speed_ground_x_self: mae=0.000077 p95=0.000000 max=1.185000
-err.speed_y_self: mae=0.000734 p95=0.000000 max=3.400000
-err.speed_x_attack: mae=0.000092 p95=0.000000 max=1.292193
-err.speed_y_attack: mae=0.000334 p95=0.000000 max=7.328387
-err.percent: mae=0.001314 p95=0.000000 max=16.000000
-err.shield_hp: mae=0.000093 p95=0.000000 max=1.400002
-err.item_pos_x: mae=0.077438 p95=0.000000 max=128.755356
-err.item_pos_y: mae=0.018868 p95=0.000000 max=37.362816
-err.item_vel_x: mae=0.004891 p95=0.000000 max=5.000000
+err.speed_air_x_self: mae=0.000012 p95=0.000000 max=0.295000
+err.speed_ground_x_self: mae=0.000063 p95=0.000000 max=1.185000
+err.speed_y_self: mae=0.000461 p95=0.000000 max=2.280000
+err.speed_x_attack: mae=0.000052 p95=0.000000 max=1.292193
+err.speed_y_attack: mae=0.000294 p95=0.000000 max=7.328387
+err.percent: mae=0.001082 p95=0.000000 max=16.000000
+err.shield_hp: mae=0.000035 p95=0.000000 max=0.700001
+err.item_pos_x: mae=0.000105 p95=0.000000 max=0.321365
+err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000093
+err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000213
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000074
-overall.discrete_mismatch: 103 / 1509475
-overall.strict_discrete_mismatch: 222 / 1509475
+overall.discrete_mismatch: 50 / 1509475
+overall.strict_discrete_mismatch: 169 / 1509475
 overall.ignored_discrete_mismatch: 119
-overall.float_norm_mae_p95: 0.00007295
+overall.float_norm_mae_p95: 0.00003780
 
 == datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl ==
 Records: 12471  Players/scored per record: 2  Total player-frames: 24942
@@ -1479,7 +1479,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00050121
 
 == suite summary ==
-overall.discrete_mismatch: 1684 / 35294369
-overall.strict_discrete_mismatch: 3184 / 35294369
+overall.discrete_mismatch: 1631 / 35294369
+overall.strict_discrete_mismatch: 3131 / 35294369
 overall.ignored_discrete_mismatch: 1500
-overall.float_norm_mae_p95: 0.00031259
+overall.float_norm_mae_p95: 0.00031114

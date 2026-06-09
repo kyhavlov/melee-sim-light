@@ -14271,6 +14271,34 @@ void mpcoll_ground_apply(MslBatch* batch) {
              final_landing_lift > (escapeair_entry_bottom_rel0 + (2.0f * k_ecb_vertical_unit)))
                 ? 1u
                 : 0u;
+        const uint8_t suppress_jumpaerial_escapeair_first_locked_static_platform_land =
+            // First-callback JumpAerial -> EscapeAir static-platform guard:
+            // `ftCo_JumpAerial_IASA` can enter EscapeAir from the same fighter update, but a
+            // vertical-only callback-local floor sweep still belongs to the pre-entry JumpAerial
+            // CollData lifetime. A static soft platform candidate seen only by the just-entered
+            // EscapeAir root projection must therefore wait until the following sustained
+            // EscapeAir_Coll pass. Keep this to the live locked-ECB entry window
+            // (`seed_prev_action_frame == 0`, high x130 countdown) and require zero horizontal
+            // source sweep; diagonal air-dodge entries with a real horizontal sweep can publish the
+            // platform immediately through the ordinary floor owner.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+            // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,
+            //   mpColl_80044838_Floor}
+            (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+             (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+              batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
+             batch->state.seed_prev_action_frame[idx] == 0 && batch->state.action_frame[idx] <= 1 &&
+             ecb_lock_timer_seed >= 8u &&
+             fabsf(batch->state.floor_sweep_prev_pos_x[idx] - x) <= k_floor_horiz_dy_thresh &&
+             msl_escapeair_locked_bottom_owner_is_live_jumpaerial(
+                 batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+             stage_collision_floor_line_is_platform(stage_id, ground_id) &&
+             !stage_collision_floor_line_has_platform_transform(stage_id, ground_id) &&
+             batch->state.speed_y_self[idx] < 0.0f && final_landing_lift >= 0.0f)
+                ? 1u
+                : 0u;
         const uint8_t suppress_jumpaerial_escapeair_static_platform_overstep_final_land =
             // Fresh JumpAerial -> EscapeAir can also reach a static soft platform after the
             // callback-local bottom sweep is produced mostly by the pre-entry JumpAerial ECB
@@ -14595,7 +14623,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 suppress_kneebend_escapeair_missing_ledge_owner_final_land,
             .jumpaerial_high_lift_ledge = suppress_jumpaerial_escapeair_high_lift_ledge_final_land,
             .jumpaerial_static_platform_overstep =
-                suppress_jumpaerial_escapeair_static_platform_overstep_final_land,
+                suppress_jumpaerial_escapeair_static_platform_overstep_final_land ||
+                suppress_jumpaerial_escapeair_first_locked_static_platform_land,
             .cliff_ledge_locked = suppress_cliff_ledge_locked_final_land,
         };
         MslMpcollFloorRejectPacket final_floor_reject = {0};
