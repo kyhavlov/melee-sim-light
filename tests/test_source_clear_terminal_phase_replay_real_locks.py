@@ -243,6 +243,46 @@ def test_source_clear_terminal_phase_attackairn_without_terminal_lane_still_clea
 
 
 @pytest.mark.integration
+def test_source_clear_active_damagefly_terminal_parks_owner_tvr() -> None:
+    # TVR rolls through an active DamageFlyHi x18C8 terminal tick with source-owner/combo
+    # provenance. Vanilla retires the countdown while keeping dmg.x18C4_source_ply visible through
+    # the following SquatRv/SquatWait rows; deferring the terminal tick until hitstun is zero clears
+    # last_hit_by one frame too late.
+    #
+    # Adjacent negative coverage: TCH:441 above is AttackAirN with timer==1 and the same owner-set
+    # provenance but no terminal seed lane, and must still publish source sentinel 6.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    start_record = 12179
+    terminal_record = 12207
+    compare_record = 12210
+    victim = 1
+    terminal_seed = ds.samples[terminal_record]["seed_t"]
+    assert int(terminal_seed["action_id"][victim]) == 0x0057  # DamageFlyHi.
+    assert int(terminal_seed["hitstun"][victim]) != 0
+    assert int(terminal_seed["source_clear_timer_x18c8"][victim]) == 1
+    assert int(terminal_seed["source_clear_owner_set_phase"][victim]) == 1
+    assert int(terminal_seed["source_clear_terminal_phase"][victim]) == 0
+    assert int(ds.samples[compare_record]["ref_t1"]["last_hit_by"][victim]) == 0
+
+    out, ref = _run_rollout_compare_row(dataset_path, start_record, compare_record)
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == 0x001C
+    assert int(out["last_hit_by"][victim]) == int(ref["last_hit_by"][victim]) == 0
+
+
+@pytest.mark.integration
 def test_source_clear_downed_recovery_terminal_parks_owner_in_rollout_cdo() -> None:
     # CDO:12020 rolls out through an x18C8 terminal tick inherited from Dash/Jump into
     # PassiveStandF. Vanilla parks last_hit_by with the timer inactive instead of clearing source

@@ -170,6 +170,49 @@ def _step_one_sample(ds, record: int) -> tuple[np.void, np.void, np.void]:
     return seed, ref, out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
 
 
+def _run_dataset_rollout_records(
+    ds_path: Path, *, start: int, records: tuple[int, ...], replay_frame_rng: bool = True
+) -> dict[int, tuple[np.void, np.void]]:
+    ds = read_dataset(str(ds_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > max(records)
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+    out_by_record: dict[int, tuple[np.void, np.void]] = {}
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, max(records) + 1):
+            seed_frame_bytes = samples_u8[record : record + 1, seed_off : seed_off + seed_stride].copy()
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            if replay_frame_rng:
+                binding.step_input_replay_frame_rng(handle, seed_frame_bytes, prev_input_bytes, input_bytes)
+            else:
+                binding.step_input(handle, prev_input_bytes, input_bytes)
+            if record in records:
+                binding.write_compare(handle, out_compare_bytes)
+                out_by_record[record] = (out_view[0].copy(), samples["ref_t1"][record].copy())
+    finally:
+        binding.destroy(handle)
+    return out_by_record
+
+
 def _run_slp_rollout_records(
     slp_path: Path, *, start: int, records: tuple[int, ...], ports: list[int]
 ) -> dict[int, tuple[np.void, np.void]]:
@@ -298,6 +341,83 @@ def test_stm_pokemon_stadium_x44_body_gap_owners_are_payload_bounded() -> None:
         out, _ref = _step_one_row_with_seed(dataset_path, record, non_stadium_seed)
         assert int(out["action_id"][defender]) == no_x44_action
         assert int(out["hitlag"][defender]) == 0
+
+
+@pytest.mark.integration
+def test_tvr_specialhi_launch_x44_body_gap_owner_is_stage_and_payload_bounded() -> None:
+    # TVR rec12278 closes the Pokemon Stadium x44 BODY residual for generated up-special launch:
+    # authored SpecialHi hb0 (16 damage, angle 80, kbg 60, bkb 80) reaches the airborne root cap
+    # through ftCommon_8007F804's Stadium x44 matrix. The same seed on a non-Stadium stage remains
+    # no-hit, proving this is the x44 source lane rather than a generic SpecialHi/root shortcut.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_80068E64,Fighter_UpdateModelScale}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHi_Enter,
+    #   ftFx_SpecialAirHi_Enter}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        / "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 12278)
+    defender = 0
+    assert int(seed["action_id"][1]) == 356  # SpecialAirHi launch.
+    assert int(seed["action_id"][defender]) == 366  # SpecialAirLwLoop before Turn publication.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 90
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 8
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+
+    ds = read_dataset(str(dataset_path))
+    non_stadium_seed = ds.samples[12278:12279]["seed_t"].copy()
+    non_stadium_seed["stage_id"][0] = np.uint32(32)  # Final Destination.
+    out, _ref = _step_one_row_with_seed(dataset_path, 12278, non_stadium_seed)
+    assert int(out["action_id"][defender]) == 369  # No x44 BODY hit.
+    assert int(out["hitlag"][defender]) == 0
+
+
+@pytest.mark.integration
+def test_tvr_specialhi_launch_x44_body_gap_waits_for_aerial_reflector_turn_rollout() -> None:
+    # Full-rollout TVR rec12277 has the same generated SpecialAirHi launch hb0 near the defender
+    # root, but the victim is still ftFx_MS_SpecialAirLwLoop. The bounded Stadium x44 bridge must wait
+    # until rec12278, where the source motion state is ftFx_MS_SpecialAirLwTurn. This is a generated
+    # Fox/Falco SpecialLw motion-state distinction, not a replay-row or character-pair predicate.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+    #   ftFx_SpecialAirLwLoop_IASA,ftFx_SpecialAirLwLoop_Coll,ftFx_SpecialAirLwTurn_Coll}
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F804
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        / "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    defender = 0
+    attacker = 1
+    assert int(ds.samples[12277]["ref_t1"]["action_id"][defender]) == 366  # SpecialAirLwLoop.
+    assert int(ds.samples[12278]["seed_t"]["action_id"][defender]) == 366
+    assert int(ds.samples[12278]["ref_t1"]["action_id"][attacker]) == 356  # SpecialAirHi launch.
+
+    rows = _run_dataset_rollout_records(dataset_path, start=0, records=(12277, 12278))
+    out_12277, ref_12277 = rows[12277]
+    assert int(out_12277["action_id"][defender]) == int(ref_12277["action_id"][defender]) == 366
+    assert int(out_12277["hitlag"][defender]) == int(ref_12277["hitlag"][defender]) == 0
+    assert int(out_12277["last_hit_by"][defender]) == int(ref_12277["last_hit_by"][defender])
+
+    out_12278, ref_12278 = rows[12278]
+    assert int(out_12278["action_id"][defender]) == int(ref_12278["action_id"][defender]) == 90
+    assert int(out_12278["hitlag"][defender]) == int(ref_12278["hitlag"][defender]) == 8
+    assert float(out_12278["percent"][defender]) == pytest.approx(float(ref_12278["percent"][defender]))
 
 
 @pytest.mark.integration

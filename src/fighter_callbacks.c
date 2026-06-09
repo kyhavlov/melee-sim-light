@@ -14,7 +14,9 @@
 #include "hurtboxes.h"
 #include "blaster.h"
 #include "grab_attachment.h"
+#include "ids.h"
 #include "input.h"
+#include "input_axis.h"
 #include "items.h"
 #include "ledge.h"
 #include "locomotion.h"
@@ -36,6 +38,24 @@
 // NOTE: `blaster_update_post_collision` is intentionally not part of the public blaster module API
 // yet; keep the forward declaration local to preserve the current include surface.
 extern void blaster_update_post_collision(MslBatch* batch);
+
+static void camera_update_zoom_scale_from_player0_cstick(MslBatch* batch,
+                                                         const uint8_t* input_bytes,
+                                                         size_t input_stride_bytes) {
+  if (batch == NULL || input_bytes == NULL || input_stride_bytes < sizeof(MslInput) ||
+      batch->camera_zoom_scale_x2bc == NULL || batch->camera_zoom_hold_x2ba == NULL) {
+    return;
+  }
+  // MSL's validation/RL target is normal VS gameplay. Source Camera_8002B0E0 updates x2BC only
+  // when gm_8016B41C() is true (Classic/Adventure/All-Star/Training/etc.) and x2C0 is live; in VS
+  // replay validation the hidden zoom scalar remains at Camera_80028B9C's initialized 1.0f.
+  // Keep the substrate explicit because Fighter_procUpdate gates magnify damage on
+  // Camera_80031144()==1.0f, but do not consume C-stick zoom input on the supported VS path.
+  // refs/melee/src/melee/cm/camera.c::{Camera_80028B9C,Camera_8002B0E0,Camera_80031144}
+  // refs/melee/src/melee/gm/gm_16AE.c::gm_8016B41C
+  (void)input_bytes;
+  (void)input_stride_bytes;
+}
 
 static inline void clear_landing_transients(MslBatch* batch) {
   if (batch == NULL) {
@@ -591,6 +611,12 @@ static int fighter_callbacks_input_phase(MslBatch* batch, const uint8_t* prev_in
   if (err != 0) {
     return err;
   }
+  // Hidden camera zoom scalar:
+  // Camera_8002B0E0 updates `cm_80452C68.x2BC` from player-0 C-stick Y; Fighter_procUpdate later
+  // admits magnify damage only when Camera_80031144() returns exactly 1.0f.
+  // refs/melee/src/melee/cm/camera.c::{Camera_8002B0E0,Camera_80031144}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  camera_update_zoom_scale_from_player0_cstick(batch, input_bytes, input_stride_bytes);
 
   // Damage hitlag callback consume (subset) after input apply and before collision ownership.
   // Decomp:

@@ -58,6 +58,13 @@ enum { MSL_STATE_FLAG_221F_B1 = 0x40 };
 enum { MSL_STATE_FLAG_221F_B3 = 0x10 };
 enum { MSL_STATE_FLAG_221F_B4 = 0x08 };
 
+// Internal magnifying-glass replay-local episode owner. This is not a Slippi bit; it records which
+// source-visible start predicate created a local x1910 counter so carry can stay bounded.
+enum { MSL_MAGNIFY_LOCAL_EPISODE_NONE = 0 };
+enum { MSL_MAGNIFY_LOCAL_EPISODE_DAMAGEFLYTOP_REFLECT = 1 };
+enum { MSL_MAGNIFY_LOCAL_EPISODE_DAMAGEFLY_VISIBLE_EDGE = 2 };
+enum { MSL_MAGNIFY_LOCAL_EPISODE_NO_INSIDE_CARRY = 3 };
+
 // Refresh a small subset of Slippi post-frame `state_flags` bits that are derived from
 // sim-owned state each step.
 //

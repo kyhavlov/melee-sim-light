@@ -2031,6 +2031,58 @@ static inline uint8_t active_damage_hard_floor_projection_source_accepted(
                        : 0u);
 }
 
+static inline uint8_t active_damage_hitlag_ledge_edge_floorhug_owner(
+    const MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    int line_idx, float projection_x, const MslCommonParams* c, float* edge_x_out,
+    float* edge_y_out) {
+  if (batch == NULL || g == NULL || c == NULL || edge_x_out == NULL || edge_y_out == NULL ||
+      stage_id != (uint32_t)MSL_STAGE_ID_POKEMON_STADIUM || line_idx < 0 ||
+      (size_t)line_idx >= g->line_count || batch->state.hitlag[idx] == 0u ||
+      !is_damage_fly_collision_action(batch->state.action_id[idx]) ||
+      batch->state.damage_hitlag_downward_sdi_consumed[idx] == 0u) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  if (line->fighter_solid == 0u || line->is_platform || line->is_ledge == 0u ||
+      line->platform_transform_kind != MSL_STAGE_PLATFORM_TRANSFORM_NONE) {
+    return 0u;
+  }
+
+  const MslStageFloorLine world = floor_line_world_for_env(batch, bi, g, line_idx);
+  if (fabsf(world.y0 - world.y1) > k_floor_horiz_dy_thresh) {
+    return 0u;
+  }
+  const float edge_scale_x = 1.0f + (c->pokemon_stadium_x34_scale_z / 3.0f);
+  const float mid_x = 0.5f * (world.x0 + world.x1);
+  MslStageRawLineKind raw_kind = MSL_STAGE_RAW_LINE_UNKNOWN;
+  uint16_t raw_segment = 0xFFFFu;
+  if (projection_x <= mid_x &&
+      stage_collision_raw_line_prev_non_kind(stage_id, line->segment_i, MSL_STAGE_RAW_LINE_FLOOR,
+                                             &raw_kind, &raw_segment) &&
+      (raw_kind == MSL_STAGE_RAW_LINE_LEFT_WALL || raw_kind == MSL_STAGE_RAW_LINE_RIGHT_WALL)) {
+    // Active DamageFly hitlag ledge-edge FloorHug:
+    // `ftCo_Damage_OnEveryHitlag` mutates `cur_pos` before `ftCo_DamageFly_Coll`, then
+    // `ft_80081DD4 -> mpColl_800477E0 -> mpColl_80044948_Floor` handles stay-airborne floorhug.
+    // If the carried floor projection falls off a floor whose previous raw line is a wall, source
+    // snaps `cur_pos.x` to the floor's left endpoint and keeps the fighter airborne. MSLSTG01 keeps
+    // the ISO raw wall kind (`left_wall`/`right_wall`) rather than source's call-site side label, so
+    // the owner requires generated wall adjacency but does not depend on that naming convention.
+    // Keep this bounded to generated ledge floor/wall adjacency plus the live consumed-SDI DamageFly
+    // callback; ordinary ledge floors without this source callback remain rejected by the generic
+    // ledge suppression below.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    //   ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll}
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044948_Floor}
+    // data/stages/bin/*.bin::MSLSTG01 floor raw_prev/raw_next wall adjacency
+    (void)raw_segment;
+    *edge_x_out = world.x0 * edge_scale_x;
+    *edge_y_out = world.y0;
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t grounded_height_platform_reproject(const MslBatch* batch, int bi,
                                                          const MslStageFloorGraph* g,
                                                          uint32_t stage_id, size_t idx,
@@ -10323,13 +10375,23 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 batch, idx, bi, g, out_line_idx, cur_bottom_x, cur_bottom_y,
                 active_damage_hitlag_carried_source_floor_contact, c);
           }
+          float ledge_edge_x = 0.0f;
+          float ledge_edge_y = 0.0f;
+          const uint8_t active_damage_ledge_edge_floorhug_owner =
+              (out_line_idx >= 0 && g->lines[(size_t)out_line_idx].is_ledge != 0u &&
+               active_damage_hitlag_ledge_edge_floorhug_owner(batch, idx, bi, g, stage_id,
+                                                              out_line_idx, proj_x, c,
+                                                              &ledge_edge_x, &ledge_edge_y))
+                  ? 1u
+                  : 0u;
           if (out_line_idx >= 0 && y_corr >= 0.0f &&
               // Keep this owner off ledge floor segments. mpColl edge/ledge suppression is owned
               // by separate floor-edge helpers, and replay-real AGN 4839/4840 stay airborne below
               // the FD ledge floor despite diagonal down input during DamageFlyTop hitlag.
               // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
               // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904
-              !g->lines[(size_t)out_line_idx].is_ledge &&
+              (!g->lines[(size_t)out_line_idx].is_ledge ||
+               active_damage_ledge_edge_floorhug_owner) &&
               // Soft-platform stay-airborne projection needs a real current bottom sweep. A
               // replay-seeded carried floor.index alone can represent hard-floor CollData
               // continuation, but using it for static platforms snaps active-hitlag SDI upward to a
@@ -10337,14 +10399,23 @@ void mpcoll_ground_apply(MslBatch* batch) {
               // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044948_Floor}
               (!g->lines[(size_t)out_line_idx].is_platform || active_damage_platform_floor_hit) &&
               active_damage_hard_floor_hit) {
-            batch->state.pos_y[idx] += y_corr;
+            if (active_damage_ledge_edge_floorhug_owner) {
+              batch->state.pos_x[idx] += (ledge_edge_x - proj_x);
+              batch->state.pos_y[idx] += (ledge_edge_y - proj_y);
+              contact_x = ledge_edge_x;
+              contact_y = ledge_edge_y;
+            } else {
+              batch->state.pos_y[idx] += y_corr;
+              contact_x = proj_x;
+              contact_y = proj_y + y_corr;
+            }
             ground_id = g->lines[(size_t)out_line_idx].segment_i;
-            contact_x = proj_x;
-            contact_y = proj_y + y_corr;
             mpcoll_record_callback_floor_result_with_mode(
                 &mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_STAY_AIRBORNE,
-                (uint8_t)MSL_MPCOLL_FLOOR_MODE_STAY_AIRBORNE_PROJECTION, ground_id, contact_x,
-                contact_y, floor_nx, floor_ny);
+                active_damage_ledge_edge_floorhug_owner
+                    ? (uint8_t)MSL_MPCOLL_FLOOR_MODE_EDGE_SNAP
+                    : (uint8_t)MSL_MPCOLL_FLOOR_MODE_STAY_AIRBORNE_PROJECTION,
+                ground_id, contact_x, contact_y, floor_nx, floor_ny);
             mpcoll_floor_probe_result(&mpcoll_ctx, &active_damage_projection_probe, 0u, 1u,
                                       (uint8_t)MSL_MPCOLL_FLOOR_PROBE_ACCEPTED);
             active_damage_hitlag_airborne_floor_contact = 1u;

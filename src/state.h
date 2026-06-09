@@ -462,6 +462,10 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   uint8_t* camera_box_visible_x221f_b0;
+  // Replay-playback current-row rising edge for fp->x221F_b0. This is not seeded gameplay state;
+  // it is set only by the combined replay-frame step before state_flags_refresh consumes it.
+  uint8_t* camera_box_visible_x221f_b0_replay_rise;
+  uint8_t* camera_box_visible_x221f_b0_replay_prev;
   // Rebirth camera subject anchor Y (`fp->mv.co.common.x8`) seeded from ISO respawn-point data.
   // refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
   // data/stages/final_destination.json: respawn_points
@@ -484,6 +488,7 @@ typedef struct MslStateSoA {
   // state, not stale teacher-forced snapshots.
   uint8_t* magnify_damage_runtime_visibility_owner;
   uint8_t* magnify_damage_seed_episode_active;
+  uint8_t* magnify_damage_local_episode_kind;
   // Current-row Camera_80030CD8-style point-inside-stage-cam predicate, seeded from the promoted
   // camera target point plus ISO stage camera bounds.
   // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C

@@ -273,12 +273,9 @@ static inline uint8_t state_flags_root_outside_stage_cam_horizontal_bounds(const
   return (uint8_t)(x < cam.left || x > cam.right);
 }
 
-static inline uint8_t state_flags_magnify_camera_target_horizontal_trajectory_owner(
+static inline uint8_t state_flags_magnify_root_horizontal_trajectory_reaches_stage_cam_bound(
     const MslBatch* batch, const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
-    return 0u;
-  }
-  if (batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] != 0u) {
     return 0u;
   }
   MslStageBounds cam = {0};
@@ -298,6 +295,25 @@ static inline uint8_t state_flags_magnify_camera_target_horizontal_trajectory_ow
   return 0u;
 }
 
+static inline uint8_t state_flags_camera_zoom_is_default(const MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->camera_zoom_scale_x2bc == NULL) {
+    return 1u;
+  }
+  const size_t bi = idx / (size_t)MSL_MAX_PLAYERS;
+  return (batch->camera_zoom_scale_x2bc[bi] == 1.0f) ? 1u : 0u;
+}
+
+static inline uint8_t state_flags_magnify_camera_target_horizontal_trajectory_owner(
+    const MslBatch* batch, const MslCommonParams* c, size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  if (batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] != 0u) {
+    return 0u;
+  }
+  return state_flags_magnify_root_horizontal_trajectory_reaches_stage_cam_bound(batch, c, idx);
+}
+
 static inline uint8_t state_flags_magnify_damageflytop_local_episode_visible_owner(
     const MslBatch* batch, size_t idx, uint8_t flags_221f) {
   if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
@@ -309,9 +325,16 @@ static inline uint8_t state_flags_magnify_damageflytop_local_episode_visible_own
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  return (uint8_t)(((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u &&
+  const uint8_t damageflytop_script_owner =
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u &&
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) == 0u;
+  const uint8_t reflect_behavior_owner =
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) != 0u &&
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B1) == 0u &&
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) == 0u &&
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) == 0u;
+  return (uint8_t)(((damageflytop_script_owner != 0u || reflect_behavior_owner != 0u) &&
                     (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u &&
-                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) == 0u &&
                     (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B0) == 0u)
                        ? 1u
                        : 0u);
@@ -321,24 +344,47 @@ static inline uint8_t state_flags_magnify_damageflytop_source_visible_owner(cons
                                                                             size_t idx,
                                                                             uint8_t flags_221f) {
   if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
-      batch->state.action_frame[idx] != 9 || (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0) == 0u) {
+      (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0) == 0u) {
     return 0u;
   }
   const uint8_t flags_2218 =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  return (uint8_t)(((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u &&
+  if (batch->state.action_frame[idx] == 9) {
+    return (uint8_t)(((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u &&
+                      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u &&
+                      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) == 0u &&
+                      (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B0) == 0u)
+                         ? 1u
+                         : 0u);
+  }
+
+  // DamageFlyTop reflect-behavior camera publication:
+  // - replay playback feeds the source `fp+0x221F_b0` camera-box visibility bit every frame,
+  // - ftLib_80086A8C can publish that bit after the early action-frame-9 DamageFlyTop owner when
+  //   the reflected-damage camera subject first becomes magnifying-glass visible,
+  // - only the current-row rising edge is allowed to start `fp->dmg.x1910`; later steady visible
+  //   top rows continue only through an already-live x1910 episode.
+  // This keeps the owner on raw source bits (`REFLECT_BEHAVIOR`, x221F rising edge, no selected
+  // victim x221C_b0) instead of a camera-y/action-frame threshold.
+  // refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+  // refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  return (uint8_t)((batch->state.camera_box_visible_x221f_b0_replay_rise[idx] != 0u &&
+                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) != 0u &&
                     (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u &&
-                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) == 0u &&
+                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B1) == 0u &&
+                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) == 0u &&
+                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) == 0u &&
                     (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B0) == 0u)
                        ? 1u
                        : 0u);
 }
 
-static inline uint8_t state_flags_magnify_runtime_visibility_owner(const MslBatch* batch,
-                                                                   size_t idx, uint16_t action_id,
-                                                                   uint8_t flags_221f) {
+static inline uint8_t state_flags_magnify_runtime_visibility_kind(const MslBatch* batch, size_t idx,
+                                                                  uint16_t action_id,
+                                                                  uint8_t flags_221f) {
   // Replay rollout fresh-start ownership follows the source magnifying-glass offscreen producer:
   // ifMagnify_802FC7C0 tests Player_80036978 world position against Stage_GetCamBounds* and
   // Fighter_procUpdate consumes that is_offscreen bit for fp->dmg.x1910.
@@ -356,26 +402,114 @@ static inline uint8_t state_flags_magnify_runtime_visibility_owner(const MslBatc
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
   // refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FC7C0,ifMagnify_802FC998}
   // refs/melee/src/melee/stage/stage.c::Stage_GetCamBounds*
-  if (state_flags_magnify_live_fighter_action(action_id) == 0u) {
-    return 0u;
+  if (state_flags_magnify_live_fighter_action(action_id) == 0u ||
+      state_flags_camera_zoom_is_default(batch, idx) == 0u) {
+    return (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE;
   }
   if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_HI || action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N) {
     if (state_flags_root_outside_stage_cam_horizontal_bounds(batch, idx) != 0u) {
-      return 1u;
+      return (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NO_INSIDE_CARRY;
     }
-    return state_flags_magnify_camera_target_horizontal_trajectory_owner(batch, msl_common_params(),
-                                                                         idx);
+    if (state_flags_magnify_camera_target_horizontal_trajectory_owner(batch, msl_common_params(),
+                                                                      idx) != 0u) {
+      return (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NO_INSIDE_CARRY;
+    }
+    const uint8_t flags_221c =
+        batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+    const uint8_t flags_2218 =
+        batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+    const uint8_t damageflyhi_reflect_visible_edge_bits =
+        (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                  MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR);
+    const uint8_t damageflyhi_hitstun_only_visible_edge =
+        (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_HI &&
+                  (flags_2218 &
+                   (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                             MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR |
+                             MSL_STATE_FLAG_2218_REFLECTING)) == 0u &&
+                  (flags_221c &
+                   (uint8_t)(MSL_STATE_FLAG_221C_B0 | MSL_STATE_FLAG_221C_B1 |
+                             MSL_STATE_FLAG_221C_B2 | MSL_STATE_FLAG_221C_B3 |
+                             MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD |
+                             MSL_STATE_FLAG_221C_IS_HITSTUN | MSL_STATE_FLAG_221C_IN_DAMAGE)) ==
+                      (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN);
+    const uint8_t damageflyn_x221c_visible_edge_bits =
+        (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2 | MSL_STATE_FLAG_221C_IS_HITSTUN);
+    const uint8_t damageflyn_hitstun_only_visible_edge_bits =
+        (uint8_t)(MSL_STATE_FLAG_2218_B1 | MSL_STATE_FLAG_221C_IS_HITSTUN);
+    const uint8_t damagefly_visible_edge_source_lane =
+        (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_HI &&
+         (flags_2218 & damageflyhi_reflect_visible_edge_bits) ==
+             damageflyhi_reflect_visible_edge_bits &&
+         (flags_2218 & (uint8_t)(MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECTING)) == 0u)
+            ? 1u
+        : damageflyhi_hitstun_only_visible_edge != 0u
+            ? 1u
+            : (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N &&
+                        ((flags_221c & damageflyn_x221c_visible_edge_bits) ==
+                             (uint8_t)(MSL_STATE_FLAG_221C_B2 | MSL_STATE_FLAG_221C_IS_HITSTUN) ||
+                         ((uint8_t)((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B1) |
+                                    (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN)) ==
+                              damageflyn_hitstun_only_visible_edge_bits &&
+                          (flags_2218 &
+                           (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B2 |
+                                     MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR |
+                                     MSL_STATE_FLAG_2218_REFLECTING)) == 0u &&
+                          (flags_221c & (uint8_t)(MSL_STATE_FLAG_221C_B0 | MSL_STATE_FLAG_221C_B1 |
+                                                  MSL_STATE_FLAG_221C_B2)) == 0u)));
+    if (batch->state.camera_box_visible_x221f_b0_replay_rise[idx] != 0u &&
+        batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] != 0u &&
+        damagefly_visible_edge_source_lane != 0u && batch->state.hitstun[idx] != 0u &&
+        (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN) != 0u &&
+        (damageflyhi_hitstun_only_visible_edge != 0u ||
+         state_flags_magnify_root_horizontal_trajectory_reaches_stage_cam_bound(
+             batch, msl_common_params(), idx) != 0u) &&
+        state_flags_camera_overlap_stage_cam_bounds(batch, idx, 15.0f) != 0u) {
+      return (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_DAMAGEFLY_VISIBLE_EDGE;
+    }
+    return (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE;
   }
   if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_LW) {
-    return state_flags_root_outside_stage_cam_horizontal_bounds(batch, idx);
+    return state_flags_root_outside_stage_cam_horizontal_bounds(batch, idx) != 0u
+               ? (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NO_INSIDE_CARRY
+               : (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE;
   }
   if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
-    return state_flags_root_outside_stage_cam_horizontal_bounds(batch, idx);
+    if (state_flags_root_outside_stage_cam_horizontal_bounds(batch, idx) != 0u) {
+      return (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NO_INSIDE_CARRY;
+    }
+    const uint8_t flags_221c =
+        batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+    const uint8_t flags_2218 =
+        batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+    const uint8_t damageflyroll_hitstun_only_visible_edge =
+        (uint8_t)((flags_2218 &
+                   (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                             MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR |
+                             MSL_STATE_FLAG_2218_REFLECTING)) == 0u &&
+                  (flags_221c &
+                   (uint8_t)(MSL_STATE_FLAG_221C_B0 | MSL_STATE_FLAG_221C_B1 |
+                             MSL_STATE_FLAG_221C_B2 | MSL_STATE_FLAG_221C_B3 |
+                             MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD |
+                             MSL_STATE_FLAG_221C_IS_HITSTUN | MSL_STATE_FLAG_221C_IN_DAMAGE)) ==
+                      (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN);
+    if (batch->state.camera_box_visible_x221f_b0_replay_rise[idx] != 0u &&
+        batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] != 0u &&
+        damageflyroll_hitstun_only_visible_edge != 0u && batch->state.hitstun[idx] != 0u &&
+        state_flags_camera_overlap_stage_cam_bounds(batch, idx, 15.0f) != 0u) {
+      return (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_DAMAGEFLY_VISIBLE_EDGE;
+    }
+    return (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE;
   }
   if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP) {
-    return state_flags_magnify_damageflytop_source_visible_owner(batch, idx, flags_221f);
+    if (state_flags_magnify_damageflytop_source_visible_owner(batch, idx, flags_221f) == 0u) {
+      return (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE;
+    }
+    return batch->state.camera_box_visible_x221f_b0_replay_rise[idx] != 0u
+               ? (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_DAMAGEFLYTOP_REFLECT
+               : (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NO_INSIDE_CARRY;
   }
-  return 0u;
+  return (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE;
 }
 
 static inline void state_flags_refresh_camera_target_from_pose(MslBatch* batch, size_t idx) {
@@ -1472,15 +1606,28 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // data/stages/final_destination.json: cam_bounds_world
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
       }
+      const uint8_t magnify_runtime_visibility_kind =
+          state_flags_magnify_runtime_visibility_kind(batch, idx, action_id, f221f);
       const uint8_t magnify_runtime_visibility_owner =
-          state_flags_magnify_runtime_visibility_owner(batch, idx, action_id, f221f);
+          magnify_runtime_visibility_kind != (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE ? 1u : 0u;
       const uint8_t magnify_damageflytop_local_visible_owner =
           state_flags_magnify_damageflytop_local_episode_visible_owner(batch, idx, f221f);
-      const uint8_t magnify_replay_local_episode =
-          (replay_rollout != 0u && batch->state.magnify_damage_counter_x1910[idx] != 0u &&
+      const uint8_t magnify_replay_visible_local_carry =
+          ((f221f & (uint8_t)MSL_STATE_FLAG_221F_B0) != 0u &&
            batch->state.magnify_damage_seed_episode_active[idx] == 0u &&
+           (batch->state.magnify_damage_local_episode_kind[idx] ==
+                (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_DAMAGEFLYTOP_REFLECT ||
+            batch->state.magnify_damage_local_episode_kind[idx] ==
+                (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_DAMAGEFLY_VISIBLE_EDGE))
+              ? 1u
+              : 0u;
+      const uint8_t magnify_replay_local_episode =
+          (replay_rollout != 0u && batch->state.magnify_damage_seed_episode_active[idx] == 0u &&
+           (batch->state.magnify_damage_counter_x1910[idx] != 0u ||
+            magnify_replay_visible_local_carry != 0u) &&
            (batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] == 0u ||
-            magnify_damageflytop_local_visible_owner != 0u))
+            magnify_damageflytop_local_visible_owner != 0u ||
+            magnify_replay_visible_local_carry != 0u))
               ? 1u
               : 0u;
       if (magnify_runtime_visibility_owner != 0u) {
@@ -1497,6 +1644,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
         }
         batch->state.magnify_damage_runtime_visibility_owner[idx] = 1u;
+        batch->state.magnify_damage_local_episode_kind[idx] = magnify_runtime_visibility_kind;
       } else if (magnify_replay_local_episode != 0u) {
         // A runtime-started replay-rollout x1910 episode can carry only while the current replay
         // camera lane still proves the magnify offscreen source. `Fighter_procUpdate` resets
@@ -1508,10 +1656,14 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         batch->state.magnify_damage_runtime_visibility_owner[idx] = 0u;
       } else if (!batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx]) {
         batch->state.magnify_damage_runtime_visibility_owner[idx] = 0u;
+        batch->state.magnify_damage_local_episode_kind[idx] =
+            (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE;
       } else {
         batch->state.magnify_damage_runtime_visibility_owner[idx] = 0u;
         if (batch->state.magnify_damage_counter_x1910[idx] == 0u) {
           batch->state.magnify_damage_seed_episode_active[idx] = 0u;
+          batch->state.magnify_damage_local_episode_kind[idx] =
+              (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE;
         }
       }
       if (replay_rollout != 0u && magnify_runtime_visibility_owner == 0u &&
@@ -1519,6 +1671,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] != 0u) {
         f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B0;
       }
+      batch->state.camera_box_visible_x221f_b0_replay_rise[idx] = 0u;
       batch->state.state_flags[flags_221c_i] = f221c;
       batch->state.state_flags[flags_221f_i] = f221f;
     }

@@ -312,6 +312,220 @@ def test_magnify_rollout_mvp_damageflylw_horizontal_root_exit_starts_counter() -
 
 
 @pytest.mark.integration
+def test_magnify_rollout_tvr_damageflyhi_visible_edge_local_episode_ticks() -> None:
+    # TVR exposes a DamageFlyHi right-edge camera-box publication where the point-only
+    # Camera_80030CD8 lane is still inside, but the replay-fed x221F_b0 rising edge proves the
+    # source magnifying-glass subject is visible. The local episode must carry through SpecialAirHi
+    # until the x1910 tick before the later BAir hit.
+    # refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    visible_record = 3126
+    tick_record = 3185
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 87  # DamageFlyHi.
+    assert int(visible_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 0
+    assert int(visible_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 1
+    assert (int(visible_seed["state_flags"][p, 0]) & 0xC4) == 0xC4
+    assert (int(visible_seed["state_flags"][p, 0]) & 0x30) == 0
+
+    tick_ref = ds.samples[tick_record]["ref_t1"]
+    plain_out = _run_rollout(ds, visible_record - 1, tick_record)
+    assert float(plain_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]) - 1.0, abs=1e-5)
+
+    tick_out = _run_rollout(ds, visible_record - 1, tick_record, replay_frame_lanes=True)
+    assert float(tick_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
+def test_magnify_rollout_tvr_damageflyn_inside_visible_edge_carries_to_damagefall_tick() -> None:
+    # TVR's second magnify episode starts from a DamageFlyN replay-fed x221F_b0 rising edge while
+    # the camera target point is still inside stage camera bounds and live hitstun is active. The
+    # source camera-box publication, not root/offscreen stage bounds, owns the x1910 start; the
+    # local episode then carries through the DamageFlyN -> DamageFall handoff until the +1% tick.
+    # refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 1
+    visible_record = 3605
+    tick_record = 3664
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 88  # DamageFlyN.
+    assert int(visible_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 0
+    assert int(visible_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 1
+    assert int(visible_seed["hitstun"][p]) > 0
+    assert (int(visible_seed["state_flags"][p, 3]) & 0x62) == 0x22
+
+    tick_ref = ds.samples[tick_record]["ref_t1"]
+    plain_out = _run_rollout(ds, visible_record - 1, tick_record)
+    assert float(plain_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]) - 1.0, abs=1e-5)
+
+    tick_out = _run_rollout(ds, visible_record - 1, tick_record, replay_frame_lanes=True)
+    assert float(tick_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
+def test_magnify_rollout_tvr_damageflyn_hitstun_only_visible_edge_repeats_after_tick() -> None:
+    # TVR's later DamageFlyN camera publication has x2218_b1 plus x221C hitstun, but not the
+    # stronger x221C_b2 lane. That still proves the source ftLib_80086A8C camera-box publication
+    # that starts a replay-local x1910 episode. After the first 60-frame +1% tick resets x1910 to
+    # zero, the same source-visible x221F lane remains live through Fall/SpecialAirHi, so the next
+    # 60-frame interval must begin without a new broad zero-counter camera admission.
+    # refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    visible_record = 6769
+    first_tick_record = 6828
+    second_tick_record = 6888
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 88  # DamageFlyN.
+    assert int(visible_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 0
+    assert int(visible_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 1
+    assert (int(visible_seed["state_flags"][p, 0]) & 0x40) == 0x40
+    assert (int(visible_seed["state_flags"][p, 0]) & 0xB4) == 0
+    assert (int(visible_seed["state_flags"][p, 3]) & 0xE2) == 0x02
+
+    first_ref = ds.samples[first_tick_record]["ref_t1"]
+    second_ref = ds.samples[second_tick_record]["ref_t1"]
+    plain_out = _run_rollout(ds, visible_record - 1, second_tick_record)
+    assert float(plain_out["percent"][p]) == pytest.approx(float(second_ref["percent"][p]) - 2.0, abs=1e-5)
+
+    first_out = _run_rollout(ds, visible_record - 1, first_tick_record, replay_frame_lanes=True)
+    assert float(first_out["percent"][p]) == pytest.approx(float(first_ref["percent"][p]), abs=1e-5)
+
+    second_out = _run_rollout(ds, visible_record - 1, second_tick_record, replay_frame_lanes=True)
+    assert float(second_out["percent"][p]) == pytest.approx(float(second_ref["percent"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
+def test_magnify_rollout_tvr_damageflyhi_hitstun_only_visible_edge_ticks() -> None:
+    # TVR has a DamageFlyHi replay-fed x221F rising edge where the point-only camera target is still
+    # inside and the raw source state is hitstun-only (`x221C_b6`) without reflect/damage-script
+    # owner bits. That source camera-box publication starts a bounded local x1910 episode; generic
+    # DamageFlyHi camera-visible rows without the rising edge still do not start from zero.
+    # refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    visible_record = 9413
+    stale_visible_record = 9438
+    tick_record = 9472
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 87  # DamageFlyHi.
+    assert int(visible_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 0
+    assert int(visible_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 1
+    assert (int(visible_seed["state_flags"][p, 0]) & 0xF4) == 0
+    assert (int(visible_seed["state_flags"][p, 3]) & 0xF7) == 0x02
+
+    stale_seed = ds.samples[stale_visible_record]["seed_t"]
+    assert int(stale_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[stale_visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 1
+
+    tick_ref = ds.samples[tick_record]["ref_t1"]
+    plain_out = _run_rollout(ds, visible_record - 1, tick_record)
+    assert float(plain_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]) - 1.0, abs=1e-5)
+
+    tick_out = _run_rollout(ds, visible_record - 1, tick_record, replay_frame_lanes=True)
+    assert float(tick_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]), abs=1e-5)
+
+    stale_out = _run_rollout(ds, stale_visible_record - 1, tick_record, replay_frame_lanes=True)
+    assert float(stale_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]) - 1.0, abs=1e-5)
+
+
+@pytest.mark.integration
+def test_magnify_rollout_tvr_damageflyroll_visible_edge_carries_through_downstand_tick() -> None:
+    # TVR starts a DamageFlyRoll x221F camera-box episode from a hitstun-only source row, then the
+    # same local x1910 episode carries across DownBoundD/DownStandD until the +1% tick. The start
+    # still requires the replay-fed x221F rising edge; stale already-visible DownBoundD rows cannot
+    # invent the hidden counter.
+    # refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    visible_record = 11036
+    stale_visible_record = 11059
+    tick_record = 11095
+    downstream_record = 11504
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 91  # DamageFlyRoll.
+    assert int(visible_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 0
+    assert int(visible_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 1
+    assert (int(visible_seed["state_flags"][p, 0]) & 0xF4) == 0
+    assert (int(visible_seed["state_flags"][p, 3]) & 0xF7) == 0x02
+
+    stale_seed = ds.samples[stale_visible_record]["seed_t"]
+    assert int(stale_seed["action_id"][p]) == 191  # DownBoundD.
+    assert int(stale_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[stale_visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 1
+
+    tick_ref = ds.samples[tick_record]["ref_t1"]
+    plain_out = _run_rollout(ds, visible_record - 1, tick_record)
+    assert float(plain_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]) - 1.0, abs=1e-5)
+
+    tick_out = _run_rollout(ds, visible_record - 1, tick_record, replay_frame_lanes=True)
+    assert float(tick_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]), abs=1e-5)
+
+    stale_out = _run_rollout(ds, stale_visible_record - 1, tick_record, replay_frame_lanes=True)
+    assert float(stale_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]) - 1.0, abs=1e-5)
+
+    downstream_ref = ds.samples[downstream_record]["ref_t1"]
+    downstream_out = _run_rollout(ds, visible_record - 1, downstream_record, replay_frame_lanes=True)
+    assert int(downstream_out["action_id"][p]) == int(downstream_ref["action_id"][p]) == 29
+
+
+@pytest.mark.integration
 def test_magnify_rollout_lim_damageflyhi_local_episode_resets_when_camera_inside() -> None:
     # LIM's early DamageFlyHi episode publishes x221F_b0 for the magnifying-glass camera subject,
     # but Slippi's hidden x1910 counter remains zero and the source visibility clears before the
@@ -351,6 +565,76 @@ def test_magnify_rollout_lim_damageflyhi_local_episode_resets_when_camera_inside
         float(no_tick_ref["percent"][p]), abs=1e-5
     )
     assert (int(no_tick_out["state_flags"][p, 4]) & 0x80) == 0
+
+
+@pytest.mark.integration
+def test_magnify_rollout_tvr_damageflytop_reflect_behavior_visible_edge_ticks() -> None:
+    # TVR's reflected DamageFlyTop episode starts from a replay-fed x221F_b0 rising edge while the
+    # raw fp+0x2218 reflect-behavior lane is live, then carries through GuardOff/GuardReflect even
+    # after state_flags refresh also publishes fp->reflecting. This is not a generic x221F carry:
+    # the existing LIM and DCC controls reject non-reflect and stale visible rows.
+    # refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 1
+    visible_record = 2638
+    tick_record = 2697
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 90  # DamageFlyTop.
+    assert int(visible_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 0
+    assert int(visible_seed["state_flags"][p, 0]) & 0x04  # fp+0x2218 reflect-behavior.
+    assert int(visible_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 1
+
+    tick_ref = ds.samples[tick_record]["ref_t1"]
+    plain_out = _run_rollout(ds, visible_record - 1, tick_record)
+    assert float(plain_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]) - 1.0, abs=1e-5)
+
+    tick_out = _run_rollout(ds, visible_record - 1, tick_record, replay_frame_lanes=True)
+    assert float(tick_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
+def test_magnify_rollout_feh_damageflytop_reflect_b1_visible_edge_does_not_tick() -> None:
+    # FEH exposes a DamageFlyTop replay-visible camera-box row whose raw x2218 byte carries both
+    # reflect-behavior and b1. That is not TVR's bounded reflect-behavior-only source publication,
+    # so replay playback must not start a local x1910 episode or add a hidden +1% before the later
+    # AttackAirB hitstun boundary.
+    # refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 1
+    visible_record = 6284
+    hit_record = 6429
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 90  # DamageFlyTop.
+    assert int(visible_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 0
+    assert (int(visible_seed["state_flags"][p, 0]) & 0x44) == 0x44
+    assert int(visible_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 1
+
+    hit_ref = ds.samples[hit_record]["ref_t1"]
+    hit_out = _run_rollout(ds, 5966, hit_record, replay_frame_lanes=True)
+    assert float(hit_out["percent"][p]) == pytest.approx(float(hit_ref["percent"][p]), abs=1e-5)
+    assert int(hit_out["hitstun"][p]) == int(hit_ref["hitstun"][p]) == 70
 
 
 @pytest.mark.integration

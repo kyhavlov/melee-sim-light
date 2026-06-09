@@ -87,6 +87,30 @@ static inline uint8_t timers_source_clear_downed_recovery_terminal_parks_owner(
   return 1u;
 }
 
+static inline uint8_t timers_source_clear_active_damagefly_terminal_parks_owner(
+    const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.source_clear_owner_set_phase[idx] == 0u || batch->state.combo_count[idx] == 0u ||
+      batch->state.last_attack_landed[idx] == 0u || batch->state.hitlag[idx] != 0u ||
+      batch->state.hitstun[idx] == 0u) {
+    return 0u;
+  }
+  // Active DamageFly x18C8 terminal owner:
+  // - Fighter_8006A360 owns the x18C8 countdown in the same prio-1 phase as Damage anim_cb.
+  // - DamageFly hitstun rows can retire the countdown while keeping `dmg.x18C4_source_ply`
+  //   replay-visible for the rest of the damage/combo episode; do not defer the terminal tick
+  //   until the later Squat/Wait row, where it would publish the sentinel source too late.
+  // - Keep this bounded to generated DamageFly motion-state class plus live owner/combo evidence;
+  //   AttackAirN terminal rows still take the ordinary source clear path.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  return msl_motion_state_common_class_has(batch->state.action_id[idx], MSL_MS_CLASS_DAMAGE_FLY);
+}
+
 void timers_update(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -759,9 +783,16 @@ static inline uint8_t timers_magnify_damageflytop_local_episode_visible_owner(co
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  return (uint8_t)(((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u &&
+  const uint8_t damageflytop_script_owner =
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u &&
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) == 0u;
+  const uint8_t reflect_behavior_owner =
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) != 0u &&
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B1) == 0u &&
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) == 0u &&
+      (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) == 0u;
+  return (uint8_t)(((damageflytop_script_owner != 0u || reflect_behavior_owner != 0u) &&
                     (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u &&
-                    (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) == 0u &&
                     (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B0) == 0u)
                        ? 1u
                        : 0u);
@@ -787,29 +818,40 @@ void timers_update_magnify_damage_post_frame(MslBatch* batch) {
           batch->state
               .state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221F_INDEX];
       const uint8_t visible = (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0) != 0u;
-      // Replay rollout magnify ownership:
-      // - nonzero x1910 seeds are teacher-forced terminal/current episodes,
-      // - zero-counter replay rollouts may start only when state_flags has just admitted an
-      //   explicit runtime ftCamera_UpdateCameraBox / ftLib_80086A8C magnifying-glass owner.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-      // refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
-      // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
-      if (replay_rollout != 0u && batch->state.magnify_damage_counter_x1910[idx] == 0u &&
-          (batch->state.magnify_damage_runtime_visibility_owner[idx] == 0u ||
-           batch->state.magnify_damage_seed_episode_active[idx] != 0u)) {
-        continue;
-      }
       const uint8_t disabled = (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B4) != 0u;
+      const uint8_t camera_zoom_default = (batch->camera_zoom_scale_x2bc == NULL ||
+                                           batch->camera_zoom_scale_x2bc[(size_t)bi] == 1.0f)
+                                              ? 1u
+                                              : 0u;
       const uint8_t seed_episode_offscreen =
           (replay_rollout != 0u && batch->state.magnify_damage_seed_episode_active[idx] != 0u &&
            batch->state.magnify_damage_counter_x1910[idx] != 0u)
               ? 1u
               : 0u;
-      const uint8_t replay_local_episode_offscreen =
-          (replay_rollout != 0u && batch->state.magnify_damage_counter_x1910[idx] != 0u &&
+      const uint8_t replay_visible_local_kind =
+          ((flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0) != 0u &&
            batch->state.magnify_damage_seed_episode_active[idx] == 0u &&
+           (batch->state.magnify_damage_local_episode_kind[idx] ==
+                (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_DAMAGEFLYTOP_REFLECT ||
+            batch->state.magnify_damage_local_episode_kind[idx] ==
+                (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_DAMAGEFLY_VISIBLE_EDGE))
+              ? 1u
+              : 0u;
+      // A replay-local source-visible magnify episode remains live after the 60-frame damage tick
+      // resets x1910 to zero, as long as the same replay-fed x221F camera lane is still visible.
+      // That permits the next interval to begin without broad zero-counter camera admission.
+      if (replay_rollout != 0u && batch->state.magnify_damage_counter_x1910[idx] == 0u &&
+          batch->state.magnify_damage_runtime_visibility_owner[idx] == 0u &&
+          replay_visible_local_kind == 0u) {
+        continue;
+      }
+      const uint8_t replay_local_episode_offscreen =
+          (replay_rollout != 0u && batch->state.magnify_damage_seed_episode_active[idx] == 0u &&
+           (batch->state.magnify_damage_counter_x1910[idx] != 0u ||
+            replay_visible_local_kind != 0u) &&
            (batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] == 0u ||
-            timers_magnify_damageflytop_local_episode_visible_owner(batch, idx, flags_221f) != 0u))
+            timers_magnify_damageflytop_local_episode_visible_owner(batch, idx, flags_221f) != 0u ||
+            replay_visible_local_kind != 0u))
               ? 1u
               : 0u;
       const uint8_t offscreen =
@@ -819,11 +861,13 @@ void timers_update_magnify_damage_post_frame(MslBatch* batch) {
             batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] == 0u))
               ? 1u
               : 0u;
-      if (!visible || !offscreen || disabled ||
+      if (!visible || !offscreen || disabled || camera_zoom_default == 0u ||
           timers_magnify_live_fighter_action(batch->state.action_id[idx]) == 0u ||
           !(batch->state.percent[idx] < (float)c->magnify_damage_percent_limit)) {
         batch->state.magnify_damage_counter_x1910[idx] = 0u;
         batch->state.magnify_damage_seed_episode_active[idx] = 0u;
+        batch->state.magnify_damage_local_episode_kind[idx] =
+            (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE;
         continue;
       }
 
@@ -834,6 +878,14 @@ void timers_update_magnify_damage_post_frame(MslBatch* batch) {
       }
       batch->state.magnify_damage_counter_x1910[idx] =
           (uint16_t)(counter > 0xFFFFu ? 0xFFFFu : counter);
+      if (batch->state.magnify_damage_counter_x1910[idx] == 0u &&
+          batch->state.magnify_damage_local_episode_kind[idx] !=
+              (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_DAMAGEFLYTOP_REFLECT &&
+          batch->state.magnify_damage_local_episode_kind[idx] !=
+              (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_DAMAGEFLY_VISIBLE_EDGE) {
+        batch->state.magnify_damage_local_episode_kind[idx] =
+            (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE;
+      }
     }
   }
 }
@@ -987,6 +1039,10 @@ void timers_update_post_anim(MslBatch* batch) {
       // ownership phase ordering inside Fighter_8006A360. The seed lane preserves one-step rows;
       // the downed/passive predicate reconstructs the same owner in free rollout.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      if (t == 1u && timers_source_clear_active_damagefly_terminal_parks_owner(batch, idx) != 0u) {
+        batch->state.source_clear_timer_x18c8[idx] = 0u;
+        continue;
+      }
       if (t == 1u && batch->state.hitstun[idx] != 0u) {
         continue;
       }

@@ -682,6 +682,16 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
   memset(batch->camera_mode, 0, (size_t)batch_size * sizeof(uint8_t));
+  batch->camera_zoom_scale_x2bc = (float*)alloc_malloc((size_t)batch_size * sizeof(float));
+  batch->camera_zoom_hold_x2ba = (uint16_t*)alloc_malloc((size_t)batch_size * sizeof(uint16_t));
+  if (batch->camera_zoom_scale_x2bc == NULL || batch->camera_zoom_hold_x2ba == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  for (int bi = 0; bi < batch_size; bi++) {
+    batch->camera_zoom_scale_x2bc[(size_t)bi] = 1.0f;
+    batch->camera_zoom_hold_x2ba[(size_t)bi] = 0u;
+  }
 
   // Debug-only per-fighter hit status override table (0xFF = none).
   batch->debug_hit_status_override =
@@ -859,6 +869,8 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch->hurtcap_matrix);
   alloc_free(batch->hurtcap_matrix_valid);
   alloc_free(batch->debug_hit_status_override);
+  alloc_free(batch->camera_zoom_hold_x2ba);
+  alloc_free(batch->camera_zoom_scale_x2bc);
   alloc_free(batch->camera_mode);
   alloc_free(batch->replay_rollout_seed_frame_id);
   alloc_free(batch->replay_rollout_reseeded);
@@ -905,6 +917,8 @@ static void msl_batch_copy_runtime_lane(MslBatch* dst, const MslBatch* src, int3
   MSL_BATCH_COPY_FIELD(replay_rollout_reseeded, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_rollout_seed_frame_id, int32_t, 1u);
   MSL_BATCH_COPY_FIELD(camera_mode, uint8_t, 1u);
+  MSL_BATCH_COPY_FIELD(camera_zoom_scale_x2bc, float, 1u);
+  MSL_BATCH_COPY_FIELD(camera_zoom_hold_x2ba, uint16_t, 1u);
   MSL_BATCH_COPY_FIELD(debug_hit_status_override, uint8_t, (size_t)MSL_MAX_PLAYERS);
   MSL_BATCH_COPY_FIELD(hurtcap_matrix_valid, uint8_t,
                        (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HURTCAPS);
@@ -1744,6 +1758,12 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
     if (batch->camera_mode != NULL) {
       batch->camera_mode[bi] = cfg->camera_mode;
     }
+    if (batch->camera_zoom_scale_x2bc != NULL) {
+      batch->camera_zoom_scale_x2bc[bi] = 1.0f;
+    }
+    if (batch->camera_zoom_hold_x2ba != NULL) {
+      batch->camera_zoom_hold_x2ba[bi] = 0u;
+    }
   }
 
   const int err =
@@ -2152,6 +2172,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.entry_end_fall_lock[idx] = seed->entry_end_fall_lock[p] ? 1u : 0u;
       batch->state.camera_box_visible_x221f_b0[idx] =
           seed->camera_box_visible_x221f_b0[p] ? 1u : 0u;
+      batch->state.camera_box_visible_x221f_b0_replay_prev[idx] =
+          seed->camera_box_visible_x221f_b0[p] ? 1u : 0u;
+      batch->state.camera_box_visible_x221f_b0_replay_rise[idx] = 0u;
       float rebirth_camera_anchor_y = seed->rebirth_camera_anchor_y_f32[p];
       if (!isfinite(rebirth_camera_anchor_y)) {
         rebirth_camera_anchor_y = 0.0f;
@@ -2179,6 +2202,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.camera_box_radius_f32[idx] = camera_box_radius;
       batch->state.camera_target_live_pose_valid[idx] = 0u;
       batch->state.magnify_damage_runtime_visibility_owner[idx] = 0u;
+      batch->state.magnify_damage_local_episode_kind[idx] = (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE;
       batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] =
           seed->camera_target_point_inside_stage_cam_bounds_u8[p] ? 1u : 0u;
       batch->state.magnify_damage_counter_x1910[idx] = seed->magnify_damage_counter_x1910[p];
@@ -3659,6 +3683,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         rollout_owned_after != (uint8_t)MSL_ROLLOUT_CLOCK_HSD_RAND_STREAM) {
       batch->camera_mode[bi] = (uint8_t)MSL_CAMERA_MODE_GAME;
     }
+    if (batch->camera_zoom_scale_x2bc != NULL) {
+      batch->camera_zoom_scale_x2bc[bi] = 1.0f;
+    }
+    if (batch->camera_zoom_hold_x2ba != NULL) {
+      batch->camera_zoom_hold_x2ba[bi] = 0u;
+    }
   }
 
   return 0;
@@ -3714,6 +3744,11 @@ static int msl_batch_apply_replay_frame_camera_box_visibility(MslBatch* batch,
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint8_t visible = seed->camera_box_visible_x221f_b0[p] ? 1u : 0u;
+      const uint8_t prev_visible =
+          batch->state.camera_box_visible_x221f_b0_replay_prev[idx] ? 1u : 0u;
+      batch->state.camera_box_visible_x221f_b0_replay_rise[idx] =
+          (uint8_t)(visible != 0u && prev_visible == 0u);
+      batch->state.camera_box_visible_x221f_b0_replay_prev[idx] = visible;
       batch->state.camera_box_visible_x221f_b0[idx] = visible;
       uint8_t* f221f =
           &batch->state
