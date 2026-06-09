@@ -48,7 +48,7 @@ rollout.float_top_errors:
   1. pos_x max_err=3.08841 rec=2613 p=1 seed/ref/out=73.5924/80.2222/77.1337 actions=356/356/356 category=unclassified
   2. pos_y max_err=1.12705 rec=6622 p=0 seed/ref/out=-30.8362/-31.0282/-32.1552 actions=354/354/354 category=unclassified
   3. percent max_err=1 rec=6115 p=0 seed/ref/out=146.735/147.735/146.735 actions=38/38/38 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:169
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:156
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.status: RAW-CLEAN
@@ -63,9 +63,9 @@ rollout.first_mismatch_seeded_total: 0
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=11.4627 rec=3136 p=0 seed/ref/out=-122.431/-123.558/-135.021 actions=247/0/0 category=unclassified
-  2. percent max_err=1 rec=11422 p=1 seed/ref/out=126.66/126.66/127.66 actions=27/27/27 category=unclassified
+  2. percent max_err=1 rec=8752 p=1 seed/ref/out=128.478/128.478/129.478 actions=350/350/350 category=unclassified
   3. speed_air_x_self max_err=0.64325 rec=3126 p=0 seed/ref/out=0.632875/0.64325/0 actions=247/247/247 category=unclassified
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:229
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:211
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.status: RAW-CLEAN
@@ -115,4 +115,4 @@ overall.rollout.float_top_errors:
   1. pos_x max_err=11.4627 rec=3136 p=0 seed/ref/out=-122.431/-123.558/-135.021 actions=247/0/0 category=unclassified
   2. pos_y max_err=1.12705 rec=6622 p=0 seed/ref/out=-30.8362/-31.0282/-32.1552 actions=354/354/354 category=unclassified
   3. percent max_err=1 rec=6115 p=0 seed/ref/out=146.735/147.735/146.735 actions=38/38/38 category=unclassified
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:835
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:804

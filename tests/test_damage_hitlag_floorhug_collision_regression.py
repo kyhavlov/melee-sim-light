@@ -1008,6 +1008,49 @@ def test_damageflytop_downward_sdi_floorhug_uses_consumed_sdi_latch_agn_794() ->
 
 
 @pytest.mark.integration
+def test_damageflytop_active_hitlag_stadium_ledge_edge_floorhug_tvr_11591() -> None:
+    # Pokemon Stadium ledge-edge active-hitlag floorhug:
+    # `ftCo_Damage_OnEveryHitlag` consumes a downward SDI input during frozen DamageFlyTop hitlag,
+    # then `ft_80081DD4 -> mpColl_800477E0 -> mpColl_80044948_Floor` snaps the stay-airborne
+    # floorhug result to the generated ledge floor's raw wall endpoint. The owner is the live
+    # DamageFly callback plus MSLSTG01 floor/wall adjacency; AGN 4839 remains the adjacent
+    # non-Stadium/no-endpoint-publication negative.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044948_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[11591:11592]
+    p = 0
+
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_TOP
+    assert int(row["seed_t"]["hitlag"][0, p]) == 3
+    assert int(row["seed_t"]["ground_id"][0, p]) == 51
+    assert int(row["input_t"]["p"]["main_y"][0, p]) < 0
+    assert float(row["seed_t"]["pos_y"][0, p]) == pytest.approx(0.0001, abs=1e-7)
+    assert float(row["ref_t1"]["pos_y"][0, p]) == pytest.approx(0.0, abs=1e-7)
+
+    out, ref, contacts, colldata = _run_one_step_with_contacts_and_colldata(dataset_path, 11591)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 2
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=0.002)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert int(colldata["damage_hitlag_downward_sdi_consumed"][p]) == 1
+    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("record", "expected_action"),
     [

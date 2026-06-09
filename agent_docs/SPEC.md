@@ -797,7 +797,13 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   `mpColl_80044948_Floor` can correct the root; replay-visible carried platform ids alone are not
   enough to snap active-hitlag SDI upward onto a platform. Pokemon Stadium and other complex
   hard-floor families are not admitted from visible floor id, root-below-floor state, or
-  root-projection eligibility alone. Dolphin probes of CDO 5521 / TVR 5994 / FSP 3593 show
+  root-projection eligibility alone. TVR `rec11591` adds the bounded Stadium ledge-edge case:
+  live `DamageFlyTop` hitlag consumes downward `ftCo_Damage_OnEveryHitlag` SDI, the carried
+  `CollData.floor.index` names a generated static ledge floor whose raw neighbor is a wall in
+  `MSLSTG01`, and `mpColl_80044948_Floor` owns the stay-airborne endpoint snap while preserving
+  airborne state. The endpoint X includes the existing Stadium x44 scale bridge from extracted
+  `p_ftCommonData->x7E4_scaleZ`; adjacent non-endpoint/no-source-contact ledge rows such as AGN
+  `rec4839` remain rejected. Dolphin probes of CDO 5521 / TVR 5994 / FSP 3593 show
   `ft_80081DD4 -> mpColl_800477E0` loading JObj ECB with no CollData_X130 lock and positive current
   ECB-bottom offsets; `mpColl_80044948_Floor` can use the root projection only after
   `mpColl_80044628_Floor` has accepted the loaded bottom sweep. The rejected broad owner landed CDO
@@ -3461,6 +3467,11 @@ Fox/Falco special-owner split (2026-04-17):
     CDO `12020 -> 12024/12025` locks the replay-real PassiveStandF case; TCH `441` remains the
     AttackAirN negative control where the terminal seed lane is clear and the ordinary source clear
     publishes sentinel `6`.
+    Active DamageFly rows are a separate bounded live owner: when `timer==1` is reached while
+    generated `DAMAGE_FLY` motion-state class, hitstun, owner-set phase, combo count, and
+    last-attack provenance are all live, the countdown retires but `dmg.x18C4_source_ply` stays
+    visible through the damage/combo episode. TVR `12179 -> 12210` locks the DamageFlyHi -> SquatRv
+    carry; the same TCH `441` AttackAirN negative proves the owner is not any terminal x18C8 row.
     Sources: `refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}`,
     `refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC`,
     `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`, and
@@ -6555,11 +6566,16 @@ BODY collision-space residual split and rejected seed bridge:
   retained STM bridges are intentionally named temporary residual caps, not source constants:
   `MSL_PSTADIUM_X44_DAIR_GROUNDED_HIGH_MAX_RESIDUAL`,
   `MSL_PSTADIUM_X44_DAIR_TAIL_MAX_RESIDUAL`,
-  `MSL_PSTADIUM_X44_ATTACKHI3_TAIL_MAX_RESIDUAL`, and the GuardOn ShieldDesc caps
+  `MSL_PSTADIUM_X44_ATTACKHI3_TAIL_MAX_RESIDUAL`,
+  `MSL_PSTADIUM_X44_SPECIALHI_LAUNCH_ROOT_MAX_RESIDUAL`, and the GuardOn ShieldDesc caps
   `MSL_PSTADIUM_GUARDON_*`. They are admitted only after the real Stadium stage gate, no shield for
   BODY, no-submotion/live-x10 GuardOn for shield, and extracted payload/hurtcap predicates
-  (strong DAir high/tail, AttackHi3 hb1/FtPart-18 tail, strong DAir/S4/BAir shield payloads). They
-  are a bounded bridge until the runtime carries the full live x44 hurtcap/ShieldDesc packet.
+  (strong DAir high/tail, AttackHi3 hb1/FtPart-18 tail, generated SpecialHi launch hb0/root, strong
+  DAir/S4/BAir shield payloads). TVR `rec12278` locks the SpecialHi launch positive only after the
+  victim is source-published as `ftFx_MS_SpecialAirLwTurn`; TVR `rec12277` locks the adjacent
+  `ftFx_MS_SpecialAirLwLoop` pre-turn negative, where the same generated SpecialHi launch hb0 is
+  still not a BODY hit. A same-row Final Destination mutation remains no-hit. They are a bounded
+  bridge until the runtime carries the full live x44 hurtcap/ShieldDesc packet.
   Controls: STM `rec976/977`, `rec4224/4225`, and `rec6646/6647` lock adjacent BODY no-hit/hit
   edges; the BODY test also mutates the latter two positives to Final Destination and confirms the
   x44 owner no longer admits damage. STM `rec4293/4364/7634/7635` lock the GuardOn rejects,

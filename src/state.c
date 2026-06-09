@@ -68,8 +68,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->item_spawn_id_counter, 0, sizeof(uint32_t) * b);
   memset(state->dynamic_pose_state_valid, 0, sizeof(uint8_t) * bp);
   memset(state->camera_target_live_pose_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->camera_box_visible_x221f_b0_replay_rise, 0, sizeof(uint8_t) * bp);
+  memset(state->camera_box_visible_x221f_b0_replay_prev, 0, sizeof(uint8_t) * bp);
   memset(state->magnify_damage_runtime_visibility_owner, 0, sizeof(uint8_t) * bp);
   memset(state->magnify_damage_seed_episode_active, 0, sizeof(uint8_t) * bp);
+  memset(state->magnify_damage_local_episode_kind, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_apply_collision_matrix, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_node_count, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_char_id, 0, sizeof(uint8_t) * bp);

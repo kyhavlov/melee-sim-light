@@ -77,6 +77,12 @@ struct MslBatch {
   // not expose this hidden CObj/debug-mode state, so they reset to normal gameplay camera mode.
   // refs/melee/src/melee/cm/camera.c::Camera_8003010C
   uint8_t* camera_mode;  // [batch]
+  // Runtime hidden camera zoom scalar (`cm_80452C68.x2BC`) and return-delay counter (`x2BA`).
+  // Fighter_procUpdate gates magnify damage on Camera_80031144() == 1.0f.
+  // refs/melee/src/melee/cm/camera.c::{Camera_8002B0E0,Camera_80031144}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  float* camera_zoom_scale_x2bc;    // [batch]
+  uint16_t* camera_zoom_hold_x2ba;  // [batch]
 
   // Debug-only per-fighter override for hit status eligibility (opcode 26).
   // Indexed like other per-player state arrays: [batch_size * MSL_MAX_PLAYERS].
