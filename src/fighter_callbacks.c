@@ -7,6 +7,7 @@
 #include "anim_pose.h"
 #include "anim_timebase.h"
 #include "combat.h"
+#include "damage_terminal_owner.h"
 #include "damage_source.h"
 #include "hitboxes.h"
 #include "hitlist.h"
@@ -355,10 +356,29 @@ static inline void promote_floor_sweep_prev_pos_post_frame(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      batch->state.floor_sweep_prev_pos_x[idx] = batch->state.prev_pos_x[idx];
-      batch->state.floor_sweep_prev_pos_y[idx] = batch->state.prev_pos_y[idx];
-      batch->state.floor_sweep_prev_source_owned[idx] = 1u;
-      batch->state.floor_sweep_prev_runtime_owned[idx] = 1u;
+      const uint8_t preserve_active_damage_hitlag_ecb_sweep =
+          // Frozen Damage hitlag can carry a hidden `CollData.ecb` packet while a same-callback
+          // floor probe rejects. Source keeps the previous mpCollPrev root for the next callback;
+          // the rejected callback-local displacement does not become floor-sweep authority until a
+          // live floor contact packet is published.
+          //
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+          //   ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll}
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+          // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800477E0,
+          //   mpColl_80044628_Floor}
+          (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
+           batch->state.coll_damage_hitlag_ecb_valid[idx] != 0u &&
+           batch->state.coll_damage_hitlag_floor_contact_runtime[idx] == 0u &&
+           msl_damage_owner_is_damage_collision_landing_action(batch->state.action_id[idx]))
+              ? 1u
+              : 0u;
+      if (!preserve_active_damage_hitlag_ecb_sweep) {
+        batch->state.floor_sweep_prev_pos_x[idx] = batch->state.prev_pos_x[idx];
+        batch->state.floor_sweep_prev_pos_y[idx] = batch->state.prev_pos_y[idx];
+        batch->state.floor_sweep_prev_source_owned[idx] = 1u;
+        batch->state.floor_sweep_prev_runtime_owned[idx] = 1u;
+      }
       // Source `mpCollPrev` preserves CollData.cur_pos across map callbacks. Wall/ceiling
       // callbacks that enter through `ft_CheckGroundAndLedge` must sweep from the last
       // callback-published root, while floor-sweep owners continue to consume the older

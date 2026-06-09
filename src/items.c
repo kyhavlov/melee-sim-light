@@ -6348,6 +6348,19 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
              (batch->state.state_flags_2218_frame_start[d_idx] & 0xA4u) == 0x84u)
                 ? 1u
                 : 0u;
+        const uint8_t guard_hold_command_behavior_current_point_laser =
+            (defender_guard_hold_no_submotion_snapshot &&
+             (batch->state.state_flags_2218_frame_start[d_idx] &
+              (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                        MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR)) ==
+                 (uint8_t)(MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR))
+                ? 1u
+                : 0u;
+        const uint8_t guard_hold_stale_command_behavior_laser =
+            (guard_hold_command_behavior_current_point_laser && laser_age_frames >= 9.0f &&
+             laser_prev_scale_z >= 2.99f && laser_scale_z >= 2.99f)
+                ? 1u
+                : 0u;
         const uint8_t guard_hold_current_segment_carried_laser =
             (guard_hold_pure_behavior_carried_laser || guard_hold_live_article_carried_laser) ? 1u
                                                                                               : 0u;
@@ -6508,7 +6521,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         }
         // If no scripted offsets exist, fall back to the projectile origin on the same prev->cur
         // owner segment used by it_8029C4D4.
-        if (!shield_hit && off_n == 0) {
+        if (!shield_hit && off_n == 0 &&
+            (!guard_hold_stale_command_behavior_laser || shield_bounce_seed_valid)) {
+          // Once a carried x2218_b2 + reflect-behavior laser has saturated its scale ramp,
+          // require explicit ShieldBounced seed provenance before publishing a shield hit; fresh
+          // scale-ramping laser rows still own their normal item callback contact.
+          // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+          // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C4D4
+          // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
           shield_hit = item_swept_sphere_sphere_intersects_3d(
               x0, y0, 0.0f, shield_probe_x, shield_probe_y, 0.0f, sr, shx, shy, shz, shr);
           if (shield_hit) {
@@ -6529,13 +6549,15 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           }
         }
         if (!shield_hit && guard_hold_allow_interrupt_behavior_carried_laser &&
+            shield_bounce_seed_valid &&
             item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, sr, shx, shy, shz,
                                                    shr)) {
           // Allow-interrupt Guard hold ShieldBounced owner:
           // The generic carried-laser shield path stays on the previous point to avoid broad
           // GuardSetOff over-admission, but rows where the current segment produces a valid
           // ftColl_80077688/Item_80269DC8 ShieldBounced normal are source-owned shield contacts.
-          // Requiring the bounce normal keeps side/destroy-path overlaps on the existing miss lane.
+          // Requiring seeded native bounce provenance keeps stale allow-interrupt command rows on
+          // the settled Guard point sample instead of teacher-forcing the live article segment.
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
           // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007DD8
           // refs/melee/src/melee/it/item.c::Item_80269DC8

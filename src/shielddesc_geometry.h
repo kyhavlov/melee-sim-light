@@ -495,11 +495,7 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
       (uint8_t)((guardreflect_final_x14_no_submotion ||
                  guardon_raise_shield_no_submotion_attackair_x10) &&
                 guardon_raise_tilted_attackairlw_model_scale_lane == 0u);
-  const float shield_matrix_radius =
-      shr * (shield_matrix_uses_unscaled_radius ? 1.0f : shield_owner_model_scale);
-  const float rr = hr + shield_matrix_radius + shield_desc_term + shield_extent_env_r;
   float d2 = 0.0f;
-
   if (batch->state.hitbox_prev_enabled[hb_i]) {
     const float px = batch->state.hitbox_prev_x[hb_i];
     const float py = batch->state.hitbox_prev_y[hb_i];
@@ -511,6 +507,10 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
     const float dz = hz - eff_shz;
     d2 = dx * dx + dy * dy + dz * dz;
   }
+
+  float shield_matrix_radius =
+      shr * (shield_matrix_uses_unscaled_radius ? 1.0f : shield_owner_model_scale);
+  const float rr = hr + shield_matrix_radius + shield_desc_term + shield_extent_env_r;
 
   if (out_overlap_margin != NULL) {
     *out_overlap_margin = rr - sqrtf(d2);

@@ -186,6 +186,7 @@
   "player_nudge_x": 0.30000001192092896,
   "player_nudge_z": 0.10000000149011612,
   "player_nudge_z_max": 1.399999976158142,
+  "pokemon_stadium_x34_scale_z": 0.05000000074505806,
   "powershield_reflect_damage_mul": 0.5,
   "powershield_reflect_frames": 1,
   "powershield_reflect_size": 0.75,

@@ -229,6 +229,13 @@ typedef struct MslCommonParams {
   float walljump_stick_x_threshold;           // p_ftCommonData->x76C
   float walljump_tilt_x_max_frames;           // p_ftCommonData->x770
   uint16_t walljump_startup_timer_frames;     // p_ftCommonData->x774
+  // Pokemon Stadium fighter x44 matrix scale source field.
+  //
+  // Decomp: `Fighter_80068E64` writes this to `fp->x34_scale.z` on internal stage 0x1B, and
+  // `Fighter_UnkApplyTransformation_8006C0F0` publishes the compensating `fp->x44_mtx` consumed by
+  // `ftCommon_8007F804`. Runtime loads this for future full x44 collision modeling; the current
+  // STM bridge remains bounded in combat until the live x44 hurtcap/ShieldDesc packet is carried.
+  float pokemon_stadium_x34_scale_z;  // p_ftCommonData->x7E4
 
   // Ground friction multiplier when |gr_vel| > walk_max_vel (refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C)
   float high_speed_friction_mul;  // p_ftCommonData->x6C

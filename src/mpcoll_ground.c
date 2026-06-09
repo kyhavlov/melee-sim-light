@@ -15007,8 +15007,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
             cur_ecb_points.right_rel_x, cur_ecb_points.side_rel_y, cur_ecb_points.frame_u16);
         stored_desired_ecb_points = cur_ecb_points;
       }
+      const uint8_t active_damage_hitlag_exit_frame =
+          (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u) ? 1u : 0u;
       const uint8_t active_damage_hitlag_existing_floor_contact_carry =
-          (batch->state.hitlag[idx] != 0u && is_damage_collision_landing_action(action_id) &&
+          ((batch->state.hitlag[idx] != 0u || active_damage_hitlag_exit_frame) &&
+           is_damage_collision_landing_action(action_id) &&
            batch->state.coll_damage_hitlag_floor_contact_runtime[idx] != 0u)
               ? 1u
               : 0u;
@@ -15033,6 +15036,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
         cur_ecb_points = state_desired_ecb_points;
         stored_prev_ecb_points = state_desired_ecb_points;
       }
+      if (active_damage_hitlag_ecb_carry && have_state_cur_ecb && !on_ground) {
+        // Rejected active-hitlag floor probes do not publish their projected floor contact as
+        // CollData.current. Source keeps the loaded Damage ECB current/prev packet live for the
+        // next frozen/exit map callback; only an accepted floor result below may replace it.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+        //   ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll}
+        // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_80044628_Floor}
+        cur_ecb_points = state_cur_ecb_points;
+        stored_prev_ecb_points = state_cur_ecb_points;
+      }
       mpcoll_store_prev_ecb_points(batch, idx, &stored_prev_ecb_points);
       mpcoll_store_current_ecb_points(batch, idx, &cur_ecb_points);
       mpcoll_store_desired_ecb_points(batch, idx, &stored_desired_ecb_points);
@@ -15055,16 +15068,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
       // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
       // refs/melee/src/melee/mp/mpcoll.c::{
       //   inline0,mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+      const uint8_t active_damage_hitlag_floor_contact_runtime_next =
+          ((active_damage_hitlag_floor_contact_carry && !active_damage_hitlag_ecb_carry) ||
+           active_damage_hitlag_existing_floor_contact_carry)
+              ? 1u
+              : 0u;
       batch->state.coll_damage_hitlag_ecb_valid[idx] =
-          (active_damage_hitlag_ecb_carry || active_damage_hitlag_floor_contact_carry ||
-           active_damage_hitlag_existing_floor_contact_carry)
-              ? 1u
-              : 0u;
+          (active_damage_hitlag_ecb_carry || active_damage_hitlag_floor_contact_runtime_next) ? 1u
+                                                                                              : 0u;
       batch->state.coll_damage_hitlag_floor_contact_runtime[idx] =
-          (active_damage_hitlag_floor_contact_carry ||
-           active_damage_hitlag_existing_floor_contact_carry)
-              ? 1u
-              : 0u;
+          active_damage_hitlag_floor_contact_runtime_next;
       const float unlocked_fall_pose_bottom_rel =
           (action_id == (uint16_t)MSL_ACT_FALL && ecb_lock_timer <= 1u)
               ? mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_cur, 0u)

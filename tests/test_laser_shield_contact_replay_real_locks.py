@@ -1152,6 +1152,81 @@ def test_high_flag_laser_steady_guard_does_not_hit_immediately() -> None:
 
 
 @pytest.mark.integration
+def test_high_flag_carried_falco_laser_steady_guard_stays_point_sample_stm() -> None:
+    # Replay-real negative for the settled-Guard high-flag carried laser boundary:
+    # - STM:7006 has Fox serialized as settled Guard (`af=-1`, `anim=-1`) with raw fp+0x2218
+    #   behavior+B2 high-flag bits while an older saturated Falco laser crosses the broad
+    #   current-origin segment.
+    # - No item_shield_bounce seed lane proves Item_80269DC8 ownership, so the stale saturated
+    #   command/behavior lane must not enter GuardSetOff. DCC:6518 below locks the adjacent fresh
+    #   scale-ramping positive.
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 7006, p)
+
+    assert int(seed_row["action_id"][p]) == 179
+    assert int(seed_row["action_frame"][p]) == -1
+    assert int(seed_row["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed_row["state_flags"][p][0]) == 0x24
+    assert int(seed_row["items"][0]["exists"]) == 1
+    assert int(seed_row["items"][0]["type"]) == 55
+    assert int(seed_row["item_shield_bounce_valid"][0]) == 0
+    assert int(ref_row["action_id"][p]) == 179
+
+    assert int(out_row["action_id"][p]) == 179
+    assert int(out_row["hitlag"][p]) == 0
+    assert int(out_row["hitstun"][p]) == 0
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
+
+    for field in ("exists", "type", "state", "owner", "instance_id", "spawn_id"):
+        assert int(out_row["items"][0][field]) == int(ref_row["items"][0][field]), (
+            f"field={field} expected={int(ref_row['items'][0][field])} "
+            f"got={int(out_row['items'][0][field])}"
+        )
+
+
+@pytest.mark.integration
+def test_high_flag_fresh_scale_ramping_laser_still_enters_guardsetoff_dcc() -> None:
+    # Fresh x2218_b2 + reflect-behavior laser positive:
+    # DCC:6518 uses the same raw state byte shape as the stale STM negative, but the laser is still
+    # in the source scale-ramp window (`scale_z` 0.444 -> 0.889). That current item callback owns
+    # the shield contact and must enter GuardSetOff rather than being suppressed as stale carry.
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 0
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 6518, p)
+
+    assert int(seed_row["action_id"][p]) == 179
+    assert int(seed_row["state_flags"][p][0]) == 0x24
+    assert int(seed_row["items"][1]["exists"]) == 1
+    assert int(seed_row["items"][1]["type"]) == 55
+    assert int(seed_row["item_shield_bounce_valid"][1]) == 0
+    assert int(ref_row["action_id"][p]) == 181
+
+    assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p])
+    assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p]) == 3
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "item_slot"),
     [

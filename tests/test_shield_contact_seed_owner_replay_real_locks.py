@@ -1175,6 +1175,77 @@ def test_landing_guardreflect_entry_keeps_shielddesc_for_same_frame_attackairhi_
 
 
 @pytest.mark.integration
+def test_stm_active_guardreflect_strong_attackairlw_extent_enters_guardsetoff() -> None:
+    # STM rec6611 covers an active no-submotion GuardReflect shield handoff against Falco's authored
+    # strong 12-damage DAir HitCapsule. The source ShieldDesc is live while x14 is active; treating
+    # the row as final/expired x14 suppresses the contact, while broadening to weak DAir regresses
+    # AGG/QGD controls.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80093A50,ftCo_80093BC0,ftCo_80092450}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    rows = _run_rollout_records_replay_frame_rng(
+        dataset_path,
+        4364,
+        (6611,),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    out, ref = rows[6611]
+
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_stm_guardon_attacks4_x44_reject_does_not_depend_on_stale_tilt_lane() -> None:
+    # STM rec4364 is a rollout-history GuardOn shield boundary against authored side-smash
+    # (`AttackS4S`/`ftCo_SM_AttackS4`) 17-damage hitboxes. One-step replay state carries enough
+    # Guard tilt to hit the old top-level tilt gate, but the source x44/ShieldDesc owner is the
+    # selected S4 payload and no-submotion GuardOn phase, not the stale tilt lane. The row must stay
+    # GuardOn instead of entering GuardSetOff.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_80068E64,Fighter_UpdateModelScale}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackS4.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    rows = _run_rollout_records_replay_frame_rng(
+        dataset_path,
+        0,
+        (4364,),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    out, ref = rows[4364]
+
+    assert int(ref["action_id"][defender]) == 178  # GuardOn.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
 def test_direct_guardreflect_guardon_pose_age_reaches_late_attackairn_contact_cdo() -> None:
     # Runtime-positive for direct GuardReflect no-submotion pose lifetime:
     # - p1 enters GuardReflect from a grounded ftCo_80091A4C source, so ftCo_80093A50 creates
@@ -1339,6 +1410,66 @@ def test_opposite_facing_final_x18_attackairb_shielddesc_still_enters_setoff_dsg
     assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 5
     assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_guardon_origin_guardreflect_x18_expiry_blocks_strong_nair_then_allows_stm() -> None:
+    # GuardOn-origin GuardReflect x18-expiry shield-side boundary:
+    # - STM 9288 is a no-submotion GuardReflect row whose x14 has already expired and whose final
+    #   x18 powershield-active tick is consumed by this callback. The persistent strong NAir hb1
+    #   ShieldDesc proxy must not enter GuardSetOff one callback early.
+    # - STM 9289 is the adjacent x18-cleared callback and must take the normal GuardSetOff path.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "SweatyThisMallard.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed_blocked = ds.samples["seed_t"][9288]
+    seed_accept = ds.samples["seed_t"][9289]
+    assert int(seed_blocked["action_id"][attacker]) == 65  # AttackAirN.
+    assert int(seed_blocked["animation_index"][attacker]) == 68  # ftCo_SM_AttackAirN.
+    assert int(seed_blocked["action_id"][defender]) == 182  # GuardReflect.
+    assert int(seed_blocked["guard_reflect_timer_x14"][defender]) == 0
+    assert int(seed_blocked["guard_reflect_timer_x18"][defender]) == 1
+    assert int(seed_blocked["guard_reflect_origin_guardon_u8"][defender]) == 1
+    assert int(seed_accept["guard_reflect_timer_x18"][defender]) == 0
+
+    got = _run_rollout_records_replay_frame_rng(
+        dataset_path,
+        9165,
+        (9288, 9289),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    out_blocked, ref_blocked = got[9288]
+    assert int(ref_blocked["action_id"][defender]) == 182
+    assert int(out_blocked["action_id"][defender]) == int(ref_blocked["action_id"][defender])
+    assert int(out_blocked["hitlag"][defender]) == int(ref_blocked["hitlag"][defender]) == 0
+    assert float(out_blocked["shield_hp"][defender]) == pytest.approx(
+        float(ref_blocked["shield_hp"][defender])
+    )
+
+    out_accept, ref_accept = got[9289]
+    assert int(ref_accept["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out_accept["action_id"][defender]) == int(ref_accept["action_id"][defender])
+    assert int(out_accept["hitlag"][defender]) == int(ref_accept["hitlag"][defender]) == 6
+    assert int(out_accept["hitlag"][attacker]) == int(ref_accept["hitlag"][attacker]) == 6
+    assert float(out_accept["shield_hp"][defender]) == pytest.approx(
+        float(ref_accept["shield_hp"][defender])
+    )
 
 
 @pytest.mark.integration

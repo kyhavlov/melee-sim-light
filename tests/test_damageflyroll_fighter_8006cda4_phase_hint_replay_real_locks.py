@@ -418,6 +418,14 @@ class _DamageFlyRoll8006CDA4Case:
             expect_hb0_enable_edge=0,
         ),
         _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            target_record=10049,
+            victim_port=0,
+            expect_seed_count=0,
+            expect_action_id=91,
+            note="JumpF victim uses live late AttackHi4 hb0/cap12 owner despite stale source-motion residue (STM)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
             dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
             target_record=2542,
             victim_port=1,
@@ -580,6 +588,14 @@ def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
         hb_id, cap_id = _selected_body_hitbox_hurtcap(dataset_path, int(case.target_record), 1, 0)
         assert (hb_id, cap_id) == (0, 1), case.note
 
+    if "SweatyThisMallard.msl" in case.dataset_rel and int(case.target_record) == 3998:
+        hb_id, cap_id = _selected_body_hitbox_hurtcap(dataset_path, int(case.target_record), 1, 0)
+        assert (hb_id, cap_id) == (1, 2), case.note
+
+    if "SweatyThisMallard.msl" in case.dataset_rel and int(case.target_record) == 10049:
+        hb_id, cap_id = _selected_body_hitbox_hurtcap(dataset_path, int(case.target_record), 1, 0)
+        assert (hb_id, cap_id) == (0, 12), case.note
+
     _, ref_row, out_row = _run_one_step_row(dataset_path, int(case.target_record), victim)
     assert int(out_row["action_id"][victim]) == int(case.expect_action_id), case.note
     if int(case.expect_action_id) == int(ref["action_id"][victim]):
@@ -590,6 +606,67 @@ def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
                 record=int(case.target_record),
                 p=p,
             )
+
+
+@pytest.mark.integration
+def test_stm_attacklw4_strong_attackairn_zero_marker_is_selected_source_owned() -> None:
+    # STM rec3998 starts with a grounded AttackLw4 victim and no seeded Fighter_8006CDA4 prefix.
+    # ftColl selects the current authored strong NAir hb1 HitCapsule against cap2/head-high; after
+    # Fighter_ProcessHit launches the victim airborne, ftCo_8008DCE0 reaches the severe-airborne
+    # DamageFlyRoll gate. Clearing the replay seed lane must still materialize only the
+    # zero-consume marker: site 1 runs, while ftColl effect and Fighter_8006CDA4 prefix sites do not.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80078538,ftColl_8007A06C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 3998
+    victim = 0
+    attacker = 1
+    seed = ds.samples[record]["seed_t"]
+    ref = ds.samples[record]["ref_t1"]
+    assert int(seed["action_id"][victim]) == 64  # AttackLw4.
+    assert int(seed["on_ground"][victim]) == 1
+    assert int(seed["hitlag"][victim]) == 0
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 4
+    assert int(seed["action_id"][attacker]) == 65  # AttackAirN.
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (1, 2)
+    assert int(ref["action_id"][victim]) == 91  # DamageFlyRoll.
+
+    def clear_seed_count(seed_t):
+        seed_t["fighter_8006cda4_pre_gate_consume_count"][0, victim] = 0
+
+    trace_path = root / "reports/triage/stm3998_attacklw4_nair_zero_marker.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+        seed_mutator=clear_seed_count,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    ref_row, out_row, site1_count = rows[record]
+    assert site1_count == 1
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=5) == 0
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=6) == 0
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=7) == 0
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=24) == 0
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(
+            out_row=out_row,
+            ref_row=ref_row,
+            record=record,
+            p=p,
+        )
 
 
 @pytest.mark.integration
@@ -2019,8 +2096,9 @@ def test_pjo_rollout_rng_sites_are_source_owned_without_exceptions() -> None:
 def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_prefix() -> None:
     # QGD rec4435 is the regression control for replay-frame Wait RNG admission: p0's earlier
     # same-frame DeadUpStar_Anim source callback adds the bounded creation prefix before p1 reaches
-    # Wait_Anim/getAnimID. BHH rec10161 is the stale-late negative: a later DeadUpStar phase-1 row
-    # must not keep carrying the startup generator prefix.
+    # Wait_Anim/getAnimID. STM rec10395 is the direct rollout-clock positive for an active
+    # DeadUpStar startup prefix on the current replay row. BHH rec10161 is the stale-late negative:
+    # a later DeadUpStar phase-1 row must not keep carrying the startup generator prefix.
     # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
     # refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
     # refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
@@ -2048,6 +2126,30 @@ def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_pr
     assert int(out_row["animation_index"][1]) == int(ref_row["animation_index"][1]) == 2
     assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=25) == 2
     assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=3) == 1
+
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "SweatyThisMallard.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    trace_path = root / "reports/triage/stm_wait_deadupstar_active_prefix_rng.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=10395,
+        window_records=(10395,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    ref_row, out_row, _ = rows[10395]
+    assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]) == 14
+    assert int(out_row["animation_index"][1]) == int(ref_row["animation_index"][1]) == 3
+    assert _trace_site_count(trace_path, start_record=10395, record=10395, site_id=25) == 3
+    assert _trace_site_count(trace_path, start_record=10395, record=10395, site_id=3) == 1
 
     dataset_rel = (
         "datasets/aggregate_recent/replays/validation/aggregate_recent/"

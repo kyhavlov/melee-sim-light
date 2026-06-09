@@ -217,6 +217,90 @@ def _run_slp_rollout_records(
 
 
 @pytest.mark.integration
+def test_stm_jumpaerialf_tail_only_bair_rejects_false_body_and_keeps_real_hit() -> None:
+    # STM rec773 is a false strong BackAir BODY contact against only Fox JumpAerialF cap12/tail.
+    # Runtime rejects that tail-only selected-HitCapsule source without promoting JumpAerialF/B into
+    # the global dynamic-pose data index; rec774 is the adjacent deeper contact with low/body
+    # hurtcaps and must remain a real hit.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/ft/chara/ftFox/ftFox_AttackAir.c::{ftCo_8009DD94,ftCo_8009E318}
+    # refs/melee/src/melee/lb/lbjobj.c::lb_8000B1CC
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    # data/hurtcaps/{fox,falco}.json cap12 -> FtPart 18
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 773)
+    assert int(seed["action_id"][0]) == 67  # AttackAirB.
+    assert int(seed["action_id"][1]) == 27  # JumpAerialF.
+    assert int(ref["action_id"][1]) == 27
+    assert int(out["action_id"][1]) == int(ref["action_id"][1])
+    assert int(out["hitlag"][1]) == int(ref["hitlag"][1]) == 0
+    assert int(out["hitstun"][1]) == int(ref["hitstun"][1]) == 0
+    assert float(out["percent"][1]) == pytest.approx(float(ref["percent"][1]))
+
+    seed, out, ref = _step_one_row(dataset_path, 774)
+    assert int(seed["action_id"][0]) == 67
+    assert int(seed["action_id"][1]) == 27
+    assert int(ref["action_id"][1]) == 86  # DamageFlyLw from the real adjacent BODY contact.
+    assert int(out["action_id"][1]) == int(ref["action_id"][1])
+    assert int(out["hitlag"][1]) == int(ref["hitlag"][1])
+    assert int(out["hitstun"][1]) == int(ref["hitstun"][1])
+    assert float(out["percent"][1]) == pytest.approx(float(ref["percent"][1]))
+
+
+@pytest.mark.integration
+def test_stm_pokemon_stadium_x44_body_gap_owners_are_payload_bounded() -> None:
+    # Pokemon Stadium x44 BODY gap owner:
+    # Stadium's x34_scale.z / x44_mtx lane reaches ftCommon_8007F804 before ftColl BODY collision.
+    # Runtime admits only the extracted payload/cap gaps that the reduced matrix path misses:
+    # strong DAir high/tail BODY and AttackHi3 hb1 vs part-18 tail. Adjacent shallower frames must
+    # remain no-hit, proving this is not a broad Stadium tolerance.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_80068E64,Fighter_UpdateModelScale}
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F804
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw/events.ftCo_SM_AttackHi3
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    for record, defender, expected_action in ((976, 1, 14), (4224, 1, 26), (6646, 1, 25)):
+        seed, out, ref = _step_one_row(dataset_path, record)
+        assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == expected_action
+        assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+        assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+
+    for record, defender, expected_action, expected_hitlag in (
+        (977, 1, 87, 7),
+        (4225, 1, 88, 7),
+        (6647, 1, 90, 6),
+    ):
+        seed, out, ref = _step_one_row(dataset_path, record)
+        assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == expected_action
+        assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == expected_hitlag
+        assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender])
+        assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+
+    ds = read_dataset(str(dataset_path))
+    for record, defender, no_x44_action in ((4225, 1, 26), (6647, 1, 25)):
+        non_stadium_seed = ds.samples[record : record + 1]["seed_t"].copy()
+        non_stadium_seed["stage_id"][0] = np.uint32(32)  # Final Destination.
+        out, _ref = _step_one_row_with_seed(dataset_path, record, non_stadium_seed)
+        assert int(out["action_id"][defender]) == no_x44_action
+        assert int(out["hitlag"][defender]) == 0
+
+
+@pytest.mark.integration
 def test_attackairlw_sustained_tiplog_contact_defers_grounded_dash_damage_selfplay_181413() -> None:
     # Self-play 181413 rec316 is a source-general fighter BODY tip-log boundary:
     # - p0 Fox AttackAirLw has a sustained HitCapsule whose exact lbColl_80006E58 matrix overlap

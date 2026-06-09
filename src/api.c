@@ -21,6 +21,7 @@
 #include "coll_env_flags.h"
 #include "common_params.h"
 #include "damage_source.h"
+#include "deadupstar_rng.h"
 #include "config.h"
 #include "escapeair_collision_owner.h"
 #include "special_msids.h"
@@ -1211,6 +1212,58 @@ static inline uint8_t msl_seed_has_fod_platform_scheduler_rng_owner(const MslSee
 static inline uint8_t msl_seed_has_pre_matchflow_rng_prefix(const MslSeed* seed, int active_players,
                                                             int top_blast_player);
 
+static inline uint8_t msl_seed_deadupstar_startup_wait_rng_prefix_active(
+    const MslSeed* seed, const MslCommonParams* common, int p) {
+  if (seed == NULL || common == NULL || p < 0 || p >= MSL_MAX_PLAYERS) {
+    return 0u;
+  }
+  return msl_deadupstar_startup_effect_prefix_active(seed->action_id[p], seed->action_frame[p],
+                                                     seed->match_flow_timer[p], common);
+}
+
+static inline uint8_t msl_seed_has_wait_anim_variant_replay_rng_owner(const MslSeed* seed,
+                                                                      int active_players) {
+  if (seed == NULL) {
+    return 0u;
+  }
+  const MslCommonParams* common = msl_common_params();
+  if (common == NULL) {
+    return 0u;
+  }
+  for (int p = 0; p < active_players; p++) {
+    if (seed->action_id[p] != (uint16_t)MSL_ACT_WAIT || seed->animation_index[p] > 0xFFFFu) {
+      continue;
+    }
+    const MslCharParams* ch = msl_char_params(seed->char_id[p]);
+    if (ch == NULL || ch->wait_anim_choice_count == 0u) {
+      continue;
+    }
+    const float end_frame =
+        msl_anim_end_frame(seed->char_id[p], (uint16_t)seed->animation_index[p]);
+    const float next_anim_frame =
+        msl_anim_frame_sanitize_f32(seed->anim_frame_f32[p] + seed->frame_speed_mul_f32[p]);
+    if (!(next_anim_frame >= end_frame)) {
+      continue;
+    }
+    for (int other = 0; other < active_players; other++) {
+      if (other == p) {
+        continue;
+      }
+      if (msl_seed_deadupstar_startup_wait_rng_prefix_active(seed, common, other) != 0u) {
+        // Replay Wait RNG is admitted only when a modeled same-frame source prefix owns stream
+        // phase before ftwaitanim.c::getAnimID. DeadUpStar startup is the bounded prefix currently
+        // modeled in locomotion_consume_deadupstar_effect_prefix_before_wait; plain Wait rows keep
+        // their seed-owned animation variant under normal replay reseed.
+        // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
+        // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
+        // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
+        return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
+      }
+    }
+  }
+  return 0u;
+}
+
 static inline uint8_t msl_seed_has_top_blast_deadupfall_rng_owner(const MslSeed* seed,
                                                                   int active_players) {
   if (seed == NULL) {
@@ -1418,6 +1471,9 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
     // the future DeadUpStar/DeadUpFall label.
     // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
     // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
+  }
+  if (msl_seed_has_wait_anim_variant_replay_rng_owner(seed, active_players) != 0u) {
     return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
   }
   for (int victim = 0; victim < active_players; victim++) {

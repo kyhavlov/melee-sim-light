@@ -113,6 +113,16 @@ Current target domain:
 - Triage/debug outputs default under gitignored `reports/triage/`, not `/tmp`.
 - Never key gameplay behavior on dataset name or record id.
 
+### Native Extension Build
+
+When running MSL from a virtualenv, build with that same Python:
+
+```bash
+make build PY=/path/to/venv/bin/python
+```
+
+If something seems stale, print `melee_sim._native.__file__` before debugging further.
+
 ## Validation Requirements
 
 ### Tests

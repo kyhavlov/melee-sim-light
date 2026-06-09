@@ -349,6 +349,8 @@ int common_params_init(void) {
       json_get_f32(buf, "walljump_stick_x_threshold", &g_params.walljump_stick_x_threshold) != 0 ||
       json_get_f32(buf, "walljump_tilt_x_max_frames", &g_params.walljump_tilt_x_max_frames) != 0 ||
       json_get_u16(buf, "walljump_startup_timer_frames", &g_params.walljump_startup_timer_frames) !=
+          0 ||
+      json_get_f32(buf, "pokemon_stadium_x34_scale_z", &g_params.pokemon_stadium_x34_scale_z) !=
           0) {
     alloc_free(buf);
     return -1;

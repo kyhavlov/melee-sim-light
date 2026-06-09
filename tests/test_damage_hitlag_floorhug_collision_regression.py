@@ -41,6 +41,7 @@ FLOOR_MODE_BOTTOM_SWEEP = 1
 FLOOR_MODE_STAY_AIRBORNE_PROJECTION = 6
 ACT_ATTACK_AIR_LW = 0x0045
 ACT_DAMAGE_HI_2 = 0x004C
+ACT_DAMAGE_HI_3 = 0x004D
 ACT_DAMAGE_N_2 = 0x004F
 ACT_DAMAGE_AIR_1 = 0x0054
 ACT_DAMAGE_AIR_2 = 0x0055
@@ -1265,6 +1266,43 @@ def test_damagefly_hitlag_exit_uses_current_loaded_ecb_not_next_stored_pose_stm_
         colldata["current_bottom_rel_y"][p]
     )
     assert current_bottom_world <= 0.0
+
+
+@pytest.mark.integration
+def test_damage_active_hitlag_floor_sweep_lifetime_lands_on_real_contact_stm_8729() -> None:
+    # Active Damage hitlag floor-sweep lifetime:
+    # The Damage hitlag callbacks keep their damage-entry CollData ECB owner until the hitlag-exit
+    # floor callback accepts a real bottom sweep. Post-frame publication must not synthesize or
+    # overwrite that sweep from the frozen previous root while no contact exists, but the actual
+    # STM 8729 floor contact must still publish Landing on the accepted Pokemon Stadium floor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local dataset: SweatyThisMallard.msl")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[8729:8730]
+    p = 0
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_HI_3
+    assert int(row["seed_t"]["hitlag"][0, p]) == 1
+    assert int(row["ref_t1"]["action_id"][0, p]) == ACT_LANDING
+    assert int(row["ref_t1"]["ground_id"][0, p]) == 52
+
+    out, ref, contacts, colldata = _run_one_step_with_contacts_and_colldata(dataset_path, 8729)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-7)
+    assert int(colldata["floor_result_valid"][p]) == 1
+    assert int(colldata["floor_result_segment_id"][p]) == int(ref["ground_id"][p])
+    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
 
 
 @pytest.mark.integration

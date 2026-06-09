@@ -68,6 +68,33 @@ enum {
   MSL_HURTCAP_FOX_FALCO_TAIL_PART_ID = 18,
 };
 
+enum {
+  MSL_ATTACKAIRB_STRONG_BODY_ROOT_HITBOX = 0u,
+  MSL_ATTACKAIRB_STRONG_BODY_TAIL_HITBOX = 1u,
+  MSL_HURTCAP_DAMAGEFLYTOP_HEAD_HIGH_SLOT = 2u,
+  MSL_HURTCAP_DAMAGEFLYTOP_ROOT_BODY_SLOT = 0u,
+  MSL_HURTCAP_DAMAGEFLYTOP_LEG_LOW_SLOT = 10u,
+  MSL_HURTCAP_DAMAGEFLYTOP_XROTN_SLOT = 12u,
+};
+
+// Pokemon Stadium x44 residual bridge caps:
+// The source x7E4 lane is extracted and loaded for future full x44 modeling, but runtime does not
+// yet carry the exact live JObj ShieldDesc/hurtcap packet used by
+// lbColl_8000805C/lbColl_80007BCC. These constants bound the temporary bridge to source-payload
+// rows whose adjacent positives/negatives prove the bridge is not a broad Stadium residual
+// tolerance.
+// refs/melee/src/melee/ft/fighter.c::{Fighter_80068E64,Fighter_UpdateModelScale}
+// refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80007BCC}
+static const float MSL_PSTADIUM_X44_DAIR_GROUNDED_HIGH_MAX_RESIDUAL = -0.25f;
+static const float MSL_PSTADIUM_X44_DAIR_TAIL_MAX_RESIDUAL = -1.20f;
+static const float MSL_PSTADIUM_X44_ATTACKHI3_TAIL_MAX_RESIDUAL = -0.50f;
+static const float MSL_PSTADIUM_GUARDON_TILT_MIN = 0.40f;
+static const float MSL_PSTADIUM_GUARDON_DAIR_REJECT_MIN_MARGIN = 1.50f;
+static const float MSL_PSTADIUM_GUARDON_S4_REJECT_MIN_MARGIN = 0.0f;
+static const float MSL_PSTADIUM_GUARDON_S4_REJECT_MAX_MARGIN = 2.0f;
+static const float MSL_PSTADIUM_GUARDON_BAIR_REJECT_MIN_MARGIN = 0.0f;
+static const float MSL_PSTADIUM_GUARDON_BAIR_REJECT_MAX_MARGIN = 0.75f;
+
 static inline uint8_t combat_hurtcap_is_extracted_fox_falco_tail_part(const MslHurtCap* cap) {
   return (uint8_t)(cap != NULL &&
                    cap->bone_part_id == (uint16_t)MSL_HURTCAP_FOX_FALCO_TAIL_PART_ID);
@@ -877,6 +904,81 @@ static inline uint8_t combat_attackairlw_down_forward_tail_rejects_body_contact(
   return 1u;
 }
 
+static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius_impl(
+    const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
+    float hy, float hz, float hr, float ax, float ay, float az, float bx, float by, float bz,
+    uint8_t use_catch_grabbable_pose, float* out_overlap_amount, uint8_t* out_evaluated);
+
+static inline uint8_t combat_pstadium_x44_gap_allows_body_contact(
+    const MslBatch* batch, int bi, int attacker, uint8_t hb_id, size_t a_idx, size_t d_idx,
+    uint8_t cap_id, const MslHurtCap* cap, float lbcoll_overlap_amount,
+    uint8_t lbcoll_overlap_evaluated, uint8_t shield_active) {
+  if (batch == NULL || cap == NULL || shield_active != 0u ||
+      batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_POKEMON_STADIUM ||
+      batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u ||
+      lbcoll_overlap_evaluated == 0u || !(lbcoll_overlap_amount <= 0.0f)) {
+    return 0u;
+  }
+  const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+  // Pokemon Stadium BODY x44 gap:
+  // Fighter_80068E64 installs the Stadium `x34_scale.z` lane, Fighter_UpdateModelScale applies it
+  // to the root X scale, and ftCommon_8007F804 supplies fp->x44_mtx to ftColl_80078C70's
+  // lbColl_8000805C BODY path. Runtime does not yet consume the extracted x7E4 lane for full x44
+  // collision; this temporary bridge admits only named residual caps after payload/source filters.
+  // This is not a broad Stadium tolerance; adjacent low-cap, shield, hitlag, weak/late-DAir, and
+  // non-tail rows stay on the ordinary lbColl predicate.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_80068E64,Fighter_UpdateModelScale,Fighter_UnkApplyTransformation_8006C0F0}
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F804
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+  // data/hurtcaps/{fox,falco}.json cap2/head-high and cap12 -> FtPart 18
+  const uint16_t defender_action = batch->state.action_id[d_idx];
+  if (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
+      combat_attackairlw_hitbox_payload_is_authored_strong_meteor(
+          hb_id, batch->state.hitbox_damage[hb_i], batch->state.hitbox_angle[hb_i],
+          batch->state.hitbox_kbg[hb_i], batch->state.hitbox_wsk[hb_i],
+          batch->state.hitbox_bkb[hb_i]) != 0u) {
+    if (batch->state.on_ground[d_idx] != 0u && cap->height >= 2u &&
+        defender_action != (uint16_t)MSL_ACT_DASH && defender_action != (uint16_t)MSL_ACT_RUN &&
+        !msl_motion_state_common_class_has(defender_action, MSL_MS_CLASS_GROUNDED_ATTACK) &&
+        lbcoll_overlap_amount >= MSL_PSTADIUM_X44_DAIR_GROUNDED_HIGH_MAX_RESIDUAL) {
+      return 1u;
+    }
+    if (batch->state.on_ground[d_idx] == 0u &&
+        (defender_action == (uint16_t)MSL_ACT_JUMP_F ||
+         defender_action == (uint16_t)MSL_ACT_JUMP_B) &&
+        cap_id == (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_XROTN_SLOT &&
+        combat_hurtcap_is_extracted_fox_falco_tail_part(cap) &&
+        lbcoll_overlap_amount >= MSL_PSTADIUM_X44_DAIR_TAIL_MAX_RESIDUAL) {
+      return 1u;
+    }
+  }
+  if (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_HI3 &&
+      batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_HI3 &&
+      (defender_action == (uint16_t)MSL_ACT_JUMP_F ||
+       defender_action == (uint16_t)MSL_ACT_JUMP_B) &&
+      batch->state.on_ground[d_idx] == 0u &&
+      cap_id == (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_XROTN_SLOT &&
+      combat_hurtcap_is_extracted_fox_falco_tail_part(cap) && hb_id == 1u &&
+      batch->state.action_frame[a_idx] >= 10 && batch->state.hitbox_damage[hb_i] == 9.0f &&
+      batch->state.hitbox_angle[hb_i] == 90u && batch->state.hitbox_kbg[hb_i] == 120u &&
+      batch->state.hitbox_wsk[hb_i] == 0u && batch->state.hitbox_bkb[hb_i] == 30u &&
+      lbcoll_overlap_amount >= MSL_PSTADIUM_X44_ATTACKHI3_TAIL_MAX_RESIDUAL) {
+    // Falco AttackHi3 hb1 vs airborne Fox tail on Pokemon Stadium:
+    // the authored high/tail HitCapsule is just inside vanilla's x44 BODY lane on STM:6647, while
+    // the adjacent STM:6646 frame remains outside. The named residual cap is retained only while
+    // the runtime lacks the full live hurtcap/JObj packet. This stays bounded by extracted hitbox
+    // payload and FtPart-18 tail hurtcap, not by replay id or character-pair checks.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_80068E64,Fighter_UpdateModelScale}
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F804
+    // data/moves/falco.json::moves.ftCo_SM_AttackHi3.events.create_hitbox hb1
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t combat_attackairhi_attackdash_tail_allow_interrupt_rejects_body_contact(
     const MslBatch* batch, int bi, int attacker, uint8_t hb_id, size_t a_idx, size_t d_idx,
     const MslHurtCap* cap) {
@@ -1045,9 +1147,12 @@ static inline uint8_t combat_attackairb_jump_low_body_source_owns_model_scale_by
   if (batch == NULL || hb_id != 0 || cap_id == 12u) {
     return 0u;
   }
+  const uint16_t defender_action = batch->state.action_id[d_idx];
   if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B ||
-      !(batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_JUMP_F ||
-        batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_JUMP_B) ||
+      !(defender_action == (uint16_t)MSL_ACT_JUMP_F ||
+        defender_action == (uint16_t)MSL_ACT_JUMP_B ||
+        defender_action == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+        defender_action == (uint16_t)MSL_ACT_JUMP_AERIAL_B) ||
       batch->state.on_ground[d_idx] != 0u || batch->state.hitlag[d_idx] != 0u ||
       batch->state.hitstun[d_idx] != 0u) {
     return 0u;
@@ -2106,7 +2211,7 @@ static inline void combat_preserve_guard_x10_for_immediate_setoff(
   }
 }
 
-static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
+static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius_impl(
     const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
     float hy, float hz, float hr, float ax, float ay, float az, float bx, float by, float bz,
     uint8_t use_catch_grabbable_pose, float* out_overlap_amount, uint8_t* out_evaluated) {
@@ -2176,6 +2281,7 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
   if (!(model_scale > 0.0f)) {
     return 0u;
   }
+  const float pos_z = batch->state.pos_z[d_idx];
   const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
   float px = hx;
   float py = hy;
@@ -2247,7 +2353,7 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
   const float facing_dir = combat_root_facing_dir_for_body_hurtcap(batch, d_idx);
   const float pos_x = batch->state.pos_x[d_idx];
   const float pos_y = batch->state.pos_y[d_idx];
-  const float pos_z = batch->state.pos_z[d_idx];
+  const float pose_scale_x = model_scale;
 
   const float hit_rel_x = hit_cp_x - pos_x;
   const float hit_rel_y = hit_cp_y - pos_y;
@@ -2265,10 +2371,10 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
 
   float hit_local_x = 0.0f, hit_local_y = 0.0f, hit_local_z = 0.0f;
   float hurt_local_x = 0.0f, hurt_local_y = 0.0f, hurt_local_z = 0.0f;
-  if (!combat_mtx34_inverse_point(m, hit_pose_x / model_scale, hit_pose_y / model_scale,
+  if (!combat_mtx34_inverse_point(m, hit_pose_x / pose_scale_x, hit_pose_y / model_scale,
                                   hit_pose_z / model_scale, &hit_local_x, &hit_local_y,
                                   &hit_local_z) ||
-      !combat_mtx34_inverse_point(m, hurt_pose_x / model_scale, hurt_pose_y / model_scale,
+      !combat_mtx34_inverse_point(m, hurt_pose_x / pose_scale_x, hurt_pose_y / model_scale,
                                   hurt_pose_z / model_scale, &hurt_local_x, &hurt_local_y,
                                   &hurt_local_z)) {
     return 0u;
@@ -2290,14 +2396,14 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
   return (uint8_t)(overlap_amount > 0.0f);
 }
 
-enum {
-  MSL_ATTACKAIRB_STRONG_BODY_ROOT_HITBOX = 0u,
-  MSL_ATTACKAIRB_STRONG_BODY_TAIL_HITBOX = 1u,
-  MSL_HURTCAP_DAMAGEFLYTOP_HEAD_HIGH_SLOT = 2u,
-  MSL_HURTCAP_DAMAGEFLYTOP_ROOT_BODY_SLOT = 0u,
-  MSL_HURTCAP_DAMAGEFLYTOP_LEG_LOW_SLOT = 10u,
-  MSL_HURTCAP_DAMAGEFLYTOP_XROTN_SLOT = 12u,
-};
+static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
+    const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
+    float hy, float hz, float hr, float ax, float ay, float az, float bx, float by, float bz,
+    uint8_t use_catch_grabbable_pose, float* out_overlap_amount, uint8_t* out_evaluated) {
+  return combat_body_overlap_lbColl_80006E58_matrix_radius_impl(
+      batch, bi, attacker, hb_id, defender, cap_id, hx, hy, hz, hr, ax, ay, az, bx, by, bz,
+      use_catch_grabbable_pose, out_overlap_amount, out_evaluated);
+}
 
 static inline uint8_t combat_attackairb_continuation_body_overlap_exact(
     const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
@@ -3427,6 +3533,42 @@ static inline void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch,
   }
 }
 
+static inline void combat_publish_damage_entry_hitlag_ecb_current(MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.animation_index[idx] > 0xFFFFu) {
+    return;
+  }
+  // Damage-entry active-hitlag CollData ECB owner:
+  // ftCo_8008DCE0 calls Fighter_ChangeMotionState into Damage* after ftCommon_8007D5D4 clears
+  // ground_or_air and locks desired.bottom. The following Damage hitlag map callbacks observe the
+  // entered Damage pose as CollData current/prev while desired.bottom remains the locked ground-to-air
+  // value. Publish that hidden current/prev packet for source-owned ground-to-air damage entries
+  // instead of carrying the pre-hit grounded ECB through the whole hitlag segment.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_8008DCE0,ftCo_DamageFly_Coll}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_procMap}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+  const uint8_t char_id = batch->state.char_id[idx];
+  const uint32_t anim = batch->state.animation_index[idx];
+  const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  MslEcbWorldPoints ecb = {0};
+  msl_ecb_world_points_sample(&ecb, char_id, anim, frame, facing_dir, batch->state.pos_x[idx],
+                              batch->state.pos_y[idx], 0u);
+  batch->state.coll_ecb_bottom_rel_y[idx] = ecb.bottom_rel_y;
+  batch->state.coll_ecb_top_rel_y[idx] = ecb.top_rel_y;
+  batch->state.coll_ecb_left_rel_x[idx] = ecb.left_rel_x;
+  batch->state.coll_ecb_right_rel_x[idx] = ecb.right_rel_x;
+  batch->state.coll_ecb_side_rel_y[idx] = ecb.side_rel_y;
+  batch->state.coll_ecb_bottom_valid[idx] = 1u;
+  batch->state.coll_prev_ecb_bottom_rel_y[idx] = ecb.bottom_rel_y;
+  batch->state.coll_prev_ecb_top_rel_y[idx] = ecb.top_rel_y;
+  batch->state.coll_prev_ecb_left_rel_x[idx] = ecb.left_rel_x;
+  batch->state.coll_prev_ecb_right_rel_x[idx] = ecb.right_rel_x;
+  batch->state.coll_prev_ecb_side_rel_y[idx] = ecb.side_rel_y;
+  batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
+  batch->state.coll_damage_hitlag_ecb_valid[idx] = 1u;
+}
+
 static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch* batch,
                                                                   size_t idx) {
   return msl_guard_reflect_is_frozen_snapshot(batch, idx);
@@ -3650,6 +3792,70 @@ static inline uint8_t combat_guard_reflect_active_x14_reflectdesc_blocks_hitshie
              : 0u;
 }
 
+static inline uint8_t combat_pstadium_guardreflect_attackairlw_extent_accepts_shield(
+    const MslBatch* batch, int bi, size_t a_idx, size_t d_idx, size_t hb_i, float overlap_margin) {
+  if (batch == NULL || batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_POKEMON_STADIUM ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT ||
+      batch->state.action_frame[d_idx] >= 0 || batch->state.animation_index[d_idx] != UINT32_MAX ||
+      batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_LW ||
+      batch->state.animation_index[a_idx] != (uint32_t)MSL_SM_ATTACK_AIR_LW ||
+      batch->state.hitbox_damage[hb_i] != 12.0f || !(overlap_margin > -4.0f) ||
+      !(overlap_margin < 0.0f)) {
+    return 0u;
+  }
+  // Active no-submotion GuardReflect / strong DAir extent:
+  // The direct GuardReflect entry has live ShieldDesc source ownership before the reduced sphere
+  // proxy reaches it. Admit only the authored strong DAir payload when the reduced overlap is just
+  // outside the ShieldDesc sphere and still within the source extent lane.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_80093BC0,ftCo_80092450}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  return 1u;
+}
+
+static inline uint8_t combat_pstadium_guardon_x44_reduced_proxy_rejects_shield(
+    const MslBatch* batch, int bi, size_t a_idx, size_t d_idx, uint8_t hb_id, size_t hb_i,
+    float overlap_margin) {
+  if (batch == NULL || batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_POKEMON_STADIUM ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON ||
+      batch->state.action_frame[d_idx] >= 0 || batch->state.animation_index[d_idx] != UINT32_MAX ||
+      batch->state.guard_x10[d_idx] == 0u) {
+    return 0u;
+  }
+
+  // Pokemon Stadium GuardOn x44 reduced-proxy rejects:
+  // The source x44 ShieldDesc lane is identified and x7E4 is extracted, but runtime does not yet
+  // consume the full live ShieldDesc/JObj packet. The reduced sphere/segment proxy can over-admit a
+  // few selected payloads, so keep this temporary reject bounded by Stadium stage, no-submotion
+  // continuing GuardOn, live x10, and extracted/authored payloads; active GuardReflect,
+  // non-Stadium rows, stale x10=0, and unrelated hitboxes stay on the ordinary ShieldDesc path.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_80068E64,Fighter_UpdateModelScale}
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F804
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+  const uint16_t a_action = batch->state.action_id[a_idx];
+  const uint32_t a_anim = batch->state.animation_index[a_idx];
+  const float damage = batch->state.hitbox_damage[hb_i];
+  if (a_action == (uint16_t)MSL_ACT_ATTACK_AIR_LW && a_anim == (uint32_t)MSL_SM_ATTACK_AIR_LW &&
+      damage == 12.0f && batch->state.guard_tilt_x4[d_idx] > MSL_PSTADIUM_GUARDON_TILT_MIN &&
+      overlap_margin > MSL_PSTADIUM_GUARDON_DAIR_REJECT_MIN_MARGIN) {
+    return 1u;
+  }
+  if (a_action == (uint16_t)MSL_ACT_ATTACK_S4_S && a_anim == (uint32_t)MSL_SM_ATTACK_S4 &&
+      damage == 17.0f && overlap_margin > MSL_PSTADIUM_GUARDON_S4_REJECT_MIN_MARGIN &&
+      overlap_margin < MSL_PSTADIUM_GUARDON_S4_REJECT_MAX_MARGIN) {
+    return 1u;
+  }
+  if (a_action == (uint16_t)MSL_ACT_ATTACK_AIR_B && a_anim == (uint32_t)MSL_SM_ATTACK_AIR_B &&
+      hb_id == 1u && damage == 15.0f &&
+      batch->state.guard_tilt_x4[d_idx] > MSL_PSTADIUM_GUARDON_TILT_MIN &&
+      overlap_margin > MSL_PSTADIUM_GUARDON_BAIR_REJECT_MIN_MARGIN &&
+      overlap_margin < MSL_PSTADIUM_GUARDON_BAIR_REJECT_MAX_MARGIN) {
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t combat_guard_reflect_final_x14_live_x18_blocks_body(const MslBatch* batch,
                                                                           size_t idx) {
   return msl_guard_reflect_final_x14_live_x18_blocks_body(batch, idx);
@@ -3679,6 +3885,42 @@ static inline uint8_t combat_guard_reflect_active_x14_rejects_strong_attackairb_
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_80093BC0}
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
   return (batch->state.hitbox_damage[hb_i] > 9.5f) ? 1u : 0u;
+}
+
+static inline uint8_t combat_guard_reflect_x18_expiry_rejects_strong_attackairn_hb1_shield(
+    const MslBatch* batch, size_t a_idx, size_t d_idx, size_t hb_i, uint8_t hb_id) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT ||
+      batch->state.action_frame[d_idx] > -2 || batch->state.animation_index[d_idx] != UINT32_MAX ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u ||
+      batch->state.guard_reflect_timer_x14_seed[d_idx] != 0u ||
+      batch->state.guard_reflect_timer_x14[d_idx] != 0u ||
+      batch->state.guard_reflect_origin_guardon[d_idx] == 0u ||
+      batch->state.guard_reflect_timer_x18_seed[d_idx] != 1u ||
+      batch->state.guard_reflect_timer_x18[d_idx] != 0u) {
+    return 0u;
+  }
+  if (batch->state.animation_index[a_idx] != (uint32_t)MSL_SM_ATTACK_AIR_N ||
+      batch->state.hitbox_prev_enabled[hb_i] == 0u || hb_id != 1u ||
+      batch->state.hitbox_damage[hb_i] != 12.0f || batch->state.hitbox_angle[hb_i] != 361u ||
+      batch->state.hitbox_kbg[hb_i] != 100u || batch->state.hitbox_wsk[hb_i] != 0u ||
+      batch->state.hitbox_bkb[hb_i] != 10u) {
+    return 0u;
+  }
+  // GuardOn-origin GuardReflect x18-expiry strong NAir shield-side owner:
+  // - The no-submotion GuardReflect row is still in the callback that consumes the final x18
+  //   powershield-active tick (`seed==1 -> current==0`). Source does not let the persistent strong
+  //   NAir hb1 ShieldDesc side path enter GuardSetOff until the following callback.
+  // - Keep this to the extracted strong NAir hb1 payload and the explicit x18-expiry owner. It is
+  //   not a broad GuardReflect/NAir reject; x18-live accepted seed lanes and the next x18-cleared
+  //   callback stay on the normal shield-hit path.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+  return 1u;
 }
 
 static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslBatch* batch,
@@ -5028,9 +5270,12 @@ static inline uint8_t combat_attackairb_jump_tail_rejects_body_contact(
   if (batch == NULL || cap == NULL || defender_caps == NULL) {
     return 0u;
   }
+  const uint16_t defender_action = batch->state.action_id[d_idx];
   if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B ||
-      !(batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_JUMP_F ||
-        batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_JUMP_B) ||
+      !(defender_action == (uint16_t)MSL_ACT_JUMP_F ||
+        defender_action == (uint16_t)MSL_ACT_JUMP_B ||
+        defender_action == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+        defender_action == (uint16_t)MSL_ACT_JUMP_AERIAL_B) ||
       batch->state.on_ground[d_idx] != 0u || batch->state.hitlag[d_idx] != 0u ||
       batch->state.hitstun[d_idx] != 0u) {
     return 0u;
@@ -5072,19 +5317,38 @@ static inline uint8_t combat_attackairb_jump_tail_rejects_body_contact(
         batch->state.hurtcap_b_z[other_cap_i], batch->state.hurtcap_radius[other_cap_i], NULL);
     overlaps = (uint8_t)(overlaps || baseline_overlaps);
     if (overlaps) {
-      // Jump -> strong BAir dynamic-tail-slot/body selected-height owner:
+      // Jump/JumpAerial -> strong BAir dynamic-tail-slot/body selected-height owner:
       // ftColl's BODY DmgLog source follows the concrete low hurtcap when strong AttackAirB hb0
-      // overlaps both the generated Jump pose's cap12 dynamic-tail slot and a low leg capsule. The
-      // current generated substrate exposes hurtcap slot, bone owner, and height but not a semantic
-      // body-region label, so reject only that extracted cap12/height-1 candidate and only when a
-      // same-hitbox low BODY source is present. This is bounded by the authored strong BAir
-      // payload, Jump motion state, and `data/hurtcaps/{fox,falco}.json` hurtcap metadata.
+      // overlaps both the generated Jump/JumpAerial pose's cap12 dynamic-tail slot and a low leg
+      // capsule. The current generated substrate exposes hurtcap slot, bone owner, and height but
+      // not a semantic body-region label, so reject only that extracted cap12/height-1 candidate and
+      // only when a same-hitbox low BODY source is present. This is bounded by the authored strong
+      // BAir payload, common jump/aerial-jump motion state, and `data/hurtcaps/{fox,falco}.json`
+      // hurtcap metadata; it does not promote JumpAerialF/B into the global dynamic-pose index.
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
       // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
       // data/hurtcaps/{fox,falco}.json cap12 height 1 dynamic tail slot, cap10/11 height 0
       return 1u;
     }
+  }
+  if (batch->state.stage_id[bi] == (uint32_t)MSL_STAGE_ID_POKEMON_STADIUM &&
+      (defender_action == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+       defender_action == (uint16_t)MSL_ACT_JUMP_AERIAL_B)) {
+    // Pokemon Stadium JumpAerial tail-only strong BAir boundary:
+    // `ftCo_JumpAerial` updates the dynamic tail JObj chain before ftColl BODY selection. A
+    // generated cap12-only overlap on Stadium, whose root x44 matrix also carries the stage
+    // `x34_scale.z` lane, is not sufficient source proof for full BODY damage; the adjacent deeper
+    // row that reaches low/body hurtcaps still hits before cap12 is considered. Non-Stadium
+    // JumpAerial tail-only BAir rows remain ordinary BODY contacts, matching QGD/DCC controls.
+    // Keep this local to the selected cap12 FtPart-18 slot and authored strong BAir payload instead
+    // of adding JumpAerialF/B to the global dynamic-pose extraction index.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_80068E64,Fighter_UpdateModelScale}
+    // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    // refs/melee/src/melee/ft/chara/ftFox/ftFox_AttackAir.c::{ftCo_8009DD94,ftCo_8009E318}
+    // refs/melee/src/melee/lb/lbjobj.c::lb_8000B1CC
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    return 1u;
   }
   return 0u;
 }
@@ -5290,6 +5554,90 @@ static inline uint8_t combat_damageflyroll_attacklw3_late_attackhi4_hitcapsule_o
   // state alone is not enough; the source proof is the selected late AttackHi4 payload and hurtcap.
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackHi4.events.create_hitbox
+  // data/hurtcaps/{fox,falco}.json cap2
+  return 1u;
+}
+
+static inline uint8_t combat_damageflyroll_jump_late_attackhi4_hitcapsule_owner(
+    const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker, size_t source_hb_i,
+    uint8_t source_hb_valid, size_t source_cap_i, uint8_t source_cap_valid,
+    int source_hitcapsule_int_dmg, uint16_t source_hitbox_angle, uint16_t source_hitbox_kbg,
+    uint16_t source_hitbox_bkb) {
+  if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
+    return 0u;
+  }
+  const uint16_t victim_action = batch->state.action_id[d_idx];
+  if (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u ||
+      victim_action != (uint16_t)MSL_ACT_JUMP_F || batch->state.on_ground[d_idx] != 0u ||
+      batch->state.hitlag[d_idx] != 0u ||
+      batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_HI4 || source_hb_valid == 0u ||
+      source_cap_valid == 0u) {
+    return 0u;
+  }
+  const size_t hb_base = a_idx * (size_t)MSL_MAX_HITBOXES;
+  const size_t cap_base = d_idx * (size_t)MSL_MAX_HURTCAPS;
+  if (source_hb_i < hb_base || source_hb_i >= hb_base + (size_t)MSL_MAX_HITBOXES ||
+      source_cap_i < cap_base || source_cap_i >= cap_base + (size_t)MSL_MAX_HURTCAPS) {
+    return 0u;
+  }
+  const uint8_t hb_id = (uint8_t)(source_hb_i - hb_base);
+  const uint8_t cap_id = (uint8_t)(source_cap_i - cap_base);
+  if (cap_id != 12u || !combat_attackhi4_hitbox_payload_is_authored_late(
+                           hb_id, source_hitcapsule_int_dmg, source_hitbox_angle, source_hitbox_kbg,
+                           source_hitbox_bkb)) {
+    return 0u;
+  }
+  // JumpF -> late AttackHi4 DamageFlyRoll owner:
+  // ftColl selected the live authored late up-smash HitCapsule against the victim's cap12 tail
+  // hurtcap while the victim was airborne in JumpF. The current HitCapsule payload owns the normal
+  // ftColl damage-effect RNG prefix before the severe-airborne `ftCo_8008DCE0` DamageFlyRoll gate;
+  // stale residual motion labels from the previous attacker action are not sufficient proof.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80078538,ftColl_8007A06C}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackHi4.events.create_hitbox
+  // data/hurtcaps/{fox,falco}.json cap12
+  return 1u;
+}
+
+static inline uint8_t combat_ground_to_air_ecb_lock_late_attackhi4_hitcapsule_owner(
+    const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker, size_t source_hb_i,
+    uint8_t source_hb_valid, size_t source_cap_i, uint8_t source_cap_valid,
+    uint16_t source_motion_id, int source_hitcapsule_int_dmg, uint16_t source_hitbox_angle,
+    uint16_t source_hitbox_kbg, uint16_t source_hitbox_bkb, uint8_t defender_on_ground_before,
+    uint16_t pre_damage_action) {
+  if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS) ||
+      defender_on_ground_before == 0u ||
+      combat_is_downed_damage_contact_action(pre_damage_action) || source_hb_valid == 0u ||
+      source_cap_valid == 0u ||
+      !(source_motion_id == (uint16_t)MSL_ACT_ATTACK_HI4 ||
+        source_motion_id == (uint16_t)MSL_SM_ATTACK_HI4)) {
+    return 0u;
+  }
+  const size_t hb_base = a_idx * (size_t)MSL_MAX_HITBOXES;
+  const size_t cap_base = d_idx * (size_t)MSL_MAX_HURTCAPS;
+  if (source_hb_i < hb_base || source_hb_i >= hb_base + (size_t)MSL_MAX_HITBOXES ||
+      source_cap_i < cap_base || source_cap_i >= cap_base + (size_t)MSL_MAX_HURTCAPS) {
+    return 0u;
+  }
+  const uint8_t hb_id = (uint8_t)(source_hb_i - hb_base);
+  const uint8_t cap_id = (uint8_t)(source_cap_i - cap_base);
+  if (cap_id != (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_HEAD_HIGH_SLOT ||
+      !combat_attackhi4_hitbox_payload_is_authored_late(hb_id, source_hitcapsule_int_dmg,
+                                                        source_hitbox_angle, source_hitbox_kbg,
+                                                        source_hitbox_bkb)) {
+    return 0u;
+  }
+  // Grounded late AttackHi4 -> DamageFly hitlag-exit ECB-lock owner:
+  // Fighter_ProcessHit routes the selected BODY DmgLog into ftCo_8008DCE0, whose ground-vs-air KB
+  // path calls ftCommon_8007D5D4 and sets fp->ecb_lock=10 / CollData_X130_Locked before hitlag.
+  // This runtime consumer is bounded to the selected late UpSmash HitCapsule against cap2/head-high;
+  // replay-visible action shape alone is not enough to reconstruct the hidden locked-bottom lane.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_8008DCE0,ftCo_DamageFly_Coll}
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
   // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackHi4.events.create_hitbox
   // data/hurtcaps/{fox,falco}.json cap2
@@ -6087,6 +6435,49 @@ static inline uint8_t combat_damageflyroll_catch_strong_attackairn_hitcapsule_ow
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
   // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+  return 1u;
+}
+
+static inline uint8_t combat_damageflyroll_attacklw4_strong_attackairn_zero_marker_owner(
+    const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker, size_t source_hb_i,
+    uint8_t source_hb_valid, size_t source_cap_i, uint8_t source_cap_valid,
+    uint16_t source_motion_id, int source_hitcapsule_int_dmg, uint16_t source_hitbox_angle,
+    uint16_t source_hitbox_kbg, uint16_t source_hitbox_bkb) {
+  if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
+    return 0u;
+  }
+  if (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_ATTACK_LW4 ||
+      batch->state.on_ground[d_idx] == 0u || batch->state.hitlag[d_idx] != 0u ||
+      !combat_source_motion_is_attackairn(source_motion_id) || source_hb_valid == 0u ||
+      source_cap_valid == 0u) {
+    return 0u;
+  }
+  const size_t hb_base = a_idx * (size_t)MSL_MAX_HITBOXES;
+  const size_t cap_base = d_idx * (size_t)MSL_MAX_HURTCAPS;
+  if (source_hb_i < hb_base || source_hb_i >= hb_base + (size_t)MSL_MAX_HITBOXES ||
+      source_cap_i < cap_base || source_cap_i >= cap_base + (size_t)MSL_MAX_HURTCAPS) {
+    return 0u;
+  }
+  const uint8_t hb_id = (uint8_t)(source_hb_i - hb_base);
+  const uint8_t cap_id = (uint8_t)(source_cap_i - cap_base);
+  if (hb_id != 1u || cap_id != (uint8_t)MSL_HURTCAP_DAMAGEFLYTOP_HEAD_HIGH_SLOT ||
+      !combat_attackairn_hitbox_payload_is_authored_strong(hb_id, source_hitcapsule_int_dmg,
+                                                           source_hitbox_angle, source_hitbox_kbg,
+                                                           source_hitbox_bkb)) {
+    return 0u;
+  }
+  // AttackLw4 -> strong AttackAirN zero-consume DamageFlyRoll marker:
+  // ftColl selected the current authored strong NAir hb1 HitCapsule against the victim's
+  // cap2/head-high BODY hurtcap while the victim was still in grounded down-smash. Fighter_ProcessHit
+  // launches the victim airborne before ftCo_8008DCE0 reaches the severe-airborne DamageFlyRoll
+  // gate. The owner is the selected DmgLog HitCapsule/hurtcap payload, not visible AttackLw4 or
+  // NAir shape alone.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80078538,ftColl_8007A06C}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+  // data/hurtcaps/{fox,falco}.json cap2
   return 1u;
 }
 
@@ -7318,6 +7709,10 @@ static inline void combat_damage_enter_state(
                           source_cap_i, source_cap_valid, source_motion_id,
                           source_hitcapsule_int_dmg, source_hitbox_angle, source_hitbox_kbg,
                           source_hitbox_bkb) ||
+                      combat_damageflyroll_jump_late_attackhi4_hitcapsule_owner(
+                          batch, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
+                          source_cap_i, source_cap_valid, source_hitcapsule_int_dmg,
+                          source_hitbox_angle, source_hitbox_kbg, source_hitbox_bkb) ||
                       combat_damageflyroll_jump_strong_attackairn_hitcapsule_owner(
                           batch, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
                           source_cap_i, source_cap_valid, source_motion_id,
@@ -7662,6 +8057,9 @@ static inline void combat_processhit_apply_resolved_damage(const MslCommonParams
       ev->source_motion_id, ev->source_hitcapsule_int_dmg, ev->source_hitbox_angle,
       ev->source_hitbox_kbg, ev->source_hitbox_bkb, ev->d_motion_id, ev->source_item_type,
       ev->source_item_state, ev->force_tumble_severity);
+  if (ev->grounded_ecb_lock_owner != 0u && ev->d_hl != 0u) {
+    combat_publish_damage_entry_hitlag_ecb_current(batch, ev->d_idx);
+  }
   combat_processhit_apply_hitlag_after_entry(batch, ev);
   if (ev->apply_guard_reflect_followup != 0u) {
     combat_apply_guard_reflect_body_hit_followup(c, batch, ev->d_idx, ev->d_motion_id);
@@ -8152,6 +8550,11 @@ static inline uint8_t combat_body_damage_log_damageflyroll_gate_candidate(
           e->hitcapsule_int_dmg, e->hitbox_angle, e->hitbox_kbg, e->hitbox_bkb)) {
     return 1u;
   }
+  if (combat_damageflyroll_jump_late_attackhi4_hitcapsule_owner(
+          batch, e->d_idx, e->a_idx, e->attacker, e->hb_i, 1u, e->cap_i, 1u, e->hitcapsule_int_dmg,
+          e->hitbox_angle, e->hitbox_kbg, e->hitbox_bkb)) {
+    return 1u;
+  }
   if (combat_damageflyroll_jump_strong_attackairn_hitcapsule_owner(
           batch, e->d_idx, e->a_idx, e->attacker, e->hb_i, 1u, e->cap_i, 1u, e->source_motion_id,
           e->hitcapsule_int_dmg, e->hitbox_angle, e->hitbox_kbg, e->hitbox_bkb)) {
@@ -8252,6 +8655,19 @@ static inline void combat_body_damage_log_consume_ftcoll_effect_rng_before_damag
   }
 }
 
+static inline void combat_body_damage_log_materialize_damageflyroll_zero_consume_marker(
+    MslBatch* batch, const MslCombatBodyDamageLogEntry* best_e) {
+  if (batch == NULL || best_e == NULL) {
+    return;
+  }
+  if (combat_damageflyroll_attacklw4_strong_attackairn_zero_marker_owner(
+          batch, best_e->d_idx, best_e->a_idx, best_e->attacker, best_e->hb_i, 1u, best_e->cap_i,
+          1u, best_e->source_motion_id, best_e->hitcapsule_int_dmg, best_e->hitbox_angle,
+          best_e->hitbox_kbg, best_e->hitbox_bkb)) {
+    batch->state.fighter_8006cda4_pre_gate_consume_count[best_e->d_idx] = 4u;
+  }
+}
+
 static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
                                                 MslCombatBodyDamageScratch* scratch) {
   if (batch == NULL || scratch == NULL || scratch->count == 0u) {
@@ -8331,6 +8747,7 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
       combat_damage_calc_angle_radians(c, e->hitbox_angle, e->defender_on_ground, best_kb);
   combat_body_damage_log_consume_ftcoll_effect_rng_before_damageflyroll(c, batch, bi, scratch, e,
                                                                         best_kb, kb_angle_rad);
+  combat_body_damage_log_materialize_damageflyroll_zero_consume_marker(batch, e);
   float kb_vel_mag = best_kb * c->kb_vel_mul;
   if (!e->defender_on_ground && combat_damage_check_air_motion_kb_mul(c, batch, d_idx)) {
     kb_vel_mag *= c->air_motion_kb_mul;
@@ -8382,11 +8799,17 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   ev.defender_on_ground = e->defender_on_ground;
   ev.use_grounded_kb = 1u;
   ev.force_tumble_severity = downed_damage_contact_facing_owner;
-  ev.grounded_ecb_lock_owner = (!combat_is_downed_damage_contact_action(pre_damage_action) &&
-                                combat_shine_start_grounded_ledge_ecb_lock_owner(
-                                    batch, d_idx, batch->state.action_id[a_idx]))
-                                   ? 1u
-                                   : 0u;
+  ev.grounded_ecb_lock_owner =
+      (!combat_is_downed_damage_contact_action(pre_damage_action) &&
+       combat_shine_start_grounded_ledge_ecb_lock_owner(batch, d_idx,
+                                                        batch->state.action_id[a_idx]))
+          ? 1u
+      : combat_ground_to_air_ecb_lock_late_attackhi4_hitcapsule_owner(
+            batch, d_idx, a_idx, e->attacker, e->hb_i, 1u, e->cap_i, 1u, e->source_motion_id,
+            e->hitcapsule_int_dmg, e->hitbox_angle, e->hitbox_kbg, e->hitbox_bkb,
+            e->defender_on_ground, pre_damage_action)
+          ? 1u
+          : 0u;
   ev.clear_x221c_on_damage_entry = 1u;
   ev.hurt_height = combat_hurt_height_damageflytop_weak_attackairb_head_high_uses_medium(
                        batch, d_idx, a_idx, e->hb_i, e->cap_i, e->source_motion_id,
@@ -10596,7 +11019,16 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                 /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
                 shield_desc_envelope_ready, shield_extent_bridge_active, &shield_overlap_margin);
           }
+          if (!overlaps_shield && combat_pstadium_guardreflect_attackairlw_extent_accepts_shield(
+                                      batch, bi, a_idx, d_idx, hb_i, shield_overlap_margin)) {
+            overlaps_shield = 1u;
+          }
           if (!overlaps_shield) {
+            continue;
+          }
+          if (shield_seed_kind == 0u &&
+              combat_pstadium_guardon_x44_reduced_proxy_rejects_shield(
+                  batch, bi, a_idx, d_idx, (uint8_t)hb_id, hb_i, shield_overlap_margin)) {
             continue;
           }
           if (shield_seed_kind == 0u &&
@@ -10624,6 +11056,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
             //   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
             // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+            continue;
+          }
+          if (shield_seed_kind == 0u &&
+              combat_guard_reflect_x18_expiry_rejects_strong_attackairn_hb1_shield(
+                  batch, a_idx, d_idx, hb_i, (uint8_t)hb_id)) {
             continue;
           }
           const uint8_t element = batch->state.hitbox_element[hb_i];
@@ -11199,6 +11636,15 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (overlaps && combat_attackhi4_damageflytop_xrotn_rejects_body_contact(
                               batch, hb_i, a_idx, d_idx, hb_id, cap_id)) {
             overlaps = 0u;
+          }
+          if (!overlaps && !use_guardreflect_body_fallback_caps) {
+            const MslHurtCap* source_cap =
+                (defender_caps == NULL || cap_id >= defender_cap_count_u16)
+                    ? NULL
+                    : &defender_caps[cap_id];
+            overlaps = combat_pstadium_x44_gap_allows_body_contact(
+                batch, bi, attacker, (uint8_t)hb_id, a_idx, d_idx, (uint8_t)cap_id, source_cap,
+                lbcoll_overlap_amount, lbcoll_overlap_evaluated, shield_active);
           }
           if (!overlaps) {
             continue;

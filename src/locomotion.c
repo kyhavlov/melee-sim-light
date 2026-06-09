@@ -18,6 +18,7 @@
 #include "coll_env_flags.h"
 #include "common_params.h"
 #include "dash_iasa.h"
+#include "deadupstar_rng.h"
 #include "escapeair_collision_owner.h"
 #include "grab_flow.h"
 #include "input.h"
@@ -40,34 +41,15 @@
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
-enum {
-  MSL_DEADUPSTAR_STARTUP_EFFECT_PREFIX_MAX_ACTION_FRAME = 8,
-};
-
 static inline uint8_t locomotion_deadupstar_startup_effect_rng_active(const MslBatch* batch,
                                                                       const MslCommonParams* c,
                                                                       size_t idx) {
-  if (batch == NULL || c == NULL) {
+  if (batch == NULL) {
     return 0u;
   }
-  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_DEAD_UP_STAR) {
-    return 0u;
-  }
-  if (batch->state.match_flow_timer[idx] <= (uint8_t)c->dead_up_star_phase2_frames) {
-    return 0u;
-  }
-  // DeadUpStar entry/early Anim owns a short-lived async visual generator before fighter Wait_Anim
-  // can sample getAnimID. Source spawns effect kind 0x42D -> generator 0x121 from
-  // ftCo_DeadUpStar_Anim; the generator bytecode/data is not extracted yet, so runtime admits only
-  // the bounded startup window observed while that generator is source-live. Stale later phase-1
-  // rows must not carry this prefix.
-  // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_800D40B8,ftCo_DeadUpStar_Anim}
-  // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
-  // refs/melee/src/melee/ef/eflib.c::efLib_CreateGenerator case 0x121
-  // refs/melee/src/sysdolphin/baselib/particle.c
-  return batch->state.action_frame[idx] <= MSL_DEADUPSTAR_STARTUP_EFFECT_PREFIX_MAX_ACTION_FRAME
-             ? 1u
-             : 0u;
+  return msl_deadupstar_startup_effect_prefix_active(batch->state.action_id[idx],
+                                                     batch->state.action_frame[idx],
+                                                     batch->state.match_flow_timer[idx], c);
 }
 
 static inline void locomotion_consume_deadupstar_effect_prefix_before_wait(MslBatch* batch, int bi,
@@ -1782,13 +1764,12 @@ static inline void dash_to_kneebend_apply_terminal_handoff(MslBatch* batch, cons
   // - Dash Phys owns the dash/run target velocity through getAccelAndTarget.
   // - KneeBend entry does not reset `gr_vel`; its Phys callback then applies ft_80084F3C friction.
   //
-  // Keep Dash's target-speed ownership through the same-frame IASA transition before KneeBend's
-  // grounded friction runs. Engine-dump rollout confirmation:
-  // frame 87->88 of rerun11 enters KneeBend with Dash terminal gr_vel, not the still-super-terminal
-  // burst speed from Dash frame 3. A controlled partial-stick variant of that probe (`joystickX=0.5`
-  // on the jump input frame) still enters KneeBend at the full Dash terminal gr_vel, not at the
-  // stick-scaled Dash Phys target. This is the narrow Dash IASA -> KneeBend bridge; non-Dash
-  // KneeBend entries keep existing speed.
+  // Keep Dash's terminal-speed ownership through the same-frame IASA transition before KneeBend's
+  // grounded friction runs. The clamp is the same root-motion exit lane used by other Dash IASA
+  // destinations: source snapshots the previous Dash motion in Fighter_ChangeMotionState, then the
+  // destination state's Phys callback runs with that bounded `gr_vel`. This is the narrow Dash IASA
+  // -> KneeBend bridge; non-Dash KneeBend entries keep existing speed.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_IASA,ftCo_Dash_Phys}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Phys

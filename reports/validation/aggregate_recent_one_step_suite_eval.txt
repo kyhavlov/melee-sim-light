@@ -1120,48 +1120,48 @@ overall.float_norm_mae_p95: 0.00023069
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl ==
 Records: 10404  Players/scored per record: 2  Total player-frames: 20808
-mismatch.action_id: 9 / 20808 (0.000433)
-mismatch.action_frame: 8 / 20808 (0.000384)
-mismatch.on_ground: 3 / 20808 (0.000144)
-mismatch.facing: 4 / 20808 (0.000192)
+mismatch.action_id: 3 / 20808 (0.000144)
+mismatch.action_frame: 4 / 20808 (0.000192)
+mismatch.on_ground: 2 / 20808 (0.000096)
+mismatch.facing: 0 / 20808 (0.000000)
 mismatch.stocks: 0 / 20808 (0.000000)
-mismatch.jumps_left: 3 / 20808 (0.000144)
+mismatch.jumps_left: 2 / 20808 (0.000096)
 mismatch.is_dead: 0 / 20808 (0.000000)
-mismatch.hitlag: 13 / 20808 (0.000625)
-mismatch.hitstun: 6 / 20808 (0.000288)
+mismatch.hitlag: 4 / 20808 (0.000192)
+mismatch.hitstun: 2 / 20808 (0.000096)
 mismatch.l_cancel: 0 / 20808 (0.000000)
 mismatch.hurtbox_state: 0 / 20808 (0.000000)
 mismatch.ground_id: 0 / 20808 (0.000000)
-mismatch.animation_index: 10 / 20808 (0.000481)
-mismatch.instance_hit_by: 6 / 20808 (0.000288)
-mismatch.instance_id: 6 / 20808 (0.000288)
-mismatch.last_attack_landed: 6 / 20808 (0.000288)
+mismatch.animation_index: 4 / 20808 (0.000192)
+mismatch.instance_hit_by: 2 / 20808 (0.000096)
+mismatch.instance_id: 2 / 20808 (0.000096)
+mismatch.last_attack_landed: 2 / 20808 (0.000096)
 mismatch.combo_count: 0 / 20808 (0.000000)
-mismatch.last_hit_by: 19 / 20808 (0.000913)
-mismatch.state_flags: 28 / 104040 (0.000269)
-mismatch.item_exists: 1 / 156060 (0.000006)
-mismatch.item_type: 1 / 156060 (0.000006)
+mismatch.last_hit_by: 17 / 20808 (0.000817)
+mismatch.state_flags: 15 / 104040 (0.000144)
+mismatch.item_exists: 0 / 156060 (0.000000)
+mismatch.item_type: 0 / 156060 (0.000000)
 mismatch.item_state: 2 / 156060 (0.000013)
-mismatch.item_owner: 1 / 156060 (0.000006)
-mismatch.item_instance_id: 1 / 156060 (0.000006)
+mismatch.item_owner: 0 / 156060 (0.000000)
+mismatch.item_instance_id: 0 / 156060 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 98 / 20808 (0.004710)
-err.pos_x: mae=0.000091 p95=0.000000 max=0.759018
+err.pos_x: mae=0.000075 p95=0.000000 max=0.759018
 err.pos_y: mae=0.000914 p95=0.000000 max=3.190001
-err.speed_air_x_self: mae=0.000223 p95=0.000000 max=1.500000
-err.speed_ground_x_self: mae=0.000180 p95=0.000000 max=1.500000
-err.speed_y_self: mae=0.001365 p95=0.000000 max=3.400000
-err.speed_x_attack: mae=0.000323 p95=0.000000 max=1.654830
-err.speed_y_attack: mae=0.000651 p95=0.000000 max=4.546608
-err.percent: mae=0.003486 p95=0.000000 max=15.000000
-err.shield_hp: mae=0.000068 p95=0.000000 max=1.400002
-err.item_pos_x: mae=0.110661 p95=0.000000 max=75.577988
-err.item_pos_y: mae=0.012743 p95=0.000000 max=17.252840
-err.item_vel_x: mae=0.003530 p95=0.000000 max=5.000000
+err.speed_air_x_self: mae=0.000118 p95=0.000000 max=1.500000
+err.speed_ground_x_self: mae=0.000137 p95=0.000000 max=1.500000
+err.speed_y_self: mae=0.000914 p95=0.000000 max=3.190000
+err.speed_x_attack: mae=0.000133 p95=0.000000 max=1.443895
+err.speed_y_attack: mae=0.000129 p95=0.000000 max=1.394353
+err.percent: mae=0.001179 p95=0.000000 max=12.349998
+err.shield_hp: mae=0.000000 p95=0.000000 max=0.000690
+err.item_pos_x: mae=0.057325 p95=0.000000 max=13.480000
+err.item_pos_y: mae=0.000567 p95=0.000000 max=0.480000
+err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000209
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000062
-overall.discrete_mismatch: 127 / 1258884
-overall.strict_discrete_mismatch: 225 / 1258884
+overall.discrete_mismatch: 61 / 1258884
+overall.strict_discrete_mismatch: 159 / 1258884
 overall.ignored_discrete_mismatch: 98
-overall.float_norm_mae_p95: 0.00013418
+overall.float_norm_mae_p95: 0.00006390
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl ==
 Records: 12475  Players/scored per record: 2  Total player-frames: 24950
@@ -1479,7 +1479,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00050121
 
 == suite summary ==
-overall.discrete_mismatch: 1750 / 35294369
-overall.strict_discrete_mismatch: 3250 / 35294369
+overall.discrete_mismatch: 1684 / 35294369
+overall.strict_discrete_mismatch: 3184 / 35294369
 overall.ignored_discrete_mismatch: 1500
-overall.float_norm_mae_p95: 0.00031496
+overall.float_norm_mae_p95: 0.00031259

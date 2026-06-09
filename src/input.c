@@ -230,7 +230,6 @@ static inline void grounded_smash_charge_update_ftCo_800DF0D0_subset(MslBatch* b
   if (batch == NULL) {
     return;
   }
-
   const uint16_t action_id = batch->state.action_id[idx];
   if (input_action_is_grounded_smash(action_id) == 0u || batch->state.on_ground[idx] == 0u ||
       batch->state.hitlag[idx] != 0u || batch->state.hitstun[idx] != 0u) {

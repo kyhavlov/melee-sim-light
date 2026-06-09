@@ -173,6 +173,15 @@ def main() -> None:
         "walljump_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x76C)),
         "walljump_tilt_x_max_frames": float(_f32_be(buf, ft_common_abs + 0x770)),
         "walljump_startup_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x774))),
+        # Pokemon Stadium fighter root x44 matrix owner:
+        # - Fighter_80068E64 writes fp->x34_scale.z = p_ftCommonData->x7E4_scaleZ only on internal
+        #   stage 0x1B (Pokemon Stadium).
+        # - Fighter_UpdateModelScale uses that as the fighter root X scale while Y/Z keep
+        #   ftCommon_GetModelScale(fp), and Fighter_UnkApplyTransformation_8006C0F0 publishes the
+        #   compensating fp->x44_mtx consumed by ftCommon_8007F804.
+        # refs/melee/src/melee/ft/fighter.c::{
+        #   Fighter_80068E64,Fighter_UpdateModelScale,Fighter_UnkApplyTransformation_8006C0F0}
+        "pokemon_stadium_x34_scale_z": float(_f32_be(buf, ft_common_abs + 0x7E4)),
         # Shield / guard (ftCo_Guard.c, fighter.c).
         # - Guard hold drain: shield_health -= x278 * (lightshield_amount*(x2F0-x2EC)+x2EC)
         # - Shield hit depletion: shield_health -= x284 * (shieldDamageTaken*(1 - (lightshield_amount*(x2E0-x2DC)+x2DC))) + x288

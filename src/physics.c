@@ -6,6 +6,7 @@
 #include "anim_frame.h"
 #include "anim_pose.h"
 #include "anim_table.h"
+#include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
@@ -2510,6 +2511,36 @@ void physics_integrate(MslBatch* batch) {
               batch->state.rebound_ground_accel_2[idx] = 0.0f;
             } else {
               float friction = ch->gr_friction;
+              const float jump_stick_y = apply_deadzone(
+                  stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+              const float prev_jump_stick_y = apply_deadzone(
+                  stick_i8_to_unit(batch->state.prev_input_main_y[idx]), c->lstick_deadzone_y);
+              const uint8_t dash_frame2_jump_edge =
+                  ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_XY) != 0u ||
+                   (prev_jump_stick_y < c->tap_jump_threshold &&
+                    jump_stick_y >= c->tap_jump_threshold))
+                      ? 1u
+                      : 0u;
+              if (action_id == (uint16_t)MSL_ACT_KNEE_BEND &&
+                  batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_DASH &&
+                  batch->state.seed_prev_action_frame[idx] == 1 &&
+                  batch->state.action_frame[idx] <= 0 && dash_frame2_jump_edge != 0u) {
+                // Dash frame-2 XY jump -> KneeBend source velocity handoff:
+                // `ftCo_Dash_IASA` reaches `fn_800CAF78` from the early Dash branch after Dash
+                // Phys has already owned the terminal `gr_vel`. The destination `KneeBend_Phys`
+                // applies `ft_80084F3C` to that bounded source speed on the same callback. Keep
+                // this to the frame-2 jump edge; later Dash, Run, and generic first-frame KneeBend
+                // rows retain the ordinary friction path.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_IASA,ftCo_Dash_Phys}
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Phys
+                const float terminal = ch->dash_run_terminal_velocity;
+                if (gr_vel > terminal) {
+                  gr_vel = terminal;
+                } else if (gr_vel < -terminal) {
+                  gr_vel = -terminal;
+                }
+              }
               if (msl_absf(gr_vel) > ch->walk_max_vel) {
                 friction *= c->high_speed_friction_mul;
               }
