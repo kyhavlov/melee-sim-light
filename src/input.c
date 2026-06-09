@@ -67,6 +67,27 @@ static inline float trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t
   return trigger_u8_to_unit(m);
 }
 
+static inline float trigger_x650_from_input(const MslCommonParams* c, uint16_t buttons, uint8_t l,
+                                            uint8_t r) {
+  // Fighter input synthesis writes fp->input.x650 before x672 trigger-history maintenance:
+  // analog max(L/R) is first cleared when <= p_ftCommonData->x10, digital L/R forces 1.0, and
+  // held Z writes p_ftCommonData->x14. The later x672 block compares this source x650 value
+  // against the lower powershield threshold, not the raw analog byte.
+  // refs/melee/src/melee/ft/fighter.c:1868-1892 and :2019-2050
+  if ((buttons & (uint16_t)MSL_BUTTON_Z) != 0u && c != NULL) {
+    return c->z_button_trigger_value;
+  }
+  enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
+  if ((buttons & LR) != 0u) {
+    return 1.0f;
+  }
+  float trig = trigger_unit_from_input(buttons, l, r);
+  if (c != NULL && trig <= c->trigger_deadzone) {
+    trig = 0.0f;
+  }
+  return trig;
+}
+
 static inline uint16_t input_edge_with_z_macro(uint16_t edge) {
   // Decomp: Fighter_Spaghetti_8006AD10 maps held Z onto the effective input lane as
   // HSD_PAD_A plus the HSD_PAD_LR macro before the button-history timer block consumes x668.
@@ -642,6 +663,9 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
 
       const float trig = trigger_unit_from_input(cur_buttons, cur->p[p].l, cur->p[p].r);
       const float prev_trig = trigger_unit_from_input(prev_buttons, prev->p[p].l, prev->p[p].r);
+      const float x650_trig = trigger_x650_from_input(com, cur_buttons, cur->p[p].l, cur->p[p].r);
+      const float x650_prev_trig =
+          trigger_x650_from_input(com, prev_buttons, prev->p[p].l, prev->p[p].r);
       // Decomp x67F tie-down:
       // - fp->x67F updates from `fp->input.x668 & HSD_PAD_LR` (edge mask), not held bits directly.
       // - x668 edges are built from held-input lanes that include digital L/R, trigger lane, and
@@ -678,7 +702,7 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
       batch->state.x672_input_timer_frame_start[idx] = batch->state.x672_input_timer[idx];
       batch->state.x672_input_timer[idx] =
-          x672_trigger_timer_update(batch->state.x672_input_timer[idx], trig, prev_trig,
+          x672_trigger_timer_update(batch->state.x672_input_timer[idx], x650_trig, x650_prev_trig,
                                     com->powershield_reflect_trigger_min);
       batch->state.x679_x_frame_start[idx] = batch->state.x679_x[idx];
       batch->state.x67A_y_frame_start[idx] = batch->state.x67A_y[idx];

@@ -12,6 +12,7 @@ ACT_GUARD = 0x00B3
 ACT_GUARD_SET_OFF = 0x00B5
 ACT_DOWN_BOUND_U = 0x00B7
 ACT_DOWN_STAND_U = 0x00BA
+ACT_JUMP_AERIAL_F = 0x001B
 ACT_ESCAPE_AIR = 0x00EC
 ACT_LANDING_FALL_SPECIAL = 0x002B
 
@@ -91,6 +92,42 @@ def _run_one_replay_row(ds, record: int) -> np.void:
 def _assert_discrete_matches(out: np.void, ref: np.void, *, players: int, note: str) -> None:
     for field in ("action_id", "animation_index", "on_ground", "ground_id", "hitlag", "hitstun"):
         assert [int(x) for x in out[field][:players]] == [int(x) for x in ref[field][:players]], note
+
+
+@pytest.mark.integration
+def test_tvr_fresh_jumpaerial_escapeair_static_platform_waits_one_callback() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    _skip_if_dataset_missing(root, dataset_path)
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    players = int(ds.header["num_players"])
+    p = 1
+
+    # TVR:2770 enters EscapeAir from JumpAerialF while the callback root is already below Pokemon
+    # Stadium's static right platform. The preserved JumpAerial desired bottom is real CollData
+    # provenance, but source EscapeAir_Coll does not publish LandingFallSpecial until the following
+    # sustained EscapeAir callback owns the floor.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    out = _run_rollout_to_records(ds, 2767, (2770, 2771))
+    ref_2770 = samples["ref_t1"][2770]
+    ref_2771 = samples["ref_t1"][2771]
+    assert int(samples["seed_t"][2770]["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(ref_2770["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(ref_2770["on_ground"][p]) == 0
+    assert int(samples["seed_t"][2771]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(ref_2771["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(ref_2771["on_ground"][p]) == 1
+    _assert_discrete_matches(out[2770], ref_2770, players=players, note="TVR rec2770 EscapeAir")
+    _assert_discrete_matches(out[2771], ref_2771, players=players, note="TVR rec2771 platform")
 
 
 @pytest.mark.integration

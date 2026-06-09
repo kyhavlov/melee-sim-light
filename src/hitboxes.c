@@ -86,12 +86,14 @@ static inline uint8_t hitboxes_source_hitcapsule_stale_damage_owner_applies(
   if (batch->state.action_id[fighter_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
     return 0u;
   }
-  if (ev->kind != (uint8_t)MSL_HITBOX_EVENT_CREATE || ev->damage != 15.0f) {
+  if (ev->kind != (uint8_t)MSL_HITBOX_EVENT_CREATE || (ev->damage != 15.0f && ev->damage != 9.0f)) {
     return 0u;
   }
-  // Source HitCapsule damage freeze for the strong AttackAirB create edge:
-  // data/moves/{fox,falco}.json gives only the frame-4 hb0/hb1 AttackAirB create commands 15
-  // damage; hb2 and the later refresh are weak 9-damage capsules and stay on live stale lookup.
+  // Source HitCapsule damage freeze for AttackAirB create edges:
+  // data/moves/{fox,falco}.json gives frame-4 strong hb0/hb1 and weak hb2 create commands, then
+  // frame-8 weak hb0/hb1/hb2 refresh commands. Every create_hitbox path stores the staled float
+  // damage into HitCapsule.damage at ftColl_8007ABD0 time; later same-action stale queue updates
+  // must not recompute the live queue for the already-created weak refresh.
   // ftAction_8007121C builds the create_hitbox command, ftColl_8007ABD0 stores staled float damage
   // into HitCapsule.damage via ft_80089228, and later ProcessHit consumes that frozen lane even
   // after same-instance stale updates. Keep the retained runtime surface on the source create edge;

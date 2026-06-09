@@ -192,8 +192,6 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
     }:
         # These grounded locomotion IASA callbacks reach ftCo_80091A4C on the source path that can
         # expose a fresh GuardOn row before a delayed digital L/R edge is consumed by GuardOn_IASA.
-        # Other ftCo_80091A4C callers (Landing/Ottotto/grounded attack/appeal) have separate
-        # selector ordering and keep the ordinary current x672 timer.
         bits |= CLASS_GUARDON_FRAME_START_X672_IASA
     if any(cb.startswith("ftCo_AttackS3") for cb in callbacks):
         bits |= CLASS_ATTACK_S3

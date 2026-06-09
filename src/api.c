@@ -1217,8 +1217,8 @@ static inline uint8_t msl_seed_deadupstar_startup_wait_rng_prefix_active(
   if (seed == NULL || common == NULL || p < 0 || p >= MSL_MAX_PLAYERS) {
     return 0u;
   }
-  return msl_deadupstar_startup_effect_prefix_active(seed->action_id[p], seed->action_frame[p],
-                                                     seed->match_flow_timer[p], common);
+  return msl_deadupstar_active_effect_prefix_before_wait(seed->action_id[p], seed->action_frame[p],
+                                                         seed->match_flow_timer[p], common);
 }
 
 static inline uint8_t msl_seed_has_wait_anim_variant_replay_rng_owner(const MslSeed* seed,
@@ -1251,7 +1251,7 @@ static inline uint8_t msl_seed_has_wait_anim_variant_replay_rng_owner(const MslS
       }
       if (msl_seed_deadupstar_startup_wait_rng_prefix_active(seed, common, other) != 0u) {
         // Replay Wait RNG is admitted only when a modeled same-frame source prefix owns stream
-        // phase before ftwaitanim.c::getAnimID. DeadUpStar startup is the bounded prefix currently
+        // phase before ftwaitanim.c::getAnimID. DeadUpStar active effect is the bounded prefix
         // modeled in locomotion_consume_deadupstar_effect_prefix_before_wait; plain Wait rows keep
         // their seed-owned animation variant under normal replay reseed.
         // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}

@@ -252,6 +252,24 @@ sim-owned**:
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA,
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack12_IASA,
   refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10).
+- Landing guard entry also uses callback-visible frame-start x672 for the `ftCo_80091A4C`
+  powershield-reflect branch. The current `MSLMSO01` frame-start-x672 class covers
+  grounded-locomotion guard-entry IASA owners but does not encode Landing, so runtime keeps this as
+  a narrow explicit Landing owner instead of widening every guard-entry caller. TVR `rec5891` locks
+  the positive: Landing's callback-local trigger-history update makes live x672 powershield-
+  eligible before `ftCo_80091A4C`, then the same shield-hit collision pass publishes GuardSetOff.
+  (`src/action.c`;
+  refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA,
+  refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C).
+- The x672/x675/x67B trigger-history counters consume source `fp->input.x650` after the trigger
+  deadzone clear, not raw analog trigger. Source zeroes `x650` when it is <=
+  `p_ftCommonData->x10` before comparing that value to the lower powershield threshold
+  `p_ftCommonData->x18`; a raw trigger in `(x18, x10]` therefore does not stale-carry x672 across
+  a following digital L/R edge. TVR `rec9685` locks the boundary through Fall -> shield-entry
+  GuardReflect: previous analog trigger is above x18 but below/equal x10, current digital R owns a
+  fresh x672=0 reset, and the source guard helper admits GuardReflect.
+  (`src/input.c`; refs/melee/src/melee/ft/fighter.c:1868-1890 and :2019-2050,
+  refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C).
 - Shield HP drain/recharge ordering keeps Guard entry provenance transient to the immediate
   `GuardOn`/spotdodge callback window after entry. A frozen no-submotion `GuardOn` row can still
   use its frame-start lightshield owner for the current drain, but the `Wait_IASA -> GuardOn` entry
@@ -2892,8 +2910,15 @@ Fox/Falco special-owner split (2026-04-17):
     The same unlocked, already-visible EscapeAir pre-entry handoff keeps shallow static-platform
     oversteps airborne when the final root correction is larger than the current EscapeAir vertical
     step; those rows have not reached the source floor-publication phase even though the
-    callback-local bottom sweep can see the platform. Same-frame `JumpAerial_IASA -> EscapeAir`
-    entries, rows with preserved desired-bottom / CollData_X130 ownership, and deeper same-owner
+    callback-local bottom sweep can see the platform. Rows with a live `CollData_X130`
+    desired-bottom owner have the same entry-callback boundary on
+    static soft platforms: when both the callback-local previous and current roots are below the
+    platform, the preserved JumpAerial desired bottom is provenance for the next EscapeAir callback
+    and cannot itself publish `LandingFallSpecial` until a sustained `EscapeAir_Coll` pass owns the
+    floor producer. The retained guard is bounded by generated JumpAerialF/B source action, live
+    previous-action entry evidence, static `MSLSTG01` platform metadata, live soft/transform locked
+    bottom owner, and absence of current EscapeAir floor-producer authority. Other same-frame
+    `JumpAerial_IASA -> EscapeAir` entries, rows with preserved desired-bottom / CollData_X130 ownership, and deeper same-owner
     Dream Land crossings remain ordinary `EscapeAir_Coll` landings. A carried FoD height-transform
     platform floor id that is already horizontally off-span is still a valid CollData_X130 source
     owner for the EscapeAir entry: runtime preserves the JumpAerial desired bottom for the following
@@ -3929,6 +3954,12 @@ Fox/Falco special-owner split (2026-04-17):
       adjacent controls `BHH:640` and `IAT:1791` stay alive, and `IAT:1793` still performs the
       following full BODY hit. `GracefulAttachedTurtle.msl:7215` is a negative sentinel proving this
       is not the rejected unscaled-offset fallback.
+    - JumpAerial dynamic-tail shallow BODY uses the same extracted item HitCapsule identity instead
+      of a generic cap12 suppressor. `ThisVioletRaccoon.msl:9511` is a trailing-half Falco-laser
+      hb2/hb3 cap12/FtPart-18 shallow candidate and waits for the deeper `9512` BODY hit;
+      `TVR:11488` is a younger hb1 cap12 candidate and remains BODY-eligible. This is bounded by
+      `MSLLASR1` state0 hitbox offsets and `data/hurtcaps/{fox,falco}.bin` cap12 -> FtPart 18, not
+      by replay row, stage, or character pair.
     - The forensic row runner now emits `item_laser_probes` with scaled/unscaled laser segments,
       hurtcap flags, margins, age, scale, and item/ref/out deltas for targeted item BODY rows.
     - Fresh taxonomy after this slice: primary total `611` unchanged;
@@ -3944,13 +3975,18 @@ Fox/Falco special-owner split (2026-04-17):
     - Passive keeps the system colanim hit-status lane across motion entry
       (`ftCo_MF_Passive | Ft_MF_KeepColAnimHitStatus`). On the replay-proven Fox-laser Passive
       row, visible hurtbox/contact geometry can admit an item BODY overlap while the hidden
-      colanim owner still rejects damage and item consume. Runtime now keeps type-54 Fox lasers
-      alive on Passive BODY overlap and leaves fighter source/combo fields untouched.
+      colanim owner still rejects damage and item consume. Runtime keeps type-54 Fox lasers alive
+      on that Passive BODY overlap only when the authored item HitCapsule source sample does not
+      itself hit.
+    - The narrowing is source-owned rather than row-owned: `itFoxlaser_UnkMotion1_Anim` stretches
+      the visual beam through scaleZ, while `it_8027137C` / `it_8029C4D4` own the item HitCapsule
+      callback sample. Passive hidden-colanim may reject scaled-overlap false positives, but an
+      unscaled/authored offset contact remains a real item BODY consume.
     - This slice is deliberately not a generic Passive or hit-status shortcut: Falco type-55
       Passive laser contacts remain on the normal BODY consume path.
-    - Replay-real locks: `TreasuredBackKangaroo.msl:6197` covers the Fox-laser keepalive; the
-      negative sentinel `PositiveRevolvingHyena.msl:3886` proves Falco-laser Passive contact still
-      consumes.
+    - Replay-real locks: `TreasuredBackKangaroo.msl:6197` covers the Fox-laser scaled false-positive
+      keepalive, and the negative sentinel `PositiveRevolvingHyena.msl:3886` proves Falco-laser
+      Passive contact still consumes.
     - Fresh taxonomy after this slice: primary total `587` (down from `595`);
       `F14c=0`, `F14d=0`, `F15a=10`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`,
       `F16d=27` (down from `31`). Aggregate total `5176` (down from `5184`);
@@ -3959,6 +3995,8 @@ Fox/Falco special-owner split (2026-04-17):
       remain closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_Passive`,
     `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}`,
+    `refs/melee/src/melee/it/itcoll.c::it_8027137C`,
     `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868`.
   - Fox Illusion end-state BODY sweep now promotes `ghostEffectPos[2]` as the prefix-causal
     previous hitcapsule endpoint. Decomp owner: `ftFox_SpecialS_SetPhys` advances the ghost ring as
@@ -5899,15 +5937,25 @@ BODY collision-space residual split and rejected seed bridge:
   `MSL_DAMAGEFLYROLL_SPECIALHIFALL_ENTRY_ENABLE_EDGE_FRAME_MAX` can consume the current BAir
   enable-edge path. Later SpecialHiFall rows must instead prove the selected DmgLog HitCapsule in
   `combat.c`; a live BAir enable edge in another capsule is not sufficient. PPA `7185` and MVP
-  `4156` protect selected/create-edge positives, TVR `6927` protects the entry-window terminal
-  positive, and PPA `7019` plus MVP `1718` protect steady/late negatives even when an unrelated
-  BAir edge or favorable raw RNG sample is present. The source predicate is callback window plus
+  `4156` protect selected/create-edge positives, and PPA `7019` plus MVP `1718` protect steady/late
+  negatives even when an unrelated BAir edge or favorable raw RNG sample is present. The source predicate is callback window plus
   selected HitCapsule/victim-list ownership, not a broader `SpecialHiFall` action admission.
   Source anchors:
   - `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076808,ftColl_800768A0}`
   - `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
     ftFx_SpecialHiFall_Anim,ftFx_SpecialHiFall_Phys,ftFx_SpecialHiFall_Coll}`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`
+- Grounded `AttackHi4` victims can also reach the DamageFlyRoll gate from a selected weak
+  `AttackAirB` DmgLog source. TVR `rec11016` locks the source owner: ftColl selected authored weak
+  BAir hb1 (9/361/100/0 from `data/moves/{fox,falco}.json::ftCo_SM_AttackAirB`) against extracted
+  hurtcap slot 3 while the victim was grounded in `AttackHi4`; `Fighter_ProcessHit` then runs one
+  `Fighter_8006CDA4` primary consume (site 5) before `ftCo_8008DCE0` samples the DamageFlyRoll
+  gate (site 1). TVR `rec11015` is the adjacent no-contact negative. The owner is selected
+  hitbox/hurtcap/payload provenance, not `AttackHi4` or BAir action shape alone.
+  Source anchors:
+  - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80078538,ftColl_8007A06C}`
+  - `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`
 - AttackAirN pre-action victims can also reach the same `ftCo_8008DCE0` DamageFlyRoll gate, but
   only under the explicit `Fighter_8006CDA4` stream-phase seed. Replay-seeded rollouts keep that
@@ -5968,6 +6016,14 @@ BODY collision-space residual split and rejected seed bridge:
     IAT `rec10332` locks the positive; adjacent hb0/root-body rows without that callback-phase
     proof stay on their existing seed-owned or two-consume paths. This is source/callback
     provenance, not a visible AttackAirB/DamageFlyTop or replay-row predicate.
+  - Active `DamageFlyTop` hit by strong `AttackAirB` hb0/cap1 can also admit the gate through the
+    normal ftColl damage-effect prefix, with zero `Fighter_8006CDA4` prefix. The selected DmgLog
+    source must be authored strong BAir hb0, the selected hurtcap must be cap1/upper-body from
+    `data/hurtcaps/{fox,falco}.json`, the victim must be airborne with hitstun and no hitlag, and
+    the current `DamageFlyTop` episode must have drained `mv.co.damage.x14`. TVR `rec4541` locks
+    the positive with site 24 count 4, sites 5/6/7 count 0. This is distinct from JumpAerial cap1
+    (`TCH:8437`, still rejected) and from hb1/cap0 create-HitCapsule rows that own two pre-gate
+    consumes.
   Source anchors:
   - `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_Damage_IASA}`
@@ -6045,6 +6101,10 @@ BODY collision-space residual split and rejected seed bridge:
   without stale carry on airborne, damage, GuardSetOff, DownBound, Cliff, throw, and special
   states. `TCH:5649` protects the formerly false AttackDash BODY row whose vanilla probe shows
   hidden Z-depth separation before `lbColl_80006E58`.
+  TVR `rec5887..5891` locks the cross-floor Z-only boundary: grounded pushbox overlap owns the
+  hidden depth lane even when MSL's active floor graph/floor-span filters reject horizontal x450
+  displacement. Runtime may therefore advance `pos_z` for cross-floor grounded overlap, but it does
+  not admit any matching X nudge from that owner.
 - Catch grabbable dynamic pose is split from ordinary BODY authority. Fox `AttackDash`
   (`ftCo_SM_AttackDash`, submotion 52) is generated in the SSDYNN01 v8 catch-grabbable owner index
   only because self-play `ftColl_80078A2C` / `lbColl_80007ECC` probes showed Catch selection
@@ -6474,6 +6534,17 @@ BODY collision-space residual split and rejected seed bridge:
   Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,
   ftCo_GuardOn_Anim,ftCo_80091E78}`, `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`,
   `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC`.
+- Same-callback `Landing -> GuardOn` can consume a live `ShieldDesc.size` sweep before replay
+  exposes a settled shield submotion. TVR `rec5891` locks the positive:
+  `ftCo_Landing_IASA -> ftCo_80091A4C -> ftCo_800924C0` creates GuardOn, then
+  `ftColl_80078C70/lbColl_80007BCC` checks the persistent AttackHi3 hb1 x58->x4C sweep against
+  that ShieldDesc. Runtime admits only the authored 9-damage AttackHi3 hb1 sweep on the
+  same-callback Landing GuardOn entry; broader Landing GuardOn and AttackAirN controls remain on
+  their existing paths. Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0}`,
+  `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}`,
+  `refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}`,
+  `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackHi3.events.create_hitbox`.
 - Pokemon Stadium x44 collision lane: `Fighter_80068E64` writes
   `p_ftCommonData->x7E4_scaleZ` into `fp->x34_scale.z` only on Pokemon Stadium; extracted common
   data now exposes that value as `pokemon_stadium_x34_scale_z`. `Fighter_UpdateModelScale` applies
@@ -6903,14 +6974,18 @@ BODY collision-space residual split and rejected seed bridge:
     exist for platform replay-clock accounting. QGD not affected on FD.
   - Wait animation variant: common Wait random animation variant via `ftCo_8008A7A8` /
     `ftwaitanim.c::getAnimID`, site `3`; runtime site id exists. Replay-frame seed ownership is
-    valid only after modeled source-prefix consumers have been applied. It is not a generic
-    replay-seed bridge: ordinary replay rows still keep frame RNG seed-owned unless a source path
-    proves callback order and earlier RNG consumers that affect `getAnimID`. PJO `rec3012` is the
-    positive for an active DeadUpStar phase-1 effect prefix without an earlier-player creation
-    prefix; STM `rec10395` is the direct replay-clock positive where active DeadUpStar startup plus
-    earlier-player creation applies three site-25 steps before the Wait site-3 draw; QGD `rec4435`
-    is the control where both the active phase-1 effect prefix and the earlier-player creation
-    prefix must be consumed before the later Wait callback.
+    valid in replay playback after `step_input_replay_frame_rng` installs the current row's Slippi
+    frame-start seed; normal `step_input`/free-running sim keeps internal HSD stream ownership.
+    Same-frame source-prefix consumers still have to be modeled before the site-3 draw. PJO
+    `rec3012` is the positive for an active DeadUpStar phase-1 effect prefix without an
+    earlier-player creation prefix; STM `rec10395` is the direct replay-clock positive where active
+    DeadUpStar startup plus earlier-player creation applies three site-25 steps before the Wait
+    site-3 draw; QGD `rec4435` is the control where both the active phase-1 effect prefix and the
+    earlier-player creation prefix must be consumed before the later Wait callback. TVR `rec9935`
+    locks the later active-generator tail: DeadUpStar action-frame 26 contributes one site-25
+    prefix before Wait, so replay playback must use the current frame-start seed plus the modeled
+    source prefix rather than either the stale match-init HSD stream or the raw unprefixed replay
+    seed.
   - DeadUpStar effect prefix before Wait: DeadUpStar entry/early Anim owns a short-lived async
     visual generator before fighter Wait callbacks can reach `getAnimID`. Runtime models this
     bounded startup effect as one site `25` (`MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX`) step for each
@@ -6921,9 +6996,11 @@ BODY collision-space residual split and rejected seed bridge:
     `ftCo_800D40B8 -> ftCo_DeadUpStar_Anim`, whose phase-1 completion dispatches effect kind
     `0x42D`; `efAsync_Dispatch` maps `0x42D` to generator `0x121`, and the baselib particle
     generator bytecode owns the downstream `HSD_Rand/HSD_Randf` churn. That generator bytecode is not
-    extracted into runtime data yet, so `0..8` is an explicitly named, bounded source-live window for
-    generator `0x121`, not a generic DeadUpStar or replay-row bridge. Separately, the same-frame
-    creation dispatch contributes the older two-step prefix before later players'
+    extracted into runtime data yet, so `0..8` is an explicitly named startup window for generator
+    `0x121`, not a generic DeadUpStar or replay-row bridge. The same generator has a separately
+    named active-effect tail for Wait only through action-frame `26`: TVR `rec9935` requires one
+    site-25 step at frame 26, while BHH `rec10161` proves frame 28 is stale and must not carry the
+    prefix. Separately, the same-frame creation dispatch contributes the older two-step prefix before later players'
     `Fighter_procUpdate` callbacks. That creation prefix is bounded by normal player callback order:
     only players with index `< wait_player` can have already run the DeadUpStar animation callback.
     PJO's later-player row therefore receives one active-effect prefix and zero creation-prefix

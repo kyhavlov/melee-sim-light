@@ -142,6 +142,67 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
 
 
 @pytest.mark.integration
+def test_terminal_guardreflect_x10_samples_laser_before_next_segment_tvr() -> None:
+    # TVR:4127/4128 locks the terminal GuardReflect -> Guard x10 boundary against Falco laser
+    # ShieldDesc contact. The final no-submotion GuardReflect callback drains into Guard while the
+    # item collision path still samples the carried article point; the following settled Guard row
+    # owns the next laser segment and enters GuardSetOff. This is not a broad GuardReflect laser
+    # delay: rec4128 proves the adjacent ShieldDesc hit still occurs.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardReflect_Anim,ftCo_GuardOn_Anim,ftCo_800928CC}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    p = 0
+    seed_4127, ref_4127, out_4127 = _run_one_step_row(dataset_path, 4127, p)
+    assert int(seed_4127["action_id"][p]) == 182  # GuardReflect.
+    assert int(seed_4127["seed_prev_action_id"][p]) == 182
+    assert int(seed_4127["guard_reflect_timer_x14"][p]) == 0
+    assert int(seed_4127["guard_reflect_timer_x18"][p]) == 0
+    assert int(seed_4127["guard_x10"][p]) == 1
+    assert int(seed_4127["items"][0]["type"]) == 55
+    assert int(seed_4127["items"][0]["instance_id"]) == 818
+    assert int(ref_4127["action_id"][p]) == 179  # Guard.
+    assert int(out_4127["action_id"][p]) == 179
+    assert int(out_4127["hitlag"][p]) == int(ref_4127["hitlag"][p]) == 0
+    _assert_live_laser_set_matches_ref(out_row=out_4127, ref_row=ref_4127, record=4127)
+
+    seed_4128, ref_4128, out_4128 = _run_one_step_row(dataset_path, 4128, p)
+    assert int(seed_4128["action_id"][p]) == 179  # Guard.
+    assert int(seed_4128["seed_prev_action_id"][p]) == 182
+    assert int(seed_4128["items"][0]["type"]) == 55
+    assert int(seed_4128["items"][0]["instance_id"]) == 818
+    assert int(ref_4128["action_id"][p]) == 181  # GuardSetOff.
+    assert int(out_4128["action_id"][p]) == 181
+    assert int(out_4128["hitlag"][p]) == int(ref_4128["hitlag"][p]) == 3
+    assert float(out_4128["shield_hp"][p]) == pytest.approx(float(ref_4128["shield_hp"][p]), abs=5e-4)
+    _assert_live_laser_set_matches_ref(out_row=out_4128, ref_row=ref_4128, record=4128)
+
+    gat_rel = "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    gat_path = root / gat_rel
+    if not gat_path.exists():
+        pytest.skip(f"missing local dataset: {gat_rel}")
+    gat_seed, gat_ref, gat_out = _run_one_step_row(gat_path, 1163, p)
+    assert int(gat_seed["action_id"][p]) == 182  # GuardReflect.
+    assert int(gat_seed["seed_prev_action_id"][p]) == 182
+    assert int(gat_seed["guard_reflect_timer_x14"][p]) == 0
+    assert int(gat_seed["guard_reflect_timer_x18"][p]) == 0
+    assert int(gat_seed["guard_x10"][p]) > 1
+    assert int(gat_ref["action_id"][p]) == 181  # GuardSetOff.
+    assert int(gat_out["action_id"][p]) == 181
+    assert int(gat_out["hitlag"][p]) == int(gat_ref["hitlag"][p])
+    _assert_live_laser_set_matches_ref(out_row=gat_out, ref_row=gat_ref, record=1163)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("record", "p", "item_slot"),
     [

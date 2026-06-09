@@ -76,7 +76,7 @@ def test_vulnerable_zero_kb_laser_body_hit_still_applies_damage() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
         "TreasuredBackKangaroo.msl"
     )
     dataset_path = root / dataset_rel
@@ -105,7 +105,7 @@ def test_passive_hidden_colanim_keeps_fox_laser_alive_without_damage() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
         "TreasuredBackKangaroo.msl"
     )
     dataset_path = root / dataset_rel

@@ -1546,13 +1546,15 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       //       fp->x672_input_timer_counter < p_ftCommonData->x2A0)
       //     ftCo_80093850(gobj);
       //
-      // No-submotion GuardOn snapshots reached from the generated grounded-locomotion guard-entry
-      // IASA family are fresh ftCo_80091A4C -> GuardOn entries whose hidden guard.x0 phase is still
-      // entry-like; they expose the x672 boundary before the persistent trigger timer advances for
-      // the next frame. Other ftCo_80091A4C callers (Landing/Ottotto/grounded attack/appeal) have
-      // separate selector ordering and keep the ordinary current x672 gate. Steady GuardOn
-      // snapshots (seed_prev is already shield-owned) also keep current x672 so held-shield rows do
-      // not re-enter GuardReflect repeatedly.
+      // No-submotion GuardOn entry snapshots expose two independent hidden lanes:
+      // - current GuardOn with non-shield `seed_prev_action_id`, negative action_frame, and no
+      //   submotion is still in the hidden guard.x0 entry window before replay publishes a positive
+      //   action_frame.
+      // - only the generated grounded-locomotion IASA subset also owns the x672 frame-start
+      //   replay-seed boundary before the persistent trigger timer advances for the next frame.
+      // Other source GuardOn handoffs retain current x672 ownership. Steady GuardOn snapshots
+      // (seed_prev is already shield-owned) keep both ordinary lanes so held-shield rows do not
+      // re-enter GuardReflect repeatedly.
       // Scope gate: this check is in ftCo_GuardOn_IASA only (not ftCo_Guard_IASA), so only
       // GuardOn can re-enter GuardReflect through this path.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093694
@@ -1566,18 +1568,25 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // grounded-locomotion entry shape (`x672<=1` at the seed snapshot). Do not gate this on
       // shield HP: ftCo_80093694 does not read shield health, and fresh GuardOn can occur after
       // prior shield damage.
-      const uint16_t guard_x0 =
-          (batch->state.action_frame[idx] < 0) ? 0u : (uint16_t)batch->state.action_frame[idx];
-      const uint8_t guardon_no_submotion_nonshield_seed =
+      const uint8_t guardon_entry_x0_nonshield_seed =
           (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.action_frame[idx] < 0 &&
            batch->state.animation_index[idx] == UINT32_MAX &&
            batch->state.x672_input_timer_frame_start[idx] <= 1u &&
-           !msl_guard_lifecycle_action_has_shield_callback(batch->state.seed_prev_action_id[idx]) &&
+           !msl_guard_lifecycle_action_has_shield_callback(batch->state.seed_prev_action_id[idx]))
+              ? 1u
+              : 0u;
+      const uint8_t guardon_frame_start_x672_seed =
+          (guardon_entry_x0_nonshield_seed != 0u &&
            msl_motion_state_common_class_has(batch->state.seed_prev_action_id[idx],
                                              MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA))
               ? 1u
               : 0u;
-      const uint8_t guardon_x672_for_reflect = guardon_no_submotion_nonshield_seed
+      const uint16_t guard_x0 = (batch->state.action_frame[idx] < 0)
+                                    ? (guardon_entry_x0_nonshield_seed != 0u
+                                           ? 0u
+                                           : (uint16_t)c->powershield_reflect_window_frames)
+                                    : (uint16_t)batch->state.action_frame[idx];
+      const uint8_t guardon_x672_for_reflect = guardon_frame_start_x672_seed
                                                    ? batch->state.x672_input_timer_frame_start[idx]
                                                    : batch->state.x672_input_timer[idx];
       if (a0 == (uint16_t)MSL_ACT_GUARD_ON &&

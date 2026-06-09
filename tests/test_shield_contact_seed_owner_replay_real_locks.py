@@ -2124,6 +2124,53 @@ def test_continuing_guardon_low_tilt_strong_attackairb_create_edge_does_not_use_
 
 
 @pytest.mark.integration
+def test_pstadium_guardon_weak_attackairb_hb1_x44_rejects_tvr() -> None:
+    # Pokemon Stadium x44 reduced-proxy boundary for continuing GuardOn:
+    # TVR:7908 reaches the weak same-group AttackAirB hb1 payload after an earlier long rollout
+    # seed. The authored outer BAir slot is still the same ShieldDesc owner as the strong hb1
+    # create payload, but the reduced runtime sphere can over-admit the weak refresh against a
+    # tilted no-submotion GuardOn shield. Keep the reject inside the existing Stadium/x10/x44 owner;
+    # this is not a broad persistent-BAir or low-tilt GuardOn suppressor.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_80068E64,Fighter_UpdateModelScale}
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F804
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][7908]
+
+    assert int(seed["stage_id"]) == 3  # Pokemon Stadium.
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
+    assert int(seed["action_frame"][attacker]) == 7
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert int(seed["seed_prev_action_id"][defender]) == 178
+    assert int(seed["guard_x10"][defender]) != 0
+    assert float(seed["guard_tilt_x4"][defender]) > 0.40
+
+    got = _run_rollout_records_replay_frame_rng(
+        dataset_path, 7504, (7908,), ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+    out, ref = got[7908]
+    assert int(ref["action_id"][defender]) == 178
+    assert int(out["action_id"][defender]) == 178
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]), abs=1e-3)
+
+
+@pytest.mark.integration
 def test_cliff_end_guardon_marker_does_not_stale_carry_to_later_guardon_shield_hit() -> None:
     # Stale-carry negative for guard_on_cliff_end_source:
     # - HVG:1185 starts in CliffClimbQuick and enters no-submotion GuardOn through the cliff-end
