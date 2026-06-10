@@ -1,4 +1,5 @@
 #include "move_tables.h"
+#include "char_registry.h"
 
 #include <limits.h>
 #include <string.h>
@@ -9,7 +10,7 @@
 
 enum {
   MSL_SPECIAL_CMD0_LATCH_CLEAR_TAIL_FRAMES = 2,
-  MSL_MOVE_TABLE_CHAR_COUNT = 2,
+  MSL_MOVE_TABLE_CHAR_COUNT = MSL_CHAR_REGISTRY_COUNT,
   MSL_MOVE_TABLE_MSID_CAP = 512,
   MSL_MOVE_TABLE_FRAME_CAP = 240,
   MSL_MOVE_TABLE_CMD_VAR_COUNT = 4,
@@ -61,14 +62,12 @@ static MslMoveTableCache g_move_cache[MSL_MOVE_TABLE_CHAR_COUNT][MSL_MOVE_TABLE_
 static int g_move_cache_loaded = 0;
 
 static int char_slot(uint8_t char_id) {
-  switch (char_id) {
-    case 1:
-      return 0;
-    case 22:
-      return 1;
-    default:
-      return -1;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    if (MSL_CHAR_REGISTRY[ci].char_id == char_id) {
+      return ci;
+    }
   }
+  return -1;
 }
 
 static const MslMoveTableCache* move_cache_get(uint8_t char_id, uint16_t msid) {
@@ -323,8 +322,9 @@ int move_tables_init(void) {
     return -1;
   }
   memset(g_move_cache, 0, sizeof(g_move_cache));
-  move_cache_build_for_char(1u);
-  move_cache_build_for_char(22u);
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    move_cache_build_for_char(MSL_CHAR_REGISTRY[ci].char_id);
+  }
   g_move_cache_loaded = 1;
   return 0;
 }

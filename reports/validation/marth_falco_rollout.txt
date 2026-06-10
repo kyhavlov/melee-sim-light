@@ -35,14 +35,14 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 
 == datasets/marth_falco_recent/replays/validation/marth_falco_recent/VictoriousSpitefulAlpaca.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 359
-rollout.streak_count: 110
-rollout.streak_len.median: 49
-rollout.streak_len.p90: 199
-rollout.streak_len.p95: 230
-rollout.streak_len.max: 359
-rollout.first_mismatch_total: 697
-rollout.first_mismatch_seeded_total: 677
+rollout.best_len: 563
+rollout.streak_count: 58
+rollout.streak_len.median: 75
+rollout.streak_len.p90: 449
+rollout.streak_len.p95: 491
+rollout.streak_len.max: 563
+rollout.first_mismatch_total: 404
+rollout.first_mismatch_seeded_total: 386
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=239.348 rec=8613 p=0 seed/ref/out=-6.04152/-6.18961/233.159 actions=368/368/368 category=unclassified
@@ -53,17 +53,17 @@ rollout.float_top_downstream:
   2. pos_x max_err=34.978 rec=8614 p=0 seed/ref/out=67.457/67.2099/32.2319 actions=368/90/368 category=downstream_discrete_mismatch
   3. speed_y_self max_err=15.3452 rec=2534 p=0 seed/ref/out=14.1699/15.2602/-0.085 actions=368/368/368 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:151
-rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:26
+rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:25
 
 == suite summary ==
-overall.rollout.streak_count: 110
-overall.rollout.streak_len.median: 49
-overall.rollout.streak_len.p90: 199
-overall.rollout.streak_len.p95: 230
-overall.rollout.streak_len.max: 359
-overall.rollout.best_len.max: 359
-overall.rollout.first_mismatch_total: 697
-overall.rollout.first_mismatch_seeded_total: 677
+overall.rollout.streak_count: 58
+overall.rollout.streak_len.median: 75
+overall.rollout.streak_len.p90: 449
+overall.rollout.streak_len.p95: 491
+overall.rollout.streak_len.max: 563
+overall.rollout.best_len.max: 563
+overall.rollout.first_mismatch_total: 404
+overall.rollout.first_mismatch_seeded_total: 386
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=239.348 rec=8613 p=0 seed/ref/out=-6.04152/-6.18961/233.159 actions=368/368/368 category=unclassified
@@ -74,4 +74,4 @@ overall.rollout.float_top_downstream:
   2. pos_x max_err=34.978 rec=8614 p=0 seed/ref/out=67.457/67.2099/32.2319 actions=368/90/368 category=downstream_discrete_mismatch
   3. speed_y_self max_err=15.3452 rec=2534 p=0 seed/ref/out=14.1699/15.2602/-0.085 actions=368/368/368 category=downstream_discrete_mismatch
 overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:151
-overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:26
+overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:25

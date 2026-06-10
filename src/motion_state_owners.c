@@ -383,21 +383,23 @@ uint8_t msl_motion_state_common_class_has(uint16_t action_id, uint32_t class_bit
       break;
     }
   }
-  return all_have
-             ? 1u
-             : 0u;
+  return all_have ? 1u : 0u;
 }
 
 uint8_t msl_motion_state_common_class2_has(uint16_t action_id, uint32_t class_bit) {
-  return (msl_motion_state_class2_has((uint8_t)MSL_CHAR_ID_FOX, action_id, class_bit) &&
-          msl_motion_state_class2_has((uint8_t)MSL_CHAR_ID_FALCO, action_id, class_bit))
-             ? 1u
-             : 0u;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    if (!msl_motion_state_class2_has(MSL_CHAR_REGISTRY[ci].char_id, action_id, class_bit)) {
+      return 0u;
+    }
+  }
+  return 1u;
 }
 
 uint8_t msl_motion_state_common_class3_has(uint16_t action_id, uint32_t class_bit) {
-  return (msl_motion_state_class3_has((uint8_t)MSL_CHAR_ID_FOX, action_id, class_bit) &&
-          msl_motion_state_class3_has((uint8_t)MSL_CHAR_ID_FALCO, action_id, class_bit))
-             ? 1u
-             : 0u;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    if (!msl_motion_state_class3_has(MSL_CHAR_REGISTRY[ci].char_id, action_id, class_bit)) {
+      return 0u;
+    }
+  }
+  return 1u;
 }

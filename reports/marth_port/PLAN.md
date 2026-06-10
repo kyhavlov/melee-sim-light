@@ -86,3 +86,12 @@ Slash, SpecialLw Counter (+CounterAttack).
   fox/falco by design.
 - ecb anims "DamageAir2/3" extra-msid comment block is fox/falco-suite-motivated but applied
   to all chars (harmless).
+- (ci2 COMMITTED d53af62d)  Coverage suite tests/test_char_common_action_coverage.py: 84 tests parameterized over
+  the registry characters that have full data artifacts (fox + marth this check-in; falco's data
+  is identical-shape and can be added to the param list at zero cost), expectations derived from
+  extracted data (the reusable porting checklist). Sharp edge found+
+  fixed: src/move_tables.c char_slot/{1,22} hardcode + 2-char cache (gated dash->run, runbrake,
+  turnrun, jab combos, smash charge, throw hitboxes, catchattack, hit_status, hurtbox masks -
+  ALL silently NULL for marth). Also motion_state_owners common_class2/3 registry loops.
+  Replay smoke: one-step 1150 -> 684 (0.063%), rollout 697 -> 404 first-breaks, median 49 -> 75.
+  Fox/falco validate-all: "no suite total changes". Full suite 3229 passed (3145 prior + 84 new).
