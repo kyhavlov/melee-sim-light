@@ -1,4 +1,5 @@
 #include "action.h"
+#include "shields.h"
 
 #include "ids.h"
 
@@ -1751,6 +1752,23 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
         if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
           batch->state.guard_reflect_timer_x14[idx] = 0;
           batch->state.guard_reflect_timer_x18[idx] = 0;
+          // ftCo_GuardReflect_Anim chains into the GuardOn_Anim body after ftCo_80093BC0, so the
+          // same release gate passes through ftCo_800928CC (Guard) before ftCo_80092C54 reaches
+          // GuardOff — two motion-state entry bundles, exactly like the GuardOn arm above. The
+          // shared plAttack_80037B08 instance counter advances twice on this boundary; collapsing
+          // it to a single direct GuardOff entry desyncs both players' instance ids for the rest
+          // of the rollout (MAJ rec302: vanilla ids 85+86 consumed on this exact exit).
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardOn_Anim,ftCo_800928CC,ftCo_80092C54}
+          // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+          const uint8_t guard_reflect_no_submotion_snapshot =
+              (batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+               batch->state.anim_frame_f32[idx] < 0.0f)
+                  ? 1u
+                  : 0u;
+          if (guard_reflect_no_submotion_snapshot) {
+            enter_guard_hold(batch, idx);
+          }
         }
         enter_guard_off(batch, idx);
         return;

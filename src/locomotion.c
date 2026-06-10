@@ -4065,7 +4065,19 @@ void locomotion_update_pre(MslBatch* batch) {
         }
 
         if (common_appeal_update(batch, idx)) {
-          continue;
+          if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_WAIT) {
+            continue;
+          }
+          // AppealS Anim end enters Wait through ft_8008A2BC inside the same Fighter_8006A360
+          // proc; Fighter_ChangeMotionState swaps the IASA callback, so the new Wait IASA still
+          // runs this frame and a held shield enters GuardOn on the taunt's final frame through
+          // ftCo_80091A4C's held-inputs path. Fall through to the Wait IASA chain exactly like
+          // the SquatRv_Anim same-frame Wait handoff below.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_AppealS_Anim
+          // refs/melee/src/melee/ft/ft_081B.c::ft_8008A2BC
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+          action_id = (uint16_t)MSL_ACT_WAIT;
         }
 
         // Squat/SquatWait/SquatRv updates.

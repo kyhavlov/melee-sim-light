@@ -13,6 +13,7 @@
 #include "combat_geom.h"
 #include "common_params.h"
 #include "guard_lifecycle.h"
+#include "input_axis.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
 #include "msl_math.h"
@@ -195,6 +196,35 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
   const uint8_t guardon_raise_no_tilt_extent_lane =
       (guardon_raise_shield_no_submotion_attackair_x10 &&
        fabsf(batch->state.guard_tilt_x4[d_idx]) <= FLT_EPSILON)
+          ? 1u
+          : 0u;
+  const MslCommonParams* shield_c = msl_common_params();
+  const uint8_t guardon_raise_neutral_main_input =
+      (shield_c != NULL &&
+       apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[d_idx]),
+                      shield_c->lstick_deadzone_x) == 0.0f &&
+       apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[d_idx]),
+                      shield_c->lstick_deadzone_y) == 0.0f)
+          ? 1u
+          : 0u;
+  // AttackAirN hb0 create-edge vs neutral-input GuardOn raise ShieldDesc.size:
+  // - ftAction_8007121C publishes the authored 12-damage AttackAirN root capsule on the create
+  //   edge, then ftColl_80078C70 tests ShieldDesc before BODY for that same HitCapsule.
+  // - When GuardOn is still in the no-submotion x10 raise window with no current main-stick guard
+  //   tilt input, source lbColl_80007BCC still includes ShieldDesc.size/extent. The reduced proxy
+  //   otherwise misses the root shield boundary by a small margin and lets BODY win first.
+  // - Keep this to hb0/create-edge/generated AttackAirN payload; active-tilt GuardOn rows,
+  //   persistent AttackAirN, and later limb slots keep their existing BODY/source-order controls.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+  const uint8_t attackairn_root_guardon_raise_neutral_input_size_lane =
+      (guardon_raise_shield_no_submotion_attackair_x10 && guardon_raise_neutral_main_input != 0u &&
+       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_N &&
+       batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_AIR_N &&
+       batch->state.hitbox_enable_edge[hb_i] && hb_id == 0 &&
+       batch->state.hitbox_damage[hb_i] == 12.0f)
           ? 1u
           : 0u;
   const uint8_t guardon_raise_tilted_attackairlw_model_scale_lane =
@@ -478,6 +508,7 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
          guardreflect_expired_no_submotion_enable_edge_size_lane ||
          attackairlw_strong_no_submotion_guard_extent_lane ||
          attackairb_weak_tail_tilted_guard_extent_lane ||
+         attackairn_root_guardon_raise_neutral_input_size_lane ||
          attackairb_strong_root_guardon_raise_size_lane ||
          landing_guard_entry_attackhi3_hb1_sweep_size_lane)) ||
        guardreflect_expired_no_submotion_attackairlw_persistent_size_lane)
@@ -490,6 +521,7 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
        !attackairlw_weak_multihit_guard_enable_edge_extent_reject &&
        (batch->state.hitbox_enable_edge[hb_i] || shield_extent_bridge_active ||
         guardon_raise_no_tilt_extent_lane || attackairlw_strong_no_submotion_guard_extent_lane ||
+        attackairn_root_guardon_raise_neutral_input_size_lane ||
         attackairb_weak_tail_tilted_guard_extent_lane))
           ? 1u
           : 0u;

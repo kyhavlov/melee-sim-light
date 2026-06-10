@@ -3973,6 +3973,55 @@ static inline uint8_t combat_pstadium_guardon_x44_reduced_proxy_rejects_shield(
   return 0u;
 }
 
+static inline uint8_t combat_guardon_raise_attacks4_age_rejects_shield(const MslBatch* batch,
+                                                                       const MslCommonParams* c,
+                                                                       int bi, size_t a_idx,
+                                                                       size_t d_idx, size_t hb_i) {
+  if (batch == NULL || c == NULL ||
+      batch->state.stage_id[bi] == (uint32_t)MSL_STAGE_ID_POKEMON_STADIUM ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON ||
+      batch->state.action_frame[d_idx] >= 0 || batch->state.animation_index[d_idx] != UINT32_MAX ||
+      batch->state.guard_x10[d_idx] == 0u ||
+      batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_S4_S ||
+      batch->state.animation_index[a_idx] != (uint32_t)MSL_SM_ATTACK_S4 ||
+      batch->state.hitbox_damage[hb_i] != 17.0f) {
+    return 0u;
+  }
+  const float main_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[d_idx]), c->lstick_deadzone_x);
+  const float main_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[d_idx]), c->lstick_deadzone_y);
+  if (main_x != 0.0f || main_y != 0.0f) {
+    return 0u;
+  }
+  const uint16_t init = (uint16_t)c->guard_x10_init_frames;
+  uint16_t guard_x10 = (uint16_t)batch->state.guard_x10[d_idx];
+  if ((uint16_t)batch->state.guard_x10_frame_start[d_idx] > guard_x10) {
+    guard_x10 = (uint16_t)batch->state.guard_x10_frame_start[d_idx];
+  }
+  if (init == 0u || guard_x10 > init) {
+    return 0u;
+  }
+  const uint16_t age = (uint16_t)(init - guard_x10);
+  // GuardOn raise ShieldDesc age owner:
+  // - `ftCo_800921DC` initializes x10 from p_ftCommonData->x268 and calls ftCo_80091E78(..., 0).
+  // - Each GuardOn_Anim callback then decrements x10 through ftCo_800925A4, while the
+  //   frame-start x10 lane remains the replay-visible owner for which raise-pose callback is being
+  //   collided. Runtime uses the larger of current/frame-start x10 so callback-local decrement
+  //   order does not move the ShieldDesc boundary one frame early.
+  // - The authored AttackS4 side-smash payload reaches this row while the raise pose is still in
+  //   the first half of the x10 window and no current main-stick guard-tilt input is active; source
+  //   lbColl_80007BCC still misses until the later x10<=4 pose. Keep this to the generated
+  //   AttackS4 17-damage payload instead of a broad GuardOn shield suppressor; active-tilt rows and
+  //   Pokemon Stadium's separate x44 transform owner keep their existing ShieldDesc path.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_800921DC,ftCo_GuardOn_Anim,ftCo_800925A4,ftCo_80091E78}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  // data/common/ft_common_data.json::{guard_x10_init_frames,lstick_deadzone_x,lstick_deadzone_y}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackS4.events.create_hitbox
+  return (uint8_t)(age < (init / 2u));
+}
+
 static inline uint8_t combat_pstadium_guardon_attackairb_weak_x44_miss_suppresses_body(
     const MslBatch* batch, int bi, int attacker, int hb_id, size_t a_idx, size_t d_idx,
     size_t hb_i) {
@@ -7809,6 +7858,83 @@ static inline void combat_damageflyroll_consume_speciallw_end_continuing_weak_at
       MSL_DAMAGEFLYROLL_SPECIALLW_END_WEAK_ATTACKAIRB_FIGHTER_8006CDA4_TERTIARY_CONSUMES);
 }
 
+static inline uint8_t combat_damageflyroll_selected_source_normal_effect_prefix_count(
+    const MslBatch* batch, size_t d_idx, size_t source_hb_i, uint8_t source_hb_valid,
+    uint8_t source_cap_valid, uint16_t source_motion_id, int source_hitcapsule_int_dmg,
+    uint16_t source_hitbox_angle, uint16_t source_hitbox_kbg, uint16_t source_hitbox_bkb,
+    uint16_t pre_action) {
+  // ftColl_80078538 normal-hit visual-effect prefix:
+  // the BODY DmgLog loop calls ftColl_80078538 once per accepted normal-element
+  // (`ftColl_803C0CAC[element] == 0x3E8`) DmgLogEntry before Fighter_ProcessHit reaches
+  // ftCo_8008DCE0's DamageFlyRoll HSD_Randf gate, and each call draws exactly one
+  // HSD_Randi(x3F4/x3F8) for the victim's co_attrs.xA0 in {0,1} (Fox/Falco). The entry count is
+  // therefore the per-victim accepted-HitCapsule count for the frame; runtime carries only the
+  // selected entry, so each retained owner names its selected source path plus the proven entry
+  // count, mirroring the existing speciallw_end/fallspecial owners in this file.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077AD8,ftColl_80078538}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+  if (batch == NULL || source_hb_valid == 0u || source_cap_valid == 0u) {
+    return 0u;
+  }
+  const uint8_t hb_id = (uint8_t)(source_hb_i % (size_t)MSL_MAX_HITBOXES);
+  const float wsk_dmg = (float)source_hitcapsule_int_dmg;
+  const uint16_t wsk = batch->state.hitbox_wsk[source_hb_i];
+  const uint8_t enable_edge = batch->state.hitbox_enable_edge[source_hb_i];
+  const uint8_t source_is_strong_dair =
+      (uint8_t)((source_motion_id == (uint16_t)MSL_ACT_ATTACK_AIR_LW ||
+                 source_motion_id == (uint16_t)MSL_SM_ATTACK_AIR_LW) &&
+                combat_attackairlw_hitbox_payload_is_authored_strong_meteor(
+                    hb_id, wsk_dmg, source_hitbox_angle, source_hitbox_kbg, wsk,
+                    source_hitbox_bkb));
+  if (source_is_strong_dair && enable_edge != 0u && pre_action == (uint16_t)MSL_ACT_ATTACK_AIR_F) {
+    // AttackAirF victim on the strong DAir create edge: one accepted DmgLogEntry, one
+    // normal-hit effect draw before the gate (MAJ rec3948 randf stream: draw #2 = 0.064 < 0.3).
+    // Broader aerial-attack-class victims are NOT equivalent owners: the prefix count is the
+    // victim's full per-frame DmgLog entry set, and an adjacent AttackAirB victim row (PRH
+    // rec2113, vanilla no-roll only at draw #4) proves a different hidden entry count under the
+    // same selected source. Keep this owner on the witnessed single-entry shape.
+    return 1u;
+  }
+  if (source_is_strong_dair && enable_edge == 0u &&
+      (pre_action == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD ||
+       pre_action == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR)) {
+    // Sustained strong DAir against a FireFox/FireBird charge victim: both live hb0/hb1
+    // HitCapsules log entries against the stationary charge hurt envelope, two effect draws
+    // before the gate (MAJ rec8959 randf stream: draw #3 = 0.059).
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHiHold_Anim}
+    return 2u;
+  }
+  if ((source_motion_id == (uint16_t)MSL_ACT_ATTACK_AIR_B ||
+       source_motion_id == (uint16_t)MSL_SM_ATTACK_AIR_B) &&
+      enable_edge == 0u && pre_action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
+      batch->state.hitstun[d_idx] != 0u &&
+      hb_id == (uint8_t)MSL_ATTACKAIRB_STRONG_BODY_TAIL_HITBOX &&
+      combat_attackairb_hitbox_is_authored_strong(hb_id, wsk_dmg)) {
+    // Sustained strong BAir against an active DamageFlyTop victim: both live strong HitCapsules
+    // (hb0 root + hb1 tail) log normal-element entries against the tumbling victim, two effect
+    // draws before the gate (MAJ rec4166 randf stream: draw #3 = 0.237 < 0.3; the selected
+    // source is the live tail hb1, enable_edge==0, outside the create-edge and root/x14
+    // DamageFlyTop owners above).
+    // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    return 2u;
+  }
+  if ((source_motion_id == (uint16_t)MSL_ACT_ATTACK_LW4 ||
+       source_motion_id == (uint16_t)MSL_SM_ATTACK_LW4) &&
+      enable_edge != 0u &&
+      combat_attacklw4_hitbox_payload_is_authored_strong(hb_id, source_hitcapsule_int_dmg,
+                                                         source_hitbox_angle, source_hitbox_kbg,
+                                                         source_hitbox_bkb) &&
+      pre_action == (uint16_t)MSL_ACT_DOWN_BACK_D) {
+    // Down-smash create edge against a downed roll victim: one accepted DmgLogEntry, one
+    // effect draw before the gate (MAJ rec8737 randf stream: draw #2 = 0.253).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBack.c
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t combat_damageflyroll_jumpaerial_attackairb_carry_selected_owner(
     const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker, size_t source_cap_i,
     uint8_t source_cap_valid) {
@@ -8141,7 +8267,11 @@ static inline void combat_damage_enter_state(
                           source_cap_i, source_cap_valid, source_motion_id,
                           source_hitcapsule_int_dmg, source_hitbox_angle, source_hitbox_kbg,
                           source_hitbox_bkb) ||
-                      speciallw_start_rng_owner);
+                      speciallw_start_rng_owner ||
+                      combat_damageflyroll_selected_source_normal_effect_prefix_count(
+                          batch, d_idx, source_hb_i, source_hb_valid, source_cap_valid,
+                          source_motion_id, source_hitcapsule_int_dmg, source_hitbox_angle,
+                          source_hitbox_kbg, source_hitbox_bkb, pre_action) != 0u);
         const float percent_cur = batch->state.percent[d_idx] + batch->state.percent_temp[d_idx];
         if (damagefly_roll_rng_subset_ok &&
             percent_cur >= (float)c->damagefly_roll_percent_threshold) {
@@ -8227,11 +8357,28 @@ static inline void combat_damage_enter_state(
               batch, bi, d_idx, source_a_idx, source_attacker, source_hb_i, source_hb_valid,
               source_cap_i, source_cap_valid, source_motion_id, source_hitcapsule_int_dmg,
               source_hitbox_angle, source_hitbox_kbg, source_hitbox_bkb);
+          {
+            // Selected-source ftColl_80078538 normal-hit effect prefix draws before the gate;
+            // count is named per owner inside the helper (1 create-edge entry or 2 sustained
+            // dual-HitCapsule entries). Runs before the Fighter_8006CDA4 consume below to match
+            // the source DmgLog -> ProcessHit order.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078538
+            // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+            const uint8_t normal_effect_prefix_count =
+                combat_damageflyroll_selected_source_normal_effect_prefix_count(
+                    batch, d_idx, source_hb_i, source_hb_valid, source_cap_valid, source_motion_id,
+                    source_hitcapsule_int_dmg, source_hitbox_angle, source_hitbox_kbg,
+                    source_hitbox_bkb, pre_action);
+            for (uint8_t i = 0u; i < normal_effect_prefix_count; i++) {
+              (void)combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_FTCOLL_DAMAGE_EFFECT, 1);
+            }
+          }
           combat_damageflyroll_consume_fighter_8006cda4_pre_gate_count(
               batch, bi, d_idx, source_a_idx, source_hb_i, source_hb_valid, source_cap_i,
               source_cap_valid, source_motion_id, source_hitcapsule_int_dmg);
           const float roll =
               combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE);
+
           if (!batch->debug_rng_enable_damage_fly_roll_gate && roll < c->damagefly_roll_prob) {
             act = (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL;
             sm = (uint32_t)MSL_SM_DAMAGE_FLY_ROLL;
@@ -11454,6 +11601,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             overlaps_shield = 1u;
           }
           if (!overlaps_shield) {
+            continue;
+          }
+          if (shield_seed_kind == 0u &&
+              combat_guardon_raise_attacks4_age_rejects_shield(batch, c, bi, a_idx, d_idx, hb_i)) {
             continue;
           }
           if (shield_seed_kind == 0u &&

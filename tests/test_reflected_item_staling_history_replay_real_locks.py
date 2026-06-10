@@ -7,7 +7,48 @@ import numpy as np
 import pytest
 
 from tests.test_platform_collision_runtime import _step_one_replay_row
-from tools.eval.dataset import read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+
+
+def _field_bytes(samples: np.ndarray, record: int, field: str, stride: int) -> np.ndarray:
+    off = samples.dtype.fields[field][1]
+    raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
+    return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+
+
+def _run_rollout_to_records(ds, records: tuple[int, ...]) -> dict[int, np.void]:
+    binding = pytest.importorskip("msl_binding")
+    samples = ds.samples
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    out_compare = np.empty((1, compare_stride), dtype=np.uint8)
+    out: dict[int, np.void] = {}
+    wanted = set(records)
+    stop = max(wanted)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, _field_bytes(samples, 0, "seed_t", seed_stride))
+        for rec in range(stop + 1):
+            binding.step_input_replay_frame_rng(
+                handle,
+                _field_bytes(samples, rec, "seed_t", seed_stride),
+                _field_bytes(samples, rec, "prev_input_t", input_stride),
+                _field_bytes(samples, rec, "input_t", input_stride),
+            )
+            if rec in wanted:
+                binding.write_compare(handle, out_compare)
+                out[rec] = out_compare.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+    finally:
+        binding.destroy(handle)
+    return out
 
 
 def test_staling_history_prefers_fighter_instance_over_same_iid_item_control() -> None:
@@ -202,3 +243,71 @@ def test_reflected_item_hit_advances_new_owner_stale_queue_replay_real(tmp_path:
     assert int(out_10409["ground_id"][1]) == int(ref_10409["ground_id"][1]) == 7
     assert int(out_10409["on_ground"][1]) == int(ref_10409["on_ground"][1]) == 0
     assert float(out_10409["pos_y"][1]) == pytest.approx(float(ref_10409["pos_y"][1]), abs=1e-7)
+
+
+@pytest.mark.integration
+def test_returned_powershielded_falco_laser_uses_original_shooter_stale_damage_maj() -> None:
+    # MAJ:6294 is a returned powershielded Falco laser BODY hit:
+    # - the live item is owned by Fox after powershield reflect (`item_reflect_damage_mul == 0.5`),
+    # - the article kind still names Falco's blaster shot,
+    # - the target/original shooter has a stale Blaster queue while the current owner does not.
+    # Source Item_80269F14 multiplies the already-live HitCapsule.damage float by xC6C before
+    # it_80272460 floors/restales it, so BODY damage is 1 rather than `3 * 0.5 => 2`.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    # refs/melee/src/melee/it/item.c::Item_80269F14
+    # refs/melee/src/melee/it/itcoll.c::it_80272460
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+
+    seed = samples[6294]["seed_t"]
+    assert int(seed["items"][1]["type"]) == 55  # Falco blaster shot kind, data/items/lasers.bin.
+    assert int(seed["items"][1]["owner"]) == 1
+    assert float(seed["item_reflect_damage_mul"][1]) == pytest.approx(0.5, abs=1e-6)
+    assert int(seed["stale_queue_index"][0]) > 0
+    assert int(seed["stale_queue_index"][1]) == 0
+
+    out = _run_rollout_to_records(ds, (6294, 6468))
+    ref_6294 = samples[6294]["ref_t1"]
+    assert int(out[6294]["action_id"][0]) == int(ref_6294["action_id"][0]) == 75
+    assert int(out[6294]["hitlag"][0]) == int(ref_6294["hitlag"][0]) == 3
+    assert int(out[6294]["hitstun"][0]) == int(ref_6294["hitstun"][0]) == 9
+    assert float(out[6294]["percent"][0]) == pytest.approx(float(ref_6294["percent"][0]), abs=1e-6)
+
+    ref_6468 = samples[6468]["ref_t1"]
+    assert int(out[6468]["action_id"][0]) == int(ref_6468["action_id"][0]) == 223
+    assert float(out[6468]["percent"][0]) == pytest.approx(float(ref_6468["percent"][0]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_strong_reflector_returned_laser_keeps_existing_damage_timing_maj() -> None:
+    # Adjacent negative for the returned-powershield BODY owner. MAJ:2015/2016 carries a returned
+    # Falco laser with a strong reflector multiplier (xC6C == 1.5). That chain stays on the existing
+    # strong-reflector damage/timing path: the target must not enter Damage until rec2016.
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    seed = samples[2015]["seed_t"]
+    assert int(seed["items"][0]["type"]) == 55
+    assert float(seed["item_reflect_damage_mul"][0]) == pytest.approx(1.5, abs=1e-6)
+
+    out = _run_rollout_to_records(ds, (2015, 2016))
+    ref_2015 = samples[2015]["ref_t1"]
+    assert int(out[2015]["action_id"][1]) == int(ref_2015["action_id"][1]) == 180
+    assert int(out[2015]["hitlag"][1]) == int(ref_2015["hitlag"][1]) == 0
+    assert float(out[2015]["percent"][1]) == pytest.approx(float(ref_2015["percent"][1]), abs=1e-6)
+
+    ref_2016 = samples[2016]["ref_t1"]
+    assert int(out[2016]["action_id"][1]) == int(ref_2016["action_id"][1]) == 78
+    assert int(out[2016]["hitlag"][1]) == int(ref_2016["hitlag"][1]) == 3
+    assert float(out[2016]["percent"][1]) == pytest.approx(float(ref_2016["percent"][1]), abs=1e-6)

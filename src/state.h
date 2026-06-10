@@ -584,6 +584,12 @@ typedef struct MslStateSoA {
   uint16_t*
       guard_tilt_x8;     // mv.co.guard.x8 (frame-ish index; neutral is shield table neutral_frame)
   float* guard_tilt_x4;  // mv.co.guard.x4 (stick magnitude smoothing; 0..1)
+  // Runtime-only frame-start snapshots of the tilt lanes, captured by shields_refresh before its
+  // per-step ftCo_80091BC4 update. Item collision consumes the pre-update values: the source item
+  // pass reads mv.co.guard.{x4,x8} as left by the PREVIOUS frame's guard anim callback (MAJ:7384
+  // rollout needs x4=0.501, not the same-step 0.75 post-update value).
+  uint16_t* guard_tilt_x8_frame_start;
+  float* guard_tilt_x4_frame_start;
   // Runtime-only transient: set when enter_guard_on() runs during the current step so item
   // projectile shield precedence can distinguish same-step GuardOn entry from teacher-forced
   // frozen GuardOn seeds that merely replay as `animation_index==-1, action_frame==-1`.

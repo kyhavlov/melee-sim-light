@@ -305,6 +305,16 @@ static inline void msl_item_reflect_apply_seeded_transfer(MslBatch* batch, size_
   batch->state.item_owner[item_idx] = (int8_t)seed_port;
   batch->state.item_instance_id[item_idx] = seed_iid;
   msl_item_reflect_set_damage_mul(batch, item_idx, damage_mul);
-  batch->state.item_pending_reflect_owner_port[item_idx] = (uint8_t)MSL_ITEM_REFLECT_NO_PORT;
-  batch->state.item_pending_reflect_instance_id[item_idx] = 0u;
+  // Stage (do not clear) the pending reflected-callback lanes: ftColl_80077464 only writes the
+  // reflect snapshot; Item_80269F14 consumes it on the item's next callback pass, where
+  // itFoxLaser_Logic94_Reflected flips facing and reverses the velocity unconditionally. The
+  // still-approaching direction heuristic above only times the same-frame visual facing lane; an
+  // already-crossed projectile must still get the next-pass velocity reversal (MAJ rec294: the
+  // powershielded laser crosses the reflector root by 0.63 before the transfer applies, and the
+  // replay's item record flips velocity exactly one item pass later).
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_Reflected
+  batch->state.item_pending_reflect_owner_port[item_idx] = (uint8_t)seed_port;
+  batch->state.item_pending_reflect_instance_id[item_idx] = seed_iid;
 }

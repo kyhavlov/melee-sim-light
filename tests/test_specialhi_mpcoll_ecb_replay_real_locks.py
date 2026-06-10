@@ -64,6 +64,10 @@ EWT = (
     "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
     "ElatedWearyTermite.msl"
 )
+STM = (
+    "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+    "SweatyThisMallard.msl"
+)
 
 
 def _run_row(
@@ -299,22 +303,29 @@ def test_specialairhi_left_wall_envelope_reduces_maj_rollout_escape() -> None:
 
     got_8917, ref_8917, contacts_8917 = rows[8917]
     got_8918, ref_8918, contacts_8918 = rows[8918]
+    got_8919, ref_8919, contacts_8919 = rows[8919]
     got_8922, ref_8922, contacts_8922 = rows[8922]
 
     assert int(contacts_8917["wall_kind"][1]) == 1
     assert int(contacts_8917["wall_id"][1]) == 11
     assert int(contacts_8918["wall_kind"][1]) == 1
     assert int(contacts_8918["wall_id"][1]) == 11
+    assert int(contacts_8919["wall_kind"][1]) == 1
+    assert int(contacts_8919["wall_id"][1]) == 11
     assert float(contacts_8917["wall_contact_x"][1]) == pytest.approx(-85.5656967, abs=1e-5)
     assert float(contacts_8918["wall_contact_x"][1]) == pytest.approx(-85.5656967, abs=1e-5)
-    # The retained live-JObj basis fixes the left-wall contact identity/envelope and removes the
-    # prior rollout X drift. Pin the tiny float residual instead of using a broad tolerance that
-    # could hide losing the wall-envelope contact above.
+    assert float(contacts_8919["wall_contact_x"][1]) == pytest.approx(-85.5656967, abs=1e-5)
+    # The retained live-JObj basis and fresh endpoint envelope admission fix the left-wall contact
+    # identity/envelope and remove the prior rollout X drift. Pin the tiny float residual instead
+    # of using a broad tolerance that could hide losing the wall-envelope contact above.
     assert float(got_8917["pos_x"][1] - ref_8917["pos_x"][1]) == pytest.approx(
         7.6293945e-06, abs=1e-6
     )
     assert float(got_8918["pos_x"][1] - ref_8918["pos_x"][1]) == pytest.approx(
         1.5258789e-05, abs=1e-6
+    )
+    assert float(got_8919["pos_x"][1] - ref_8919["pos_x"][1]) == pytest.approx(
+        0.0, abs=2.0e-5
     )
     assert int(got_8922["action_id"][1]) == int(ref_8922["action_id"][1]) == 84
     assert int(contacts_8922["wall_kind"][1]) == 0
@@ -367,6 +378,42 @@ def test_ft80084db0_left_wall_endpoint_one_step_keeps_authoritative_replay_conta
     assert float(seed["speed_air_x_self"][p]) > 0.0
     assert int(got["action_id"][p]) == int(ref["action_id"][p]) == 356
     assert int(contacts["wall_kind"][p]) == 1
+    assert float(got["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_specialairhi_endpoint_envelope_rejects_already_at_endpoint_iat_control() -> None:
+    # Adjacent negative for the MAJ endpoint-envelope admission: if the callback-entry root is
+    # already on the endpoint and SpecialAirHi is moving away from the left wall, source does not
+    # re-clamp through the endpoint candidate. This is current-row source behavior, not only a
+    # rollout stale-state repair.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+    seed, ref, got, contacts = _run_row(9157, IAT)
+    p = 0
+
+    assert int(seed["action_id"][p]) == 356
+    assert float(seed["speed_air_x_self"][p]) > 0.0
+    assert int(got["action_id"][p]) == int(ref["action_id"][p]) == 356
+    assert int(contacts["wall_kind"][p]) == 0
+    assert float(got["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_specialairhi_endpoint_envelope_rejects_nonzero_mapjoint_stm_control() -> None:
+    # MapJoint-backed walls need the source transformed collision packet before their endpoint
+    # candidates are authoritative. The static left-wall envelope must not re-clamp this Stadium
+    # SpecialAirHi row through segment 106's nonzero joint endpoint.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
+    # data/stages/bin/grps.json::segments[i=106].joint_id
+    seed, ref, got, contacts = _run_row(1213, STM)
+    p = 1
+
+    assert int(seed["action_id"][p]) == 356
+    assert int(seed["char_id"][p]) == 1
+    assert float(seed["speed_air_x_self"][p]) > 0.0
+    assert int(got["action_id"][p]) == int(ref["action_id"][p]) == 356
+    assert int(contacts["wall_kind"][p]) == 0
     assert float(got["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
 
 

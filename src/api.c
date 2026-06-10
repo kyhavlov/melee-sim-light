@@ -2320,6 +2320,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.anim_defer_tick_once[idx] = 0;
       batch->state.guard_tilt_x8[idx] = seed->guard_tilt_x8[p];
       batch->state.guard_tilt_x4[idx] = seed->guard_tilt_x4[p];
+      batch->state.guard_tilt_x8_frame_start[idx] = seed->guard_tilt_x8[p];
+      batch->state.guard_tilt_x4_frame_start[idx] = seed->guard_tilt_x4[p];
       batch->state.guard_reflect_timer_x14[idx] = seed->guard_reflect_timer_x14[p];
       batch->state.guard_reflect_timer_x18[idx] = seed->guard_reflect_timer_x18[p];
       batch->state.guard_reflect_origin_guardon[idx] =
