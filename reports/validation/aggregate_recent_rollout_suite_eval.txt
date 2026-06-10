@@ -265,13 +265,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:310
 == datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1914
-rollout.streak_count: 26
+rollout.streak_count: 25
 rollout.streak_len.median: 333
 rollout.streak_len.p90: 1401
 rollout.streak_len.p95: 1500
 rollout.streak_len.max: 1914
-rollout.first_mismatch_total: 27
-rollout.first_mismatch_seeded_total: 15
+rollout.first_mismatch_total: 25
+rollout.first_mismatch_seeded_total: 13
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=116.809 rec=7120 p=1 seed/ref/out=36.0399/34.1441/150.953 actions=7/7/7 category=unclassified
@@ -618,14 +618,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:522
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == suite summary ==
-overall.rollout.streak_count: 237
-overall.rollout.streak_len.median: 333
+overall.rollout.streak_count: 236
+overall.rollout.streak_len.median: 329
 overall.rollout.streak_len.p90: 2542
 overall.rollout.streak_len.p95: 8459
 overall.rollout.streak_len.max: 12475
 overall.rollout.best_len.max: 12475
-overall.rollout.first_mismatch_total: 212
-overall.rollout.first_mismatch_seeded_total: 84
+overall.rollout.first_mismatch_total: 210
+overall.rollout.first_mismatch_seeded_total: 82
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=116.809 rec=7120 p=1 seed/ref/out=36.0399/34.1441/150.953 actions=7/7/7 category=unclassified
