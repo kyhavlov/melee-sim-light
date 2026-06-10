@@ -8,7 +8,10 @@ from pathlib import Path
 from tools.extraction.known_data_artifacts import PART_MAGIC, PART_VERSION
 
 
-CHAR_IDS = {"fox": 2, "falco": 20}
+# External (CSS/Slippi) character ids from the central registry.
+from tools.extraction.char_registry import CHARS
+
+CHAR_IDS = {name: info.external_id for name, info in CHARS.items()}
 
 ANCHOR_IDS = {
     "ecb_joint": 1,

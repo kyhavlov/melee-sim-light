@@ -1,4 +1,5 @@
 #include "char_params.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <ctype.h>
@@ -127,6 +128,18 @@ static int json_get_u16(const char* json, const char* key, uint16_t* out) {
   return 0;
 }
 
+static int json_get_u16_or_default(const char* json, const char* key, uint16_t default_v,
+                                   uint16_t* out) {
+  // Missing key -> default (used for per-character special params absent on other characters).
+  char pat[96];
+  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
+  if (n <= 0 || (size_t)n >= sizeof(pat) || strstr(json, pat) == NULL) {
+    *out = default_v;
+    return 0;
+  }
+  return json_get_u16(json, key, out);
+}
+
 static int json_get_i32(const char* json, const char* key, int32_t* out) {
   if (json == NULL || key == NULL || out == NULL) {
     return -1;
@@ -145,6 +158,20 @@ static int json_get_i32(const char* json, const char* key, int32_t* out) {
   return 0;
 }
 
+static int json_get_i32_or_default(const char* json, const char* key, int32_t default_v,
+                                   int32_t* out) {
+  char pat[96];
+  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
+  if (n <= 0 || (size_t)n >= sizeof(pat) || strstr(json, pat) == NULL) {
+    *out = default_v;
+    return 0;
+  }
+  return json_get_i32(json, key, out);
+}
+
+static int json_get_i8_or_default(const char* json, const char* key, int8_t default_v,
+                                  int8_t* out);
+
 static int json_get_i8(const char* json, const char* key, int8_t* out) {
   if (json == NULL || key == NULL || out == NULL) {
     return -1;
@@ -161,6 +188,17 @@ static int json_get_i8(const char* json, const char* key, int8_t* out) {
   }
   *out = (int8_t)v;
   return 0;
+}
+
+static int json_get_i8_or_default(const char* json, const char* key, int8_t default_v,
+                                  int8_t* out) {
+  char pat[96];
+  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
+  if (n <= 0 || (size_t)n >= sizeof(pat) || strstr(json, pat) == NULL) {
+    *out = default_v;
+    return 0;
+  }
+  return json_get_i8(json, key, out);
 }
 
 static int json_get_f32_array3(const char* json, const char* key, float out3[3]) {
@@ -447,68 +485,57 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "model_scaling", &out.model_scaling) != 0 ||
       json_get_f32(buf, "pushbox_x", &out.pushbox_x) != 0 ||
       json_get_f32(buf, "pushbox_y", &out.pushbox_y) != 0 ||
-      json_get_f32(buf, "laser_scale_max", &out.laser_scale_max) != 0 ||
-      json_get_u16(buf, "laser_spawn_joint_part_id", &out.laser_spawn_joint_part_id) != 0 ||
+      json_get_f32_or_default(buf, "laser_scale_max", 0.0f, &out.laser_scale_max) != 0 ||
+      json_get_u16_or_default(buf, "laser_spawn_joint_part_id", 0, &out.laser_spawn_joint_part_id) != 0 ||
       json_get_u16(buf, "grab_capture_anchor_part_id", &out.grab_capture_anchor_part_id) != 0 ||
-      json_get_u8(buf, "illusion_gravity_delay_start_frames",
-                  &out.illusion_gravity_delay_start_frames) != 0 ||
-      json_get_f32(buf, "illusion_air_friction_start", &out.illusion_air_friction_start) != 0 ||
-      json_get_f32(buf, "illusion_fall_accel_start", &out.illusion_fall_accel_start) != 0 ||
-      json_get_f32(buf, "illusion_ground_vel_x", &out.illusion_ground_vel_x) != 0 ||
-      json_get_f32(buf, "illusion_ground_end_vel_x", &out.illusion_ground_end_vel_x) != 0 ||
-      json_get_f32(buf, "illusion_ground_friction", &out.illusion_ground_friction) != 0 ||
-      json_get_f32(buf, "illusion_air_end_vel_x", &out.illusion_air_end_vel_x) != 0 ||
-      json_get_f32(buf, "illusion_air_friction", &out.illusion_air_friction) != 0 ||
-      json_get_u8(buf, "illusion_landing_lag_frames", &out.illusion_landing_lag_frames) != 0 ||
-      json_get_u8(buf, "illusion_gravity_delay_end_frames",
-                  &out.illusion_gravity_delay_end_frames) != 0 ||
-      json_get_f32(buf, "illusion_fall_accel_end", &out.illusion_fall_accel_end) != 0 ||
-      json_get_f32(buf, "illusion_item_hitbox_size", &out.illusion_item_hitbox_size) != 0 ||
-      json_get_u8(buf, "illusion_item_lifetime_state01_frames",
-                  &out.illusion_item_lifetime_state01_frames) != 0 ||
-      json_get_u8(buf, "illusion_item_lifetime_state2_frames",
-                  &out.illusion_item_lifetime_state2_frames) != 0 ||
-      json_get_f32(buf, "illusion_item_state0_damage", &out.illusion_item_state0_damage) != 0 ||
-      json_get_i8(buf, "illusion_item_state0_shield_damage",
-                  &out.illusion_item_state0_shield_damage) != 0 ||
-      json_get_u16(buf, "illusion_item_state0_angle", &out.illusion_item_state0_angle) != 0 ||
-      json_get_u16(buf, "illusion_item_state0_kbg", &out.illusion_item_state0_kbg) != 0 ||
-      json_get_u16(buf, "illusion_item_state0_wsk", &out.illusion_item_state0_wsk) != 0 ||
-      json_get_u16(buf, "illusion_item_state0_bkb", &out.illusion_item_state0_bkb) != 0 ||
-      json_get_u8(buf, "illusion_item_state0_element", &out.illusion_item_state0_element) != 0 ||
-      json_get_f32(buf, "illusion_item_state0_hitbox_y_offset",
-                   &out.illusion_item_state0_hitbox_y_offset) != 0 ||
-      json_get_f32(buf, "illusion_item_state1_damage", &out.illusion_item_state1_damage) != 0 ||
-      json_get_i8(buf, "illusion_item_state1_shield_damage",
-                  &out.illusion_item_state1_shield_damage) != 0 ||
-      json_get_u16(buf, "illusion_item_state1_angle", &out.illusion_item_state1_angle) != 0 ||
-      json_get_u16(buf, "illusion_item_state1_kbg", &out.illusion_item_state1_kbg) != 0 ||
-      json_get_u16(buf, "illusion_item_state1_wsk", &out.illusion_item_state1_wsk) != 0 ||
-      json_get_u16(buf, "illusion_item_state1_bkb", &out.illusion_item_state1_bkb) != 0 ||
-      json_get_u8(buf, "illusion_item_state1_element", &out.illusion_item_state1_element) != 0 ||
-      json_get_f32(buf, "illusion_item_state1_hitbox_y_offset",
-                   &out.illusion_item_state1_hitbox_y_offset) != 0 ||
-      json_get_u8(buf, "firefox_hold_gravity_delay_frames",
-                  &out.firefox_hold_gravity_delay_frames) != 0 ||
-      json_get_f32(buf, "firefox_hold_vel_x", &out.firefox_hold_vel_x) != 0 ||
-      json_get_f32(buf, "firefox_hold_air_friction", &out.firefox_hold_air_friction) != 0 ||
-      json_get_f32(buf, "firefox_hold_air_fall_accel", &out.firefox_hold_air_fall_accel) != 0 ||
-      json_get_f32(buf, "firefox_direction_stick_range_min",
-                   &out.firefox_direction_stick_range_min) != 0 ||
-      json_get_u8(buf, "firefox_launch_duration_frames", &out.firefox_launch_duration_frames) !=
+      json_get_u8_or_default(buf, "illusion_gravity_delay_start_frames", 0, &out.illusion_gravity_delay_start_frames) != 0 ||
+      json_get_f32_or_default(buf, "illusion_air_friction_start", 0.0f, &out.illusion_air_friction_start) != 0 ||
+      json_get_f32_or_default(buf, "illusion_fall_accel_start", 0.0f, &out.illusion_fall_accel_start) != 0 ||
+      json_get_f32_or_default(buf, "illusion_ground_vel_x", 0.0f, &out.illusion_ground_vel_x) != 0 ||
+      json_get_f32_or_default(buf, "illusion_ground_end_vel_x", 0.0f, &out.illusion_ground_end_vel_x) != 0 ||
+      json_get_f32_or_default(buf, "illusion_ground_friction", 0.0f, &out.illusion_ground_friction) != 0 ||
+      json_get_f32_or_default(buf, "illusion_air_end_vel_x", 0.0f, &out.illusion_air_end_vel_x) != 0 ||
+      json_get_f32_or_default(buf, "illusion_air_friction", 0.0f, &out.illusion_air_friction) != 0 ||
+      json_get_u8_or_default(buf, "illusion_landing_lag_frames", 0, &out.illusion_landing_lag_frames) != 0 ||
+      json_get_u8_or_default(buf, "illusion_gravity_delay_end_frames", 0, &out.illusion_gravity_delay_end_frames) != 0 ||
+      json_get_f32_or_default(buf, "illusion_fall_accel_end", 0.0f, &out.illusion_fall_accel_end) != 0 ||
+      json_get_f32_or_default(buf, "illusion_item_hitbox_size", 0.0f, &out.illusion_item_hitbox_size) != 0 ||
+      json_get_u8_or_default(buf, "illusion_item_lifetime_state01_frames", 0, &out.illusion_item_lifetime_state01_frames) != 0 ||
+      json_get_u8_or_default(buf, "illusion_item_lifetime_state2_frames", 0, &out.illusion_item_lifetime_state2_frames) != 0 ||
+      json_get_f32_or_default(buf, "illusion_item_state0_damage", 0.0f, &out.illusion_item_state0_damage) != 0 ||
+      json_get_i8_or_default(buf, "illusion_item_state0_shield_damage", 0, &out.illusion_item_state0_shield_damage) != 0 ||
+      json_get_u16_or_default(buf, "illusion_item_state0_angle", 0, &out.illusion_item_state0_angle) != 0 ||
+      json_get_u16_or_default(buf, "illusion_item_state0_kbg", 0, &out.illusion_item_state0_kbg) != 0 ||
+      json_get_u16_or_default(buf, "illusion_item_state0_wsk", 0, &out.illusion_item_state0_wsk) != 0 ||
+      json_get_u16_or_default(buf, "illusion_item_state0_bkb", 0, &out.illusion_item_state0_bkb) != 0 ||
+      json_get_u8_or_default(buf, "illusion_item_state0_element", 0, &out.illusion_item_state0_element) != 0 ||
+      json_get_f32_or_default(buf, "illusion_item_state0_hitbox_y_offset", 0.0f, &out.illusion_item_state0_hitbox_y_offset) != 0 ||
+      json_get_f32_or_default(buf, "illusion_item_state1_damage", 0.0f, &out.illusion_item_state1_damage) != 0 ||
+      json_get_i8_or_default(buf, "illusion_item_state1_shield_damage", 0, &out.illusion_item_state1_shield_damage) != 0 ||
+      json_get_u16_or_default(buf, "illusion_item_state1_angle", 0, &out.illusion_item_state1_angle) != 0 ||
+      json_get_u16_or_default(buf, "illusion_item_state1_kbg", 0, &out.illusion_item_state1_kbg) != 0 ||
+      json_get_u16_or_default(buf, "illusion_item_state1_wsk", 0, &out.illusion_item_state1_wsk) != 0 ||
+      json_get_u16_or_default(buf, "illusion_item_state1_bkb", 0, &out.illusion_item_state1_bkb) != 0 ||
+      json_get_u8_or_default(buf, "illusion_item_state1_element", 0, &out.illusion_item_state1_element) != 0 ||
+      json_get_f32_or_default(buf, "illusion_item_state1_hitbox_y_offset", 0.0f, &out.illusion_item_state1_hitbox_y_offset) != 0 ||
+      json_get_u8_or_default(buf, "firefox_hold_gravity_delay_frames", 0, &out.firefox_hold_gravity_delay_frames) != 0 ||
+      json_get_f32_or_default(buf, "firefox_hold_vel_x", 0.0f, &out.firefox_hold_vel_x) != 0 ||
+      json_get_f32_or_default(buf, "firefox_hold_air_friction", 0.0f, &out.firefox_hold_air_friction) != 0 ||
+      json_get_f32_or_default(buf, "firefox_hold_air_fall_accel", 0.0f, &out.firefox_hold_air_fall_accel) != 0 ||
+      json_get_f32_or_default(buf, "firefox_direction_stick_range_min", 0.0f, &out.firefox_direction_stick_range_min) != 0 ||
+      json_get_u8_or_default(buf, "firefox_launch_duration_frames", 0, &out.firefox_launch_duration_frames) !=
           0 ||
-      json_get_f32(buf, "firefox_launch_speed", &out.firefox_launch_speed) != 0 ||
-      json_get_u8(buf, "firefox_launch_reverse_accel_start_frames",
-                  &out.firefox_launch_reverse_accel_start_frames) != 0 ||
-      json_get_f32(buf, "firefox_launch_reverse_accel", &out.firefox_launch_reverse_accel) != 0 ||
-      json_get_f32(buf, "firefox_ground_momentum_end", &out.firefox_ground_momentum_end) != 0 ||
-      json_get_f32(buf, "firefox_bound_vel_x", &out.firefox_bound_vel_x) != 0 ||
-      json_get_f32(buf, "firefox_facing_stick_range_min", &out.firefox_facing_stick_range_min) !=
+      json_get_f32_or_default(buf, "firefox_launch_speed", 0.0f, &out.firefox_launch_speed) != 0 ||
+      json_get_u8_or_default(buf, "firefox_launch_reverse_accel_start_frames", 0, &out.firefox_launch_reverse_accel_start_frames) != 0 ||
+      json_get_f32_or_default(buf, "firefox_launch_reverse_accel", 0.0f, &out.firefox_launch_reverse_accel) != 0 ||
+      json_get_f32_or_default(buf, "firefox_ground_momentum_end", 0.0f, &out.firefox_ground_momentum_end) != 0 ||
+      json_get_f32_or_default(buf, "firefox_bound_vel_x", 0.0f, &out.firefox_bound_vel_x) != 0 ||
+      json_get_f32_or_default(buf, "firefox_facing_stick_range_min", 0.0f, &out.firefox_facing_stick_range_min) !=
           0 ||
-      json_get_f32(buf, "firefox_freefall_mobility", &out.firefox_freefall_mobility) != 0 ||
-      json_get_u8(buf, "firefox_landing_lag_frames", &out.firefox_landing_lag_frames) != 0 ||
-      json_get_f32(buf, "firefox_bound_angle_degrees", &out.firefox_bound_angle_degrees) != 0 ||
-      json_get_u8(buf, "firefox_bound_delay_frames", &out.firefox_bound_delay_frames) != 0 ||
+      json_get_f32_or_default(buf, "firefox_freefall_mobility", 0.0f, &out.firefox_freefall_mobility) != 0 ||
+      json_get_u8_or_default(buf, "firefox_landing_lag_frames", 0, &out.firefox_landing_lag_frames) != 0 ||
+      json_get_f32_or_default(buf, "firefox_bound_angle_degrees", 0.0f, &out.firefox_bound_angle_degrees) != 0 ||
+      json_get_u8_or_default(buf, "firefox_bound_delay_frames", 0, &out.firefox_bound_delay_frames) != 0 ||
       json_get_f32(buf, "ledge_jump_horizontal_velocity", &out.ledge_jump_horizontal_velocity) !=
           0 ||
       json_get_f32(buf, "ledge_jump_vertical_velocity", &out.ledge_jump_vertical_velocity) != 0 ||
@@ -525,23 +552,27 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "ledge_snap_y", &out.ledge_snap_y) != 0 ||
       json_get_f32(buf, "ledge_snap_height", &out.ledge_snap_height) != 0 ||
 
-      json_get_u8(buf, "reflector_release_lag_frames", &out.reflector_release_lag_frames) != 0 ||
-      json_get_u8(buf, "reflector_turn_frames", &out.reflector_turn_frames) != 0 ||
-      json_get_u8(buf, "reflector_gravity_delay_frames", &out.reflector_gravity_delay_frames) !=
+      json_get_u8_or_default(buf, "reflector_release_lag_frames", 0, &out.reflector_release_lag_frames) != 0 ||
+      json_get_u8_or_default(buf, "reflector_turn_frames", 0, &out.reflector_turn_frames) != 0 ||
+      json_get_u8_or_default(buf, "reflector_gravity_delay_frames", 0, &out.reflector_gravity_delay_frames) !=
           0 ||
-      json_get_f32(buf, "reflector_momentum_preserve_x", &out.reflector_momentum_preserve_x) != 0 ||
-      json_get_f32(buf, "reflector_fall_accel", &out.reflector_fall_accel) != 0 ||
-      json_get_u16(buf, "reflector_bone_id", &out.reflector_bone_part_id) != 0 ||
-      json_get_i32(buf, "reflector_max_damage", &out.reflector_max_damage) != 0 ||
-      json_get_f32_array3(buf, "reflector_offset", refl_off) != 0 ||
-      json_get_f32(buf, "reflector_size", &out.reflector_size) != 0 ||
-      json_get_f32(buf, "reflector_damage_mul", &out.reflector_damage_mul) != 0 ||
-      json_get_f32(buf, "reflector_speed_mul", &out.reflector_speed_mul) != 0 ||
-      json_get_u8(buf, "reflector_behavior", &out.reflector_behavior) != 0) {
+      json_get_f32_or_default(buf, "reflector_momentum_preserve_x", 0.0f, &out.reflector_momentum_preserve_x) != 0 ||
+      json_get_f32_or_default(buf, "reflector_fall_accel", 0.0f, &out.reflector_fall_accel) != 0 ||
+      json_get_u16_or_default(buf, "reflector_bone_id", 0, &out.reflector_bone_part_id) != 0 ||
+      json_get_i32_or_default(buf, "reflector_max_damage", 0, &out.reflector_max_damage) != 0 ||
+      (strstr(buf, "\"reflector_offset\"") != NULL &&
+       json_get_f32_array3(buf, "reflector_offset", refl_off) != 0) ||
+      json_get_f32_or_default(buf, "reflector_size", 0.0f, &out.reflector_size) != 0 ||
+      json_get_f32_or_default(buf, "reflector_damage_mul", 0.0f, &out.reflector_damage_mul) != 0 ||
+      json_get_f32_or_default(buf, "reflector_speed_mul", 0.0f, &out.reflector_speed_mul) != 0 ||
+      json_get_u8_or_default(buf, "reflector_behavior", 0, &out.reflector_behavior) != 0) {
+    fprintf(stderr, "msl: char params parse failed (required field chain) in %s\n", path);
     alloc_free(buf);
     return -1;
   }
   if (ecb_joint_count != (sizeof(out.ecb_joints) / sizeof(out.ecb_joints[0]))) {
+    fprintf(stderr, "msl: char params ecb_joints count %u != expected in %s\n",
+            (unsigned)ecb_joint_count, path);
     alloc_free(buf);
     return -1;
   }
@@ -550,6 +581,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       wait_anim_choice_msid_count != wait_anim_choice_weight_count ||
       wait_anim_choice_msid_count >
           (sizeof(out.wait_anim_choice_msids) / sizeof(out.wait_anim_choice_msids[0]))) {
+    fprintf(stderr, "msl: char params wait_anim_choice counts invalid in %s\n", path);
     alloc_free(buf);
     return -1;
   }
@@ -590,11 +622,12 @@ int char_params_init(void) {
     data_dir = "data";
   }
 
-  if (load_one(data_dir, "characters/fox.json", MSL_CHAR_ID_FOX) != 0) {
-    return -1;
-  }
-  if (load_one(data_dir, "characters/falco.json", MSL_CHAR_ID_FALCO) != 0) {
-    return -1;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    char rel[64];
+    snprintf(rel, sizeof(rel), "characters/%s.json", MSL_CHAR_REGISTRY[ci].name);
+    if (load_one(data_dir, rel, MSL_CHAR_REGISTRY[ci].char_id) != 0) {
+      return -1;
+    }
   }
 
   g_loaded = 1;

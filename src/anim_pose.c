@@ -1,4 +1,5 @@
 #include "anim_pose.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <math.h>
@@ -1355,6 +1356,7 @@ static int load_pose_for_char(const char* data_dir, const char* rel_path, uint8_
     // tests that provide only SSANIM01 still run through anim_pose_get_matrix().
     local_status = load_locals_into_table(data_dir, locals_rel, &next);
     if (local_status < 0) {
+      fprintf(stderr, "msl: anim locals load failed: %s/%s\n", data_dir, locals_rel);
       free_table(&next);
       return -1;
     }
@@ -1364,10 +1366,12 @@ static int load_pose_for_char(const char* data_dir, const char* rel_path, uint8_
   if (snprintf(dyn_rel, sizeof(dyn_rel), "anims/%.*s.dyn.bin", stem_len, file) > 0) {
     dyn_status = load_dynamics_into_table(data_dir, dyn_rel, &next);
     if (dyn_status < 0) {
+      fprintf(stderr, "msl: anim dynamics load failed: %s/%s\n", data_dir, dyn_rel);
       free_table(&next);
       return -1;
     }
     if (dyn_status == 0 && local_status != 0) {
+      fprintf(stderr, "msl: anim dynamics present without locals: %s/%s\n", data_dir, dyn_rel);
       free_table(&next);
       return -1;
     }
@@ -1380,6 +1384,7 @@ static int load_pose_for_char(const char* data_dir, const char* rel_path, uint8_
     // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
     const int track_status = load_tracks_into_table(data_dir, tracks_rel, &next);
     if (track_status < 0) {
+      fprintf(stderr, "msl: anim tracks load failed: %s/%s\n", data_dir, tracks_rel);
       free_table(&next);
       return -1;
     }
@@ -1403,12 +1408,15 @@ int anim_pose_init(void) {
     data_dir = "data";
   }
 
-  if (load_pose_for_char(data_dir, "anims/fox.bin", MSL_CHAR_ID_FOX) != 0) {
-    return -1;
-  }
-  if (load_pose_for_char(data_dir, "anims/falco.bin", MSL_CHAR_ID_FALCO) != 0) {
-    free_table(&g_table_by_char[MSL_CHAR_ID_FOX]);
-    return -1;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    char rel[64];
+    snprintf(rel, sizeof(rel), "anims/%s.bin", MSL_CHAR_REGISTRY[ci].name);
+    if (load_pose_for_char(data_dir, rel, MSL_CHAR_REGISTRY[ci].char_id) != 0) {
+      for (int cj = 0; cj < ci; cj++) {
+        free_table(&g_table_by_char[MSL_CHAR_REGISTRY[cj].char_id]);
+      }
+      return -1;
+    }
   }
 
   g_loaded = 1;

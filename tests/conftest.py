@@ -8,6 +8,18 @@ from pathlib import Path
 
 # Make the repo root importable so `tools.*` modules can be imported in tests.
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _data_manifest_chars() -> list[str]:
+    # Regeneration helpers must use the character set the data tree was built with
+    # (data/manifest.json); the motion-state owner callback-id namespace spans all of them.
+    import json as _json
+
+    try:
+        chars = _json.loads((ROOT / "data" / "manifest.json").read_text()).get("chars")
+        return list(chars) if chars else ["fox", "falco"]
+    except OSError:
+        return ["fox", "falco"]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -412,7 +424,7 @@ def _ensure_motion_state_owner_bins() -> None:
                 "--out_dir",
                 str(ROOT / "data" / "motion_state" / "owners"),
                 "--chars",
-                "fox,falco",
+                ",".join(_data_manifest_chars()),
             ],
             check=True,
         )

@@ -59,6 +59,18 @@ FALCO = Path("data/motion_state/owners/falco.bin")
 MANIFEST = Path("data/motion_state/owners/callback_symbols.json")
 
 
+def _data_manifest_chars() -> list[str]:
+    # The owner tables share one callback-id namespace across every extracted character, so
+    # regeneration stability must be checked with the same character set the data tree was
+    # built with (data/manifest.json), not a hardcoded fox,falco pair.
+    import json as _json
+
+    try:
+        return list(_json.loads(Path("data/manifest.json").read_text()).get("chars") or ["fox", "falco"])
+    except OSError:
+        return ["fox", "falco"]
+
+
 @pytest.mark.integration
 def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     fox = read_mslmso01_v1(FOX)
@@ -896,9 +908,9 @@ def test_motion_state_owner_extractor_regenerates_stable_artifacts(tmp_path: Pat
             "--out_dir",
             str(out_dir),
             "--chars",
-            "fox,falco",
+            ",".join(_data_manifest_chars()),
         ],
         check=True,
     )
-    for rel in ("fox.bin", "falco.bin", "callback_symbols.json"):
+    for rel in [f"{ch}.bin" for ch in _data_manifest_chars()] + ["callback_symbols.json"]:
         assert (out_dir / rel).read_bytes() == (Path("data/motion_state/owners") / rel).read_bytes()

@@ -1,4 +1,5 @@
 #include "special_msids.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <ctype.h>
@@ -163,11 +164,12 @@ int special_msids_init(void) {
     data_dir = "data";
   }
 
-  if (load_one(data_dir, "special_msids/fox.json", (uint8_t)MSL_CHAR_ID_FOX) != 0) {
-    return -1;
-  }
-  if (load_one(data_dir, "special_msids/falco.json", (uint8_t)MSL_CHAR_ID_FALCO) != 0) {
-    return -1;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    char rel[64];
+    snprintf(rel, sizeof(rel), "special_msids/%s.json", MSL_CHAR_REGISTRY[ci].name);
+    if (load_one(data_dir, rel, MSL_CHAR_REGISTRY[ci].char_id) != 0) {
+      return -1;
+    }
   }
 
   g_loaded = 1;

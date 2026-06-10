@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+
+from tools.extraction.char_registry import CHARS
 import json
 import re
 import struct
@@ -187,24 +189,19 @@ def main() -> None:
     common_src = melee / "src" / "melee" / "ft" / "ftmotionstates.c"
     common_entries = _parse_motion_state_table_entries(common_src)
 
+    # Per-character spec rows derive from the central registry: the init MotionState table lives
+    # at <decomp_dir>/<prefix>Init.c and resolves anim ids through the submotion enum in
+    # <submotion_dir>/forward.h (clones reuse the donor enum: Falco uses ftFox's ftFx_SM_*).
     char_specs = {
-        "fox": {
-            "char_dir": "ftFox",
-            "submotion_header_dir": "ftFox",
-            "init_src": melee / "src" / "melee" / "ft" / "chara" / "ftFox" / "ftFx_Init.c",
-            "submotion_typedef": "typedef enum ftFx_Submotion",
-            "submotion_prefix": "ftFx_SM_",
-        },
-        "falco": {
-            "char_dir": "ftFalco",
-            # Decomp note: Falco's init table uses Fox's ftFx_* submotion enum (clone).
-            # refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c includes `ftFox/forward.h` and its
-            # `MotionState ftFc_Init_MotionStateTable[ftFx_MS_SelfCount]` uses `ftFx_SM_*` anim ids.
-            "submotion_header_dir": "ftFox",
-            "init_src": melee / "src" / "melee" / "ft" / "chara" / "ftFalco" / "ftFc_Init.c",
-            "submotion_typedef": "typedef enum ftFx_Submotion",
-            "submotion_prefix": "ftFx_SM_",
-        },
+        name: {
+            "char_dir": info.decomp_dir,
+            "submotion_header_dir": info.submotion_dir,
+            "init_src": melee / "src" / "melee" / "ft" / "chara" / info.decomp_dir
+            / f"{info.decomp_prefix}Init.c",
+            "submotion_typedef": f"typedef enum {info.submotion_prefix.removesuffix('SM_')}Submotion",
+            "submotion_prefix": info.submotion_prefix,
+        }
+        for name, info in CHARS.items()
     }
 
     for ch in [c.strip() for c in args.chars.split(",") if c.strip()]:

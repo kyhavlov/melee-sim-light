@@ -1,4 +1,5 @@
 #include "attack_id_tables.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <errno.h>
@@ -267,25 +268,23 @@ int attack_id_tables_init(void) {
   }
 
   // Atomic initialization: fully load all supported tables first, then publish.
-  MslActionMoveIdTable fox = {0};
-  MslActionMoveIdTable falco = {0};
-
-  if (load_table_for_char_into((uint8_t)MSL_CHAR_ID_FOX, "fox", &fox) != 0) {
-    table_free(&fox);
-    table_free(&falco);
-    g_load_state = -1;
-    return -1;
-  }
-  if (load_table_for_char_into((uint8_t)MSL_CHAR_ID_FALCO, "falco", &falco) != 0) {
-    table_free(&fox);
-    table_free(&falco);
-    g_load_state = -1;
-    return -1;
+  MslActionMoveIdTable staged[MSL_CHAR_REGISTRY_COUNT];
+  memset(staged, 0, sizeof(staged));
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    if (load_table_for_char_into(MSL_CHAR_REGISTRY[ci].char_id, MSL_CHAR_REGISTRY[ci].name,
+                                 &staged[ci]) != 0) {
+      for (int cj = 0; cj <= ci; cj++) {
+        table_free(&staged[cj]);
+      }
+      g_load_state = -1;
+      return -1;
+    }
   }
 
   memset(g_table_by_char, 0, sizeof(g_table_by_char));
-  g_table_by_char[(uint8_t)MSL_CHAR_ID_FOX] = fox;
-  g_table_by_char[(uint8_t)MSL_CHAR_ID_FALCO] = falco;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    g_table_by_char[MSL_CHAR_REGISTRY[ci].char_id] = staged[ci];
+  }
   g_load_state = 1;
   return 0;
 }

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+
+from tools.extraction.char_registry import CHAR_PL_DAT
 import json
 import shutil
 import subprocess
@@ -119,7 +121,7 @@ def main(argv: list[str] | None = None) -> None:
         "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*ItCo.dat' --out-dir _iso",
     )
     for ch in chars:
-        dat = {"fox": "PlFx.dat", "falco": "PlFc.dat"}.get(ch)
+        dat = CHAR_PL_DAT.get(ch)
         if dat is None:
             raise SystemExit(f"unsupported character for now: {ch}")
         _require(

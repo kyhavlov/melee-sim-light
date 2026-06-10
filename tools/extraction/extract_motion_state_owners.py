@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+
+from tools.extraction.char_registry import CHARS
 import json
 import re
 import struct
@@ -133,12 +135,29 @@ def _parse_enum(header: Path, *, enum_typedef: str, prefixes: tuple[str, ...], s
 
 def _parse_submotion_ids(melee_decomp_root: Path) -> dict[str, int]:
     common_forward = melee_decomp_root / "src" / "melee" / "ft" / "chara" / "ftCommon" / "forward.h"
-    fox_forward = melee_decomp_root / "src" / "melee" / "ft" / "chara" / "ftFox" / "forward.h"
 
     out: dict[str, int] = {}
     out.update(_parse_enum(common_forward, enum_typedef="typedef enum ftCo_Submotion", prefixes=("ftCo_SM_",), symbols=out))
-    out.update(_parse_enum(fox_forward, enum_typedef="typedef enum ftFx_Submotion", prefixes=("ftFx_SM_",), symbols=out))
-    # Falco shares Fox's special submotion enum names in this decomp tree.
+    # Per-character submotion enums (clones reuse the donor's enum: Falco uses ftFox's
+    # ftFx_SM_*, so submotion_dir rows de-duplicate).
+    seen: set[str] = set()
+    for info in CHARS.values():
+        if info.submotion_dir in seen:
+            continue
+        seen.add(info.submotion_dir)
+        fwd = (
+            melee_decomp_root / "src" / "melee" / "ft" / "chara" / info.submotion_dir
+            / "forward.h"
+        )
+        enum_name = info.submotion_prefix.removesuffix("SM_") + "Submotion"
+        out.update(
+            _parse_enum(
+                fwd,
+                enum_typedef=f"typedef enum {enum_name}",
+                prefixes=(info.submotion_prefix,),
+                symbols=out,
+            )
+        )
     return out
 
 
@@ -818,21 +837,28 @@ def main() -> None:
 
     chars = [c.strip() for c in args.chars.split(",") if c.strip()]
     supported = {
-        "fox": TableSpec(
-            src=args.melee_decomp / "src" / "melee" / "ft" / "chara" / "ftFox" / "ftFx_Init.c",
-            rel_name="fox",
-        ),
-        "falco": TableSpec(
-            src=args.melee_decomp / "src" / "melee" / "ft" / "chara" / "ftFalco" / "ftFc_Init.c",
-            rel_name="falco",
-        ),
+        name: TableSpec(
+            src=args.melee_decomp / "src" / "melee" / "ft" / "chara" / info.decomp_dir
+            / f"{info.decomp_prefix}Init.c",
+            rel_name=name,
+        )
+        for name, info in CHARS.items()
     }
 
     common_src = args.melee_decomp / "src" / "melee" / "ft" / "ftmotionstates.c"
     common_headers = [
         args.melee_decomp / "src" / "melee" / "ft" / "forward.h",
         args.melee_decomp / "src" / "melee" / "ft" / "chara" / "ftCommon" / "forward.h",
-        args.melee_decomp / "src" / "melee" / "ft" / "chara" / "ftFox" / "forward.h",
+        *sorted(
+            {
+                fh
+                for info in CHARS.values()
+                if (
+                    fh := args.melee_decomp / "src" / "melee" / "ft" / "chara" / info.decomp_dir
+                    / "forward.h"
+                ).exists()
+            }
+        ),
     ]
     ft_move_id = _parse_ft_move_id_enum(args.melee_decomp)
     motion_flags = _parse_motion_flags_constants(common_headers)

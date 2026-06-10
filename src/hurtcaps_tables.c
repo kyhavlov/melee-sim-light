@@ -1,4 +1,5 @@
 #include "hurtcaps_tables.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <stdio.h>
@@ -171,12 +172,15 @@ int hurtcaps_tables_init(void) {
     data_dir = "data";
   }
 
-  if (load_for_char(data_dir, "hurtcaps/fox.bin", MSL_CHAR_ID_FOX) != 0) {
-    return -1;
-  }
-  if (load_for_char(data_dir, "hurtcaps/falco.bin", MSL_CHAR_ID_FALCO) != 0) {
-    free_table(&g_table_by_char[MSL_CHAR_ID_FOX]);
-    return -1;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    char rel[64];
+    snprintf(rel, sizeof(rel), "hurtcaps/%s.bin", MSL_CHAR_REGISTRY[ci].name);
+    if (load_for_char(data_dir, rel, MSL_CHAR_REGISTRY[ci].char_id) != 0) {
+      for (int cj = 0; cj < ci; cj++) {
+        free_table(&g_table_by_char[MSL_CHAR_REGISTRY[cj].char_id]);
+      }
+      return -1;
+    }
   }
 
   g_loaded = 1;

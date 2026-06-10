@@ -1,4 +1,5 @@
 #include "script_events.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <limits.h>
@@ -313,12 +314,15 @@ int script_events_init(void) {
   if (data_dir == NULL || data_dir[0] == '\0') {
     data_dir = "data";
   }
-  if (script_table_load(data_dir, "scripts/fox.bin", &g_tables[MSL_CHAR_ID_FOX]) != 0) {
-    return -1;
-  }
-  if (script_table_load(data_dir, "scripts/falco.bin", &g_tables[MSL_CHAR_ID_FALCO]) != 0) {
-    script_table_free(&g_tables[MSL_CHAR_ID_FOX]);
-    return -1;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    char rel[64];
+    snprintf(rel, sizeof(rel), "scripts/%s.bin", MSL_CHAR_REGISTRY[ci].name);
+    if (script_table_load(data_dir, rel, &g_tables[MSL_CHAR_REGISTRY[ci].char_id]) != 0) {
+      for (int cj = 0; cj < ci; cj++) {
+        script_table_free(&g_tables[MSL_CHAR_REGISTRY[cj].char_id]);
+      }
+      return -1;
+    }
   }
   g_loaded = 1;
   return 0;

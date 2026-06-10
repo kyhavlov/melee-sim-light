@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+
+from tools.extraction.char_registry import CHARS
 import struct
 from pathlib import Path
 
@@ -252,7 +254,7 @@ def _extract_shield_part_xyz_by_frame(
 ) -> list[tuple[float, float, float]]:
     from tools.extraction import extract_fighter_anims as efa
 
-    prefix = {"fox": "PlFx", "falco": "PlFc"}[character]
+    prefix = CHARS[character].pl_dat.removesuffix(".dat")
     aj_dat = efa.ISO_DIR / f"{prefix}AJ.dat"
     entry = efa._msid_anim_entry(character, msid)
     if entry is None:
@@ -416,7 +418,7 @@ def main() -> None:
         description="Extract guard-tilt shield bubble center offsets (decomp-first, ISO-derived)."
     )
     ap.add_argument("--iso-dir", type=Path, default=Path("_iso"))
-    ap.add_argument("--character", type=str, required=True, choices=["fox", "falco"])
+    ap.add_argument("--character", type=str, required=True, choices=sorted(CHARS))
     ap.add_argument("--out", type=Path, required=True, help="output path (e.g. data/shields/fox.bin)")
     args = ap.parse_args()
 
@@ -427,13 +429,13 @@ def main() -> None:
     efa.ISO_DIR = args.iso_dir
     character = args.character
 
-    prefix = {"fox": "PlFx", "falco": "PlFc"}[character]
+    prefix = CHARS[character].pl_dat.removesuffix(".dat")
     pl_dat = args.iso_dir / f"{prefix}.dat"
     aj_dat = args.iso_dir / f"{prefix}AJ.dat"
     if not pl_dat.exists() or not aj_dat.exists():
         raise SystemExit(f"missing required ISO artifacts: {pl_dat} / {aj_dat}")
 
-    ftdata_symbol = {"fox": "ftDataFox", "falco": "ftDataFalco"}[character]
+    ftdata_symbol = CHARS[character].ftdata_symbol
     shield_part = _shield_part_from_pldat(pl_dat, ftdata_symbol=ftdata_symbol)
 
     entry = efa._msid_anim_entry(character, 38)  # ftCo_SM_Guard (tilt timeline uses this)

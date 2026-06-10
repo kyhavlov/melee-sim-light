@@ -79,8 +79,11 @@ def read_mslacid1_v3(path: str | Path) -> ActionStateTable:
 
 @functools.lru_cache(maxsize=8)
 def load_action_state_tables(data_dir: str = "data") -> dict[int, ActionStateTable]:
+    # One table per registry character (keyed by internal id); preprocessing must cover every
+    # character the data tree was built for, not a hardcoded fox/falco pair.
+    from tools.extraction.char_registry import CHARS
+
     base = Path(str(data_dir)) / "attack_id" / "move_id"
     return {
-        1: read_mslacid1_v3(base / "fox.bin"),
-        22: read_mslacid1_v3(base / "falco.bin"),
+        info.internal_id: read_mslacid1_v3(base / f"{name}.bin") for name, info in CHARS.items()
     }

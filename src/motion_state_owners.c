@@ -1,4 +1,5 @@
 #include "motion_state_owners.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <errno.h>
@@ -255,10 +256,15 @@ int motion_state_owners_init(void) {
   if (g_load_state == -1) {
     return -1;
   }
-  if (load_table_for_char_into((uint8_t)MSL_CHAR_ID_FOX, "fox",
-                               &g_table_by_char[(uint8_t)MSL_CHAR_ID_FOX]) != 0 ||
-      load_table_for_char_into((uint8_t)MSL_CHAR_ID_FALCO, "falco",
-                               &g_table_by_char[(uint8_t)MSL_CHAR_ID_FALCO]) != 0) {
+  int load_failed = 0;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    if (load_table_for_char_into(MSL_CHAR_REGISTRY[ci].char_id, MSL_CHAR_REGISTRY[ci].name,
+                                 &g_table_by_char[MSL_CHAR_REGISTRY[ci].char_id]) != 0) {
+      load_failed = 1;
+      break;
+    }
+  }
+  if (load_failed) {
     g_load_state = -1;
     return -1;
   }
@@ -370,8 +376,14 @@ uint8_t msl_motion_state_class3_has(uint8_t char_id, uint16_t action_id, uint32_
 }
 
 uint8_t msl_motion_state_common_class_has(uint16_t action_id, uint32_t class_bit) {
-  return (msl_motion_state_class_has((uint8_t)MSL_CHAR_ID_FOX, action_id, class_bit) &&
-          msl_motion_state_class_has((uint8_t)MSL_CHAR_ID_FALCO, action_id, class_bit))
+  uint8_t all_have = 1u;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    if (!msl_motion_state_class_has(MSL_CHAR_REGISTRY[ci].char_id, action_id, class_bit)) {
+      all_have = 0u;
+      break;
+    }
+  }
+  return all_have
              ? 1u
              : 0u;
 }

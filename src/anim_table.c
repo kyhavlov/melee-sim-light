@@ -1,4 +1,5 @@
 #include "anim_table.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <stdint.h>
@@ -207,11 +208,12 @@ int anim_table_init(void) {
     data_dir = "data";
   }
 
-  if (load_tracks_for_char(data_dir, "anims/fox.tracks.bin", MSL_CHAR_ID_FOX) != 0) {
-    return -1;
-  }
-  if (load_tracks_for_char(data_dir, "anims/falco.tracks.bin", MSL_CHAR_ID_FALCO) != 0) {
-    return -1;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    char rel[64];
+    snprintf(rel, sizeof(rel), "anims/%s.tracks.bin", MSL_CHAR_REGISTRY[ci].name);
+    if (load_tracks_for_char(data_dir, rel, MSL_CHAR_REGISTRY[ci].char_id) != 0) {
+      return -1;
+    }
   }
 
   g_loaded = 1;

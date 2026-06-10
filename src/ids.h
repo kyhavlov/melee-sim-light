@@ -1,8 +1,9 @@
 #pragma once
 
-// Public GALE01/Slippi external character ids supported by the current runtime.
+// Melee internal FighterKind ids (ft/types.h order) supported by the current runtime.
 typedef enum MslCharacterId {
   MSL_CHAR_ID_FOX = 1,
+  MSL_CHAR_ID_MARTH = 18,
   MSL_CHAR_ID_FALCO = 22,
 } MslCharacterId;
 

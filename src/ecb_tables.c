@@ -1,4 +1,5 @@
 #include "ecb_tables.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <stdio.h>
@@ -223,11 +224,12 @@ int ecb_table_init(void) {
   }
 
   // If these artifacts are missing, fail loudly so developers run `tools.extraction.build_data`.
-  if (load_table_for_char(data_dir, "ecb/fox_bottom.bin", MSL_CHAR_ID_FOX) != 0) {
-    return -1;
-  }
-  if (load_table_for_char(data_dir, "ecb/falco_bottom.bin", MSL_CHAR_ID_FALCO) != 0) {
-    return -1;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    char rel[64];
+    snprintf(rel, sizeof(rel), "ecb/%s_bottom.bin", MSL_CHAR_REGISTRY[ci].name);
+    if (load_table_for_char(data_dir, rel, MSL_CHAR_REGISTRY[ci].char_id) != 0) {
+      return -1;
+    }
   }
 
   g_loaded = 1;
@@ -504,11 +506,12 @@ int ecb_extents_table_init(void) {
     data_dir = "data";
   }
 
-  if (load_extents_table_for_char(data_dir, "ecb/fox_extents.bin", MSL_CHAR_ID_FOX) != 0) {
-    return -1;
-  }
-  if (load_extents_table_for_char(data_dir, "ecb/falco_extents.bin", MSL_CHAR_ID_FALCO) != 0) {
-    return -1;
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    char rel[64];
+    snprintf(rel, sizeof(rel), "ecb/%s_extents.bin", MSL_CHAR_REGISTRY[ci].name);
+    if (load_extents_table_for_char(data_dir, rel, MSL_CHAR_REGISTRY[ci].char_id) != 0) {
+      return -1;
+    }
   }
 
   g_extents_loaded = 1;

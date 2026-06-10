@@ -17,7 +17,11 @@ from tools.extraction.known_data_artifacts import (
 )
 
 
-CHAR_IDS = {"fox": 2, "falco": 20}
+from tools.extraction.char_registry import CHARS
+
+# Article params exist only for characters whose ftData registers items (registry
+# has_articles); article-less characters (Marth, ...) are skipped by _records.
+CHAR_IDS = {name: info.external_id for name, info in CHARS.items() if info.has_articles}
 ILLUSION_ITEM_KINDS = {
     # refs/melee/src/melee/it/forward.h::ItemKind
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_OnLoad
@@ -87,6 +91,8 @@ def _pack_record(char_id: int, spec: FieldSpec, value: float) -> bytes:
 def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple[int, FieldSpec, float]]:
     out: list[tuple[int, FieldSpec, float]] = []
     for ch in chars:
+        if ch not in CHAR_IDS:
+            continue
         attrs = json.loads((attrs_dir / f"{ch}.json").read_text(encoding="utf-8"))
         char_id = CHAR_IDS[ch]
         for key, spec in FIELD_SPECS.items():
@@ -100,6 +106,8 @@ def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple
     common = json.loads(item_common.read_text(encoding="utf-8"))
     if "shield_bounce_extra_degrees" in common:
         for ch in chars:
+            if ch not in CHAR_IDS:
+                continue
             out.append((CHAR_IDS[ch], FIELD_SPECS["shield_bounce_extra_degrees"], float(common["shield_bounce_extra_degrees"])))
     return sorted(out, key=lambda row: (row[0], row[1].field_id))
 

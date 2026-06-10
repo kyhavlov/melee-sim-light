@@ -988,11 +988,12 @@ def _ftdata_xc_count(character: str) -> int:
     This count is the length of the per-anim-id tables (`ftData.xC` and `ftData.x10`),
     where `ftData.x10` is a packed `[blend_frames, dynamics_tree_idx]` pair per anim id.
     """
-    # Only keep counts for characters we actively support in extraction.
-    # Add more as needed if we expand the suite beyond Fox/Falco.
+    # Values are ftData_Table_Unk0[internal_id].count from refs/melee/src/melee/ft/ftdata.c
+    # (FTKIND_MAX rows indexed by FighterKind): fox=row 1, falco=row 22, marth=row 18.
     return {
         "fox": 327,
         "falco": 327,
+        "marth": 327,
     }[character]
 
 
@@ -1773,6 +1774,14 @@ def extract_one_character(
     parts_num = len(part_to_joint)
     dynamic_sets = _read_fighter_dynamics(character)
     moves = json.loads(moves_path.read_text())
+    # Runtime dynamic-pose state lanes (MSL_MAX_DYNAMIC_NODES per player) only carry chains that
+    # have extracted collision owners. Characters whose chains have no owner msids yet (everything
+    # but Fox's tail today) get an empty SSDYNN01 so the loader contract stays satisfied without
+    # publishing inert sets that exceed the per-player node capacity. NOTE (marth): hurtcaps on
+    # bones 60/70/71 may ride cape/hair chains; if a future validation row needs their dynamic
+    # pose, extend the runtime node lanes and drop this gate for that character.
+    if not _dynamic_collision_owner_msids(character, moves, dynamic_sets):
+        dynamic_sets = []
     for dyn in dynamic_sets:
         for part in _dynamic_first_child_chain(
             int(dyn.get("root_part", -1)), int(dyn.get("chain_count", 0)), parent_part

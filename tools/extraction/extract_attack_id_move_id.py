@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+
+from tools.extraction.char_registry import CHARS
 import json
 import re
 import struct
@@ -535,12 +537,24 @@ def main() -> None:
     # Decomp pointers:
     # - Ft_MF_* base flags: refs/melee/src/melee/ft/forward.h
     # - Common ftCo_MF_* composites: refs/melee/src/melee/ft/chara/ftCommon/forward.h
-    # - Fox/Falco ftFx_MF_* composites: refs/melee/src/melee/ft/chara/ftFox/forward.h
+    # - Per-character MF composites (ftFx_MF_*, ftMs_MF_*, ...): every registry character's
+    #   <decomp_dir>/forward.h (names are prefix-disjoint so one merged namespace is safe).
     motion_flags_expr_by_name = _parse_motion_flags_constants(
         [
             melee / "src" / "melee" / "ft" / "forward.h",
             melee / "src" / "melee" / "ft" / "chara" / "ftCommon" / "forward.h",
-            melee / "src" / "melee" / "ft" / "chara" / "ftFox" / "forward.h",
+            *sorted(
+                {
+                    fh
+                    for info in CHARS.values()
+                    if (
+                        fh := melee / "src" / "melee" / "ft" / "chara" / info.decomp_dir
+                        / "forward.h"
+                    ).exists()
+                    # Clones without their own forward.h (ftFalco) reuse the donor enum, which is
+                    # already included via the donor's decomp_dir row.
+                }
+            ),
         ]
     )
 
@@ -553,17 +567,16 @@ def main() -> None:
         common_src, ft_move_id, motion_flags_expr_by_name
     )
 
+    # Spec rows derive from the central registry: the per-character MotionState init table is
+    # <decomp_dir>/<prefix>Init.c for every fighter.
     specs = {
-        "fox": _TableSpec(
-            name="fox",
-            src=melee / "src" / "melee" / "ft" / "chara" / "ftFox" / "ftFx_Init.c",
-            rel_name="fox",
-        ),
-        "falco": _TableSpec(
-            name="falco",
-            src=melee / "src" / "melee" / "ft" / "chara" / "ftFalco" / "ftFc_Init.c",
-            rel_name="falco",
-        ),
+        name: _TableSpec(
+            name=name,
+            src=melee / "src" / "melee" / "ft" / "chara" / info.decomp_dir
+            / f"{info.decomp_prefix}Init.c",
+            rel_name=name,
+        )
+        for name, info in CHARS.items()
     }
 
     for ch in [c.strip() for c in args.chars.split(",") if c.strip()]:

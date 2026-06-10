@@ -1,4 +1,5 @@
 #include "api.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <errno.h>
@@ -1041,7 +1042,12 @@ enum {
 };
 
 static inline uint8_t msl_match_init_supported_char(uint8_t char_id) {
-  return (uint8_t)(char_id == (uint8_t)MSL_CHAR_ID_FOX || char_id == (uint8_t)MSL_CHAR_ID_FALCO);
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    if (char_id == MSL_CHAR_REGISTRY[ci].char_id) {
+      return 1u;
+    }
+  }
+  return 0u;
 }
 
 static inline uint8_t msl_match_init_point_inside_bounds(const MslStageBounds* b, float x,

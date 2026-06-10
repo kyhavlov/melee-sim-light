@@ -1,4 +1,5 @@
 #include "staling_tables.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <math.h>
@@ -245,8 +246,9 @@ int staling_tables_init(void) {
 
   // Treat missing artifacts as non-fatal (groundwork is allowed to be debug-only).
   (void)load_staling_weights();
-  (void)load_move_id_table_for_char((uint8_t)MSL_CHAR_ID_FOX, "fox");
-  (void)load_move_id_table_for_char((uint8_t)MSL_CHAR_ID_FALCO, "falco");
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    (void)load_move_id_table_for_char(MSL_CHAR_REGISTRY[ci].char_id, MSL_CHAR_REGISTRY[ci].name);
+  }
 
   g_loaded = 1;
   return 0;

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+
+from tools.extraction.char_registry import CHARS
 import json
 import struct
 from pathlib import Path
@@ -213,10 +215,7 @@ def _iter_entries_from_iso(
     max_frames: int,
     max_steps_per_frame: int,
 ) -> list[tuple[int, str, list[dict]]]:
-    char_to_dat = {
-        "fox": ("PlFx.dat", "ftDataFox"),
-        "falco": ("PlFc.dat", "ftDataFalco"),
-    }
+    char_to_dat = {name: (info.pl_dat, info.ftdata_symbol) for name, info in CHARS.items()}
     if character not in char_to_dat:
         raise RuntimeError(f"unknown character {character!r}")
 
