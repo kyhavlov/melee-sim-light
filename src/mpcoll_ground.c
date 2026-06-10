@@ -7489,19 +7489,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
               ? 1u
               : 0u;
-      const uint8_t prev_action_is_jump =
-          (prev_action_id == (uint16_t)MSL_ACT_JUMP_F || prev_action_id == (uint16_t)MSL_ACT_JUMP_B)
-              ? 1u
-              : 0u;
-      const uint8_t seed_prev_action_is_jump =
-          (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_F ||
-           batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_B)
-              ? 1u
-              : 0u;
-      const uint8_t fresh_lr_edge = ((batch->state.input_buttons_pressed[idx] &
-                                      (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R)) != 0u)
-                                        ? 1u
-                                        : 0u;
       // TODO: Once the current rollout burn-down stabilizes, fold this accumulating floor-owner
       // logic into a bounded collision-result packet. Floor sweep start provenance,
       // callback/source authority, suppress/reject reason, and final publication should be carried
@@ -7516,15 +7503,23 @@ void mpcoll_ground_apply(MslBatch* batch) {
             batch->state.prev_action_frame[idx] <= 2))
               ? 1u
               : 0u;
+      const uint8_t prev_action_is_jump =
+          (prev_action_id == (uint16_t)MSL_ACT_JUMP_F || prev_action_id == (uint16_t)MSL_ACT_JUMP_B)
+              ? 1u
+              : 0u;
+      const uint8_t seed_prev_action_is_jump =
+          (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_F ||
+           batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_B)
+              ? 1u
+              : 0u;
+      const uint8_t fresh_lr_edge = ((batch->state.input_buttons_pressed[idx] &
+                                      (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R)) != 0u)
+                                        ? 1u
+                                        : 0u;
       // Same-frame JumpAerial -> EscapeAir IASA from a platform-domain floor can enter EscapeAir
       // before Fighter_procMap. In that entry-frame source path, ft_80082C74 calls mpCollPrev after
       // the action transition, so CollData.last_pos is the frame-start JumpAerial root and
-      // CollData.cur_pos is the post-Phys EscapeAir root. This also matters for no-lock FoD
-      // static-y platform wavelands: the pre-entry CollData root/ECB has already been advanced by
-      // Fighter_8006A360 before IASA changes the motion state, so using the older replay
-      // floor_sweep_prev_pos endpoint misses the source bottom sweep. Already seeded EscapeAir rows
-      // have run the entry callback on the previous frame, so their source CollData.cur_pos is the
-      // prefix floor_sweep_prev_pos seed lane instead.
+      // CollData.cur_pos is the post-Phys EscapeAir root.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
       // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
@@ -7542,8 +7537,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
               : 0u;
       // Late frame-start JumpF/B -> EscapeAir on a fresh shield edge keeps the frame-start
       // CollData root for the first EscapeAir_Coll mpCollPrev sweep while the source jump ECB lock
-      // still has two frames remaining. The following lock-1 frame has already advanced the
-      // callback-local root far enough that EscapeAir keeps the ordinary post-entry floor sweep.
+      // still has two frames remaining.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
       // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
       // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}
@@ -7553,10 +7547,31 @@ void mpcoll_ground_apply(MslBatch* batch) {
            batch->state.action_frame[idx] <= 1)
               ? 1u
               : 0u;
+      // No-lock EscapeAir_Coll floor sweeps start from the frame-start CollData root, entry and
+      // sustained frames alike: ft_80081D0C copies the previous callback's published
+      // CollData.cur_pos into last_pos before writing the post-Phys root, and mpColl_80043754
+      // sweeps from last_pos. The previous EscapeAir_Coll (or the pre-entry action's map callback
+      // on the entry frame) published CollData.cur_pos as the corrected fighter root, so the
+      // source sweep never starts from the older pre-physics root of the previous frame. Sweeping
+      // from that older root both fabricates platform crossings on falling rows (prev bottom
+      // still above the line) and misses waveland crossings on rising-then-falling rows (prev
+      // bottom below the line trips mpLineIntersectionH's `b0y - a0y < -0.0001` reject).
+      // While CollData_X130_Locked is live, `mpColl_LoadECB_inline` preserves the locked desired
+      // bottom in both sweep endpoints; that locked family keeps its existing carried-root owners
+      // until the locked prev/cur endpoint substrate replaces them.
+      // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class3 PHASE4_ESCAPE_AIR_COLL)
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+      // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+      // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpColl_800471F8,
+      //   mpColl_LoadECB_inline}
+      // refs/melee/src/melee/mp/mplib.c::mpLineIntersectionH
       const uint8_t escapeair_471f8_uses_frame_start_last_pos =
-          (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-           (escapeair_jumpaerial_frame_start_owner != 0u ||
-            escapeair_late_jump_fresh_edge_owner != 0u))
+          ((msl_motion_state_class3_has(char_id, action_id, MSL_MS_CLASS3_PHASE4_ESCAPE_AIR_COLL) &&
+            !ecb_lock_active && ecb_lock_timer_seed == 0u) ||
+           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+            (escapeair_jumpaerial_frame_start_owner != 0u ||
+             escapeair_late_jump_fresh_edge_owner != 0u)))
               ? 1u
               : 0u;
       uint8_t damagefly_frame_start_bottom_above_carried_floor = 0u;
@@ -7835,10 +7850,27 @@ void mpcoll_ground_apply(MslBatch* batch) {
            batch->state.seed_prev_action_frame[idx] >= 4)
               ? 1u
               : 0u;
+      // General no-lock EscapeAir entry prev-ECB lifetime:
+      // any same-frame IASA -> EscapeAir entry reaches the map callback with the pre-entry
+      // action's CollData current ECB still promoted into prev_ecb by mpCollInterpolateECB;
+      // only the current/desired endpoint follows the just-loaded EscapeAir pose. Late jump
+      // poses carry a high ECB bottom, so sampling the entered EscapeAir pose for the previous
+      // endpoint drops the source sweep start below floors the pre-entry bottom was still above
+      // (e.g. late JumpB wavelands onto the stage shell).
+      // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 submotion_id
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+      // refs/melee/src/melee/mp/mpcoll.c::{
+      //   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor}
+      const uint8_t escapeair_no_lock_entry_prev_ecb_lifetime =
+          (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && !ecb_lock_active &&
+           ecb_lock_timer_seed == 0u && prev_action_id != action_id &&
+           !escapeair_jumpaerial_prev_ecb_lifetime)
+              ? 1u
+              : 0u;
       const float pose_prev_ecb_rel =
           mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_prev, lock_bottom_to_zero);
       const float pre_entry_prev_ecb_rel =
-          // Same-frame JumpAerial -> EscapeAir IASA still enters the map callback with the
+          // Same-frame IASA -> EscapeAir still enters the map callback with the
           // pre-entry CollData current ECB as `prev_ecb`; source then loads/interpolates the
           // entered EscapeAir desired ECB before `mpColl_80044628_Floor`. Use the generated
           // MotionState submotion table for the pre-entry action instead of reusing the entered
@@ -7852,6 +7884,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
               ? mpcoll_action_pose_ecb_bottom_rel_y(
                     char_id, batch->state.seed_prev_action_id[idx],
                     (int16_t)(batch->state.prev_action_frame[idx] + 1), lock_bottom_to_zero)
+          : (escapeair_no_lock_entry_prev_ecb_lifetime)
+              ? mpcoll_action_pose_ecb_bottom_rel_y(
+                    char_id, prev_action_id, (int16_t)(batch->state.prev_action_frame[idx] + 1),
+                    lock_bottom_to_zero)
               : pose_prev_ecb_rel;
       MslEcbWorldPoints state_cur_ecb_points = {0};
       const uint8_t have_state_cur_ecb = mpcoll_state_current_ecb_points(
@@ -7953,7 +7989,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
            (jumpaerial_entry_ecb_consumer || damage_entry_attackair_ecb_consumer ||
             damage_entry_escapeair_ecb_consumer || active_damage_hitlag_ecb_consumer))
               ? 1u
-              : (escapeair_jumpaerial_prev_ecb_lifetime && !use_locked_desired_ecb_bottom);
+              : ((escapeair_jumpaerial_prev_ecb_lifetime ||
+                  escapeair_no_lock_entry_prev_ecb_lifetime) &&
+                 !use_locked_desired_ecb_bottom);
       const float state_cur_ecb_rel =
           have_state_cur_ecb ? state_cur_ecb_points.bottom_rel_y : pre_entry_prev_ecb_rel;
       const float hidden_current_ecb_rel =
@@ -11441,10 +11479,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
           float best_static_platform_dist2 = 0.0f;
           float best_static_platform_ix = 0.0f;
           float best_static_platform_iy = 0.0f;
+          // Source `mpCollInterpolateECB` promotes the previous frame's final ECB into prev_ecb
+          // before loading the current pose, so the sustained sweep's previous endpoint uses the
+          // previous frame's EscapeAir pose bottom, not the just-loaded current pose. Sampling the
+          // current pose here lifts the previous endpoint above platforms the source prev bottom
+          // never reached, fabricating `mpLineIntersectionH` crossings.
+          // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_80044628_Floor}
+          // refs/melee/src/melee/mp/mplib.c::mpLineIntersectionH
           const float prev_pose_bottom_y =
               escapeair_no_lock_jumpaerial_entry
                   ? prev_bottom_y
-                  : (prev_y + mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame, 0u));
+                  : (prev_y + mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_prev, 0u));
           const float cur_pose_bottom_y =
               escapeair_no_lock_jumpaerial_entry
                   ? cur_bottom_y

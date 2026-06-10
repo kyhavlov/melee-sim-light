@@ -4638,17 +4638,20 @@ def test_attackair_current_owned_height_platform_and_action_entry_floor_skip_bou
 def test_fod_escapeair_live_hard_floor_bottom_sweep_over_stale_platform_lands() -> None:
     # EscapeAir_Coll uses `ft_80082C74 -> ft_80081D0C -> mpColl_800471F8`. A stale platform
     # CollData.floor id does not block the current callback from accepting an ordinary hard-floor
-    # ECB-bottom sweep. The owner is the live runtime mpCollPrev bottom sweep, not public root state.
+    # ECB-bottom sweep. No-lock EscapeAir sweeps start from the frame-start CollData root that the
+    # previous callback published (`coll->last_pos = coll->cur_pos` in ft_80081D0C before
+    # mpColl_80043754 sweeps from last_pos), so the crossing happens inside the live step.
     #
     # data/motion_state/owners/{fox,falco}.bin::MSLMSO01 phase AIR_471F8
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
-    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpColl_80044628_Floor}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpColl_800471F8,
+    #   mpColl_80044628_Floor}
     seed = _seed_fod_airborne_hard_floor_crossing(
         ACT_ESCAPE_AIR,
         SM_ESCAPE_AIR,
         x=19.6,
-        y=-6.8,
+        y=-3.4,
         prev_y=-3.4,
         ground_id=1,
         action_frame=1,
