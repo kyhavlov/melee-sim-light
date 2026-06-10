@@ -701,6 +701,11 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093694
       // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
       batch->state.x672_input_timer_frame_start[idx] = batch->state.x672_input_timer[idx];
+      // Frame-start guard tilt snapshot: item collision consumes mv.co.guard.{x4,x8} as left by
+      // the previous frame's guard anim callback; both shields_refresh blocks update the live
+      // lanes later this step.
+      batch->state.guard_tilt_x8_frame_start[idx] = batch->state.guard_tilt_x8[idx];
+      batch->state.guard_tilt_x4_frame_start[idx] = batch->state.guard_tilt_x4[idx];
       batch->state.x672_input_timer[idx] =
           x672_trigger_timer_update(batch->state.x672_input_timer[idx], x650_trig, x650_prev_trig,
                                     com->powershield_reflect_trigger_min);

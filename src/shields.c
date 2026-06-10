@@ -440,10 +440,39 @@ void shields_refresh(MslBatch* batch) {
             }
             batch->state.lightshield_amount[idx] = light;
           }
+          const uint8_t guard_second_frame =
+              ((batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+                batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) &&
+               batch->state.guard_on_entered_this_frame[idx] == 0u &&
+               batch->state.guard_reflect_entered_this_frame[idx] == 0u &&
+               c->guard_x10_init_frames > 1.0f &&
+               batch->state.guard_x10[idx] == (uint8_t)((uint16_t)c->guard_x10_init_frames - 1u))
+                  ? 1u
+                  : 0u;
+          if (guard_second_frame && denom > 0.0f) {
+            // Second guard frame: ftCo_800921DC seeds fp->lightshield_amount as
+            // input.x650 / (1 - x10) with no deadzone subtraction and no upper clamp, so a full
+            // digital press yields ~1.43. The collision matrix phase makes this visible on the
+            // SECOND guard frame only: the entry frame's fighter pass still consumes the
+            // pre-entry matrix (same-frame entry contact locks hit the full bubble), the entry's
+            // ftCo_80091D58 scale is what the next frame's collision reads, and ftCo_800925A4
+            // then overwrites the lane so frame 3+ returns to steady. Suite-wide witness fit
+            // (reports/triage/maj_burn/shield_boundary_sweep.py, first-of-window kind-1/kind-2
+            // rows): the deepest static-radius "misses inside" (-2.5) match steady(8.0) -
+            // entry(5.5) on second-frame rows.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_800925A4}
+            const float entry_candidate = trig / denom;
+            if (entry_candidate >= 0.0f) {
+              light = entry_candidate;
+            }
+          }
           const float hp_ratio = clamp01(batch->state.shield_hp[idx] / c->start_shield_health);
-          const float light_scale =
+          float light_scale =
               (light * (c->shield_size_lightshield_max - c->shield_size_lightshield_min)) +
               c->shield_size_lightshield_min;
+          if (light_scale < 0.0f) {
+            light_scale = 0.0f;
+          }
           const float n1 = hp_ratio * light_scale;
           const float n2 = 1.0f - c->shield_size_min_scale;
           const float scale = (n2 * n1) + c->shield_size_min_scale;

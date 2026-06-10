@@ -420,6 +420,34 @@ static inline uint8_t ft80084db0_left_wall_endpoint_persistence_suppresses(
                    projected_y >= projected_line->y1 - k_line_axis_thresh);
 }
 
+static inline uint8_t specialhi_left_wall_endpoint_envelope_stale_from_callback_root(
+    const MslBatch* batch, size_t idx, const MslStageWallLine* envelope_line, uint8_t char_id,
+    uint16_t action_id, float callback_prev_x, float envelope_x, float candidate_y) {
+  if (batch == NULL || envelope_line == NULL ||
+      !specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id) ||
+      !(batch->state.speed_air_x_self[idx] > 0.0f)) {
+    return 0u;
+  }
+  if (!(candidate_y >= envelope_line->y1 - k_line_axis_thresh)) {
+    return 0u;
+  }
+  // Source `mpColl_80045B74_LeftWall` builds the candidate list from actual previous->current
+  // ECB sweeps. Endpoint candidates are valid when the callback-entry root is still outside the
+  // left wall and crosses into the endpoint envelope. If the callback already starts on/inside the
+  // endpoint and self velocity moves away from the wall, the current-edge candidate is stale and
+  // source leaves the root on its integrated path instead of re-clamping to the endpoint.
+  //
+  // Nonzero MapJoint walls require the source JObj/transformed collision packet before a static
+  // endpoint candidate is authoritative. Keep those rejected here; the generic transformed wall
+  // packet is separate x44 debt, not a SpecialHi endpoint-envelope owner.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+  if (envelope_line->joint_id != 0) {
+    return 1u;
+  }
+  return (uint8_t)(callback_prev_x >= envelope_x - k_line_axis_thresh);
+}
+
 static inline uint8_t mpcoll_damagefly_wall_asdi_latch_action(uint16_t action_id) {
   return msl_motion_state_common_class3_has(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
 }
@@ -3446,10 +3474,9 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                                            &envelope_x, &envelope_line_idx, &envelope_nx,
                                            &envelope_ny)) {
             const MslStageWallLine* envelope_line = &lwg->lines[(size_t)envelope_line_idx];
-            const uint8_t suppress_airblaster_endpoint_envelope =
-                ft80084db0_left_wall_endpoint_persistence_suppresses(
-                    batch, idx, envelope_line, char_id, action_id, candidates.first_iy);
-            if (!suppress_airblaster_endpoint_envelope) {
+            if (!specialhi_left_wall_endpoint_envelope_stale_from_callback_root(
+                    batch, idx, envelope_line, char_id, action_id, callback_prev_x, envelope_x,
+                    candidates.first_iy)) {
               const float dx = envelope_x - batch->state.pos_x[idx];
               // SpecialAirHi consumes the wall resolution for rebound/hitlag provenance, not the
               // common-air PassiveWall/WallJump Hug consumer. Active DamageFly hitlag refreshes
@@ -3457,11 +3484,17 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               // free DamageFly and common Jump/Fall callbacks can consume Collide_LeftWallHug
               // immediately for FlyReflect/PassiveWall or walljump. The ft_80081D0C path still
               // receives the source mpColl Hug bit, but has no same-callback walljump consumer.
+              //
+              // Endpoint admission is still candidate-owned: the helper above rejects stale rows
+              // whose callback-entry root already sat on the endpoint and moved away, while
+              // preserving true outside-to-inside endpoint sweeps from the fresh source list.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
               //   ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_800C15F4
               // refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
+              // refs/melee/src/melee/mp/mpcoll.c::{
+              //   mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
               const uint8_t hug =
                   (uint8_t)((use_common_air_left_envelope || use_ft80081d0c_left_envelope ||
                              (use_ft_check_ground_ledge_air_left_envelope &&

@@ -3769,6 +3769,12 @@ Fox/Falco special-owner split (2026-04-17):
       SpecialHi paths: `mpColl_LoadECB_JObj` samples collision joints after
       `ftFox_SpecialHi_RotateModel` mutates FtPart_XRotN, and `mpColl_80044628_Floor` consumes the
       rotated bottom sweep. A stale carried floor id does not suppress a real live bottom crossing.
+      The left-wall endpoint envelope keeps the same source split: static FD wall endpoint sweeps
+      can publish the crossing when the callback-entry root starts outside the endpoint, while
+      already-at-endpoint roots and nonzero MapJoint walls still reject stale endpoint candidates
+      until the generic transformed packet/x44 path is modeled. MAJ:8919 locks the admitted static
+      endpoint crossing; IAT:9157 and STM:1213 lock the already-at-endpoint and nonzero-MapJoint
+      negatives.
     - `Game_20260514T181413.msl:{531,1522,2361,2559,2560}` cover the retained replay-real
       positives and adjacent controls. The remaining `rec2463+` percent residual is a larger
       live `ifMagnify`/camera-target owner gap; it is not classified as exact RNG.
@@ -3785,7 +3791,8 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`,
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
     ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Enter}`,
-    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044628_Floor}`.
+    `refs/melee/src/melee/mp/mpcoll.c::{
+    mpColl_LoadECB_JObj,mpColl_80044628_Floor,mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}`.
   - TCH ThrowF owner-before-victim release anchor:
     - `ftCo_800DD724` consumes `set_throw_flags(hit_idx=0)` during the thrower's Anim callback. If
       the thrower slot runs before the victim slot, the victim can observe the release in its
@@ -4143,6 +4150,22 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}`,
     `refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C4D4,itFoxLaser_Logic94_HitShield}`.
+  - Returned powershielded blaster BODY damage:
+    - When a reflected laser returns to its original shooter through the damage-reducing
+      powershield lane (`item->xC6C < 1`), BODY damage consumes the live item HitCapsule damage
+      float already owned by the original shooter's stale queue, then `Item_80269F14` multiplies
+      that float by `xC6C` and floors through `it_80272460`. Runtime admits this only after BODY
+      contact is selected, only when the item article kind matches the defender's generated blaster
+      shot kind, the defender character is unique in the match, the defender's Blaster stale queue
+      is non-identity, and the current reflected owner has identity stale for that public item move.
+      Strong reflector chains (`xC6C > 1`) remain on the existing reflected-owner damage/timing
+      path; the helper must not mutate reflect-time HitCapsule damage because that changes
+      `ftColl_80077464` ReflectDesc timing. MAJ:6294 locks the returned-powershield positive and
+      MAJ:2015/2016 locks the strong-reflector adjacent negative.
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464`,
+    `refs/melee/src/melee/it/item.c::Item_80269F14`,
+    `refs/melee/src/melee/it/itcoll.c::it_80272460`,
+    `data/items/lasers.bin` (MSLLASR1 shot-kind ownership).
   - GuardOn-follow-up ReflectDesc owner/xDA8 and pure-state final-x14 HitShield handoff:
     - Latest decomp refresh (`refs/melee` `4e62f34a`) confirms `ftCo_8009388C` can enter
       GuardReflect from GuardOn and immediately call `ftCo_8009370C` to install ReflectDesc before

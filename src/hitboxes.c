@@ -1447,6 +1447,55 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
       hitboxes_seed_bridge_entry_clear(e);
       continue;
     }
+    const size_t guard_trim_shield_kind_i =
+        ((size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES +
+         (size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb_id) *
+            (size_t)MSL_MAX_PLAYERS +
+        (size_t)victim_port;
+    if (stale_clear_window && e->cd == 0u && seed_materialized_now != 0u &&
+        msl_motion_state_class_has(batch->state.char_id[a_idx], attacker_action,
+                                   MSL_MS_CLASS_ATTACK_S4) &&
+        batch->state.combat_shield_contact_hb_kind[guard_trim_shield_kind_i] != 2u &&
+        v_action != (uint16_t)MSL_ACT_GUARD_REFLECT &&
+        batch->state.guard_reflect_timer_x14[v_idx] == 0u &&
+        batch->state.guard_reflect_timer_x18[v_idx] == 0u &&
+        (shield_desc_active || guard_admission_pending || guard_entry_desc_pending ||
+         hitboxes_seed_bridge_is_guard_transition_owner(v_action)) &&
+        batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u &&
+        batch->state.hitlag[a_idx] == 0u && batch->state.hitstun[a_idx] == 0u &&
+        batch->state.instance_hit_by[v_idx] != attacker_iid) {
+      // Guard-family victim early-window impossibility proof (generic materialization,
+      // MSLMSO01 ATTACK_S4 smash class only):
+      // The witness slice is smash-class attackers (MAJ rec7421: down/forward-smash capsules
+      // freshly created inside a rollout streak, with the stale dense latch suppressing the next
+      // frame's real shield hit). Aerial/dash attacker rows with byte-identical seed shapes carry
+      // REAL hidden victims_1 latches (PTE rec3069/3070, HHG rec7970 et al.), so the slice
+      // boundary is witness-driven until the preprocessor emits the explicit per-HitCapsule
+      // victims_1 provenance lane this file's owners repeatedly name as the true closure.
+      // - Scoped to `seed_materialized_now` so only the same-call generic dense materialization is
+      //   subject; latches reconstructed by the explicit create-edge shielddesc-miss/powershield/
+      //   guard-admission owners persist untrimmed.
+      // - `combat_shield_contact_hb_kind == 2` (replay-proven accepted shield hit) rows keep
+      //   their latch shape untouched; kind==1 (proven miss) is consistent with a stale latch
+      //   because the miss proof says no contact occurred at this step either.
+      // - GuardReflect victims (or live x14/x18 reflect timers) are excluded: powershield contact
+      //   registers the victim with the x221C_b2 branch suppressing shield damage AND hitlag, so
+      //   the hitlag-based impossibility proof does not hold there.
+      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80094138
+      // ftColl_80076CBC applies nonzero defender hitlag on every accepted shield contact, and an
+      // accepted GuardOn shield hit also leaves GuardOn for GuardSetOff. Within this HitCapsule's
+      // first create window (age+1 <= ftCommon_CalcHitlag horizon), a neutral (hitlag==0,
+      // hitstun==0) Guard-family victim therefore cannot already be a real victims_1 entry of the
+      // current attack window; ftColl_800768A0 cleared the fresh capsule at its create edge, so an
+      // indefinite dense-group entry here is pre-create stale carry. Post-horizon Guard latches
+      // (real rehit-0 suppression persisting after hitlag) stay protected because the window check
+      // fails once the create horizon has elapsed.
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+      hitboxes_seed_bridge_entry_clear(e);
+      continue;
+    }
 
     if (((shield_desc_active && hitboxes_seed_bridge_is_guard_transition_owner(v_action)) ||
          guard_admission_pending || guard_entry_desc_pending) &&
