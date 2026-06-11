@@ -9042,8 +9042,9 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
 // fighter scale_y on the radius (shield/hitbox radius policy).
 // refs/melee/src/melee/ft/chara/ftMars/types.h::MarsAttributes::x64 (AbsorbDesc)
 // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_8007AEE0}
-static inline uint8_t marth_counter_desc_overlaps_hitbox(const MslBatch* batch, size_t d_idx,
-                                                         size_t hb_i) {
+static inline uint8_t marth_counter_desc_world_sphere(const MslBatch* batch, size_t d_idx,
+                                                      float* out_x, float* out_y, float* out_z,
+                                                      float* out_r) {
   const uint8_t cid = batch->state.char_id[d_idx];
   const MslCharParams* ms_ch = msl_char_params(cid);
   if (ms_ch == NULL || !(ms_ch->speciallw_counter_desc_size > 0.0f)) {
@@ -9075,19 +9076,39 @@ static inline uint8_t marth_counter_desc_overlaps_hitbox(const MslBatch* batch, 
   cx *= model_scale;
   cy *= model_scale;
   cz *= model_scale;
-  const float wx = facing_dir * cz + batch->state.pos_x[d_idx];
-  const float wy = cy + batch->state.pos_y[d_idx];
-  const float wz = -facing_dir * cx + batch->state.pos_z[d_idx];
-  const float r = ms_ch->speciallw_counter_desc_size * scale_y;
-  const float hx = batch->state.hitbox_x[hb_i];
-  const float hy = batch->state.hitbox_y[hb_i];
-  const float hz = batch->state.hitbox_z[hb_i];
-  const float hr = batch->state.hitbox_radius[hb_i];
-  const float dx = hx - wx;
-  const float dy = hy - wy;
-  const float dz = hz - wz;
-  const float rr = r + hr;
+  *out_x = facing_dir * cz + batch->state.pos_x[d_idx];
+  *out_y = cy + batch->state.pos_y[d_idx];
+  *out_z = -facing_dir * cx + batch->state.pos_z[d_idx];
+  *out_r = ms_ch->speciallw_counter_desc_size * scale_y;
+  return 1u;
+}
+
+static inline uint8_t marth_counter_desc_overlaps_hitbox(const MslBatch* batch, size_t d_idx,
+                                                         size_t hb_i) {
+  float wx, wy, wz, r;
+  if (!marth_counter_desc_world_sphere(batch, d_idx, &wx, &wy, &wz, &r)) {
+    return 0u;
+  }
+  const float dx = batch->state.hitbox_x[hb_i] - wx;
+  const float dy = batch->state.hitbox_y[hb_i] - wy;
+  const float dz = batch->state.hitbox_z[hb_i] - wz;
+  const float rr = r + batch->state.hitbox_radius[hb_i];
   return (dx * dx + dy * dy + dz * dz <= rr * rr) ? 1u : 0u;
+}
+
+// Item/projectile variant: items travel in the x/y plane; test the descriptor disc against the
+// item position with the item's contact radius.
+static inline uint8_t marth_counter_desc_overlaps_point(const MslBatch* batch, size_t d_idx,
+                                                        float px, float py, float extra_r) {
+  float wx, wy, wz, r;
+  if (!marth_counter_desc_world_sphere(batch, d_idx, &wx, &wy, &wz, &r)) {
+    return 0u;
+  }
+  (void)wz;
+  const float dx = px - wx;
+  const float dy = py - wy;
+  const float rr = r + extra_r;
+  return (dx * dx + dy * dy <= rr * rr) ? 1u : 0u;
 }
 
 static inline uint8_t marth_counter_intercepts_contact(const MslBatch* batch, size_t d_idx) {
@@ -9132,13 +9153,28 @@ static inline void marth_counter_trigger(MslBatch* batch, size_t a_idx, size_t d
   }
 
   // Both sides take standard hitlag (the descriptor contact runs the same CalcHitlag pair as
-  // a shield contact in ftColl_80076CBC).
-  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id, 1.0f);
+  // a shield contact in ftColl_80076CBC), FLOORED by the descriptor's shield strength:
+  // ftColl_8007B1B8 stores da->x60 into fp->shield_unk0, and the shield-contact tail copies it
+  // into BOTH fighters' x1964, which Fighter_ProcessHit consumes as a hitlag-frames minimum
+  // (`if (x195c_hitlag_frames < x1964) x195c_hitlag_frames = x1964`).
+  // refs/melee/src/melee/ft/ftcoll.c (shield_unk0 -> x1964 tail)
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (x1964 floor)
+  const MslCharParams* floor_ch = msl_char_params(batch->state.char_id[d_idx]);
+  const uint16_t hl_floor = (floor_ch != NULL && floor_ch->speciallw_counter_shield_strength > 0.0f)
+                                ? (uint16_t)floor_ch->speciallw_counter_shield_strength
+                                : 0u;
+  uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id, 1.0f);
+  if (a_hl < hl_floor) {
+    a_hl = hl_floor;
+  }
   if (a_hl > batch->state.hitlag[a_idx]) {
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
   }
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, batch->state.action_id[d_idx], 1.0f);
+  uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, batch->state.action_id[d_idx], 1.0f);
+  if (d_hl < hl_floor) {
+    d_hl = hl_floor;
+  }
   if (d_hl > batch->state.hitlag[d_idx]) {
     batch->state.hitlag[d_idx] = d_hl;
     combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
@@ -10036,7 +10072,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
                                        uint16_t kbg, uint16_t wsk, uint16_t bkb,
                                        uint8_t defender_hurt_height, uint8_t element,
                                        float stale_mult_override, float item_pos_x,
-                                       float item_vel_x, uint8_t item_damage_facing_owner_valid) {
+                                       float item_pos_y, float item_hit_radius, float item_vel_x,
+                                       uint8_t item_damage_facing_owner_valid) {
   if (batch == NULL) {
     return MSL_ITEM_HIT_NONE;
   }
@@ -10079,6 +10116,53 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   }
 
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
+
+  // Marth Counter intercepts item/projectile contacts through the same descriptor used for
+  // fighter BODY contacts: the AbsorbDesc is a ShieldDesc-family intercept, and item collision
+  // consults the defender's shield_hit descriptor exactly like fighter collision does. The
+  // projectile is consumed (vanilla: countering destroys the incoming article) and the
+  // counterattack damage stays script-authored.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80077688}
+  // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::ftMs_SpecialLw_80139140
+  // Descriptor geometry requires the caller's real projectile position/radius; callers that
+  // cannot provide them pass a negative radius and Counter FAILS CLOSED for that contact.
+  if (item_hit_radius >= 0.0f && isfinite(item_pos_y) &&
+      marth_counter_intercepts_contact(batch, d_idx) &&
+      marth_counter_desc_overlaps_point(batch, d_idx, item_pos_x, item_pos_y, item_hit_radius)) {
+    const int dmg_i = combat_get_env_dmg(damage_product.applied_damage);
+    if (dmg_i > 0) {
+      const MslCharParams* ms_ch = msl_char_params(batch->state.char_id[d_idx]);
+      uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id, 1.0f);
+      if (ms_ch != NULL && ms_ch->speciallw_counter_shield_strength > 0.0f &&
+          d_hl < (uint16_t)ms_ch->speciallw_counter_shield_strength) {
+        // shield_unk0 hitlag floor (see the fighter-contact intercept above).
+        d_hl = (uint16_t)ms_ch->speciallw_counter_shield_strength;
+      }
+      if (d_hl > batch->state.hitlag[d_idx]) {
+        batch->state.hitlag[d_idx] = d_hl;
+        combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+      }
+      float stash = (ms_ch != NULL) ? (float)dmg_i * ms_ch->speciallw_counter_damage_mul : 0.0f;
+      if (stash < 0.0f) {
+        stash = 0.0f;
+      }
+      if (stash > 65535.0f) {
+        stash = 65535.0f;
+      }
+      batch->state.speciallw_countered_damage[d_idx] = (uint16_t)stash;
+      batch->state.speciallw_counter_window[d_idx] = 0u;
+      if (item_pos_x != batch->state.pos_x[d_idx]) {
+        batch->state.facing[d_idx] = (uint8_t)(item_pos_x > batch->state.pos_x[d_idx]);
+      }
+      const uint8_t grounded = batch->state.on_ground[d_idx] ? 1u : 0u;
+      batch->state.action_id[d_idx] =
+          grounded ? (uint16_t)MSL_ACT_MS_SPECIAL_LW_HIT : (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW_HIT;
+      batch->state.animation_index[d_idx] = (uint32_t)(grounded ? 324u : 326u);
+      msl_anim_timebase_enter(batch, d_idx, 0.0f, 1.0f);
+      return MSL_ITEM_HIT_APPLIED_CONSUME_ITEM;
+    }
+  }
+
   // Compatibility/seed pending-release lane:
   // normal runtime ThrowLw release damage runs in throw_flow_update_anim_callback_pre_input(), but
   // one-step/reseed rows can still expose a pending detached release victim when an item BODY hit is

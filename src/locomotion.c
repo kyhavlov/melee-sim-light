@@ -1,5 +1,6 @@
 #include "locomotion.h"
 #include "char_registry.h"
+#include "marth_specials.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -7145,6 +7146,15 @@ void locomotion_update_post_collision(MslBatch* batch) {
         }
       }
 
+      if (was_ground && !now_ground && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+          marth_special_try_ground_to_air_swap(batch, idx)) {
+        // Marth grounded special floor loss swaps to the aerial variant at the preserved
+        // animation frame (ftCommon_8007D5D4: lose the ground jump).
+        // refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Lw}.c (grounded Coll handlers)
+        batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+        continue;
+      }
+
       if (was_ground && !now_ground && action_is_catch_start_floor_loss(a)) {
         // Catch/CatchDash collision callbacks are grounded owners. On floor loss they call the
         // common floor-loss helper with fn_800D8E30, which performs catch cleanup and enters Fall.
@@ -7213,6 +7223,16 @@ void locomotion_update_post_collision(MslBatch* batch) {
                                   a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S)) {
           side_special_air_to_ground_transition(batch, ms, ch, idx,
                                                 (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S);
+          continue;
+        } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+                   marth_special_try_air_to_ground_swap(batch, idx)) {
+          // Marth air special ground contact swaps to the grounded variant at the preserved
+          // animation frame (ftCommon_8007D7FC grounding bundle below).
+          // refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Lw}.c (Air*_Coll handlers)
+          batch->state.jumps_left[idx] = ch->max_jumps;
+          batch->state.fall_fast[idx] = 0u;
+          batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+          batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi);
           continue;
         } else if (a == (uint16_t)MSL_ACT_ESCAPE_AIR) {
           // EscapeAir: EscapeAir_Coll -> ft_80082C74(..., ftCo_80099D70) -> ftCo_LandingFallSpecial_Enter(..., x344)

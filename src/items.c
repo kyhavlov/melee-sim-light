@@ -4441,8 +4441,11 @@ static uint8_t yoshi_shyguy_try_knocked_state_fighter_body_hit(MslBatch* batch, 
         batch, bi, src.attacker, def, batch->state.attack_id[src.attacker_idx],
         batch->state.attack_instance[src.attacker_idx], batch->state.instance_id[src.attacker_idx],
         batch->state.item_type[shy_idx], batch->state.item_state[shy_idx], src.damage, src.angle,
-        src.kbg, src.wsk, src.bkb, hurt_height, src.element, 1.0f, batch->state.item_pos_x[shy_idx],
-        batch->state.item_vel_x[shy_idx], 1u);
+        src.kbg, src.wsk, src.bkb, hurt_height, src.element, 1.0f,
+        // Knocked Shy Guy Counter geometry: the contact capsule is the carried source hitbox
+        // (hx/hy with radius hr, the same sweep tested against the defender's hurtcaps above),
+        // so the descriptor sphere sees the real contact position/radius.
+        hx, hy, hr, batch->state.item_vel_x[shy_idx], 1u);
     if (res == MSL_ITEM_HIT_NONE) {
       continue;
     }
@@ -5576,7 +5579,8 @@ static void laser_spawn_apply_throwlw_attached_body_callback(MslBatch* batch, in
       batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
       batch->state.item_type[ii], batch->state.item_state[ii], lp->state1_damage, lp->state1_angle,
       lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element, -1.0f,
-      batch->state.item_pos_x[ii], batch->state.item_vel_x[ii], 0u);
+      batch->state.item_pos_x[ii], batch->state.item_pos_y[ii], lp->state1_size,
+      batch->state.item_vel_x[ii], 0u);
   if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM && preserve_late_state1_article == 0u) {
     item_slot_clear(batch, ii);
     return;
@@ -5709,7 +5713,8 @@ static void laser_spawn_apply_falco_throwb_startup_body_callback(MslBatch* batch
       batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
       batch->state.item_type[ii], batch->state.item_state[ii], lp->state1_damage, lp->state1_angle,
       lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element, -1.0f,
-      batch->state.item_pos_x[ii], batch->state.item_vel_x[ii], 0u);
+      batch->state.item_pos_x[ii], batch->state.item_pos_y[ii], lp->state1_size,
+      batch->state.item_vel_x[ii], 0u);
   if (res != MSL_ITEM_HIT_NONE && late_owner_damagefly_phys != 0u) {
     batch->state.pos_x[v_idx] += source_damagefly_dx;
     batch->state.pos_y[v_idx] += source_damagefly_dy;
@@ -5754,7 +5759,9 @@ static MslItemHitResult throw_laser_apply_hidden_state1_body_topoff(MslBatch* ba
       batch, bi, owner, victim, batch->state.attack_id[o_idx], batch->state.attack_instance[o_idx],
       batch->state.instance_id[o_idx], lp->shot_itkind, 1u, lp->state1_damage, lp->state1_angle,
       lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element, -1.0f,
-      batch->state.pos_x[o_idx], batch->state.facing[o_idx] ? 1.0f : -1.0f, 0u);
+      // Spawn-time attached contact carries no live item position; Counter fails closed.
+      batch->state.pos_x[o_idx], batch->state.pos_y[o_idx], -1.0f,
+      batch->state.facing[o_idx] ? 1.0f : -1.0f, 0u);
 }
 
 static void laser_spawn_apply_falco_throwb_final_prior_body_callback(
@@ -5837,7 +5844,8 @@ static void laser_spawn_apply_falco_throwb_final_prior_body_callback(
       batch->state.item_attack_instance[prior_ii], batch->state.item_instance_id[prior_ii],
       batch->state.item_type[prior_ii], batch->state.item_state[prior_ii], lp->state1_damage,
       lp->state1_angle, lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element,
-      -1.0f, batch->state.item_pos_x[prior_ii], batch->state.item_vel_x[prior_ii], 0u);
+      -1.0f, batch->state.item_pos_x[prior_ii], batch->state.item_pos_y[prior_ii], lp->state1_size,
+      batch->state.item_vel_x[prior_ii], 0u);
   if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
     item_slot_clear(batch, prior_ii);
   }
@@ -6099,7 +6107,8 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
           batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
           batch->state.item_type[ii], batch->state.item_state[ii], dmg, hp.angle, hp.kbg, hp.wsk,
           hp.bkb, hit_hurt_height, hp.element, -1.0f, batch->state.item_pos_x[ii],
-          batch->state.item_vel_x[ii], steady_illusion_item_facing_owner);
+          batch->state.item_pos_y[ii], hp.radius, batch->state.item_vel_x[ii],
+          steady_illusion_item_facing_owner);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
       }
@@ -6203,7 +6212,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           batch, bi, owner, (int)hidden_victim, batch->state.item_attack_id[ii],
           batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
           batch->state.item_type[ii], laser_state, dmg, angle, kbg, wsk, bkb, hurt_height, element,
-          -1.0f, batch->state.item_pos_x[ii], batch->state.item_vel_x[ii], 0u);
+          -1.0f, batch->state.item_pos_x[ii], batch->state.item_pos_y[ii],
+          (laser_state == 0u) ? lp->size : lp->state1_size, batch->state.item_vel_x[ii], 0u);
       const uint16_t victim_iid_post =
           batch->state.instance_id[msl_idx_player(bi, (int)hidden_victim)];
       if (res != MSL_ITEM_HIT_NONE) {
@@ -8721,8 +8731,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
               batch->state.item_type[ii], batch->state.item_state[ii], lp->state1_damage,
               lp->state1_angle, lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, hit_hurt_height,
-              lp->state1_element, -1.0f, batch->state.item_pos_x[ii], batch->state.item_vel_x[ii],
-              0u);
+              lp->state1_element, -1.0f, batch->state.item_pos_x[ii], batch->state.item_pos_y[ii],
+              lp->state1_size, batch->state.item_vel_x[ii], 0u);
           if (topoff_res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
             item_slot_clear(batch, ii);
             break;
@@ -8817,6 +8827,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           batch, bi, owner, def, body_attack_id, body_attack_instance,
           batch->state.item_instance_id[ii], batch->state.item_type[ii], laser_state, dmg, angle,
           kbg, wsk, bkb, hit_hurt_height, element, body_stale_mult, batch->state.item_pos_x[ii],
+          batch->state.item_pos_y[ii], (laser_state == 0u) ? lp->size : lp->state1_size,
           batch->state.item_vel_x[ii], 1u);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;

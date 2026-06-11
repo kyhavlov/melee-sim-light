@@ -48,7 +48,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
                                        uint16_t kbg, uint16_t wsk, uint16_t bkb,
                                        uint8_t defender_hurt_height, uint8_t element,
                                        float stale_mult_override, float item_pos_x,
-                                       float item_vel_x, uint8_t item_damage_facing_owner_valid);
+                                       float item_pos_y, float item_hit_radius, float item_vel_x,
+                                       uint8_t item_damage_facing_owner_valid);
 
 // Apply an item/fighter phantom BODY contact: victim hitlag and source attribution only; no
 // percent, KB, damage-state entry, stale queue, or item consume.

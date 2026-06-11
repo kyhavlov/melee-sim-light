@@ -693,3 +693,76 @@ void marth_specials_update_pre_physics(MslBatch* batch) {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Ground <-> air variant swaps (collision callbacks; preserve animation frame)
+// ---------------------------------------------------------------------------
+
+// Decomp swap pairs (ground id <-> air id), all entered at fp->cur_anim_frame:
+// - Shield Breaker: 341..344 <-> 345..348 (ftMs_SpecialN_80136A1C/80136A7C/80136DB4/80136E14...)
+// - Dancing Blade stages: 349..357 <-> 358..366 (ftMs_SpecialS_801376E8/80137748/80137CBC/80137D60)
+// - Counter: 369<->371, 370<->372 (ftMs_SpecialLw_80138D38/80138DD0/80139080/801390E0)
+// Dolphin Slash (367/368) has no swap pair; its collision handling is the cliffcatch/landing
+// path (ledge.c + the LandingFallSpecial owner).
+static uint16_t marth_special_air_variant(uint16_t a) {
+  if (a >= 341u && a <= 344u) {
+    return (uint16_t)(a + 4u);
+  }
+  if (a >= 349u && a <= 357u) {
+    return (uint16_t)(a + 9u);
+  }
+  if (a == 369u || a == 370u) {
+    return (uint16_t)(a + 2u);
+  }
+  return 0u;
+}
+
+static uint16_t marth_special_ground_variant(uint16_t a) {
+  if (a >= 345u && a <= 348u) {
+    return (uint16_t)(a - 4u);
+  }
+  if (a >= 358u && a <= 366u) {
+    return (uint16_t)(a - 9u);
+  }
+  if (a == 371u || a == 372u) {
+    return (uint16_t)(a - 2u);
+  }
+  return 0u;
+}
+
+static void ms_swap_preserving_frame(MslBatch* batch, size_t idx, uint16_t next_action) {
+  const float cur = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+  batch->state.action_id[idx] = next_action;
+  batch->state.animation_index[idx] = (uint32_t)marth_special_submotion(next_action);
+  msl_anim_timebase_enter(batch, idx, cur, 1.0f);
+}
+
+uint8_t marth_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {
+  if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_MARTH) {
+    return 0u;
+  }
+  const uint16_t next = marth_special_ground_variant(batch->state.action_id[idx]);
+  if (next == 0u) {
+    return 0u;
+  }
+  // ftCommon_8007D7FC grounding bundle equivalents are applied by the caller's landing path
+  // (gr_vel sync, jumps refresh); the swap owns action/anim only. fv.ms.x222C clears on
+  // grounding via the per-frame specials_air_used reset.
+  ms_swap_preserving_frame(batch, idx, next);
+  batch->state.specials_air_used[idx] = 0u;
+  return 1u;
+}
+
+uint8_t marth_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
+  if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_MARTH) {
+    return 0u;
+  }
+  const uint16_t next = marth_special_air_variant(batch->state.action_id[idx]);
+  if (next == 0u) {
+    return 0u;
+  }
+  // ftCommon_8007D5D4 (lose ground jump / no-ECB window) equivalents are owned by the caller's
+  // floor-loss path.
+  ms_swap_preserving_frame(batch, idx, next);
+  return 1u;
+}

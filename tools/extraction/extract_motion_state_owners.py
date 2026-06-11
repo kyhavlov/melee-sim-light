@@ -439,6 +439,39 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         bits |= CLASS_FT800827A0_EDGE_SNAP_COLL
     if coll_cb == "ftCo_EscapeAir_Coll":
         bits |= CLASS_ESCAPE_AIR_COLL
+    if coll_cb in {
+        # Marth grounded special collision callbacks that call ft_800827A0 (StopAtLedge) on the
+        # grounded branch. The Dancing Blade stage callbacks are shared by ground and air
+        # variants and branch on ground_or_air internally; the grounded branch is 827A0.
+        # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialS.c::{
+        #   ftMs_SpecialAirS1_Coll,ftMs_SpecialS3_Coll (and the S2/S4 pairs)}
+        # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::ftMs_SpecialLw_Coll
+        "ftMs_SpecialAirS1_Coll",
+        "ftMs_SpecialS2_Coll",
+        "ftMs_SpecialS3_Coll",
+        "ftMs_SpecialS4_Coll",
+        "ftMs_SpecialLw_Coll",
+    }:
+        bits |= CLASS_FT800827A0_EDGE_SNAP_COLL
+    if coll_cb in {
+        # Marth aerial special collision callbacks that call ft_80081D0C
+        # (CheckGroundOnly, no ledge grab). The DB stage callbacks above also carry this for
+        # their airborne branch; SpecialAirN*/AirLw* are air-only.
+        # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c::{
+        #   ftMs_SpecialAirNStart_Coll,ftMs_SpecialAirNLoop_Coll,ftMs_SpecialAirNEnd_Coll}
+        # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+        #   ftMs_SpecialAirLw_Coll,ftMs_SpecialAirLwHit_Coll}
+        "ftMs_SpecialAirNStart_Coll",
+        "ftMs_SpecialAirNLoop_Coll",
+        "ftMs_SpecialAirNEnd_Coll",
+        "ftMs_SpecialAirLw_Coll",
+        "ftMs_SpecialAirLwHit_Coll",
+        "ftMs_SpecialAirS1_Coll",
+        "ftMs_SpecialS2_Coll",
+        "ftMs_SpecialS3_Coll",
+        "ftMs_SpecialS4_Coll",
+    }:
+        bits |= CLASS_FT80081D0C_AIR_COLL
     if coll_cb in {"ftFx_SpecialSStart_Coll", "ftFx_SpecialS_Coll"}:
         # Grounded Fox/Falco Side-B Start/Main collision callbacks call ft_80082708, which routes to
         # mpColl_8004B108. Aerial Side-B has separate ft_CheckGroundAndLedge ownership above.

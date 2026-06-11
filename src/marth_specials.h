@@ -29,3 +29,9 @@ void marth_specials_update_pre_physics(MslBatch* batch);
 // Per-player physics for marth special actions. Returns 1 when this module owned the player's
 // self-velocity update this frame (the generic physics path must then skip its own).
 uint8_t marth_specials_phys(MslBatch* batch, size_t idx);
+
+// Collision-callback ground/air variant swaps (preserve the current animation frame).
+// Return 1 when the player's action was swapped; callers own the grounding/floor-loss bundle.
+// refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Lw}.c (Coll handlers)
+uint8_t marth_special_try_air_to_ground_swap(MslBatch* batch, size_t idx);
+uint8_t marth_special_try_ground_to_air_swap(MslBatch* batch, size_t idx);

@@ -114,3 +114,19 @@ Slash, SpecialLw Counter (+CounterAttack).
   items.c boundary-encoded owner invariants). Counter descriptor now FAIL-CLOSED (no body-
   admission fallback) with the desc bone added to the pose extraction (marth 22 joints) and a
   sentinel-seed proof test. Suite 3248; fox/falco byte-stable; marth smoke 241/55 unchanged.
+- (completeness pass, pre-burn) DB stop-at-ledge via ftMs coll classification (data-driven,
+  fox bins byte-identical), frame-preserving ground<->air swaps for SB/DB/Counter, Counter
+  projectile intercept through combat_apply_item_hit (laser countered+consumed), x60
+  shield-strength hitlag floor (decomp x1964 proof), and the cape/hair dynamic-chain deferral
+  CLOSED with a lineage+collider data proof test. 109 marth tests; suite 3254; fox/falco
+  byte-stable; smoke 238/55. See COMPLETENESS_PASS.md.
+- (completeness pass, review-fix) Counter item intercept now threads REAL projectile geometry
+  (item_pos_y + per-state radius through all 8 combat_apply_item_hit callers; geometry-less
+  callers fail closed); BF platform-height negative tests added (fail on proxy-Y). Swap-family
+  coverage completed: SB/DB/Counter air->ground + SB ground->air walk-off end-to-end; DB and
+  Counter ground->air documented as Stadium-transform-only (no seed surface). 114 marth tests;
+  suite 3259; fox/falco byte-stable; smoke 238/55.
+- (completeness pass, review-fix 2) Knocked Shy Guy Counter geometry implemented: the path
+  passes its real contact capsule (carried source hitbox hx/hy/hr) instead of failing closed;
+  only the spawn-time attached-laser caller (no live contact position) remains fail-closed.
+  All gates re-run green (114 marth / 3259 total; fox/falco stable; smoke 238/55).
