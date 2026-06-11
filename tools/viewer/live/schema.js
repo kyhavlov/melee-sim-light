@@ -1,5 +1,6 @@
 export const CHAR_FOX = 1;
 export const CHAR_FALCO = 22;
+export const CHAR_MARTH = 18;
 export const STAGE_FOUNTAIN_OF_DREAMS = 2;
 export const STAGE_POKEMON_STADIUM = 3;
 export const STAGE_YOSHIS_STORY = 8;
@@ -14,6 +15,12 @@ export const SUPPORTED_STAGES = Object.freeze([
   Object.freeze({ id: STAGE_POKEMON_STADIUM, label: "PS", name: "Pokemon Stadium" }),
   Object.freeze({ id: STAGE_YOSHIS_STORY, label: "YS", name: "Yoshi's Story" }),
   Object.freeze({ id: STAGE_DREAM_LAND_N64, label: "DL", name: "Dream Land N64" }),
+]);
+
+export const SUPPORTED_CHARACTERS = Object.freeze([
+  Object.freeze({ id: CHAR_FOX, label: "Fox" }),
+  Object.freeze({ id: CHAR_FALCO, label: "Falco" }),
+  Object.freeze({ id: CHAR_MARTH, label: "Marth" }),
 ]);
 
 export const MATCH_CONFIG_SIZE = 36;

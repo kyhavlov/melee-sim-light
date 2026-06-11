@@ -26,8 +26,6 @@ fi
 
 required_data=(
   "$DATA_DIR/common/ft_common_data.json"
-  "$DATA_DIR/characters/fox.json"
-  "$DATA_DIR/characters/falco.json"
   "$DATA_DIR/stages/battlefield.json"
   "$DATA_DIR/stages/dream_land_n64.json"
   "$DATA_DIR/stages/final_destination.json"
@@ -40,10 +38,6 @@ required_data=(
   "$DATA_DIR/stages/bin/grps.bin"
   "$DATA_DIR/stages/bin/grst.bin"
   "$DATA_DIR/stages/bin/grop.bin"
-  "$DATA_DIR/scripts/fox.bin"
-  "$DATA_DIR/scripts/falco.bin"
-  "$DATA_DIR/motion_state/owners/fox.bin"
-  "$DATA_DIR/motion_state/owners/falco.bin"
   "$DATA_DIR/items/item_common.json"
   "$DATA_DIR/items/lasers.bin"
   "$DATA_DIR/items/articles/fox_falco.bin"
@@ -51,19 +45,22 @@ required_data=(
   "$DATA_DIR/stage_items/yoshi_shyguy.json"
   "$DATA_DIR/stage_items/dream_whispy.bin"
   "$DATA_DIR/stage_items/dream_whispy.json"
-  "$DATA_DIR/anims/fox.tracks.bin"
-  "$DATA_DIR/anims/falco.tracks.bin"
-  "$DATA_DIR/hitboxes/fox.bin"
-  "$DATA_DIR/hitboxes/falco.bin"
-  "$DATA_DIR/hurtcaps/fox.bin"
-  "$DATA_DIR/hurtcaps/falco.bin"
-  "$DATA_DIR/ecb/fox_bottom.bin"
-  "$DATA_DIR/ecb/falco_bottom.bin"
-  "$DATA_DIR/ecb/fox_extents.bin"
-  "$DATA_DIR/ecb/falco_extents.bin"
-  "$DATA_DIR/attack_id/move_id/fox.bin"
-  "$DATA_DIR/attack_id/move_id/falco.bin"
 )
+
+viewer_chars=(fox falco marth)
+for char in "${viewer_chars[@]}"; do
+  required_data+=(
+    "$DATA_DIR/characters/$char.json"
+    "$DATA_DIR/scripts/$char.bin"
+    "$DATA_DIR/motion_state/owners/$char.bin"
+    "$DATA_DIR/anims/$char.tracks.bin"
+    "$DATA_DIR/hitboxes/$char.bin"
+    "$DATA_DIR/hurtcaps/$char.bin"
+    "$DATA_DIR/ecb/${char}_bottom.bin"
+    "$DATA_DIR/ecb/${char}_extents.bin"
+    "$DATA_DIR/attack_id/move_id/$char.bin"
+  )
+done
 
 missing=0
 for path in "${required_data[@]}"; do

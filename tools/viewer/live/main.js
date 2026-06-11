@@ -1,6 +1,12 @@
 import { GameCubeAdapterInput } from "./gamecube_adapter.js";
 import { installKeyboard, readKeyboardController } from "./keyboard.js";
-import { STAGE_FINAL_DESTINATION, SUPPORTED_STAGES } from "./schema.js";
+import {
+  CHAR_FALCO,
+  CHAR_FOX,
+  STAGE_FINAL_DESTINATION,
+  SUPPORTED_CHARACTERS,
+  SUPPORTED_STAGES,
+} from "./schema.js";
 import { MslWasmSim } from "./sim.js";
 import { saveLiveTrace, traceInputFromControllers } from "./trace_export.js";
 import { viewerFrameFromCompare, viewerSettingsFromCompare } from "./viewer_adapter.js";
@@ -14,6 +20,8 @@ const connectAdapterButton = document.querySelector("#connect-adapter");
 const adapterPortSelect = document.querySelector("#adapter-port");
 const controlP1Button = document.querySelector("#control-p1");
 const controlP2Button = document.querySelector("#control-p2");
+const p1CharacterSelect = document.querySelector("#p1-character");
+const p2CharacterSelect = document.querySelector("#p2-character");
 const stageSelectorEl = document.querySelector("#stage-selector");
 const MAX_RENDER_FRAMES = 60 * 60 * 8 + 123;
 const STEP_MS = 1000 / 60;
@@ -34,6 +42,7 @@ let seed = 1;
 let inputTrace = [];
 let controlledPlayer = 0;
 let selectedStageId = STAGE_FINAL_DESTINATION;
+const selectedCharacterIds = [CHAR_FOX, CHAR_FALCO];
 const adapterInput = new GameCubeAdapterInput({
   onStatus(message) {
     inputStatusEl.textContent = message;
@@ -90,6 +99,10 @@ function selectedStage() {
   return SUPPORTED_STAGES.find((stage) => stage.id === selectedStageId) || SUPPORTED_STAGES[0];
 }
 
+function characterLabel(charId) {
+  return SUPPORTED_CHARACTERS.find((character) => character.id === charId)?.label || `Char ${charId}`;
+}
+
 function setControlledPlayer(playerIndex) {
   controlledPlayer = playerIndex;
   controlP1Button.setAttribute("aria-pressed", controlledPlayer === 0 ? "true" : "false");
@@ -110,6 +123,25 @@ function setSelectedStage(stageId) {
   selectedStageId = stageId >>> 0;
   updateStageButtons();
   reset();
+}
+
+function setSelectedCharacter(playerIndex, charId) {
+  selectedCharacterIds[playerIndex] = charId >>> 0;
+  reset();
+}
+
+function installCharacterSelect(selectEl, playerIndex) {
+  selectEl.textContent = "";
+  for (const character of SUPPORTED_CHARACTERS) {
+    const option = document.createElement("option");
+    option.value = String(character.id);
+    option.textContent = character.label;
+    selectEl.appendChild(option);
+  }
+  selectEl.value = String(selectedCharacterIds[playerIndex]);
+  selectEl.addEventListener("change", () =>
+    setSelectedCharacter(playerIndex, Number(selectEl.value))
+  );
 }
 
 function installStageSelector() {
@@ -203,7 +235,12 @@ function appendCurrentFrame(controllers, { render = true } = {}) {
 function reset() {
   if (!sim) return;
   seed = (seed + 1) >>> 0;
-  const compare = sim.reset({ seed, stageId: selectedStageId });
+  const compare = sim.reset({
+    seed,
+    stageId: selectedStageId,
+    p1Char: selectedCharacterIds[0],
+    p2Char: selectedCharacterIds[1],
+  });
   const firstControllers = neutralControllers();
   const firstFrame = currentViewerFrame(0, firstControllers);
   inputTrace = [traceInputFromControllers(0, firstControllers)];
@@ -355,6 +392,8 @@ async function main() {
   }
   sim = await MslWasmSim.create();
   installKeyboard(reset);
+  installCharacterSelect(p1CharacterSelect, 0);
+  installCharacterSelect(p2CharacterSelect, 1);
   installStageSelector();
   resetButton.addEventListener("click", reset);
   saveTraceButton.addEventListener("click", () => {
@@ -376,6 +415,10 @@ async function main() {
           simFrameId: 0,
           randomSeed: seed,
           stageId: selectedStageId,
+          playerCharacters: selectedCharacterIds.map((charId) => ({
+            internalId: charId,
+            label: characterLabel(charId),
+          })),
           controlledPlayer: controlledPlayer + 1,
           inputSource: inputSourceLabel(),
         },

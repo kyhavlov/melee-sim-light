@@ -21,6 +21,13 @@ npm --prefix tools/viewer/slippi-viewer install
 make viewer-build
 ```
 
+On the Marth/newchar branch, make sure the local data directory includes Marth
+before building:
+
+```bash
+uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco,marth
+```
+
 `make viewer-build` writes a self-contained browser asset tree under
 repository-root `build/viewer`. The selected simulator data directory is
 bundled into the WASM output at build time. Character display zips are downloaded into

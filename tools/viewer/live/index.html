@@ -140,6 +140,19 @@
         border-color: #20211f;
       }
 
+      .character-selectors {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .character-selectors label {
+        display: grid;
+        gap: 4px;
+        font-weight: 700;
+      }
+
       .stage-selector {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -216,6 +229,16 @@
           <span>Control</span>
           <button id="control-p1" type="button" aria-pressed="true">P1</button>
           <button id="control-p2" type="button" aria-pressed="false">P2</button>
+        </div>
+        <div class="character-selectors" aria-label="Character selectors">
+          <label>
+            P1
+            <select id="p1-character" aria-label="Player 1 character"></select>
+          </label>
+          <label>
+            P2
+            <select id="p2-character" aria-label="Player 2 character"></select>
+          </label>
         </div>
         <div id="stage-selector" class="stage-selector" aria-label="Stage selector"></div>
         <p id="input-status" class="input-status">GameCube adapter: not connected.</p>

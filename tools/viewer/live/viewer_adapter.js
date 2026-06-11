@@ -48,6 +48,7 @@ function arrF32(view, base, index) {
 
 function externalCharId(internalCharId) {
   if (internalCharId === 1) return 2;
+  if (internalCharId === 18) return 9;
   if (internalCharId === 22) return 20;
   return internalCharId;
 }
