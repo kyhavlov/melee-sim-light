@@ -716,6 +716,14 @@ def test_landing_fallspecial_allow_interrupt_lane_is_prefix_causal() -> None:
     got = _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=action)
     assert got.tolist() == [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0]
 
+    # Firefox/Firebird can publish the LandingFallSpecial row directly from SpecialHiFall/Bound
+    # while still owning the hidden interruptible landing source bit through ftCo_80096900.
+    action_firefox = np.array([358, 43, 43, 359, 43, 14], dtype=np.uint16)
+    got_firefox = _derive_landing_fallspecial_allow_interrupt_seed_lane(
+        action_id_u16=action_firefox
+    )
+    assert got_firefox.tolist() == [0, 1, 1, 0, 1, 0]
+
     extended = np.concatenate([action, np.array([35, 43, 43], dtype=np.uint16)])
     got_extended = _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=extended)
     np.testing.assert_array_equal(got_extended[: action.shape[0]], got)

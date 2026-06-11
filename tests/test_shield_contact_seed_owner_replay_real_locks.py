@@ -2758,6 +2758,90 @@ def test_attackairb_guard_lower_bound_seed_keeps_hb0_when_inside_shield_radius_d
 
 
 @pytest.mark.integration
+def test_attackairb_guardreflect_lower_bound_x19a4_uses_live_hitcapsule_damage_pte_3608() -> None:
+    # Active GuardReflect powershield recoil consumes ftColl_80076CBC's x19A4 scalar from the
+    # current HitCapsule.damage. PTE has all-slot shield seed provenance but a lower-bound
+    # combat_shield_hit_int_damage=6; overriding the live weak BAir stale-damage capsule with that
+    # seed under-pushes GuardSetOff by one source recoil step.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_8007ABD0}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        / "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+    record = 3608
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"][0]
+    assert int(seed["action_id"][attacker]) == 67
+    assert int(seed["action_id"][defender]) == 182
+    assert int(seed["guard_reflect_timer_x14"][defender]) != 0
+    assert int(seed["guard_reflect_timer_x18"][defender]) != 0
+    assert int(seed["combat_shield_hit_int_damage"][defender]) == 6
+    assert all(
+        int(row["seed_t"]["combat_shield_contact_hb_kind"][0, attacker, hb, defender]) == 2
+        for hb in range(3)
+    )
+
+    _, ref, out = _run_one_step_row(
+        dataset_path,
+        record,
+        defender,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert float(out["speed_ground_x_self"][defender]) == pytest.approx(
+        float(ref["speed_ground_x_self"][defender]), abs=1e-7
+    )
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_attackairb_guardreflect_lower_bound_x19a4_requires_active_guardreflect_pte_3608() -> None:
+    # Adjacent negative: the lower-bound x19A4 bypass is not a generic weak-BAir/all-slot seed rule.
+    # If the active GuardReflect timers are removed from the same seed, runtime consumes the seeded
+    # x19A4 lane as usual.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        / "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+
+    def clear_guardreflect_timers(seed_t: np.ndarray) -> None:
+        seed_t["guard_reflect_timer_x14"][0, defender] = 0
+        seed_t["guard_reflect_timer_x18"][0, defender] = 0
+        seed_t["state_flags"][0, defender, 3] = np.uint8(
+            int(seed_t["state_flags"][0, defender, 3]) & ~0x20
+        )
+
+    _seed, _ref, out = _run_one_step_row(
+        dataset_path,
+        3608,
+        defender,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+        seed_mutator=clear_guardreflect_timers,
+    )
+    assert int(out["action_id"][defender]) == 181
+    assert float(out["speed_ground_x_self"][defender]) == pytest.approx(0.56400001, abs=1e-6)
+
+
+@pytest.mark.integration
 def test_guardsetoff_active_hitlag_sdi_stale_seed_carry_does_not_reconsume() -> None:
     # Negative boundary for teacher-forced replay seeds:
     # - the previous CNM row consumed ftCo_80093240 and reset callback-local x670,

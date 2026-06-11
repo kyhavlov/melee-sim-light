@@ -248,3 +248,57 @@ def test_blaster_gun_damage_exit_target_pm1_both_players_strict_lock(
                 record=rec,
                 p=p,
             )
+
+
+@pytest.mark.integration
+def test_same_frame_specialairn_gun_spawn_clears_when_damage_interrupts_pte_1019() -> None:
+    # PTE:1019 covers the source order missing from the older frame-start SpecialN damage-exit
+    # locks: JumpF input enters SpecialAirNStart and ftFx_SpecialN_Enter creates the attached
+    # blaster gun during the fighter Anim phase, then the live Falco laser hits Fox in the same
+    # combat pass. itFoxblaster_UnkMotion8_Anim sees ftFx_SpecialN_GetBlasterAction==9 after
+    # Fighter_ProcessHit and clears only that same-frame gun article.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ProcessHit_8006D1EC}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    #   ftFx_SpecialN_Enter,ftFx_SpecialN_GetBlasterAction}
+    # refs/melee/src/melee/it/items/itfoxblaster.c::{it_802AE8A8,itFoxblaster_UnkMotion8_Anim}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 1019
+    owner = 0
+    seed, ref, out = _run_one_step_row(dataset_path, record, owner)
+
+    assert int(seed["action_id"][owner]) == 25  # JumpF before the B-special input callback.
+    assert int(seed["seed_prev_action_id"][owner]) == 25
+    assert int(ref["action_id"][owner]) == 84  # DamageAir1 after the same-frame laser hit.
+    assert _count_owner_gun_items(seed, owner) == 0
+    assert _count_owner_gun_items(ref, owner) == 0
+    assert _count_owner_gun_items(out, owner) == 0
+    _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=record, p=owner)
+
+
+@pytest.mark.integration
+def test_same_frame_damage_clear_requires_specialn_gun_spawn_source_pte_1019() -> None:
+    # Same replay row, but clear the B button that owns SpecialAirNStart entry. The Falco laser
+    # still has no authority to fabricate/clear a Fox gun article because no ftFx_SpecialN_Enter
+    # article episode ran this step.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    def no_b_button(_prev_input_t, input_t) -> None:
+        input_t["p"]["buttons"][0, 0] = 0
+
+    _, _, out = _run_one_step_row(dataset_path, 1019, 0, input_mutator=no_b_button)
+    assert _count_owner_gun_items(out, 0) == 0

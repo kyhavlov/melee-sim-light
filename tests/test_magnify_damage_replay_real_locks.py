@@ -681,6 +681,75 @@ def test_magnify_rollout_lim_damageflytop_early_visible_episode_ticks() -> None:
 
 
 @pytest.mark.integration
+def test_magnify_rollout_pte_damageflytop_hitstun_visible_edge_ticks() -> None:
+    # PTE exposes a DamageFlyTop early source camera-box publication while raw x2218_b1 and
+    # x221C hitstun-only provenance are live. This is the same source-visible hitstun-only family
+    # as DamageFlyHi/N, bounded to the early DamageFlyTop publication window and not to camera-y or
+    # velocity thresholds. The Game_20260514T181413 control below rejects later stale-visible top.
+    # refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    start = 5620
+    visible_record = 5623
+    tick_record = 5682
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 90  # DamageFlyTop.
+    assert int(visible_seed["action_frame"][p]) == 8
+    assert int(visible_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 0
+    assert int(visible_seed["magnify_damage_counter_x1910"][p]) == 0
+    assert (int(visible_seed["state_flags"][p, 0]) & 0x40) != 0
+    assert (int(visible_seed["state_flags"][p, 0]) & 0xA4) == 0
+    assert int(visible_seed["state_flags"][p, 3]) == 0x02
+
+    tick_ref = ds.samples[tick_record]["ref_t1"]
+    plain_out = _run_rollout(ds, start, tick_record)
+    assert float(plain_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]) - 1.0, abs=1e-5)
+
+    tick_out = _run_rollout(ds, start, tick_record, replay_frame_lanes=True)
+    assert float(tick_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
+def test_magnify_rollout_late_damageflytop_b1_visible_edge_does_not_tick() -> None:
+    # A later DamageFlyTop x2218_b1/x221F visible rise is stale camera-box visibility, not the early
+    # source publication window. It must not start a fresh zero-counter x1910 episode.
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260514T181413.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    visible_record = 2398
+    stop = 2490
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 90  # DamageFlyTop.
+    assert int(visible_seed["action_frame"][p]) == 28
+    assert int(visible_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 0
+    assert int(visible_seed["magnify_damage_counter_x1910"][p]) == 0
+    assert (int(visible_seed["state_flags"][p, 0]) & 0x40) != 0
+    assert (int(visible_seed["state_flags"][p, 0]) & 0xA4) == 0
+
+    ref = ds.samples[stop]["ref_t1"]
+    out = _run_rollout(ds, visible_record - 1, stop, replay_frame_lanes=True)
+    assert float(out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
 def test_magnify_rollout_dcc_damagefly_top_visible_rows_do_not_start_episode() -> None:
     # DCC has later source-visible DamageFlyTop rows with camera point outside, but it does not
     # expose the early frame-8 x221F_b0 create-edge that owns LIM's x1910 start. The later terminal

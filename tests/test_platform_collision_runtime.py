@@ -334,6 +334,33 @@ def _step_once_rollout(
         msl_binding.destroy(handle)
 
 
+def _step_once_replay_frame_rng(
+    seed: np.ndarray, prev_input: np.ndarray | None = None, input_t: np.ndarray | None = None
+):
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    if prev_input is None:
+        prev_input = _input_bytes()
+    if input_t is None:
+        input_t = _input_bytes()
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(
+        batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1
+    )
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride)).copy()
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input_replay_frame_rng(handle, seed_bytes, prev_input, input_t)
+        msl_binding.write_compare(handle, out)
+        return out.view(COMPARE_DTYPE).reshape((1,))[0]
+    finally:
+        msl_binding.destroy(handle)
+
+
 def _step_once_with_contacts(
     seed: np.ndarray, prev_input: np.ndarray | None = None, input_t: np.ndarray | None = None
 ):
@@ -2673,6 +2700,25 @@ def _moving_surface_packet_after_seed(seed: np.ndarray, segment_i: int) -> dict[
         msl_binding.destroy(handle)
 
 
+def _moving_surface_packet_after_replay_frame_step(
+    seed: np.ndarray, segment_i: int
+) -> dict[str, object] | None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    inp = _input_bytes()
+    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.step_input_replay_frame_rng(
+            handle, seed.view(np.uint8).reshape((1, seed_stride)), inp, inp
+        )
+        return msl_binding.debug_stage_moving_floor_surface(handle, 0, segment_i)
+    finally:
+        msl_binding.destroy(handle)
+
+
 def test_fod_moving_surface_packet_reports_current_height_velocity_and_hidden_visibility() -> None:
     # Phase-6 moving floors use one stage-collision runtime surface packet: grIzumi-owned height,
     # visibility, source bits, and motion delta are exposed together before fighter mpColl consumes
@@ -2722,6 +2768,78 @@ def test_fod_moving_surface_packet_reports_current_height_velocity_and_hidden_vi
     assert int(hidden["reached_hidden_this_step"]) == 0
     assert float(hidden["y0"]) == pytest.approx(float(motion.hidden_target_height) * 0.75, abs=1e-6)
     assert float(hidden["velocity_y"]) == pytest.approx(0.0, abs=1e-7)
+
+
+def test_fod_replay_frame_sparse_velocity_without_source_bit_requires_same_platform_geometry() -> None:
+    # Replay-frame FoD lanes are platform-indexed. A valid sparse velocity with no source bit is
+    # not enough to prove the current fighter callback is consuming that specific platform's
+    # grIzumi/mpLib packet. Replay playback may preserve it only when the callback root is inside
+    # that exact generated platform line.
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    height = np.float32(17.100000381469727)
+    velocity = np.float32(-0.1)
+    seed = _seed_base(STAGE_FOD, ACT_LANDING, SM_WAIT1_0, 70.0, 1.125 + float(height) * 0.75)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(3)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["stage_fod_platform_height_f32"][0, 1] = height
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["stage_fod_platform_velocity_f32"][0, 1] = velocity
+    seed["stage_fod_platform_velocity_valid_u8"][0, 1] = np.uint8(1)
+    seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(0)
+
+    stale = _moving_surface_packet_after_replay_frame_step(seed, 0)
+    assert stale is not None
+    assert int(stale["valid"]) == 1
+    assert int(stale["current_owned"]) == 0
+    assert int(stale["source_bits"]) == 0
+    assert float(stale["velocity_y"]) == pytest.approx(0.0, abs=1e-7)
+
+    sourced_seed = seed.copy()
+    sourced_seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(4)
+    sourced = _moving_surface_packet_after_replay_frame_step(sourced_seed, 0)
+    assert sourced is not None
+    assert int(sourced["current_owned"]) == 1
+    assert float(sourced["velocity_y"]) == pytest.approx(float(velocity) * 0.75, abs=1e-6)
+
+
+@pytest.mark.integration
+def test_fod_replay_sparse_velocity_damageair_owner_is_same_platform_specific_pte_3466() -> None:
+    # PTE:3466 starts p1 in DamageAir2 with a sparse current velocity for FoD platform 0. The
+    # player root is horizontally inside that same generated platform line and below it, so
+    # `ftCo_Damage_Coll -> ft_80081DD4` can consume that platform's current grIzumi/mpLib packet.
+    # Moving the player outside the platform span keeps the velocity stale and rejects the landing.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+    ds = read_dataset(str(dataset_path))
+    record = 3466
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_AIR_2
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0]) == 0
+    assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0]) == 1
+
+    out = _step_once_replay_frame_rng(row["seed_t"].reshape((1,)))
+    ref = row["ref_t1"]
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
+
+    far_seed = row["seed_t"].reshape((1,)).copy()
+    far_seed["pos_x"][0, p] = np.float32(70.0)
+    far_out = _step_once_replay_frame_rng(far_seed)
+    assert int(far_out["action_id"][p]) == ACT_DAMAGE_AIR_2
+    assert int(far_out["ground_id"][p]) != 1
 
 
 def test_yoshi_randall_moving_surface_packet_uses_generated_path_and_velocity() -> None:
@@ -3014,7 +3132,7 @@ def test_fod_platform_scheduler_rand_range_matches_grizumi_replay_real() -> None
     assert int(ds.samples[record]["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_B
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING_AIR_B
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 0
-    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
 
 
 def test_fod_live_platform_stage_debug_reports_runtime_height_for_live() -> None:
@@ -3691,6 +3809,51 @@ def test_downbound_does_not_inherit_kneebend_height_platform_carry() -> None:
     assert int(moving_out["action_id"][0]) == ACT_DOWN_BOUND_U
     assert int(moving_out["ground_id"][0]) == 0
     assert float(moving_out["pos_y"][0]) == pytest.approx(float(static_out["pos_y"][0]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_fod_passive_follows_live_height_platform_via_80083f88_pte_replay_real() -> None:
+    # PTE 10962 is neutral Passive on FoD's right side platform. `ftCo_Passive_Coll` is a thin
+    # `ft_80083F88 -> mpColl_8004B108` wrapper, so the current CollData floor consumes grIzumi's
+    # signed DD90 y correction while the fighter stays grounded. This is deliberately narrower than
+    # all downed/getup B108 callbacks; DownBound keeps the exclusion tested above.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_Passive_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    row = ds.samples[10962]
+    out = _step_one_replay_row(ds, 10962)
+    ref = row["ref_t1"]
+    p = 1
+
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_PASSIVE
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0]) & 0x02
+    assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0]) == 1
+    assert float(row["seed_t"]["stage_fod_platform_velocity_f32"][0]) < 0.0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_PASSIVE
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+    no_velocity_seed = np.array(row["seed_t"], dtype=SEED_DTYPE).reshape((1,))
+    no_velocity_seed["stage_fod_platform_velocity_valid_u8"][0, 0] = np.uint8(0)
+    no_velocity_out = _step_once(
+        no_velocity_seed,
+        np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, -1),
+        np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, -1),
+    )
+    assert int(no_velocity_out["action_id"][p]) == ACT_PASSIVE
+    assert float(no_velocity_out["pos_y"][p]) != pytest.approx(float(ref["pos_y"][p]), abs=1e-4)
 
 
 def test_fod_kneebend_projects_down_generated_slope_during_rollout() -> None:

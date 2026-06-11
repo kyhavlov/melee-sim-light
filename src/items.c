@@ -2877,10 +2877,17 @@ static inline uint8_t laser_tail_shallow_body_contact_rejected(
          (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) == 0u)
             ? 1u
             : 0u;
+    const uint8_t live_item_b1_only =
+        ((flags_2218 & (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                                 MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR |
+                                 MSL_STATE_FLAG_2218_REFLECTING)) ==
+         (uint8_t)MSL_STATE_FLAG_2218_B1)
+            ? 1u
+            : 0u;
     if (cap_is_tail != 0u &&
         ((hit_hb_id == 0u &&
           (action_id == (uint16_t)MSL_ACT_JUMP_F || action_id == (uint16_t)MSL_ACT_JUMP_B) &&
-          reflect_behavior_only != 0u) ||
+          (reflect_behavior_only != 0u || live_item_b1_only != 0u)) ||
          (hit_hb_id >= 2u && action_id >= (uint16_t)MSL_ACT_JUMP_AERIAL_F &&
           action_id <= (uint16_t)MSL_ACT_JUMP_AERIAL_B))) {
       // Source-owned shallow item BODY rejection:
@@ -2888,8 +2895,9 @@ static inline uint8_t laser_tail_shallow_body_contact_rejected(
       //   ftColl_8007925C tests each one against extracted hurtcaps via lbColl_8000805C.
       // - The shallow edge owner is only admitted for the extracted FtPart-18 tail hurtcap and for
       //   overlaps no deeper than the laser HitCapsule radius. Early JumpF/B additionally requires
-      //   the source reflect-behavior carry, while JumpAerial* is limited to the trailing half of
-      //   the authored laser offsets. Deeper overlaps continue to normal BODY damage.
+      //   the source reflect-behavior carry or the raw fp+0x2218_b1 live-item callback lane, while
+      //   JumpAerial* is limited to the trailing half of the authored laser offsets. Deeper
+      //   overlaps and non-tail BODY caps continue to normal BODY damage.
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
       // data/items/lasers.bin (MSLLASR1 state0 size/offsets)
@@ -9150,8 +9158,10 @@ void items_update_post_combat(MslBatch* batch) {
           (blaster_gun_state_from_action_id(prev_action_id_u16) != 9u) ? 1u : 0u;
       const uint8_t cur_requires_gun =
           (blaster_gun_state_from_action_id(action_id_u16) != 9u) ? 1u : 0u;
+      const uint8_t same_frame_spawned_requires_gun =
+          batch->state.blaster_gun_spawned_this_frame[idx] ? 1u : 0u;
 
-      if (!prev_requires_gun || cur_requires_gun) {
+      if ((!prev_requires_gun && !same_frame_spawned_requires_gun) || cur_requires_gun) {
         continue;
       }
       const uint8_t is_damage_exit = items_action_is_damage_family(action_id_u16);
@@ -9172,10 +9182,16 @@ void items_update_post_combat(MslBatch* batch) {
       // - Dead* motion states are common non-blaster states (ftCo_MF_Dead); when a SpecialN owner
       //   crosses the blast line, the blaster item's UnkMotion8_Anim sees blaster_action==9 and
       //   clear_blaster consumes the stale gun while preserving already-spawned shots.
+      // - Same-step SpecialN entry can create the attached gun in Fighter_8006A360 before
+      //   Fighter_ProcessHit_8006D1EC damages the owner out of the action. That source episode is
+      //   carried by blaster_gun_spawned_this_frame because frame-start prev_action_id still names
+      //   the pre-SpecialN action and cannot prove the live article owner by itself.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNEnd_Anim
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_GetBlasterAction
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_Enter
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
       //   ftFx_SpecialAirNStart_Phys,ftFx_SpecialAirNLoop_Phys,ftFx_SpecialAirNEnd_Phys}
+      // refs/melee/src/melee/it/items/itfoxblaster.c::it_802AE8A8
       // refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim
       // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
@@ -9306,6 +9322,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
         continue;
       }
       gun_spawned_this_frame[p] = blaster_gun_update_from_fighter(batch, bi, p, lp);
+      batch->state.blaster_gun_spawned_this_frame[idx] = gun_spawned_this_frame[p] ? 1u : 0u;
     }
 
     for (int p = 0; p < num_players; p++) {

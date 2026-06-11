@@ -2125,6 +2125,23 @@ uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const
   return state.trusted;
 }
 
+uint8_t stage_collision_floor_line_height_platform_state_is_current_owned(const MslBatch* batch,
+                                                                          int bi,
+                                                                          uint16_t segment_i) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  const MslStageSlot* slot = stage_slot(batch->state.stage_id[(size_t)bi]);
+  const MslStagePlatformTransform* rec =
+      stage_collision_platform_transform_for_line(slot, segment_i);
+  MslFodHeightPlatformLineState state = {0};
+  if (!stage_collision_fod_height_platform_line_state(batch, bi, slot, rec, &state) ||
+      state.valid == 0u) {
+    return 0u;
+  }
+  return state.current_owned;
+}
+
 static uint8_t stage_collision_fod_platform_default_height(const MslStageSlot* slot,
                                                            uint8_t platform_id, float* out) {
   if (slot == NULL || out == NULL || slot->platform_transforms == NULL) {
@@ -2355,6 +2372,40 @@ uint8_t stage_collision_floor_line_moving_surface_state(const MslBatch* batch, i
                                                         const MslStageFloorLine* line,
                                                         MslStageMovingSurfaceState* out) {
   return stage_collision_floor_line_moving_surface_state_impl(batch, bi, line, 1u, out);
+}
+
+uint8_t stage_collision_fod_height_platform_line_y_at_x(const MslBatch* batch, int bi,
+                                                        uint8_t platform_id, float x,
+                                                        float* y_out) {
+  if (y_out != NULL) {
+    *y_out = 0.0f;
+  }
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || platform_id >= 2u || y_out == NULL) {
+    return 0u;
+  }
+  const MslStageSlot* slot = stage_slot(batch->state.stage_id[bi]);
+  if (slot == NULL || !slot->loaded || slot->platform_transforms == NULL) {
+    return 0u;
+  }
+  for (size_t i = 0; i < slot->platform_transform_count; i++) {
+    const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
+    if (rec->kind_id != (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT ||
+        rec->platform_id != platform_id) {
+      continue;
+    }
+    const MslStageFloorLine* line = stage_floor_line_for_segment(slot, rec->line_id);
+    if (line == NULL) {
+      continue;
+    }
+    MslStageFloorLine world = {0};
+    if (!stage_collision_floor_line_world(batch, bi, line, &world) ||
+        !stage_line_x_contains_closed(&world, x)) {
+      continue;
+    }
+    *y_out = stage_line_y_at_x(&world, x);
+    return 1u;
+  }
+  return 0u;
 }
 
 uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,

@@ -33,7 +33,7 @@ class _FieldCase:
     note: str
 
 
-def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
+def _run_one_step(dataset_path: Path, record: int, *, seed_mutator=None) -> tuple[np.void, np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -44,10 +44,11 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     samples = ds.samples
     assert int(samples.shape[0]) > int(record), f"dataset too short for record={record}"
     row = samples[int(record) : int(record) + 1]
+    seed_t = row["seed_t"].copy()
+    if seed_mutator is not None:
+        seed_mutator(seed_t)
 
-    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
-        1, seed_stride
-    )
+    seed_bytes = np.frombuffer(seed_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
     prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
         1, input_stride
     )
@@ -64,7 +65,7 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     finally:
         binding.destroy(handle)
 
-    return row["seed_t"][0], row["ref_t1"][0], out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+    return seed_t[0], row["ref_t1"][0], out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
 
 
 def _run_one_step_from_slp(slp_path: Path, record: int, *, ports: list[int]) -> tuple[np.void, np.void, np.void]:
@@ -408,6 +409,66 @@ def test_landing_fallspecial_allow_interrupt_seed_lane_replay_real_lock() -> Non
     assert int(ref["action_id"][player]) == 18  # Turn
     assert int(out["action_id"][player]) == int(ref["action_id"][player])
     assert int(out["instance_id"][player]) == int(ref["instance_id"][player])
+
+
+@pytest.mark.integration
+def test_landing_fallspecial_firefox_rate_seed_lane_enters_turn_pte_7232() -> None:
+    # Replay-real lock for the hidden Up-B landing allow_interrupt carry:
+    # PTE:7232 starts inside a LandingFallSpecial run whose AObj rate is the Firefox/Firebird x90
+    # landing-lag rate. Slippi does not expose mv.co.landing.allow_interrupt directly, so reseed
+    # reconstructs that bit from the source rate and lets ftCo_Landing_IASA consume Turn.
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+    #   ftCo_LandingFallSpecial_Enter,ftCo_Landing_IASA}
+    dataset_path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 7232
+    player = 0
+    seed, ref, out = _run_one_step(dataset_path, record)
+
+    assert int(seed["action_id"][player]) == 43  # LandingFallSpecial
+    assert int(seed["landing_fallspecial_allow_interrupt"][player]) == 0
+    assert float(seed["frame_speed_mul_f32"][player]) == pytest.approx(30.1 / 18.0, abs=5e-5)
+    assert int(ref["action_id"][player]) == 18  # Turn
+    assert int(out["action_id"][player]) == int(ref["action_id"][player])
+    assert int(out["animation_index"][player]) == int(ref["animation_index"][player])
+    assert int(out["action_frame"][player]) == int(ref["action_frame"][player])
+
+
+@pytest.mark.integration
+def test_landing_fallspecial_sideb_rate_does_not_reconstruct_firefox_allow_interrupt_pte_7232() -> None:
+    # Adjacent negative: the same LandingFallSpecial row and Turn-capable input must not dispatch
+    # if the source rate is the Illusion/Phantasm x50 landing-lag rate. Side-B collision passes
+    # allow_interrupt=false into LandingFallSpecial, so the Firefox x90 rate is the source owner.
+    dataset_path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    def _sideb_rate(seed_t: np.ndarray) -> None:
+        seed_t["frame_speed_mul_f32"][0, player] = np.float32(30.1 / 20.0)
+
+    record = 7232
+    player = 0
+    seed, _ref, out = _run_one_step(dataset_path, record, seed_mutator=_sideb_rate)
+
+    assert int(seed["action_id"][player]) == 43  # LandingFallSpecial
+    assert int(seed["landing_fallspecial_allow_interrupt"][player]) == 0
+    assert float(seed["frame_speed_mul_f32"][player]) == pytest.approx(30.1 / 20.0, abs=5e-5)
+    assert int(out["action_id"][player]) == 43
+    assert int(out["animation_index"][player]) == 36
 
 
 @pytest.mark.integration

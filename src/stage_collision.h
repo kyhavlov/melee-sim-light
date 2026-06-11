@@ -297,6 +297,9 @@ int stage_collision_randall_floor_line_index(uint32_t stage_id);
 float stage_collision_floor_ground_friction_mul(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint16_t segment_i,
                                                          uint8_t* platform_id_out);
+uint8_t stage_collision_floor_line_height_platform_state_is_current_owned(const MslBatch* batch,
+                                                                          int bi,
+                                                                          uint16_t segment_i);
 uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const MslBatch* batch,
                                                                            int bi,
                                                                            uint16_t segment_i);
@@ -307,6 +310,8 @@ uint8_t stage_collision_fod_hidden_target_height(float* out);
 uint8_t stage_collision_floor_line_moving_surface_state(const MslBatch* batch, int bi,
                                                         const MslStageFloorLine* line,
                                                         MslStageMovingSurfaceState* out);
+uint8_t stage_collision_fod_height_platform_line_y_at_x(const MslBatch* batch, int bi,
+                                                        uint8_t platform_id, float x, float* y_out);
 // Resolve a floor line to current world coordinates for the given batch environment. Static lines
 // copy through unchanged. Dynamic FoD platform lines consume causal stage platform state.
 uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,

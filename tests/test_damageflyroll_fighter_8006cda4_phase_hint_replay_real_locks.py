@@ -1199,6 +1199,202 @@ def test_iat_damageflyroll_runtime_owners_are_selected_source_owned(
 
 
 @pytest.mark.integration
+def test_pte_sustained_jump_late_attackairn_leg_owner_is_selected_source_owned() -> None:
+    # PTE rec6280 is a sustained airborne JumpF victim struck by late NAir hb0/cap11. The owner is
+    # the selected BODY DmgLog source: extracted late NAir payload, selected cap11 leg hurtcap, no
+    # replay-fed Fighter_8006CDA4 seed count, then the named normal-effect + primary RNG ledger.
+    # Changing the source motion removes the runtime prefix, proving this is not visible Jump state.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80078538,ftColl_8007A06C}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+    # data/hurtcaps/{fox,falco}.json cap11
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 6280
+    victim = 1
+    attacker = 0
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["action_id"][victim]) == 25  # JumpF.
+    assert int(seed["action_id"][attacker]) == 65  # AttackAirN.
+    assert int(seed["on_ground"][victim]) == 0
+    assert int(seed["hitlag"][victim]) == 0
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (0, 11)
+
+    trace_path = root / "reports/triage/pte6280_sustained_jump_late_nair_leg_owner.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, site1_count = rows[record]
+    assert site1_count == 1
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=24) == 12
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=5) == 4
+    assert int(out_row["action_id"][victim]) == int(ref_row["action_id"][victim]) == 91
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(
+            out_row=out_row,
+            ref_row=ref_row,
+            record=record,
+            p=p,
+        )
+
+    def mutate_source_motion(seed_t):
+        seed_t["action_id"][0, attacker] = 66  # AttackAirF: same victim row, wrong source motion.
+
+    negative_trace_path = root / "reports/triage/pte6280_sustained_jump_late_nair_leg_negative.tsv"
+    negative_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=negative_trace_path,
+        seed_mutator=mutate_source_motion,
+    )
+    _, _, negative_site1_count = negative_rows[record]
+    assert negative_site1_count == 0
+    assert _trace_site_count(negative_trace_path, start_record=record, record=record, site_id=24) == 0
+    assert _trace_site_count(negative_trace_path, start_record=record, record=record, site_id=5) == 0
+
+
+@pytest.mark.integration
+def test_pte_landingairn_weak_attackairb_owner_is_selected_source_owned() -> None:
+    # PTE rec5241 is grounded LandingAirN struck by weak BAir hb2/cap2. The selected BODY source,
+    # not LandingAirN or BAir visible action alone, owns one Fighter_8006CDA4 primary consume before
+    # ftCo_8008DCE0's DamageFlyRoll gate.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 5241
+    victim = 0
+    attacker = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["action_id"][victim]) == 70  # LandingAirN.
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (2, 2)
+
+    trace_path = root / "reports/triage/pte5241_landingairn_weak_bair_owner.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, site1_count = rows[record]
+    assert site1_count == 1
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=5) == 1
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=24) == 0
+    assert int(out_row["action_id"][victim]) == int(ref_row["action_id"][victim]) == 91
+
+    def mutate_source_motion(seed_t):
+        seed_t["action_id"][0, attacker] = 65  # AttackAirN: wrong selected source family.
+
+    negative_trace_path = root / "reports/triage/pte5241_landingairn_weak_bair_negative.tsv"
+    negative_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=negative_trace_path,
+        seed_mutator=mutate_source_motion,
+    )
+    _, _, negative_site1_count = negative_rows[record]
+    assert negative_site1_count == 0
+    assert _trace_site_count(negative_trace_path, start_record=record, record=record, site_id=5) == 0
+    assert _trace_site_count(negative_trace_path, start_record=record, record=record, site_id=24) == 0
+
+
+@pytest.mark.integration
+def test_pte_attackairb_strong_dair_effect_prefix_is_randi_count_owned() -> None:
+    # PTE rec9389 is an AttackAirB victim struck by strong DAir hb0/cap0 on the create edge. The
+    # selected BODY source owns the DamageFlyRoll gate and the normal-hit visual-effect prefix. The
+    # helper contract is Randi-call count, not DmgLog-entry count: trace site 24 totals exactly
+    # twelve calls, including the eight-call post-selected-entry prefix for this DAir root packet.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C,ftColl_80078538}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 9389
+    victim = 0
+    attacker = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["action_id"][victim]) == 67  # AttackAirB.
+    assert int(seed["action_id"][attacker]) == 69  # AttackAirLw.
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (0, 0)
+
+    trace_path = root / "reports/triage/pte9389_attackairb_strong_dair_effect_prefix.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, site1_count = rows[record]
+    assert site1_count == 1
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=24) == 12
+    for site_id in (5, 6, 7):
+        assert _trace_site_count(trace_path, start_record=record, record=record, site_id=site_id) == 0
+    assert int(out_row["action_id"][victim]) == int(ref_row["action_id"][victim]) == 91
+
+    def mutate_victim_action(seed_t):
+        seed_t["action_id"][0, victim] = 14  # Wait: strong DAir payload alone is not this owner.
+
+    negative_trace_path = root / "reports/triage/pte9389_attackairb_strong_dair_negative.tsv"
+    negative_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=negative_trace_path,
+        seed_mutator=mutate_victim_action,
+    )
+    _, negative_out, negative_site1_count = negative_rows[record]
+    assert negative_site1_count == 0
+    assert _trace_site_count(negative_trace_path, start_record=record, record=record, site_id=24) == 0
+    assert int(negative_out["action_id"][victim]) != 91
+
+
+@pytest.mark.integration
 def test_damageflyroll_to_damagefall_uses_frame_start_hitstun_one_tick_boundary() -> None:
     # TCH rec3251 starts in DamageFlyRoll with one hitstun tick left and enters DamageFall through
     # DamageFlyRoll_Anim. Raising the replay seed hitstun to two ticks changes only the frame-start
@@ -2052,6 +2248,72 @@ def test_damageflytop_attackairb_hb0_cap1_effect_prefix_closes_tvr_4541_rollout(
     negative_trace = (
         root / "reports/triage/tvr4541_damageflytop_bair_hb0_cap1_effect_prefix_negative.tsv"
     )
+    negative_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=negative_trace,
+        seed_mutator=mutate_victim_action,
+    )
+    _negative_ref, negative_out, negative_site1_count = negative_rows[record]
+    assert negative_site1_count == 0
+    assert _trace_site_count(negative_trace, start_record=record, record=record, site_id=24) == 0
+    assert int(negative_out["action_id"][victim]) != 91
+
+
+@pytest.mark.integration
+def test_catch_attack11_jab_effect_prefix_closes_pte_5935_rollout() -> None:
+    # PTE rec5935 is a Catch victim interrupted by Falco Attack11's selected authored jab
+    # HitCapsule. The accepted normal DmgLog entry owns ftColl_80078538's visual-effect RNG prefix
+    # before Fighter_ProcessHit reaches ftCo_8008DCE0's DamageFlyRoll gate; it does not own a
+    # hidden Fighter_8006CDA4 pre-gate consume. Mutating the victim out of Catch keeps the same
+    # selected Attack11 payload from admitting the gate.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077AD8,ftColl_80078538,ftColl_8007A06C}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_Attack11.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 5935
+    victim = 0
+    attacker = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    ref = ds.samples[record]["ref_t1"]
+    assert int(seed["action_id"][victim]) == 212  # Catch.
+    assert int(seed["action_id"][attacker]) == 44  # Attack11.
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
+    assert int(ref["action_id"][victim]) == 91  # DamageFlyRoll.
+    assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (1, 1)
+
+    trace_path = root / "reports/triage/pte5935_catch_attack11_effect_prefix.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=record,
+        window_records=(record,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+    ref_row, out_row, site1_count = rows[record]
+    assert site1_count == 1
+    assert _trace_site_count(trace_path, start_record=record, record=record, site_id=24) == 1
+    for site_id in (5, 6, 7):
+        assert _trace_site_count(trace_path, start_record=record, record=record, site_id=site_id) == 0
+    assert int(out_row["action_id"][victim]) == int(ref_row["action_id"][victim]) == 91
+
+    def mutate_victim_action(seed_t):
+        seed_t["action_id"][0, victim] = 14  # Wait: Attack11 payload alone is not this owner.
+
+    negative_trace = root / "reports/triage/pte5935_catch_attack11_effect_prefix_negative.tsv"
     negative_rows = _run_rollout_window_rows_with_trace(
         dataset_path,
         start_record=record,

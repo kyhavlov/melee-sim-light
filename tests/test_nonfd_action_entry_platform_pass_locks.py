@@ -51,6 +51,34 @@ def _step_one_record(row: np.ndarray, num_players: int):
     return out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
 
 
+def _step_one_record_replay_frame(row: np.ndarray, num_players: int):
+    msl_binding = pytest.importorskip("msl_binding")
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+        1, seed_stride
+    ).copy()
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+        1, input_stride
+    ).copy()
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+        1, input_stride
+    ).copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=int(num_players))
+    try:
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input_replay_frame_rng(handle, seed_bytes, prev_input_bytes, input_bytes)
+        msl_binding.write_compare(handle, out_compare_bytes)
+    finally:
+        msl_binding.destroy(handle)
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+
+
 def _stage_state_dtype() -> np.dtype:
     return STAGE_DEBUG_DTYPE
 
@@ -494,6 +522,153 @@ def test_fod_sustained_landingfallspecial_does_not_reuse_same_step_height_source
     ref = row["ref_t1"]
     assert int(out["ground_id"][player]) == int(ref["ground_id"][player])
     assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_fod_landingairb_live_velocity_entry_retries_to_platform_pte_5336() -> None:
+    # PTE:5336 is the first LandingAirB map-collision callback after the AttackAirB landing entry.
+    # Replay playback carries no direct/contact source bit on this row, but the extracted FoD
+    # velocity lane proves the live grIzumi moving-platform owner. Source LandingAir_Coll uses
+    # ft_80084280 -> mpColl_8004B4B0's current-floor release helper and can retry from the carried
+    # main floor onto that live transformed platform even after animation has advanced the visible
+    # action frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor}
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    # data/stages/bin/griz.bin::MSLSTG01 height platform transforms
+    root = Path(__file__).resolve().parents[1]
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    if not path.exists():
+        pytest.skip(
+            f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}"
+        )
+
+    ds = read_dataset(str(path))
+    record = 5336
+    player = 0
+    if int(ds.samples.shape[0]) <= record:
+        pytest.skip(f"dataset too short for record {record}: {path}")
+
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][player]) == 72  # LandingAirB.
+    assert int(row["seed_t"]["action_frame"][player]) == 0
+    assert int(row["seed_t"]["ground_id"][player]) == 5
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][1]) == 0
+    assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][1]) == 1
+    assert int(row["ref_t1"]["ground_id"][player]) == 0
+
+    out = _step_one_record(ds.samples[record : record + 1].copy(), int(ds.header["num_players"]))
+    ref = row["ref_t1"]
+    assert int(out["ground_id"][player]) == int(ref["ground_id"][player])
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_fod_landingair_live_velocity_entry_retry_requires_vertical_reach_ewt_770() -> None:
+    # Negative for the PTE:5336 owner: EWT:770 also has first-callback LandingAir and live FoD
+    # velocity, but the side platform is well outside the current frame's vertical collision reach.
+    # Source mpColl does not turn a live grIzumi velocity lane into an unbounded upward snap.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B4B0
+    root = Path(__file__).resolve().parents[1]
+    path = root / _BASE / "fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ElatedWearyTermite.msl'}")
+
+    ds = read_dataset(str(path))
+    record = 770
+    player = 1
+    if int(ds.samples.shape[0]) <= record:
+        pytest.skip(f"dataset too short for record {record}: {path}")
+
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][player]) == 74  # LandingAirLw.
+    assert int(row["seed_t"]["action_frame"][player]) == 0
+    assert int(row["seed_t"]["seed_prev_action_id"][player]) != 74
+    assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0]) == 1
+    assert int(row["ref_t1"]["ground_id"][player]) == 5
+
+    out = _step_one_record(ds.samples[record : record + 1].copy(), int(ds.header["num_players"]))
+    ref = row["ref_t1"]
+    assert int(out["ground_id"][player]) == int(ref["ground_id"][player]) == 5
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_fod_damageair_live_velocity_replay_frame_lands_on_current_platform_pte_3466() -> None:
+    # PTE:3466 is a DamageAir2 `ftCo_Damage_Coll -> ft_80081DD4` floor callback while FoD's right
+    # platform has a replay-recovered current velocity packet but no direct/contact source bit.
+    # Replay playback must preserve that grIzumi/mpLib velocity state before stepping so the
+    # DamageAir floor producer can consume the current transformed platform line.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    root = Path(__file__).resolve().parents[1]
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    if not path.exists():
+        pytest.skip(
+            f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}"
+        )
+
+    ds = read_dataset(str(path))
+    record = 3466
+    player = 1
+    if int(ds.samples.shape[0]) <= record:
+        pytest.skip(f"dataset too short for record {record}: {path}")
+
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][player]) == 85  # DamageAir2.
+    assert int(row["seed_t"]["hitlag"][player]) == 0
+    assert int(row["seed_t"]["hitstun"][player]) != 0
+    assert int(row["seed_t"]["ground_id"][player]) == 5
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0]) == 0
+    assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0]) == 1
+    assert int(row["ref_t1"]["action_id"][player]) == 42
+    assert int(row["ref_t1"]["ground_id"][player]) == 1
+
+    out = _step_one_record_replay_frame(
+        ds.samples[record : record + 1].copy(), int(ds.header["num_players"])
+    )
+    ref = row["ref_t1"]
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 42
+    assert int(out["ground_id"][player]) == int(ref["ground_id"][player]) == 1
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_fod_damageair_live_velocity_owner_requires_recovered_velocity_pte_3466() -> None:
+    # Negative for the DamageAir FoD velocity owner: a sparse visible height alone is not a current
+    # grIzumi/mpLib packet. Removing only the recovered platform-velocity lane leaves the same
+    # DamageAir row airborne instead of promoting a generic transformed-platform snap.
+    root = Path(__file__).resolve().parents[1]
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    if not path.exists():
+        pytest.skip(
+            f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}"
+        )
+
+    ds = read_dataset(str(path))
+    record = 3466
+    player = 1
+    if int(ds.samples.shape[0]) <= record:
+        pytest.skip(f"dataset too short for record {record}: {path}")
+
+    row = ds.samples[record : record + 1].copy()
+    assert int(row["seed_t"]["action_id"][0, player]) == 85  # DamageAir2.
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0, 0]) == 0
+    assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0, 0]) == 1
+
+    row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0, 0] = np.uint8(0)
+    row["seed_t"]["stage_fod_platform_velocity_f32"][0, 0] = np.float32(0.0)
+
+    out = _step_one_record_replay_frame(row, int(ds.header["num_players"]))
+    assert int(out["action_id"][player]) == 85
+    assert int(out["hitstun"][player]) != 0
+    assert int(out["on_ground"][player]) == 0
+    assert int(out["ground_id"][player]) == 5
 
 
 @pytest.mark.integration

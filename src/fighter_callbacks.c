@@ -176,6 +176,7 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
         batch->state.throw_command_deferred_pulse_frame[idx] = 0u;
       }
       batch->state.throw_pulse_crossed_curr_frame[idx] = 0u;
+      batch->state.blaster_gun_spawned_this_frame[idx] = 0u;
       // DamageFly wall-ASDI provenance is allowed to arm on the SpecialAirHi wall-contact frame
       // before combat starts hitlag, but it must become live only if the frame actually enters or
       // continues hitlag. Non-hitlag wall contacts are stale CollData for this owner.
@@ -330,6 +331,7 @@ static inline void cache_prev_action_state(MslBatch* batch) {
       batch->state.frame_start_instance_id[idx] = batch->state.instance_id[idx];
       batch->state.frame_start_on_ground[idx] = batch->state.on_ground[idx] ? 1u : 0u;
       batch->state.dash_entered_this_frame[idx] = 0u;
+      batch->state.blaster_gun_spawned_this_frame[idx] = 0u;
     }
   }
 }

@@ -9,6 +9,7 @@ enum {
   MSL_DEADUPSTAR_STARTUP_EFFECT_PREFIX_MAX_ACTION_FRAME = 8,
   MSL_DEADUPSTAR_ACTIVE_EFFECT_PREFIX_MAX_ACTION_FRAME = 27,
   MSL_DEADUPSTAR_EFFECT_PREFIX_PHASE1_TAIL_FRAMES = 15,
+  MSL_DEADUPSTAR_ACTIVE_EFFECT_FRAME25_PREFIX_STEPS = 9,
 };
 
 static inline uint8_t msl_deadupstar_effect_prefix_phase_tail_active(
@@ -49,11 +50,35 @@ static inline uint8_t msl_deadupstar_startup_effect_prefix_active(uint16_t actio
   return action_frame <= MSL_DEADUPSTAR_STARTUP_EFFECT_PREFIX_MAX_ACTION_FRAME ? 1u : 0u;
 }
 
+static inline uint8_t msl_deadupstar_active_effect_prefix_count_before_wait(
+    uint16_t action_id, int16_t action_frame, uint8_t match_flow_timer,
+    const MslCommonParams* common);
+
 static inline uint8_t msl_deadupstar_active_effect_prefix_before_wait(
+    uint16_t action_id, int16_t action_frame, uint8_t match_flow_timer,
+    const MslCommonParams* common) {
+  return msl_deadupstar_active_effect_prefix_count_before_wait(action_id, action_frame,
+                                                               match_flow_timer, common) != 0u
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t msl_deadupstar_active_effect_prefix_count_before_wait(
     uint16_t action_id, int16_t action_frame, uint8_t match_flow_timer,
     const MslCommonParams* common) {
   if (common == NULL || action_id != (uint16_t)MSL_ACT_DEAD_UP_STAR) {
     return 0u;
+  }
+  if (action_frame == 26 && match_flow_timer <= (uint8_t)common->dead_up_star_phase2_frames) {
+    // Generator 0x121's active particle bytecode can still run before same-frame Wait getAnimID
+    // when the Wait callback observes the other fighter's post-Anim frame 26 during phase 2. The
+    // bytecode is not extracted yet; PTE locks the bounded source-owned count, while the final-tail
+    // frame-27 and stale-late frame-29 controls below keep the existing one-step/stale boundary.
+    // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
+    // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
+    // refs/melee/src/melee/ef/eflib.c::efLib_CreateGenerator case 0x121
+    // refs/melee/src/sysdolphin/baselib/particle.c
+    return (uint8_t)MSL_DEADUPSTAR_ACTIVE_EFFECT_FRAME25_PREFIX_STEPS;
   }
   if (msl_deadupstar_effect_prefix_phase_tail_active(match_flow_timer, common) == 0u) {
     return 0u;

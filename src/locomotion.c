@@ -57,18 +57,22 @@ static inline void locomotion_consume_deadupstar_effect_prefix_before_wait(MslBa
         continue;
       }
       const size_t idx = msl_idx_player(bi, p);
-      if (msl_deadupstar_active_effect_prefix_before_wait(
-              batch->state.action_id[idx], batch->state.action_frame[idx],
-              batch->state.match_flow_timer[idx], c) == 0u) {
+      const uint8_t prefix_count = msl_deadupstar_active_effect_prefix_count_before_wait(
+          batch->state.action_id[idx], batch->state.action_frame[idx],
+          batch->state.match_flow_timer[idx], c);
+      if (prefix_count == 0u) {
         continue;
       }
-      // Active DeadUpStar effect generator owns one RNG step before fighter Wait_Anim can sample
-      // getAnimID's HSD_Randi(100). This is separate from the same-frame creation prefix below.
+      // Active DeadUpStar effect generator owns source RNG steps before fighter Wait_Anim can
+      // sample getAnimID's HSD_Randi(100). This is separate from the same-frame creation prefix
+      // below; the helper names the bounded generator bytecode count for the visible phase.
       // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
       // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
       // refs/melee/src/melee/ef/eflib.c::efLib_CreateGenerator case 0x121
       // refs/melee/src/sysdolphin/baselib/particle.c
-      combat_rng_consume_step_site(batch, bi, MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX);
+      for (uint8_t i = 0u; i < prefix_count; i++) {
+        combat_rng_consume_step_site(batch, bi, MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX);
+      }
     }
   }
   for (int p = 0; p < player; p++) {
@@ -1056,6 +1060,42 @@ static inline float landing_root_y_from_mpcoll_contact(const MslBatch* batch, si
     // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
     // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
     // data/stages/bin/griz.bin::MSLSTG01 platform_transforms
+    uint8_t platform_id = 0u;
+    const uint8_t same_step_contact_source =
+        (stage_collision_floor_line_platform_transform_id(stage_id, batch->state.ground_id[idx],
+                                                          &platform_id) &&
+         platform_id < 2u &&
+         (batch->state.stage_fod_platform_height_source[bi * 2u + (size_t)platform_id] &
+          (uint8_t)MSL_FOD_PLATFORM_HEIGHT_SOURCE_SAME_STEP_CONTACT) != 0u)
+            ? 1u
+            : 0u;
+    if (same_step_contact_source != 0u) {
+      // Same-step grIzumi platform contact stores the callback-local transformed floor result
+      // before Landing* entry performs its final mpLib_8004DD90_Floor root publication. AttackAir
+      // collision (`ftCo_AttackAir_Coll` -> `ft_80082C74` -> `mpColl_800471F8`) and aerial
+      // side-special end collision (`ftFx_SpecialAirSEnd_Coll` -> `ft_CheckGroundAndLedge`) and
+      // SpecialHiFall landing store the already-biased root in the scratch lane; JumpF/B landing
+      // stores the callback-local transformed floor result and needs the entry publication bias
+      // here. Direct replay rows EWT:9157/10353/10984 and PTE:9136/10272 lock the callback-family
+      // split; normal current-source platform carry without SAME_STEP_CONTACT stays on the
+      // single-bias path.
+      // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::{ftCo_JumpF_Coll,ftCo_JumpB_Coll}
+      // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+      const uint16_t pre_action = batch->state.action_id[idx];
+      if (pre_action >= (uint16_t)MSL_ACT_ATTACK_AIR_N &&
+          pre_action <= (uint16_t)MSL_ACT_ATTACK_AIR_LW) {
+        return batch->state.ground_contact_y[idx] + k_mplib_floor_y_bias;
+      }
+      if (pre_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END ||
+          pre_action == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING ||
+          pre_action == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL) {
+        return batch->state.ground_contact_y[idx] + k_mplib_floor_y_bias;
+      }
+      return batch->state.ground_contact_y[idx] + (2.0f * k_mplib_floor_y_bias);
+    }
     return batch->state.ground_contact_y[idx] + k_mplib_floor_y_bias;
   }
 

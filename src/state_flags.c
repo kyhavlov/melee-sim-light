@@ -351,6 +351,34 @@ static inline uint8_t state_flags_magnify_damageflytop_source_visible_owner(cons
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  const uint8_t damageflytop_hitstun_visible_edge =
+      (uint8_t)(batch->state.action_frame[idx] <= 9 &&
+                batch->state.camera_box_visible_x221f_b0_replay_rise[idx] != 0u &&
+                (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B1) != 0u &&
+                (flags_2218 &
+                 (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B2 |
+                           MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR |
+                           MSL_STATE_FLAG_2218_REFLECTING)) == 0u &&
+                (flags_221c &
+                 (uint8_t)(MSL_STATE_FLAG_221C_B0 | MSL_STATE_FLAG_221C_B1 |
+                           MSL_STATE_FLAG_221C_B2 | MSL_STATE_FLAG_221C_B3 |
+                           MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD |
+                           MSL_STATE_FLAG_221C_IS_HITSTUN | MSL_STATE_FLAG_221C_IN_DAMAGE)) ==
+                    (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN);
+  if (damageflytop_hitstun_visible_edge != 0u) {
+    // Early DamageFlyTop hitstun-only camera publication:
+    // - the replay-fed x221F_b0 row is the source camera-box visibility publication,
+    // - raw x2218_b1 plus x221C hitstun-only provenance matches the DamageFlyHi/N hitstun-only
+    //   visible-edge family,
+    // - action-frame <= 9 keeps this to the early publication window used by the existing x2218_b2
+    //   DamageFlyTop owner; later stale-visible top rows remain seed-owned,
+    // - reflect-behavior, x2218_b2 script-owner, selected-victim, and shield-touch bits stay on
+    //   their existing owners.
+    // refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+    // refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,ifMagnify_802FC998}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+    return 1u;
+  }
   if (batch->state.action_frame[idx] == 9) {
     return (uint8_t)(((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u &&
                       (flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u &&
