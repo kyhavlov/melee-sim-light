@@ -192,6 +192,9 @@ uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid,
 // pulses (window open/close), excluding frame-0 value-0 entry initializers.
 // Consumers: Marth special windows (Dancing Blade chain cmd0, Counter intercept cmd1,
 // Dolphin Slash launch cmd0).
+uint8_t move_tables_state_flags_221c_y_with_event_frame(uint8_t char_id, uint16_t msid,
+                                                        uint16_t frame, uint8_t* out_flags,
+                                                        uint16_t* out_last_event_frame);
 uint8_t move_tables_special_throw_flags_window(uint8_t char_id, uint16_t msid,
                                                float anim_frame_f32);
 uint8_t move_tables_special_cmd_var_value_at_frame(uint8_t char_id, uint16_t msid, uint8_t var_idx,

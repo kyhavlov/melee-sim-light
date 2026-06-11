@@ -88,9 +88,24 @@ static inline uint8_t is_fall_like_action(uint16_t a) {
 }
 
 static inline uint8_t is_airborne_action_with_cliffcatch_check(uint8_t char_id, uint16_t a,
-                                                               float speed_y_self) {
+                                                               float speed_y_self,
+                                                               uint8_t special_cmd1) {
   if (is_fall_like_action(a)) {
     return 1;
+  }
+  // Marth char-specials (the 341..372 range is per-character; check BEFORE the fox/falco
+  // case labels below, which collide numerically). Dolphin Slash's collision callback takes
+  // the ft_800831CC (cliffcatch-enabled) branch once launched (cmd0) and descending; the
+  // rising/pre-launch frames use ft_80083B68 (stage collision + item catch only). Other Marth
+  // air specials use ft_80081D0C (no ledge grab).
+  // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::{ftMs_SpecialHi_Coll,
+  //   ftMs_SpecialAirHi_Coll}
+  if (char_id == (uint8_t)MSL_CHAR_ID_MARTH && a >= 341u && a <= 372u) {
+    // cmd_vars[1] arms on the first descending collision pass; the cliffcatch wrapper runs
+    // from the second (ftMs_Special(Air)Hi_Coll branch order).
+    return (uint8_t)((a == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
+                      a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) &&
+                     speed_y_self < 0.0f && special_cmd1 != 0u);
   }
   switch (a) {
     // Pass / platform drop collision uses the MissFoot-style common-air wrapper, which runs
@@ -136,16 +151,6 @@ static inline uint8_t is_airborne_action_with_cliffcatch_check(uint8_t char_id, 
     case MSL_ACT_FX_SPECIAL_AIR_HI:
     case MSL_ACT_FX_SPECIAL_HI_FALL:
     case MSL_ACT_FX_SPECIAL_HI_BOUND:
-      // Shared 341..372 range: Marth specials handled below; these cases are fox/falco-only.
-      // Marth Dolphin Slash: descending frames use the cliffcatch-enabled collision wrapper
-      // (rising/pre-launch frames use ft_80083B68 without it).
-      // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::{ftMs_SpecialHi_Coll,
-      //   ftMs_SpecialAirHi_Coll} (ft_800831CC branch when cmd0 set and vel.y < 0)
-      if (char_id == (uint8_t)MSL_CHAR_ID_MARTH) {
-        return (uint8_t)((a == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
-                          a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) &&
-                         speed_y_self < 0.0f);
-      }
       return msl_char_id_is_spacie(char_id);
 
     default:
@@ -1175,7 +1180,8 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
       // Decomp: cliff check call sites are in shared collision wrappers that run after mpColl.
       // refs/melee/src/melee/ft/ft_081B.c::{ft_800835B0,ft_800831CC,ft_80083090}
       if (!is_airborne_action_with_cliffcatch_check(batch->state.char_id[idx], a,
-                                                    batch->state.speed_y_self[idx])) {
+                                                    batch->state.speed_y_self[idx],
+                                                    batch->state.special_cmd1[idx])) {
         continue;
       }
       // Decomp: cliff catch checks collision env flags for Collide_LedgeGrabMask.

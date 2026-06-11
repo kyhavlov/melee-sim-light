@@ -1131,9 +1131,20 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
         const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
         uint8_t y_flags = 0u;
-        if (move_tables_state_flags_221c_y_at_frame(batch->state.char_id[idx], msid, frame,
-                                                    &y_flags) != 0u) {
-          if (y_flags & 0x4u) {
+        uint16_t y_event_frame = 0u;
+        if (batch->state.action_frame[idx] == 0) {
+          // Fresh (frame-0) entries re-run the timeline from the start; drop any transition floor.
+          batch->state.x221c_y_event_floor[idx] = 0u;
+        }
+        if (move_tables_state_flags_221c_y_with_event_frame(batch->state.char_id[idx], msid, frame,
+                                                            &y_flags, &y_event_frame) != 0u) {
+          const uint16_t floor_f = batch->state.x221c_y_event_floor[idx];
+          if (floor_f != 0u && y_event_frame < floor_f) {
+            // The level's source event predates a frame-preserving transition that cleared
+            // fp->x221C_u16_y (no Ft_MF_Unk24); stay cleared until the next crossing.
+            // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+            f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IN_DAMAGE;
+          } else if (y_flags & 0x4u) {
             f221c |= (uint8_t)MSL_STATE_FLAG_221C_IN_DAMAGE;
           } else {
             f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IN_DAMAGE;

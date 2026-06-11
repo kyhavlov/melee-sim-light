@@ -699,6 +699,36 @@ uint8_t move_tables_state_flags_221c_y_at_frame(uint8_t char_id, uint16_t msid, 
   return 1u;
 }
 
+uint8_t move_tables_state_flags_221c_y_with_event_frame(uint8_t char_id, uint16_t msid,
+                                                        uint16_t frame, uint8_t* out_flags,
+                                                        uint16_t* out_last_event_frame) {
+  // Level + provenance: also report the frame of the opcode-52 event that produced the level
+  // (the last frame at or before `frame` where the scripted lane changed). Consumers model the
+  // Fighter_ChangeMotionState x221C_u16_y clear on frame-preserving transitions by suppressing
+  // levels whose source event predates the transition entry frame.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState (clear when !Ft_MF_Unk24)
+  if (out_flags == NULL || out_last_event_frame == NULL) {
+    return 0u;
+  }
+  *out_flags = 0u;
+  *out_last_event_frame = 0u;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL) {
+    return 0u;
+  }
+  uint16_t f = frame;
+  if (f >= (uint16_t)MSL_MOVE_TABLE_FRAME_CAP) {
+    f = (uint16_t)(MSL_MOVE_TABLE_FRAME_CAP - 1);
+  }
+  *out_flags = cache->state_flags_221c_y[f];
+  uint16_t e = f;
+  while (e > 0u && cache->state_flags_221c_y[e - 1u] == cache->state_flags_221c_y[e]) {
+    e--;
+  }
+  *out_last_event_frame = e;
+  return 1u;
+}
+
 uint8_t move_tables_airborne_state_event_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame,
                                                   uint8_t* out_state) {
   if (out_state == NULL) {

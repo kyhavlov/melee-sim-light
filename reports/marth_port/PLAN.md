@@ -130,3 +130,8 @@ Slash, SpecialLw Counter (+CounterAttack).
   passes its real contact capsule (carried source hitbox hx/hy/hr) instead of failing closed;
   only the spawn-time attached-laser caller (no live contact position) remains fail-closed.
   All gates re-run green (114 marth / 3259 total; fox/falco stable; smoke 238/55).
+- (marth-rows triage, pre-burn) 55 -> 33 rollout first-breaks / 238 -> 225 one-step via three
+  decomp-backed families: op52 x221C_u16_y event-floor on frame-preserving swaps (-22), the
+  ledge-grab cd->ecb.bottom.x term (DS under-lip sweetspot; marth-only bottom_x tables), and
+  DS cliffcatch cmd1 sequencing (+ the dead marth ledge clause from ci3 fixed). Remaining 33
+  split marth-boundary vs generic in TRIAGE_MARTH_ROWS.md. Fox/falco byte-stable.

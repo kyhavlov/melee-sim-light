@@ -17,6 +17,11 @@ int ecb_table_init(void);
 // - Clamps action_frame to [0, frame_count-1].
 float msl_ecb_bottom_rel_y(uint8_t char_id, uint32_t animation_index, int action_frame);
 
+// Fighter-local ECB bottom-point X offset (model-Z of the min-y joint) for the ledge-grab
+// `cd->ecb.bottom.x` term. Returns 0 when the optional data/ecb/*_bottom_x.bin is absent.
+// refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044164,mpColl_800443C4}
+float msl_ecb_bottom_rel_x(uint8_t char_id, uint32_t animation_index, int action_frame);
+
 // Init-only (may allocate): loads `data/ecb/{fox,falco}_extents.bin`.
 // Must be called before any msl_ecb_extents_rel() queries.
 int ecb_extents_table_init(void);

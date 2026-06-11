@@ -20,6 +20,10 @@ ECB_VERSION = 3
 # tools/extraction/extract_fighter_anims.py:_mtx_concat emits ty at float index 7.
 _MAT_BYTES = 12 * 4
 _MAT_TY_BYTE_OFF = 7 * 4
+# Horizontal axis convention matches extract_ecb_extents.py: the skeleton's facing axis is model
+# Z, so the ledge-grab `ecb.bottom.x` term is the min-ty joint's tz.
+# refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044164,mpColl_800443C4} (cd->ecb.bottom.x)
+_MAT_TZ_BYTE_OFF = 11 * 4
 
 
 def _u16_le(buf: bytes, off: int) -> int:
@@ -75,6 +79,7 @@ class _EcbAnim:
     msid: int
     frame_count: int
     values: array.array  # 'f'
+    values_x: array.array  # 'f' (model-Z of the min-ty joint; ledge-grab ecb.bottom.x term)
 
 
 def _extract_ecb_bottom_for_anim_file(*, anims: Path, attrs: Path) -> list[_EcbAnim]:
@@ -122,22 +127,27 @@ def _extract_ecb_bottom_for_anim_file(*, anims: Path, attrs: Path) -> list[_EcbA
             )
 
         vals = array.array("f")
+        vals_x = array.array("f")
         if frame_count:
             for fi in range(int(frame_count)):
                 frame_base = off + fi * joint_count * _MAT_BYTES
                 min_y = math.inf
+                min_tz = 0.0
                 for ji in ecb_joint_indices:
-                    ty_off = frame_base + ji * _MAT_BYTES + _MAT_TY_BYTE_OFF
-                    ty = float(_f32_le(buf, ty_off))
+                    base = frame_base + ji * _MAT_BYTES
+                    ty = float(_f32_le(buf, base + _MAT_TY_BYTE_OFF))
                     if not math.isfinite(ty):
                         raise ValueError(f"SSANIM01: non-finite ty for msid={msid} frame={fi} part_i={ji}")
                     if ty < min_y:
                         min_y = ty
+                        min_tz = float(_f32_le(buf, base + _MAT_TZ_BYTE_OFF))
                 if not math.isfinite(min_y):
                     min_y = 0.0
+                    min_tz = 0.0
                 vals.append(float(min_y))
+                vals_x.append(float(min_tz) if math.isfinite(min_tz) else 0.0)
 
-        out.append(_EcbAnim(msid=int(msid), frame_count=int(frame_count), values=vals))
+        out.append(_EcbAnim(msid=int(msid), frame_count=int(frame_count), values=vals, values_x=vals_x))
         off += need
 
     # Extra bytes are allowed (future extension), but are unexpected today; fail loudly.
@@ -211,6 +221,21 @@ def main() -> None:
     ecb = _extract_ecb_bottom_for_anim_file(anims=anims, attrs=attrs)
     _write_ecb_bottom_table(out, ecb)
     print(f"wrote {out} ({len(ecb)} animations)")
+
+    # Parallel bottom-X table (the min-ty joint's model-Z; ledge-grab cd->ecb.bottom.x term).
+    # Fox/Falco intentionally do NOT ship this table: their validated ledge-grab behavior was
+    # locked with bottom.x == 0 (the desired_ecb approximation), and regenerating it moves
+    # reviewed rows (e.g. Yoshi platform-drop Pass grabs). Revisit in a dedicated fox/falco
+    # ledge-geometry pass; queries return 0 when the file is absent.
+    if ch in ("fox", "falco"):
+        return
+    out_x = out.with_name(out.name.replace("_bottom.bin", "_bottom_x.bin"))
+    ecb_x = [
+        _EcbAnim(msid=a.msid, frame_count=a.frame_count, values=a.values_x, values_x=a.values_x)
+        for a in ecb
+    ]
+    _write_ecb_bottom_table(out_x, ecb_x)
+    print(f"wrote {out_x} ({len(ecb_x)} animations)")
 
 
 if __name__ == "__main__":

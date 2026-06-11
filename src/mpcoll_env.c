@@ -630,6 +630,12 @@ static inline uint32_t ledge_grab_flags_for_fighter(
   msl_ecb_world_points_sample(&ecb, char_id, animation_index, ecb_frame, ecb_facing_dir, coll_cur_x,
                               coll_cur_y,
                               /*lock_bottom_to_zero=*/0u);
+  // The ledge AABB builders consume cd->ecb (interpolated, posed) whose bottom point carries a
+  // real X displacement (e.g. Marth Dolphin Slash's flip pose) - unlike desired_ecb where
+  // bottom.x is always 0. Source the term from the extracted per-frame bottom-X tables.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044164,mpColl_800443C4} (cd->ecb.bottom.x)
+  ecb.bottom_x =
+      coll_cur_x + ecb_facing_dir * msl_ecb_bottom_rel_x(char_id, animation_index, (int)ecb_frame);
   if (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
       (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
        action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL)) {
@@ -731,7 +737,9 @@ static inline uint32_t ledge_grab_flags_for_fighter(
       // Decomp: contact.x is required to be close to the floor endpoint:
       // `cd->contact.x - edge.x < 5.0F`.
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
-      if ((contact_x - edge_x) < k_ledge_edge_dx_max && coll_cur_x < edge_x &&
+      // Decomp: `cd->cur_pos.x + cd->ecb.bottom.x < edge.x` (the posed bottom point).
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
+      if ((contact_x - edge_x) < k_ledge_edge_dx_max && ecb.bottom_x < edge_x &&
           ecb.bottom_y < edge_y) {
         // Decomp: mpColl_80044164 includes additional obstruction checks using mpCheckMultiple
         // (checks=6) from ECB top and a bottom-2 probe to cd->contact.
@@ -783,7 +791,9 @@ static inline uint32_t ledge_grab_flags_for_fighter(
       const float edge_y = ledge_line->y1;
       // Decomp: `edge.x - cd->contact.x < 5.0F`.
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
-      if ((edge_x - contact_x) < k_ledge_edge_dx_max && coll_cur_x > edge_x &&
+      // Decomp: `cd->cur_pos.x + cd->ecb.bottom.x > edge.x` (the posed bottom point).
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
+      if ((edge_x - contact_x) < k_ledge_edge_dx_max && ecb.bottom_x > edge_x &&
           ecb.bottom_y < edge_y) {
         // Decomp: mpColl_800443C4 includes additional obstruction checks using mpCheckMultiple
         // (checks=10) from ECB top and a bottom-2 probe to cd->contact.

@@ -801,7 +801,11 @@ typedef struct MslStateSoA {
   float* special_stick_angle;
   uint8_t* specials_air_used;
   float* fallspecial_mobility_mul;
-  uint8_t* speciallw_counter_window;  // [batch * players], 0/1
+  uint8_t* speciallw_counter_window;
+  // Frame-preserving motion transitions without Ft_MF_Unk24 clear fp->x221C_u16_y; opcode-52
+  // events at frames <= this floor are suppressed until the next crossing (0 = no floor).
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  uint16_t* x221c_y_event_floor;  // [batch * players], 0/1
   // ECB lock countdown (decomp: fp->ecb_lock) used with CollData_X130_Locked.
   // - Set by ftCommon_8007D5D4 / ftCommon_8007D60C.
   // - Decremented once per map/collision callback in Fighter_procMap and clears lock at 0.

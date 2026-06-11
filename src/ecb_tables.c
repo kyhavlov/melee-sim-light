@@ -38,6 +38,9 @@ typedef struct {
 } MslEcbTable;
 
 static MslEcbTable g_table_by_char[256];
+// Optional parallel bottom-X tables (the min-ty joint's model-Z; ledge-grab cd->ecb.bottom.x
+// term). Missing files are tolerated: queries return 0 (the pre-existing behavior).
+static MslEcbTable g_bottom_x_table_by_char[256];
 static int g_loaded = 0;
 
 static uint16_t read_u16_le(const uint8_t* p) {
@@ -58,7 +61,10 @@ static float read_f32_le(const uint8_t* p) {
   return v;
 }
 
-static int load_table_for_char(const char* data_dir, const char* rel_path, uint8_t char_id) {
+static int load_table_for_char(const char* data_dir, const char* rel_path, uint8_t char_id);
+
+static int load_table_for_char_into(MslEcbTable* table_by_char, const char* data_dir,
+                                    const char* rel_path, uint8_t char_id) {
   char path[512];
   const int n = snprintf(path, sizeof(path), "%s/%s", data_dir, rel_path);
   if (n <= 0 || (size_t)n >= sizeof(path)) {
@@ -190,14 +196,14 @@ static int load_table_for_char(const char* data_dir, const char* rel_path, uint8
   }
 
   // Replace any existing table for this character.
-  if (g_table_by_char[char_id].buf) {
-    alloc_free(g_table_by_char[char_id].entry_index_by_msid);
-    alloc_free(g_table_by_char[char_id].entries);
-    alloc_free(g_table_by_char[char_id].buf);
+  if (table_by_char[char_id].buf) {
+    alloc_free(table_by_char[char_id].entry_index_by_msid);
+    alloc_free(table_by_char[char_id].entries);
+    alloc_free(table_by_char[char_id].buf);
   }
   const MslCharParams* ch = msl_char_params(char_id);
   const float model_scaling = (ch != NULL) ? ch->model_scaling : 1.0f;
-  g_table_by_char[char_id] = (MslEcbTable){
+  table_by_char[char_id] = (MslEcbTable){
       .buf = buf,
       .sz = sz,
       .entries = entries,
@@ -232,8 +238,32 @@ int ecb_table_init(void) {
     }
   }
 
+  // Optional bottom-X tables (cd->ecb.bottom.x ledge-grab term); absence keeps the
+  // pre-existing bottom_x == pos_x behavior.
+  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+    char rel[64];
+    snprintf(rel, sizeof(rel), "ecb/%s_bottom_x.bin", MSL_CHAR_REGISTRY[ci].name);
+    (void)load_table_for_char_into(g_bottom_x_table_by_char, data_dir, rel,
+                                   MSL_CHAR_REGISTRY[ci].char_id);
+  }
+
   g_loaded = 1;
   return 0;
+}
+
+static int load_table_for_char(const char* data_dir, const char* rel_path, uint8_t char_id) {
+  return load_table_for_char_into(g_table_by_char, data_dir, rel_path, char_id);
+}
+
+static const MslEcbTable* bottom_x_table_for_char(uint8_t char_id) {
+  if (!g_loaded) {
+    return NULL;
+  }
+  const MslEcbTable* t = &g_bottom_x_table_by_char[char_id];
+  if (!t->have || t->buf == NULL || t->entries == NULL || t->anim_count == 0) {
+    return NULL;
+  }
+  return t;
 }
 
 static const MslEcbTable* table_for_char(uint8_t char_id) {
@@ -601,6 +631,47 @@ MslEcbExtentsRel msl_ecb_extents_rel(uint8_t char_id, uint32_t animation_index, 
       .min_y = min_y * t->model_scaling,
       .max_y = max_y * t->model_scaling,
   };
+}
+
+float msl_ecb_bottom_rel_x(uint8_t char_id, uint32_t animation_index, int action_frame) {
+  // Slippi sentinel.
+  if (animation_index == 0xFFFFFFFFu) {
+    return 0.0f;
+  }
+  if (animation_index > 0xFFFFu) {
+    return 0.0f;
+  }
+
+  const MslEcbTable* t = bottom_x_table_for_char(char_id);
+  if (t == NULL) {
+    return 0.0f;
+  }
+
+  const uint16_t msid = (uint16_t)animation_index;
+  const int ei = find_entry_index(t, msid);
+  if (ei < 0) {
+    return 0.0f;
+  }
+  const MslEcbEntry* e = &t->entries[ei];
+  if (e->frame_count == 0) {
+    return 0.0f;
+  }
+
+  int f = action_frame;
+  if (f < 0) {
+    f = 0;
+  }
+  if (f >= (int)e->frame_count) {
+    f = (int)e->frame_count - 1;
+  }
+
+  const uint8_t* base = t->buf + e->values_off + (size_t)f * 4u;
+  const float v = read_f32_le(base);
+  // v is expected to be a real offset; if corrupted, fall back to 0 to avoid NaNs in hot-path physics.
+  if (!(v == v)) {
+    return 0.0f;
+  }
+  return v * t->model_scaling;
 }
 
 float msl_ecb_left_rel_x(uint8_t char_id, uint32_t animation_index, int action_frame) {

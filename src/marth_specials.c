@@ -319,6 +319,15 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
 
       // ---- Dolphin Slash -------------------------------------------------
       if (a == (uint16_t)MSL_ACT_MS_SPECIAL_HI || a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) {
+        // Coll sequencing (ftMs_Special(Air)Hi_Coll): the first descending collision pass only
+        // sets cmd_vars[1]; the cliffcatch-enabled wrapper (ft_800831CC) runs from the second.
+        // This update runs pre-physics, so the start-of-frame vel.y mirrors what the previous
+        // frame's Coll saw.
+        if (!batch->state.on_ground[idx] && batch->state.special_cmd1[idx] == 0u &&
+            batch->state.speed_y_self[idx] < 0.0f &&
+            move_tables_special_cmd_var_value_at_frame(cid, msid, 0u, frame)) {
+          batch->state.special_cmd1[idx] = 1u;
+        }
         // Pre-launch IASA: stick X tilts the launch angle (ftMs_SpecialHi_IASA).
         const uint8_t launched = move_tables_special_cmd_var_value_at_frame(cid, msid, 0u, frame);
         if (!launched) {
@@ -735,6 +744,10 @@ static void ms_swap_preserving_frame(MslBatch* batch, size_t idx, uint16_t next_
   batch->state.action_id[idx] = next_action;
   batch->state.animation_index[idx] = (uint32_t)marth_special_submotion(next_action);
   msl_anim_timebase_enter(batch, idx, cur, 1.0f);
+  // ChangeMotionState without Ft_MF_Unk24 clears fp->x221C_u16_y; opcode-52 levels whose
+  // source event is at or before the preserved entry frame stay cleared until the script
+  // crosses its next event (state_flags.c consumer).
+  batch->state.x221c_y_event_floor[idx] = (uint16_t)(msl_anim_frame_floor_u16(cur) + 1u);
 }
 
 uint8_t marth_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {

@@ -36,13 +36,13 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 == datasets/marth_falco_recent/replays/validation/marth_falco_recent/VictoriousSpitefulAlpaca.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 701
-rollout.streak_count: 35
-rollout.streak_len.median: 231
+rollout.streak_count: 34
+rollout.streak_len.median: 230
 rollout.streak_len.p90: 491
 rollout.streak_len.p95: 587
 rollout.streak_len.max: 701
-rollout.first_mismatch_total: 55
-rollout.first_mismatch_seeded_total: 38
+rollout.first_mismatch_total: 33
+rollout.first_mismatch_seeded_total: 14
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=12.8251 rec=6078 p=0 seed/ref/out=-71.4131/-71.0931/-58.268 actions=35/35/35 category=unclassified
@@ -55,14 +55,14 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:136
 
 == suite summary ==
-overall.rollout.streak_count: 35
-overall.rollout.streak_len.median: 231
+overall.rollout.streak_count: 34
+overall.rollout.streak_len.median: 230
 overall.rollout.streak_len.p90: 491
 overall.rollout.streak_len.p95: 587
 overall.rollout.streak_len.max: 701
 overall.rollout.best_len.max: 701
-overall.rollout.first_mismatch_total: 55
-overall.rollout.first_mismatch_seeded_total: 38
+overall.rollout.first_mismatch_total: 33
+overall.rollout.first_mismatch_seeded_total: 14
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=12.8251 rec=6078 p=0 seed/ref/out=-71.4131/-71.0931/-58.268 actions=35/35/35 category=unclassified
