@@ -33,6 +33,48 @@ static inline size_t msl_shielddesc_idx_hitbox_victim(int bi, int p, int hb_i, i
          (size_t)victim;
 }
 
+static inline uint8_t msl_shielddesc_attackairb_guard_lower_bound_seed_owner(const MslBatch* batch,
+                                                                             int bi, int attacker,
+                                                                             int defender) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const size_t d_idx = msl_idx_player(bi, defender);
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD ||
+      batch->state.action_frame[d_idx] >= 0 || batch->state.animation_index[d_idx] != UINT32_MAX ||
+      fabsf(batch->state.guard_tilt_x4[d_idx]) > FLT_EPSILON ||
+      batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B ||
+      batch->state.animation_index[a_idx] != (uint32_t)MSL_SM_ATTACK_AIR_B) {
+    return 0u;
+  }
+  const size_t hb0_i = msl_shielddesc_idx_hitbox(bi, attacker, 0);
+  const size_t hb2_i = msl_shielddesc_idx_hitbox(bi, attacker, 2);
+  if (batch->state.hitbox_enable_edge[hb0_i] == 0u || batch->state.hitbox_damage[hb0_i] != 15.0f ||
+      batch->state.hitbox_enabled[hb2_i] == 0u || batch->state.hitbox_damage[hb2_i] != 9.0f) {
+    return 0u;
+  }
+  const uint8_t seeded_x19a4 = batch->state.combat_shield_hit_int_damage[d_idx];
+  if (seeded_x19a4 == 0u || seeded_x19a4 >= 15u) {
+    return 0u;
+  }
+  // Existing shield seed lanes can be aggregate/lower-bound proofs for replay-visible GuardSetOff:
+  // FEH/DCC/IAT-style rows can mark every BAir HitCapsule as accepted even though source
+  // `lbColl_80007BCC` still selects a concrete current packet. When the authored
+  // strong-root/weak-slot packet and x19A4 below the strong root's raw 15-damage payload prove this
+  // is not exact per-HitCapsule seed provenance, live ShieldDesc geometry remains the packet owner
+  // instead of teacher-forcing the all-slot seed lane.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  return (uint8_t)(batch->state.combat_shield_contact_hb_kind[msl_shielddesc_idx_hitbox_victim(
+                       bi, attacker, 0, defender)] == 2u &&
+                   batch->state.combat_shield_contact_hb_kind[msl_shielddesc_idx_hitbox_victim(
+                       bi, attacker, 1, defender)] == 2u &&
+                   batch->state.combat_shield_contact_hb_kind[msl_shielddesc_idx_hitbox_victim(
+                       bi, attacker, 2, defender)] == 2u);
+}
+
 static inline float msl_shielddesc_model_scale_for_idx(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 1.0f;
@@ -387,8 +429,10 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
           ? 1u
           : 0u;
   const uint8_t shield_seed_kind =
-      batch->state.combat_shield_contact_hb_kind[msl_shielddesc_idx_hitbox_victim(bi, attacker,
-                                                                                  hb_id, defender)];
+      (msl_shielddesc_attackairb_guard_lower_bound_seed_owner(batch, bi, attacker, defender) != 0u)
+          ? 0u
+          : batch->state.combat_shield_contact_hb_kind[msl_shielddesc_idx_hitbox_victim(
+                bi, attacker, hb_id, defender)];
   const int16_t attackair_first_create_frame = move_tables_attackair_first_create_hitbox_frame(
       batch->state.char_id[a_idx], batch->state.action_id[a_idx]);
   // Weak AttackAirB HitCapsule vs tilted no-submotion Guard ShieldDesc:
@@ -571,8 +615,13 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
       shr * (shield_matrix_uses_unscaled_radius ? 1.0f : shield_owner_model_scale);
   const float rr = hr + shield_matrix_radius + shield_desc_term + shield_extent_env_r;
 
+  const float overlap_margin = rr - sqrtf(d2);
   if (out_overlap_margin != NULL) {
-    *out_overlap_margin = rr - sqrtf(d2);
+    *out_overlap_margin = overlap_margin;
   }
-  return (uint8_t)(d2 <= rr * rr);
+  if (d2 > rr * rr) {
+    return 0u;
+  }
+
+  return 1u;
 }

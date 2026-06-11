@@ -97,10 +97,11 @@ int msl_batch_apply_replay_frame_rng(MslBatch* batch, const uint8_t* seed_bytes,
                                      size_t seed_stride_bytes);
 
 // Replay playback validation step: apply current replay row frame-start lanes that are
-// authoritative in replay playback, then advance one input frame. This includes frame-start RNG
-// and the replay-visible x221F_b0 camera-box visibility bit used by magnify ownership. The
-// standalone msl_batch_apply_replay_frame_rng helper remains RNG-only. Normal RL/free-running
-// step_input callers should not use this.
+// authoritative in replay playback, then advance one input frame. This includes frame-start RNG,
+// the replay-visible x221F_b0 camera-box visibility bit used by magnify ownership, and
+// prefix-causal stage lanes such as Dream Land Whispy current wind. The standalone
+// msl_batch_apply_replay_frame_rng helper remains RNG-only. Normal RL/free-running step_input
+// callers should not use this.
 int msl_batch_step_input_replay_frame_rng(MslBatch* batch, const uint8_t* seed_bytes,
                                           size_t seed_stride_bytes, const uint8_t* prev_input_bytes,
                                           size_t prev_input_stride_bytes,

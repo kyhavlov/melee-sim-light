@@ -7,6 +7,7 @@ import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 from tests.test_combat_ownership_seed_guardrail_locks import (
+    _DEBUG_SHIELD_CANDIDATE_DTYPE,
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
@@ -162,6 +163,49 @@ def _run_rollout_records_replay_frame_rng(
     finally:
         msl_binding.destroy(handle)
     return got
+
+
+def _debug_replay_frame_shield_candidates(
+    dataset_path: Path,
+    record: int,
+    *,
+    ucf_enabled: bool = False,
+    ucf_cardinals_1_0_enabled: bool = False,
+) -> np.ndarray:
+    import msl_binding
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    def field_bytes(off: int, stride: int) -> np.ndarray:
+        raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
+        return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=int(ucf_enabled),
+        ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
+    )
+    try:
+        msl_binding.reseed_seed_rollout(handle, field_bytes(seed_off, seed_stride))
+        msl_binding.apply_replay_frame_rng(handle, field_bytes(seed_off, seed_stride))
+        msl_binding.debug_step_input_pre_combat(
+            handle,
+            field_bytes(prev_off, input_stride),
+            field_bytes(input_off, input_stride),
+        )
+        raw, count = msl_binding.debug_shield_candidate_decisions(handle, 0, 128)
+    finally:
+        msl_binding.destroy(handle)
+    assert int(raw.shape[1]) == int(_DEBUG_SHIELD_CANDIDATE_DTYPE.itemsize)
+    return raw.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count].copy()
 
 
 @pytest.mark.integration
@@ -2571,6 +2615,146 @@ def test_guardsetoff_active_hitlag_sdi_requires_x670_window() -> None:
     assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender])
     assert float(out["pos_x"][defender]) == pytest.approx(float(ref["pos_x"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_replay_rollout_attackairb_create_edge_uses_live_shield_contact_feh_5346() -> None:
+    # Replay-rollout positive for the source ShieldDesc contact owner:
+    # - One-step seed lanes mark all BAir HitCapsules as shield-contact candidates and carry only a
+    #   lower-bound x19A4 from hitlag; those lanes are teacher-forced one-step surfaces.
+    # - Runtime replay rollout must use the live ftColl_80078C70/lbColl_80007BCC order instead:
+    #   the strong hb0 root capsule is a reduced-proxy near miss, then the stale weak hb2 capsule
+    #   owns x19A4/x19A0 and GuardSetOff recoil.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        / "FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    got = _run_rollout_records_replay_frame_rng(
+        dataset_path,
+        5346,
+        (5346,),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    out, ref = got[5346]
+    attacker = 0
+    defender = 1
+
+    assert int(out["action_id"][attacker]) == int(ref["action_id"][attacker]) == 67
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 5
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 5
+    assert float(out["speed_ground_x_self"][defender]) == pytest.approx(
+        float(ref["speed_ground_x_self"][defender]), abs=1e-7
+    )
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[5346:5347]
+    assert all(
+        int(row["seed_t"]["combat_shield_contact_hb_kind"][0, attacker, hb, defender]) == 2
+        for hb in range(3)
+    )
+    assert 0 < int(row["seed_t"]["combat_shield_hit_int_damage"][0, defender]) < 15
+
+    cand = _debug_replay_frame_shield_candidates(
+        dataset_path,
+        5346,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    hb0 = next(
+        c
+        for c in cand
+        if int(c["source_kind"]) == 0
+        and int(c["attacker"]) == attacker
+        and int(c["defender"]) == defender
+        and int(c["hitbox_id"]) == 0
+    )
+    hb2 = next(
+        c
+        for c in cand
+        if int(c["source_kind"]) == 0
+        and int(c["attacker"]) == attacker
+        and int(c["defender"]) == defender
+        and int(c["hitbox_id"]) == 2
+    )
+    assert abs(float(hb0["hitbox_y"]) - float(hb0["shield_y"])) > float(hb0["shield_radius"])
+    assert int(hb2["overlap_shield"]) == 1
+
+
+
+@pytest.mark.integration
+def test_attackairb_guard_lower_bound_seed_keeps_hb0_when_inside_shield_radius_dcc_9057() -> None:
+    # Adjacent negative for the FEH hb0 -> hb2 handoff: DCC has the same all-slot BAir shield seed
+    # provenance, but the strong hb0 create-edge center remains inside the live ShieldDesc vertical
+    # radius and source keeps hb0 as the shield owner.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        / "DistinctCaringCobra.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    got = _run_rollout_records_replay_frame_rng(
+        dataset_path,
+        9057,
+        (9057,),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    out, ref = got[9057]
+    defender = 0
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 7
+    assert float(out["speed_ground_x_self"][defender]) == pytest.approx(
+        float(ref["speed_ground_x_self"][defender]), abs=1e-7
+    )
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[9057:9058]
+    attacker = 1
+    assert all(
+        int(row["seed_t"]["combat_shield_contact_hb_kind"][0, attacker, hb, defender]) == 2
+        for hb in range(3)
+    )
+    assert 0 < int(row["seed_t"]["combat_shield_hit_int_damage"][0, defender]) < 15
+
+    cand = _debug_replay_frame_shield_candidates(
+        dataset_path,
+        9057,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    hb0 = next(
+        c
+        for c in cand
+        if int(c["source_kind"]) == 0
+        and int(c["attacker"]) == attacker
+        and int(c["defender"]) == defender
+        and int(c["hitbox_id"]) == 0
+    )
+    hb2 = next(
+        c
+        for c in cand
+        if int(c["source_kind"]) == 0
+        and int(c["attacker"]) == attacker
+        and int(c["defender"]) == defender
+        and int(c["hitbox_id"]) == 2
+    )
+    assert abs(float(hb0["hitbox_y"]) - float(hb0["shield_y"])) <= float(hb0["shield_radius"])
+    assert int(hb2["overlap_shield"]) == 1
 
 
 @pytest.mark.integration

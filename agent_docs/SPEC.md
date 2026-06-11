@@ -1180,7 +1180,17 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   and remaining active-window carry prefix-causally in native preprocessing; it does not
   seed replay-next fighter position or velocity. The carry is bounded by the source
   `grOldPupupu_802113E0` active window (`xD0` in `(45, 320)`) instead of treating every active row
-  as a fresh full-length episode. This closes the dense Dream Land fighter `pos_x` p95 wind band. The remaining
+  as a fresh full-length episode. Replay playback validation feeds that same prefix-causal stage
+  lane each step, parallel to replay frame-start RNG/camera lanes, while normal `step_input` keeps
+  the live scheduler state. Because Slippi/preprocessing serializes the first active `xDC` on the
+  next seed row after the source callback has already applied one `ftColl_GetWindOffsetVec`, the
+  replay-step API installs a named runtime owner,
+  `replay_frame_dream_whispy_first_apply_pending`, for exactly that first source application when a
+  rollout has advanced past its reseed frame. Rollouts seeded on that row do not take the pending
+  application because they have not advanced past their reseed frame. FEH rec 889->953 locks the
+  replay-playback positive and rec 890 locks the direct-seed negative. This closes the dense Dream
+  Land fighter `pos_x` p95 wind band.
+  The remaining
   Dream Land float-norm p95 outlier was not Whispy apple p95; float-norm autopsy identified sparse
   throw-side Fox/Falco laser item lifecycle rows. Runtime now advances the throw-side blaster item
   spawn counter from extracted throw-pulse ordinals and keeps carried ThrowB state-1 laser articles
@@ -6535,6 +6545,23 @@ BODY collision-space residual split and rejected seed bridge:
   Sources: `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC`,
   `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C`.
+- AttackAirB-vs-Guard all-slot ShieldDesc seed lanes are lower-bound provenance, not exact
+  per-HitCapsule truth. Rows such as FEH:5346, DCC:9057, and IAT:4605 can serialize
+  `combat_shield_contact_hb_kind == 2` for multiple BAir slots while source
+  `ftColl_80078C70 -> lbColl_80007BCC` still selects one current HitCapsule packet. Runtime treats
+  the all-slot seed plus x19A4 below the authored strong hb0 raw 15-damage payload as a lower-bound
+  seed owner and uses live ShieldDesc geometry/source order for the selected packet. This is not the
+  final generic ShieldDesc matrix-packet implementation: the current runtime packet uses the live
+  axis-aligned ShieldDesc vertical radius as a bounded lower-dimensional admission boundary. FEH is
+  the hb0-miss/hb2-accept positive: strong hb0's center is outside that live ShieldDesc radius and
+  weak hb2 independently overlaps. DCC is the adjacent negative: with the same all-slot seed shape
+  and hb2 overlap, hb0 remains inside the live ShieldDesc radius, so hb0 stays the source owner.
+  One-step seeded rows with exact per-HitCapsule provenance and true strong hb0 x19A4>=15 keep their
+  existing owners. TODO: replace the vertical-radius boundary with the exact
+  `lbColl_80007BCC` matrix packet once runtime carries that packet generically.
+  Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}`,
+  `refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}`,
+  `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox`.
 - Continuing GuardOn raise-shield no-submotion rows have a separate fighter-vs-fighter ShieldDesc
   pose owner. After `ftCo_800924C0` enters GuardOn, `ftCo_GuardOn_Anim` continues calling
   `ftCo_80091E78` while `mv.co.guard.x10` remains live, but Slippi still exposes the row as

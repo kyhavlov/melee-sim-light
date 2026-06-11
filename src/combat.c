@@ -11446,7 +11446,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         uint8_t shield_contact_groups[MSL_MAX_HITBOXES] = {0};
         uint8_t shield_contact_rehit_frames[MSL_MAX_HITBOXES] = {0};
         uint8_t shield_contact_group_seen[8] = {0};
-
         for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
           const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
           if (!batch->state.hitbox_enabled[hb_i]) {
@@ -11502,8 +11501,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
           // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
           const uint8_t shield_seed_kind =
-              batch->state
-                  .combat_shield_contact_hb_kind[idx_hitbox_victim(bi, attacker, hb_id, defender)];
+              (msl_shielddesc_attackairb_guard_lower_bound_seed_owner(batch, bi, attacker,
+                                                                      defender) != 0u)
+                  ? 0u
+                  : batch->state.combat_shield_contact_hb_kind[idx_hitbox_victim(bi, attacker,
+                                                                                 hb_id, defender)];
           uint8_t allows =
               hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
           if (!allows && shield_seed_kind == 2u) {
@@ -11602,6 +11604,40 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
           if (!overlaps_shield) {
             continue;
+          }
+          if (shield_seed_kind == 0u && hb_id == 0 &&
+              msl_shielddesc_attackairb_guard_lower_bound_seed_owner(batch, bi, attacker,
+                                                                     defender) != 0u &&
+              fabsf(hy - shy) > shr) {
+            const size_t hb2_i = idx_hitbox(bi, attacker, 2);
+            uint8_t weak_hb2_overlaps = 0u;
+            if (batch->state.hitbox_enabled[hb2_i] != 0u &&
+                batch->state.hitbox_damage[hb2_i] == 9.0f) {
+              float hb2_overlap_margin = 0.0f;
+              weak_hb2_overlaps = combat_shield_overlap_ftcoll_80007bcc(
+                  batch, bi, attacker, defender, 2, batch->state.hitbox_x[hb2_i],
+                  batch->state.hitbox_y[hb2_i], batch->state.hitbox_z[hb2_i],
+                  batch->state.hitbox_radius[hb2_i], shx, shy, shz, shr,
+                  /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
+                  shield_desc_envelope_ready, shield_extent_bridge_active, &hb2_overlap_margin);
+              (void)hb2_overlap_margin;
+            }
+            if (weak_hb2_overlaps != 0u) {
+              // Strong BAir hb0 / weak hb2 ShieldDesc packet ordering:
+              // Existing seed lanes can mark the whole BAir packet as shield-accepted. Source
+              // lbColl_80007BCC still checks the current HitCapsule packet. Runtime does not yet
+              // carry the full source ShieldDesc matrix packet here, so this uses the live packet's
+              // axis-aligned vertical radius as the bounded lower-dimensional guard: only rows
+              // where strong-root hb0 is outside that radius and weak hb2 independently overlaps
+              // can hand shield ownership to hb2. If hb0 is inside the live radius, rows such as
+              // DCC keep hb0 as the source owner even with the same all-slot lower-bound seed.
+              // TODO: replace this boundary with the exact ftColl/lbColl ShieldDesc matrix packet
+              // once runtime carries that packet generically.
+              // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+              // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+              // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+              continue;
+            }
           }
           if (shield_seed_kind == 0u &&
               combat_guardon_raise_attacks4_age_rejects_shield(batch, c, bi, a_idx, d_idx, hb_i)) {
@@ -11712,7 +11748,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         }
 
         if (sel_int_dmg > 0) {
-          const uint8_t seeded_x19a4 = batch->state.combat_shield_hit_int_damage[d_idx];
+          const uint8_t lower_bound_attackairb_guard_seed =
+              msl_shielddesc_attackairb_guard_lower_bound_seed_owner(batch, bi, attacker, defender);
+          const uint8_t seeded_x19a4 = (lower_bound_attackairb_guard_seed != 0u)
+                                           ? 0u
+                                           : batch->state.combat_shield_hit_int_damage[d_idx];
           if (seeded_x19a4 != 0u) {
             // Teacher-forced shield-hit max-damage lane:
             // - ftColl_80076CBC writes defender fp->x19A4 as the max getEnvDmg(hit0->damage)
@@ -11728,7 +11768,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             max_int_dmg = (int)seeded_x19a4;
           }
           int tmp_dmg = shield_damage_taken_sum;
-          const uint8_t seeded_x19a0 = batch->state.combat_shield_damage_taken[d_idx];
+          const uint8_t seeded_x19a0 = (lower_bound_attackairb_guard_seed != 0u)
+                                           ? 0u
+                                           : batch->state.combat_shield_damage_taken[d_idx];
           if (seeded_x19a0 != 0u) {
             // Teacher-forced shield HP accumulator:
             // - ftColl_80076CBC accumulates `fp->x19A0_shieldDamageTaken` separately from x19A4.
@@ -13045,8 +13087,11 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
           // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
           // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
           const uint8_t shield_seed_kind =
-              batch->state
-                  .combat_shield_contact_hb_kind[idx_hitbox_victim(bi, attacker, hb_id, defender)];
+              (msl_shielddesc_attackairb_guard_lower_bound_seed_owner(batch, bi, attacker,
+                                                                      defender) != 0u)
+                  ? 0u
+                  : batch->state.combat_shield_contact_hb_kind[idx_hitbox_victim(bi, attacker,
+                                                                                 hb_id, defender)];
           uint8_t allows =
               hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
           // GuardReflect no-submotion x14-expired bridge:
@@ -13070,8 +13115,11 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
         if (reason == (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD) {
           float overlap_margin = 0.0f;
           const uint8_t shield_seed_kind =
-              batch->state
-                  .combat_shield_contact_hb_kind[idx_hitbox_victim(bi, attacker, hb_id, defender)];
+              (msl_shielddesc_attackairb_guard_lower_bound_seed_owner(batch, bi, attacker,
+                                                                      defender) != 0u)
+                  ? 0u
+                  : batch->state.combat_shield_contact_hb_kind[idx_hitbox_victim(bi, attacker,
+                                                                                 hb_id, defender)];
           uint8_t overlaps = 0u;
           if (shield_seed_kind == 1u) {
             reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_SHIELD_GEOM_NO_OVERLAP;
@@ -13092,6 +13140,27 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
           }
           out->overlap_shield = overlaps ? 1u : 0u;
           out->shield_overlap_margin = overlap_margin;
+          if (reason == (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD && overlaps &&
+              shield_seed_kind == 0u && hb_id == 0 &&
+              msl_shielddesc_attackairb_guard_lower_bound_seed_owner(batch, bi, attacker,
+                                                                     defender) != 0u &&
+              fabsf(out->hitbox_y - shy) > shr) {
+            const size_t hb2_i = idx_hitbox(bi, attacker, 2);
+            uint8_t weak_hb2_overlaps = 0u;
+            if (batch->state.hitbox_enabled[hb2_i] != 0u &&
+                batch->state.hitbox_damage[hb2_i] == 9.0f) {
+              weak_hb2_overlaps = combat_shield_overlap_ftcoll_80007bcc(
+                  batch, bi, attacker, defender, 2, batch->state.hitbox_x[hb2_i],
+                  batch->state.hitbox_y[hb2_i], batch->state.hitbox_z[hb2_i],
+                  batch->state.hitbox_radius[hb2_i], shx, shy, shz, shr,
+                  /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
+                  shield_desc_envelope_ready, shield_extent_bridge_active, NULL);
+            }
+            if (weak_hb2_overlaps != 0u) {
+              overlaps = 0u;
+              out->overlap_shield = 0u;
+            }
+          }
           if (reason == (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD && !overlaps) {
             // Decomp shield geometry test helper:
             // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC

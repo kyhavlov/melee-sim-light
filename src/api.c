@@ -656,6 +656,14 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
   memset(batch->replay_frame_rng_applied, 0, (size_t)batch_size * sizeof(uint8_t));
+  batch->replay_frame_dream_whispy_first_apply_pending =
+      (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
+  if (batch->replay_frame_dream_whispy_first_apply_pending == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->replay_frame_dream_whispy_first_apply_pending, 0,
+         (size_t)batch_size * sizeof(uint8_t));
   batch->replay_frame_top_blast_rng_owned =
       (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
   if (batch->replay_frame_top_blast_rng_owned == NULL) {
@@ -874,8 +882,9 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch->camera_mode);
   alloc_free(batch->replay_rollout_seed_frame_id);
   alloc_free(batch->replay_rollout_reseeded);
-  alloc_free(batch->replay_frame_rng_applied);
   alloc_free(batch->replay_frame_top_blast_rng_owned);
+  alloc_free(batch->replay_frame_dream_whispy_first_apply_pending);
+  alloc_free(batch->replay_frame_rng_applied);
   alloc_free(batch->rollout_yoshi_shyguy_spawn_rng_installed);
   alloc_free(batch->rollout_clock_rng_owned);
   alloc_free(batch->match_init_seed_scratch);
@@ -913,6 +922,7 @@ static void msl_batch_copy_runtime_lane(MslBatch* dst, const MslBatch* src, int3
   MSL_BATCH_COPY_FIELD(rollout_clock_rng_owned, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(rollout_yoshi_shyguy_spawn_rng_installed, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_frame_rng_applied, uint8_t, 1u);
+  MSL_BATCH_COPY_FIELD(replay_frame_dream_whispy_first_apply_pending, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_frame_top_blast_rng_owned, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_rollout_reseeded, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_rollout_seed_frame_id, int32_t, 1u);
@@ -3765,6 +3775,64 @@ static int msl_batch_apply_replay_frame_camera_box_visibility(MslBatch* batch,
   return 0;
 }
 
+enum { MSL_DREAM_WHISPY_FIRST_VISIBLE_ACTIVE_TIMER = 274u };
+
+static int msl_batch_apply_replay_frame_stage_lanes(MslBatch* batch, const uint8_t* seed_bytes,
+                                                    size_t seed_stride_bytes) {
+  if (batch == NULL || seed_bytes == NULL) {
+    return EINVAL;
+  }
+  if (seed_stride_bytes < sizeof(MslSeed)) {
+    return EINVAL;
+  }
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    const MslSeed* seed =
+        (const MslSeed*)(const void*)(seed_bytes + (size_t)bi * seed_stride_bytes);
+    if (batch->replay_frame_dream_whispy_first_apply_pending != NULL) {
+      batch->replay_frame_dream_whispy_first_apply_pending[bi] = 0u;
+    }
+    if (seed->stage_id != (uint32_t)MSL_STAGE_ID_DREAM_LAND_N64 ||
+        batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_DREAM_LAND_N64) {
+      continue;
+    }
+    // Replay playback feeds frame-start inputs and frame-start RNG every step. Dream Land Whispy's
+    // hidden current wind (`grOldPupupu.xDC`) is also replay-derived prefix-causal stage state:
+    // preprocessing promotes only source-shaped ±wind residuals from the previous step, and
+    // runtime carries the source active-window timer rather than a replay-next fighter position.
+    // Normal RL/free-running step_input does not call this replay playback helper.
+    // refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec
+    const uint8_t dir =
+        (seed->stage_dream_whispy_wind_dir_u8 <= 2u) ? seed->stage_dream_whispy_wind_dir_u8 : 0u;
+    const uint8_t valid =
+        (uint8_t)(seed->stage_dream_whispy_wind_valid_u8 != 0u && (dir == 1u || dir == 2u));
+    batch->state.stage_dream_whispy_wind_dir[bi] = valid != 0u ? dir : 0u;
+    batch->state.stage_dream_whispy_wind_valid[bi] = valid;
+    uint16_t timer = seed->stage_dream_whispy_wind_timer_u16;
+    if (timer > 274u) {
+      timer = 274u;
+    }
+    batch->state.stage_dream_whispy_wind_timer[bi] =
+        valid != 0u ? (uint16_t)((timer != 0u) ? timer : 1u) : 0u;
+    if (batch->replay_frame_dream_whispy_first_apply_pending != NULL) {
+      const uint8_t rollout_advanced =
+          (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u &&
+           batch->replay_rollout_seed_frame_id != NULL &&
+           batch->state.frame_id[bi] != batch->replay_rollout_seed_frame_id[bi])
+              ? 1u
+              : 0u;
+      // `stage_dream_whispy_wind_timer == 274` is the first source-visible active-window age from
+      // grOldPupupu_802113E0. Keep that source fact in the replay-stage lane owner instead of
+      // letting collision infer a catch-up from a timer value.
+      batch->replay_frame_dream_whispy_first_apply_pending[bi] =
+          (uint8_t)(valid != 0u && rollout_advanced != 0u &&
+                    seed->stage_dream_whispy_wind_timer_u16 ==
+                        (uint16_t)MSL_DREAM_WHISPY_FIRST_VISIBLE_ACTIVE_TIMER);
+    }
+  }
+  return 0;
+}
+
 static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
   if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
     return;
@@ -3866,6 +3934,10 @@ int msl_batch_step_input_replay_frame_rng(MslBatch* batch, const uint8_t* seed_b
     return err;
   }
   err = msl_batch_apply_replay_frame_camera_box_visibility(batch, seed_bytes, seed_stride_bytes);
+  if (err != 0) {
+    return err;
+  }
+  err = msl_batch_apply_replay_frame_stage_lanes(batch, seed_bytes, seed_stride_bytes);
   if (err != 0) {
     return err;
   }
