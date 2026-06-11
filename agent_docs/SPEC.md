@@ -2334,7 +2334,8 @@ Grounded motion-entry timing notes:
   changing into the destination grounded state. This includes GuardOn and GuardReflect entries from
   Dash; rows whose callback frame has not crossed the branch must keep the ordinary Dash carry. The
   terminal-scalar marker is transient within the current step and exists only to preserve the
-  callback ordering into same-frame GuardReflect item collision.
+  callback ordering into same-frame GuardReflect item collision. The scalar's friction multiplier is
+  source-owned by `ft_GetGroundFrictionMultiplier(fp)`.
   Refs: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Enter,ftCo_80091A4C,ftCo_GuardReflect_Enter}`.
 - Dash root-motion exits carry the `Fighter_ChangeMotionState` terminal gr-velocity clamp before
@@ -2343,7 +2344,8 @@ Grounded motion-entry timing notes:
   root-motion owned it clamps `fp->gr_vel` to `co_attrs.dash_run_terminal_velocity`. For
   `Dash -> Turn` this clamp runs before `ftCo_Dash_IASA` falls through to the terminal scalar, so
   super-terminal Dash rows scalar from the terminal velocity rather than the replay-visible
-  super-terminal Dash carry. `QuerulousGrandDinosaur.msl:8609:p0` is the rollout-critical lock.
+  super-terminal Dash carry. `QuerulousGrandDinosaur.msl:8609:p0` is the rollout-critical clamp
+  lock.
   Refs: `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash`.
@@ -2358,6 +2360,24 @@ Grounded motion-entry timing notes:
   `refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Run.c,ftCo_RunDirect.c}`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{doEnter,ftCo_AttackDash_Phys}`,
   `refs/melee/src/melee/ft/ft_081B.c::ft_80085030`.
+- Common grounded fighter-overlap nudge consumes live transformed-floor spans. Source computes
+  `ftCommon_8007E0E4 -> ftCommon_8007DD7C` in `Fighter_8006A360` before
+  `Fighter_procUpdate`; stale downed peers are already visible to this pass, but same-frame
+  `DamageFly/DamageFall -> DownBound` publications are not. The runtime therefore keeps those
+  same-frame damage publications out of the common nudge pass while allowing stale downed peers, and
+  the floor-span admission resolves generated platform-transform lines through the existing
+  `stage_collision_floor_line_world` packet. This closes FoD rows where the carried platform line's
+  static template span is nowhere near the live grIzumi/mpLib platform, without adding a
+  post-collision AttackDash/knockdown bridge. `ParallelTemptingElk.msl:10970` locks the transformed
+  stale-DownWait positive; `FavorableSuperficialPig.msl:9392` remains the same-frame
+  DamageFall->DownBound negative.
+  Refs: `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}`,
+  `refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_80090984`,
+  `refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}`,
+  `refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C`,
+  `data/stages/bin/griz.bin::MSLSTG01 platform_transforms`.
 - `ft_80085030` / `ft_800850E0` must branch on `fp->x594_b0`, not on TransN track presence.
   `Fighter_ChangeMotionState` sources this bit from `ftData_80085FD4_ret.x10_b0`; SSANIMT1 v3
   stores it as `uses_root_motion`. This keeps AttackDash on the root-motion branch while ordinary
@@ -3035,6 +3055,15 @@ Fox/Falco special-owner split (2026-04-17):
     after that frame. Runtime promotes that deferred velocity during post-frame transient cleanup so
     sustained grounded riders follow the moving platform without pre-advancing the landing callback.
     `ParallelTemptingElk.msl:3257->3352` locks that boundary.
+    Replay-frame stage playback preserves finite extracted FoD platform velocity when either the
+    same platform's current-height source bit is present or a first Landing/LandingAir/DamageAir
+    floor callback is geometrically consuming that exact generated platform line. The velocity lane
+    is platform-indexed rather than player/callback-indexed, so runtime must not preserve velocity
+    for platform `pi` just because any player has a compatible callback. The fallback owner requires
+    the callback root X to lie inside the generated platform line and the fighter root to be below
+    the current world line; `PTE:3466` locks the DamageAir positive, while the synthetic outside-span
+    control keeps platform-agnostic velocity carry from returning. Explicit same-platform source
+    bits still preserve the velocity packet through `grIzumi_801CC358 -> mpLib_80055E9C`.
     The live match-start scheduler updates the platform geometry, but sustained `Landing` /
     `LandingAir*` callbacks still preserve their carried hard-floor CollData unless a same-step
     contact bit, a fresh action-entry handoff, or live grIzumi velocity within the current CollData
@@ -3599,6 +3628,19 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
     ftCo_Landing_IASA,ftCo_LandingFallSpecial_Enter}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0`.
+  - Firefox/Firebird recovery exits that reach `LandingFallSpecial` carry
+    `landing.allow_interrupt=true` from `ftCo_80096900(..., arg1=1, ..., da->x90)`. Slippi does not
+    expose that hidden bit directly, so replay reseed may reconstruct it only when the visible
+    `LandingFallSpecial` AObj rate matches the extracted `firefox_landing_lag_frames` source rate
+    `(LandingFallSpecial.end + 0.1) / x90`. This is distinct from EscapeAir common `x344` and
+    Illusion/Phantasm `x50`, both of which remain non-interruptible. PTE `rec7232` is the positive
+    Turn handoff; the adjacent Side-B-rate mutation stays in `LandingFallSpecial`.
+    Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+    ftCo_LandingFallSpecial_Enter,ftCo_Landing_IASA}`,
+    `data/characters/{fox,falco}.json::firefox_landing_lag_frames`.
   - Opening input lock countdowns are replay post-frame "remaining locked steps" lanes. At seed
     frame `-40`, value `1` represents the VS-overlay clear that runs before raw frame `-39` inputs,
     so that current input is visible to `Fighter_procUpdate`. This lets
@@ -6092,6 +6134,18 @@ BODY collision-space residual split and rejected seed bridge:
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
   `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`, and
   `data/moves/{fox,falco}.json::moves.ftCo_SM_DownAttackU.events.create_hitbox`.
+- Catch interrupted by an authored Attack11 jab can reach the same `DamageFlyRoll` gate through the
+  ordinary selected BODY `ProcessHit` path. The owner is the selected DmgLog source: `Attack11`
+  hb0/hb1 with the extracted jab payload (`damage=4`, `angle=70`, `kbg=100`, `bkb=0`) against a
+  `Catch` victim. `ftColl_80078538` owns exactly one normal-hit visual-effect RNG prefix
+  (`MSL_RNG_SITE_FTCOLL_DAMAGE_EFFECT`, site 24) before `Fighter_ProcessHit` calls
+  `ftCo_8008DCE0`; this family does not own any `Fighter_8006CDA4` pre-gate consumes
+  (sites 5/6/7 remain zero). PTE `rec5935` locks the positive, and the Wait-mutated negative proves
+  Attack11 visible payload alone is not an admission rule. Source anchors:
+  `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077AD8,ftColl_80078538,ftColl_8007A06C}`,
+  `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`, and
+  `data/moves/{fox,falco}.json::moves.ftCo_SM_Attack11.events.create_hitbox`.
 - JumpAerial victims can also enter the `DamageFlyRoll` gate through Illusion/Phantasm article BODY
   damage. This is separate from the `JumpAerial -> AttackAirB` cap2 BODY carry: the item path enters
   `combat_apply_item_hit` with no selected fighter HitCapsule/hurtcap source. Runtime admits this
@@ -6562,6 +6616,20 @@ BODY collision-space residual split and rejected seed bridge:
   Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}`,
   `refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}`,
   `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox`.
+- AttackAirB-vs-active-GuardReflect all-slot ShieldDesc seeds can also carry lower-bound x19A4
+  provenance. PTE:3608 is the positive: the replay seed proves accepted weak BAir ShieldDesc
+  contact on all three slots, but its hidden `combat_shield_hit_int_damage=6` is only a hitlag
+  lower bound. Source `ftColl_80076CBC` writes x19A4 from the current HitCapsule.damage that
+  `ftColl_8007ABD0 -> ft_80089228` created; `ftCo_80092F2C` then consumes that scalar for the
+  active GuardReflect powershield recoil while x18/x221C_b2 remains live. Runtime therefore keeps
+  the all-slot seed for contact admission but ignores the lower-bound x19A4 override only for the
+  extracted weak BAir payload, active no-submotion GuardReflect x14/x18 phase, and all-slot
+  accepted ShieldDesc seed shape. The adjacent negative clears the active GuardReflect/x221C_b2
+  owner on the same row and confirms the seeded x19A4 path is still consumed.
+  Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_8007ABD0}`,
+  `refs/melee/src/melee/ft/ft_0881.c::ft_80089228`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C`,
+  `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox`.
 - Continuing GuardOn raise-shield no-submotion rows have a separate fighter-vs-fighter ShieldDesc
   pose owner. After `ftCo_800924C0` enters GuardOn, `ftCo_GuardOn_Anim` continues calling
   `ftCo_80091E78` while `mv.co.guard.x10` remains live, but Slippi still exposes the row as
@@ -7000,6 +7068,26 @@ BODY collision-space residual split and rejected seed bridge:
       hb1/cap0 root-body payload owns the normal effect prefix and exactly seven site-5 primary
       consumes. The count is a source-owner ledger entry for the bounded same-callback jump/NAir
       ProcessHit episode, not a replay phase constant.
+    - Sustained airborne `JumpF`/`JumpB` victim + late `AttackAirN` source (`PTE:6280`): selected
+      late NAir hb0/cap11 leg payload owns the active late-NAir DmgLog source episode. The selected
+      packet requires zero replay-fed `fighter_8006cda4_pre_gate_consume_count`, the authored
+      9-damage NAir payload, hb0, and cap11 (`data/hurtcaps/{fox,falco}.json`, bone 7
+      non-grabbable leg). The same source episode owns the normal ftColl effect prefix before
+      `Fighter_ProcessHit` and exactly four site-5 primary consumes before the gate; with the
+      selected normal-hit entry this produces twelve total site-24 calls on the motivating row.
+      Strong NAir, other hitboxes, root/head hurtcaps, and source-motion mutations stay rejected in
+      focused controls.
+    - Grounded `LandingAirN` victim + weak `AttackAirB` source (`PTE:5241`): selected weak BAir
+      hb2/cap2 BODY provenance owns exactly one site-5 primary consume before the gate and no
+      site-24 normal-effect prefix. Mutating the source action away from AttackAirB removes the
+      gate pulse, proving this is selected DmgLog ownership rather than LandingAirN/BAir visible
+      action shape.
+    - `AttackAirB` victim + strong `AttackAirLw` source (`PTE:9389`): selected strong DAir hb0/cap0
+      create-edge BODY provenance owns the DamageFlyRoll gate and the normal-effect prefix. The
+      site-24 helper returns Randi-call count for this owner, not a DmgLog-entry count: trace locks
+      exactly twelve site-24 calls total, including the eight-call post-selected-entry prefix for
+      the DAir root packet, and zero sites 5/6/7. Mutating the victim action away from AttackAirB
+      removes the gate pulse and site-24 prefix.
     - `SpecialAirHi` victim + strong `AttackLw4` source (`IAT:7632`): selected strong down-smash
       hb1/cap0 payload owns exactly two site-5 primary consumes; broad SpecialAirHi state or
       down-smash action shape without the selected source remains rejected.
@@ -7051,7 +7139,10 @@ BODY collision-space residual split and rejected seed bridge:
     locks the later active-generator tail: DeadUpStar action-frame 26 contributes one site-25
     prefix before Wait, so replay playback must use the current frame-start seed plus the modeled
     source prefix rather than either the stale match-init HSD stream or the raw unprefixed replay
-    seed.
+    seed. PTE `rec4110` locks the phase-2 active generator case: seed frame 25 is observed by the
+    later Wait callback as runtime frame 26 while the DeadUpStar phase-2 timer is still live, so
+    generator `0x121` contributes nine bounded site-25 particle-bytecode steps before Wait's
+    site-3 draw.
   - DeadUpStar effect prefix before Wait: DeadUpStar entry/early Anim owns a short-lived async
     visual generator before fighter Wait callbacks can reach `getAnimID`. Runtime models this
     bounded startup effect as one site `25` (`MSL_RNG_SITE_DEAD_UP_STAR_EFFECT_PREFIX`) step for each
@@ -7065,8 +7156,10 @@ BODY collision-space residual split and rejected seed bridge:
     extracted into runtime data yet, so `0..8` is an explicitly named startup window for generator
     `0x121`, not a generic DeadUpStar or replay-row bridge. The same generator has a separately
     named active-effect tail for Wait only through action-frame `26`: TVR `rec9935` requires one
-    site-25 step at frame 26, while BHH `rec10161` proves frame 28 is stale and must not carry the
-    prefix. Separately, the same-frame creation dispatch contributes the older two-step prefix before later players'
+    site-25 step at frame 26, PTE `rec4110` requires the named nine-step phase-2 active-generator
+    prefix at seed frame 25/runtime frame 26, while BHH `rec10161` proves frame 28 is stale and
+    must not carry the prefix.
+    Separately, the same-frame creation dispatch contributes the older two-step prefix before later players'
     `Fighter_procUpdate` callbacks. That creation prefix is bounded by normal player callback order:
     only players with index `< wait_player` can have already run the DeadUpStar animation callback.
     PJO's later-player row therefore receives one active-effect prefix and zero creation-prefix

@@ -19,7 +19,9 @@ CHAR_FOX = 1
 ACT_GUARD = 179
 ACT_GUARD_SET_OFF = 181
 ACT_DAMAGE_FALL = 38
+ACT_ATTACK_DASH = 50
 ACT_DOWN_BOUND_D = 191
+ACT_DOWN_WAIT_D = 199
 
 
 def _size(sizes: dict[str, int], key: str) -> int:
@@ -221,6 +223,47 @@ def test_damagefall_to_downboundd_first_frame_friction_not_double_applied_fsp_93
     ref_9553, out_9553 = _run_aggregate_rollout_window(dataset_path, 0, 9553)
     assert int(out_9553["action_id"][0]) == int(ref_9553["action_id"][0]) == ACT_GUARD_SET_OFF
     assert int(out_9553["hitlag"][0]) == int(ref_9553["hitlag"][0]) == 7
+
+
+@pytest.mark.integration
+def test_common_grounded_player_nudge_uses_live_transformed_floor_span_pte_10970() -> None:
+    # Replay-real positive for common x450 overlap nudge on a transformed FoD platform:
+    # - Fighter_8006A360 runs ftCommon_8007E0E4 before Fighter_procUpdate.
+    # - The peer is already in a stale downed state, so it is source-visible to ftCommon_8007DD7C.
+    # - The carried floor is a live grIzumi/mpLib transformed platform; the floor-span admission
+    #   must consume the source-owned world-line packet instead of the static template span.
+    # Same-frame DamageFall->DownBound remains the adjacent negative above: that DownBound is
+    # published after the source common-nudge phase and is not admitted as a stale downed peer.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}
+    # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
+    # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 10970
+    p = 0
+    peer = 1
+    seed, ref, out = _run_one_step_row(dataset_path, record, p)
+    assert int(seed["action_id"][p]) == 21  # Run before same-frame AttackDash IASA.
+    assert int(ref["action_id"][p]) == ACT_ATTACK_DASH
+    assert int(seed["action_id"][peer]) == ACT_DOWN_WAIT_D
+    assert int(seed["seed_prev_action_id"][peer]) == ACT_DOWN_WAIT_D
+    assert int(seed["ground_id"][p]) == 1
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_ATTACK_DASH
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+    assert float(out["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref["speed_ground_x_self"][p]), abs=2e-6
+    )
 
 
 def test_common_grounded_player_nudge_exact_overlap_uses_player_order() -> None:

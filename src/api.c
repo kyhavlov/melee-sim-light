@@ -517,6 +517,40 @@ static inline uint16_t colanim_timer_remaining_from_seed_bridge(uint16_t init_fr
   return rem;
 }
 
+static inline uint8_t landing_fallspecial_firefox_rate_seed_owns_allow_interrupt(
+    const MslSeed* seed, int p) {
+  if (seed == NULL || seed->action_id[p] != (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL ||
+      seed->landing_fallspecial_allow_interrupt[p] != 0u) {
+    return 0u;
+  }
+  const MslCharParams* ch = msl_char_params(seed->char_id[p]);
+  if (ch == NULL || ch->firefox_landing_lag_frames == 0u) {
+    return 0u;
+  }
+  const float end_frame =
+      msl_anim_end_frame(seed->char_id[p], (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
+  if (!(end_frame > 0.0f)) {
+    return 0u;
+  }
+  const float expected = (end_frame + 0.1f) / (float)ch->firefox_landing_lag_frames;
+  const float seeded_rate = seed->frame_speed_mul_f32[p];
+  if (!isfinite(seeded_rate)) {
+    return 0u;
+  }
+  // Reseed-only hidden-lane reconstruction:
+  // - Firefox/Firebird end paths call ftCo_80096900(..., arg1=1, ..., da->x90), then the
+  //   following LandingFallSpecial carries mv.co.landing.allow_interrupt=true.
+  // - Slippi does not expose mv.co.landing.allow_interrupt, but it does expose the seeded AObj
+  //   rate. The x90 source lane is distinct from EscapeAir common x344 and Illusion/Phantasm x50,
+  //   so this reconstructs the hidden source bit without opening generic LandingFallSpecial IASA.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+  // data/characters/{fox,falco}.json::firefox_landing_lag_frames
+  return (fabsf(seeded_rate - expected) <= 0.00005f) ? 1u : 0u;
+}
+
 static inline uint8_t seed_bridge_has_shine_start_x1988_masked_x198c(const MslSeed* seed, int p,
                                                                      uint8_t seed_hurtbox_state,
                                                                      uint8_t seed_x1988) {
@@ -2139,6 +2173,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.seed_prev_action_id[idx] = seed->seed_prev_action_id[p];
       batch->state.seed_prev_action_frame[idx] = seed->seed_prev_action_frame[p];
+      batch->state.blaster_gun_spawned_this_frame[idx] = 0u;
       batch->state.illusion_ghost_pos0_x[idx] = seed->illusion_ghost_pos0_x[p];
       batch->state.illusion_ghost_pos0_y[idx] = seed->illusion_ghost_pos0_y[p];
       batch->state.illusion_ghost_pos1_x[idx] = seed->illusion_ghost_pos1_x[p];
@@ -2434,7 +2469,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.cliff_option_stick_latch_x8[idx] =
           seed->cliff_option_stick_latch_x8[p] ? 1u : 0u;
       batch->state.landing_fallspecial_allow_interrupt[idx] =
-          seed->landing_fallspecial_allow_interrupt[p] ? 1u : 0u;
+          (seed->landing_fallspecial_allow_interrupt[p] != 0u ||
+           landing_fallspecial_firefox_rate_seed_owns_allow_interrupt(seed, p))
+              ? 1u
+              : 0u;
       {
         const MslCommonParams* common = msl_common_params();
         float landing_lag = (common != NULL) ? common->landing_fall_special_lag_frames : 0.0f;
@@ -3777,6 +3815,128 @@ static int msl_batch_apply_replay_frame_camera_box_visibility(MslBatch* batch,
 
 enum { MSL_DREAM_WHISPY_FIRST_VISIBLE_ACTIVE_TIMER = 274u };
 
+static uint8_t msl_replay_fod_sparse_velocity_has_floor_callback_owner(const MslBatch* batch,
+                                                                       int bi, const MslSeed* seed,
+                                                                       int platform_id) {
+  if (batch == NULL || seed == NULL || platform_id < 0 || platform_id >= 2 ||
+      seed->stage_fod_platform_velocity_valid_u8[platform_id] == 0u ||
+      !isfinite(seed->stage_fod_platform_velocity_f32[platform_id])) {
+    return 0u;
+  }
+  for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+    const uint16_t action = seed->action_id[p];
+    const uint8_t landing_entry =
+        (uint8_t)((msl_motion_state_common_class_has(action, MSL_MS_CLASS_LANDING_COLL) ||
+                   msl_motion_state_common_class_has(action, MSL_MS_CLASS_LANDING_AIR_COLL)) &&
+                  seed->seed_prev_action_id[p] != action);
+    const uint8_t damage_air =
+        (uint8_t)(msl_motion_state_common_class_has(action, MSL_MS_CLASS_DAMAGE_AIR) &&
+                  seed->hitlag[p] == 0u && seed->hitstun[p] != 0u);
+    if (landing_entry == 0u && damage_air == 0u) {
+      continue;
+    }
+    if (seed->ground_id[p] == 0xFFFFu || stage_collision_floor_line_has_height_platform_transform(
+                                             seed->stage_id, seed->ground_id[p])) {
+      continue;
+    }
+    float line_y = 0.0f;
+    if (!stage_collision_fod_height_platform_line_y_at_x(batch, bi, (uint8_t)platform_id,
+                                                         seed->pos_x[p], &line_y)) {
+      continue;
+    }
+    if (seed->pos_y[p] <= line_y + 1.0e-5f) {
+      // The player/callback root is horizontally inside this exact generated FoD platform line and
+      // below the current world line, so the first Landing/DamageAir map callback can consume this
+      // platform's current grIzumi/mpLib packet. This replaces the rejected row-wide owner where
+      // any callback could preserve velocity for any platform.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+      // refs/melee/src/melee/ft/ft_081B.c::{ft_80081DD4,ft_80084280}
+      // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_8004B4B0}
+      // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static void msl_batch_apply_replay_frame_fod_platform_lanes(MslBatch* batch, int bi,
+                                                            const MslSeed* seed) {
+  if (batch == NULL || seed == NULL) {
+    return;
+  }
+  if (seed->stage_id != (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS ||
+      batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS) {
+    return;
+  }
+
+  for (int pi = 0; pi < 2; pi++) {
+    const uint8_t source_bits = seed->stage_fod_platform_height_source_u8[pi];
+    const float h = seed->stage_fod_platform_height_f32[pi];
+    const size_t pidx = (size_t)bi * 2u + (size_t)pi;
+    if (source_bits == 0u) {
+      if (seed->stage_fod_platform_height_valid_u8[pi] != 0u && isfinite(h)) {
+        // Replay playback rows with no FoD source bit carry sparse visible height, not a live
+        // grIzumi/mpLib contact packet. Preserve the velocity lane only when a player callback is
+        // geometrically consuming this exact generated platform line; platform-agnostic callback
+        // ownership stays disabled. Normal RL/free-running `step_input` never calls this helper.
+        // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+        // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+        const float v = seed->stage_fod_platform_velocity_f32[pi];
+        const float deferred_v = seed->stage_fod_platform_deferred_velocity_f32[pi];
+        batch->state.stage_fod_platform_height[pidx] = h;
+        batch->state.stage_fod_platform_valid[pidx] = 1u;
+        batch->state.stage_fod_platform_height_source[pidx] = 0u;
+        const uint8_t sparse_velocity_retry_owner =
+            msl_replay_fod_sparse_velocity_has_floor_callback_owner(batch, bi, seed, pi);
+        batch->state.stage_fod_platform_velocity[pidx] =
+            (sparse_velocity_retry_owner && isfinite(v)) ? v : 0.0f;
+        batch->state.stage_fod_platform_velocity_valid[pidx] =
+            (sparse_velocity_retry_owner && seed->stage_fod_platform_velocity_valid_u8[pi] != 0u &&
+             isfinite(v))
+                ? 1u
+                : 0u;
+        batch->state.stage_fod_platform_deferred_velocity[pidx] =
+            isfinite(deferred_v) ? deferred_v : 0.0f;
+        batch->state.stage_fod_platform_deferred_velocity_valid[pidx] =
+            (seed->stage_fod_platform_deferred_velocity_valid_u8[pi] != 0u && isfinite(deferred_v))
+                ? 1u
+                : 0u;
+        batch->state.stage_fod_platform_scheduler_valid[pidx] = 0u;
+        batch->state.stage_fod_platform_scheduler_phase[pidx] = 0u;
+        batch->state.stage_fod_platform_scheduler_timer[pidx] = 0u;
+        batch->state.stage_fod_platform_scheduler_target[pidx] = 0.0f;
+      }
+      continue;
+    }
+    if (seed->stage_fod_platform_height_valid_u8[pi] == 0u || !isfinite(h)) {
+      continue;
+    }
+
+    // Replay playback feeds frame-start stage state when the replay row carries a current-source
+    // FoD platform pose. These source bits are produced only from direct Slippi `fod_platform`
+    // events or current platform contact reconstruction, so they are current grIzumi/mpLib state,
+    // not a generic sparse replay-height bridge. Normal free-running `step_input` does not call
+    // this replay-stage helper.
+    // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    const float v = seed->stage_fod_platform_velocity_f32[pi];
+    const float deferred_v = seed->stage_fod_platform_deferred_velocity_f32[pi];
+    batch->state.stage_fod_platform_height[pidx] = h;
+    batch->state.stage_fod_platform_valid[pidx] = 1u;
+    batch->state.stage_fod_platform_height_source[pidx] = source_bits;
+    batch->state.stage_fod_platform_velocity[pidx] = isfinite(v) ? v : 0.0f;
+    batch->state.stage_fod_platform_velocity_valid[pidx] =
+        (seed->stage_fod_platform_velocity_valid_u8[pi] != 0u && isfinite(v)) ? 1u : 0u;
+    batch->state.stage_fod_platform_deferred_velocity[pidx] =
+        isfinite(deferred_v) ? deferred_v : 0.0f;
+    batch->state.stage_fod_platform_deferred_velocity_valid[pidx] =
+        (seed->stage_fod_platform_deferred_velocity_valid_u8[pi] != 0u && isfinite(deferred_v))
+            ? 1u
+            : 0u;
+  }
+}
+
 static int msl_batch_apply_replay_frame_stage_lanes(MslBatch* batch, const uint8_t* seed_bytes,
                                                     size_t seed_stride_bytes) {
   if (batch == NULL || seed_bytes == NULL) {
@@ -3791,6 +3951,7 @@ static int msl_batch_apply_replay_frame_stage_lanes(MslBatch* batch, const uint8
     if (batch->replay_frame_dream_whispy_first_apply_pending != NULL) {
       batch->replay_frame_dream_whispy_first_apply_pending[bi] = 0u;
     }
+    msl_batch_apply_replay_frame_fod_platform_lanes(batch, bi, seed);
     if (seed->stage_id != (uint32_t)MSL_STAGE_ID_DREAM_LAND_N64 ||
         batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_DREAM_LAND_N64) {
       continue;

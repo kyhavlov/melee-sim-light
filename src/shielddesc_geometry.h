@@ -75,6 +75,45 @@ static inline uint8_t msl_shielddesc_attackairb_guard_lower_bound_seed_owner(con
                        bi, attacker, 2, defender)] == 2u);
 }
 
+static inline uint8_t msl_shielddesc_attackairb_guardreflect_x19a4_lower_bound_seed_owner(
+    const MslBatch* batch, int bi, int attacker, int defender) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const size_t d_idx = msl_idx_player(bi, defender);
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B ||
+      batch->state.animation_index[a_idx] != (uint32_t)MSL_SM_ATTACK_AIR_B ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT ||
+      !msl_guard_reflect_is_no_submotion(batch, d_idx) ||
+      (batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+       batch->state.guard_reflect_timer_x14[d_idx] == 0u) ||
+      batch->state.guard_reflect_timer_x18[d_idx] == 0u || batch->state.hitlag[d_idx] != 0u ||
+      batch->state.hitstun[d_idx] != 0u) {
+    return 0u;
+  }
+  const uint8_t seeded_x19a4 = batch->state.combat_shield_hit_int_damage[d_idx];
+  if (seeded_x19a4 == 0u || seeded_x19a4 >= 9u) {
+    return 0u;
+  }
+  for (int hb = 0; hb < 3; hb++) {
+    const size_t hb_i = msl_shielddesc_idx_hitbox(bi, attacker, hb);
+    if (batch->state.hitbox_enabled[hb_i] == 0u || batch->state.hitbox_damage[hb_i] != 9.0f ||
+        batch->state.combat_shield_contact_hb_kind[msl_shielddesc_idx_hitbox_victim(
+            bi, attacker, hb, defender)] != 2u) {
+      return 0u;
+    }
+  }
+  // Active GuardReflect powershield recoil consumes the source HitCapsule.damage lane for x19A4.
+  // All-slot replay shield seeds prove accepted ShieldDesc contact here, but a seeded x19A4 below
+  // the authored weak BAir payload is only a lower-bound hitlag surface and must not override the
+  // ftColl_8007ABD0-created HitCapsule damage used by ftCo_80092F2C.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_8007ABD0}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  return 1u;
+}
+
 static inline float msl_shielddesc_model_scale_for_idx(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 1.0f;

@@ -2383,7 +2383,10 @@ def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.n
     ACT_FALL_SPECIAL_B = 0x0025
     ACT_LANDING_FALL_SPECIAL = 0x002B
     ACT_ESCAPE_AIR = 0x00EC
+    ACT_FX_SPECIAL_HI_FALL = 0x0166
+    ACT_FX_SPECIAL_HI_BOUND = 0x0167
     fall_actions = {ACT_FALL_SPECIAL, ACT_FALL_SPECIAL_F, ACT_FALL_SPECIAL_B}
+    firefox_allow_landing_sources = {ACT_FX_SPECIAL_HI_FALL, ACT_FX_SPECIAL_HI_BOUND}
     fallspecial_allow = 0
     lfs_allow = 0
     prev = -1
@@ -2398,6 +2401,13 @@ def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.n
             elif cur == ACT_LANDING_FALL_SPECIAL:
                 if prev in fall_actions:
                     lfs_allow = 1 if fallspecial_allow != 0 else 0
+                elif prev in firefox_allow_landing_sources:
+                    # Firefox/Firebird end paths own the same hidden landing.allow_interrupt=true
+                    # source bit through ftCo_80096900(..., arg1=1, ..., da->x90). Some replay
+                    # rows publish the resulting LandingFallSpecial directly from the SpecialHi*
+                    # visible state, so the prefix-derived lane must not treat those like
+                    # EscapeAir/Side-B false-entry landings.
+                    lfs_allow = 1
                 else:
                     # Direct EscapeAir_Coll and SpecialAirSEnd_Coll both pass false.
                     lfs_allow = 0

@@ -22675,21 +22675,21 @@
     },
     {
       "assertion": {
-        "action_id": 357,
+        "action_id": 14,
         "frame": 2657,
-        "ground_id": 0,
-        "min_y": 10.0,
+        "ground_id": 5,
+        "min_y": 0.0,
         "on_ground": 1,
         "player": 0
       },
       "extra_assertions": [
         {
-          "action_id": 356,
+          "action_id": 43,
           "frame": 2617,
           "ground_id": 3,
-          "max_x": -63.0,
-          "min_y": -20.0,
-          "on_ground": 0,
+          "max_x": -59.0,
+          "min_y": 0.0,
+          "on_ground": 1,
           "player": 0
         }
       ],

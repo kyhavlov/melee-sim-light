@@ -218,14 +218,19 @@ def _run_one_step_row(
     ucf_enabled: bool | None = None,
     ucf_cardinals_1_0_enabled: bool | None = None,
     seed_mutator=None,
+    input_mutator=None,
 ) -> tuple[np.void, np.void, np.void]:
     ds = read_dataset(str(ds_path))
     samples = ds.samples
     assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
     row = samples[record : record + 1]
     seed_t = row["seed_t"].copy()
+    prev_input_t = row["prev_input_t"].copy()
+    input_t = row["input_t"].copy()
     if seed_mutator is not None:
         seed_mutator(seed_t)
+    if input_mutator is not None:
+        input_mutator(prev_input_t, input_t)
     seed = seed_t[0]
     ref = row["ref_t1"][0]
 
@@ -236,10 +241,10 @@ def _run_one_step_row(
     compare_stride = int(sizes["compare"])
 
     seed_bytes = np.frombuffer(seed_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
-    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+    prev_input_bytes = np.frombuffer(prev_input_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(
         1, input_stride
     )
-    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    input_bytes = np.frombuffer(input_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     prev_rng_gate_env = os.environ.get("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE")

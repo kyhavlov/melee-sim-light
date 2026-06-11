@@ -978,13 +978,24 @@ static inline uint8_t physics_floor_lines_adjacent_or_equal(const MslStageFloorG
   return (uint8_t)(la->prev == b || la->next == b);
 }
 
+static inline uint8_t physics_floor_line_contains_x(const MslStageFloorLine* line, float x) {
+  if (line == NULL) {
+    return 0u;
+  }
+  const float min_x = line->x0 < line->x1 ? line->x0 : line->x1;
+  const float max_x = line->x0 > line->x1 ? line->x0 : line->x1;
+  return (uint8_t)(x >= min_x && x <= max_x);
+}
+
 static inline uint8_t physics_floor_line_contains_or_connects_to_nudged_x(
-    const MslStageFloorGraph* g, int line_idx, float x) {
+    const MslBatch* batch, int bi, const MslStageFloorGraph* g, int line_idx, float x) {
   if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
     return 0u;
   }
   const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
-  if (x >= line->x0 && x <= line->x1) {
+  MslStageFloorLine world = *line;
+  (void)stage_collision_floor_line_world(batch, bi, line, &world);
+  if (physics_floor_line_contains_x(&world, x)) {
     return 1u;
   }
   const int adj[2] = {line->prev, line->next};
@@ -994,7 +1005,9 @@ static inline uint8_t physics_floor_line_contains_or_connects_to_nudged_x(
       continue;
     }
     const MslStageFloorLine* other = &g->lines[(size_t)adj_idx];
-    if (x >= other->x0 && x <= other->x1) {
+    MslStageFloorLine other_world = *other;
+    (void)stage_collision_floor_line_world(batch, bi, other, &other_world);
+    if (physics_floor_line_contains_x(&other_world, x)) {
       return 1u;
     }
   }
@@ -1223,6 +1236,21 @@ static inline uint8_t physics_action_is_attackdash_knockdown_overlap_owner(uint1
   return (uint8_t)(action_id == (uint16_t)MSL_ACT_ATTACK_DASH && other_is_knockdown);
 }
 
+static inline uint8_t physics_knockdown_is_same_frame_damage_publication(const MslBatch* batch,
+                                                                         size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (action_id != (uint16_t)MSL_ACT_DOWN_BOUND_U && action_id != (uint16_t)MSL_ACT_DOWN_BOUND_D) {
+    return 0u;
+  }
+  const uint16_t seed_prev = batch->state.seed_prev_action_id[idx];
+  return (uint8_t)((physics_action_is_damage_fly(seed_prev) ||
+                    seed_prev == (uint16_t)MSL_ACT_DAMAGE_FALL) &&
+                   batch->state.action_frame[idx] <= 1);
+}
+
 static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi,
                                                          float out_nudge_x[MSL_MAX_PLAYERS],
                                                          float out_nudge_z[MSL_MAX_PLAYERS]) {
@@ -1311,16 +1339,36 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
         if (msl_action_is_grabbed_victim(other_action_for_nudge)) {
           continue;
         }
-        if (physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[idx],
-                                                                 other_action_for_nudge) ||
-            physics_action_is_attackdash_knockdown_overlap_owner(other_action_for_nudge,
-                                                                 batch->state.action_id[idx])) {
-          // Existing replay-real seed bridge owns this family after collision/knockdown resolution.
-          // Applying the common pre-physics approximation here double-counts the x450 lane for
-          // those rows. Keep that narrower owner until the full ftCommon_8007E0E4 Z/ceiling branch
-          // is modeled.
-          // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E0E4
-          // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DD7C
+        if ((physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[idx],
+                                                                  other_action_for_nudge) &&
+             physics_knockdown_is_same_frame_damage_publication(batch, oidx)) ||
+            (physics_action_is_attackdash_knockdown_overlap_owner(other_action_for_nudge,
+                                                                  batch->state.action_id[idx]) &&
+             physics_knockdown_is_same_frame_damage_publication(batch, idx))) {
+          // Source order:
+          // - Fighter_8006A360 computes ftCommon_8007E0E4/x450 before Fighter_procUpdate and before
+          //   this frame's DamageFly/DamageFall collision can publish DownBound.
+          // - Stale DownWait/DownBound peers are already source-visible and must stay on the
+          //   ordinary common nudge path. Only same-frame damage->DownBound publications are absent
+          //   at the source common-nudge phase.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_80090984
+          continue;
+        }
+
+        if ((physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[idx],
+                                                                  other_action_for_nudge) ||
+             physics_action_is_attackdash_knockdown_overlap_owner(other_action_for_nudge,
+                                                                  batch->state.action_id[idx])) &&
+            !stage_collision_floor_line_has_platform_transform(stage_id,
+                                                               batch->state.ground_id[idx]) &&
+            !stage_collision_floor_line_has_platform_transform(stage_id,
+                                                               batch->state.ground_id[oidx])) {
+          // The retained source-completion here is the live transformed-floor span owner above.
+          // Non-transformed AttackDash-vs-downed overlap rows remain out of this common-nudge
+          // approximation until their callback-local source phase is modeled separately.
           continue;
         }
 
@@ -1356,7 +1404,7 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
         const uint8_t nudge_x_admitted =
             (uint8_t)(floor_adjacent &&
                       (physics_floor_line_contains_or_connects_to_nudged_x(
-                           floor_graph, self_line, batch->state.pos_x[idx] + nudge_x) ||
+                           batch, bi, floor_graph, self_line, batch->state.pos_x[idx] + nudge_x) ||
                        (physics_action_uses_generated_b2dc_edge_snap_callback(source_action) &&
                         physics_nudge_exits_floor_span(floor_graph, self_line,
                                                        batch->state.pos_x[idx], nudge_x)) ||
@@ -2706,7 +2754,8 @@ void physics_integrate(MslBatch* batch) {
         //   ftCo_DownBound_Phys,ftCo_DownBound_Coll}
         float floor_nx = batch->state.ground_normal_x[idx];
         float floor_ny = batch->state.ground_normal_y[idx];
-        if (action_id == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL &&
+        if ((action_id == (uint16_t)MSL_ACT_LANDING ||
+             action_id == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) &&
             batch->state.ground_id[idx] != 0xFFFFu) {
           float stage_floor_nx = 0.0f;
           float stage_floor_ny = 1.0f;
@@ -2714,11 +2763,11 @@ void physics_integrate(MslBatch* batch) {
                                                               &stage_floor_ny) &&
               (fabsf(stage_floor_nx - floor_nx) > 0.000001f ||
                fabsf(stage_floor_ny - floor_ny) > 0.000001f)) {
-            // LandingFallSpecial shares the common grounded Phys callback. Source projects
-            // `fp->gr_vel` through the current CollData.floor.normal during
-            // `ftCommon_ApplyGroundMovement`; when replay reseed exposes the new floor id before
-            // the matching normal lane, use the generated MSLSTG01 line normal for that same
-            // current floor.
+            // Basic Landing and LandingFallSpecial share the common grounded Phys callback. Source
+            // projects `fp->gr_vel` through the current CollData.floor.normal during
+            // `ftCommon_ApplyGroundMovement`; when replay reseed exposes the current floor id
+            // before the matching normal lane, use the generated MSLSTG01 line normal for that
+            // same current floor.
             // refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_LandingFallSpecial
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Phys
             // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement

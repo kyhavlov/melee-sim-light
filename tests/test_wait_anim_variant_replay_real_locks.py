@@ -248,6 +248,36 @@ def test_wait_loop_tvr_deadupstar_frame26_active_effect_prefix_selects_visible_v
     assert int(out["animation_index"][0]) == int(ref["animation_index"][0]) == SM_WAIT1_0
 
 
+def test_wait_loop_pte_deadupstar_frame25_active_effect_prefix_selects_visible_variant() -> None:
+    # PTE:4110 locks the source-owned active generator count for DeadUpStar frame 25. The same
+    # generator 0x121 family has one-step frame-26 and stale-late frame-28 controls below; this row
+    # needs the bounded frame-25 particle-bytecode prefix before Wait getAnimID samples site 3.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
+    # refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch case 0x42D
+    # refs/melee/src/melee/ef/eflib.c::efLib_CreateGenerator case 0x121
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing PTE dataset")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[4110]["seed_t"]
+    assert int(seed["action_id"][0]) == ACT_WAIT
+    assert int(seed["action_frame"][0]) == 119
+    assert int(seed["action_id"][1]) == 4  # DeadUpStar.
+    assert int(seed["action_frame"][1]) == 25
+
+    ref, out = _run_rollout_replay_frame_rng(dataset_path, 4110, 4110)
+    assert int(out["action_id"][0]) == int(ref["action_id"][0]) == ACT_WAIT
+    assert int(out["action_frame"][0]) == int(ref["action_frame"][0]) == 0
+    assert int(out["animation_index"][0]) == int(ref["animation_index"][0]) == 3
+
+
 def test_wait_loop_bhh_deadupstar_frame28_does_not_carry_active_effect_prefix() -> None:
     # BHH:10161 is the adjacent stale-late DeadUpStar control. A site-25 prefix at action_frame 28
     # would flip the Wait choice to Wait1_1, so this guards the active-effect bound from becoming a

@@ -366,6 +366,54 @@ def test_landing_basic_rows_keep_contact_y_parity_for_jump_and_specialairn_famil
     assert abs(float(out["pos_y"][p]) - float(ref["pos_y"][p])) <= 2e-4
 
 
+def test_specialairnloop_basic_landing_uses_current_floor_normal_pte() -> None:
+    # PTE:306 is the first source-visible drift in the long PTE rollout: SpecialAirNLoop lands on
+    # FoD floor line 6, whose current CollData.floor.normal is sloped. Landing_Phys then projects
+    # gr_vel through that normal via ftCommon_ApplyGroundMovement; using the stale flat seed normal
+    # over-advances x and eventually turns into a false BODY hit at PTE:1261.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ftCo_AirCatchHit_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Phys
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+    seed, out, ref = _step_one_row(dataset_path, 306, p)
+    assert int(seed["action_id"][p]) == 42
+    assert int(seed["ground_id"][p]) == 6
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 42
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6)
+
+
+def test_basic_landing_current_floor_normal_keeps_flat_floor_control_gat() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 0
+    seed, out, ref = _step_one_row(dataset_path, 8218, p)
+    assert int(seed["action_id"][p]) == 25
+    assert int(ref["action_id"][p]) == 42
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 42
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
 @pytest.mark.integration
 def test_landingfallspecial_rollout_uses_single_mplib_floor_bias_selfplay_181413() -> None:
     # Free-run rollout lock for mpColl floor-publication ownership:

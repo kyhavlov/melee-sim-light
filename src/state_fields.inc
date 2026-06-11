@@ -183,6 +183,7 @@ MSL_STATE_FIELD(throw_command_pending_pulse_frame, uint8_t, bp, (size_t)MSL_MAX_
 MSL_STATE_FIELD(throw_command_pending_seed_valid, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(throw_command_deferred_pulse_frame, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(throw_pulse_crossed_curr_frame, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(blaster_gun_spawned_this_frame, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(source_clear_timer_x18c8, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(source_clear_owner_set_phase, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(source_clear_processhit_damage_pending_phase, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)

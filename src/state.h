@@ -359,6 +359,15 @@ typedef struct MslStateSoA {
   // rollout can carry the same throw-side pulse ownership that one-step seeds expose directly.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
   uint8_t* throw_pulse_crossed_curr_frame;
+  // Runtime-only source marker for same-step SpecialN gun creation. Fighter Anim callbacks can
+  // enter SpecialN and create the attached gun before a later item/combat pass damages the owner
+  // out of the action; post-combat gun lifetime must then see the same ftFx_SpecialN_Enter article
+  // episode even though frame-start prev_action_id was not a blaster action.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ProcessHit_8006D1EC}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+  //   ftFx_SpecialN_Enter,ftFx_SpecialN_GetBlasterAction}
+  // refs/melee/src/melee/it/items/itfoxblaster.c::{it_802AE8A8,itFoxblaster_UnkMotion8_Anim}
+  uint8_t* blaster_gun_spawned_this_frame;
   // Source-owner clear countdown (`fp->dmg.x18C8`) with +1 bias.
   //
   // Decomp:
