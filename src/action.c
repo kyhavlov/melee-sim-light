@@ -1,5 +1,6 @@
 #include "action.h"
 #include "shields.h"
+#include "marth_specials.h"
 
 #include "ids.h"
 
@@ -2237,6 +2238,7 @@ void action_update(MslBatch* batch) {
   // intentionally Neutral/Side/Up-only and relies on this ordering.
   shine_update_pre_physics(batch);
   blaster_update_pre_physics(batch);
+  marth_specials_update_pre_physics(batch);
   // Shield recharge is owned by Fighter_ProcessHit_8006D1EC under the `!fp->x221A_b7` gate, not
   // by locomotion. Run it after the frame's state-entry callbacks so the gate observes the current
   // state (for example SpecialLwStart after a shine entry), and do not suppress it during hitlag.

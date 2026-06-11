@@ -1,4 +1,5 @@
 #include "hurtboxes.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <stdint.h>
@@ -842,8 +843,9 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         // Entry happens after the prio 1 Anim proc and before later callback phases.
         const uint16_t cur_action = batch->state.action_id[idx];
         const uint8_t is_shine_start_entry =
-            (cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
-             cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START)
+            (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+             (cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+              cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START))
                 ? 1u
                 : 0u;
         const uint8_t is_passive_tech_entry = (cur_action == (uint16_t)MSL_ACT_PASSIVE ||

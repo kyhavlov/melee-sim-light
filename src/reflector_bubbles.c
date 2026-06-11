@@ -1,4 +1,5 @@
 #include "reflector_bubbles.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <math.h>
@@ -31,9 +32,13 @@ static inline uint8_t action_is_shine_reflector_active(uint16_t a) {
   }
 }
 
-static inline uint8_t action_is_shine(uint16_t a) {
+static inline uint8_t action_is_shine(uint8_t char_id, uint16_t a) {
   // Decomp: refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
   // (ftFx_MS_SpecialLwStart=360 .. ftFx_MS_SpecialAirLwTurn=369)
+  // Fox/Falco-only: the numeric range is shared with other characters' specials.
+  if (!msl_char_id_is_spacie(char_id)) {
+    return 0u;
+  }
   switch (a) {
     case 0x0168:  // ftFx_MS_SpecialLwStart
     case 0x0169:  // ftFx_MS_SpecialLwLoop
@@ -130,7 +135,10 @@ void reflector_bubbles_refresh(MslBatch* batch) {
       //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0 (tick/expire; clears fp->reflecting)
       // - Otherwise leave it seed-carry-through (other reflect windows not modeled yet).
       const uint16_t prev_a = batch->state.prev_action_id[idx];
-      const uint8_t override_shine = (action_is_shine(a) || action_is_shine(prev_a)) ? 1u : 0u;
+      const uint8_t override_shine = (action_is_shine(batch->state.char_id[idx], a) ||
+                                      action_is_shine(batch->state.char_id[idx], prev_a))
+                                         ? 1u
+                                         : 0u;
       const uint8_t override_guard_reflect =
           ((a == (uint16_t)MSL_ACT_GUARD_REFLECT) || (prev_a == (uint16_t)MSL_ACT_GUARD_REFLECT))
               ? 1u
@@ -141,7 +149,8 @@ void reflector_bubbles_refresh(MslBatch* batch) {
         // bit until the Start anim reaches Loop, without admitting fresh airborne Start entries.
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Pass
         const uint8_t shine_start_pass_reflecting =
-            ((a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+            (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+             (a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
               a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
              (f & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) != 0u)
                 ? 1u
@@ -163,7 +172,8 @@ void reflector_bubbles_refresh(MslBatch* batch) {
           }
         } else {
           f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
-          if ((prev_a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+          if (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+              (prev_a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
                prev_a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
               batch->state.action_frame[idx] == 0) {
             // Reflector-start direct exit reset:

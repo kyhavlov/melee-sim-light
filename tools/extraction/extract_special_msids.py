@@ -36,6 +36,10 @@ class SpecialMsids:
     up_air: SpecialPhases | None = None
     down_ground: SpecialPhases | None = None
     down_air: SpecialPhases | None = None
+    # Multi-stage chain submotions that do not fit the start/loop/main/hit/end slot scheme
+    # (e.g. Marth's Dancing Blade stages and the SpecialN full-charge End1). Consumers that
+    # enumerate special msids for script/hitbox extraction must include these.
+    extra_script_msids: list[int] | None = None
 
 
 def _scan_special_entries(character: str, *, limit: int = 512) -> list[tuple[int, str]]:
@@ -265,6 +269,32 @@ def extract_special_msids(*, character: str) -> SpecialMsids:
     if down_air.start is None and down_air.loop is None and down_air.main is None and down_air.hit is None and down_air.end is None:
         down_air = None
 
+    # Chain stages: any scanned _ACTION_Special* figatree whose msid is not already covered by
+    # the slot scheme is a chain/auxiliary special submotion (Marth: SpecialS2Hi..S4Lw stages and
+    # SpecialNEnd1). Source-driven by the anim bank, not per-char literals.
+    covered: set[int] = set()
+    for ph in (neutral_ground, neutral_air, side_ground, side_air, up_ground, up_air, down_ground,
+               down_air):
+        if ph is None:
+            continue
+        for slot in (ph.start, ph.loop, ph.main, ph.hit, ph.end, ph.hold):
+            if slot is None:
+                continue
+            for v in (slot.default, slot.left, slot.right):
+                if v is not None:
+                    covered.add(int(v))
+    extra = sorted(
+        int(msid)
+        for msid, name in entries
+        if "_ACTION_Special" in name and "FallSpecial" not in name and int(msid) not in covered
+    )
+    # Fox/Falco: the long-validated runtime special owners (blaster.c/physics.c SpecialHi
+    # Bound/Landing handling) consume the ABSENCE of script data for the slot-scheme leftovers
+    # (e.g. SpecialHiBound root-motion phys, HIS:562 lock). Do not retroactively add their
+    # leftover msids; chain extras exist for multi-stage specials (Marth's Dancing Blade family).
+    if character in ("fox", "falco"):
+        extra = []
+
     return SpecialMsids(
         neutral_ground=neutral_ground,
         neutral_air=neutral_air,
@@ -274,6 +304,7 @@ def extract_special_msids(*, character: str) -> SpecialMsids:
         up_air=up_air,
         down_ground=down_ground,
         down_air=down_air,
+        extra_script_msids=extra or None,
     )
 
 

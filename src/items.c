@@ -1,4 +1,5 @@
 #include "items.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <math.h>
@@ -161,7 +162,8 @@ static inline float item_hitcapsule_stale_damage_mul(const MslBatch* batch, size
   return staling_multiplier_for_move(batch, owner_idx, attack_id);
 }
 
-static inline uint8_t item_reflector_owner_is_shine_callback_state(uint16_t action_id);
+static inline uint8_t item_reflector_owner_is_shine_callback_state(uint8_t char_id,
+                                                                   uint16_t action_id);
 
 static inline float item_laser_script_hitcapsule_damage(const MslLaserParams* lp,
                                                         uint8_t laser_state, uint8_t hitbox_id,
@@ -282,7 +284,8 @@ static inline uint8_t item_laser_reflected_body_damage_owner(
     return 0u;
   }
   const size_t owner_idx = msl_idx_player(bi, owner);
-  if (!item_reflector_owner_is_shine_callback_state(batch->state.action_id[owner_idx]) ||
+  if (!item_reflector_owner_is_shine_callback_state(batch->state.char_id[owner_idx],
+                                                    batch->state.action_id[owner_idx]) ||
       batch->state.attack_id[owner_idx] == (uint16_t)MSL_FT_MOVE_ID_DEFAULT ||
       batch->state.attack_instance[owner_idx] == 0u ||
       *io_attack_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT) {
@@ -495,7 +498,8 @@ static inline uint8_t item_spawn_has_unique_same_source_damage_victim(const MslB
     const size_t v_idx = msl_idx_player(bi, vp);
     const uint8_t victim_in_damage_episode =
         (batch->state.hitstun[v_idx] != 0u ||
-         msl_damage_owner_is_damage_or_firefox_launch_action(batch->state.action_id[v_idx]))
+         msl_damage_owner_is_damage_or_firefox_launch_action(batch->state.char_id[v_idx],
+                                                             batch->state.action_id[v_idx]))
             ? 1u
             : 0u;
     if (victim_in_damage_episode == 0u ||
@@ -1508,7 +1512,10 @@ static inline uint8_t throw_blaster_pulse_is_seed_stale_latch(uint16_t action_id
   return 0u;
 }
 
-static inline uint8_t action_is_illusion_dash(uint16_t action_id_u16) {
+static inline uint8_t action_is_illusion_dash(uint8_t char_id, uint16_t action_id_u16) {
+  if (!msl_char_id_is_spacie(char_id)) {
+    return 0u;
+  }
   // Ghost article spawn is owned by ftFx_SpecialS_Anim / ftFx_SpecialAirS_Anim
   // (main dash states), not Start/End states.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
@@ -1519,26 +1526,33 @@ static inline uint8_t action_is_illusion_dash(uint16_t action_id_u16) {
              : 0u;
 }
 
-static inline uint8_t action_is_illusion_end(uint16_t action_id_u16) {
+static inline uint8_t action_is_illusion_end(uint8_t char_id, uint16_t action_id_u16) {
+  if (!msl_char_id_is_spacie(char_id)) {
+    return 0u;
+  }
   return (action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END ||
           action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)
              ? 1u
              : 0u;
 }
 
-static inline uint8_t action_is_illusion_setphys(uint16_t action_id_u16) {
+static inline uint8_t action_is_illusion_setphys(uint8_t char_id, uint16_t action_id_u16) {
   // Illusion/Phantasm ghost position is advanced by ftFox_SpecialS_SetPhys, which is called from
   // the grounded/air main and end Phys callbacks.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
   //   ftFx_SpecialS_Phys,ftFx_SpecialAirS_Phys,ftFx_SpecialSEnd_Phys,ftFx_SpecialAirSEnd_Phys,
   //   ftFox_SpecialS_SetPhys
   // }
-  return (action_is_illusion_dash(action_id_u16) || action_is_illusion_end(action_id_u16)) ? 1u
-                                                                                           : 0u;
+  return (action_is_illusion_dash(char_id, action_id_u16) ||
+          action_is_illusion_end(char_id, action_id_u16))
+             ? 1u
+             : 0u;
 }
 
-static inline uint8_t action_can_own_fighter_anim_article_spawn(uint16_t action_id_u16) {
-  if (action_is_illusion_dash(action_id_u16) || action_is_illusion_end(action_id_u16)) {
+static inline uint8_t action_can_own_fighter_anim_article_spawn(uint8_t char_id,
+                                                                uint16_t action_id_u16) {
+  if (action_is_illusion_dash(char_id, action_id_u16) ||
+      action_is_illusion_end(char_id, action_id_u16)) {
     return 1u;
   }
   return (blaster_gun_state_from_action_id(action_id_u16) != 9u) ? 1u : 0u;
@@ -1552,15 +1566,17 @@ static inline uint8_t items_row_has_fighter_anim_article_source(const MslBatch* 
   for (int p = 0; p < num_players; p++) {
     const size_t idx = msl_idx_player(bi, p);
     const uint16_t action_id_u16 = batch->state.action_id[idx];
-    if (action_can_own_fighter_anim_article_spawn(action_id_u16)) {
+    if (action_can_own_fighter_anim_article_spawn(batch->state.char_id[idx], action_id_u16)) {
       return 1u;
     }
     const uint16_t prev_action_id_u16 = batch->state.prev_action_id[idx];
     if (batch->state.action_frame[idx] == 0 &&
         ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
-          action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) ||
+          (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+           action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END)) ||
          (prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
-          action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END))) {
+          (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+           action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)))) {
       return 1u;
     }
   }
@@ -1574,7 +1590,7 @@ static inline uint8_t items_row_has_illusion_setphys_source(const MslBatch* batc
   }
   for (int p = 0; p < num_players; p++) {
     const size_t idx = msl_idx_player(bi, p);
-    if (action_is_illusion_setphys(batch->state.action_id[idx])) {
+    if (action_is_illusion_setphys(batch->state.char_id[idx], batch->state.action_id[idx])) {
       return 1u;
     }
   }
@@ -1584,7 +1600,7 @@ static inline uint8_t items_row_has_illusion_setphys_source(const MslBatch* batc
 static inline uint8_t illusion_spawn_pulse_crossed(uint8_t char_id, uint16_t action_id_u16,
                                                    uint16_t msid, float prev_anim_frame_f32,
                                                    float cur_anim_frame_f32) {
-  if (!action_is_illusion_dash(action_id_u16)) {
+  if (!action_is_illusion_dash(char_id, action_id_u16)) {
     return 0u;
   }
   // Cmd-var pulse source is the typed MSLFTSC1 script event cache:
@@ -1638,6 +1654,9 @@ static inline int items_find_illusion_slot(const MslBatch* batch, int bi, int ow
 static inline float items_cur_anim_frame_f32(const MslBatch* batch, size_t idx);
 
 static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
+  if (!msl_char_id_is_spacie(batch->state.char_id[msl_idx_player(bi, owner)])) {
+    return;
+  }
   if (batch == NULL) {
     return;
   }
@@ -1663,7 +1682,7 @@ static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
       batch->state.anim_frame_fp_q16_16[o_idx] - batch->state.frame_speed_mul_fp_q16_16[o_idx];
   const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
   uint8_t spawn_pulse = illusion_spawn_pulse_crossed(char_id, action_id_u16, msid, af_prev, af);
-  if (!spawn_pulse && action_is_illusion_end(action_id_u16) &&
+  if (!spawn_pulse && action_is_illusion_end(char_id, action_id_u16) &&
       batch->state.action_frame[o_idx] == 0 &&
       ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
         action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) ||
@@ -3036,6 +3055,9 @@ static inline uint8_t laser_airborne_body_uses_flattened_hurt_z(const MslBatch* 
 static inline uint8_t laser_airborne_damagefall_uses_lbcoll_hurt_radius(
     const MslBatch* batch, size_t d_idx, size_t o_idx, uint8_t laser_state, float laser_age_frames,
     uint16_t item_type, uint16_t item_attack_id) {
+  if (!msl_char_id_is_spacie(batch->state.char_id[o_idx])) {
+    return 0u;
+  }
   if (batch == NULL || laser_state != 0u ||
       (item_type_is_fox_laser(item_type) == 0u && item_type_is_falco_laser(item_type) == 0u) ||
       !(laser_age_frames > 1.0f)) {
@@ -3342,6 +3364,9 @@ static inline uint8_t illusion_item_hit_params_from_state(const MslCharParams* c
 }
 
 static inline uint8_t illusion_owner_motion_is_active(const MslBatch* batch, size_t owner_idx) {
+  if (!msl_char_id_is_spacie(batch->state.char_id[owner_idx])) {
+    return 0u;
+  }
   if (batch == NULL) {
     return 0u;
   }
@@ -4905,7 +4930,11 @@ static inline uint8_t laser_try_shield_bounce_velocity_from_segment(
   return 1u;
 }
 
-static inline uint8_t item_reflector_owner_is_shine_callback_state(uint16_t action_id) {
+static inline uint8_t item_reflector_owner_is_shine_callback_state(uint8_t char_id,
+                                                                   uint16_t action_id) {
+  if (!msl_char_id_is_spacie(char_id)) {
+    return 0u;
+  }
   switch (action_id) {
     case MSL_ACT_FX_SPECIAL_LW_LOOP:
     case MSL_ACT_FX_SPECIAL_LW_HIT:
@@ -4925,7 +4954,8 @@ static inline void item_apply_shine_reflect_callback(MslBatch* batch, size_t ii,
     return;
   }
   const uint16_t action_id = batch->state.action_id[reflector_idx];
-  if (!item_reflector_owner_is_shine_callback_state(action_id)) {
+  if (!item_reflector_owner_is_shine_callback_state(batch->state.char_id[reflector_idx],
+                                                    action_id)) {
     return;
   }
   const MslSpecialMsids* ms = msl_special_msids(batch->state.char_id[reflector_idx]);
@@ -5078,6 +5108,9 @@ static inline uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii,
                                                      const MslLaserParams* lp, uint8_t laser_state,
                                                      float x0, float y0, float x, float y, float ux,
                                                      float uy, float sr, float laser_scale_z) {
+  if (!msl_char_id_is_spacie(batch->state.char_id[reflector_idx])) {
+    return 0u;
+  }
   if (batch == NULL || lp == NULL) {
     return 0u;
   }
@@ -5882,7 +5915,7 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
     float base_y0 = batch->state.item_pos_y[ii];
     float base_x1 = base_x0;
     float base_y1 = base_y0;
-    if (action_is_illusion_setphys(batch->state.action_id[o_idx])) {
+    if (action_is_illusion_setphys(batch->state.char_id[o_idx], batch->state.action_id[o_idx])) {
       // Item collision carries the previous-to-current HitCapsule segment. The current endpoint
       // is the decomp-owned `ghostEffectPos[1]` item position. Main-state rows reload the current
       // ghost position as the article sample; Fox end-state rows consume ghostEffectPos[2] as the
@@ -5895,7 +5928,7 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
       base_x0 = base_x1;
       base_y0 = base_y1;
       if (item_type_is_fox_illusion(type) &&
-          action_is_illusion_end(batch->state.action_id[o_idx])) {
+          action_is_illusion_end(batch->state.char_id[o_idx], batch->state.action_id[o_idx])) {
         base_x0 = batch->state.illusion_ghost_pos2_x[o_idx];
         base_y0 = batch->state.illusion_ghost_pos2_y[o_idx];
       }
@@ -6408,7 +6441,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       if (!item_hitlist_prefilter_allows) {
         continue;
       }
-      if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP &&
+      if (msl_char_id_is_spacie(batch->state.char_id[d_idx]) &&
+          batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP &&
           ((uint16_t)(batch->state.animation_index[d_idx] & 0xFFFFu)) == lp->air_loop_msid &&
           !move_tables_special_cmd0_raw_active_at_frame(batch->state.char_id[d_idx],
                                                         lp->air_loop_msid,
@@ -9258,7 +9292,7 @@ void items_update_collision_phase(MslBatch* batch) {
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFox_SpecialS_SetPhys
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      if (!action_is_illusion_setphys(batch->state.action_id[idx])) {
+      if (!action_is_illusion_setphys(batch->state.char_id[idx], batch->state.action_id[idx])) {
         continue;
       }
       batch->state.illusion_ghost_pos2_x[idx] = batch->state.illusion_ghost_pos1_x[idx];

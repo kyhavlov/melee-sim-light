@@ -696,7 +696,11 @@ def _iter_msids_from_special_msids_json(v: object) -> list[int]:
                 out.extend(_iter_msids_from_special_msids_json(vv))
     elif isinstance(v, list):
         for vv in v:
-            out.extend(_iter_msids_from_special_msids_json(vv))
+            if isinstance(vv, int):
+                # extra_script_msids chain lists carry bare ints (multi-stage specials).
+                out.append(int(vv))
+            else:
+                out.extend(_iter_msids_from_special_msids_json(vv))
     return out
 
 

@@ -1,4 +1,5 @@
 #include "mpcoll_env.h"
+#include "char_registry.h"
 
 #include <float.h>
 #include <math.h>
@@ -629,8 +630,9 @@ static inline uint32_t ledge_grab_flags_for_fighter(
   msl_ecb_world_points_sample(&ecb, char_id, animation_index, ecb_frame, ecb_facing_dir, coll_cur_x,
                               coll_cur_y,
                               /*lock_bottom_to_zero=*/0u);
-  if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
-      action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL) {
+  if (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+      (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
+       action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL)) {
     (void)mpcoll_env_specialhi_try_sample_jobj_ecb_points(&ecb, batch, idx, char_id,
                                                           animation_index, ecb_frame,
                                                           ecb_facing_dir, coll_cur_x, coll_cur_y);
@@ -877,8 +879,10 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       //   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
       // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904
-      if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
-          batch->state.action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL) {
+      if ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+           batch->state.action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) ||
+          (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+           batch->state.action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL)) {
         fd = 0.0f;
       }
       // Decomp: mpColl_80046904 runs inside the mpColl_80043754 substep loop, which updates:

@@ -1,4 +1,5 @@
 #include "mpcoll_wall_ceil.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <float.h>
@@ -452,7 +453,10 @@ static inline uint8_t mpcoll_damagefly_wall_asdi_latch_action(uint16_t action_id
   return msl_motion_state_common_class3_has(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
 }
 
-static inline uint8_t mpcoll_wall_asdi_producer_action(uint16_t action_id) {
+static inline uint8_t mpcoll_wall_asdi_producer_action(uint8_t char_id, uint16_t action_id) {
+  if (!msl_char_id_is_spacie(char_id) && action_id >= 341u) {
+    return 0u;
+  }
   return (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
           mpcoll_damagefly_wall_asdi_latch_action(action_id))
              ? 1u
@@ -582,7 +586,8 @@ static inline uint8_t mpcoll_action_uses_ft_check_ground_ledge_air_collision(uin
   const uint16_t smid = msl_motion_state_submotion_id(char_id, action_id);
   return (uint8_t)((smid >= (uint16_t)MSL_SM_FX_SPECIAL_AIR_S_START &&
                     smid <= (uint16_t)MSL_SM_FX_SPECIAL_AIR_S_END) ||
-                   action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR ||
+                   (msl_char_id_is_spacie(char_id) &&
+                    action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR) ||
                    smid == (uint16_t)MSL_SM_FX_SPECIAL_HI_FALL);
 }
 
@@ -4187,13 +4192,14 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}
       const uint8_t active_hitlag_phase = mpcoll_active_hitlag_phase(batch, idx);
       const uint8_t same_frame_specialhi_continuing_left_wall =
-          (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
+          ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+            action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) &&
            batch->state.wall_kind[idx] == MSL_WALL_LEFT &&
            (batch->state.coll_prev_env_flags[idx] & (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK) != 0u &&
            fabsf(batch->state.wall_normal_y[idx]) <= 1.0e-4f)
               ? 1u
               : 0u;
-      if (mpcoll_wall_asdi_producer_action(action_id) &&
+      if (mpcoll_wall_asdi_producer_action(batch->state.char_id[idx], action_id) &&
           (active_hitlag_phase || same_frame_specialhi_continuing_left_wall)) {
         if (batch->state.wall_kind[idx] == MSL_WALL_LEFT ||
             batch->state.wall_kind[idx] == MSL_WALL_RIGHT) {

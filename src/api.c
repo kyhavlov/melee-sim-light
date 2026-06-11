@@ -217,7 +217,8 @@ static inline uint16_t compare_public_ground_id(const MslBatch* batch, int bi, u
   return ground_id;
 }
 
-static inline uint8_t reseed_action_is_damage_or_firefox_launch_victim(uint16_t action) {
+static inline uint8_t reseed_action_is_damage_or_firefox_launch_victim(uint8_t char_id,
+                                                                       uint16_t action) {
   switch (action) {
     case MSL_ACT_DAMAGE_HI_1:
     case MSL_ACT_DAMAGE_HI_2:
@@ -240,7 +241,8 @@ static inline uint8_t reseed_action_is_damage_or_firefox_launch_victim(uint16_t 
     case MSL_ACT_FLY_REFLECT_CEIL:
     case MSL_ACT_FX_SPECIAL_HI:
     case MSL_ACT_FX_SPECIAL_AIR_HI:
-      return 1u;
+      // Firefox launch victims are fox/falco-only (shared 341..372 id range).
+      return msl_char_id_is_spacie(char_id);
     default:
       return 0u;
   }
@@ -558,8 +560,9 @@ static inline uint8_t seed_bridge_has_shine_start_x1988_masked_x198c(const MslSe
   if (seed == NULL) {
     return 0u;
   }
-  if (seed->action_id[p] != (uint16_t)MSL_ACT_FX_SPECIAL_LW_START &&
-      seed->action_id[p] != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) {
+  if (!msl_char_id_is_spacie(seed->char_id[p]) ||
+      (seed->action_id[p] != (uint16_t)MSL_ACT_FX_SPECIAL_LW_START &&
+       seed->action_id[p] != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START)) {
     return 0u;
   }
   if (seed->action_frame[p] != 1 || seed_hurtbox_state != 2u || seed_x1988 != 2u) {
@@ -1584,7 +1587,8 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
-    if ((seed->action_id[victim] == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL ||
+    if (msl_char_id_is_spacie(seed->char_id[victim]) &&
+        (seed->action_id[victim] == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL ||
          seed->action_id[victim] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) &&
         seed->on_ground[victim] == 0u && seed->hitlag[victim] == 0u &&
         seed->hitstun[victim] == 0u && seed->instance_hit_by[victim] != 0u) {
@@ -2170,11 +2174,11 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.action_id[idx] = seed->action_id[p];
       batch->state.specialhi_rotate_model_valid[idx] = 0u;
       batch->state.specialhi_rotate_model[idx] = 0.0f;
-      if (msl_specialhi_rotate_model_action(seed->action_id[p]) &&
+      if (msl_specialhi_rotate_model_action(seed->char_id[p], seed->action_id[p]) &&
           seed->specialhi_rotate_model_valid_u8[p] != 0u &&
           isfinite(seed->specialhi_rotate_model_f32[p])) {
         msl_specialhi_rotate_model_set(batch, idx, seed->specialhi_rotate_model_f32[p]);
-      } else if (msl_specialhi_rotate_model_action(seed->action_id[p])) {
+      } else if (msl_specialhi_rotate_model_action(seed->char_id[p], seed->action_id[p])) {
         msl_specialhi_rotate_model_set_from_velocity(batch, idx);
       }
       batch->state.seed_prev_action_id[idx] = seed->seed_prev_action_id[p];
@@ -2486,12 +2490,20 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         const MslCharParams* phys = msl_char_params(seed->char_id[p]);
         const uint16_t src = seed->seed_prev_action_id[p];
         if (phys != NULL) {
-          if (src == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
+          if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_MARTH &&
+              (src == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
+               src == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI)) {
+            // Dolphin Slash source: LandingFallSpecial lag = MarsAttributes x2C.
+            // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
+            landing_lag = phys->specialhi_landing_lag_frames;
+          } else if (msl_char_id_is_spacie(seed->char_id[p]) &&
+                     src == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
             landing_lag = (float)phys->illusion_landing_lag_frames;
-          } else if (src == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
-                     src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL ||
-                     src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND ||
-                     src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING) {
+          } else if (msl_char_id_is_spacie(seed->char_id[p]) &&
+                     (src == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
+                      src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL ||
+                      src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND ||
+                      src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING)) {
             landing_lag = (float)phys->firefox_landing_lag_frames;
           }
         }
@@ -2675,7 +2687,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
         // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         const uint8_t shine_start_x1990_reseed =
-            ((seed->action_id[p] == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+            (msl_char_id_is_spacie(seed->char_id[p]) &&
+             (seed->action_id[p] == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
               seed->action_id[p] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
              seed_hurtbox_state == 2u)
                 ? 1u
@@ -2719,7 +2732,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         if (seed->hitlag[p] == 0u && seed->hitstun[p] != 0u &&
             seed->colanim_hit_status_x198c[p] == 1u && seed->colanim_timer_x1994[p] != 0u &&
             seed->colanim_timer_x1990[p] == 0u && seed->colanim_lock_x2221_b0[p] == 0u &&
-            reseed_action_is_damage_or_firefox_launch_victim(seed->action_id[p])) {
+            reseed_action_is_damage_or_firefox_launch_victim(seed->char_id[p],
+                                                             seed->action_id[p])) {
           // Explicit seed-only x198C=1 hitstun proof:
           // - Slippi's merged hurtbox_state can be 0 while replay-history extraction carries the
           //   hidden color-animation status (`fp->x198C`) and x1994 timer.
@@ -4595,7 +4609,9 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
       out->ledge_cooldown[p] = batch->state.ledge_cooldown[idx];
       out->cliff_ledge_floor_segment_seeded[p] = batch->state.cliff_ledge_floor_segment_seeded[idx];
       out->specialhi_rotate_model_action[p] =
-          msl_specialhi_rotate_model_action(batch->state.action_id[idx]) ? 1u : 0u;
+          msl_specialhi_rotate_model_action(batch->state.char_id[idx], batch->state.action_id[idx])
+              ? 1u
+              : 0u;
       out->specialhi_rotate_model_valid[p] =
           msl_specialhi_rotate_model_get(batch, idx, &out->specialhi_rotate_model[p]) ? 1u : 0u;
 
@@ -5111,7 +5127,7 @@ static uint8_t debug_sample_hitbox_center_proxy(const MslBatch* batch, size_t id
   cy *= model_scale;
   cz *= model_scale;
 
-  if (def->bone_part_id < 256u &&
+  if (def->bone_part_id < 256u && msl_char_id_is_spacie(char_id) &&
       batch->state.action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
       msl_anim_part_under_xrotn(char_id, def->bone_part_id)) {
     float xrotn_m[12];

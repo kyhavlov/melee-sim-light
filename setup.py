@@ -100,6 +100,7 @@ ext = Extension(
         "src/mpcoll_env.c",
         "src/match_flow.c",
         "src/locomotion.c",
+        "src/marth_specials.c",
         "src/move_tables.c",
         "src/script_events.c",
         "src/attack_id_tables.c",

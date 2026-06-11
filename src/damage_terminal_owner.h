@@ -55,7 +55,8 @@ static inline uint8_t msl_damage_owner_allows_sdi_action(uint16_t action_id) {
                    action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D);
 }
 
-static inline uint8_t msl_damage_owner_is_damage_or_firefox_launch_action(uint16_t action_id) {
+static inline uint8_t msl_damage_owner_is_damage_or_firefox_launch_action(uint8_t char_id,
+                                                                          uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_DAMAGE_HI_1:
     case MSL_ACT_DAMAGE_HI_2:
@@ -78,7 +79,9 @@ static inline uint8_t msl_damage_owner_is_damage_or_firefox_launch_action(uint16
     case MSL_ACT_FLY_REFLECT_CEIL:
     case MSL_ACT_FX_SPECIAL_HI:
     case MSL_ACT_FX_SPECIAL_AIR_HI:
-      return 1u;
+      // Firefox/Firebird launch is fox/falco-only (shared 341..372 action-id range).
+      return (uint8_t)(char_id == (uint8_t)MSL_CHAR_ID_FOX ||
+                       char_id == (uint8_t)MSL_CHAR_ID_FALCO);
     default:
       return 0u;
   }
@@ -296,6 +299,9 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
     case (uint16_t)MSL_ACT_ATTACK_HI4:
     case (uint16_t)MSL_ACT_ATTACK_LW3:
     case (uint16_t)MSL_ACT_FX_SPECIAL_LW_END:
+      // Shine-end pre-action is fox/falco-only (shared 341..372 range).
+      return (uint8_t)(batch->state.char_id[d_idx] == (uint8_t)MSL_CHAR_ID_FOX ||
+                       batch->state.char_id[d_idx] == (uint8_t)MSL_CHAR_ID_FALCO);
     case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
       return 1u;
     case (uint16_t)MSL_ACT_LANDING_AIR_LW:
@@ -308,6 +314,10 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
       return 0u;
     case (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI:
+      if (batch->state.char_id[d_idx] != (uint8_t)MSL_CHAR_ID_FOX &&
+          batch->state.char_id[d_idx] != (uint8_t)MSL_CHAR_ID_FALCO) {
+        return 0u;
+      }
       // Exact replay rows keep the HSD_Randf phase seed-owned. Free-running rollout must still use
       // the current ProcessHit source owner before admitting this pre-action; visible
       // SpecialAirHi shape plus an advanced RNG clock is not enough to prove the damage source.
@@ -353,6 +363,10 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
       return msl_damage_owner_replay_rollout_advanced_under_rng_owner(batch, d_idx);
     }
     case (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL: {
+      if (batch->state.char_id[d_idx] != (uint8_t)MSL_CHAR_ID_FOX &&
+          batch->state.char_id[d_idx] != (uint8_t)MSL_CHAR_ID_FALCO) {
+        return 0u;
+      }
       const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
       const int num_players = (int)batch->config.num_players;
       const int attacker = msl_damage_source_local_slot_from_port0(batch, (int)bi, num_players,

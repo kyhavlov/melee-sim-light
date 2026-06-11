@@ -1,4 +1,5 @@
 #include "state_flags.h"
+#include "char_registry.h"
 #include "ids.h"
 
 #include <stddef.h>
@@ -115,6 +116,11 @@ static inline uint8_t state_flags_action_allow_interrupt_at_frame(uint8_t char_i
 
 static inline uint8_t state_flags_2218_action_owns_reflecting(const MslBatch* batch, size_t idx,
                                                               uint16_t action_id) {
+  if (!msl_char_id_is_spacie(batch->state.char_id[idx])) {
+    // Reflector ownership is fox/falco-only; the numeric range is shared with other chars'
+    // specials (Marth Dancing Blade air stages).
+    return 0u;
+  }
   switch (action_id) {
     case MSL_ACT_FX_SPECIAL_LW_LOOP:
     case MSL_ACT_FX_SPECIAL_LW_HIT:
@@ -827,7 +833,8 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         }
       }
       const uint8_t shine_start_platform_pass_reflecting =
-          ((action_id == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+          (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+           (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
            (f2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) != 0u)
               ? 1u
@@ -1152,11 +1159,12 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54
         f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IN_DAMAGE;
       }
-      if ((action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
-           prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_S && batch->state.action_frame[idx] > 0) ||
-          (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
-           prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S && seed_x221c_y_visible == 0u &&
-           batch->state.action_frame[idx] > 0)) {
+      if (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+          ((action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
+            prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_S && batch->state.action_frame[idx] > 0) ||
+           (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
+            prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S && seed_x221c_y_visible == 0u &&
+            batch->state.action_frame[idx] > 0))) {
         // Fox/Falco side-special ground->air transition:
         // - ftFx_SpecialS_GroundToAir calls Fighter_ChangeMotionState with
         //   FTFOX_SPECIALS_COLL_FLAG and the current animation frame,

@@ -266,7 +266,71 @@ def _extract_wait_anim_choices(buf: bytes, wait_abs: int) -> dict:
     }
 
 
-def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaster: bool = False) -> dict:
+def _extract_mars_sword_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
+    """Extract MarsAttributes (ftData.x4 ext block) for Marth-style sword characters.
+
+    Field semantics are derived from the per-special consumers (mechanic-position names so Roy,
+    a Marth clone with the same layout, can reuse this extractor):
+    - SpecialN (Shield Breaker): refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c
+      x0 max charge seconds (cur_frame > x0*30 forces release), x4 + charge_seconds * x8 is the
+      ftColl_8007ABD0 damage override on normal release, xC entry velocity divisor,
+      x10 start/loop friction.
+    - SpecialS (Dancing Blade): refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialS.c
+      x14 air-entry vel.x divisor, x18 air friction, x1C air-entry vel.y, x20 fall accel,
+      x24 terminal velocity.
+    - SpecialHi (Dolphin Slash): refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c
+      x28 freefall mobility multiplier (also FallSpecial arg), x2C landing lag,
+      x30 B-reverse stick threshold, x34 launch-angle stick threshold, x38 max launch angle
+      (degrees), x3C air-entry vel.x multiplier, x40 launch velocity decay (air variant),
+      x44 post-launch gravity, x48 post-launch terminal velocity.
+    - SpecialLw (Counter): refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c
+      x4C air-entry vel.x divisor, x50 air friction, x54 fall accel, x58 terminal velocity,
+      x5C counter damage multiplier (consumed by FTKIND_EMBLEM only; extracted for clones),
+      x60 counter shield strength (fp->shield_unk0/1), x64 AbsorbDesc intercept descriptor
+      (bone, offset, size) installed via ftColl_8007B1B8 while the script holds cmd_vars[1]==1.
+    - refs/melee/src/melee/ft/chara/ftMars/types.h::MarsAttributes
+    """
+    out: dict = {}
+    ext_abs = arc.ptr32(ftdata_abs + 0x04)
+    if ext_abs == arc.data_base:
+        return out
+    out["specialn_charge_max_seconds"] = int(_i32_be(buf, ext_abs + 0x00))
+    out["specialn_release_damage_base"] = int(_i32_be(buf, ext_abs + 0x04))
+    out["specialn_release_damage_per_second"] = int(_i32_be(buf, ext_abs + 0x08))
+    out["specialn_entry_vel_divisor"] = float(_f32_be(buf, ext_abs + 0x0C))
+    out["specialn_start_friction"] = float(_f32_be(buf, ext_abs + 0x10))
+    out["specials_air_entry_vel_x_divisor"] = float(_f32_be(buf, ext_abs + 0x14))
+    out["specials_air_friction"] = float(_f32_be(buf, ext_abs + 0x18))
+    out["specials_air_entry_vel_y"] = float(_f32_be(buf, ext_abs + 0x1C))
+    out["specials_fall_accel"] = float(_f32_be(buf, ext_abs + 0x20))
+    out["specials_terminal_vel"] = float(_f32_be(buf, ext_abs + 0x24))
+    out["specialhi_freefall_mobility_mul"] = float(_f32_be(buf, ext_abs + 0x28))
+    out["specialhi_landing_lag_frames"] = float(_f32_be(buf, ext_abs + 0x2C))
+    out["specialhi_breverse_stick_threshold"] = float(_f32_be(buf, ext_abs + 0x30))
+    out["specialhi_angle_stick_threshold"] = float(_f32_be(buf, ext_abs + 0x34))
+    out["specialhi_angle_max_degrees"] = float(_f32_be(buf, ext_abs + 0x38))
+    out["specialhi_air_entry_vel_x_mul"] = float(_f32_be(buf, ext_abs + 0x3C))
+    out["specialhi_launch_decay_mul"] = float(_f32_be(buf, ext_abs + 0x40))
+    out["specialhi_fall_accel"] = float(_f32_be(buf, ext_abs + 0x44))
+    out["specialhi_terminal_vel"] = float(_f32_be(buf, ext_abs + 0x48))
+    out["speciallw_air_entry_vel_x_divisor"] = float(_f32_be(buf, ext_abs + 0x4C))
+    out["speciallw_air_friction"] = float(_f32_be(buf, ext_abs + 0x50))
+    out["speciallw_fall_accel"] = float(_f32_be(buf, ext_abs + 0x54))
+    out["speciallw_terminal_vel"] = float(_f32_be(buf, ext_abs + 0x58))
+    out["speciallw_counter_damage_mul"] = float(_f32_be(buf, ext_abs + 0x5C))
+    out["speciallw_counter_shield_strength"] = float(_f32_be(buf, ext_abs + 0x60))
+    out["speciallw_counter_desc_bone"] = int(_i32_be(buf, ext_abs + 0x64))
+    out["speciallw_counter_desc_offset"] = [
+        float(_f32_be(buf, ext_abs + 0x68)),
+        float(_f32_be(buf, ext_abs + 0x6C)),
+        float(_f32_be(buf, ext_abs + 0x70)),
+    ]
+    out["speciallw_counter_desc_size"] = float(_f32_be(buf, ext_abs + 0x74))
+    return out
+
+
+def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaster: bool = False,
+                         ext_attr_layout: str | None = None) -> dict:
     buf = pl_dat.read_bytes()
     arc = parse_hsd_archive(buf)
 
@@ -446,6 +510,8 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     elif ftdata_symbol == "ftDataFalco":
         out["damage_post_hitlag_sfx_mid_num"] = 1
         out["damage_post_hitlag_sfx_high_num"] = 2
+    if ext_attr_layout == "mars_sword":
+        out.update(_extract_mars_sword_attrs(buf, arc, ftdata_abs=ftdata_abs))
     if extract_fox_blaster:
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
@@ -771,6 +837,11 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
             out[k] = extracted[k]
         elif k in existing:
             out[k] = existing[k]
+    # Per-character special-attribute families (ext-attr layouts) use mechanic-position
+    # prefixes; carry every extracted special* key after the ordered common block.
+    for k in sorted(extracted):
+        if k.startswith("special") and k not in out:
+            out[k] = extracted[k]
     for k, v in existing.items():
         if k in drop_keys:
             continue
@@ -796,14 +867,19 @@ def main() -> None:
     )
     args = ap.parse_args()
 
+    # (pl_dat, ftData symbol, spacie blaster ext-attrs, ext-attr layout tag)
+    # Layout tags name the ftData.x4 special-attribute struct family:
+    # - "spacie": ftFox_DatAttrs (blaster/illusion/firefox/reflector) - covered by the
+    #   extract_fox_blaster flag path.
+    # - "mars_sword": MarsAttributes (refs/melee/.../ftMars/types.h) - Marth (and Roy clone).
     mapping = {
-        "fox": ("PlFx.dat", "ftDataFox", True),
-        "falco": ("PlFc.dat", "ftDataFalco", True),
-        "sheik": ("PlSk.dat", "ftDataSeak", False),
-        "peach": ("PlPe.dat", "ftDataPeach", False),
-        "marth": ("PlMs.dat", "ftDataMars", False),
-        "puff": ("PlPr.dat", "ftDataPurin", False),
-        "falcon": ("PlCa.dat", "ftDataCaptain", False),
+        "fox": ("PlFx.dat", "ftDataFox", True, None),
+        "falco": ("PlFc.dat", "ftDataFalco", True, None),
+        "sheik": ("PlSk.dat", "ftDataSeak", False, None),
+        "peach": ("PlPe.dat", "ftDataPeach", False, None),
+        "marth": ("PlMs.dat", "ftDataMars", False, "mars_sword"),
+        "puff": ("PlPr.dat", "ftDataPurin", False, None),
+        "falcon": ("PlCa.dat", "ftDataCaptain", False, None),
     }
     want = [c.strip() for c in args.chars.split(",") if c.strip()]
     for c in want:
@@ -813,7 +889,7 @@ def main() -> None:
 
     if args.iso is not None:
         files = list_files(args.iso)
-        for _, (pl, _, _) in mapping.items():
+        for _, (pl, _, _, _) in mapping.items():
             dst = args.pl_dir / pl
             if dst.exists():
                 continue
@@ -825,12 +901,13 @@ def main() -> None:
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
-    for name, (pl_name, sym, blaster) in mapping.items():
+    for name, (pl_name, sym, blaster, ext_layout) in mapping.items():
         pl_path = args.pl_dir / pl_name
         if not pl_path.exists():
             raise SystemExit(f"missing {pl_path} (pass --iso to extract)")
 
-        extracted = _extract_ftco_dattrs(pl_path, ftdata_symbol=sym, extract_fox_blaster=bool(blaster))
+        extracted = _extract_ftco_dattrs(pl_path, ftdata_symbol=sym, extract_fox_blaster=bool(blaster),
+                                         ext_attr_layout=ext_layout)
         if blaster:
             # Decomp ownership: SpecialN spawn joint uses ftParts_GetBoneIndex(fp, FtPart_RThumbNb).
             # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint

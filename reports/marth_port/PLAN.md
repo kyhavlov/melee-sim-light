@@ -95,3 +95,22 @@ Slash, SpecialLw Counter (+CounterAttack).
   ALL silently NULL for marth). Also motion_state_owners common_class2/3 registry loops.
   Replay smoke: one-step 1150 -> 684 (0.063%), rollout 697 -> 404 first-breaks, median 49 -> 75.
   Fox/falco validate-all: "no suite total changes". Full suite 3229 passed (3145 prior + 84 new).
+- (ci3 COMMITTED 811608a5) Specials implemented decomp-first: MarsAttributes extraction (28 keys, mars_sword
+  layout), src/marth_specials.c (DS/SB/DB/Counter state machines + phys), Counter combat
+  intercept, SB charge-damage hitbox override, DS TransN launch + 34f landing lag. THE major
+  generic refactor: msl_char_id_is_spacie gating of ~60 char-blind MSL_ACT_FX_* sites (marth
+  specials were being driven by fox's special state machines). 17 specials tests + 101 total
+  marth tests green; full suite 3246. Replay smoke: one-step 684 -> 241, rollout 404 -> 55
+  first-breaks (median 75 -> 231). Fox/falco validate-all: no suite total changes. See
+  CHECKIN3_REPORT.md.
+- (ci3 review-fix pass) Completed the full MSL_ACT_FX_* audit (every runtime site in src/
+  classified gated / char-param-widened / documented-safe; table in CHECKIN3_REPORT.md),
+  fixed the reviewer's locomotion landing-selector + shine platform-pass blockers, and
+  implemented the Counter AbsorbDesc descriptor-sphere intercept geometry (bone-posed, with a
+  back-hit test). 18 specials tests; suite 3247; fox/falco validate-all still byte-stable;
+  marth smoke unchanged (241 one-step / 55 rollout).
+- (ci3 review-fix pass 2) Audit extended to headers + bindings (action_ids.h fastfall,
+  damage_terminal_owner.h, specialhi_pose.h, shielddesc_geometry.h, reflector_bubbles.c,
+  items.c boundary-encoded owner invariants). Counter descriptor now FAIL-CLOSED (no body-
+  admission fallback) with the desc bone added to the pose extraction (marth 22 joints) and a
+  sentinel-seed proof test. Suite 3248; fox/falco byte-stable; marth smoke 241/55 unchanged.

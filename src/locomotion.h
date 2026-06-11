@@ -34,3 +34,8 @@ uint8_t locomotion_wait_iasa_locomotion_subset_try_enter(
     MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, size_t idx,
     uint16_t buttons, uint16_t buttons_pressed, float stick_x, float stick_y, uint8_t tilt_timer_x,
     uint8_t tilt_timer_y, float facing_dir, uint16_t action_id_start);
+
+// ftCo_80096900 FallSpecial entry (keep-fastfall + xc + landing-lag lanes). Exported for
+// character-special anim-end handoffs (Marth Dolphin Slash).
+void msl_locomotion_enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t idx,
+                                                         float landing_lag);

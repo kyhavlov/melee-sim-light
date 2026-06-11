@@ -326,6 +326,40 @@ typedef struct MslCharParams {
   float reflector_speed_mul;     // ReflectDesc.x1C_speed_mul
   uint8_t reflector_behavior;    // ReflectDesc.x20_behavior
   uint8_t _pad_u8_reflector_1[3];
+  // Marth-family sword special attributes (MarsAttributes ext block; mechanic-position names
+  // shared with clones). Zero for characters without the mars_sword ext-attr layout.
+  // Source: ISO-extracted data/characters/<ch>.json special* keys
+  // refs/melee/src/melee/ft/chara/ftMars/types.h::MarsAttributes
+  int32_t specialn_charge_max_seconds;
+  int32_t specialn_release_damage_base;
+  int32_t specialn_release_damage_per_second;
+  float specialn_entry_vel_divisor;
+  float specialn_start_friction;
+  float specials_air_entry_vel_x_divisor;
+  float specials_air_friction;
+  float specials_air_entry_vel_y;
+  float specials_fall_accel;
+  float specials_terminal_vel;
+  float specialhi_freefall_mobility_mul;
+  float specialhi_landing_lag_frames;
+  float specialhi_breverse_stick_threshold;
+  float specialhi_angle_stick_threshold;
+  float specialhi_angle_max_degrees;
+  float specialhi_air_entry_vel_x_mul;
+  float specialhi_launch_decay_mul;
+  float specialhi_fall_accel;
+  float specialhi_terminal_vel;
+  float speciallw_air_entry_vel_x_divisor;
+  float speciallw_air_friction;
+  float speciallw_fall_accel;
+  float speciallw_terminal_vel;
+  float speciallw_counter_damage_mul;
+  float speciallw_counter_shield_strength;
+  int32_t speciallw_counter_desc_bone;
+  float speciallw_counter_desc_offset_x;
+  float speciallw_counter_desc_offset_y;
+  float speciallw_counter_desc_offset_z;
+  float speciallw_counter_desc_size;
 } MslCharParams;
 
 int char_params_init(void);

@@ -1,4 +1,5 @@
 #include "hitlist.h"
+#include "char_registry.h"
 
 #include <string.h>
 
@@ -13,7 +14,10 @@ static inline size_t idx_fighter_hitlist(int bi, int p, int hb_id) {
          (size_t)hb_id;
 }
 
-static inline uint8_t hitlist_specialhi_action(uint16_t action_id) {
+static inline uint8_t hitlist_specialhi_action(uint8_t char_id, uint16_t action_id) {
+  if (!msl_char_id_is_spacie(char_id)) {
+    return 0u;
+  }
   return ((uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD <= action_id &&
           action_id <= (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND)
              ? 1u
@@ -877,7 +881,8 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
                                                 : batch->state.combat_hitlist_victim_iid[i];
     const size_t v_idx = msl_idx_player(bi, v);
     const size_t a_idx = msl_idx_player(bi, attacker);
-    if (!use_hitbox_seed && hitlist_specialhi_action(batch->state.action_id[a_idx])) {
+    if (!use_hitbox_seed &&
+        hitlist_specialhi_action(batch->state.char_id[a_idx], batch->state.action_id[a_idx])) {
       // Dense group seeds are a compatibility surface for replay-derived HitCapsule victims_1,
       // not per-HitCapsule authority. SpecialHi charge/launch spans can carry coarse dense
       // entries across inactive gaps, so materialize them only when replay-visible state proves

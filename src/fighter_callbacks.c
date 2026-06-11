@@ -227,7 +227,8 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // Runtime after that step must require live mpColl WallHug bits again.
       // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
       batch->state.walljump_seed_phase_valid[idx] = 0u;
-      if (!msl_specialhi_rotate_model_action(batch->state.action_id[idx])) {
+      if (!msl_specialhi_rotate_model_action(batch->state.char_id[idx],
+                                             batch->state.action_id[idx])) {
         batch->state.specialhi_rotate_model_valid[idx] = 0u;
         batch->state.specialhi_rotate_model[idx] = 0.0f;
       }

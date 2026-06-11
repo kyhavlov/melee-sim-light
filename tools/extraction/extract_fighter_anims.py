@@ -1402,6 +1402,20 @@ def _collect_needed_parts_from_moves(character: str, moves_path: Path) -> tuple[
             if 0 <= part < parts_num:
                 needed.add(part)
 
+    # Include character special intercept descriptor bones so the runtime can pose them
+    # (e.g. Marth Counter AbsorbDesc bone; consumed by combat.c
+    # marth_counter_desc_overlaps_hitbox via anim_pose_get_matrix).
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8 (fp->parts[shield->bone].joint)
+    char_path = DATA_DIR / "characters" / f"{character}.json"
+    if char_path.exists():
+        try:
+            ch_json = json.loads(char_path.read_text())
+            desc_part = int(ch_json.get("speciallw_counter_desc_bone", -1))
+            if 0 <= desc_part < parts_num:
+                needed.add(desc_part)
+        except Exception as e:
+            print(f"warning: failed to read {char_path}: {e}")
+
     # Include hurt capsule bones if extracted (needed to animate accurate defender hurt capsules).
     hurt_path = DATA_DIR / "hurtcaps" / f"{character}.json"
     if hurt_path.exists():

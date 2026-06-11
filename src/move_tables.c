@@ -40,6 +40,8 @@ typedef struct MslMoveTableCache {
   MslScriptFrameWindow jab_rapid;
   uint16_t cmd_var_value1_pulses[MSL_MOVE_TABLE_CMD_VAR_COUNT][MSL_MOVE_TABLE_PULSE_CAP];
   uint8_t cmd_var_value1_pulse_count[MSL_MOVE_TABLE_CMD_VAR_COUNT];
+  uint16_t cmd_var_value0_pulses[MSL_MOVE_TABLE_CMD_VAR_COUNT][MSL_MOVE_TABLE_PULSE_CAP];
+  uint8_t cmd_var_value0_pulse_count[MSL_MOVE_TABLE_CMD_VAR_COUNT];
   uint16_t throw_flags_pulses[MSL_MOVE_TABLE_THROW_HITBOX_CAP][MSL_MOVE_TABLE_PULSE_CAP];
   uint8_t throw_flags_pulse_count[MSL_MOVE_TABLE_THROW_HITBOX_CAP];
   uint16_t projectile_pulses[MSL_MOVE_TABLE_PULSE_CAP];
@@ -163,12 +165,19 @@ static void move_cache_build_for_msid(uint8_t char_id, uint16_t msid, MslMoveTab
     const MslScriptEvent* ev = &range.events[i];
     switch ((MslScriptEventKind)ev->kind_id) {
       case MSL_SCRIPT_EVENT_SET_CMD_VAR:
-        if (ev->payload.cmd_var.idx < MSL_MOVE_TABLE_CMD_VAR_COUNT &&
-            ev->payload.cmd_var.value == 1u) {
+        if (ev->payload.cmd_var.idx < MSL_MOVE_TABLE_CMD_VAR_COUNT) {
           const uint8_t idx = ev->payload.cmd_var.idx;
-          add_unique_pulse(cache->cmd_var_value1_pulses[idx],
-                           &cache->cmd_var_value1_pulse_count[idx],
-                           (uint8_t)MSL_MOVE_TABLE_PULSE_CAP, ev->frame);
+          if (ev->payload.cmd_var.value == 1u) {
+            add_unique_pulse(cache->cmd_var_value1_pulses[idx],
+                             &cache->cmd_var_value1_pulse_count[idx],
+                             (uint8_t)MSL_MOVE_TABLE_PULSE_CAP, ev->frame);
+          } else if (ev->payload.cmd_var.value == 0u && ev->frame > 0u) {
+            // Window-close pulses (e.g. Counter cmd1 / Dancing Blade cmd0 reset). Frame-0
+            // initializers are entry resets, not window closes.
+            add_unique_pulse(cache->cmd_var_value0_pulses[idx],
+                             &cache->cmd_var_value0_pulse_count[idx],
+                             (uint8_t)MSL_MOVE_TABLE_PULSE_CAP, ev->frame);
+          }
         }
         break;
       case MSL_SCRIPT_EVENT_SET_JAB_COMBO:
@@ -797,6 +806,42 @@ uint8_t move_tables_attack100_loop_end_check_crossed(uint8_t char_id, int16_t pr
     }
   }
   return 0u;
+}
+
+uint8_t move_tables_special_throw_flags_window(uint8_t char_id, uint16_t msid,
+                                               float anim_frame_f32) {
+  // True once the move's first set_throw_flags pulse has been reached (the ftCheckThrowB3
+  // consumable window opener used by e.g. Dolphin Slash's B-reverse).
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || cache->throw_flags_pulse_count[0] == 0u) {
+    return 0u;
+  }
+  return ((float)cache->throw_flags_pulses[0][0] <= anim_frame_f32) ? 1u : 0u;
+}
+
+uint8_t move_tables_special_cmd_var_value_at_frame(uint8_t char_id, uint16_t msid, uint8_t var_idx,
+                                                   float anim_frame_f32) {
+  // Script-owned cmd var value at a frame: 1 iff the latest set_cmd_var pulse at or before the
+  // frame is a value-1 pulse (frame-0 value-0 initializers are excluded at cache build).
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || var_idx >= (uint8_t)MSL_MOVE_TABLE_CMD_VAR_COUNT) {
+    return 0u;
+  }
+  int last_on = -1;
+  int last_off = -1;
+  for (uint8_t i = 0; i < cache->cmd_var_value1_pulse_count[var_idx]; i++) {
+    const int f = (int)cache->cmd_var_value1_pulses[var_idx][i];
+    if ((float)f <= anim_frame_f32 && f > last_on) {
+      last_on = f;
+    }
+  }
+  for (uint8_t i = 0; i < cache->cmd_var_value0_pulse_count[var_idx]; i++) {
+    const int f = (int)cache->cmd_var_value0_pulses[var_idx][i];
+    if ((float)f <= anim_frame_f32 && f > last_off) {
+      last_off = f;
+    }
+  }
+  return (last_on >= 0 && last_on >= last_off) ? 1u : 0u;
 }
 
 uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {

@@ -96,26 +96,33 @@ def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dic
 
 
 @functools.cache
-def _common_motion_state_owner_actions(
+def _motion_state_owner_actions_by_char(
     data_root_text: str,
     *,
     class_bit: int = 0,
     coll_callbacks: tuple[str, ...] = (),
-    submotion_ids: tuple[int, ...] = (),
-) -> frozenset[int]:
-    """Return action ids whose generated Fox/Falco MSLMSO01 owner rows agree.
+    submotion_move_names: tuple[str, ...] = (),
+) -> dict[int, frozenset[int]]:
+    """Return PER-CHAR action-id sets from the generated MSLMSO01 owner rows.
 
-    Seed preprocessing receives action ids before runtime has loaded C owner helpers. Use the same
-    generated MotionState owner artifact here instead of local replay-shaped action-id lists.
+    Replaces the old fox/falco INTERSECTION helper: the intersection was consumed
+    char-blind, silently applying spacie-derived sets to every character's rows (marth
+    aerial timings differ). Seed preprocessing receives action ids before runtime has
+    loaded C owner helpers; use the same generated MotionState owner artifact here
+    instead of local replay-shaped action-id lists.
     """
 
     owner_dir = Path(data_root_text) / "motion_state" / "owners"
     manifest = read_callback_manifest(owner_dir / "callback_symbols.json")
     wanted_callbacks = set(coll_callbacks)
-    wanted_submotions = {int(v) for v in submotion_ids}
-    common: set[int] | None = None
-    for ch in ("fox", "falco"):
+    out: dict[int, frozenset[int]] = {}
+    for cid, ch in manifest_registry_chars(Path(data_root_text)):
         owners = read_mslmso01_v1(owner_dir / f"{ch}.bin")
+        wanted_submotions = set(
+            _move_submotion_ids_for_char(data_root_text, ch, submotion_move_names)
+            if submotion_move_names
+            else ()
+        )
         selected: set[int] = set()
         for action_id in range(len(owners.submotion_id)):
             if class_bit and (int(owners.class_bits[action_id]) & int(class_bit)) == 0:
@@ -125,31 +132,37 @@ def _common_motion_state_owner_actions(
             if wanted_submotions and int(owners.submotion_id[action_id]) not in wanted_submotions:
                 continue
             selected.add(action_id)
-        common = selected if common is None else common & selected
-    return frozenset(common or ())
+        out[int(cid)] = frozenset(selected)
+    return out
 
 
 @functools.cache
-def _common_move_submotion_ids(data_root_text: str, move_names: tuple[str, ...]) -> tuple[int, ...]:
-    common: set[int] | None = None
-    for ch in ("fox", "falco"):
-        moves_path = Path(data_root_text) / "moves" / f"{ch}.json"
-        payload = json.loads(moves_path.read_text(encoding="utf-8"))
-        moves = payload.get("moves", {})
-        selected: set[int] = set()
-        for name in move_names:
-            row = moves.get(name)
-            if isinstance(row, dict) and int(row.get("submotion_id", -1)) >= 0:
-                selected.add(int(row["submotion_id"]))
-        common = selected if common is None else common & selected
-    return tuple(sorted(common or ()))
+def _move_submotion_ids_for_char(
+    data_root_text: str, char_name: str, move_names: tuple[str, ...]
+) -> tuple[int, ...]:
+    # Per-char move -> submotion resolution (replaces the fox/falco intersection helper:
+    # ftCo submotion ids are shared, but resolving per char keeps non-spacie characters
+    # on their own extracted tables).
+    moves_path = Path(data_root_text) / "moves" / f"{char_name}.json"
+    payload = json.loads(moves_path.read_text(encoding="utf-8"))
+    moves = payload.get("moves", {})
+    selected: set[int] = set()
+    for name in move_names:
+        row = moves.get(name)
+        if isinstance(row, dict) and int(row.get("submotion_id", -1)) >= 0:
+            selected.add(int(row["submotion_id"]))
+    return tuple(sorted(selected))
 
 
 @functools.cache
-def _common_attackair_first_hitbox_phase_by_action(data_root_text: str) -> dict[int, tuple[int, int]]:
+def _attackair_first_hitbox_phase_by_char_action(
+    data_root_text: str,
+) -> dict[int, dict[int, tuple[int, int]]]:
+    # Per-char phases (replaces the fox/falco intersection: the result was consumed
+    # char-blind, applying spacie hitbox windows to every character's aerial rows).
     owner_dir = Path(data_root_text) / "motion_state" / "owners"
-    by_char: list[dict[int, tuple[int, int]]] = []
-    for ch in ("fox", "falco"):
+    by_char: dict[int, dict[int, tuple[int, int]]] = {}
+    for cid, ch in manifest_registry_chars(Path(data_root_text)):
         owners = read_mslmso01_v1(owner_dir / f"{ch}.bin")
         moves_path = Path(data_root_text) / "moves" / f"{ch}.json"
         moves = json.loads(moves_path.read_text(encoding="utf-8")).get("moves", {})
@@ -185,15 +198,9 @@ def _common_attackair_first_hitbox_phase_by_action(data_root_text: str) -> dict[
             phase = phase_by_submotion.get(int(owners.submotion_id[action_id]))
             if phase is not None:
                 selected[action_id] = phase
-        by_char.append(selected)
+        by_char[int(cid)] = selected
 
-    if len(by_char) != 2:
-        return {}
-    common: dict[int, tuple[int, int]] = {}
-    for action_id, phase in by_char[0].items():
-        if by_char[1].get(action_id) == phase:
-            common[action_id] = phase
-    return common
+    return by_char
 
 
 def _stage_ledge_floor_ids(*, stage_id: int, data_root: Path) -> tuple[int, int]:

@@ -785,7 +785,23 @@ typedef struct MslStateSoA {
   // - Ticked in Start/Loop/Turn/Hit anim callbacks and consulted by ftFx_SpecialLwHit_Check.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
   uint8_t* shine_release_lag;  // [batch * players], clamped to 0..255
-  uint8_t* shine_is_release;   // [batch * players], 0/1
+  uint8_t* shine_is_release;
+  // Marth-family special machinery (runtime-internal; reconstructed/zeroed at reseed):
+  // fp->cmd_vars[0..2] equivalents for char specials, the SpecialN charge counter
+  // (mv.ms.specialn.cur_frame), and the Counter-stashed incoming damage (mv.ms.speciallw.x0).
+  // refs/melee/src/melee/ft/chara/ftMars/types.h::ftMars_MotionVars
+  uint8_t* special_cmd0;
+  uint8_t* special_cmd1;
+  uint8_t* special_cmd2;
+  uint16_t* specialn_charge_frames;
+  uint16_t* speciallw_countered_damage;
+  // fp->lstick_angle for special launch tilt (Dolphin Slash); ftMars_FighterVars.x222C
+  // air-side-special freshness; FallSpecial mobility/lag overrides from ftCo_80096900 args
+  // (0 = use defaults); Counter intercept window (script cmd1; 2 = armed descriptor).
+  float* special_stick_angle;
+  uint8_t* specials_air_used;
+  float* fallspecial_mobility_mul;
+  uint8_t* speciallw_counter_window;  // [batch * players], 0/1
   // ECB lock countdown (decomp: fp->ecb_lock) used with CollData_X130_Locked.
   // - Set by ftCommon_8007D5D4 / ftCommon_8007D60C.
   // - Decremented once per map/collision callback in Fighter_procMap and clears lock at 0.

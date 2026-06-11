@@ -1,4 +1,5 @@
 #include "anim_timebase.h"
+#include "char_registry.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -912,20 +913,46 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       //
       // Apply on action_frame==0 (entry-shaped snapshots) so one-step reseeds do not depend on
       // prior-frame hidden rates.
-      if (action_frame_pre == 0 && c != NULL) {
+      // Marth scoping: live LandingFallSpecial entries (Dolphin Slash / FallSpecial chains)
+      // already wrote a source-correct rate via enter_landing_action_from_air; the af==0
+      // re-derivation would clobber it with the common default because prev_action_id is
+      // already self by the time this runs. Spacie rows keep the original re-derivation
+      // unconditionally (validated lock behavior: reseeds carry replay rates).
+      const uint8_t skip_rederive_live_entry =
+          (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+           batch->state.frame_speed_mul_fp_q16_16[idx] != msl_q16_16_from_f32(1.0f))
+              ? 1u
+              : 0u;
+      if (action_frame_pre == 0 && c != NULL && !skip_rederive_live_entry) {
         float entry_rate = 0.0f;
         if (a == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
           float lag = c->landing_fall_special_lag_frames;
           const uint16_t source_prev_action = (action_frame_pre == 0)
                                                   ? batch->state.seed_prev_action_id[idx]
                                                   : batch->state.prev_action_id[idx];
+          // Live rollout rows can carry a stale seed_prev_action_id; honor the live prev lane
+          // too so a real FallSpecial -> LandingFallSpecial chain keeps its forwarded
+          // mv.co.fallspecial.landing_lag rate (ftCo_80096D28) instead of the common default.
+          const uint16_t live_prev_action = batch->state.prev_action_id[idx];
           const uint8_t source_is_fallspecial =
               (source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL ||
                source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
-               source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_B)
+               source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_B ||
+               live_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL ||
+               live_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
+               live_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_B)
                   ? 1u
                   : 0u;
-          if (source_prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
+          if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+              (source_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
+               source_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI ||
+               live_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
+               live_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI)) {
+            // Dolphin Slash direct landing: LandingFallSpecial with MarsAttributes x2C.
+            // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
+            lag = (ch != NULL) ? ch->specialhi_landing_lag_frames : lag;
+          } else if (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+                     source_prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
             // Decomp source split for LandingFallSpecial entry rate:
             // - EscapeAir_Coll enters ftCo_LandingFallSpecial_Enter(..., p_ftCommonData->x344).
             // - Fox/Falco Illusion end collision enters ftCo_LandingFallSpecial_Enter(...,
@@ -1082,7 +1109,8 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // Fighter_ChangeMotionState; fastfall persists across those wraps in decomp.
       if (did_wrap && action_frame_pre >= 0 && batch->state.action_frame[idx] < action_frame_pre) {
         const uint16_t a = batch->state.action_id[idx];
-        if (a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP) {
+        if (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
+            a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP) {
           batch->state.fall_fast[idx] = 0;
         }
       }

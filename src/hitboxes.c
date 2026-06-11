@@ -1,4 +1,5 @@
 #include "hitboxes.h"
+#include "char_registry.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -1101,7 +1102,10 @@ static inline uint8_t hitboxes_event_world_capsule(const MslBatch* batch, size_t
 }
 
 static inline uint8_t hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(
-    uint16_t action_id) {
+    uint8_t char_id, uint16_t action_id) {
+  if (!msl_char_id_is_spacie(char_id) && action_id >= 341u) {
+    return 0u;
+  }
   switch (action_id) {
     case MSL_ACT_DAMAGE_HI_1:
     case MSL_ACT_DAMAGE_HI_2:
@@ -1564,7 +1568,8 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
         batch->state.hitlag[v_idx] == 0u && batch->state.instance_hit_by[v_idx] != attacker_iid) {
       if (batch->state.hitstun[v_idx] != 0u &&
           !(batch->state.last_hit_by[v_idx] == attacker_source_port0 &&
-            hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(v_action) &&
+            hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(
+                batch->state.char_id[v_idx], v_action) &&
             batch->state.hitstun[v_idx] <= expected_hitlag)) {
         continue;
       }
@@ -1617,7 +1622,8 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
         !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
         batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] != 0u &&
         batch->state.last_hit_by[v_idx] == attacker_source_port0 &&
-        hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(v_action) &&
+        hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(batch->state.char_id[v_idx],
+                                                                       v_action) &&
         batch->state.instance_hit_by[v_idx] != attacker_iid) {
       hitboxes_seed_bridge_entry_clear(e);
       continue;
@@ -2206,6 +2212,21 @@ void hitboxes_refresh(MslBatch* batch) {
 
           def[hb] = *ev;
           have_def[hb] = 1;
+          // Marth Shield Breaker normal-release charge damage: ftMs_SpecialNEnd_Anim overrides
+          // every enabled HitCapsule via ftColl_8007ABD0(hb, base + charge_seconds * per_second)
+          // while cmd0 == 0 (the full-charge End1 keeps the authored script damage).
+          // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c::inlineA0
+          if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+              batch->state.special_cmd0[idx] == 0u &&
+              (action_id == (uint16_t)MSL_ACT_MS_SPECIAL_N_END0 ||
+               action_id == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_N_END0)) {
+            const MslCharParams* ms_ch = msl_char_params(batch->state.char_id[idx]);
+            if (ms_ch != NULL) {
+              def[hb].damage = (float)(ms_ch->specialn_release_damage_base +
+                                       ((int32_t)batch->state.specialn_charge_frames[idx] / 30) *
+                                           ms_ch->specialn_release_damage_per_second);
+            }
+          }
           const uint8_t stale_owner =
               hitboxes_source_hitcapsule_stale_damage_owner_applies(batch, idx, ev);
           stale_damage_valid[hb] = stale_owner;

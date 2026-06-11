@@ -5021,7 +5021,7 @@ static inline uint8_t msl_py_apply_specialhi_xrotn(uint8_t char_id, uint16_t act
                                                    float model_scale, float rotate_model,
                                                    uint8_t rotate_model_valid, float* io_x,
                                                    float* io_y, float* io_z) {
-  if (rotate_model_valid == 0u || !msl_specialhi_rotate_model_action(action_id) ||
+  if (rotate_model_valid == 0u || !msl_specialhi_rotate_model_action(char_id, action_id) ||
       !msl_anim_part_under_xrotn(char_id, part_id) || !isfinite(rotate_model)) {
     return 0u;
   }

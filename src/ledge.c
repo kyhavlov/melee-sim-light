@@ -1,4 +1,5 @@
 #include "ledge.h"
+#include "char_registry.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -86,7 +87,8 @@ static inline uint8_t is_fall_like_action(uint16_t a) {
   }
 }
 
-static inline uint8_t is_airborne_action_with_cliffcatch_check(uint16_t a) {
+static inline uint8_t is_airborne_action_with_cliffcatch_check(uint8_t char_id, uint16_t a,
+                                                               float speed_y_self) {
   if (is_fall_like_action(a)) {
     return 1;
   }
@@ -134,7 +136,17 @@ static inline uint8_t is_airborne_action_with_cliffcatch_check(uint16_t a) {
     case MSL_ACT_FX_SPECIAL_AIR_HI:
     case MSL_ACT_FX_SPECIAL_HI_FALL:
     case MSL_ACT_FX_SPECIAL_HI_BOUND:
-      return 1;
+      // Shared 341..372 range: Marth specials handled below; these cases are fox/falco-only.
+      // Marth Dolphin Slash: descending frames use the cliffcatch-enabled collision wrapper
+      // (rising/pre-launch frames use ft_80083B68 without it).
+      // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::{ftMs_SpecialHi_Coll,
+      //   ftMs_SpecialAirHi_Coll} (ft_800831CC branch when cmd0 set and vel.y < 0)
+      if (char_id == (uint8_t)MSL_CHAR_ID_MARTH) {
+        return (uint8_t)((a == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
+                          a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) &&
+                         speed_y_self < 0.0f);
+      }
+      return msl_char_id_is_spacie(char_id);
 
     default:
       return 0;
@@ -1162,7 +1174,8 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
       // whose collision callbacks include the cliff check in-engine.
       // Decomp: cliff check call sites are in shared collision wrappers that run after mpColl.
       // refs/melee/src/melee/ft/ft_081B.c::{ft_800835B0,ft_800831CC,ft_80083090}
-      if (!is_airborne_action_with_cliffcatch_check(a)) {
+      if (!is_airborne_action_with_cliffcatch_check(batch->state.char_id[idx], a,
+                                                    batch->state.speed_y_self[idx])) {
         continue;
       }
       // Decomp: cliff catch checks collision env flags for Collide_LedgeGrabMask.

@@ -23,7 +23,8 @@ static inline uint8_t action_is_blaster_loop(uint16_t action_id) {
              : 0;
 }
 
-static inline uint8_t motion_state_change_calls_ft_80089824(uint16_t prev_action_id,
+static inline uint8_t motion_state_change_calls_ft_80089824(uint8_t char_id,
+                                                            uint16_t prev_action_id,
                                                             uint16_t next_action_id) {
   // Decomp callsites (GALE01):
   // - ftCo_AttackLw3 sets fp->x21EC callback that calls ft_80089824 on AttackLw3 entry.
@@ -49,7 +50,9 @@ static inline uint8_t motion_state_change_calls_ft_80089824(uint16_t prev_action
   if (next_action_id == (uint16_t)MSL_ACT_CO_ATTACK_LW3) {
     return 1;
   }
-  if (action_is_blaster_loop(prev_action_id) && prev_action_id == next_action_id) {
+  if (is_fox_falco(char_id) && action_is_blaster_loop(prev_action_id) &&
+      prev_action_id == next_action_id) {
+    // Fox/Falco-only: ftMs_SpecialNLoop (Marth, same numeric ids) installs no x21EC callback.
     return 1;
   }
   return 0;
@@ -185,7 +188,8 @@ void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::callUnk
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_OnChangeAction
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824 (plAttack_80037B08; sth ..., 0x2088)
-  if (is_fox_falco(char_id) && motion_state_change_calls_ft_80089824(prev_action_id, action_id)) {
+  if (is_fox_falco(char_id) &&
+      motion_state_change_calls_ft_80089824(batch->state.char_id[idx], prev_action_id, action_id)) {
     const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
     batch->state.instance_id[idx] = inc_instance_id_plAttack_80037B08(batch, bi);
   }

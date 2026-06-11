@@ -641,6 +641,68 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     alloc_free(buf);
     return -1;
   }
+  // Marth-family sword special attrs (optional; zero for other ext-attr layouts).
+  float ctr_off[3] = {0.0f, 0.0f, 0.0f};
+  if (json_get_i32_or_default(buf, "specialn_charge_max_seconds", 0,
+                              &out.specialn_charge_max_seconds) != 0 ||
+      json_get_i32_or_default(buf, "specialn_release_damage_base", 0,
+                              &out.specialn_release_damage_base) != 0 ||
+      json_get_i32_or_default(buf, "specialn_release_damage_per_second", 0,
+                              &out.specialn_release_damage_per_second) != 0 ||
+      json_get_f32_or_default(buf, "specialn_entry_vel_divisor", 0.0f,
+                              &out.specialn_entry_vel_divisor) != 0 ||
+      json_get_f32_or_default(buf, "specialn_start_friction", 0.0f, &out.specialn_start_friction) !=
+          0 ||
+      json_get_f32_or_default(buf, "specials_air_entry_vel_x_divisor", 0.0f,
+                              &out.specials_air_entry_vel_x_divisor) != 0 ||
+      json_get_f32_or_default(buf, "specials_air_friction", 0.0f, &out.specials_air_friction) !=
+          0 ||
+      json_get_f32_or_default(buf, "specials_air_entry_vel_y", 0.0f,
+                              &out.specials_air_entry_vel_y) != 0 ||
+      json_get_f32_or_default(buf, "specials_fall_accel", 0.0f, &out.specials_fall_accel) != 0 ||
+      json_get_f32_or_default(buf, "specials_terminal_vel", 0.0f, &out.specials_terminal_vel) !=
+          0 ||
+      json_get_f32_or_default(buf, "specialhi_freefall_mobility_mul", 0.0f,
+                              &out.specialhi_freefall_mobility_mul) != 0 ||
+      json_get_f32_or_default(buf, "specialhi_landing_lag_frames", 0.0f,
+                              &out.specialhi_landing_lag_frames) != 0 ||
+      json_get_f32_or_default(buf, "specialhi_breverse_stick_threshold", 0.0f,
+                              &out.specialhi_breverse_stick_threshold) != 0 ||
+      json_get_f32_or_default(buf, "specialhi_angle_stick_threshold", 0.0f,
+                              &out.specialhi_angle_stick_threshold) != 0 ||
+      json_get_f32_or_default(buf, "specialhi_angle_max_degrees", 0.0f,
+                              &out.specialhi_angle_max_degrees) != 0 ||
+      json_get_f32_or_default(buf, "specialhi_air_entry_vel_x_mul", 0.0f,
+                              &out.specialhi_air_entry_vel_x_mul) != 0 ||
+      json_get_f32_or_default(buf, "specialhi_launch_decay_mul", 0.0f,
+                              &out.specialhi_launch_decay_mul) != 0 ||
+      json_get_f32_or_default(buf, "specialhi_fall_accel", 0.0f, &out.specialhi_fall_accel) != 0 ||
+      json_get_f32_or_default(buf, "specialhi_terminal_vel", 0.0f, &out.specialhi_terminal_vel) !=
+          0 ||
+      json_get_f32_or_default(buf, "speciallw_air_entry_vel_x_divisor", 0.0f,
+                              &out.speciallw_air_entry_vel_x_divisor) != 0 ||
+      json_get_f32_or_default(buf, "speciallw_air_friction", 0.0f, &out.speciallw_air_friction) !=
+          0 ||
+      json_get_f32_or_default(buf, "speciallw_fall_accel", 0.0f, &out.speciallw_fall_accel) != 0 ||
+      json_get_f32_or_default(buf, "speciallw_terminal_vel", 0.0f, &out.speciallw_terminal_vel) !=
+          0 ||
+      json_get_f32_or_default(buf, "speciallw_counter_damage_mul", 0.0f,
+                              &out.speciallw_counter_damage_mul) != 0 ||
+      json_get_f32_or_default(buf, "speciallw_counter_shield_strength", 0.0f,
+                              &out.speciallw_counter_shield_strength) != 0 ||
+      json_get_i32_or_default(buf, "speciallw_counter_desc_bone", 0,
+                              &out.speciallw_counter_desc_bone) != 0 ||
+      (strstr(buf, "\"speciallw_counter_desc_offset\"") != NULL &&
+       json_get_f32_array3(buf, "speciallw_counter_desc_offset", ctr_off) != 0) ||
+      json_get_f32_or_default(buf, "speciallw_counter_desc_size", 0.0f,
+                              &out.speciallw_counter_desc_size) != 0) {
+    fprintf(stderr, "msl: char params sword special attr parse failed in %s\n", path);
+    alloc_free(buf);
+    return -1;
+  }
+  out.speciallw_counter_desc_offset_x = ctr_off[0];
+  out.speciallw_counter_desc_offset_y = ctr_off[1];
+  out.speciallw_counter_desc_offset_z = ctr_off[2];
   out.reflector_offset_x = refl_off[0];
   out.reflector_offset_y = refl_off[1];
   out.reflector_offset_z = refl_off[2];

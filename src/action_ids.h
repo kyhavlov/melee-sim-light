@@ -314,6 +314,43 @@ enum {
 // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirN{Start,Loop,End}_Phys
 //   (all call `ft_80084DB0`)
 enum {
+  // Marth (ftMs_*) char-special motion states. Same numeric range as the fox/falco specials
+  // (per-character action id space above ftCo_MS_Count=341); consumers must gate on char_id.
+  // Submotion mapping is a fixed 1:1 offset: submotion = 295 + (action - 341).
+  // refs/melee/src/melee/ft/chara/ftMars/forward.h::ftMs_MotionState
+  MSL_ACT_MS_SPECIAL_N_START = 0x0155,      // ftMs_MS_SpecialNStart (341)
+  MSL_ACT_MS_SPECIAL_N_LOOP = 0x0156,       // ftMs_MS_SpecialNLoop
+  MSL_ACT_MS_SPECIAL_N_END0 = 0x0157,       // ftMs_MS_SpecialNEnd0
+  MSL_ACT_MS_SPECIAL_N_END1 = 0x0158,       // ftMs_MS_SpecialNEnd1
+  MSL_ACT_MS_SPECIAL_AIR_N_START = 0x0159,  // ftMs_MS_SpecialAirNStart
+  MSL_ACT_MS_SPECIAL_AIR_N_LOOP = 0x015A,   // ftMs_MS_SpecialAirNLoop
+  MSL_ACT_MS_SPECIAL_AIR_N_END0 = 0x015B,   // ftMs_MS_SpecialAirNEnd0
+  MSL_ACT_MS_SPECIAL_AIR_N_END1 = 0x015C,   // ftMs_MS_SpecialAirNEnd1
+  MSL_ACT_MS_SPECIAL_S1 = 0x015D,           // ftMs_MS_SpecialS1 (349)
+  MSL_ACT_MS_SPECIAL_S2_HI = 0x015E,        // ftMs_MS_SpecialS2Hi
+  MSL_ACT_MS_SPECIAL_S2_LW = 0x015F,        // ftMs_MS_SpecialS2Lw
+  MSL_ACT_MS_SPECIAL_S3_HI = 0x0160,        // ftMs_MS_SpecialS3Hi
+  MSL_ACT_MS_SPECIAL_S3_S = 0x0161,         // ftMs_MS_SpecialS3S
+  MSL_ACT_MS_SPECIAL_S3_LW = 0x0162,        // ftMs_MS_SpecialS3Lw
+  MSL_ACT_MS_SPECIAL_S4_HI = 0x0163,        // ftMs_MS_SpecialS4Hi
+  MSL_ACT_MS_SPECIAL_S4_S = 0x0164,         // ftMs_MS_SpecialS4S
+  MSL_ACT_MS_SPECIAL_S4_LW = 0x0165,        // ftMs_MS_SpecialS4Lw (357)
+  MSL_ACT_MS_SPECIAL_AIR_S1 = 0x0166,       // ftMs_MS_SpecialAirS1 (358)
+  MSL_ACT_MS_SPECIAL_AIR_S2_HI = 0x0167,    // ftMs_MS_SpecialAirS2Hi
+  MSL_ACT_MS_SPECIAL_AIR_S2_LW = 0x0168,    // ftMs_MS_SpecialAirS2Lw
+  MSL_ACT_MS_SPECIAL_AIR_S3_HI = 0x0169,    // ftMs_MS_SpecialAirS3Hi
+  MSL_ACT_MS_SPECIAL_AIR_S3_S = 0x016A,     // ftMs_MS_SpecialAirS3S
+  MSL_ACT_MS_SPECIAL_AIR_S3_LW = 0x016B,    // ftMs_MS_SpecialAirS3Lw
+  MSL_ACT_MS_SPECIAL_AIR_S4_HI = 0x016C,    // ftMs_MS_SpecialAirS4Hi
+  MSL_ACT_MS_SPECIAL_AIR_S4_S = 0x016D,     // ftMs_MS_SpecialAirS4S
+  MSL_ACT_MS_SPECIAL_AIR_S4_LW = 0x016E,    // ftMs_MS_SpecialAirS4Lw (366)
+  MSL_ACT_MS_SPECIAL_HI = 0x016F,           // ftMs_MS_SpecialHi (367)
+  MSL_ACT_MS_SPECIAL_AIR_HI = 0x0170,       // ftMs_MS_SpecialAirHi (368)
+  MSL_ACT_MS_SPECIAL_LW = 0x0171,           // ftMs_MS_SpecialLw (369)
+  MSL_ACT_MS_SPECIAL_LW_HIT = 0x0172,       // ftMs_MS_SpecialLwHit (370)
+  MSL_ACT_MS_SPECIAL_AIR_LW = 0x0173,       // ftMs_MS_SpecialAirLw (371)
+  MSL_ACT_MS_SPECIAL_AIR_LW_HIT = 0x0174,   // ftMs_MS_SpecialAirLwHit (372)
+
   MSL_ACT_FX_SPECIAL_N_START = 0x0155,      // ftFx_MS_SpecialNStart
   MSL_ACT_FX_SPECIAL_N_LOOP = 0x0156,       // ftFx_MS_SpecialNLoop
   MSL_ACT_FX_SPECIAL_N_END = 0x0157,        // ftFx_MS_SpecialNEnd
@@ -667,7 +704,7 @@ static inline uint8_t msl_action_is_air_locomotion(uint16_t action_id) {
   }
 }
 
-static inline uint8_t msl_action_allows_fastfall(uint16_t action_id) {
+static inline uint8_t msl_action_allows_fastfall(uint8_t char_id, uint16_t action_id) {
   // The ftCommon_CheckFallFast + ftCommon_Fall/FallFast helper (`ft_80084DB0`) is used by many
   // common airborne action states, not just the basic Fall motions.
   //
@@ -700,6 +737,7 @@ static inline uint8_t msl_action_allows_fastfall(uint16_t action_id) {
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_MissFoot_Phys
     // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
     case MSL_ACT_MISS_FOOT:
+      return 1u;
     // Decomp: `ftFx_SpecialAirN{Start,Loop,End}_Phys` call `ft_80084DB0`.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNStart_Phys
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Phys
@@ -707,9 +745,20 @@ static inline uint8_t msl_action_allows_fastfall(uint16_t action_id) {
     case MSL_ACT_FX_SPECIAL_AIR_N_START:
     case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
     case MSL_ACT_FX_SPECIAL_AIR_N_END:
+      // ft_80084DB0 fastfall path is the fox/falco AirN family; Marth's air Shield Breaker
+      // (same numeric ids) uses plain ftCommon_Fall (no fastfall).
+      // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c
+      if (char_id != (uint8_t)1u && char_id != (uint8_t)22u) {
+        return 0u;
+      }
+      return 1u;
     // Decomp: `ftFx_SpecialHiFall_Phys` calls `ft_80084DB0`.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Phys
     case MSL_ACT_FX_SPECIAL_HI_FALL:
+      if (char_id != (uint8_t)1u && char_id != (uint8_t)22u) {
+        return 0u;
+      }
+      return 1u;
     case MSL_ACT_ESCAPE_AIR:
     // Decomp: both CliffJump2 variants call `ft_80084DB0` after the first-frame x0 gate.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Phys

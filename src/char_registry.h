@@ -21,3 +21,10 @@ static const MslCharRegistryEntry MSL_CHAR_REGISTRY[] = {
 };
 
 enum { MSL_CHAR_REGISTRY_COUNT = sizeof(MSL_CHAR_REGISTRY) / sizeof(MSL_CHAR_REGISTRY[0]) };
+
+// Fox/Falco ("spacie") guard for the shared fox-special action-id range (341..372). Other
+// characters reuse the same numeric ids for their own specials (Marth ftMs_*), so every
+// MSL_ACT_FX_* comparison in shared code must be gated on this predicate.
+static inline uint8_t msl_char_id_is_spacie(uint8_t char_id) {
+  return (uint8_t)(char_id == (uint8_t)MSL_CHAR_ID_FOX || char_id == (uint8_t)MSL_CHAR_ID_FALCO);
+}

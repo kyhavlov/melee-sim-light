@@ -188,6 +188,15 @@ uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_
 // Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) specials_by_msid["<msid>"].events set_cmd_var(idx=0).
 uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid, int action_frame);
 
+// Script-owned cmd var value (0/1) at an animation frame; honors both value-1 and value-0
+// pulses (window open/close), excluding frame-0 value-0 entry initializers.
+// Consumers: Marth special windows (Dancing Blade chain cmd0, Counter intercept cmd1,
+// Dolphin Slash launch cmd0).
+uint8_t move_tables_special_throw_flags_window(uint8_t char_id, uint16_t msid,
+                                               float anim_frame_f32);
+uint8_t move_tables_special_cmd_var_value_at_frame(uint8_t char_id, uint16_t msid, uint8_t var_idx,
+                                                   float anim_frame_f32);
+
 // Returns the exact command-script cmd_var[0] window without the loop-repeat latch tail used by
 // move_tables_special_cmd0_active_at_frame().
 uint8_t move_tables_special_cmd0_raw_active_at_frame(uint8_t char_id, uint16_t msid,

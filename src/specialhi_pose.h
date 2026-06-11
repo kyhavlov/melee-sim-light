@@ -5,9 +5,15 @@
 
 #include "action_ids.h"
 #include "batch_internal.h"
+#include "ids.h"
 #include "msl_math.h"
 
-static inline uint8_t msl_specialhi_rotate_model_action(uint16_t action_id) {
+static inline uint8_t msl_specialhi_rotate_model_action(uint8_t char_id, uint16_t action_id) {
+  if (char_id != (uint8_t)MSL_CHAR_ID_FOX && char_id != (uint8_t)MSL_CHAR_ID_FALCO) {
+    // Firefox/Firebird model rotation is fox/falco-only; the 341..372 action-id range is
+    // shared with other characters' specials (see char_registry.h).
+    return 0u;
+  }
   switch (action_id) {
     case MSL_ACT_FX_SPECIAL_HI:
     case MSL_ACT_FX_SPECIAL_AIR_HI:

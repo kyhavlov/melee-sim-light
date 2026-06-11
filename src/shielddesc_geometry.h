@@ -1,6 +1,7 @@
 #pragma once
 
 #include <float.h>
+#include "char_registry.h"
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -614,6 +615,7 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
   // ShieldDesc-miss/BODY boundaries.
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
   const uint8_t shine_start_enable_edge = (batch->state.hitbox_enable_edge[hb_i] &&
+                                           msl_char_id_is_spacie(batch->state.char_id[a_idx]) &&
                                            (a_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
                                             a_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START))
                                               ? 1u
