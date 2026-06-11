@@ -40,51 +40,51 @@ validation.profile.ignored: state_flags[4]&0x80 reason=Slippi fp+0x221F camera-s
 
 == datasets/marth_falco_recent/replays/validation/marth_falco_recent/VictoriousSpitefulAlpaca.msl ==
 Records: 8922  Players/scored per record: 2  Total player-frames: 17844
-mismatch.action_id: 16 / 17844 (0.000897)
-mismatch.action_frame: 64 / 17844 (0.003587)
+mismatch.action_id: 14 / 17844 (0.000785)
+mismatch.action_frame: 62 / 17844 (0.003475)
 mismatch.on_ground: 6 / 17844 (0.000336)
 mismatch.facing: 14 / 17844 (0.000785)
 mismatch.stocks: 0 / 17844 (0.000000)
 mismatch.jumps_left: 7 / 17844 (0.000392)
 mismatch.is_dead: 0 / 17844 (0.000000)
-mismatch.hitlag: 12 / 17844 (0.000672)
-mismatch.hitstun: 7 / 17844 (0.000392)
+mismatch.hitlag: 10 / 17844 (0.000560)
+mismatch.hitstun: 6 / 17844 (0.000336)
 mismatch.l_cancel: 1 / 17844 (0.000056)
 mismatch.hurtbox_state: 1 / 17844 (0.000056)
 mismatch.ground_id: 1 / 17844 (0.000056)
-mismatch.animation_index: 15 / 17844 (0.000841)
+mismatch.animation_index: 13 / 17844 (0.000729)
 mismatch.instance_hit_by: 5 / 17844 (0.000280)
-mismatch.instance_id: 12 / 17844 (0.000672)
-mismatch.last_attack_landed: 4 / 17844 (0.000224)
+mismatch.instance_id: 10 / 17844 (0.000560)
+mismatch.last_attack_landed: 3 / 17844 (0.000168)
 mismatch.combo_count: 2 / 17844 (0.000112)
 mismatch.last_hit_by: 8 / 17844 (0.000448)
-mismatch.state_flags: 42 / 89220 (0.000471)
+mismatch.state_flags: 39 / 89220 (0.000437)
 mismatch.item_exists: 2 / 133830 (0.000015)
 mismatch.item_type: 2 / 133830 (0.000015)
 mismatch.item_state: 0 / 133830 (0.000000)
 mismatch.item_owner: 2 / 133830 (0.000015)
 mismatch.item_instance_id: 2 / 133830 (0.000015)
 ignored_mismatch.state_flags[4]&0x80: 30 / 17844 (0.001681)
-err.pos_x: mae=0.002501 p95=0.000000 max=2.814636
-err.pos_y: mae=0.002805 p95=0.000000 max=4.612979
-err.speed_air_x_self: mae=0.001697 p95=0.000000 max=2.814622
+err.pos_x: mae=0.002174 p95=0.000000 max=2.814636
+err.pos_y: mae=0.002382 p95=0.000000 max=4.612979
+err.speed_air_x_self: mae=0.001365 p95=0.000000 max=2.814622
 err.speed_ground_x_self: mae=0.000321 p95=0.000000 max=1.378500
-err.speed_y_self: mae=0.002458 p95=0.000000 max=2.140000
-err.speed_x_attack: mae=0.000433 p95=0.000000 max=3.853634
-err.speed_y_attack: mae=0.000646 p95=0.000000 max=4.507009
-err.percent: mae=0.002689 p95=0.000000 max=14.000000
+err.speed_y_self: mae=0.002031 p95=0.000000 max=2.045000
+err.speed_x_attack: mae=0.000411 p95=0.000000 max=3.853634
+err.speed_y_attack: mae=0.000394 p95=0.000000 max=3.721411
+err.percent: mae=0.001905 p95=0.000000 max=14.000000
 err.shield_hp: mae=0.000500 p95=0.000000 max=6.200001
 err.item_pos_x: mae=0.045829 p95=0.000000 max=52.397186
 err.item_pos_y: mae=0.012448 p95=0.000000 max=13.752838
 err.item_vel_x: mae=0.005027 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.000024 p95=0.000000 max=0.031715
-overall.discrete_mismatch: 225 / 1079562
-overall.strict_discrete_mismatch: 255 / 1079562
+overall.discrete_mismatch: 210 / 1079562
+overall.strict_discrete_mismatch: 240 / 1079562
 overall.ignored_discrete_mismatch: 30
-overall.float_norm_mae_p95: 0.00030609
+overall.float_norm_mae_p95: 0.00025571
 
 == suite summary ==
-overall.discrete_mismatch: 225 / 1079562
-overall.strict_discrete_mismatch: 255 / 1079562
+overall.discrete_mismatch: 210 / 1079562
+overall.strict_discrete_mismatch: 240 / 1079562
 overall.ignored_discrete_mismatch: 30
-overall.float_norm_mae_p95: 0.00030609
+overall.float_norm_mae_p95: 0.00025571

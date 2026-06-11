@@ -319,22 +319,14 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
 
       // ---- Dolphin Slash -------------------------------------------------
       if (a == (uint16_t)MSL_ACT_MS_SPECIAL_HI || a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) {
-        // Coll sequencing (ftMs_Special(Air)Hi_Coll): the first descending collision pass only
-        // sets cmd_vars[1]; the cliffcatch-enabled wrapper (ft_800831CC) runs from the second.
-        // This update runs pre-physics, so the start-of-frame vel.y mirrors what the previous
-        // frame's Coll saw.
-        if (!batch->state.on_ground[idx] && batch->state.special_cmd1[idx] == 0u &&
-            batch->state.speed_y_self[idx] < 0.0f &&
-            move_tables_special_cmd_var_value_at_frame(cid, msid, 0u, frame)) {
-          batch->state.special_cmd1[idx] = 1u;
-        }
         // Pre-launch IASA: stick X tilts the launch angle (ftMs_SpecialHi_IASA).
         const uint8_t launched = move_tables_special_cmd_var_value_at_frame(cid, msid, 0u, frame);
-        if (!launched) {
+        {
           const float sx = ms_stick_unit(batch->state.input_main_x[idx]);
           const float ax = fabsf(sx);
-          if (ax > ch->specialhi_angle_stick_threshold &&
+          if (!launched && ax > ch->specialhi_angle_stick_threshold &&
               ch->specialhi_angle_stick_threshold < 1.0f) {
+            // Launch-angle tilt accumulates only while cmd_vars[0] is clear.
             float deg =
                 ch->specialhi_angle_max_degrees * ((ax - ch->specialhi_angle_stick_threshold) /
                                                    (1.0f - ch->specialhi_angle_stick_threshold));
@@ -344,14 +336,30 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
               batch->state.special_stick_angle[idx] = rad;
             }
           }
-          // B-reverse window: script throw-flags bit + stick past threshold flips facing.
+          // B-reverse: ftCheckThrowB3 runs UNCONDITIONALLY in the IASA (not under cmd0==0);
+          // the script's set_throw_flags pulse (frame 6, the same frame cmd0 sets) is
+          // consume-once, modeled as a single-frame window at the pulse crossing.
+          // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_IASA
+          // refs/melee/src/melee/ft/inlines.h::ftCheckThrowB3
           if (move_tables_special_throw_flags_window(cid, msid, frame) &&
+              !move_tables_special_throw_flags_window(cid, msid, frame - 1.0f) &&
               ax > ch->specialhi_breverse_stick_threshold) {
             batch->state.facing[idx] = (uint8_t)(sx > 0.0f);
           }
         }
         if (ms_anim_finished(cid, msid, frame)) {
-          ms_enter_fall_special_from_specialhi(batch, ch, idx);
+          if (batch->state.on_ground[idx]) {
+            // Grounded anim end (ground contact resolved the same frame): the landing owner is
+            // LandingFallSpecial with x2C, not an (unexitable) grounded FallSpecial.
+            // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
+            msl_locomotion_enter_fall_special_via_ftco_80096900(batch, idx,
+                                                                ch->specialhi_landing_lag_frames);
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING_FALL_SPECIAL;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          } else {
+            ms_enter_fall_special_from_specialhi(batch, ch, idx);
+          }
         }
         break;
       }
@@ -389,6 +397,45 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
 // ---------------------------------------------------------------------------
 // Physics (decomp: ftMs_Special*_Phys)
 // ---------------------------------------------------------------------------
+
+// ft_80084F3C: grounded friction with the common high-speed multiplier when |gr_vel| exceeds
+// walk_max. refs/melee/src/melee/ft/ft_084E.c::ft_80084F3C
+static void ms_ground_friction_f3c(MslBatch* batch, const MslCharParams* ch, size_t idx) {
+  const MslCommonParams* c = msl_common_params();
+  float friction = ch->gr_friction;
+  const float v = batch->state.speed_ground_x_self[idx];
+  if (fabsf(v) > ch->walk_max_vel && c != NULL) {
+    friction *= c->high_speed_friction_mul;
+  }
+  float nv = v;
+  if (nv > 0.0f) {
+    nv = (nv > friction) ? nv - friction : 0.0f;
+  } else if (nv < 0.0f) {
+    nv = (nv < -friction) ? nv + friction : 0.0f;
+  }
+  batch->state.speed_ground_x_self[idx] = nv;
+}
+
+// ft_80084FA8 -> ft_80085030: when the animation owns root motion, gr_vel is driven to the
+// anim's per-frame TransN z-delta (facing-aligned); otherwise the F3C friction applies.
+// refs/melee/src/melee/ft/ft_084E.c::{ft_80084FA8,ft_80085030}
+static void ms_ground_anim_vel_fa8(MslBatch* batch, const MslCharParams* ch, size_t idx,
+                                   uint16_t msid, float frame) {
+  if (msl_anim_uses_root_motion(batch->state.char_id[idx], msid)) {
+    float t_cur[3];
+    float t_prev[3];
+    const uint16_t f_cur = msl_anim_frame_floor_u16(frame);
+    const uint16_t f_prev = (f_cur > 0u) ? (uint16_t)(f_cur - 1u) : 0u;
+    if (anim_pose_get_transn(batch->state.char_id[idx], msid, f_cur, t_cur) == 0 &&
+        anim_pose_get_transn(batch->state.char_id[idx], msid, f_prev, t_prev) == 0) {
+      const float facing = ms_facing_dir(batch, idx);
+      const float dz = (t_cur[2] - t_prev[2]) * ch->model_scaling;
+      batch->state.speed_ground_x_self[idx] = dz * facing;
+      return;
+    }
+  }
+  ms_ground_friction_f3c(batch, ch, idx);
+}
 
 static void ms_fall_step(MslBatch* batch, size_t idx, float grav, float terminal) {
   float vy = batch->state.speed_y_self[idx];
@@ -511,7 +558,10 @@ uint8_t marth_specials_phys(MslBatch* batch, size_t idx) {
       // Ground-origin Dolphin Slash: once airborne, anim-driven launch until descending,
       // then post-launch fall + reduced drift (ftMs_SpecialHi_Phys).
       if (on_ground) {
-        return 0u;  // pre-launch grounded frames: generic ground anim velocity
+        // Pre-launch grounded frames: ft_80084FA8 (anim root-motion owner; the launch wind-up
+        // root motion replaces carried gr_vel rather than sliding on it).
+        ms_ground_anim_vel_fa8(batch, ch, idx, msid, frame);
+        return 1u;
       }
       if (batch->state.special_cmd2[idx] == 0u) {
         ms_specialhi_launch_vel(batch, ch, idx, msid, frame);
@@ -520,6 +570,11 @@ uint8_t marth_specials_phys(MslBatch* batch, size_t idx) {
         }
         return 1u;
       }
+      // ftMs_SpecialHi_Coll sequencing: the first descending collision pass only arms
+      // cmd_vars[1]; the cliffcatch wrapper runs from the second. This phys branch first runs
+      // on the second descending frame (cmd2 was set by the previous frame's launch branch),
+      // so arming here gives the ledge admission vanilla's one-frame delay.
+      batch->state.special_cmd1[idx] = 1u;
       ms_fall_step(batch, idx, ch->specialhi_fall_accel, ch->specialhi_terminal_vel);
       ms_air_drift_step(batch, ch, idx, ch->specialhi_freefall_mobility_mul);
       return 1u;
@@ -540,6 +595,8 @@ uint8_t marth_specials_phys(MslBatch* batch, size_t idx) {
         }
         return 1u;
       }
+      // See the grounded-origin branch: arm cmd_vars[1] from the second descending frame.
+      batch->state.special_cmd1[idx] = 1u;
       ms_fall_step(batch, idx, ch->specialhi_fall_accel, ch->specialhi_terminal_vel);
       ms_air_drift_step(batch, ch, idx, ch->specialhi_freefall_mobility_mul);
       return 1u;
@@ -547,7 +604,9 @@ uint8_t marth_specials_phys(MslBatch* batch, size_t idx) {
     case MSL_ACT_MS_SPECIAL_LW:
     case MSL_ACT_MS_SPECIAL_LW_HIT:
       if (on_ground) {
-        return 0u;  // generic ground friction
+        // ftMs_SpecialLw_Phys / ftMs_SpecialLwHit_Phys: ft_80084F3C.
+        ms_ground_friction_f3c(batch, ch, idx);
+        return 1u;
       }
       ms_fall_step(batch, idx, ch->speciallw_fall_accel, ch->speciallw_terminal_vel);
       ms_air_friction_step(batch, idx, ch->speciallw_air_friction);
@@ -563,7 +622,15 @@ uint8_t marth_specials_phys(MslBatch* batch, size_t idx) {
     default:
       if (ms_db_is_stage(a)) {
         if (on_ground) {
-          return 0u;  // generic grounded anim/friction owners
+          // ftMs_SpecialAirS1/S2/S4_Phys grounded branch: ft_80084F3C (friction);
+          // ftMs_SpecialS3_Phys grounded branch: ft_80084FA8 (anim root-motion owner).
+          if (a == (uint16_t)MSL_ACT_MS_SPECIAL_S3_HI || a == (uint16_t)MSL_ACT_MS_SPECIAL_S3_S ||
+              a == (uint16_t)MSL_ACT_MS_SPECIAL_S3_LW) {
+            ms_ground_anim_vel_fa8(batch, ch, idx, msid, frame);
+          } else {
+            ms_ground_friction_f3c(batch, ch, idx);
+          }
+          return 1u;
         }
         ms_fall_step(batch, idx, ch->specials_fall_accel, ch->specials_terminal_vel);
         ms_air_friction_step(batch, idx, ch->specials_air_friction);
@@ -577,31 +644,144 @@ uint8_t marth_specials_phys(MslBatch* batch, size_t idx) {
 // Entry dispatch + update loop
 // ---------------------------------------------------------------------------
 
-static uint8_t ms_action_allows_b_entry(const MslBatch* batch, size_t idx, uint16_t a,
-                                        uint8_t on_ground) {
-  // Conservative actionable set mirroring the spacie dispatcher's gates (blaster.c):
-  // grounded locomotion/idle states and aerial drift states.
+// Grounded/aerial B-special admission, per action and per direction, mirroring the ftCo IASA
+// dispatch chains (each grounded action's IASA calls a specific subset of
+// ftCo_SpecialS_CheckInput / ftCo_Attack100_CheckInput (up) / ftCo_800D6824 (neutral) /
+// ftCo_800D68C0 (down)).
+// refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Walk.c,ftCo_Squat.c,
+//   ftCo_SquatWait.c,ftCo_Run.c,ftCo_Dash.c,ftCo_RunBrake.c,ftCo_TurnRun.c,ftCo_Turn.c,
+//   ftCo_KneeBend.c,ftCo_Ottotto.c,ftCo_Landing.c}
+enum {
+  MS_B_SIDE = 1u << 0,
+  MS_B_UP = 1u << 1,
+  MS_B_NEUTRAL = 1u << 2,
+  MS_B_DOWN = 1u << 3,
+  MS_B_ALL = 0xFu,
+};
+
+static uint8_t ms_b_entry_mask(const MslBatch* batch, size_t idx, uint16_t a, uint8_t on_ground) {
   if (on_ground) {
     switch (a) {
+      // Full chain: SpecialS -> Attack100(up) -> D6824(neutral) -> D68C0(down).
+      // RunDirect_IASA and OttottoWait_IASA (which delegates to Ottotto_IASA) run the same
+      // full chain as Run/Ottotto.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_IASA
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_OttottoWait_IASA
       case MSL_ACT_WAIT:
       case MSL_ACT_WALK_SLOW:
       case MSL_ACT_WALK_MIDDLE:
       case MSL_ACT_WALK_FAST:
-      case MSL_ACT_TURN:
-      case MSL_ACT_DASH:
+      case MSL_ACT_SQUAT:
       case MSL_ACT_RUN:
-      case MSL_ACT_RUN_BRAKE:
-      case MSL_ACT_SQUAT_WAIT:
-        return 1u;
+      case MSL_ACT_RUN_DIRECT:
+      case MSL_ACT_OTTOTTO:
+      case MSL_ACT_OTTOTTO_WAIT:
+        return MS_B_ALL;
       case MSL_ACT_LANDING: {
+        // Landing_IASA runs the full chain only past the landing-lag gate.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
         const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
         const float cur = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-        return (ch != NULL && cur >= (float)ch->landing_lag_frames) ? 1u : 0u;
+        return (ch != NULL && cur >= (float)ch->landing_lag_frames) ? (uint8_t)MS_B_ALL : 0u;
       }
+      // SquatWait_IASA / SquatRv_IASA: D68C0(down) -> Attack100(up); no SpecialS, no D6824.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
+      case MSL_ACT_SQUAT_WAIT:
+      case MSL_ACT_SQUAT_RV:
+        return (uint8_t)(MS_B_UP | MS_B_DOWN);
+      // Turn_IASA: SpecialS -> D68C0(down) -> Attack100(up); no D6824(neutral).
+      case MSL_ACT_TURN:
+        return (uint8_t)(MS_B_SIDE | MS_B_UP | MS_B_DOWN);
+      // Dash_IASA: SpecialS only.
+      case MSL_ACT_DASH:
+        return (uint8_t)MS_B_SIDE;
+      // KneeBend_IASA: Attack100(up) first (jump-cancel up-special). The IASA first runs on
+      // the frame AFTER entry (callbacks already ran for the entering frame), so block the
+      // entry frame itself.
+      case MSL_ACT_KNEE_BEND:
+        return (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_KNEE_BEND) ? (uint8_t)MS_B_UP
+                                                                                 : 0u;
+      // GuardOff_IASA runs the full chain only while mv.co.guard.x1C is armed (powershield
+      // contact window); the engine lane already exists for the spacie dispatcher.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOff_IASA,ftCo_80094138}
+      case MSL_ACT_GUARD_OFF:
+        return (batch->state.guard_special_enable_timer_x1c[idx] != 0u) ? (uint8_t)MS_B_ALL : 0u;
+      // Grounded attack IASA -> specials, gated on fp->allow_interrupt (the script-owned
+      // allow_interrupt event via move_tables):
+      // - AttackS4_IASA runs the full special chain directly.
+      // - Attack13/AttackDash/AttackS3*/AttackHi3/AttackHi4/AttackLw4 delegate to
+      //   ftCo_Wait_IASA (full chain) once allow_interrupt is set.
+      // - Attack11/Attack12/AttackLw3/Attack100* run attack/locomotion checks only - NO
+      //   special dispatch (excluded below by default).
+      // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackS4.c,ftCo_Attack1.c,
+      //   ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,
+      //   ftCo_AttackLw4.c,ftCo_AttackLw3.c}
+      case MSL_ACT_ATTACK_13:
+      case MSL_ACT_ATTACK_DASH:
+      case MSL_ACT_ATTACK_S3_HI:
+      case MSL_ACT_ATTACK_S3_HI_S:
+      case MSL_ACT_ATTACK_S3_S:
+      case MSL_ACT_ATTACK_S3_LW_S:
+      case MSL_ACT_ATTACK_S3_LW:
+      case MSL_ACT_ATTACK_HI3:
+      case MSL_ACT_ATTACK_S4_HI:
+      case MSL_ACT_ATTACK_S4_HI_S:
+      case MSL_ACT_ATTACK_S4_S:
+      case MSL_ACT_ATTACK_S4_LW_S:
+      case MSL_ACT_ATTACK_S4_LW:
+      case MSL_ACT_ATTACK_HI4:
+      case MSL_ACT_ATTACK_LW4:
+        return move_tables_grounded_attack_allow_interrupt(
+                   batch->state.char_id[idx], a,
+                   msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]))
+                   ? (uint8_t)MS_B_ALL
+                   : 0u;
+      // Grounded Damage_IASA delegates to ftCo_Wait_IASA once the hitstun scalar clears
+      // (x221C_b6); the dispatcher's hitstun gate already enforces the scalar.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+      case MSL_ACT_DAMAGE_HI_1:
+      case MSL_ACT_DAMAGE_HI_1 + 1:
+      case MSL_ACT_DAMAGE_HI_1 + 2:
+      case MSL_ACT_DAMAGE_N_1:
+      case MSL_ACT_DAMAGE_N_1 + 1:
+      case MSL_ACT_DAMAGE_N_1 + 2:
+      case MSL_ACT_DAMAGE_LW_1:
+      case MSL_ACT_DAMAGE_LW_1 + 1:
+      case MSL_ACT_DAMAGE_LW_1 + 2:
+        return MS_B_ALL;
+      // AppealS_IASA runs the full chain gated on fp->allow_interrupt, but no extracted
+      // MSLFTSC1 allow_interrupt event exists for the Appeal msids (engine-wide retained
+      // policy: Appeal rows stay anim-end-only until the data owns the event), so Appeal
+      // stays blocked here intentionally.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_AppealS_IASA
+      // RunBrake/TurnRun IASA: jump/dash checks only, no special dispatch. Exception: on
+      // the brake ENTRY frame the B edge belongs to the same frame's Run_IASA /
+      // RunDirect_IASA (both run the full chain BEFORE the brake transition in source
+      // order, and the locomotion brake transition accepts either source); the sim's
+      // locomotion brakes before this dispatcher runs, so honor the pre-brake chain.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_IASA
+      case MSL_ACT_RUN_BRAKE:
+        return (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_RUN ||
+                batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_RUN_DIRECT)
+                   ? (uint8_t)MS_B_ALL
+                   : 0u;
       default:
         return 0u;
     }
   }
+  // Aerial: ftCo_SpecialAir_CheckInput resolves all four; reachable from air locomotion,
+  // Pass, and post-hitstun DamageFall (the dispatcher's hitstun gate).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Fall.c,ftCo_Jump.c,ftCo_JumpAerial.c,
+  //   ftCo_Pass.c,ftCo_DamageFall.c}
+  //
+  // TODO(source-backed, blocked on an input-history lane): ftCo_800D69C4 admits the aerial
+  // up-special on a BUFFERED press (fp->x686 == 0 && fp->x68B >= p_ftCommonData->x1C, the
+  // reverse-buffer window). The engine has no x68B input-history lane yet, so the aerial
+  // dispatcher requires the same-frame B edge; test_aerial_up_b_buffer_not_modeled locks the
+  // conservative behavior until the lane lands.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D69C4
   switch (a) {
     case MSL_ACT_JUMP_F:
     case MSL_ACT_JUMP_B:
@@ -613,7 +793,30 @@ static uint8_t ms_action_allows_b_entry(const MslBatch* batch, size_t idx, uint1
     case MSL_ACT_FALL_AERIAL:
     case MSL_ACT_FALL_AERIAL_F:
     case MSL_ACT_FALL_AERIAL_B:
-      return 1u;
+    case MSL_ACT_PASS:
+    case MSL_ACT_DAMAGE_FALL:
+      return MS_B_ALL;
+    // Airborne Damage/DamageFly IASA delegate into Fall_IASA_Inner / DamageFall_IASA once
+    // the hitstun scalar clears (the dispatcher's hitstun gate); same split the spacie
+    // dispatcher models.
+    // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Damage.c,ftCo_DamageFall.c,ftCo_Fall.c}
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_1 + 1:
+    case MSL_ACT_DAMAGE_AIR_1 + 2:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+      return MS_B_ALL;
+    // PassiveWall_IASA runs ftCo_SpecialAir_CheckInput; the walltech timer blocks the
+    // window exactly as the spacie dispatcher models.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c (PassiveWall)
+    case MSL_ACT_PASSIVE_WALL:
+    case MSL_ACT_PASSIVE_WALL_JUMP:
+      return (batch->state.passivewall_timer[idx] != 0u) ? 0u : (uint8_t)MS_B_ALL;
+    // Out-of-scope (engine substrate): BuryJump/CaptureJump (no capture-escape jump
+    // machinery), ItemParasol/ItemScope/ItemScrew (no held items).
     default:
       return 0u;
   }
@@ -662,7 +865,8 @@ void marth_specials_update_pre_physics(MslBatch* batch) {
       if ((pressed & (uint16_t)MSL_BUTTON_B) == 0u) {
         continue;
       }
-      if (!ms_action_allows_b_entry(batch, idx, a, on_ground)) {
+      const uint8_t mask = ms_b_entry_mask(batch, idx, a, on_ground);
+      if (mask == 0u) {
         continue;
       }
       const float sx =
@@ -670,32 +874,39 @@ void marth_specials_update_pre_physics(MslBatch* batch) {
       const float sy =
           ms_apply_deadzone(ms_stick_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
       const float ax = fabsf(sx);
-      // Grounded order: Side -> Up -> Down -> Neutral; aerial: Up -> Down -> Side -> Neutral
-      // (matches the resolver ordering in blaster.c with decomp citations).
+      // Resolution order mirrors the per-action IASA chain order: grounded
+      // SpecialS -> Attack100(up) -> D6824(neutral) -> D68C0(down) (ftCo_Wait_IASA); aerial
+      // Up -> Down -> Side -> Neutral (ftCo_SpecialAir_CheckInput). The source neutral/down
+      // helpers gate on the x689/x687 input counters rather than rereading the raw stick;
+      // the stick-zone reconstruction below is outcome-equivalent because the zones are
+      // mutually exclusive, but the check order matches the source chain regardless.
+      // Directions absent from the action's chain do not enter.
       if (on_ground) {
-        if (ax >= c->special_stick_x_threshold_side) {
+        if ((mask & MS_B_SIDE) != 0u && ax >= c->special_stick_x_threshold_side) {
           if ((sx > 0.0f) != (batch->state.facing[idx] != 0u)) {
             batch->state.facing[idx] = (uint8_t)(sx > 0.0f);
           }
           ms_enter_specials(batch, ch, idx, 1u);
-        } else if (sy >= c->special_stick_y_threshold) {
+        } else if ((mask & MS_B_UP) != 0u && sy >= c->special_stick_y_threshold) {
           ms_enter_specialhi(batch, ch, idx, 1u);
-        } else if (sy <= -c->special_stick_y_threshold) {
-          ms_enter_speciallw(batch, ch, idx, 1u);
-        } else {
+        } else if ((mask & MS_B_NEUTRAL) != 0u && ax < c->special_stick_x_threshold_side &&
+                   sy < c->special_stick_y_threshold && sy > -c->special_stick_y_threshold) {
           ms_enter_specialn(batch, ch, idx, 1u);
+        } else if ((mask & MS_B_DOWN) != 0u && sy <= -c->special_stick_y_threshold) {
+          ms_enter_speciallw(batch, ch, idx, 1u);
         }
       } else {
-        if (sy >= c->special_stick_y_threshold) {
+        if ((mask & MS_B_UP) != 0u && sy >= c->special_stick_y_threshold) {
           ms_enter_specialhi(batch, ch, idx, 0u);
-        } else if (sy <= -c->special_stick_y_threshold) {
+        } else if ((mask & MS_B_DOWN) != 0u && sy <= -c->special_stick_y_threshold) {
           ms_enter_speciallw(batch, ch, idx, 0u);
-        } else if (ax >= c->special_stick_x_threshold_side) {
+        } else if ((mask & MS_B_SIDE) != 0u && ax >= c->special_stick_x_threshold_side) {
           if ((sx > 0.0f) != (batch->state.facing[idx] != 0u)) {
             batch->state.facing[idx] = (uint8_t)(sx > 0.0f);
           }
           ms_enter_specials(batch, ch, idx, 0u);
-        } else {
+        } else if ((mask & MS_B_NEUTRAL) != 0u && ax < c->special_stick_x_threshold_side &&
+                   sy < c->special_stick_y_threshold) {
           ms_enter_specialn(batch, ch, idx, 0u);
         }
       }

@@ -2509,6 +2509,23 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         }
         batch->state.fallspecial_landing_lag[idx] = landing_lag;
       }
+      // Marth special cmd-var reconstruction (Slippi does not expose fp->cmd_vars):
+      // Dolphin Slash phase lanes are derivable from the seed row alone. cmd_vars[0] is the
+      // script launch pulse (frame 6); descending (vy < 0) after the launch implies the Phys
+      // launch phase ended (cmd2) and at least one descending Coll pass armed cmd1, so a
+      // teacher-forced row mid-descent can cliffcatch exactly like the live rollout.
+      // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::{ftMs_SpecialHi_Phys,
+      //   ftMs_SpecialHi_Coll}
+      if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_MARTH &&
+          (seed->action_id[p] == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
+           seed->action_id[p] == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) &&
+          seed->on_ground[p] == 0u && seed->speed_y_self[p] < 0.0f &&
+          move_tables_special_cmd_var_value_at_frame(seed->char_id[p],
+                                                     (uint16_t)(295u + (seed->action_id[p] - 341u)),
+                                                     0u, (float)seed->action_frame[p])) {
+        batch->state.special_cmd2[idx] = 1u;
+        batch->state.special_cmd1[idx] = 1u;
+      }
       // FallSpecial xC mode is not exposed by Slippi directly; derive it deterministically from
       // seeded post-frame velocities when possible.
       //

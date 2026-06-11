@@ -7225,6 +7225,14 @@ void locomotion_update_post_collision(MslBatch* batch) {
                                                 (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S);
           continue;
         } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+                   (a == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
+                    a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI)) {
+          // Dolphin Slash ground contact: the descending Coll's landing callback enters
+          // LandingFallSpecial with MarsAttributes x2C (the rate switch below selects the
+          // marth source lag).
+          // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
+          land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
+        } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
                    marth_special_try_air_to_ground_swap(batch, idx)) {
           // Marth air special ground contact swaps to the grounded variant at the preserved
           // animation frame (ftCommon_8007D7FC grounding bundle below).

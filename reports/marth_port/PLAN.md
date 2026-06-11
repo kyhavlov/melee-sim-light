@@ -135,3 +135,34 @@ Slash, SpecialLw Counter (+CounterAttack).
   ledge-grab cd->ecb.bottom.x term (DS under-lip sweetspot; marth-only bottom_x tables), and
   DS cliffcatch cmd1 sequencing (+ the dead marth ledge clause from ci3 fixed). Remaining 33
   split marth-boundary vs generic in TRIAGE_MARTH_ROWS.md. Fox/falco byte-stable.
+- (marth boundary-row pass) DS cliffcatch cmd1 arming moved to the Phys descent branch
+  (vanilla two-pass Coll sequencing) + teacher-forced cmd1/cmd2 reseed derivation; DamageFall
+  added to the marth B-dispatch (tumble side-B, decomp ftCo_DamageFall_IASA). 6035 chain
+  proven inherited drift (clean reseed byte-exact); 6351/6352 = shared ECB-interpolation
+  platform-landing debt; 3416 = shared KB float-parity. Rollout 33 -> 31 (median 285),
+  one-step 225 -> 210. Fox/falco byte-stable. See TRIAGE_MARTH_ROWS_2.md.
+- (manual-repro pass) Ported the two missed COMMON layers: per-action grounded IASA dispatch
+  chains (direction mask: Dash=side-only, KneeBend=up-only post-entry, SquatWait=up/down,
+  Turn=no-neutral, RunBrake/TurnRun=none) and the grounded phys owners ft_80084F3C/ft_80084FA8
+  (friction + anim-root-motion exchange) for all marth ground specials. Fixed dead B-reverse
+  (un-nested from cmd0==0), DS grounded-landing stuck-FallSpecial, and verified the airdodge
+  pass-through is not reproducible. 6 new tests; suite 3265; fox/falco byte-stable; smoke
+  unchanged (no ground specials in the replay). See MANUAL_REPRO_CATALOG.md.
+- (source-hook audit pass 2) RunDirect/SquatRv/OttottoWait added to the dispatch mask;
+  GuardOff x1C window implemented (lane existed); AppealS blocked per the engine's
+  data-absent allow-interrupt policy; aerial up-B buffer (x68B) locked with a strict test +
+  source TODO; item chains explicitly engine-scope. Airdodge-through-stage ROOT-CAUSED from
+  the second repro set: generic wall penetration-ejection gap (fox reproduces identically),
+  xfail-locked for a dedicated collision pass. Suite 3269+1 xfail; fox/falco byte-stable.
+- (dispatch audit pass 3) Full ftCommon *_IASA enumeration: attack-IASA specials implemented
+  (AttackS4 direct + the Wait_IASA delegators, gated on script allow_interrupt via
+  move_tables), grounded Damage + airborne DamageAir/DamageFly post-hitstun delegates,
+  PassiveWall with walltech-timer block. Jab/dtilt/rapid-jab/aerial-attacks confirmed
+  no-special by source. Stale GuardOff wording fixed. 128 marth tests + 1 xfail; suite 3273;
+  fox/falco byte-stable.
+- (dispatch order tighten) Grounded resolution order aligned to the source chain
+  (SpecialS -> up -> neutral D6824 -> down D68C0; the x689/x687 counter gates are
+  outcome-equivalent stick zones, noted in code). Found+fixed via the new down-B full-chain
+  test: the Run->RunBrake same-frame race ate down-B during run (Run_IASA dispatches before
+  braking in source order); brake entry frames now honor Run's chain. 129 marth tests +
+  1 xfail; suite 3274; fox/falco byte-stable.
