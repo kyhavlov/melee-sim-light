@@ -3716,6 +3716,11 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch) {
     const float x_add = (dir == 1u) ? -params->wind_speed : params->wind_speed;
     const float left = (dir == 1u) ? params->left_rect_left : params->right_rect_left;
     const float right = (dir == 1u) ? params->left_rect_right : params->right_rect_right;
+    const uint8_t source_first_frame_catchup =
+        (batch->replay_frame_dream_whispy_first_apply_pending != NULL &&
+         batch->replay_frame_dream_whispy_first_apply_pending[bi] != 0u)
+            ? 1u
+            : 0u;
     const int num_players = (int)batch->config.num_players;
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
@@ -3725,8 +3730,23 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch) {
       if (stage_collision_whispy_point_inside(batch->state.pos_x[idx], batch->state.pos_y[idx],
                                               left, right, params->rect_bottom, params->rect_top)) {
         batch->state.pos_x[idx] += x_add;
+        if (source_first_frame_catchup != 0u &&
+            stage_collision_whispy_point_inside(batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                                left, right, params->rect_bottom,
+                                                params->rect_top)) {
+          // Replay-stage lane owner: apply the one source Whispy wind displacement that happened
+          // before Slippi could serialize the first visible `grOldPupupu.xDC` active row. The
+          // owner bit is installed only by replay playback; free-running stage state never enters
+          // this catch-up path.
+          // refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+          batch->state.pos_x[idx] += x_add;
+        }
         mpcoll_ground_refresh_grounded_root_floor_index(batch, bi, p);
       }
+    }
+    if (batch->replay_frame_dream_whispy_first_apply_pending != NULL) {
+      batch->replay_frame_dream_whispy_first_apply_pending[bi] = 0u;
     }
     batch->state.stage_dream_whispy_wind_timer[bi]--;
     if (batch->state.stage_dream_whispy_wind_timer[bi] == 0u) {

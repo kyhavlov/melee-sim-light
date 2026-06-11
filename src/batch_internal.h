@@ -64,6 +64,11 @@ struct MslBatch {
   // frame_pre_random_seed before this step. This disables old synthetic replay-clock advancement
   // while preserving source-site admission through rollout_clock_rng_owned.
   uint8_t* replay_frame_rng_applied;  // [batch]
+  // Runtime-only replay playback stage marker: the current Dream Land seed row exposes the first
+  // post-publication Whispy wind state after a rollout has advanced past its reseed frame, so the
+  // frame owes one source `ftColl_GetWindOffsetVec` application that happened before Slippi could
+  // serialize `grOldPupupu.xDC`.
+  uint8_t* replay_frame_dream_whispy_first_apply_pending;  // [batch]
   // Runtime-only replay playback source-site marker: the current replay row is in the
   // ftCo_800D3158 top-blast gate pre-state, so site 23 may consume the just-installed
   // frame_pre_random_seed. This is intentionally narrower than replay_frame_rng_applied.

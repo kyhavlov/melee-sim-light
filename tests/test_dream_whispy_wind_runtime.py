@@ -70,7 +70,12 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
 
 
 def _rollout_row_ucf(
-    dataset_path: Path, start_record: int, target_record: int, samples_override: np.ndarray | None = None
+    dataset_path: Path,
+    start_record: int,
+    target_record: int,
+    samples_override: np.ndarray | None = None,
+    *,
+    replay_frame_rng: bool = False,
 ) -> tuple[np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -93,13 +98,21 @@ def _rollout_row_ucf(
         binding.reseed_seed_rollout(handle, seed_bytes.copy())
         for rec in range(start_record, target_record + 1):
             row = samples[rec : rec + 1]
+            step_seed_bytes = np.frombuffer(
+                row["seed_t"].tobytes(order="C"), dtype=np.uint8
+            ).reshape(1, seed_stride)
             prev_input_bytes = np.frombuffer(
                 row["prev_input_t"].tobytes(order="C"), dtype=np.uint8
             ).reshape(1, input_stride)
             input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
                 1, input_stride
             )
-            binding.step_input(handle, prev_input_bytes.copy(), input_bytes.copy())
+            if replay_frame_rng:
+                binding.step_input_replay_frame_rng(
+                    handle, step_seed_bytes.copy(), prev_input_bytes.copy(), input_bytes.copy()
+                )
+            else:
+                binding.step_input(handle, prev_input_bytes.copy(), input_bytes.copy())
         out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
         binding.write_compare(handle, out_bytes)
         return samples[target_record]["ref_t1"], out_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
@@ -160,6 +173,43 @@ def test_dream_whispy_replay_seed_wind_matches_representative_row() -> None:
     assert int(seed["stage_dream_whispy_wind_valid_u8"]) == 1
     assert int(seed["stage_dream_whispy_wind_dir_u8"]) == 2
     assert float(out["pos_x"][1]) == pytest.approx(float(ref["pos_x"][1]))
+
+
+@pytest.mark.integration
+def test_dream_whispy_replay_playback_applies_prefix_lane_each_frame_feh_953() -> None:
+    dataset_path = Path(
+        "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+    )
+    ref, out = _rollout_row_ucf(dataset_path, 889, 953, replay_frame_rng=True)
+    assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 361
+    assert int(out["hitlag"][0]) == int(ref["hitlag"][0]) == 0
+    assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=5e-5)
+    assert float(out["pos_x"][1]) == pytest.approx(float(ref["pos_x"][1]), abs=1e-4)
+
+
+@pytest.mark.integration
+def test_dream_whispy_first_visible_seed_catchup_is_rollout_advanced_only() -> None:
+    dataset_path = Path(
+        "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+    )
+    ds = read_dataset(str(dataset_path))
+    assert int(ds.samples[889]["seed_t"]["stage_dream_whispy_wind_valid_u8"]) == 0
+    assert int(ds.samples[890]["seed_t"]["stage_dream_whispy_wind_valid_u8"]) == 1
+    assert int(ds.samples[890]["seed_t"]["stage_dream_whispy_wind_timer_u16"]) == 274
+
+    ref_from_start, out_from_start = _rollout_row_ucf(
+        dataset_path, 889, 890, replay_frame_rng=True
+    )
+    assert float(out_from_start["pos_x"][1]) == pytest.approx(
+        float(ref_from_start["pos_x"][1]), abs=1e-4
+    )
+
+    ref_from_seed, out_from_seed = _rollout_row_ucf(
+        dataset_path, 890, 890, replay_frame_rng=True
+    )
+    assert float(out_from_seed["pos_x"][1]) == pytest.approx(
+        float(ref_from_seed["pos_x"][1]), abs=1e-5
+    )
 
 
 @pytest.mark.integration
