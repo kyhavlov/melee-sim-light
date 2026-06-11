@@ -1,0 +1,60 @@
+[marth/fd/ledgedash] done, 0 violations
+[marth/fd/fall-into-stage] done, 0 violations
+[marth/fd/boundary-approach] done, 0 violations
+[marth/bf/ledgedash] done, 0 violations
+[marth/bf/fall-into-stage] done, 0 violations
+[marth/bf/boundary-approach] done, 0 violations
+[marth/dl/ledgedash] done, 0 violations
+[marth/dl/fall-into-stage] done, 0 violations
+[marth/dl/boundary-approach] done, 0 violations
+VIOLATION ledgedash marth/ys case=(1, 4, 1, 13, 127, 0) [('hull-interior', 59, 5.81, -71.24, 35)]
+VIOLATION ledgedash marth/ys case=(-1, 4, 1, 13, 127, 0) [('hull-interior', 58, -4.91, -69.17, 35)]
+[marth/ys/ledgedash] done, 2 violations
+[marth/ys/fall-into-stage] done, 0 violations
+[marth/ys/boundary-approach] done, 0 violations
+[marth/fod/ledgedash] done, 0 violations
+[marth/fod/fall-into-stage] done, 0 violations
+[marth/fod/boundary-approach] done, 0 violations
+[marth/ps/ledgedash] done, 0 violations
+[marth/ps/fall-into-stage] done, 0 violations
+[marth/ps/boundary-approach] done, 0 violations
+[fox/fd/ledgedash] done, 0 violations
+[fox/fd/fall-into-stage] done, 0 violations
+[fox/fd/boundary-approach] done, 0 violations
+[fox/bf/ledgedash] done, 0 violations
+[fox/bf/fall-into-stage] done, 0 violations
+[fox/bf/boundary-approach] done, 0 violations
+[fox/dl/ledgedash] done, 0 violations
+[fox/dl/fall-into-stage] done, 0 violations
+[fox/dl/boundary-approach] done, 0 violations
+[fox/ys/ledgedash] done, 0 violations
+[fox/ys/fall-into-stage] done, 0 violations
+[fox/ys/boundary-approach] done, 0 violations
+[fox/fod/ledgedash] done, 0 violations
+[fox/fod/fall-into-stage] done, 0 violations
+[fox/fod/boundary-approach] done, 0 violations
+[fox/ps/ledgedash] done, 0 violations
+[fox/ps/fall-into-stage] done, 0 violations
+[fox/ps/boundary-approach] done, 0 violations
+[falco/fd/ledgedash] done, 0 violations
+[falco/fd/fall-into-stage] done, 0 violations
+[falco/fd/boundary-approach] done, 0 violations
+[falco/bf/ledgedash] done, 0 violations
+[falco/bf/fall-into-stage] done, 0 violations
+[falco/bf/boundary-approach] done, 0 violations
+[falco/dl/ledgedash] done, 0 violations
+[falco/dl/fall-into-stage] done, 0 violations
+[falco/dl/boundary-approach] done, 0 violations
+VIOLATION ledgedash falco/ys case=(1, 4, 1, 13, 127, 0) [('hull-interior', 58, 7.69, -92.9, 0)]
+[falco/ys/ledgedash] done, 1 violations
+[falco/ys/fall-into-stage] done, 0 violations
+[falco/ys/boundary-approach] done, 0 violations
+[falco/fod/ledgedash] done, 0 violations
+[falco/fod/fall-into-stage] done, 0 violations
+[falco/fod/boundary-approach] done, 0 violations
+[falco/ps/ledgedash] done, 0 violations
+[falco/ps/fall-into-stage] done, 0 violations
+[falco/ps/boundary-approach] done, 0 violations
+TOTAL: 3 violations
+saved to reports/marth_port/clip_sweep_final_violations.json
+exit=1

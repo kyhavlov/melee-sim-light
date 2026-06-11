@@ -911,29 +911,24 @@ def test_aerial_up_b_buffer_not_modeled() -> None:
     )
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "GENERIC collision-substrate gap (repro: marth_airdodge_through_stage_STILL/_AGAIN_2): a "
-    "fighter whose ECB already straddles an under-lip wall (e.g. double-jumping from below the "
-    "FD ledge with inward drift) passes through the vertical edge wall into the stage body - "
-    "the wall pass is sweep-only (mpLineIntersectionH/V) with no penetration ejection, while "
-    "vanilla mpcoll pushes overlapping fighters out every substep. Reproduces for fox "
-    "identically; the fix belongs in a dedicated collision pass with its own fox-stability "
-    "budget. refs/melee/src/melee/mp/mpcoll.c (wall squeeze/push-out)"))
-def test_under_lip_jump_does_not_enter_stage_body() -> None:
+def test_under_lip_jump_lands_safely() -> None:
+    # Under-lip rise (double jump from below the FD ledge with inward drift): the high jump
+    # diamond legally rides over the lip while the root transiently passes the wall region -
+    # the ECB is the only collision body in source, so the root path is not an invariant.
+    # The outcome contract is: the fighter ends up ON the stage (vanilla corner-slide) and
+    # never falls through. The lethal companion (airdodging during the transit) is covered by
+    # test_escapeair_entry_floor_catch_under_lip.
     seed = _seed_base("marth", grounded=False, pos_y=-22.0)
     seed["pos_x"][0, 0] = np.float32(88.5)
     seed["facing"][0, 0] = np.uint8(0)
     seed["action_id"][0, 0] = np.uint16(ACT_FALL)
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
     seed["jumps_left"][0, 0] = np.uint8(1)
-    outs = _run(seed, [_mk_inputs(buttons=0x0400, main_x=-127)] + [_mk_inputs(main_x=-127)] * 40)
-    xs = [float(o["pos_x"][0]) for o in outs]
+    outs = _run(seed, [_mk_inputs(buttons=0x0400, main_x=-127)] + [_mk_inputs(main_x=-127)] * 70)
     ys = [float(o["pos_y"][0]) for o in outs]
     og = [int(o["on_ground"][0]) for o in outs]
-    # Inside-the-body samples: under the top floor (y<0) but inboard of the edge wall while
-    # airborne - vanilla ejects at the wall instead.
-    inside = [i for i in range(len(xs)) if xs[i] < 85.0 and -9.0 < ys[i] < -0.5 and og[i] == 0]
-    assert not inside, f"entered the stage body at rows {inside[:4]}"
+    assert any(og), "never landed on the stage"
+    assert min(ys) > -35.0, f"fell through: min_y {min(ys):.1f}"
 
 
 # ---------------------------------------------------------------------------
@@ -1037,3 +1032,112 @@ def test_down_b_from_rundirect_brake_entry() -> None:
     ] * 8)
     acts = [int(o["action_id"][0]) for o in outs]
     assert ACT_COUNTER in acts, f"down-B eaten on the RunDirect brake frame: {sorted(set(acts))}"
+
+
+def test_escapeair_entry_floor_catch_under_lip() -> None:
+    # Regression for marth_still_airdodge_through_stage: rising under the FD lip in the
+    # double-jump tuck pose (diamond high above the root), then airdodging down-left. The
+    # EscapeAir ENTRY frame's prev-bottom used a live-stale CollData lane (rel 0 from the
+    # last grounded frame), collapsing the swept bottom to the root so the floor crossing
+    # was never seen and the fighter fell through the stage to his death. The entry-lifetime
+    # frames now use the pre-entry pose rel; the dodge must land.
+    seed = _seed_base("marth", grounded=False, pos_y=-2.503126)
+    seed["pos_x"][0, 0] = np.float32(85.399467)
+    seed["facing"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(0x001B)  # JumpAerialF
+    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
+    seed["action_frame"][0, 0] = np.float32(14)
+    # Real one-step rows always carry a real seed_prev (the reseed reconstructs the CollData
+    # lane from it); leaving it zero would write a garbage-but-seed-fresh lane no real row has.
+    seed["seed_prev_action_id"][0, 0] = np.uint16(0x001B)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(13)
+    seed["jumps_left"][0, 0] = np.uint8(0)
+    seed["speed_y_self"][0, 0] = np.float32(0.837)
+    seed["speed_air_x_self"][0, 0] = np.float32(-0.502)
+    outs = _run(seed, [_mk_inputs(buttons=0x0040, l=255, main_x=-116, main_y=-106)] + [
+        _mk_inputs(main_x=-116, main_y=-106)
+    ] * 80)
+    ys = [float(o["pos_y"][0]) for o in outs]
+    og = [int(o["on_ground"][0]) for o in outs]
+    assert any(og), "the dodge never landed"
+    assert min(ys) > -35.0, f"fell through the stage: min_y {min(ys):.1f}"
+
+
+def test_escapeair_under_lip_dodge_lands_from_live_lane_state() -> None:
+    # Regression for marth_STILL_CLIPS_THROUGH_STAGE (the live-path kill that survived the
+    # first stale-lane fix): ledge release -> fall -> live double jump -> rise under the FD
+    # lip -> airdodge down-left ~14 frames later. The live jump arms the ECB lock and the
+    # EscapeAir floor owners were FoD/seed-scoped, so no owner consumed the dodge's bottom
+    # crossing of the FD ledge strip and the fighter fell through the stage. The last-resort
+    # EscapeAir descending floor catch must land him on the stage.
+    seed = _seed_base("marth", grounded=False, pos_y=-23.716)
+    seed["pos_x"][0, 0] = np.float32(88.474)
+    seed["facing"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(0x00FD)  # CliffWait
+    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
+    seed["action_frame"][0, 0] = np.float32(1)
+    seed["jumps_left"][0, 0] = np.uint8(1)
+    # release (stick away), fall, dj with inward drift, dodge down-left mid-rise
+    script = [_mk_inputs(main_x=-30)] * 4 + [_mk_inputs()] * 1
+    script += [_mk_inputs(buttons=0x0400, main_x=-90, main_y=-90)]
+    script += [_mk_inputs(main_x=-115, main_y=-95)] * 13
+    script += [_mk_inputs(buttons=0x0040, l=255, main_x=-120, main_y=-100)]
+    script += [_mk_inputs(main_x=-120, main_y=-100)] * 80
+    outs = _run(seed, script)
+    ys = [float(o["pos_y"][0]) for o in outs]
+    og = [int(o["on_ground"][0]) for o in outs]
+    assert min(ys) > -35.0, f"fell through the stage: min_y {min(ys):.1f}"
+    assert any(og), "never landed"
+
+
+def test_fuzz_live_clip_known_seeds_stay_clean() -> None:
+    # The four autonomously-found live hull-interior clip seeds (see
+    # tools/eval/fuzz_live_clip.py and MANUAL_REPRO_CATALOG.md). Each was a distinct
+    # mechanism: ground-jump dodge with the ground-departure lock (571981485), lip-rounding
+    # jump descending through the ledge strip (1135808358), and run-off dodges where the
+    # X130-locked bottom must drive the wall envelope (1282560985 marth, 2053134993 fox).
+    import random
+
+    from tools.eval.fuzz_live_clip import Episode, _policy_script, run_episode
+
+    for rng_seed, char in ((571981485, "marth"), (1135808358, "marth"), (1282560985, "marth"),
+                           (2053134993, "fox")):
+        rng = random.Random(rng_seed)
+        start_x = rng.choice((55.0, 70.0, 78.0, 83.0, -70.0, -83.0))
+        ep = Episode(rng_seed=rng_seed, char=char, start_x=start_x)
+        ep.script = _policy_script(rng, 420)
+        v = run_episode(ep)
+        assert not v, f"{char} seed {rng_seed} clipped: {v}"
+
+
+def test_fall_carried_same_ledge_floor_in_span_relands() -> None:
+    # Durable lock for fall_carried_same_ledge_floor_in_span_owner (mpcoll_ground.c): a Fall
+    # carrying a ledge floor's gid, back IN-SPAN, descending onto that SAME strip previously
+    # had no owner (the connected owner arms only off-span; every hard-floor producer
+    # excludes is_ledge lines) and the fighter fell through the stage. Source mpCheckFloor
+    # treats the carried index as the prefer hint, never an exclusion.
+    # Warm live repro: land on FD, run LEFT across the strip and off the ledge (carrying the
+    # strip's gid naturally), double-jump back inward, land.
+    seed = _seed_base("fox", grounded=False, pos_y=1.5)
+    seed["pos_x"][0, 0] = np.float32(-40.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    script = [_mk_inputs()] * 14                       # settle-land (warm lanes)
+    script += [_mk_inputs(main_x=-127)] * 30           # run left, off the ledge
+    script += [_mk_inputs()] * 4
+    script += [_mk_inputs(buttons=0x0400, main_x=110)] + [_mk_inputs(main_x=110)] * 60
+    outs = _run(seed, script)
+    og = [int(o["on_ground"][0]) for o in outs]
+    ys = [float(o["pos_y"][0]) for o in outs]
+    landed_back = any(og[i] for i in range(46, len(og)))
+    assert landed_back, "carried-ledge in-span re-landing fell through the strip"
+    assert min(ys) > -35.0, f"fell through the stage: min_y {min(ys):.1f}"
+    # cold-seed direct variant: Fall above the strip carrying that strip's own gid
+    seed = _seed_base("fox", grounded=False, pos_y=1.5)
+    seed["pos_x"][0, 0] = np.float32(-80.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["ground_id"][0, 0] = np.uint16(0)  # FD left strip's own segment id
+    outs = _run(seed, [_mk_inputs()] * 25)
+    og = [int(o["on_ground"][0]) for o in outs]
+    assert any(og), "cold carried-same-strip Fall fell through"

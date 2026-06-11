@@ -2161,6 +2161,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.wall_normal_y[idx] = 0.0f;
       batch->state.wall_id[idx] = 0xFFFFu;
       batch->state.wall_kind[idx] = 0u;
+      batch->state.coll_wall_commit_runtime[idx] = 0u;
       batch->state.ceiling_contact_x[idx] = 0.0f;
       batch->state.ceiling_contact_y[idx] = 0.0f;
       batch->state.ceiling_normal_x[idx] = 0.0f;
@@ -2299,6 +2300,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           (seed->walljump_input_timer[p] < 254u && seed->walljump_wall_side_i8[p] != 0) ? 1u : 0u;
       if (seed->mpcoll_wall_kind_seed_u8[p] == 1u || seed->mpcoll_wall_kind_seed_u8[p] == 2u) {
         batch->state.wall_kind[idx] = seed->mpcoll_wall_kind_seed_u8[p];
+        // Seed-injected contact: not a live collision-pass commit (the held-contact
+        // persistence consumes only live continuations).
+        batch->state.coll_wall_commit_runtime[idx] = 0u;
         batch->state.wall_id[idx] = seed->mpcoll_wall_id_seed_u16[p];
         // One-step teacher-forced DamageFlyTop wall-callback bridge:
         // seed_t.mpcoll_wall_* represents CollData wall side/index plus the WallHug env phase
@@ -2889,6 +2893,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.coll_desired_ecb_bottom_locked_owner[idx] = seed_locked_bottom_valid;
         reseed_store_colldata_ecb_current(batch, idx, &prev_ecb);
         reseed_store_colldata_ecb_prev(batch, idx, &prev_ecb);
+        // Frame-end converged bottom rel of the (reconstructed) previous frame: the seed's
+        // locked-preserved bottom while locked, else the pre-entry pose bottom; grounded rows
+        // keep the bottom at the root. Mirrors the live store at the mpcoll frame tail.
+        batch->state.coll_effective_bottom_rel_prev[idx] = seed->on_ground[p] ? 0.0f
+                                                           : seed_locked_bottom_valid
+                                                               ? seed->ecb_lock_bottom_rel_y_f32[p]
+                                                               : prev_ecb.bottom_rel_y;
+        batch->state.coll_effective_bottom_rel_prev_valid[idx] = 1u;
         batch->state.coll_squeeze_restore_ecb_valid[idx] = 0u;
         batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_ecb_bottom_valid[idx] = 1u;

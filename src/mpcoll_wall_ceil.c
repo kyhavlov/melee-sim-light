@@ -1724,6 +1724,7 @@ static inline void mpcoll_commit_wall_result(MslBatch* batch, size_t idx,
   }
   batch->state.pos_x[idx] += r->dx;
   batch->state.wall_kind[idx] = r->side;
+  batch->state.coll_wall_commit_runtime[idx] = 1u;
   batch->state.wall_id[idx] = r->segment_id;
   batch->state.wall_contact_x[idx] = r->contact_x;
   batch->state.wall_contact_y[idx] = r->contact_y;
@@ -3277,6 +3278,42 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                                           (uint8_t)MSL_MPCOLL_ECB_SOURCE_LOCKED_DESIRED_BOTTOM);
         msl_mpcoll_loaded_ecb_set_desired(&loaded_ecb, &cur_ecb,
                                           (uint8_t)MSL_MPCOLL_ECB_SOURCE_LOCKED_DESIRED_BOTTOM);
+      } else if (!was_grounded && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+                 batch->state.ecb_lock_timer[idx] != 0u &&
+                 batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 0u &&
+                 batch->state.action_frame[idx] >= 1 && batch->state.pos_y[idx] < 0.0f &&
+                 stage_collision_stage_has_only_static_cardinal_hard_floors(stage_id)) {
+        // (af >= 1: the af==0 entry callback consumes the pre-entry CollData prev-ECB packet
+        // - mpCollPrev - not the destination lock; the fall-adjacent ledge-wall negatives
+        // pin that boundary.)
+        // Ground-departure lock (X130 timer held with no owner lane): CollData keeps the
+        // bottom at the GROUNDED ZERO - the same use_locked/lock_bottom_to_zero split the
+        // floor consumers apply. Without it the wall pass samples the floaty pose diamond,
+        // so a run-off dodge's bottom point sails ABOVE the wall span while the source's
+        // locked bottom sweeps through it and gets pushed out; the fighter entered the stage
+        // body laterally under the lip instead (fuzz seeds marth 1282560985,
+        // fox 2053134993).
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+        msl_ecb_world_points_preserve_desired_bottom_rel_y(&cur_ecb, batch->state.pos_x[idx],
+                                                           batch->state.pos_y[idx], 0.0f);
+        msl_mpcoll_loaded_ecb_set_current(&loaded_ecb, &cur_ecb,
+                                          (uint8_t)MSL_MPCOLL_ECB_SOURCE_LOCKED_DESIRED_BOTTOM);
+        msl_mpcoll_loaded_ecb_set_desired(&loaded_ecb, &cur_ecb,
+                                          (uint8_t)MSL_MPCOLL_ECB_SOURCE_LOCKED_DESIRED_BOTTOM);
+        // The PREVIOUS endpoint was lock-held too: use the frame-end converged bottom rel
+        // (the effective lane) so the swept bottom segment stays at the locked height instead
+        // of crossing the wall plane ABOVE the span through a pose-based prev (the fox
+        // run-off dodge entry, fuzz seed 2053134993).
+        if (batch->state.coll_effective_bottom_rel_prev_valid[idx] != 0u) {
+          MslEcbWorldPoints gd_prev_ecb = prev_ecb;
+          msl_ecb_world_points_preserve_desired_bottom_rel_y(
+              &gd_prev_ecb, callback_prev_x, callback_prev_y,
+              batch->state.coll_effective_bottom_rel_prev[idx]);
+          prev_ecb = gd_prev_ecb;
+          msl_mpcoll_loaded_ecb_set_previous(&loaded_ecb, &prev_ecb,
+                                             (uint8_t)MSL_MPCOLL_ECB_SOURCE_LOCKED_DESIRED_BOTTOM);
+        }
       }
       MslEcbWorldPoints cur_right_ecb = cur_ecb;
       MslEcbWorldPoints cur_specialhi_wall_ecb = cur_ecb;
@@ -3924,10 +3961,57 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           float envelope_x = 0.0f;
           int envelope_line_idx = -1;
           float envelope_nx = 1.0f, envelope_ny = 0.0f;
-          if (right_wall_air_envelope_max_x(stage_id, rwg, &candidates, right_cur_ecb,
-                                            batch->state.pos_x[idx], batch->state.pos_y[idx],
-                                            &envelope_x, &envelope_line_idx, &envelope_nx,
-                                            &envelope_ny)) {
+          const uint8_t env_hit3 = right_wall_air_envelope_max_x(
+              stage_id, rwg, &candidates, right_cur_ecb, batch->state.pos_x[idx],
+              batch->state.pos_y[idx], &envelope_x, &envelope_line_idx, &envelope_nx, &envelope_ny);
+          if (!env_hit3 && candidates.count == 0u && prev_wall_kind == (uint8_t)MSL_WALL_RIGHT &&
+              prefer_line_idx >= 0 && batch->state.pos_y[idx] < 0.0f &&
+              mpcoll_wall_ceil_prev_root_runtime_owned(batch, idx) &&
+              batch->state.coll_wall_commit_runtime[idx] != 0u) {
+            // Held-contact persistence (mpLib_8004E684 family), EscapeAir rows restricted
+            // to the Fall-IASA source family (the fall-adjacent ledge-wall negatives pin
+            // jump/kneebend-entry dodges OUT of this owner): the per-frame push/drift
+            // oscillation can leave an interpolation-phase diamond fractionally INSIDE the
+            // held wall with no swept plane crossing for the candidate collectors (e.g. the
+            // X130 lock expiring mid-dodge under the lip - fuzz seed marth 1282560985).
+            // Source persistence projects the held line and re-clamps; without it the
+            // contact silently releases inside the stage body.
+            // refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall
+            float lp_corr = 0.0f;
+            float lp_nx = 1.0f, lp_ny = 0.0f;
+            const int lp_idx =
+                right_wall_e684_project(rwg, prefer_line_idx, right_cur_ecb->left_x,
+                                        right_cur_ecb->left_y, &lp_corr, &lp_nx, &lp_ny);
+            float bp_corr = 0.0f;
+            float bp_nx = 1.0f, bp_ny = 0.0f;
+            const int bp_idx =
+                right_wall_e684_project(rwg, prefer_line_idx, right_cur_ecb->bottom_x,
+                                        right_cur_ecb->bottom_y, &bp_corr, &bp_nx, &bp_ny);
+            float per_corr = 0.0f;
+            int per_idx = -1;
+            float per_nx = 1.0f, per_ny = 0.0f;
+            if (lp_idx >= 0 && lp_corr > 0.0f) {
+              per_corr = lp_corr;
+              per_idx = lp_idx;
+              per_nx = lp_nx;
+              per_ny = lp_ny;
+            }
+            if (bp_idx >= 0 && bp_corr > per_corr) {
+              per_corr = bp_corr;
+              per_idx = bp_idx;
+              per_nx = bp_nx;
+              per_ny = bp_ny;
+            }
+            if (per_idx >= 0 && per_corr > 0.0f) {
+              MslMpcollWallResult wall = mpcoll_wall_result_make(
+                  MSL_WALL_RIGHT, 1u, MSL_MPCOLL_WALL_RESULT_AIR_PERSISTENCE,
+                  rwg->lines[(size_t)per_idx].segment_i, per_corr,
+                  batch->state.pos_x[idx] + per_corr, batch->state.pos_y[idx], per_nx, per_ny);
+              mpcoll_commit_wall_result(batch, idx, &wall);
+              ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, per_corr);
+            }
+          }
+          if (env_hit3) {
             const MslStageWallLine* envelope_line = &rwg->lines[(size_t)envelope_line_idx];
             if (!specialhi_right_wall_push_only_envelope_suppresses(
                     batch, idx, envelope_line, char_id, action_id, candidates.has_hug)) {

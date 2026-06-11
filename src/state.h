@@ -805,7 +805,14 @@ typedef struct MslStateSoA {
   // Frame-preserving motion transitions without Ft_MF_Unk24 clear fp->x221C_u16_y; opcode-52
   // events at frames <= this floor are suppressed until the next crossing (0 = no floor).
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
-  uint16_t* x221c_y_event_floor;  // [batch * players], 0/1
+  uint16_t* x221c_y_event_floor;          // [batch * players], 0/1
+  uint8_t* coll_wall_commit_runtime;      // [batch * players], wall contact committed by the live
+                                          // collision pass this run (cleared on reseed)
+  float* coll_effective_bottom_rel_prev;  // [batch * players], last frame's converged
+                                          // CollData ecb.bottom rel (locked-preserved or
+                                          // pose; mpCollInterpolateECB converges within
+                                          // the frame's substeps)
+  uint8_t* coll_effective_bottom_rel_prev_valid;  // [batch * players]
   // ECB lock countdown (decomp: fp->ecb_lock) used with CollData_X130_Locked.
   // - Set by ftCommon_8007D5D4 / ftCommon_8007D60C.
   // - Decremented once per map/collision callback in Fighter_procMap and clears lock at 0.

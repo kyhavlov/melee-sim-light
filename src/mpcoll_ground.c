@@ -5552,6 +5552,7 @@ static uint8_t msl_mpcoll_80047e14_common_air_hard_floor_bottom_sweep(
   uint8_t fall_fast_same_hard_floor_owner = 0u;
   uint8_t fall_fast_platform_to_hard_floor_owner = 0u;
   uint8_t fall_carried_ledge_to_connected_hard_floor_owner = 0u;
+  uint8_t fall_carried_same_ledge_floor_in_span_owner = 0u;
   int fall_carried_line_idx = -1;
   if (action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] != 0u &&
       batch->state.ground_id[idx] != 0xFFFFu) {
@@ -5578,13 +5579,28 @@ static uint8_t msl_mpcoll_80047e14_common_air_hard_floor_bottom_sweep(
                     floor_line_is_runtime_fighter_solid(g, stage_id, carried_line_idx) &&
                     !floor_x_within_line_segment_strict(batch, bi, g, carried_line_idx,
                                                         batch->state.pos_x[idx]));
+      // Sibling owner for the IN-SPAN case: a Fall that carried a ledge floor (ran off the
+      // ledge), drifted back over the SAME strip, and descends onto it had NO owner at all -
+      // the connected owner above only arms off-span and the hard-floor producers exclude
+      // is_ledge lines - so the fighter fell through the stage (fuzz family ledgedash,
+      // fox/falco FD; the warm repro is simply run-off-ledge -> drift back -> fall).
+      // Source mpCheckFloor lands it: the carried index is only the prefer hint, never an
+      // exclusion.
+      // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
+      // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
+      fall_carried_same_ledge_floor_in_span_owner =
+          (uint8_t)(carried->is_ledge && !carried->is_platform &&
+                    floor_line_is_runtime_fighter_solid(g, stage_id, carried_line_idx) &&
+                    floor_x_within_line_segment_strict(batch, bi, g, carried_line_idx,
+                                                       batch->state.pos_x[idx]));
       fall_carried_line_idx = carried_line_idx;
     }
   }
   const uint8_t action_uses_bottom_sweep_owner =
       (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
        action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B || fall_fast_same_hard_floor_owner ||
-       fall_fast_platform_to_hard_floor_owner || fall_carried_ledge_to_connected_hard_floor_owner)
+       fall_fast_platform_to_hard_floor_owner || fall_carried_ledge_to_connected_hard_floor_owner ||
+       fall_carried_same_ledge_floor_in_span_owner)
           ? 1u
           : 0u;
   const uint8_t probe_this_47e14_helper =
@@ -5650,12 +5666,25 @@ static uint8_t msl_mpcoll_80047e14_common_air_hard_floor_bottom_sweep(
   (void)skip_platform_segment_i;
   (void)c;
   MslMpcollFloorSweepResult floor_sweep = {0};
+  uint8_t same_ledge_in_span_hit = 0u;
   if (!mpcoll_collect_bottom_sweep_hard_floor_result(batch, idx, bi, g, stage_id, prev_bottom_x,
                                                      prev_bottom_y, cur_bottom_x, cur_bottom_y,
                                                      prefer_line_idx, -1, &floor_sweep)) {
-    mpcoll_floor_probe_result(ctx, NULL, 0u, 0u,
-                              (uint8_t)MSL_MPCOLL_FLOOR_PROBE_REJECT_NO_BOTTOM_SWEEP);
-    return 0u;
+    // The hard-floor collect excludes is_ledge lines; the same-carried-ledge in-span
+    // re-landing legitimately hits exactly that line. Use the unfiltered collect and accept
+    // only the carried line itself.
+    if (fall_carried_same_ledge_floor_in_span_owner && fall_carried_line_idx >= 0 &&
+        mpcoll_collect_bottom_sweep_hit(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
+                                        cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
+                                        fall_carried_line_idx, -1, c, &floor_sweep) &&
+        floor_sweep.hit_line_idx == fall_carried_line_idx) {
+      same_ledge_in_span_hit = 1u;
+      mpcoll_project_bottom_sweep_floor_result(batch, bi, g, stage_id, cur_bottom_y, &floor_sweep);
+    } else {
+      mpcoll_floor_probe_result(ctx, NULL, 0u, 0u,
+                                (uint8_t)MSL_MPCOLL_FLOOR_PROBE_REJECT_NO_BOTTOM_SWEEP);
+      return 0u;
+    }
   }
   if (floor_sweep.hit_line_idx < 0 || floor_sweep.projected_line_idx < 0 ||
       (size_t)floor_sweep.hit_line_idx >= g->line_count ||
@@ -5664,9 +5693,10 @@ static uint8_t msl_mpcoll_80047e14_common_air_hard_floor_bottom_sweep(
                               (uint8_t)MSL_MPCOLL_FLOOR_PROBE_REJECT_LINE_FILTER);
     return 0u;
   }
-  if (floor_sweep.hit_is_platform || floor_sweep.hit_is_ledge ||
-      floor_sweep.hit_has_platform_transform || floor_sweep.projected_is_platform ||
-      floor_sweep.projected_is_ledge || floor_sweep.projected_has_platform_transform) {
+  if (!same_ledge_in_span_hit &&
+      (floor_sweep.hit_is_platform || floor_sweep.hit_is_ledge ||
+       floor_sweep.hit_has_platform_transform || floor_sweep.projected_is_platform ||
+       floor_sweep.projected_is_ledge || floor_sweep.projected_has_platform_transform)) {
     mpcoll_floor_probe_result(ctx, &floor_sweep, 1u, 0u,
                               (uint8_t)MSL_MPCOLL_FLOOR_PROBE_REJECT_LINE_FILTER);
     return 0u;
@@ -8078,8 +8108,23 @@ void mpcoll_ground_apply(MslBatch* batch) {
               : ((escapeair_jumpaerial_prev_ecb_lifetime ||
                   escapeair_no_lock_entry_prev_ecb_lifetime) &&
                  !use_locked_desired_ecb_bottom);
-      const float state_cur_ecb_rel =
-          have_state_cur_ecb ? state_cur_ecb_points.bottom_rel_y : pre_entry_prev_ecb_rel;
+      // On EscapeAir entry-lifetime frames the CollData current-ECB lane can be live-stale:
+      // last written on a long-past grounded frame with bottom rel exactly 0, which collapses
+      // the prev bottom to the root so the entry-frame floor crossing is never seen (manual
+      // repro: marth_still_airdodge_through_stage). A genuine airborne CollData bottom rel is
+      // never exactly 0 (grounded collapses it; airborne poses keep the diamond above the
+      // root), so the exact-zero lane while airborne marks staleness and defers to the
+      // pre-entry pose sample. Seed-owned and rollout-evolved lanes carry real pose values
+      // and keep winning. Stale NON-zero live lanes are covered by the last-resort EscapeAir
+      // descending floor catch below in the apply pass.
+      const uint8_t state_cur_ecb_stale_zero =
+          (uint8_t)((escapeair_jumpaerial_prev_ecb_lifetime ||
+                     escapeair_no_lock_entry_prev_ecb_lifetime) &&
+                    have_state_cur_ecb && !was_grounded &&
+                    state_cur_ecb_points.bottom_rel_y == 0.0f);
+      const float state_cur_ecb_rel = (have_state_cur_ecb && !state_cur_ecb_stale_zero)
+                                          ? state_cur_ecb_points.bottom_rel_y
+                                          : pre_entry_prev_ecb_rel;
       const float hidden_current_ecb_rel =
           active_damage_hitlag_ecb_consumer ? state_cur_ecb_rel : desired_ecb_rel;
       const float prev_ecb_rel =
@@ -10299,6 +10344,173 @@ void mpcoll_ground_apply(MslBatch* batch) {
           } else {
             mpcoll_floor_probe_result(&mpcoll_ctx, &sideb_floor_sweep, 0u, 0u,
                                       (uint8_t)MSL_MPCOLL_FLOOR_PROBE_REJECT_NO_BOTTOM_SWEEP);
+          }
+        }
+        // FallSpecial joins the jump family here: is_common_fallspecial_action excludes it
+        // from the 47e14 owners and the hard-floor producers exclude is_ledge lines, so a
+        // post-airdodge FallSpecial descending onto a sloped LEDGE strip (Yoshi's) had no
+        // owner at all and fell into the stage keel (fuzz ledgedash falco/ys).
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Coll
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
+        const uint8_t lr_is_jump_action = (uint8_t)(action_id == (uint16_t)MSL_ACT_JUMP_F ||
+                                                    action_id == (uint16_t)MSL_ACT_JUMP_B ||
+                                                    action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                                                    action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
+                                                    action_id == (uint16_t)MSL_ACT_FALL_SPECIAL);
+        // Sustained EscapeAir (af > 4) joins the jump-branch basis but with LEDGE-floor-only
+        // acceptance (set below): a long dodge's decaying descent can cross a sloped ledge
+        // strip (Yoshi's) mid-dodge with every validated owner ledge-blind, while the
+        // sustained one-step locks that forced the af windows all cross HARD floors and stay
+        // protected by the ledge restriction plus the sustained depth boundary.
+        const uint8_t lr_is_sustained_dodge = (uint8_t)(action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+                                                        batch->state.action_frame[idx] > 4);
+        if (!on_ground &&
+            ((action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+              ((batch->state.action_frame[idx] <= 1 && batch->state.speed_y_self[idx] < 0.0f) ||
+               (batch->state.action_frame[idx] <= 4 &&
+                batch->state.pos_y[idx] < batch->state.prev_pos_y[idx] &&
+                batch->state.ecb_lock_timer[idx] != 0u &&
+                !(batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+                  msl_escapeair_locked_bottom_owner_any(
+                      batch->state.coll_desired_ecb_bottom_locked_owner[idx]))))) ||
+             lr_is_sustained_dodge ||
+             // Jump family: descending bottom crossings of LEDGE-STRIP floors only (gated at
+             // the acceptance below) - every validated jump landing owner filters out
+             // is_ledge lines, so a jump that rounded the lip corner and descends inside the
+             // strip span had no owner at all and traversed the stage body
+             // (fuzz seed 1135808358, act 28).
+             (lr_is_jump_action && batch->state.pos_y[idx] < 0.0f)) &&
+            !stage_has_height_platform_transform && stage_has_only_static_cardinal_hard_floors) {
+          // Last-resort EscapeAir descending floor catch with the source-shaped frame-level
+          // ECB basis: mpCollInterpolateECB converges the diamond to the desired pose within
+          // each frame's substeps, so the per-frame bottom sweep runs from
+          // (prev root + LAST frame's converged bottom rel) to (cur root + THIS frame's
+          // effective bottom rel). With per-endpoint rels the legitimate sustained
+          // stay-airborne rows (whose source diamond never crosses) and the live clip-through
+          // dodges (whose diamond does) discriminate by geometry - no frame cap. The locked
+          // EscapeAir family owns height-transform stages (FoD interpolation-gap locks);
+          // every validated owner above publishes first.
+          // Admission: dodge ENTRY frames (af <= 1) with the general per-endpoint basis, or
+          // the early ground-departure-locked window (af <= 4 with the lock timer held and no
+          // owner lane - CollData bottom at the grounded zero, so the ROOT crossing is the
+          // source landing; fuzz seed 571981485). Unlocked or owner-locked af >= 2 frames are
+          // sustained-dodge territory owned by the locked/interpolation family.
+          // SUSTAINED dodges additionally require the bottom to have passed the floor by
+          // more than k_ecb_vertical_unit: the source floor handoff keeps shallow tangent
+          // crossings airborne mid-dodge (the Battlefield sustained-dodge lock
+          // test_locked_escapeair_shallow_cliff_floor_final_snap_stays_airborne); entries and
+          // jumps land on the raw crossing - a rejected shallow crossing frame never
+          // re-crosses (both endpoints below from then on) and would fall through.
+          // Manual repros: marth_still_airdodge_through_stage, marth_STILL_CLIPS_THROUGH_STAGE,
+          // fuzz_live_clip seed 571981485.
+          // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_LoadECB_inline,
+          //   mpColl_80044628_Floor}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          const uint8_t lr_ground_departure_window =
+              (uint8_t)(!lr_is_jump_action && !lr_is_sustained_dodge &&
+                        batch->state.action_frame[idx] > 1);
+          float lr_cur_rel;
+          float lr_prev_rel;
+          float lr_prev_x;
+          float lr_prev_y;
+          if (lr_ground_departure_window) {
+            // Ground-departure-locked window: CollData bottom held at the grounded zero
+            // (use_locked/lock_bottom_to_zero split with no owner lane), so the ROOT sweep
+            // from the true previous-frame position is the source landing.
+            lr_cur_rel = 0.0f;
+            lr_prev_rel = 0.0f;
+            lr_prev_x = batch->state.prev_pos_x[idx];
+            lr_prev_y = batch->state.prev_pos_y[idx];
+          } else if (lr_is_jump_action || lr_is_sustained_dodge) {
+            // Jump branch: source-shaped per-endpoint basis - THIS frame's pose bottom rel
+            // at the current root, LAST frame's converged bottom rel (the effective lane) at
+            // the previous root. The strip crossing can happen while the ROOT rises (the
+            // pose rel shrinks faster than the root climbs), so the admission is the BOTTOM
+            // descending, checked here.
+            lr_cur_rel = mpcoll_pose_ecb_bottom_rel_y(
+                char_id, batch->state.animation_index[idx],
+                msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]), 0u);
+            lr_prev_rel = batch->state.coll_effective_bottom_rel_prev_valid[idx]
+                              ? batch->state.coll_effective_bottom_rel_prev[idx]
+                              : lr_cur_rel;
+            lr_prev_x = batch->state.prev_pos_x[idx];
+            lr_prev_y = batch->state.prev_pos_y[idx];
+            if (!(batch->state.pos_y[idx] + lr_cur_rel < lr_prev_y + lr_prev_rel)) {
+              lr_cur_rel = -1.0f;  // bottom not descending: decline
+            }
+          } else {
+            // Entry frames: the validated entry basis - the loaded previous ECB bottom rel
+            // (or the explicit locked-desired bottom) applied at both sweep endpoints with
+            // the true previous-frame root, positive rels only (a non-positive loaded rel
+            // declines the owner via the lr_cur_rel < 0 sentinel below).
+            float entry_rel = prev_ecb_points.bottom_rel_y;
+            if (batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+                msl_escapeair_locked_bottom_owner_any(
+                    batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+                batch->state.coll_desired_ecb_bottom_rel_y[idx] > k_floor_y_bias) {
+              entry_rel = batch->state.coll_desired_ecb_bottom_rel_y[idx];
+            }
+            if (!(entry_rel > k_floor_y_bias)) {
+              entry_rel = -1.0f;
+            }
+            lr_cur_rel = entry_rel;
+            lr_prev_rel = entry_rel;
+            lr_prev_x = batch->state.prev_pos_x[idx];
+            lr_prev_y = batch->state.prev_pos_y[idx];
+          }
+          {
+            // No positivity guard: a ground-departure lock legitimately holds the bottom at
+            // the root (rel 0), and the root crossing IS the source landing for that case.
+            MslMpcollFloorSweepResult lr_sweep = {0};
+            if (lr_cur_rel >= 0.0f &&
+                mpcoll_collect_bottom_sweep_hit(batch, idx, bi, g, stage_id, lr_prev_x,
+                                                lr_prev_y + lr_prev_rel, batch->state.pos_x[idx],
+                                                batch->state.pos_y[idx] + lr_cur_rel,
+                                                skip_platform_segment_i, -1, -1, c, &lr_sweep) &&
+                lr_sweep.hit_line_idx >= 0 && (size_t)lr_sweep.hit_line_idx < g->line_count &&
+                !lr_sweep.hit_is_platform && !lr_sweep.hit_has_platform_transform &&
+                (!(lr_is_jump_action || lr_is_sustained_dodge) || lr_sweep.hit_is_ledge) &&
+                // Near-flat floors only. 0.25 admits Yoshi's sloped ledge strips (nx 0.204,
+                // the lateral-entry class's landing surface there) while still excluding the
+                // steeper cliff slopes pinned by the shallow-cliff stay-airborne lock.
+                fabsf(lr_sweep.normal_x) < 0.25f && batch->state.pos_y[idx] < lr_sweep.hit_y &&
+                (!(lr_ground_departure_window ||
+                   (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+                    batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR)) ||
+                 // Sloped ledge strips (|nx| > 0.05, Yoshi's) waive the sustained depth
+                 // boundary: a decaying dodge GRAZES a slope shallowly at its only crossing
+                 // frame and never re-crosses; the flat-strip shallow-snap lock
+                 // (Battlefield) keeps the boundary.
+                 fabsf(lr_sweep.normal_x) > 0.05f ||
+                 (batch->state.pos_y[idx] + lr_cur_rel) < lr_sweep.hit_y - k_ecb_vertical_unit)) {
+              // Publish through the source segment remap: mpLib_8004DD90 walks from the hit
+              // line to the segment under the CURRENT root (a seam landing publishes the
+              // segment the snapped root rests on, not the segment the sweep crossed).
+              batch->state.pos_y[idx] = lr_sweep.hit_y;
+              on_ground = 1u;
+              {
+                float rm_nx = lr_sweep.normal_x;
+                float rm_ny = lr_sweep.normal_y;
+                const int rm_idx = msl_mplib_8004dd90_floor(batch, bi, g, lr_sweep.hit_line_idx,
+                                                            batch->state.pos_x[idx], lr_sweep.hit_y,
+                                                            NULL, &rm_nx, &rm_ny);
+                if (rm_idx >= 0 && (size_t)rm_idx < g->line_count) {
+                  ground_id = g->lines[(size_t)rm_idx].segment_i;
+                  lr_sweep.normal_x = rm_nx;
+                  lr_sweep.normal_y = rm_ny;
+                } else {
+                  ground_id = lr_sweep.hit_segment_id;
+                }
+              }
+              contact_x = lr_sweep.hit_x;
+              contact_y = lr_sweep.hit_y;
+              floor_nx = lr_sweep.normal_x;
+              floor_ny = lr_sweep.normal_y;
+              mpcoll_record_callback_floor_result_with_mode(
+                  &mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT,
+                  (uint8_t)MSL_MPCOLL_FLOOR_MODE_BOTTOM_SWEEP, ground_id, contact_x, contact_y,
+                  floor_nx, floor_ny);
+            }
           }
         }
         if (!on_ground && batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] != 0u &&
@@ -15674,6 +15886,32 @@ void mpcoll_ground_apply(MslBatch* batch) {
       batch->state.coll_ecb_bottom_valid[idx] = 1u;
       batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
       batch->state.coll_desired_ecb_bottom_locked_owner[idx] = stored_locked_desired_bottom_owner;
+      // Frame-end converged CollData ecb.bottom rel: mpCollInterpolateECB converges ecb to
+      // desired WITHIN the frame's substep loop (time reaches 1 on the last substep), so the
+      // frame-level effective bottom is the locked-preserved desired bottom while
+      // CollData_X130_Locked is held, otherwise the pose bottom; grounded CollData keeps the
+      // bottom at the root. Consumed as the prev-endpoint rel by per-frame bottom sweeps.
+      // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_LoadECB_inline}
+      {
+        float eff = 0.0f;
+        if (!batch->state.on_ground[idx]) {
+          eff = mpcoll_pose_ecb_bottom_rel_y(
+              char_id, batch->state.animation_index[idx],
+              msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]), 0u);
+          if (batch->state.ecb_lock_timer[idx] != 0u) {
+            // Same use_locked/lock_bottom_to_zero split as the validated consumers: an
+            // owner-held lock preserves the explicit lane; a ground-departure lock holds the
+            // grounded zero.
+            eff = (batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+                   msl_escapeair_locked_bottom_owner_any(
+                       batch->state.coll_desired_ecb_bottom_locked_owner[idx]))
+                      ? batch->state.coll_desired_ecb_bottom_rel_y[idx]
+                      : 0.0f;
+          }
+        }
+        batch->state.coll_effective_bottom_rel_prev[idx] = eff;
+        batch->state.coll_effective_bottom_rel_prev_valid[idx] = 1u;
+      }
     }
   }
 }

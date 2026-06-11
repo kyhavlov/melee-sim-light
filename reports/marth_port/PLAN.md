@@ -166,3 +166,31 @@ Slash, SpecialLw Counter (+CounterAttack).
   test: the Run->RunBrake same-frame race ate down-B during run (Run_IASA dispatches before
   braking in source order); brake entry frames now honor Run's chain. 129 marth tests +
   1 xfail; suite 3274; fox/falco byte-stable.
+- (airdodge-through-stage fix) Root-caused via faithful trace replay: live-stale CollData
+  current-ECB lane (grounded zero) on the EscapeAir entry frame collapsed the floor sweep's
+  prev-bottom to the root - the dodge skipped the floor line and fell through. Stale-zero
+  lanes now defer to the pre-entry pose; seeded lanes still win (FoD waveland lock intact).
+  Earlier wall-pass attempts reverted (broke 14 fox locks, unnecessary). Suite 3277, 0 xfail;
+  fox/falco byte-stable.
+- (clip-through fix, second round) The first fix (stale-zero entry basis) was insufficient:
+  the live kill path goes through owners that all decline ledge-floor crossings - the
+  EscapeAir locked floor family is FoD/seed-scoped and the hard-floor producers exclude
+  is_ledge lines. Added a last-resort EscapeAir descending floor catch (entry frames only,
+  flat fighter-solid non-platform floors, static-floor stages, true prev_pos basis, ordered
+  after every validated owner). Both manual-repro kills now land natively (verified frame by
+  frame against the traces). Suite 3278; fox/falco validate-all clean after scoping
+  (regressions found and fixed during development: FoD interpolation-gap rows, sustained
+  mid-dodge rows, sloped cliff floors).
+- (wall-corner pass) Zero live hull-interior fuzz violations: GD-lock wall ECB load for
+  EscapeAir under-lip dodges (both endpoints via the effective-prev lane), live-commit-gated
+  wall persistence (new coll_wall_commit_runtime lane), jump-family ledge-strip floor catch.
+  All four fuzz seeds + both traces land; suite 3279; validate-all no totals/no reds;
+  marth+fox 1200 episodes each, 0 violations. Uncommitted for review.
+- (clip elimination, final) Sweep matrix 370 -> 3 (one YS scenario, possibly
+  vanilla-faithful - pinned for a Dolphin probe). Engine: in-span carried-ledge re-landing
+  owner (mpCheckFloor prefer-hint semantics). Harness: unit_scale geometry, realistic
+  seeds, live-approach boundary family, resolution-aware oracle (4/4 validated at every
+  revision). All gates green: suite 3280 (incl. the carried-ledge re-landing lock),
+  validate-all no totals/no reds, traces land, locked seeds clean. Final matrix artifact:
+  CLIP_SWEEP_FINAL.md (+ clip_sweep_final.log / clip_sweep_final_violations.json);
+  Dolphin probe recipe in MANUAL_REPRO_CATALOG.md. Uncommitted for review.

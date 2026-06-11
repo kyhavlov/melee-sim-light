@@ -16,6 +16,14 @@ from melee_sim.env_batch import _check_data_manifest, _resolve_data_dir
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _pin_repo_data_root(monkeypatch):
+    # EnvBatch(data_dir=...) writes MSL_DATA_DIR into os.environ as a side effect,
+    # so no-arg EnvBatch tests here were order-dependent on that leak. Pin the repo
+    # data root per-test (monkeypatch restores it) to make each test standalone.
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+
+
 def _populate_data_overlay_without_legacy_script_owner_splits(dst_data_dir: Path) -> None:
     src_data_dir = ROOT / "data"
     dst_data_dir.mkdir(parents=True, exist_ok=True)
