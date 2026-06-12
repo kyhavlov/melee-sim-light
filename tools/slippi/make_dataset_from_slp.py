@@ -29,6 +29,32 @@ from tools.slippi.known_data_artifacts import (
 from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso01_v1
 from tools.slippi.rollback import finalized_frame_indices
 from tools.slippi.slpz import replay_path_for_peppi
+from tools.slippi.motion_state_owners import read_mslmso01_v1
+
+
+def manifest_registry_chars(data_root: Path) -> list[tuple[int, str]]:
+    """(internal_id, name) for every char in the data manifest, registry-verified.
+
+    Fails loudly when manifest.json names a char missing from the extraction registry:
+    silently skipping is exactly the per-char no-op class the de-spacie pass eliminated
+    (a skipped char gets default/empty entries in every per-char preprocessor map).
+    """
+    from tools.extraction.char_registry import CHARS as registry_chars
+
+    manifest_chars = json.loads((data_root / "manifest.json").read_text()).get("chars") or [
+        "fox",
+        "falco",
+    ]
+    out: list[tuple[int, str]] = []
+    for key in manifest_chars:
+        info = registry_chars.get(str(key))
+        if info is None:
+            raise ValueError(
+                f"data manifest names char {key!r} not present in tools/extraction/"
+                "char_registry.py - add the registry row before preprocessing"
+            )
+        out.append((info.internal_id, info.name))
+    return out
 from tools.slippi.suite_io import team_attack_on_from_start
 
 
@@ -1125,10 +1151,9 @@ def _derive_grounded_overlap_hidden_pos_z(
 
     push_x = np.zeros(256, dtype=np.float32)
     push_y = np.zeros(256, dtype=np.float32)
-    char_files = {
-        1: "fox",
-        22: "falco",
-    }
+    from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS_PB
+
+    char_files = {info.internal_id: info.name for info in _REGISTRY_CHARS_PB.values()}
     root = Path(data_dir)
     for cid, key in char_files.items():
         path = root / "characters" / f"{key}.json"
@@ -1670,6 +1695,8 @@ def _load_throw_pulse_seed_tables(
     pulse_frames_by_char_action: dict[tuple[int, int], tuple[int, ...]] = {}
     cmd1_start_by_char_action: dict[tuple[int, int], int] = {}
     shot_itkind_by_char: dict[int, int] = {}
+    # Spacie-only by design: blaster article machinery (the laser pulse lanes have no
+    # analog for article-less characters).
     for char_id, key in ((1, "fox"), (22, "falco")):
         moves = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
         shot_itkind_by_char[int(char_id)] = int(
@@ -1704,7 +1731,9 @@ def _load_runbrake_cmd0_seed_tables(*, data_root) -> tuple[dict[int, int], dict[
     """
     cmd0_on_by_char: dict[int, int] = {}
     cmd0_off_by_char: dict[int, int] = {}
-    for char_id, key in ((1, "fox"), (22, "falco")):
+    from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS_RB
+
+    for char_id, key in ((info.internal_id, info.name) for info in _REGISTRY_CHARS_RB.values()):
         moves = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
         events = moves.get("ftCo_SM_RunBrake", {}).get("events", [])
         cmd0_on = sorted(
@@ -1748,7 +1777,9 @@ def _load_source_clear_terminal_followup_tables(
     }
     cmd0_on_by_char_action: dict[tuple[int, int], int] = {}
     cmd0_off_by_char_action: dict[tuple[int, int], int] = {}
-    for char_id, key in ((1, "fox"), (22, "falco")):
+    from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS_CA
+
+    for char_id, key in ((info.internal_id, info.name) for info in _REGISTRY_CHARS_CA.values()):
         moves = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
         for action_id, move_name in action_to_move.items():
             events = moves.get(move_name, {}).get("events", [])
@@ -3596,7 +3627,11 @@ def _main_impl(args) -> Dataset:
     stage_segments: list[dict] = []
     stage_segments = _load_stage_segments_for_seed(stage_id=stage_id, data_root=data_root)
     char_landing_air_lag_frames: dict[int, dict[str, int]] = {}
-    char_fallspecial_landing_lag_frames: dict[int, dict[str, int]] = {}
+    # Resolved per-char map: freefall ORIGIN action id -> LandingFallSpecial lag frames.
+    # Derived from extracted MotionState identity (owners fx_special_kind lane for the
+    # spacie illusion/firefox rows; special-msids x submotion lane for marth-style
+    # up-special freefall) - no raw action-id literals.
+    char_fallspecial_origin_lag: dict[int, dict[int, float]] = {}
     char_walk_divisors: dict[int, tuple[float, float, float]] = {}
     char_walk_max: dict[int, float] = {}
     char_run_scaling: dict[int, float] = {}
@@ -3630,8 +3665,11 @@ def _main_impl(args) -> Dataset:
     stale_weight_count = int(struct.unpack_from("<H", stale_weights_buf, 12)[0])
     stale_weights = struct.unpack_from("<" + "f" * stale_weight_count, stale_weights_buf, 20)
 
-    for cid in (1, 22):
-        key = "fox" if cid == 1 else "falco"
+    # Per-character attr maps for every supported character (data manifest = registry
+    # chars). The old hardcoded (1, 22) loop silently skipped marth: no aerial landing-lag
+    # map (L-cancel derivation disabled!), default walk/run/friction tables - the
+    # spacie-shaped preprocessor class of the de-spacie pass.
+    for cid, key in manifest_registry_chars(data_root):
         attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
         move_file = json.loads((data_root / "moves" / f"{key}.json").read_text())
         move_data = move_file["moves"]
@@ -3643,10 +3681,40 @@ def _main_impl(args) -> Dataset:
             "airhi": int(attrs["landing_airhi_lag_frames"]),
             "airlw": int(attrs["landing_airlw_lag_frames"]),
         }
-        char_fallspecial_landing_lag_frames[int(cid)] = {
-            "illusion": int(attrs["illusion_landing_lag_frames"]),
-            "firefox": int(attrs["firefox_landing_lag_frames"]),
-        }
+        origin_lag: dict[int, float] = {}
+        owners_tbl = read_mslmso01_v1(data_root / "motion_state" / "owners" / f"{key}.bin")
+        if "illusion_landing_lag_frames" in attrs or "firefox_landing_lag_frames" in attrs:
+            from tools.extraction.extract_motion_state_owners import FX_SPECIAL_KIND_VALUES
+
+            illusion_kind = FX_SPECIAL_KIND_VALUES["SPECIAL_AIR_S_END"]
+            firefox_kinds = {
+                FX_SPECIAL_KIND_VALUES["SPECIAL_AIR_HI"],
+                FX_SPECIAL_KIND_VALUES["SPECIAL_HI_FALL"],
+                FX_SPECIAL_KIND_VALUES["SPECIAL_HI_BOUND"],
+            }
+            for a in range(len(owners_tbl.fx_special_kind)):
+                k = int(owners_tbl.fx_special_kind[a])
+                if k == illusion_kind and "illusion_landing_lag_frames" in attrs:
+                    origin_lag[a] = float(attrs["illusion_landing_lag_frames"])
+                elif k in firefox_kinds and "firefox_landing_lag_frames" in attrs:
+                    origin_lag[a] = float(attrs["firefox_landing_lag_frames"])
+        if "specialhi_landing_lag_frames" in attrs:
+            # Marth-style up-special freefall (ftMs_SpecialHi stores MarsAttributes x2C into
+            # mv.co.fallspecial.landing_lag): origins are the actions whose submotion is the
+            # char's up-special main msid (data/special_msids/<char>.json).
+            sm_path = data_root / "special_msids" / f"{key}.json"
+            if sm_path.exists():
+                sm = json.loads(sm_path.read_text())
+                up_msids = set()
+                for up_key in ("up_air", "up_ground"):
+                    main = (sm.get(up_key) or {}).get("main") or {}
+                    for v in main.values():
+                        if isinstance(v, int):
+                            up_msids.add(int(v))
+                for a in range(len(owners_tbl.submotion_id)):
+                    if int(owners_tbl.submotion_id[a]) in up_msids:
+                        origin_lag[a] = float(attrs["specialhi_landing_lag_frames"])
+        char_fallspecial_origin_lag[int(cid)] = origin_lag
         char_walk_divisors[int(cid)] = (
             float(attrs["slow_walk_max"]),
             float(attrs["mid_walk_point"]),
@@ -4631,7 +4699,7 @@ def _main_impl(args) -> Dataset:
             common_lcancel_lag_div=lcancel_lag_div,
             common_landing_fall_special_lag_frames=landing_fall_special_lag_frames,
             char_landing_air_lag_frames=char_landing_air_lag_frames,
-            char_fallspecial_landing_lag_frames=char_fallspecial_landing_lag_frames,
+            char_fallspecial_origin_lag=char_fallspecial_origin_lag,
         )
         frame_speed_mul_all[:, slot] = frame_speed_mul
         smash_state, smash_frames, smash_hold, smash_saved_rate = _derive_smash_charge_seed_lanes(

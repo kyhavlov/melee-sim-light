@@ -14,9 +14,14 @@ from tools.slippi.known_data_artifacts import (
 )
 
 
-# Explicit bridge between simulator/Slippi external `character` ids and the GALE01 internal
-# FighterKind domain documented by MSLITAR1.
-SIM_CHAR_TO_GALE01_FIGHTER_KIND = {1: 2, 22: 20}
+# Bridge between simulator internal ids (GALE01 FighterKind: Fox=1, Falco=22, ...) and the
+# Slippi/CSS external `character` ids (Fox=2, Falco=20, ...), registry-derived so every
+# supported character is covered (the old hardcoded {1: 2, 22: 20} silently dropped others).
+from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS
+
+SIM_CHAR_TO_GALE01_FIGHTER_KIND = {
+    info.internal_id: info.external_id for info in _REGISTRY_CHARS.values()
+}
 GALE01_FIGHTER_KIND_TO_SIM_CHAR = {v: k for k, v in SIM_CHAR_TO_GALE01_FIGHTER_KIND.items()}
 
 

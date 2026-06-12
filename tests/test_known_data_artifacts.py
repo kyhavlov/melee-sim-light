@@ -647,7 +647,12 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
 
 @pytest.mark.integration
 def test_item_article_tooling_accessors_map_to_sim_char_domain() -> None:
-    assert SIM_CHAR_TO_GALE01_FIGHTER_KIND == {1: 2, 22: 20}
+    # Registry-derived: every supported character maps internal -> external id.
+    from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS
+
+    assert SIM_CHAR_TO_GALE01_FIGHTER_KIND == {
+        info.internal_id: info.external_id for info in _REGISTRY_CHARS.values()
+    }
     assert item_article_kind_set(Path("data"), "blaster_shot_itkind") == (54, 55)
     assert item_article_kind_set(Path("data"), "side_special_illusion_itkind") == (56, 57)
     by_char = item_article_values_by_sim_char(Path("data"), "laser_lifetime_frames")
@@ -1832,3 +1837,23 @@ def test_known_data_artifact_extractors_regenerate_stable_outputs(tmp_path: Path
     assert (tmp_path / "dream_whispy.bin").read_bytes() == Path(
         "data/stage_items/dream_whispy.bin"
     ).read_bytes()
+
+
+def test_manifest_registry_chars_fails_loudly_on_unknown_char(tmp_path) -> None:
+    # A manifest char missing from the extraction registry must raise, not silently skip:
+    # skipped chars get default/empty entries in every per-char preprocessor map (the
+    # hardcoded-(1,22)-loop class fixed in the de-spacie pass).
+    import json as _json
+
+    import pytest as _pytest
+
+    from tools.slippi.make_dataset_from_slp import manifest_registry_chars
+
+    (tmp_path / "manifest.json").write_text(
+        _json.dumps({"chars": ["fox", "falco", "marth", "roy"]})
+    )
+    with _pytest.raises(ValueError, match="roy"):
+        manifest_registry_chars(tmp_path)
+
+    (tmp_path / "manifest.json").write_text(_json.dumps({"chars": ["fox", "marth"]}))
+    assert manifest_registry_chars(tmp_path) == [(1, "fox"), (18, "marth")]

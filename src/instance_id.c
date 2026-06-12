@@ -13,10 +13,6 @@ enum {
   MSL_ACT_CO_ATTACK_LW3 = 0x0039,  // ftCo_MS_AttackLw3
 };
 
-static inline uint8_t is_fox_falco(uint8_t char_id) {
-  return (char_id == (uint8_t)MSL_CHAR_ID_FOX) || (char_id == (uint8_t)MSL_CHAR_ID_FALCO);
-}
-
 static inline uint8_t action_is_blaster_loop(uint8_t char_id, uint16_t action_id) {
   // Ownership from the extracted MotionState row identity (the Blaster loop rows);
   // ftMs_SpecialNLoop (Marth, same numeric ids) stays kind 0.
@@ -190,8 +186,12 @@ void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::callUnk
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_OnChangeAction
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824 (plAttack_80037B08; sth ..., 0x2088)
-  if (is_fox_falco(char_id) &&
-      motion_state_change_calls_ft_80089824(batch->state.char_id[idx], prev_action_id, action_id)) {
+  // No char-family gate: ftCo_AttackLw3's callUnk -> ft_80089824 is COMMON ftCo code (every
+  // character's dtilt entry bumps fp->x2088); the blaster-loop branch inside the helper is
+  // already keyed on the extracted MotionState kind. The old fox/falco gate silently kept
+  // other characters' dtilt from bumping the instance counter (persistent divergence).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::{doEnter,callUnk}
+  if (motion_state_change_calls_ft_80089824(batch->state.char_id[idx], prev_action_id, action_id)) {
     const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
     batch->state.instance_id[idx] = inc_instance_id_plAttack_80037B08(batch, bi);
   }

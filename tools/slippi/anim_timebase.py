@@ -14,13 +14,12 @@ class EndFrameTables:
 
 
 def _char_key_from_char_id(char_id: int) -> str | None:
-    # Target domain mapping (GALE01): Fox=1, Falco=22.
-    # refs/melee/src/melee/ft/types.h and Slippi post-frame `character`.
-    if int(char_id) == 1:
-        return "fox"
-    if int(char_id) == 22:
-        return "falco"
-    return None
+    # Registry-driven internal-id -> pipeline-name mapping (GALE01 FighterKind ids).
+    # refs/melee/src/melee/ft/types.h and tools/extraction/char_registry.py
+    from tools.extraction.char_registry import CHAR_BY_INTERNAL_ID
+
+    info = CHAR_BY_INTERNAL_ID.get(int(char_id))
+    return info.name if info is not None else None
 
 
 def _read_end_frames_from_tracks_bin(path: Path) -> dict[int, float]:
@@ -81,12 +80,16 @@ def _read_end_frames_from_tracks_bin(path: Path) -> dict[int, float]:
 
 
 def load_end_frame_tables(data_root: Path) -> EndFrameTables:
+    # All registry characters: the old hardcoded (1, 22) loop left non-spacie characters
+    # without anim end-frame tables (silent None in every consumer).
+    from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS
+
     by_char_id: dict[int, dict[int, float]] = {}
-    for cid in (1, 22):
-        key = _char_key_from_char_id(cid)
-        if key is None:
+    for info in _REGISTRY_CHARS.values():
+        path = data_root / "anims" / f"{info.name}.tracks.bin"
+        if not path.exists():
             continue
-        by_char_id[int(cid)] = _read_end_frames_from_tracks_bin(data_root / "anims" / f"{key}.tracks.bin")
+        by_char_id[int(info.internal_id)] = _read_end_frames_from_tracks_bin(path)
     return EndFrameTables(by_char_id=by_char_id)
 
 
@@ -113,7 +116,7 @@ def derive_frame_speed_mul_f32(
     common_lcancel_lag_div: float,
     common_landing_fall_special_lag_frames: float,
     char_landing_air_lag_frames: dict[int, dict[str, int]],  # char_id -> {"airn":..,"airf":..,...}
-    char_fallspecial_landing_lag_frames: dict[int, dict[str, int]] | None = None,
+    char_fallspecial_origin_lag: dict[int, dict[int, float]] | None = None,
 ) -> np.ndarray:
     """
     Strictly-causal derivation of fp->frame_speed_mul (float).
@@ -182,17 +185,8 @@ def derive_frame_speed_mul_f32(
     ACT_FALL_SPECIAL_F = np.uint16(0x0024)
     ACT_FALL_SPECIAL_B = np.uint16(0x0025)
     ACT_ESCAPE_AIR = np.uint16(0x00EC)
-    ACT_FX_SPECIAL_AIR_S_END = np.uint16(0x0160)
-    ACT_FX_SPECIAL_AIR_HI = np.uint16(0x0164)
-    ACT_FX_SPECIAL_HI_FALL = np.uint16(0x0166)
-    ACT_FX_SPECIAL_HI_BOUND = np.uint16(0x0167)
     ACT_GUARD_SET_OFF = np.uint16(0x00B5)
     fall_special_actions = {int(ACT_FALL_SPECIAL), int(ACT_FALL_SPECIAL_F), int(ACT_FALL_SPECIAL_B)}
-    firefox_origin_actions = {
-        int(ACT_FX_SPECIAL_AIR_HI),
-        int(ACT_FX_SPECIAL_HI_FALL),
-        int(ACT_FX_SPECIAL_HI_BOUND),
-    }
 
     def landing_fall_special_lag_for_entry(i: int, cid: int) -> float:
         if i <= 0:
@@ -212,18 +206,16 @@ def derive_frame_speed_mul_f32(
             #   ftCo_EscapeAir_Anim,ftCo_80099D70}
             return float(common_landing_fall_special_lag_frames)
 
-        lag_map = {} if char_fallspecial_landing_lag_frames is None else char_fallspecial_landing_lag_frames.get(cid, {})
-        if origin_action == int(ACT_FX_SPECIAL_AIR_S_END):
-            # Illusion/Phantasm freefall stores da->x50_FOX_ILLUSION_LANDING_LAG in
-            # mv.co.fallspecial.landing_lag; direct SpecialAirSEnd_Coll does the same.
-            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
-            #   ftFx_SpecialAirSEnd_Anim,ftFx_SpecialAirSEnd_Coll}
-            return float(lag_map.get("illusion", common_landing_fall_special_lag_frames))
-        if origin_action in firefox_origin_actions:
-            # Firefox/Firebird rebound/fall freefall stores da->x90_FOX_FIREFOX_LANDING_LAG.
-            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
-            #   ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}
-            return float(lag_map.get("firefox", common_landing_fall_special_lag_frames))
+        # Per-char resolved origin map (built from extracted MotionState identity in
+        # make_dataset_from_slp: owners fx_special_kind lane for the spacie illusion/
+        # firefox rows, special-msids x submotion for marth-style up-special freefall).
+        # No raw action-id literals: the same id means different rows per character.
+        origin_map = (
+            {} if char_fallspecial_origin_lag is None else char_fallspecial_origin_lag.get(cid, {})
+        )
+        lag = origin_map.get(int(origin_action))
+        if lag is not None:
+            return float(lag)
 
         return float(common_landing_fall_special_lag_frames)
 

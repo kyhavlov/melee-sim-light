@@ -240,8 +240,10 @@ static inline uint8_t reseed_action_is_damage_or_firefox_launch_victim(uint8_t c
     case MSL_ACT_DAMAGE_FLY_ROLL:
     case MSL_ACT_FLY_REFLECT_WALL:
     case MSL_ACT_FLY_REFLECT_CEIL:
-      // Damage-family launch victims gate on the spacie char family.
-      return msl_char_id_is_spacie(char_id);
+      // Common damage-family victim states: char-agnostic in source (the colanim
+      // x198C/x1994 lanes are Fighter_8006A360 mechanics for every character; the old
+      // spacie gate reflected the validation corpus, not the mechanism).
+      return 1u;
     default: {
       // Firefox launch ownership from the extracted MotionState row identity
       // (shared 341..372 id range stays kind 0 for other characters).

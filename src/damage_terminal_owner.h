@@ -299,7 +299,11 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
     case (uint16_t)MSL_ACT_JUMP_AERIAL_B:
     case (uint16_t)MSL_ACT_ATTACK_HI4:
     case (uint16_t)MSL_ACT_ATTACK_LW3:
-      // Common pre-actions in this family gate on the spacie char-family RNG owner.
+      // SUBSTRATE-DEBT gate (de-spacie pass, 2026-06-11): ftCo_8008DCE0's DamageFlyRoll
+      // RNG gate is char-agnostic in source, but this owner attributes a HIDDEN RNG-clock
+      // phase whose derivation is only proven for spacie rows - widening to all chars was
+      // tested and regressed the marth suite by +8 one-step rows (wrong RNG attribution).
+      // Widen only together with marth RNG-phase derivation work.
       return (uint8_t)(batch->state.char_id[d_idx] == (uint8_t)MSL_CHAR_ID_FOX ||
                        batch->state.char_id[d_idx] == (uint8_t)MSL_CHAR_ID_FALCO);
     case (uint16_t)MSL_ACT_FX_SPECIAL_LW_END:

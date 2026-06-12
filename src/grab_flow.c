@@ -947,10 +947,10 @@ uint8_t grab_flow_try_enter_catchdash_from_iasa(MslBatch* batch, const MslCommon
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8A38
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54
   //
-  // NOTE(v1-domain):
-  // - ftCo_800D8A38 also gates through fn_800D8E94/fn_800D952C before input checks.
-  // - For Fox/Falco-only v1, those gates are effectively pass-through; keep the source pointers
-  //   and model the input+enter shape directly.
+  // NOTE(char-domain): ftCo_800D8A38 also gates through fn_800D8E94 (blocks Link/YLink
+  // with an active hookshot item) and fn_800D952C (blocks Samus with an active grapple)
+  // before input checks. Pass-through for every currently supported character
+  // (fox/falco/marth); model these blocks when a Link/YLink/Samus port lands.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800D8E94,fn_800D952C}
   if (!catch_input_a_pressed_edge(batch, idx)) {
     return 0u;

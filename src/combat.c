@@ -420,9 +420,9 @@ static inline float combat_lbColl_804D7A38(void) {
 static inline uint8_t combat_shine_start_damageair_entry_pose_bridge_applies(const MslBatch* batch,
                                                                              size_t a_idx,
                                                                              size_t d_idx) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[d_idx])) {
-    return 0u;
-  }
+  // No victim char-family gate: the attacker's shine-start identity below is kind-keyed and
+  // the victim-side DamageAir entry-pose bridge is common ftColl/ftCo mechanics (the old
+  // gate reflected the spacie-vs-spacie validation corpus).
   if (batch == NULL) {
     return 0u;
   }
@@ -448,9 +448,8 @@ static inline uint8_t combat_shine_start_damageair_entry_pose_bridge_applies(con
 static inline uint8_t combat_shine_start_grounded_ledge_ecb_lock_owner(const MslBatch* batch,
                                                                        size_t d_idx, size_t a_idx,
                                                                        uint16_t attacker_action) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[d_idx])) {
-    return 0u;
-  }
+  // No victim char-family gate: the attacker shine-start identity is kind-keyed and the
+  // victim-side grounded-launch ECB-lock handoff is common CollData mechanics.
   if (batch == NULL) {
     return 0u;
   }
@@ -2029,9 +2028,9 @@ static inline uint8_t combat_is_damage_air_action(uint16_t action_id) {
 
 static inline uint8_t combat_residual_frame_start_hitcapsule_owner(const MslBatch* batch,
                                                                    size_t idx) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[idx])) {
-    return 0u;
-  }
+  // No char-family gate: the victim-action set below is common-damage + kind-keyed firefox
+  // rows (msl_damage_owner_is_damage_or_firefox_launch_action), and frame-start residual
+  // hitcapsules are common ftColl mechanics.
   if (batch == NULL || batch->state.hitbox_count[idx] == 0u) {
     return 0u;
   }
@@ -6186,9 +6185,11 @@ static inline uint8_t combat_damageflyroll_specialairhi_attacklw4_hitcapsule_own
     uint8_t source_hb_valid, size_t source_cap_i, uint8_t source_cap_valid,
     uint16_t source_motion_id, int source_hitcapsule_int_dmg, uint16_t source_hitbox_angle,
     uint16_t source_hitbox_kbg, uint16_t source_hitbox_bkb) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[a_idx])) {
-    return 0u;
-  }
+  // No attacker char-family gate: the victim-side spacie special states below are keyed on
+  // the extracted MotionState kind, the attacker's move payload is verified against the
+  // attacker's own extracted move data, and source ftCo_8008DCE0's DamageFlyRoll gate is
+  // victim-side char-agnostic. The old gate reflected the spacie-vs-spacie validation
+  // corpus, not the mechanism (de-spacie pass).
   if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
     return 0u;
   }
@@ -7151,9 +7152,11 @@ static inline uint8_t combat_damageflyroll_specialhifall_late_attackairn_hitcaps
     uint8_t source_hb_valid, uint8_t source_cap_valid, uint16_t source_motion_id,
     int source_hitcapsule_int_dmg, uint16_t source_hitbox_angle, uint16_t source_hitbox_kbg,
     uint16_t source_hitbox_bkb) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[a_idx])) {
-    return 0u;
-  }
+  // No attacker char-family gate: the victim-side spacie special states below are keyed on
+  // the extracted MotionState kind, the attacker's move payload is verified against the
+  // attacker's own extracted move data, and source ftCo_8008DCE0's DamageFlyRoll gate is
+  // victim-side char-agnostic. The old gate reflected the spacie-vs-spacie validation
+  // corpus, not the mechanism (de-spacie pass).
   if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
     return 0u;
   }
@@ -7192,9 +7195,11 @@ static inline uint8_t combat_damageflyroll_specialhifall_attackairb_create_hitca
     const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker, size_t source_hb_i,
     uint8_t source_hb_valid, size_t source_cap_i, uint8_t source_cap_valid,
     uint16_t source_motion_id) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[a_idx])) {
-    return 0u;
-  }
+  // No attacker char-family gate: the victim-side spacie special states below are keyed on
+  // the extracted MotionState kind, the attacker's move payload is verified against the
+  // attacker's own extracted move data, and source ftCo_8008DCE0's DamageFlyRoll gate is
+  // victim-side char-agnostic. The old gate reflected the spacie-vs-spacie validation
+  // corpus, not the mechanism (de-spacie pass).
   if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
     return 0u;
   }
@@ -7757,9 +7762,11 @@ static inline uint8_t combat_damageflyroll_weak_attackairb_source_skips_x1994(
 static inline uint8_t combat_damageflyroll_specialairhi_attackairb_hitcapsule_owner(
     const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker, size_t source_hb_i,
     uint8_t source_hb_valid, size_t source_cap_i, uint8_t source_cap_valid) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[a_idx])) {
-    return 0u;
-  }
+  // No attacker char-family gate: the victim-side spacie special states below are keyed on
+  // the extracted MotionState kind, the attacker's move payload is verified against the
+  // attacker's own extracted move data, and source ftCo_8008DCE0's DamageFlyRoll gate is
+  // victim-side char-agnostic. The old gate reflected the spacie-vs-spacie validation
+  // corpus, not the mechanism (de-spacie pass).
   if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
     return 0u;
   }
@@ -7833,9 +7840,11 @@ static inline uint8_t combat_damageflyroll_specialhifall_strong_attackairb_cap2_
     uint8_t source_hb_valid, size_t source_cap_i, uint8_t source_cap_valid,
     uint16_t source_motion_id, int source_hitcapsule_int_dmg, uint16_t source_hitbox_angle,
     uint16_t source_hitbox_kbg, uint16_t source_hitbox_bkb) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[a_idx])) {
-    return 0u;
-  }
+  // No attacker char-family gate: the victim-side spacie special states below are keyed on
+  // the extracted MotionState kind, the attacker's move payload is verified against the
+  // attacker's own extracted move data, and source ftCo_8008DCE0's DamageFlyRoll gate is
+  // victim-side char-agnostic. The old gate reflected the spacie-vs-spacie validation
+  // corpus, not the mechanism (de-spacie pass).
   if (!combat_damageflyroll_specialairhi_attackairb_hitcapsule_owner(
           batch, d_idx, a_idx, attacker, source_hb_i, source_hb_valid, source_cap_i,
           source_cap_valid)) {
@@ -7921,9 +7930,11 @@ static inline void combat_damageflyroll_consume_specialhifall_strong_attackairb_
 static inline uint8_t combat_damageflyroll_specialairs_attackairb_hitcapsule_owner(
     const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker, size_t source_hb_i,
     uint8_t source_hb_valid, size_t source_cap_i, uint8_t source_cap_valid) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[a_idx])) {
-    return 0u;
-  }
+  // No attacker char-family gate: the victim-side spacie special states below are keyed on
+  // the extracted MotionState kind, the attacker's move payload is verified against the
+  // attacker's own extracted move data, and source ftCo_8008DCE0's DamageFlyRoll gate is
+  // victim-side char-agnostic. The old gate reflected the spacie-vs-spacie validation
+  // corpus, not the mechanism (de-spacie pass).
   if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
     return 0u;
   }
@@ -8027,9 +8038,11 @@ static inline uint8_t combat_damageflyroll_speciallw_end_strong_attackairb_hitca
     uint8_t source_hb_valid, size_t source_cap_i, uint8_t source_cap_valid,
     uint16_t source_motion_id, int source_hitcapsule_int_dmg, uint16_t source_hitbox_angle,
     uint16_t source_hitbox_kbg, uint16_t source_hitbox_bkb, uint8_t defender_on_ground_before) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[a_idx])) {
-    return 0u;
-  }
+  // No attacker char-family gate: the victim-side spacie special states below are keyed on
+  // the extracted MotionState kind, the attacker's move payload is verified against the
+  // attacker's own extracted move data, and source ftCo_8008DCE0's DamageFlyRoll gate is
+  // victim-side char-agnostic. The old gate reflected the spacie-vs-spacie validation
+  // corpus, not the mechanism (de-spacie pass).
   if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
     return 0u;
   }
@@ -8092,9 +8105,11 @@ static inline uint8_t combat_damageflyroll_speciallw_end_continuing_weak_attacka
     uint8_t source_hb_valid, size_t source_cap_i, uint8_t source_cap_valid,
     uint16_t source_motion_id, int source_hitcapsule_int_dmg, uint16_t source_hitbox_angle,
     uint16_t source_hitbox_kbg, uint16_t source_hitbox_bkb, uint8_t defender_on_ground_before) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[a_idx])) {
-    return 0u;
-  }
+  // No attacker char-family gate: the victim-side spacie special states below are keyed on
+  // the extracted MotionState kind, the attacker's move payload is verified against the
+  // attacker's own extracted move data, and source ftCo_8008DCE0's DamageFlyRoll gate is
+  // victim-side char-agnostic. The old gate reflected the spacie-vs-spacie validation
+  // corpus, not the mechanism (de-spacie pass).
   if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
     return 0u;
   }
@@ -8299,9 +8314,11 @@ static inline uint8_t combat_damageflyroll_jumpaerial_attackairb_carry_selected_
 static inline uint8_t combat_damageflyroll_jumpaerial_illusion_article_owner(
     const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker, uint8_t source_hb_valid,
     uint16_t source_item_type, uint8_t source_item_state) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[a_idx])) {
-    return 0u;
-  }
+  // No attacker char-family gate: the victim-side spacie special states below are keyed on
+  // the extracted MotionState kind, the attacker's move payload is verified against the
+  // attacker's own extracted move data, and source ftCo_8008DCE0's DamageFlyRoll gate is
+  // victim-side char-agnostic. The old gate reflected the spacie-vs-spacie validation
+  // corpus, not the mechanism (de-spacie pass).
   if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
     return 0u;
   }

@@ -122,7 +122,7 @@ mismatch.item_type: 0 / 153330 (0.000000)
 mismatch.item_state: 0 / 153330 (0.000000)
 mismatch.item_owner: 0 / 153330 (0.000000)
 mismatch.item_instance_id: 0 / 153330 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 27 / 20444 (0.001321)
+ignored_mismatch.state_flags[4]&0x80: 25 / 20444 (0.001223)
 err.pos_x: mae=0.000208 p95=0.000000 max=0.299999
 err.pos_y: mae=0.000293 p95=0.000000 max=2.200000
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000059
@@ -137,8 +137,8 @@ err.item_pos_y: mae=0.056702 p95=0.000000 max=18.343994
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000152
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000045
 overall.discrete_mismatch: 15 / 1236862
-overall.strict_discrete_mismatch: 42 / 1236862
-overall.ignored_discrete_mismatch: 27
+overall.strict_discrete_mismatch: 40 / 1236862
+overall.ignored_discrete_mismatch: 25
 overall.float_norm_mae_p95: 0.00001356
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
@@ -167,7 +167,7 @@ mismatch.item_type: 0 / 117555 (0.000000)
 mismatch.item_state: 0 / 117555 (0.000000)
 mismatch.item_owner: 0 / 117555 (0.000000)
 mismatch.item_instance_id: 0 / 117555 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 19 / 15674 (0.001212)
+ignored_mismatch.state_flags[4]&0x80: 20 / 15674 (0.001276)
 err.pos_x: mae=0.000000 p95=0.000000 max=0.000059
 err.pos_y: mae=0.000379 p95=0.000000 max=2.940002
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000059
@@ -182,12 +182,12 @@ err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000126
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000213
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000126
 overall.discrete_mismatch: 7 / 948277
-overall.strict_discrete_mismatch: 26 / 948277
-overall.ignored_discrete_mismatch: 19
+overall.strict_discrete_mismatch: 27 / 948277
+overall.ignored_discrete_mismatch: 20
 overall.float_norm_mae_p95: 0.00001336
 
 == suite summary ==
 overall.discrete_mismatch: 39 / 4462843
-overall.strict_discrete_mismatch: 125 / 4462843
-overall.ignored_discrete_mismatch: 86
+overall.strict_discrete_mismatch: 124 / 4462843
+overall.ignored_discrete_mismatch: 85
 overall.float_norm_mae_p95: 0.00001608

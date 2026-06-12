@@ -752,7 +752,11 @@ def test_derive_frame_speed_mul_landing_fallspecial_origin_specific_lag() -> Non
         common_lcancel_lag_div=2.0,
         common_landing_fall_special_lag_frames=10.0,
         char_landing_air_lag_frames={1: {"airn": 15, "airf": 22, "airb": 20, "airhi": 18, "airlw": 18}},
-        char_fallspecial_landing_lag_frames={1: {"illusion": 20, "firefox": 18}},
+        char_fallspecial_origin_lag={
+            # Resolved origin->lag map (fox): illusion end row + the firefox freefall rows,
+            # as make_dataset_from_slp now derives from the owners fx_special_kind lane.
+            1: {0x0160: 20.0, 0x0164: 18.0, 0x0166: 18.0, 0x0167: 18.0}
+        },
     )
 
     assert float(got[1]) == pytest.approx(3.01, abs=1e-6)
@@ -772,7 +776,11 @@ def test_derive_frame_speed_mul_landing_fallspecial_origin_specific_lag() -> Non
         common_lcancel_lag_div=2.0,
         common_landing_fall_special_lag_frames=10.0,
         char_landing_air_lag_frames={1: {"airn": 15, "airf": 22, "airb": 20, "airhi": 18, "airlw": 18}},
-        char_fallspecial_landing_lag_frames={1: {"illusion": 20, "firefox": 18}},
+        char_fallspecial_origin_lag={
+            # Resolved origin->lag map (fox): illusion end row + the firefox freefall rows,
+            # as make_dataset_from_slp now derives from the owners fx_special_kind lane.
+            1: {0x0160: 20.0, 0x0164: 18.0, 0x0166: 18.0, 0x0167: 18.0}
+        },
     )
     assert np.allclose(got, got_extended[: got.size])
 
