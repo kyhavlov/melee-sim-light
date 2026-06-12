@@ -2431,7 +2431,12 @@ def _derive_throw_laser_item_hitlist_seed_lanes(
     )
 
 
-def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.ndarray) -> np.ndarray:
+def _derive_landing_fallspecial_allow_interrupt_seed_lane(
+    *,
+    action_id_u16: np.ndarray,
+    char_id_u8: np.ndarray,
+    origin_allow_by_char: dict[int, dict[int, tuple[int, int]]],
+) -> np.ndarray:
     """
     Derive LandingFallSpecial `mv.co.landing.allow_interrupt` from replay-prefix action history.
 
@@ -2440,9 +2445,13 @@ def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.n
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099D70
     - FallSpecial_Coll forwards `mv.co.fallspecial.allow_interrupt`.
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096D28
-    - Fox/Falco SpecialS/Hi freefall enters FallSpecial with allow_interrupt=true.
+    - The bool is CALLSITE-owned per freefall origin: fox/falco SpecialS/Hi enters pass true,
+      marth-style ftMs_SpecialHi passes false. `origin_allow_by_char` carries that per-char
+      origin-action identity (owners fx_special_kind lane / special msids - no raw FX ids)
+      as (entry_allow, direct_lfs_allow) per origin.
       refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Anim
       refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c
+      refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c
 
     Seed policy:
     - Strictly prefix-causal over visible action ids.
@@ -2450,37 +2459,41 @@ def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.n
       subsequent LandingFallSpecial run.
     """
     action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    char_ids = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
     out = np.zeros(int(action.shape[0]), dtype=np.uint8)
     ACT_FALL_SPECIAL = 0x0023
     ACT_FALL_SPECIAL_F = 0x0024
     ACT_FALL_SPECIAL_B = 0x0025
     ACT_LANDING_FALL_SPECIAL = 0x002B
     ACT_ESCAPE_AIR = 0x00EC
-    ACT_FX_SPECIAL_HI_FALL = 0x0166
-    ACT_FX_SPECIAL_HI_BOUND = 0x0167
     fall_actions = {ACT_FALL_SPECIAL, ACT_FALL_SPECIAL_F, ACT_FALL_SPECIAL_B}
-    firefox_allow_landing_sources = {ACT_FX_SPECIAL_HI_FALL, ACT_FX_SPECIAL_HI_BOUND}
+    _empty: dict[int, tuple[int, int]] = {}
     fallspecial_allow = 0
     lfs_allow = 0
     prev = -1
     for i, raw in enumerate(action):
         cur = int(raw)
         if i == 0 or cur != prev:
+            origin_allow = origin_allow_by_char.get(int(char_ids[i]), _empty)
             if cur in fall_actions:
-                # EscapeAir_Anim enters FallSpecial with allow_interrupt=false. Other suite-owned
-                # common/special freefall enters that reach FallSpecial use ftCo_80096900(..., true).
-                fallspecial_allow = 0 if prev == ACT_ESCAPE_AIR else 1
+                # EscapeAir_Anim enters FallSpecial with allow_interrupt=false. Known special
+                # freefall origins carry their callsite bool; remaining common enters reach
+                # FallSpecial through ftCo_FallSpecial_Enter's true path.
+                # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Enter
+                if prev == ACT_ESCAPE_AIR:
+                    fallspecial_allow = 0
+                else:
+                    fallspecial_allow = int(origin_allow.get(prev, (1, 0))[0])
                 lfs_allow = 0
             elif cur == ACT_LANDING_FALL_SPECIAL:
                 if prev in fall_actions:
                     lfs_allow = 1 if fallspecial_allow != 0 else 0
-                elif prev in firefox_allow_landing_sources:
-                    # Firefox/Firebird end paths own the same hidden landing.allow_interrupt=true
-                    # source bit through ftCo_80096900(..., arg1=1, ..., da->x90). Some replay
-                    # rows publish the resulting LandingFallSpecial directly from the SpecialHi*
-                    # visible state, so the prefix-derived lane must not treat those like
-                    # EscapeAir/Side-B false-entry landings.
-                    lfs_allow = 1
+                elif prev in origin_allow:
+                    # Some replay rows publish the LandingFallSpecial directly from the special's
+                    # visible state (same-frame landing): the origin's DIRECT-landing callsite
+                    # bool applies (Firefox/Firebird HiFall/HiBound true; Illusion
+                    # SpecialAirSEnd_Coll false; marth-style SpecialHi false).
+                    lfs_allow = int(origin_allow[prev][1])
                 else:
                     # Direct EscapeAir_Coll and SpecialAirSEnd_Coll both pass false.
                     lfs_allow = 0
@@ -3670,6 +3683,7 @@ def _main_impl(args) -> Dataset:
     # spacie illusion/firefox rows; special-msids x submotion lane for marth-style
     # up-special freefall) - no raw action-id literals.
     char_fallspecial_origin_lag: dict[int, dict[int, float]] = {}
+    char_fallspecial_origin_allow_interrupt: dict[int, dict[int, tuple[int, int]]] = {}
     char_walk_divisors: dict[int, tuple[float, float, float]] = {}
     char_walk_max: dict[int, float] = {}
     char_run_scaling: dict[int, float] = {}
@@ -3721,6 +3735,19 @@ def _main_impl(args) -> Dataset:
             "airlw": int(attrs["landing_airlw_lag_frames"]),
         }
         origin_lag: dict[int, float] = {}
+        # ftCo_80096900's allow_interrupt bool is callsite-owned, and an origin carries TWO
+        # bits because the freefall-entry callsite and the direct-landing callsite differ:
+        # (entry_allow, direct_lfs_allow) per origin action.
+        # - fox/falco Illusion end: Anim-end -> FallSpecial passes true, but the direct
+        #   SpecialAirSEnd_Coll landing passes false.
+        # - fox/falco Firefox HiFall/HiBound: both paths pass true.
+        # - marth-style ftMs_SpecialHi: both paths pass false.
+        # Same origin identity machinery as origin_lag (owners fx_special_kind lane /
+        # special msids - no raw FX ids).
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSEnd_Anim,ftFx_SpecialAirSEnd_Coll}
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c
+        # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c
+        origin_allow_interrupt: dict[int, tuple[int, int]] = {}
         owners_tbl = read_mslmso01_v1(data_root / "motion_state" / "owners" / f"{key}.bin")
         if "illusion_landing_lag_frames" in attrs or "firefox_landing_lag_frames" in attrs:
             from tools.extraction.extract_motion_state_owners import FX_SPECIAL_KIND_VALUES
@@ -3735,8 +3762,14 @@ def _main_impl(args) -> Dataset:
                 k = int(owners_tbl.fx_special_kind[a])
                 if k == illusion_kind and "illusion_landing_lag_frames" in attrs:
                     origin_lag[a] = float(attrs["illusion_landing_lag_frames"])
+                    origin_allow_interrupt[a] = (1, 0)
                 elif k in firefox_kinds and "firefox_landing_lag_frames" in attrs:
                     origin_lag[a] = float(attrs["firefox_landing_lag_frames"])
+                    direct_kinds = {
+                        FX_SPECIAL_KIND_VALUES["SPECIAL_HI_FALL"],
+                        FX_SPECIAL_KIND_VALUES["SPECIAL_HI_BOUND"],
+                    }
+                    origin_allow_interrupt[a] = (1, 1 if k in direct_kinds else 0)
         if "specialhi_landing_lag_frames" in attrs:
             # Marth-style up-special freefall (ftMs_SpecialHi stores MarsAttributes x2C into
             # mv.co.fallspecial.landing_lag): origins are the actions whose submotion is the
@@ -3753,7 +3786,9 @@ def _main_impl(args) -> Dataset:
                 for a in range(len(owners_tbl.submotion_id)):
                     if int(owners_tbl.submotion_id[a]) in up_msids:
                         origin_lag[a] = float(attrs["specialhi_landing_lag_frames"])
+                        origin_allow_interrupt[a] = (0, 0)
         char_fallspecial_origin_lag[int(cid)] = origin_lag
+        char_fallspecial_origin_allow_interrupt[int(cid)] = origin_allow_interrupt
         char_walk_divisors[int(cid)] = (
             float(attrs["slow_walk_max"]),
             float(attrs["mid_walk_point"]),
@@ -5154,7 +5189,11 @@ def _main_impl(args) -> Dataset:
             :-1
         ]
         samples["seed_t"]["landing_fallspecial_allow_interrupt"][:, slot] = (
-            _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=post_state)[:-1]
+            _derive_landing_fallspecial_allow_interrupt_seed_lane(
+                action_id_u16=post_state,
+                char_id_u8=post_char,
+                origin_allow_by_char=char_fallspecial_origin_allow_interrupt,
+            )[:-1]
         )
         samples["seed_t"]["lr_press_timer"][:, slot] = lr_press_timer[:-1]
 

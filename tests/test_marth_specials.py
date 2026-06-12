@@ -231,6 +231,36 @@ def test_ds_air_launch_and_landing_lag() -> None:
     assert abs(lag - expect) <= 3.0, f"DS landing lag {lag} vs attr {expect}"
 
 
+def test_ds_landing_lag_is_not_interruptible() -> None:
+    # ftMs_SpecialHi enters freefall through ftCo_80096900(gobj, 0, 1, 0, x28, x2C) -
+    # allow_interrupt FALSE - so neither the special fall nor the LandingFallSpecial lag
+    # accepts squat/guard/airdodge interrupts (unlike fox/falco Firefox, which passes true).
+    # Locks the spurious squat-at-af3 / guard-at-af19 one-step class (IPW recs 594/612).
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
+    a = _attrs()
+    seed = _seed_base("marth", grounded=False, pos_y=30.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    press = _mk_inputs(buttons=B, main_y=127)
+    # Hold crouch through the descent and the whole landing; mash shield late in the lag.
+    hold_down = _mk_inputs(main_y=-90)
+    hold_shield = _mk_inputs(buttons=0x0040, l=255, main_y=-90)
+    outs = _run(seed, [press] + [hold_down] * 70 + [hold_shield] * 60)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_LANDING_FALL_SPECIAL in acts, f"never landed: {sorted(set(acts))}"
+    lag = sum(1 for x in acts if x == ACT_LANDING_FALL_SPECIAL)
+    expect = float(a["specialhi_landing_lag_frames"])
+    assert abs(lag - expect) <= 3.0, (
+        f"DS landing lag {lag} vs attr {expect} - the lag was interrupted"
+    )
+    first = acts.index(ACT_LANDING_FALL_SPECIAL)
+    run = acts[first : first + lag]
+    assert all(x == ACT_LANDING_FALL_SPECIAL for x in run), (
+        f"LandingFallSpecial interrupted mid-lag: {run}"
+    )
+
+
 def test_ds_air_entry_velocity_mul() -> None:
     # ftMs_SpecialAirHi_Enter: vel.y zeroed, vel.x *= specialhi_air_entry_vel_x_mul.
     a = _attrs()

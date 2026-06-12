@@ -498,7 +498,8 @@ static inline uint8_t squat_wait_try_dash_or_rv(MslBatch* batch, const MslCommon
 }
 
 static inline void enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t idx,
-                                                        float landing_lag) {
+                                                        float landing_lag,
+                                                        uint8_t allow_interrupt) {
   if (batch == NULL) {
     return;
   }
@@ -523,13 +524,19 @@ static inline void enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t 
   batch->state.fall_fast[idx] = keep_fastfall;
   batch->state.fallspecial_xc[idx] = 1u;
   batch->state.fallspecial_landing_lag[idx] = landing_lag;
-  batch->state.landing_fallspecial_allow_interrupt[idx] = 1u;
+  // ftCo_80096900's allow_interrupt bool is CALLSITE-owned: fox/falco Illusion/Firefox and the
+  // common ftCo_FallSpecial_Enter pass true; marth ftMs_SpecialHi passes false (its
+  // LandingFallSpecial lag is not interruptible).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
+  // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c
+  batch->state.landing_fallspecial_allow_interrupt[idx] = allow_interrupt;
   batch->state.jumps_left[idx] = 0u;
 }
 
 void msl_locomotion_enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t idx,
-                                                         float landing_lag) {
-  enter_fall_special_via_ftco_80096900(batch, idx, landing_lag);
+                                                         float landing_lag,
+                                                         uint8_t allow_interrupt) {
+  enter_fall_special_via_ftco_80096900(batch, idx, landing_lag, allow_interrupt);
 }
 
 static inline void enter_specialhi_bound_from_airhi_collision(MslBatch* batch,
@@ -878,7 +885,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       if (!on_ground) {
         const MslCharParams* ch = msl_char_params(char_id);
         enter_fall_special_via_ftco_80096900(
-            batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f);
+            batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f, 1u);
         return 1;
       }
       // Decomp: ftFx_SpecialHiLanding_Anim transitions to Wait on anim end.
@@ -905,7 +912,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
                         batch->state.anim_frame_f32[idx])) {
         const MslCharParams* ch = msl_char_params(char_id);
         enter_fall_special_via_ftco_80096900(
-            batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f);
+            batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f, 1u);
       }
       return 1;
     case MSL_ACT_FX_SPECIAL_HI_BOUND:
@@ -917,7 +924,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
                                       batch->state.anim_frame_f32[idx])) {
         const MslCharParams* ch = msl_char_params(char_id);
         enter_fall_special_via_ftco_80096900(
-            batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f);
+            batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f, 1u);
       }
       return 1;
     default:
@@ -6506,7 +6513,7 @@ void locomotion_update_pre(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Anim
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
             enter_fall_special_via_ftco_80096900(
-                batch, idx, ch != NULL ? (float)ch->illusion_landing_lag_frames : 0.0f);
+                batch, idx, ch != NULL ? (float)ch->illusion_landing_lag_frames : 0.0f, 1u);
             action_id = (uint16_t)MSL_ACT_FALL_SPECIAL;
           }
 
@@ -7392,7 +7399,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           if (msl_motion_state_fx_special_kind(batch->state.char_id[idx], a) ==
               (uint8_t)MSL_FX_KIND_SPECIAL_HI_LANDING) {
             enter_fall_special_via_ftco_80096900(
-                batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f);
+                batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f, 1u);
           }
           continue;
         }

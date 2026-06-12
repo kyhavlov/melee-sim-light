@@ -219,7 +219,8 @@ static void ms_enter_fall_special_from_specialhi(MslBatch* batch, const MslCharP
                                                  size_t idx) {
   // Decomp: ftMs_Special(Air)Hi_Anim end -> ftCo_80096900(gobj, 0, 1, 0, x28, x2C):
   // FallSpecial with custom freefall mobility and LandingFallSpecial lag.
-  msl_locomotion_enter_fall_special_via_ftco_80096900(batch, idx, ch->specialhi_landing_lag_frames);
+  msl_locomotion_enter_fall_special_via_ftco_80096900(batch, idx, ch->specialhi_landing_lag_frames,
+                                                      /*allow_interrupt=*/0u);
   batch->state.fallspecial_mobility_mul[idx] = ch->specialhi_freefall_mobility_mul;
 }
 
@@ -352,8 +353,8 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
             // Grounded anim end (ground contact resolved the same frame): the landing owner is
             // LandingFallSpecial with x2C, not an (unexitable) grounded FallSpecial.
             // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
-            msl_locomotion_enter_fall_special_via_ftco_80096900(batch, idx,
-                                                                ch->specialhi_landing_lag_frames);
+            msl_locomotion_enter_fall_special_via_ftco_80096900(
+                batch, idx, ch->specialhi_landing_lag_frames, /*allow_interrupt=*/0u);
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING_FALL_SPECIAL;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);

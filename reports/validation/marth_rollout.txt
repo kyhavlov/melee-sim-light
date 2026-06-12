@@ -13,13 +13,13 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 == datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 849
-rollout.streak_count: 93
-rollout.streak_len.median: 62
-rollout.streak_len.p90: 250
+rollout.streak_count: 89
+rollout.streak_len.median: 63
+rollout.streak_len.p90: 267
 rollout.streak_len.p95: 388
 rollout.streak_len.max: 849
-rollout.first_mismatch_total: 137
-rollout.first_mismatch_seeded_total: 111
+rollout.first_mismatch_total: 93
+rollout.first_mismatch_seeded_total: 66
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=42.7663 rec=4485 p=1 seed/ref/out=100.244/101.357/58.5903 actions=89/89/89 category=unclassified
@@ -78,22 +78,22 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 == datasets/marth/replays/validation/marth/ParallelFamiliarZebra.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 735
-rollout.streak_count: 64
-rollout.streak_len.median: 59
-rollout.streak_len.p90: 363
-rollout.streak_len.p95: 522
+rollout.streak_count: 59
+rollout.streak_len.median: 67
+rollout.streak_len.p90: 387
+rollout.streak_len.p95: 537
 rollout.streak_len.max: 735
-rollout.first_mismatch_total: 84
-rollout.first_mismatch_seeded_total: 66
+rollout.first_mismatch_total: 60
+rollout.first_mismatch_seeded_total: 41
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=28.4 rec=5154 p=1 seed/ref/out=-32.7589/-34.2589/-5.85885 actions=358/358/358 category=unclassified
-  2. pos_x max_err=4.49743 rec=1273 p=1 seed/ref/out=-54.913/-54.793/-50.2956 actions=43/43/43 category=unclassified
+  2. pos_x max_err=5.51743 rec=1279 p=1 seed/ref/out=-54.733/-54.733/-49.2156 actions=43/43/43 category=unclassified
   3. speed_air_x_self max_err=2.75574 rec=1218 p=1 seed/ref/out=2.75574/2.75574/0 actions=368/368/368 category=unclassified
 rollout.float_top_downstream:
   1. pos_y max_err=32.1868 rec=3251 p=0 seed/ref/out=23.0903/22.2133/54.4001 actions=236/236/43 category=downstream_discrete_mismatch
   2. percent max_err=20.1224 rec=8315 p=0 seed/ref/out=118.91/139.032/118.91 actions=253/91/253 category=downstream_discrete_mismatch
-  3. shield_hp max_err=14 rec=5224 p=1 seed/ref/out=60/60/46 actions=43/43/181 category=downstream_discrete_mismatch
+  3. pos_x max_err=5.51743 rec=1285 p=1 seed/ref/out=-54.733/-54.733/-49.2156 actions=43/88/43 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:143
 
 == datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl ==
@@ -182,14 +182,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1336
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 
 == suite summary ==
-overall.rollout.streak_count: 460
-overall.rollout.streak_len.median: 93
-overall.rollout.streak_len.p90: 389
-overall.rollout.streak_len.p95: 524
+overall.rollout.streak_count: 451
+overall.rollout.streak_len.median: 98
+overall.rollout.streak_len.p90: 390
+overall.rollout.streak_len.p95: 531
 overall.rollout.streak_len.max: 1592
 overall.rollout.best_len.max: 1592
-overall.rollout.first_mismatch_total: 561
-overall.rollout.first_mismatch_seeded_total: 379
+overall.rollout.first_mismatch_total: 493
+overall.rollout.first_mismatch_seeded_total: 309
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=62.9009 rec=13167 p=0 seed/ref/out=30.4055/30.6624/-32.2385 actions=90/90/90 category=unclassified

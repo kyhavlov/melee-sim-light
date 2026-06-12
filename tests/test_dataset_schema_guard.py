@@ -711,22 +711,48 @@ def test_item_spawn_id_counter_survives_itemless_gaps() -> None:
 def test_landing_fallspecial_allow_interrupt_lane_is_prefix_causal() -> None:
     # Action ids: FallSpecial=35, LandingFallSpecial=43, EscapeAir=236.
     # EscapeAir-owned freefall enters LandingFallSpecial with allow_interrupt=false, while
-    # non-EscapeAir FallSpecial sources use the common true-carry path.
+    # non-EscapeAir FallSpecial sources use the common true-carry path. The per-char origin
+    # map carries ftCo_80096900's callsite bools as (entry_allow, direct_lfs_allow):
+    # spacie HiFall/HiBound (1, 1), Illusion end (1, 0), marth-style SpecialHi (0, 0).
+    spacie_allow = {358: (1, 1), 359: (1, 1)}
+    origin_allow = {1: spacie_allow, 22: spacie_allow, 18: {367: (0, 0), 368: (0, 0)}}
+
     action = np.array([236, 35, 35, 43, 43, 14, 358, 35, 43, 14, 236, 43], dtype=np.uint16)
-    got = _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=action)
+    fox = np.ones(action.shape[0], dtype=np.uint8)
+    got = _derive_landing_fallspecial_allow_interrupt_seed_lane(
+        action_id_u16=action, char_id_u8=fox, origin_allow_by_char=origin_allow
+    )
     assert got.tolist() == [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0]
 
     # Firefox/Firebird can publish the LandingFallSpecial row directly from SpecialHiFall/Bound
     # while still owning the hidden interruptible landing source bit through ftCo_80096900.
     action_firefox = np.array([358, 43, 43, 359, 43, 14], dtype=np.uint16)
     got_firefox = _derive_landing_fallspecial_allow_interrupt_seed_lane(
-        action_id_u16=action_firefox
+        action_id_u16=action_firefox,
+        char_id_u8=np.ones(action_firefox.shape[0], dtype=np.uint8),
+        origin_allow_by_char=origin_allow,
     )
     assert got_firefox.tolist() == [0, 1, 1, 0, 1, 0]
 
     extended = np.concatenate([action, np.array([35, 43, 43], dtype=np.uint16)])
-    got_extended = _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=extended)
+    got_extended = _derive_landing_fallspecial_allow_interrupt_seed_lane(
+        action_id_u16=extended,
+        char_id_u8=np.ones(extended.shape[0], dtype=np.uint8),
+        origin_allow_by_char=origin_allow,
+    )
     np.testing.assert_array_equal(got_extended[: action.shape[0]], got)
+
+    # Marth Dolphin Slash (367 air / 368 ground): ftMs_SpecialHi passes allow_interrupt=false
+    # on BOTH the freefall enter and the direct landing, so neither the FallSpecial run nor
+    # the LandingFallSpecial lag is interruptible (the spurious squat/guard-out class).
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c
+    action_marth = np.array([367, 35, 35, 43, 43, 14, 368, 43, 14], dtype=np.uint16)
+    got_marth = _derive_landing_fallspecial_allow_interrupt_seed_lane(
+        action_id_u16=action_marth,
+        char_id_u8=np.full(action_marth.shape[0], 18, dtype=np.uint8),
+        origin_allow_by_char=origin_allow,
+    )
+    assert got_marth.tolist() == [0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 
 def test_character_attrs_include_ordered_walljump_setup_threshold() -> None:
