@@ -25,6 +25,12 @@
 //   - refs/melee/src/common_structs.h (Collide_* env flag bit values)
 void mpcoll_wall_ceil_apply(MslBatch* batch);
 
+// Source-shaped segment intersection with mpLineIntersection's 0.1 half-space slop and
+// endpoint clamping. Shared by sloped wall Hug checks and the sloped ledge-floor sweep.
+// refs/melee/src/melee/mp/mplib.c::mpLineIntersection
+uint8_t msl_mplib_line_intersection(float x0, float y0, float x1, float y1, float ax, float ay,
+                                    float bx, float by, float* ix_out, float* iy_out);
+
 // Legal-stage portions of mpCollGetSpeedFloor/Ceiling and mpColl_IsOnPlatform.
 //
 // Source speed helpers call mpGetSpeed(surface.index, coll->ecb.top, out), which returns the

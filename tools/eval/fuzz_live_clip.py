@@ -505,7 +505,9 @@ def main() -> int:
                     found.extend(hits)
                     print(f"[{ch}/{st}/{fam}] done, {len(hits)} violations")
     print(f"TOTAL: {len(found)} violations")
-    if args.save_violations and found:
+    if args.save_violations:
+        # write [] on a clean run too: a stale violations file from a previous run must not
+        # outlive the matrix that cleared it
         with open(args.save_violations, "w") as f:
             json.dump(found, f, indent=1, default=str)
         print(f"saved to {args.save_violations}")

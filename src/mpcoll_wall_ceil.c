@@ -981,8 +981,8 @@ static uint8_t intersect_segment(float x0, float y0, float x1, float y1, float a
   return 1;
 }
 
-static uint8_t intersect_segment_mplib(float x0, float y0, float x1, float y1, float ax, float ay,
-                                       float bx, float by, float* ix_out, float* iy_out) {
+uint8_t msl_mplib_line_intersection(float x0, float y0, float x1, float y1, float ax, float ay,
+                                    float bx, float by, float* ix_out, float* iy_out) {
   // Decomp `mpLineIntersection` is not a strict geometric segment test. It allows the moving point
   // to start/end within a 0.1 half-space slop around the static line before clamping the returned
   // point to the source segment. Sloped wall Hug checks consume that helper directly.
@@ -1555,7 +1555,7 @@ static uint8_t wall_sweep_check(uint32_t stage_id, const MslStageWallGraph* g, u
     float ix = 0.0f, iy = 0.0f;
     uint8_t hit = 0;
     if (fabsf(x0 - x1) > k_line_axis_thresh) {
-      hit = use_mplib_slop ? intersect_segment_mplib(x0, y0, x1, y1, ax, ay, bx, by, &ix, &iy)
+      hit = use_mplib_slop ? msl_mplib_line_intersection(x0, y0, x1, y1, ax, ay, bx, by, &ix, &iy)
                            : intersect_segment(x0, y0, x1, y1, ax, ay, bx, by, &ix, &iy);
     } else {
       hit = intersect_vert_clamped(x0, y0, y1, ax, ay, bx, by, is_left_wall, &ix, &iy);

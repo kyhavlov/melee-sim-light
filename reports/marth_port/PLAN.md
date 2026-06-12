@@ -186,11 +186,15 @@ Slash, SpecialLw Counter (+CounterAttack).
   wall persistence (new coll_wall_commit_runtime lane), jump-family ledge-strip floor catch.
   All four fuzz seeds + both traces land; suite 3279; validate-all no totals/no reds;
   marth+fox 1200 episodes each, 0 violations. Uncommitted for review.
-- (clip elimination, final) Sweep matrix 370 -> 3 (one YS scenario, possibly
-  vanilla-faithful - pinned for a Dolphin probe). Engine: in-span carried-ledge re-landing
-  owner (mpCheckFloor prefer-hint semantics). Harness: unit_scale geometry, realistic
-  seeds, live-approach boundary family, resolution-aware oracle (4/4 validated at every
-  revision). All gates green: suite 3280 (incl. the carried-ledge re-landing lock),
-  validate-all no totals/no reds, traces land, locked seeds clean. Final matrix artifact:
-  CLIP_SWEEP_FINAL.md (+ clip_sweep_final.log / clip_sweep_final_violations.json);
-  Dolphin probe recipe in MANUAL_REPRO_CATALOG.md. Uncommitted for review.
+- (clip elimination, final) Sweep matrix 370 -> 3 -> 0 (committed through 1c934596 at the
+  3-residual state, then the YS residual root-caused and FIXED - it was an engine bug, a
+  stock loss through the stage body, not vanilla behavior). Engine: in-span carried-ledge
+  re-landing owner (mpCheckFloor prefer-hint semantics), then the EscapeAir ledge-strip
+  hard-floor sibling producer (source mpCheckFloor has no ledge filter and no sloped-line
+  descent gate; msl_mplib_line_intersection shared from the wall side). Harness:
+  unit_scale geometry, realistic seeds, live-approach boundary family, resolution-aware
+  oracle (4/4 validated at every revision). Matrix: 54/54 cells, TOTAL 0, exit 0. All
+  gates green: suite 3281 (incl. the YS waveland lock, verified to fail pre-fix),
+  validate-all no totals/no reds. Artifacts: CLIP_SWEEP_FINAL.md (+ log/violations json);
+  root-cause + fix detail in MANUAL_REPRO_CATALOG.md. Ledge-strip fix uncommitted for
+  review.

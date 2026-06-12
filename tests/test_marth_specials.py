@@ -1141,3 +1141,50 @@ def test_fall_carried_same_ledge_floor_in_span_relands() -> None:
     outs = _run(seed, [_mk_inputs()] * 25)
     og = [int(o["on_ground"][0]) for o in outs]
     assert any(og), "cold carried-same-strip Fall fell through"
+
+
+def test_ys_ledgedash_horizontal_airdodge_wavelands_on_lip_slope() -> None:
+    # Yoshi's Story ledgedash, pure-horizontal airdodge (the pinned sweep residual: tuple
+    # side=+1, hang=4, dj_delay=1, dodge_af_delay=13, angle (127, 0)). The dodge transits
+    # under the lip at constant root y with the pose ECB bottom skimming the sloped ledge
+    # strip (segment 6); the bottom crosses the slope while RISING by float jitter on the
+    # crossing frame. Source mpCheckFloor's sloped-line branch has no descent gate and no
+    # ledge-line filter, so vanilla wavelands onto the slope; without the ledge-strip
+    # producer the fighter fell through the stage body and lost the stock.
+    # refs/melee/src/melee/mp/mplib.c::{mpCheckFloor,mpLineIntersection}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    for side in (1, -1):
+        seed = _seed_base("marth", grounded=False, pos_y=0.0)
+        seed["stage_id"][0] = np.uint32(8)  # Yoshi's Story
+        edge_x = 56.0 * side
+        slope_y = -3.5 / 16.8 * 6.8  # strip y at 10 units inboard of the edge
+        seed["pos_x"][0, 0] = np.float32(edge_x - side * 10.0)
+        seed["pos_y"][0, 0] = np.float32(slope_y + 1.5)
+        seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+        seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+        seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+        script = [_mk_inputs()] * 14                              # settle-land on the strip
+        script += [_mk_inputs(main_x=side * 127)] * 12            # run off toward the ledge
+        script += [_mk_inputs(main_x=side * 40)] * 10             # drift to grab
+        script += [_mk_inputs()] * 4                              # hang
+        script += [_mk_inputs(main_x=-side * 35)]                 # release
+        script += [_mk_inputs()] * 1
+        script += [_mk_inputs(buttons=0x0400, main_x=-side * 90, main_y=-60)]
+        script += [_mk_inputs(main_x=-side * 90, main_y=-60)] * 13
+        script += [_mk_inputs(buttons=0x0040, l=255, main_x=-side * 127, main_y=0)]
+        script += [_mk_inputs(main_x=-side * 127, main_y=0)] * 80
+        outs = _run(seed, script)
+        og = [int(o["on_ground"][0]) for o in outs]
+        ys = [float(o["pos_y"][0]) for o in outs]
+        stocks = [int(o["stocks"][0]) for o in outs]
+        dodge_rows = [i for i, o in enumerate(outs) if int(o["action_id"][0]) == 0x00EC]
+        assert dodge_rows, f"side {side}: airdodge never started"
+        landed = any(og[i] for i in range(dodge_rows[0], len(og)))
+        assert landed, f"side {side}: horizontal under-lip dodge never landed on the slope"
+        # ys before the dodge include the legal pre-grab fall outside the stage (~-29);
+        # the clip signature is the post-dodge descent into the keel (the kill reached -91).
+        post_dodge_min_y = min(ys[dodge_rows[0] :])
+        assert post_dodge_min_y > -20.0, (
+            f"side {side}: entered the stage body: min_y {post_dodge_min_y:.1f}"
+        )
+        assert stocks[-1] == stocks[0], f"side {side}: lost a stock ({stocks[0]}->{stocks[-1]})"

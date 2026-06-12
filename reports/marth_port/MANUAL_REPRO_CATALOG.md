@@ -225,24 +225,47 @@ turned out unnecessary and was dropped. The action/af/pos_y/stage scoping is wha
 the validated corpus; each clause is pinned by a named lock or seed above.
 
 
-## Sweep-matrix burn-down: FINAL (370 -> 3, one open scenario)
+## Sweep-matrix burn-down: FINAL (370 -> 3 -> 0)
 
 Full deterministic matrix (3 chars x 6 stages x 3 families, real engine steps):
-370 -> 68 -> 26 -> 14 -> 3. Every cell clean except ONE geometric scenario appearing 3x
+370 -> 68 -> 26 -> 14 -> 3 -> 0. The last 3 were ONE geometric scenario appearing 3x
 (marth both sides + falco right): the Yoshi's Story ledgedash grid point (hang 4,
 dj_delay 1, dodge_af 13, angle (127,0)) - a PURE-HORIZONTAL airdodge at y=-8 travelling
-under Yoshi's sloped ledge strip. The collision diamond legitimately passes ABOVE both the
-short notched wall segments and the sloped floor line the whole way (only the
-non-collision ROOT transits), and the post-dodge fall descends into the keel. Per the pure
-ECB model vanilla's diamond does the same, and Yoshi's under-lip entries are a known
-real-Melee phenomenon - this MAY be vanilla-faithful. Verdict needs a Dolphin probe of the
-same inputs; pinned as the single open question.
+under Yoshi's sloped ledge strip, post-dodge fall into the keel, STOCK LOST from inside
+the stage (verified in a live rollout: ~75-frame interior fall, death at y=-91).
 
-CLAIM SCOPE (do not overstate): the deterministic sweep is clean EXCEPT this pinned Yoshi
-horizontal-airdodge residual, whose vanilla status is unknown until Dolphin-probed. That is
-the honest statement; "clipping eliminated" without that qualifier is not.
+ROOT CAUSE (engine bug, fixed): the dodge's pose ECB bottom skims just above the sloped
+ledge floor line (segment 6) and crosses it mid-transit - but on the crossing frame the
+bottom RISES by 0.002 units of animation jitter. Two stacked non-source exclusions dropped
+the landing:
+1. the EscapeAir hard-floor producer was gated `cur_bottom_y <= prev_bottom_y`; source
+   mpCheckFloor applies its `ay >= by` descent gate ONLY in the horizontal-line branch -
+   the SLOPED-line branch uses mpLineIntersection with no direction gate, just the 0.1
+   half-space slop (prev not far below the line, cur not far above);
+2. msl_mpcheck_hard_floor excludes is_ledge floor lines; source mpCheckFloor has no
+   ledge-line filter - a ledge-grabbable strip is an ordinary landable floor.
+Vanilla wavelands onto the slope at the crossing frame. Hand-feeding the f61/f62 sweep
+values through decomp mpLineIntersection confirms: f61 rejected (cur 0.027 above ->
+cross 0.46 > 0.1 slop), f62 accepted.
 
-DOLPHIN PROBE RECIPE for the residual:
+FIX (src/mpcoll_ground.c): sibling EscapeAir ledge-strip hard-floor producer - the family
+the non-ledge producer filters out - swept with the faithful per-branch source gates
+(msl_mplib_line_intersection for sloped lines, floor_intersect_horiz with its ay >= by for
+horizontal), restricted to runtime-solid non-platform untransformed ledge floor lines.
+Acceptance mirrors the direct ft_CheckGroundAndLedge producer: dd90 projection when it
+lifts the bottom, else contact snap (source mpColl_80044628_Floor lands at the mpCheckFloor
+contact; the dd90 `y > 0` gate belongs to its wall-adjacent fallback only).
+Result: waveland onto the slope at the crossing frame, slide to the main floor, no entry.
+Lock: test_ys_ledgedash_horizontal_airdodge_wavelands_on_lip_slope (both sides; verified
+to FAIL on the pre-fix engine).
+
+CLAIM SCOPE: the full deterministic sweep matrix (54 cells) is clean - 0 violations,
+exit 0. Random soak mode remains lead-generation, not proof; coverage is the three
+modelled clip families.
+
+DOLPHIN PROBE RECIPE (optional faithfulness cross-check of the FIXED behavior - the MSL
+outcome is now a waveland onto the lip slope; the probe would confirm vanilla does the
+same rather than gate any open bug):
 - Stage: Yoshi's Story. Character: Marth (or Falco; both reproduce). Side: right ledge
   (mirrors on the left). Opponent: any, parked far away.
 - Sweep case tuple: ledgedash family (side=+1, hang=4, dj_delay=1, dodge_af_delay=13,
@@ -256,18 +279,13 @@ DOLPHIN PROBE RECIPE for the residual:
   The MSL trajectory at the kill: the dodge runs flat at world y = -8 from x ~58 to ~40
   (root passing under the sloped strip, collision diamond above it), then the post-dodge
   FallSpecial descends into the stage keel and dies at the bottom blast zone.
-- Classification:
-  - If vanilla's fighter ALSO passes under the strip and dies inside/below the keel region
-    (or exits under the stage), the MSL behavior is VANILLA-CORRECT and the residual is
-    closed as faithful (update the sweep's expected-residuals list).
-  - If vanilla's fighter is stopped (wall push at the notched segments, a landing on the
-    sloped strip, or a ledge re-grab) anywhere along the y=-8 transit, the MSL engine has a
-    real wall/floor gap on Yoshi's notched geometry: fix target is the airborne wall
-    envelope's handling of the short (1-3 unit) notch segments that the straddling diamond
-    currently passes between.
-- Regression lock once classified: the carried-ledge re-landing fix has
-  test_fall_carried_same_ledge_floor_in_span_relands; the residual case should get its own
-  locked test (clean or fixed) after the probe.
+- Expected vanilla outcome (per decomp mpCheckFloor semantics): waveland onto the sloped
+  strip at the bottom-sweep crossing (~x=50.8 right side), matching post-fix MSL. A vanilla
+  landing confirms the fix shape; the old fall-through is an engine bug regardless (stock
+  loss through the stage body is not shippable behavior).
+- Regression locks: test_ys_ledgedash_horizontal_airdodge_wavelands_on_lip_slope (this
+  scenario, both sides) and test_fall_carried_same_ledge_floor_in_span_relands (the
+  carried-ledge re-landing class).
 
 Engine fix added this round (suite + validate-all green):
 - fall_carried_same_ledge_floor_in_span_owner (mpcoll_ground.c): a Fall carrying a ledge
