@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from tools.extraction.char_registry import CHAR_PL_DAT
+from tools.extraction.char_registry import CHAR_PL_DAT, CHARS
 import json
 import shutil
 import subprocess
@@ -76,7 +76,16 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Build ISO-derived `data/` artifacts.")
     ap.add_argument("--iso-dir", type=Path, default=Path("_iso"), help="directory containing extracted *.dat files")
     ap.add_argument("--out-dir", type=Path, default=Path("data"), help="directory for generated simulator data")
-    ap.add_argument("--chars", type=str, default="fox,falco", help="comma-separated characters (fox,falco,...)")
+    ap.add_argument(
+        "--chars",
+        type=str,
+        default=None,
+        help=(
+            "comma-separated characters (fox,falco,...). Default: every character in "
+            "tools/extraction/char_registry.py. A subset writes a manifest without the omitted "
+            "characters, and preprocessing then refuses replays that use them."
+        ),
+    )
     ap.add_argument(
         "--stage",
         type=str,
@@ -104,7 +113,13 @@ def main(argv: list[str] | None = None) -> None:
     def out(rel: str) -> Path:
         return out_root / rel
 
-    chars = [c.strip() for c in args.chars.split(",") if c.strip()]
+    if args.chars is None:
+        # Registry-driven default: a data tree that silently omits a supported character
+        # poisons every per-character preprocessing map for that character (the manifest is
+        # the source of truth downstream), so the full registry is the only safe default.
+        chars = list(CHARS.keys())
+    else:
+        chars = [c.strip() for c in args.chars.split(",") if c.strip()]
     timings: list[tuple[str, float]] | None = [] if args.timings else None
     _RUN_TIMINGS = timings
     melee_decomp_args = ["--melee_decomp", str(args.melee_decomp)] if has_melee_decomp else []

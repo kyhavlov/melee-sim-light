@@ -57,6 +57,12 @@ ACT_FALL_SPECIAL = 0x0023
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
+ACT_THROW_B = 0x00DC
+ACT_THROW_HI = 0x00DD
+ACT_THROWN_B = 0x00F0
+ACT_THROWN_HI = 0x00F1
+ACT_DAMAGE_FLY_N = 0x0058
+ACT_DAMAGE_FLY_TOP = 0x005A
 
 
 def _attrs() -> dict:
@@ -74,9 +80,120 @@ def _air_seed():
     return seed
 
 
+def _throw_pair_seed(owner_char: str, victim_char_id: int, throw_action: int, frame: int) -> np.ndarray:
+    owner_char_id = {
+        "fox": 1,
+        "marth": 18,
+        "falco": 22,
+    }[owner_char]
+    seed = _seed_base("marth" if owner_char == "marth" else "fox")
+    seed["char_id"][0, 0] = np.uint8(owner_char_id)
+    seed["char_id"][0, 1] = np.uint8(victim_char_id)
+    seed["grab_owner_port"][0, :] = np.uint8(0xFF)
+    seed["grab_owner_port"][0, 1] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(throw_action)
+    seed["animation_index"][0, 0] = np.uint32(throw_action)
+    thrown_action = {
+        ACT_THROW_B: ACT_THROWN_B,
+        ACT_THROW_HI: ACT_THROWN_HI,
+    }[throw_action]
+    seed["action_id"][0, 1] = np.uint16(thrown_action)
+    seed["animation_index"][0, 1] = np.uint32(thrown_action)
+    seed["action_frame"][0, :2] = np.int16(frame)
+    seed["anim_frame_f32"][0, :2] = np.float32(float(frame))
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    return seed
+
+
+def _run_throw_pair(owner_char: str, victim_char_id: int, throw_action: int, frame: int) -> np.ndarray:
+    return _run(_throw_pair_seed(owner_char, victim_char_id, throw_action, frame), [_mk_inputs()])[0]
+
+
 # ---------------------------------------------------------------------------
 # Dolphin Slash
 # ---------------------------------------------------------------------------
+
+
+def test_marth_throwhi_uses_thrower_victim_anim_table_for_falco_victim() -> None:
+    # Thrown victims source their victim animation from the thrower's fighter data:
+    # ftCo_800DE3FC passes the thrower gobj to Fighter_ChangeMotionState, so the victim-side
+    # loop/end-frame lookup must use Marth's ftCo_SM_ThrownHi table, not Falco's shorter table.
+    # This locks the non-skipping Marth up-throw/Falco-victim case that regressed when thrown
+    # victims clamped on their own character's animation end frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    out = _run_throw_pair("marth", 22, ACT_THROW_HI, 7)
+    assert int(out["action_id"][1]) == ACT_THROWN_HI
+    assert int(out["action_frame"][1]) == 8
+    assert float(out["percent"][1]) == pytest.approx(0.0)
+
+
+def test_marth_non_low_throw_snap_boundaries_are_not_early() -> None:
+    # Marth's non-low throw rate does not land exactly on the source command integer boundaries.
+    # The timebase re-accumulates f32 AObj time so frame-9-ish and frame-12-ish rows do not snap
+    # past their command until the real source crossing. Back throw crosses from 6->7; up throw
+    # crosses from 11->12. The adjacent rows stay attached.
+    # refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+    import msl_binding
+
+    assert msl_binding.move_tables_throw_release_hit_idx(18, ACT_THROW_B, 7.0) == (1, 0)
+    assert msl_binding.move_tables_throw_release_hit_idx(18, ACT_THROW_HI, 12.0) == (1, 0)
+
+    before_back = _run_throw_pair("marth", 22, ACT_THROW_B, 7)
+    assert int(before_back["action_id"][1]) == ACT_THROWN_B
+    assert int(before_back["action_frame"][1]) == 8
+
+    crossed_back = _run_throw_pair("marth", 22, ACT_THROW_B, 6)
+    assert int(crossed_back["action_id"][1]) == ACT_DAMAGE_FLY_N
+    assert float(crossed_back["percent"][1]) == pytest.approx(4.0)
+
+    before_hi = _run_throw_pair("marth", 22, ACT_THROW_HI, 10)
+    assert int(before_hi["action_id"][1]) == ACT_THROWN_HI
+    assert int(before_hi["action_frame"][1]) == 11
+
+    crossed_hi = _run_throw_pair("marth", 22, ACT_THROW_HI, 11)
+    assert int(crossed_hi["action_id"][1]) == ACT_DAMAGE_FLY_TOP
+    assert float(crossed_hi["percent"][1]) == pytest.approx(4.0)
+
+
+def test_fox_falco_throw_timing_invariant_stays_on_existing_boundaries() -> None:
+    # Adjacent invariant for the long-standing Fox/Falco timing: the Marth f32 snap fix must not
+    # move spacie throw release boundaries.
+    # data/moves/{fox,falco}.json ftCo_SM_ThrowB/ThrowHi set_throw_flags events
+    import msl_binding
+
+    assert msl_binding.move_tables_throw_release_hit_idx(1, ACT_THROW_B, 8.0) == (0, -1)
+    assert msl_binding.move_tables_throw_release_hit_idx(1, ACT_THROW_B, 9.0) == (1, 0)
+    assert msl_binding.move_tables_throw_release_hit_idx(1, ACT_THROW_HI, 7.0) == (0, -1)
+    assert msl_binding.move_tables_throw_release_hit_idx(1, ACT_THROW_HI, 8.0) == (1, 0)
+    assert msl_binding.move_tables_throw_release_hit_idx(22, ACT_THROW_B, 8.0) == (0, -1)
+    assert msl_binding.move_tables_throw_release_hit_idx(22, ACT_THROW_B, 9.0) == (1, 0)
+    assert msl_binding.move_tables_throw_release_hit_idx(22, ACT_THROW_HI, 7.0) == (1, 0)
+
+    fox_back_before = _run_throw_pair("fox", 22, ACT_THROW_B, 7)
+    assert int(fox_back_before["action_id"][1]) == ACT_THROWN_B
+    assert int(fox_back_before["action_frame"][1]) == 8
+
+    fox_back_crossed = _run_throw_pair("fox", 22, ACT_THROW_B, 8)
+    assert int(fox_back_crossed["action_id"][1]) == ACT_DAMAGE_FLY_N
+    assert float(fox_back_crossed["percent"][1]) == pytest.approx(2.0)
+
+    fox_hi_crossed = _run_throw_pair("fox", 22, ACT_THROW_HI, 7)
+    assert int(fox_hi_crossed["action_id"][1]) == ACT_DAMAGE_FLY_TOP
+    assert float(fox_hi_crossed["percent"][1]) == pytest.approx(2.0)
+
+    falco_back_before = _run_throw_pair("falco", 1, ACT_THROW_B, 7)
+    assert int(falco_back_before["action_id"][1]) == ACT_THROWN_B
+    assert int(falco_back_before["action_frame"][1]) == 8
+
+    falco_back_crossed = _run_throw_pair("falco", 1, ACT_THROW_B, 8)
+    assert int(falco_back_crossed["action_id"][1]) == ACT_DAMAGE_FLY_N
+    assert float(falco_back_crossed["percent"][1]) == pytest.approx(2.0)
+
+    falco_hi_crossed = _run_throw_pair("falco", 1, ACT_THROW_HI, 6)
+    assert int(falco_hi_crossed["action_id"][1]) == ACT_DAMAGE_FLY_TOP
+    assert float(falco_hi_crossed["percent"][1]) == pytest.approx(2.0)
 
 
 def test_ds_ground_enters_launches_and_fallspecials() -> None:
@@ -1146,6 +1263,26 @@ def test_fuzz_live_clip_known_seeds_stay_clean() -> None:
         ep.script = _policy_script(rng, 420)
         v = run_episode(ep)
         assert not v, f"{char} seed {rng_seed} clipped: {v}"
+
+
+def test_runoff_escapeair_ground_departure_wall_packet_still_prevents_clip() -> None:
+    # Positive lock for the owner excluded from JumpAerial/KneeBend-entry EscapeAir rows:
+    # run-off / ground-departure EscapeAir can consume the X130-locked bottom wall envelope.
+    # The deterministic fuzz seed below is the Marth run-off witness from the manual clip search;
+    # narrowing JumpAerial-entry rows must not remove this source path.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80046224_LeftWall}
+    import random
+
+    from tools.eval.fuzz_live_clip import Episode, _policy_script, run_episode
+
+    rng_seed = 1282560985
+    rng = random.Random(rng_seed)
+    start_x = rng.choice((55.0, 70.0, 78.0, 83.0, -70.0, -83.0))
+    ep = Episode(rng_seed=rng_seed, char="marth", start_x=start_x)
+    ep.script = _policy_script(rng, 420)
+    violation = run_episode(ep)
+    assert not violation, f"run-off EscapeAir ground-departure packet regressed: {violation}"
 
 
 def test_fall_carried_same_ledge_floor_in_span_relands() -> None:

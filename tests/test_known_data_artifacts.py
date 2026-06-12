@@ -1857,3 +1857,40 @@ def test_manifest_registry_chars_fails_loudly_on_unknown_char(tmp_path) -> None:
 
     (tmp_path / "manifest.json").write_text(_json.dumps({"chars": ["fox", "marth"]}))
     assert manifest_registry_chars(tmp_path) == [(1, "fox"), (18, "marth")]
+
+
+def test_replay_chars_must_be_in_manifest() -> None:
+    # A replay character missing from the data manifest must refuse to preprocess: every
+    # per-char map (landing lag, walk/run anim rates, friction, owners) silently resolves
+    # empty for it, producing a dataset with subtly wrong seed lanes. This is the failure
+    # mode that regressed the marth suite by +485 one-step rows when a fox/falco-only
+    # `make build_data` clobbered data/manifest.json.
+    import numpy as _np
+
+    import pytest as _pytest
+
+    from tools.slippi.make_dataset_from_slp import require_replay_chars_in_manifest
+
+    manifest = [(1, "fox"), (22, "falco")]
+    require_replay_chars_in_manifest(_np.array([1, 22, 1], dtype=_np.uint8), manifest)
+    # Doubles/rollback padding rows carry NaN char ids - they must not trip the guard.
+    require_replay_chars_in_manifest(_np.array([1.0, _np.nan, 22.0]), manifest)
+    with _pytest.raises(ValueError, match=r"\[18\].*make build_data"):
+        require_replay_chars_in_manifest(_np.array([1, 18], dtype=_np.uint8), manifest)
+
+
+def test_data_manifest_covers_registry_chars() -> None:
+    # The generated data tree must cover every registry character. `build_data` defaults to
+    # the full registry; a partial --chars run (or a stale data/ tree after a registry
+    # addition) leaves characters whose replays cannot be preprocessed.
+    import json as _json
+    from pathlib import Path as _Path
+
+    from tools.extraction.char_registry import CHARS as _CHARS
+
+    manifest = _json.loads(_Path("data/manifest.json").read_text())
+    missing = set(_CHARS.keys()) - set(manifest.get("chars") or [])
+    assert not missing, (
+        f"data/manifest.json is missing registry chars {sorted(missing)}; "
+        "run `make build_data` to regenerate the data tree"
+    )

@@ -1132,7 +1132,7 @@ Characters (Fox/Falco):
     knockback decay. Version 10 expands segment records to 40 bytes and adds `joint_id` for
     `mpJointFromLine`-shaped query filters. Regenerate supported
     stage artifacts with
-    `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`.
+    `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop`.
   - Supported runtime stage ids: `2` Fountain of Dreams, `3` Pokemon Stadium base, `8` Yoshi's
     Story, `28` Dream Land N64, `31` Battlefield, `32` Final Destination. Static pass-through
     platform flags are consumed by runtime fighter collision through source-shaped Pass/floor-skip
@@ -2043,8 +2043,7 @@ Generate all required artifacts for the current target domain:
 ```bash
 uv run python -m tools.extraction.build_data \
   --iso-dir _iso \
-  --stages grnla,grnba,griz,grps,grst,grop \
-  --chars fox,falco
+  --stages grnla,grnba,griz,grps,grst,grop
 ```
 
 If `_iso/` is missing required `.dat` files, extract them from `SSBM.iso` first:

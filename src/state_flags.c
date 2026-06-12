@@ -1605,7 +1605,8 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B1;
       }
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
-      if (action_id == (uint16_t)MSL_ACT_FALL_SPECIAL && ch != NULL &&
+      if (action_id == (uint16_t)MSL_ACT_FALL_SPECIAL &&
+          batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCO && ch != NULL &&
           !batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] &&
           state_flags_camera_below_stage_cam_bounds(batch, idx) &&
           state_flags_camera_overlap_stage_cam_bounds(batch, idx, 15.0f)) {
@@ -1622,7 +1623,8 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // data/stages/final_destination.json: cam_bounds_world
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
       }
-      if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL && ch != NULL &&
+      if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL &&
+          batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCO && ch != NULL &&
           !batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] &&
           state_flags_camera_below_stage_cam_bounds(batch, idx) &&
           state_flags_camera_overlap_stage_cam_bounds(batch, idx, 15.0f)) {

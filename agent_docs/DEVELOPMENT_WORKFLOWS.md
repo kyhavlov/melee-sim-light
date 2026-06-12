@@ -314,7 +314,7 @@ Then run the same dump/extract flow from `tools/dolphin/README.md`.
 Rebuild ISO-derived data artifacts:
 
 ```bash
-uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco
+uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop
 ```
 
 Data contract:

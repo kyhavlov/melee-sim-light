@@ -45,8 +45,14 @@ Collect before writing any code:
    - `tools/extraction/char_registry.py`: add a `CharInfo` (all fields above).
    - `src/char_registry.h`: mirror the entry in `MSL_CHAR_REGISTRY`.
    - `src/ids.h`: `MSL_CHAR_ID_<CHAR> = <internal id>`.
-2. **Run** `uv run python -m tools.extraction.build_data --chars fox,falco,<char>`
-   and chase failures extractor by extractor. Every extractor is registry-driven
+2. **Run** `uv run python -m tools.extraction.build_data` (chars default to the full
+   registry, so the new registry row is picked up automatically; `--chars` exists only
+   for debugging subsets) and chase failures extractor by extractor.
+   **PITFALL**: a subset `--chars` run writes `data/manifest.json` without the omitted
+   characters. The manifest is the preprocessing source of truth: every per-char map
+   (landing lag, walk/run anim rates, friction, owners) silently resolves empty for a
+   missing char. Preprocessing now refuses replays whose chars are absent from the
+   manifest, but don't commit/keep a subset data tree. Every extractor is registry-driven
    but has per-char caveats:
    - `extract_character_attrs.py` — common attrs come from ftData; the
      **char-specific ext-attr block (`ftData.x4`)** needs an explicit layout

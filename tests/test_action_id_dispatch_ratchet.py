@@ -46,8 +46,9 @@ FX_BASELINE = {
     # items.c: write-side state installs (shine-reflect enters the spacie SpecialLwHit).
     "items.c": 2,
     # locomotion.c: spacie special machine bodies (state transitions/write-side vocabulary
-    # behind the 6 module-entry guards) - the blaster.c/shine.c class.
-    "locomotion.c": 69,
+    # behind the 6 module-entry guards, incl. machine-entry call arguments whose admission
+    # is kind-guarded) - the blaster.c/shine.c class.
+    "locomotion.c": 72,
 }
 
 SPACIE_GATE_BASELINE = {

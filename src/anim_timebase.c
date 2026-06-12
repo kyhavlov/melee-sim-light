@@ -154,26 +154,37 @@ static inline uint16_t anim_timebase_throw_action_from_thrown(uint16_t action_id
   }
 }
 
-static inline int32_t anim_timebase_throw_rate_fp_from_pair(uint8_t owner_char_id,
-                                                            uint8_t victim_char_id,
-                                                            uint16_t throw_action) {
+static inline float anim_timebase_throw_rate_f32_from_pair(uint8_t owner_char_id,
+                                                           uint8_t victim_char_id,
+                                                           uint16_t throw_action) {
   const int throw_index = anim_timebase_throw_index_from_action(throw_action);
   if (throw_index < 0) {
-    return 0;
+    return 0.0f;
   }
   const MslCommonParams* c = msl_common_params();
   const MslCharParams* owner_ch = msl_char_params(owner_char_id);
   const MslCharParams* victim_ch = msl_char_params(victim_char_id);
   if (owner_ch == NULL || victim_ch == NULL || c == NULL) {
-    return 0;
+    return 0.0f;
   }
   float rate = 1.0f;
   if ((owner_ch->weight_independent_throws_mask & (uint8_t)(1u << throw_index)) == 0u) {
     if (!(victim_ch->weight > 0.0f) || !(c->throw_anim_speed_weight_mul > 0.0f)) {
-      return 0;
+      return 0.0f;
     }
     rate = 1.0f / (victim_ch->weight * c->throw_anim_speed_weight_mul);
   }
+  if (!(rate > 0.0f)) {
+    return 0.0f;
+  }
+  return rate;
+}
+
+static inline int32_t anim_timebase_throw_rate_fp_from_pair(uint8_t owner_char_id,
+                                                            uint8_t victim_char_id,
+                                                            uint16_t throw_action) {
+  const float rate =
+      anim_timebase_throw_rate_f32_from_pair(owner_char_id, victim_char_id, throw_action);
   if (!(rate > 0.0f)) {
     return 0;
   }
@@ -222,12 +233,87 @@ static inline uint8_t anim_timebase_attached_non_low_throw_pair_active(const Msl
   return 0u;
 }
 
+static inline float anim_timebase_attached_non_low_throw_rate_f32(const MslBatch* batch, int bi,
+                                                                  int p, size_t idx,
+                                                                  int num_players) {
+  // Resolve the shared ftCo_800DD4B0 rate for an attached ThrowB/Hi<->ThrownB/Hi pair
+  // (same owner/victim link predicate as anim_timebase_attached_non_low_throw_pair_active).
+  const uint16_t a = batch->state.action_id[idx];
+  if (a == (uint16_t)MSL_ACT_THROW_B || a == (uint16_t)MSL_ACT_THROW_HI) {
+    const uint8_t victim_p = batch->state.attached_victim_port[idx];
+    if (victim_p == 0xFFu || (int)victim_p >= num_players || (int)victim_p == p) {
+      return 0.0f;
+    }
+    const size_t vidx = msl_idx_player(bi, (int)victim_p);
+    if (batch->state.action_id[vidx] != (uint16_t)(a + 20u) ||
+        batch->state.grab_owner_port[vidx] != (uint8_t)p) {
+      return 0.0f;
+    }
+    return anim_timebase_throw_rate_f32_from_pair(batch->state.char_id[idx],
+                                                  batch->state.char_id[vidx], a);
+  }
+  if (a == (uint16_t)MSL_ACT_THROWN_B || a == (uint16_t)MSL_ACT_THROWN_HI) {
+    uint8_t owner_p = batch->state.grab_owner_port[idx];
+    if (owner_p == 0xFFu || (int)owner_p >= num_players || (int)owner_p == p) {
+      for (int candidate = 0; candidate < num_players; candidate++) {
+        const size_t cidx = msl_idx_player(bi, candidate);
+        if (batch->state.attached_victim_port[cidx] == (uint8_t)p) {
+          owner_p = (uint8_t)candidate;
+          break;
+        }
+      }
+    }
+    if (owner_p == 0xFFu || (int)owner_p >= num_players || (int)owner_p == p) {
+      return 0.0f;
+    }
+    const size_t oidx = msl_idx_player(bi, (int)owner_p);
+    const uint16_t owner_action = anim_timebase_throw_action_from_thrown(a);
+    if (owner_action == 0xFFFFu || batch->state.action_id[oidx] != owner_action ||
+        batch->state.attached_victim_port[oidx] != (uint8_t)p) {
+      return 0.0f;
+    }
+    return anim_timebase_throw_rate_f32_from_pair(batch->state.char_id[oidx],
+                                                  batch->state.char_id[idx], owner_action);
+  }
+  return 0.0f;
+}
+
 static inline int32_t anim_timebase_non_low_throw_rate_snap_delta(const MslBatch* batch, int bi,
                                                                   int p, size_t idx,
                                                                   int num_players, int32_t cur_fp,
                                                                   int32_t rem) {
   if (anim_timebase_attached_non_low_throw_pair_active(batch, bi, p, idx, num_players)) {
-    return (rem == (int32_t)MSL_Q16_16_ONE - 1) ? 1 : 0;
+    // Mirror HSD AObj's f32 `curr_frame += anim_rate` across the attached window exactly:
+    // re-accumulate the source f32 timebase for the same tick count and snap up only when
+    // the source floor is ahead of the truncated Q16.16 floor. The previous `rem == ONE-1`
+    // shortcut was fit to fox/falco-length throws (their 4/3-rate cumsum lands exactly on
+    // 4.0/8.0) and pushed marth's frame-9/12 ticks (source 11.999999/15.999998) over the
+    // integer, firing set_throw_flags / release one frame early.
+    // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+    const float rate =
+        anim_timebase_attached_non_low_throw_rate_f32(batch, bi, p, idx, num_players);
+    if (!(rate > 0.0f)) {
+      return 0;
+    }
+    const int32_t rate_fp = msl_q16_16_from_f32(rate);
+    if (rate_fp <= 0) {
+      return 0;
+    }
+    const int32_t n = (cur_fp + rate_fp / 2) / rate_fp;
+    if (n <= 0 || n > 256) {
+      return 0;
+    }
+    float src = 0.0f;
+    for (int32_t i = 0; i < n; i++) {
+      src += rate;
+    }
+    const int32_t src_floor = (int32_t)src;
+    const int32_t q16_floor = cur_fp / (int32_t)MSL_Q16_16_ONE;
+    if (src_floor > q16_floor) {
+      return (src_floor * (int32_t)MSL_Q16_16_ONE) - cur_fp;
+    }
+    return 0;
   }
   if (batch == NULL || batch->state.throw_anim_rate_fp_q16_16[idx] <= 0) {
     return 0;
@@ -319,7 +405,38 @@ static inline int32_t anim_timebase_non_low_throw_rate_snap_delta(const MslBatch
   return 0;
 }
 
-static inline uint8_t anim_timebase_apply_aobj_loop(MslBatch* batch, size_t idx) {
+static inline uint8_t anim_timebase_anim_source_char_id(const MslBatch* batch, int bi, int p,
+                                                        size_t idx, int num_players) {
+  // Thrown victims play the THROWER's victim-throw animation: ftCo_800DE3FC passes the
+  // thrower's gobj as Fighter_ChangeMotionState's anim-source arg, which resolves the AJ
+  // data (`x24[anim_id]` / ftData_80085CD8) from THAT fighter's files. Loop/end-frame
+  // metadata for the victim's timeline must therefore come from the thrower's tables
+  // (e.g. marth ThrownHi runs 13 frames; falco's own track is 7 and clamping there froze
+  // thrown victims of marth's up-throw 6 frames early).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState (arg3 anim source)
+  // Capture* victim states pass arg3=NULL and keep their own anims (ftCo_Attack100.c).
+  if (!msl_action_is_thrown_victim(batch->state.action_id[idx])) {
+    return batch->state.char_id[idx];
+  }
+  uint8_t owner_p = batch->state.grab_owner_port[idx];
+  if (owner_p == 0xFFu || (int)owner_p >= num_players || (int)owner_p == p) {
+    for (int candidate = 0; candidate < num_players; candidate++) {
+      const size_t cidx = msl_idx_player(bi, candidate);
+      if (batch->state.attached_victim_port[cidx] == (uint8_t)p) {
+        owner_p = (uint8_t)candidate;
+        break;
+      }
+    }
+  }
+  if (owner_p == 0xFFu || (int)owner_p >= num_players || (int)owner_p == p) {
+    return batch->state.char_id[idx];
+  }
+  return batch->state.char_id[msl_idx_player(bi, (int)owner_p)];
+}
+
+static inline uint8_t anim_timebase_apply_aobj_loop(MslBatch* batch, size_t idx,
+                                                    uint8_t anim_src_char_id) {
   // Fighter AObj loop semantics (AOBJ_LOOP) apply a deterministic rewind+wrap when
   // `end_frame <= curr_frame`.
   //
@@ -339,10 +456,10 @@ static inline uint8_t anim_timebase_apply_aobj_loop(MslBatch* batch, size_t idx)
     return 0;
   }
   const uint16_t smid = (uint16_t)anim_u32;
-  if (!msl_anim_is_looping(batch->state.char_id[idx], smid)) {
+  if (!msl_anim_is_looping(anim_src_char_id, smid)) {
     return 0;
   }
-  const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], smid);
+  const float end_frame = msl_anim_end_frame(anim_src_char_id, smid);
   if (!(end_frame > 0.0f)) {
     return 0;
   }
@@ -1014,7 +1131,9 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           }
         }
       }
-      const uint8_t did_wrap = anim_timebase_apply_aobj_loop(batch, idx);
+      const uint8_t anim_src_char =
+          anim_timebase_anim_source_char_id(batch, bi, p, idx, num_players);
+      const uint8_t did_wrap = anim_timebase_apply_aobj_loop(batch, idx, anim_src_char);
       anim_timebase_apply_capture_loop(batch, idx);
 
       // Non-looping timelines clamp at end_frame and stop advancing.
@@ -1030,9 +1149,8 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // in anim_timebase_apply_aobj_loop() exactly as before.
       if (!did_wrap) {
         const uint32_t anim_u32 = batch->state.animation_index[idx];
-        if (anim_u32 <= 0xFFFFu &&
-            !msl_anim_is_looping(batch->state.char_id[idx], (uint16_t)anim_u32)) {
-          const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim_u32);
+        if (anim_u32 <= 0xFFFFu && !msl_anim_is_looping(anim_src_char, (uint16_t)anim_u32)) {
+          const float end_frame = msl_anim_end_frame(anim_src_char, (uint16_t)anim_u32);
           if (end_frame > 0.0f) {
             const int32_t end_fp = msl_q16_16_from_f32(end_frame);
             if (end_fp > 0) {
@@ -1145,14 +1263,15 @@ void anim_timebase_apply_deferred_tick_once_pre_collision(MslBatch* batch) {
       // IMPORTANT: do not gate this on `hitlag_started_frame`; hitlag can be started by combat later
       // in the frame, after the decomp tick already occurred.
       batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
-      const uint8_t did_wrap = anim_timebase_apply_aobj_loop(batch, idx);
+      const uint8_t anim_src_char =
+          anim_timebase_anim_source_char_id(batch, bi, p, idx, num_players);
+      const uint8_t did_wrap = anim_timebase_apply_aobj_loop(batch, idx, anim_src_char);
       anim_timebase_apply_capture_loop(batch, idx);
 
       if (!did_wrap) {
         const uint32_t anim_u32 = batch->state.animation_index[idx];
-        if (anim_u32 <= 0xFFFFu &&
-            !msl_anim_is_looping(batch->state.char_id[idx], (uint16_t)anim_u32)) {
-          const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim_u32);
+        if (anim_u32 <= 0xFFFFu && !msl_anim_is_looping(anim_src_char, (uint16_t)anim_u32)) {
+          const float end_frame = msl_anim_end_frame(anim_src_char, (uint16_t)anim_u32);
           if (end_frame > 0.0f) {
             const int32_t end_fp = msl_q16_16_from_f32(end_frame);
             if (end_fp > 0) {

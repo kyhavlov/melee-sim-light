@@ -15645,7 +15645,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
         if ((action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
              action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
             batch->state.shine_jump_iasa_entered_this_frame[idx] != 0u &&
-            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_LOOP &&
+            msl_motion_state_fx_special_kind(batch->state.char_id[idx],
+                                             batch->state.seed_prev_action_id[idx]) ==
+                (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_LOOP &&
             stored_desired_bottom_rel_y > k_floor_y_bias) {
           batch->state.shine_jump_preserved_desired_bottom[idx] = 1u;
         }

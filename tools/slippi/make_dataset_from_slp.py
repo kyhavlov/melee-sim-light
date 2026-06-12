@@ -55,6 +55,30 @@ def manifest_registry_chars(data_root: Path) -> list[tuple[int, str]]:
             )
         out.append((info.internal_id, info.name))
     return out
+
+
+def require_replay_chars_in_manifest(
+    replay_char_ids: "np.ndarray", manifest_chars: list[tuple[int, str]]
+) -> None:
+    """Refuse to build a dataset for a replay whose character is absent from the manifest.
+
+    A manifest without the replay's character means every per-character preprocessing map
+    silently resolved empty for it (landing lag, walk/run anim rates, friction, motion-state
+    owners) - the dataset would build "successfully" with subtly wrong seed lanes.
+    """
+    manifest_ids = {cid for cid, _key in manifest_chars}
+    vals = np.asarray(replay_char_ids)
+    if np.issubdtype(vals.dtype, np.floating):
+        # Doubles/rollback padding rows carry NaN char ids (peppi exposes floats there);
+        # only real character ids participate in the manifest check.
+        vals = vals[np.isfinite(vals)]
+    missing = sorted(set(int(c) for c in np.unique(vals)) - manifest_ids)
+    if missing:
+        raise ValueError(
+            f"replay uses char internal id(s) {missing} not in data manifest chars "
+            f"{sorted(manifest_ids)} - regenerate data with `make build_data` "
+            "(registry-driven) or add the character to tools/extraction/char_registry.py first"
+        )
 from tools.slippi.suite_io import team_attack_on_from_start
 
 
@@ -321,6 +345,7 @@ def _derive_fod_floor_skip_segments(
     *,
     action_id_u16: np.ndarray,
     action_frame_u16: np.ndarray,
+    char_id_u8: np.ndarray,
     on_ground_u8: np.ndarray,
     pos_x_f32: np.ndarray,
     pos_y_f32: np.ndarray,
@@ -502,8 +527,10 @@ def _derive_fod_floor_skip_segments(
             and y1 < world_y
         )
 
-    def attackair_first_hitbox_phase(action_id: int, action_frame: int) -> bool:
-        phase = attackair_first_phase_by_action.get(int(action_id))
+    _empty: frozenset[int] = frozenset()
+
+    def attackair_first_hitbox_phase(cid: int, action_id: int, action_frame: int) -> bool:
+        phase = attackair_first_phase_by_char_action.get(cid, {}).get(int(action_id))
         if phase is None:
             return False
         return int(action_frame) >= phase[0] and int(action_frame) < phase[1]
@@ -515,6 +542,17 @@ def _derive_fod_floor_skip_segments(
                 active_skip_from_shallow_attackair[slot] = False
                 continue
             action_id = int(action_id_u16[fi, slot])
+            cid = int(char_id_u8[fi, slot])
+            # Per-char action sets: the same numeric id is a different MotionState row per
+            # character (de-spacie pass; the old fox/falco intersection was applied
+            # char-blind to every row).
+            active_skip_actions = (
+                attackair_actions_by_char.get(cid, _empty) | escapeair_actions_by_char.get(cid, _empty)
+            )
+            common_air_skip_actions = (
+                jump_skip_actions_by_char.get(cid, _empty) | fall_skip_actions_by_char.get(cid, _empty)
+            )
+            shallow_attackair_actions = shallow_attackair_actions_by_char.get(cid, _empty)
             if action_id not in active_skip_actions and action_id not in common_air_skip_actions:
                 active_skip[slot] = 0xFFFF
                 active_skip_remaining[slot] = 0
@@ -549,7 +587,7 @@ def _derive_fod_floor_skip_segments(
                         rec is not None
                         and action_id in shallow_attackair_actions
                         and attackair_first_hitbox_phase(
-                            action_id, int(action_frame_u16[fi, slot])
+                            cid, action_id, int(action_frame_u16[fi, slot])
                         )
                         and attackair_shallow_first_contact(fi, slot, rec)
                     ):
@@ -618,7 +656,7 @@ def _derive_fod_floor_skip_segments(
                     active_skip_remaining[slot] = int(floor_skip_frames)
                     active_skip_from_shallow_attackair[slot] = False
                     if action_id in active_skip_actions:
-                        if action_id not in attackair_actions or transform_endpoint_contact(
+                        if action_id not in attackair_actions_by_char.get(cid, _empty) or transform_endpoint_contact(
                             fi, slot, rec
                         ):
                             out[fi, slot] = active_skip[slot]
@@ -628,7 +666,7 @@ def _derive_fod_floor_skip_segments(
                     break
                 if (
                     action_id in shallow_attackair_actions
-                    and attackair_first_hitbox_phase(action_id, int(action_frame_u16[fi, slot]))
+                    and attackair_first_hitbox_phase(cid, action_id, int(action_frame_u16[fi, slot]))
                     and attackair_shallow_first_contact(fi, slot, rec)
                 ):
                     active_skip[slot] = int(rec.line_id)
@@ -3669,7 +3707,8 @@ def _main_impl(args) -> Dataset:
     # chars). The old hardcoded (1, 22) loop silently skipped marth: no aerial landing-lag
     # map (L-cancel derivation disabled!), default walk/run/friction tables - the
     # spacie-shaped preprocessor class of the de-spacie pass.
-    for cid, key in manifest_registry_chars(data_root):
+    manifest_chars = manifest_registry_chars(data_root)
+    for cid, key in manifest_chars:
         attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
         move_file = json.loads((data_root / "moves" / f"{key}.json").read_text())
         move_data = move_file["moves"]
@@ -4063,7 +4102,14 @@ def _main_impl(args) -> Dataset:
         samples["input_t"]["p"]["r"][:, slot] = pre_r[1:]
 
         # --- Post-frame state (seed/ref)
-        post_char = _to_numpy(post.field("character")).astype(np.uint8)
+        post_char_field = post.field("character")
+        # Guard on the raw arrow values: _to_numpy squashes null/NaN padding rows (doubles,
+        # rollback) to 0, which would alias Mario's internal id.
+        post_char_for_guard = post_char_field.to_numpy(zero_copy_only=False)
+        if isinstance(post_char_for_guard, np.ma.MaskedArray):
+            post_char_for_guard = post_char_for_guard.compressed()
+        require_replay_chars_in_manifest(np.asarray(post_char_for_guard), manifest_chars)
+        post_char = _to_numpy(post_char_field).astype(np.uint8)
         post_state = _to_numpy(post.field("state")).astype(np.uint16)
         post_pos = post.field("position")
         post_pos_x = _to_numpy(post_pos.field("x")).astype(np.float32)
@@ -5895,6 +5941,7 @@ def _main_impl(args) -> Dataset:
         fod_floor_skip = _derive_fod_floor_skip_segments(
             action_id_u16=samples["seed_t"]["action_id"][:, :num_players],
             action_frame_u16=samples["seed_t"]["action_frame"][:, :num_players],
+            char_id_u8=samples["seed_t"]["char_id"][:, :num_players],
             on_ground_u8=samples["seed_t"]["on_ground"][:, :num_players],
             pos_x_f32=samples["seed_t"]["pos_x"][:, :num_players],
             pos_y_f32=samples["seed_t"]["pos_y"][:, :num_players],

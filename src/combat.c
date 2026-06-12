@@ -8236,8 +8236,10 @@ static inline uint8_t combat_damageflyroll_selected_source_normal_effect_prefix_
     return 8u;
   }
   if (source_is_strong_dair && enable_edge == 0u &&
-      (pre_action == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD ||
-       pre_action == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR)) {
+      (msl_motion_state_fx_special_kind(batch->state.char_id[d_idx], pre_action) ==
+           (uint8_t)MSL_FX_KIND_SPECIAL_HI_HOLD ||
+       msl_motion_state_fx_special_kind(batch->state.char_id[d_idx], pre_action) ==
+           (uint8_t)MSL_FX_KIND_SPECIAL_HI_HOLD_AIR)) {
     // Sustained strong DAir against a FireFox/FireBird charge victim: both live hb0/hb1
     // HitCapsules log entries against the stationary charge hurt envelope, two effect draws
     // before the gate (MAJ rec8959 randf stream: draw #3 = 0.059).

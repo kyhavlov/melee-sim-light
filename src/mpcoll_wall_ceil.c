@@ -90,6 +90,20 @@ static inline uint8_t mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(const Ms
       batch->state.seed_prev_action_id[idx]);
 }
 
+static inline uint8_t mpcoll_wall_ceil_escapeair_jump_entry_source(const MslBatch* batch,
+                                                                   size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t prev = batch->state.prev_action_id[idx];
+  const uint16_t seed_prev = batch->state.seed_prev_action_id[idx];
+  return (uint8_t)(prev == (uint16_t)MSL_ACT_KNEE_BEND || prev == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                   prev == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
+                   seed_prev == (uint16_t)MSL_ACT_KNEE_BEND ||
+                   seed_prev == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                   seed_prev == (uint16_t)MSL_ACT_JUMP_AERIAL_B);
+}
+
 static inline uint8_t mpcoll_wall_ceil_prev_root_runtime_owned(const MslBatch* batch, size_t idx) {
   // Source `mpCollPrev` is callback-local runtime state. Requiring this lane prevents
   // teacher-forced/restored wall ids from manufacturing a Fall -> EscapeAir ledge-wall handoff.
@@ -3298,6 +3312,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         msl_mpcoll_loaded_ecb_set_desired(&loaded_ecb, &cur_ecb,
                                           (uint8_t)MSL_MPCOLL_ECB_SOURCE_LOCKED_DESIRED_BOTTOM);
       } else if (!was_grounded && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+                 !mpcoll_wall_ceil_escapeair_jump_entry_source(batch, idx) &&
                  batch->state.ecb_lock_timer[idx] != 0u &&
                  batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 0u &&
                  batch->state.action_frame[idx] >= 1 && batch->state.pos_y[idx] < 0.0f &&

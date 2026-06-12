@@ -622,6 +622,55 @@ def test_fod_fresh_jumpaerial_escapeair_locked_bottom_sweep_lands_on_hard_floor(
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "max_abs_pos_x_err"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "DistinctCaringCobra.msl",
+            7308,
+            1,
+            0.05,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "PutridJoyousOryx.msl",
+            3339,
+            1,
+            0.10,
+        ),
+    ],
+)
+def test_jump_entry_escapeair_does_not_use_ground_departure_wall_packet(
+    dataset_rel: str, record: int, p: int, max_abs_pos_x_err: float
+) -> None:
+    # Regression lock for the DCC/PJO float movement found during the newchar rebase:
+    # JumpAerial/KneeBend -> EscapeAir rows use their own callback-local floor/ECB producers and
+    # must not inherit the Fall/run-off ground-departure locked-bottom wall packet. Over-applying
+    # that packet preserved the discrete state but moved pos_x by ~0.2-0.85 units.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) in (ACT_KNEE_BEND, ACT_JUMP_AERIAL_F, ACT_JUMP_AERIAL_B)
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
+
+    out, _dbg = _run_one_step_with_colldata(ds, record)
+    ref = row["ref_t1"]
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=3e-6)
+    assert abs(float(out["pos_x"][p]) - float(ref["pos_x"][p])) <= max_abs_pos_x_err
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "expected_ground"),
     [
         (
