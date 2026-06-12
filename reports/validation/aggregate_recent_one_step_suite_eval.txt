@@ -77,7 +77,7 @@ mismatch.item_type: 0 / 152610 (0.000000)
 mismatch.item_state: 0 / 152610 (0.000000)
 mismatch.item_owner: 0 / 152610 (0.000000)
 mismatch.item_instance_id: 0 / 152610 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 25 / 20348 (0.001229)
+ignored_mismatch.state_flags[4]&0x80: 24 / 20348 (0.001179)
 err.pos_x: mae=0.000404 p95=0.000000 max=0.494659
 err.pos_y: mae=0.000412 p95=0.000000 max=2.940002
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000168
@@ -92,8 +92,8 @@ err.item_pos_y: mae=0.000002 p95=0.000000 max=0.000114
 err.item_vel_x: mae=0.000005 p95=0.000000 max=0.000234
 err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000060
 overall.discrete_mismatch: 19 / 1231054
-overall.strict_discrete_mismatch: 44 / 1231054
-overall.ignored_discrete_mismatch: 25
+overall.strict_discrete_mismatch: 43 / 1231054
+overall.ignored_discrete_mismatch: 24
 overall.float_norm_mae_p95: 0.00001427
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl ==
@@ -167,7 +167,7 @@ mismatch.item_type: 0 / 182775 (0.000000)
 mismatch.item_state: 0 / 182775 (0.000000)
 mismatch.item_owner: 0 / 182775 (0.000000)
 mismatch.item_instance_id: 0 / 182775 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 47 / 24370 (0.001929)
+ignored_mismatch.state_flags[4]&0x80: 46 / 24370 (0.001888)
 err.pos_x: mae=0.000085 p95=0.000000 max=0.299999
 err.pos_y: mae=0.000065 p95=0.000000 max=1.580000
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000051
@@ -182,8 +182,8 @@ err.item_pos_y: mae=0.000002 p95=0.000000 max=0.000114
 err.item_vel_x: mae=0.000006 p95=0.000000 max=0.000234
 err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000060
 overall.discrete_mismatch: 27 / 1474385
-overall.strict_discrete_mismatch: 74 / 1474385
-overall.ignored_discrete_mismatch: 47
+overall.strict_discrete_mismatch: 73 / 1474385
+overall.ignored_discrete_mismatch: 46
 overall.float_norm_mae_p95: 0.00000521
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260514T181413.msl ==
@@ -392,7 +392,7 @@ mismatch.item_type: 0 / 130935 (0.000000)
 mismatch.item_state: 0 / 130935 (0.000000)
 mismatch.item_owner: 0 / 130935 (0.000000)
 mismatch.item_instance_id: 0 / 130935 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 14 / 17458 (0.000802)
+ignored_mismatch.state_flags[4]&0x80: 13 / 17458 (0.000745)
 err.pos_x: mae=0.000578 p95=0.000000 max=3.910500
 err.pos_y: mae=0.000239 p95=0.000000 max=1.820000
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000051
@@ -407,8 +407,8 @@ err.item_pos_y: mae=0.000001 p95=0.000000 max=0.000114
 err.item_vel_x: mae=0.000002 p95=0.000000 max=0.000234
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000060
 overall.discrete_mismatch: 28 / 1056209
-overall.strict_discrete_mismatch: 42 / 1056209
-overall.ignored_discrete_mismatch: 14
+overall.strict_discrete_mismatch: 41 / 1056209
+overall.ignored_discrete_mismatch: 13
 overall.float_norm_mae_p95: 0.00000893
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl ==
@@ -482,7 +482,7 @@ mismatch.item_type: 0 / 145335 (0.000000)
 mismatch.item_state: 0 / 145335 (0.000000)
 mismatch.item_owner: 0 / 145335 (0.000000)
 mismatch.item_instance_id: 0 / 145335 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 22 / 19378 (0.001135)
+ignored_mismatch.state_flags[4]&0x80: 21 / 19378 (0.001084)
 err.pos_x: mae=0.000231 p95=0.000000 max=1.153801
 err.pos_y: mae=0.000650 p95=0.000000 max=3.160000
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000193
@@ -497,8 +497,8 @@ err.item_pos_y: mae=0.000194 p95=0.000000 max=0.409171
 err.item_vel_x: mae=0.006106 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000001 p95=0.000000 max=0.001173
 overall.discrete_mismatch: 28 / 1172369
-overall.strict_discrete_mismatch: 50 / 1172369
-overall.ignored_discrete_mismatch: 22
+overall.strict_discrete_mismatch: 49 / 1172369
+overall.ignored_discrete_mismatch: 21
 overall.float_norm_mae_p95: 0.00004435
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
@@ -572,7 +572,7 @@ mismatch.item_type: 1 / 119055 (0.000008)
 mismatch.item_state: 0 / 119055 (0.000000)
 mismatch.item_owner: 1 / 119055 (0.000008)
 mismatch.item_instance_id: 1 / 119055 (0.000008)
-ignored_mismatch.state_flags[4]&0x80: 27 / 15874 (0.001701)
+ignored_mismatch.state_flags[4]&0x80: 28 / 15874 (0.001764)
 err.pos_x: mae=0.000337 p95=0.000000 max=1.485809
 err.pos_y: mae=0.000523 p95=0.000000 max=6.900000
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000059
@@ -587,8 +587,8 @@ err.item_pos_y: mae=0.000038 p95=0.000000 max=0.043619
 err.item_vel_x: mae=0.021988 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
 overall.discrete_mismatch: 22 / 960377
-overall.strict_discrete_mismatch: 49 / 960377
-overall.ignored_discrete_mismatch: 27
+overall.strict_discrete_mismatch: 50 / 960377
+overall.ignored_discrete_mismatch: 28
 overall.float_norm_mae_p95: 0.00007163
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
@@ -662,7 +662,7 @@ mismatch.item_type: 0 / 153330 (0.000000)
 mismatch.item_state: 0 / 153330 (0.000000)
 mismatch.item_owner: 0 / 153330 (0.000000)
 mismatch.item_instance_id: 0 / 153330 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 27 / 20444 (0.001321)
+ignored_mismatch.state_flags[4]&0x80: 25 / 20444 (0.001223)
 err.pos_x: mae=0.000208 p95=0.000000 max=0.299999
 err.pos_y: mae=0.000293 p95=0.000000 max=2.200000
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000059
@@ -677,8 +677,8 @@ err.item_pos_y: mae=0.056702 p95=0.000000 max=18.343994
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000152
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000045
 overall.discrete_mismatch: 15 / 1236862
-overall.strict_discrete_mismatch: 42 / 1236862
-overall.ignored_discrete_mismatch: 27
+overall.strict_discrete_mismatch: 40 / 1236862
+overall.ignored_discrete_mismatch: 25
 overall.float_norm_mae_p95: 0.00001356
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
@@ -707,7 +707,7 @@ mismatch.item_type: 0 / 117555 (0.000000)
 mismatch.item_state: 0 / 117555 (0.000000)
 mismatch.item_owner: 0 / 117555 (0.000000)
 mismatch.item_instance_id: 0 / 117555 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 19 / 15674 (0.001212)
+ignored_mismatch.state_flags[4]&0x80: 20 / 15674 (0.001276)
 err.pos_x: mae=0.000000 p95=0.000000 max=0.000059
 err.pos_y: mae=0.000379 p95=0.000000 max=2.940002
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000059
@@ -722,8 +722,8 @@ err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000126
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000213
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000126
 overall.discrete_mismatch: 7 / 948277
-overall.strict_discrete_mismatch: 26 / 948277
-overall.ignored_discrete_mismatch: 19
+overall.strict_discrete_mismatch: 27 / 948277
+overall.ignored_discrete_mismatch: 20
 overall.float_norm_mae_p95: 0.00001336
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
@@ -887,7 +887,7 @@ mismatch.item_type: 0 / 121200 (0.000000)
 mismatch.item_state: 0 / 121200 (0.000000)
 mismatch.item_owner: 0 / 121200 (0.000000)
 mismatch.item_instance_id: 0 / 121200 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 31 / 16160 (0.001918)
+ignored_mismatch.state_flags[4]&0x80: 30 / 16160 (0.001856)
 err.pos_x: mae=0.000069 p95=0.000000 max=0.299999
 err.pos_y: mae=0.000793 p95=0.000000 max=2.940002
 err.speed_air_x_self: mae=0.000001 p95=0.000000 max=0.012645
@@ -902,8 +902,8 @@ err.item_pos_y: mae=0.000009 p95=0.000000 max=0.007275
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000208
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000061
 overall.discrete_mismatch: 51 / 977680
-overall.strict_discrete_mismatch: 82 / 977680
-overall.ignored_discrete_mismatch: 31
+overall.strict_discrete_mismatch: 81 / 977680
+overall.ignored_discrete_mismatch: 30
 overall.float_norm_mae_p95: 0.00097882
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl ==
@@ -1472,7 +1472,7 @@ mismatch.item_type: 2 / 133830 (0.000015)
 mismatch.item_state: 0 / 133830 (0.000000)
 mismatch.item_owner: 2 / 133830 (0.000015)
 mismatch.item_instance_id: 2 / 133830 (0.000015)
-ignored_mismatch.state_flags[4]&0x80: 30 / 17844 (0.001681)
+ignored_mismatch.state_flags[4]&0x80: 33 / 17844 (0.001849)
 err.pos_x: mae=0.002174 p95=0.000000 max=2.814636
 err.pos_y: mae=0.002382 p95=0.000000 max=4.612979
 err.speed_air_x_self: mae=0.001365 p95=0.000000 max=2.814622
@@ -1487,8 +1487,8 @@ err.item_pos_y: mae=0.012448 p95=0.000000 max=13.752838
 err.item_vel_x: mae=0.005027 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.000024 p95=0.000000 max=0.031715
 overall.discrete_mismatch: 165 / 1079562
-overall.strict_discrete_mismatch: 195 / 1079562
-overall.ignored_discrete_mismatch: 30
+overall.strict_discrete_mismatch: 198 / 1079562
+overall.ignored_discrete_mismatch: 33
 overall.float_norm_mae_p95: 0.00025707
 
 == datasets/aggregate_recent/replays/validation/marth/InternalPowerlessWallaby.msl ==
@@ -1607,7 +1607,7 @@ mismatch.item_type: 0 / 80775 (0.000000)
 mismatch.item_state: 0 / 80775 (0.000000)
 mismatch.item_owner: 0 / 80775 (0.000000)
 mismatch.item_instance_id: 0 / 80775 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 51 / 10770 (0.004735)
+ignored_mismatch.state_flags[4]&0x80: 50 / 10770 (0.004643)
 err.pos_x: mae=0.010533 p95=0.000000 max=5.297989
 err.pos_y: mae=0.012272 p95=0.000000 max=16.568657
 err.speed_air_x_self: mae=0.004015 p95=0.000000 max=4.631064
@@ -1622,8 +1622,8 @@ err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000219 p95=0.000000 max=0.750000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
 overall.discrete_mismatch: 186 / 651585
-overall.strict_discrete_mismatch: 237 / 651585
-overall.ignored_discrete_mismatch: 51
+overall.strict_discrete_mismatch: 236 / 651585
+overall.ignored_discrete_mismatch: 50
 overall.float_norm_mae_p95: 0.00034725
 
 == datasets/aggregate_recent/replays/validation/marth/ParallelFamiliarZebra.msl ==
@@ -1652,7 +1652,7 @@ mismatch.item_type: 0 / 125355 (0.000000)
 mismatch.item_state: 0 / 125355 (0.000000)
 mismatch.item_owner: 0 / 125355 (0.000000)
 mismatch.item_instance_id: 0 / 125355 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 33 / 16714 (0.001974)
+ignored_mismatch.state_flags[4]&0x80: 30 / 16714 (0.001795)
 err.pos_x: mae=0.005626 p95=0.000000 max=5.383545
 err.pos_y: mae=0.008038 p95=0.000000 max=8.831502
 err.speed_air_x_self: mae=0.004605 p95=0.000000 max=2.814622
@@ -1667,8 +1667,8 @@ err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
 overall.discrete_mismatch: 482 / 1011197
-overall.strict_discrete_mismatch: 515 / 1011197
-overall.ignored_discrete_mismatch: 33
+overall.strict_discrete_mismatch: 512 / 1011197
+overall.ignored_discrete_mismatch: 30
 overall.float_norm_mae_p95: 0.00093439
 
 == datasets/aggregate_recent/replays/validation/marth/QuestionableHarmfulPanther.msl ==
@@ -1808,6 +1808,6 @@ overall.float_norm_mae_p95: 0.00042294
 
 == suite summary ==
 overall.discrete_mismatch: 4405 / 44129063
-overall.strict_discrete_mismatch: 6343 / 44129063
-overall.ignored_discrete_mismatch: 1938
+overall.strict_discrete_mismatch: 6337 / 44129063
+overall.ignored_discrete_mismatch: 1932
 overall.float_norm_mae_p95: 0.98263457

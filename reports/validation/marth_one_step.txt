@@ -32,7 +32,7 @@ mismatch.item_type: 2 / 133830 (0.000015)
 mismatch.item_state: 0 / 133830 (0.000000)
 mismatch.item_owner: 2 / 133830 (0.000015)
 mismatch.item_instance_id: 2 / 133830 (0.000015)
-ignored_mismatch.state_flags[4]&0x80: 30 / 17844 (0.001681)
+ignored_mismatch.state_flags[4]&0x80: 33 / 17844 (0.001849)
 err.pos_x: mae=0.002174 p95=0.000000 max=2.814636
 err.pos_y: mae=0.002382 p95=0.000000 max=4.612979
 err.speed_air_x_self: mae=0.001365 p95=0.000000 max=2.814622
@@ -47,8 +47,8 @@ err.item_pos_y: mae=0.012448 p95=0.000000 max=13.752838
 err.item_vel_x: mae=0.005027 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.000024 p95=0.000000 max=0.031715
 overall.discrete_mismatch: 165 / 1079562
-overall.strict_discrete_mismatch: 195 / 1079562
-overall.ignored_discrete_mismatch: 30
+overall.strict_discrete_mismatch: 198 / 1079562
+overall.ignored_discrete_mismatch: 33
 overall.float_norm_mae_p95: 0.00025707
 
 == datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl ==
@@ -167,7 +167,7 @@ mismatch.item_type: 0 / 80775 (0.000000)
 mismatch.item_state: 0 / 80775 (0.000000)
 mismatch.item_owner: 0 / 80775 (0.000000)
 mismatch.item_instance_id: 0 / 80775 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 51 / 10770 (0.004735)
+ignored_mismatch.state_flags[4]&0x80: 50 / 10770 (0.004643)
 err.pos_x: mae=0.010533 p95=0.000000 max=5.297989
 err.pos_y: mae=0.012272 p95=0.000000 max=16.568657
 err.speed_air_x_self: mae=0.004015 p95=0.000000 max=4.631064
@@ -182,8 +182,8 @@ err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000219 p95=0.000000 max=0.750000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
 overall.discrete_mismatch: 186 / 651585
-overall.strict_discrete_mismatch: 237 / 651585
-overall.ignored_discrete_mismatch: 51
+overall.strict_discrete_mismatch: 236 / 651585
+overall.ignored_discrete_mismatch: 50
 overall.float_norm_mae_p95: 0.00034725
 
 == datasets/marth/replays/validation/marth/ParallelFamiliarZebra.msl ==
@@ -212,7 +212,7 @@ mismatch.item_type: 0 / 125355 (0.000000)
 mismatch.item_state: 0 / 125355 (0.000000)
 mismatch.item_owner: 0 / 125355 (0.000000)
 mismatch.item_instance_id: 0 / 125355 (0.000000)
-ignored_mismatch.state_flags[4]&0x80: 33 / 16714 (0.001974)
+ignored_mismatch.state_flags[4]&0x80: 30 / 16714 (0.001795)
 err.pos_x: mae=0.005626 p95=0.000000 max=5.383545
 err.pos_y: mae=0.008038 p95=0.000000 max=8.831502
 err.speed_air_x_self: mae=0.004605 p95=0.000000 max=2.814622
@@ -227,8 +227,8 @@ err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
 overall.discrete_mismatch: 482 / 1011197
-overall.strict_discrete_mismatch: 515 / 1011197
-overall.ignored_discrete_mismatch: 33
+overall.strict_discrete_mismatch: 512 / 1011197
+overall.ignored_discrete_mismatch: 30
 overall.float_norm_mae_p95: 0.00093439
 
 == datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl ==
@@ -368,6 +368,6 @@ overall.float_norm_mae_p95: 0.00042294
 
 == suite summary ==
 overall.discrete_mismatch: 2964 / 8834694
-overall.strict_discrete_mismatch: 3402 / 8834694
-overall.ignored_discrete_mismatch: 438
+overall.strict_discrete_mismatch: 3401 / 8834694
+overall.ignored_discrete_mismatch: 437
 overall.float_norm_mae_p95: 4.82544994
