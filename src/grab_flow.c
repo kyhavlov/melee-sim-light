@@ -784,14 +784,18 @@ static inline uint8_t enter_capture_damage_from_wait(MslBatch* batch, size_t vid
     return 0u;
   }
   const uint16_t va = batch->state.action_id[vidx];
-  if (va == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI) {
-    // Decomp: CaptureWaitHi victim enters CaptureDamageHi (0xE1) via ftCo_800DC284.
+  if (va == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI || va == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_HI) {
+    // Decomp: a grabbed-victim hit enters CaptureDamageHi (0xE1) via ftCo_800DC284 from
+    // EITHER CaptureWaitHi or CaptureDamageHi (ftCo_Damage.c::inlineF0 dispatches on msid
+    // {0xE0, 0xE1} - a re-pummel RESTARTS the damage anim).
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DC284
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineF0
     batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_DAMAGE_HI;
     batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_DAMAGE_HI;
-  } else if (va == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) {
-    // Decomp: CaptureWaitLw victim enters CaptureDamageLw (0xE4) via ftCo_800DC3A4.
+  } else if (va == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW || va == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW) {
+    // Decomp: same shape for the Lw family via ftCo_800DC3A4 (inlineF0 msid {0xE3, 0xE4}).
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DC3A4
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineF0
     batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW;
     batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_DAMAGE_LW;
   } else {
@@ -1519,8 +1523,15 @@ void grab_flow_update_anim_callbacks_pre_input(MslBatch* batch) {
       }
 
       if (oa == (uint16_t)MSL_ACT_CATCH_ATTACK) {
-        if (move_tables_catchattack_grabbed_hit_active(batch->state.char_id[oidx],
-                                                       batch->state.anim_frame_f32[oidx])) {
+        // Per-HIT edge, not per-window-frame: the source restart (ftCo_Damage.c::inlineF0 ->
+        // ftCo_800DC284/ftCo_800DC3A4) runs once per applied grabbed hit. The extracted hit
+        // window spans several frames; re-entering CaptureDamage on every active frame would
+        // pin the victim's damage anim at 0. CatchAttack advances at rate 1.0, so the window
+        // entry edge is `active(anim) && !active(anim - 1)`.
+        const float owner_anim = batch->state.anim_frame_f32[oidx];
+        if (move_tables_catchattack_grabbed_hit_active(batch->state.char_id[oidx], owner_anim) &&
+            !move_tables_catchattack_grabbed_hit_active(batch->state.char_id[oidx],
+                                                        owner_anim - 1.0f)) {
           for (int victim_p = 0; victim_p < num_players; victim_p++) {
             const size_t vidx = msl_idx_player(bi, victim_p);
             if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
@@ -1553,13 +1564,13 @@ void grab_flow_update_anim_callbacks_pre_input(MslBatch* batch) {
             va != (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW) {
           continue;
         }
-        if (owner_catch_attack_ended) {
-          if (victim_p > owner_p) {
-            continue;
-          }
-          (void)enter_capture_wait_from_damage(batch, vidx);
-          continue;
-        }
+        // No owner-end linkage: ftCo_CaptureDamage*_Anim exits to CaptureWait* ONLY when its
+        // own animation ends (fn_800DB790 / fn_800DBAE4). The previous owner-CatchAttack-ended
+        // yank had no source counterpart and returned victims of long pummels (marth's 24f
+        // CatchAttack) to CaptureWait early; re-pummel restarts are owned by the grabbed-hit
+        // path (enter_capture_damage_from_wait now mirrors ftCo_Damage.c::inlineF0).
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+        //   ftCo_CaptureDamageHi_Anim,ftCo_CaptureDamageLw_Anim}
         const uint32_t vmsid_u32 = batch->state.animation_index[vidx];
         uint16_t vmsid = 0u;
         if (vmsid_u32 <= 0xFFFFu) {
@@ -1577,20 +1588,6 @@ void grab_flow_update_anim_callbacks_pre_input(MslBatch* batch) {
       if (owner_catch_attack_ended) {
         enter_catch_wait_from_attack(batch, oidx);
         oa = batch->state.action_id[oidx];
-        for (int victim_p = owner_p + 1; victim_p < num_players; victim_p++) {
-          const size_t vidx = msl_idx_player(bi, victim_p);
-          if (batch->state.hitlag_started_frame[vidx] != 0) {
-            continue;
-          }
-          if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
-            continue;
-          }
-          const uint16_t va = batch->state.action_id[vidx];
-          if (va == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_HI ||
-              va == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW) {
-            (void)enter_capture_wait_from_damage(batch, vidx);
-          }
-        }
       }
 
       if (c == NULL) {
