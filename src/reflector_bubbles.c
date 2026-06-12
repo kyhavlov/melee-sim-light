@@ -1,4 +1,5 @@
 #include "reflector_bubbles.h"
+#include "motion_state_owners.h"
 #include "char_registry.h"
 #include "ids.h"
 
@@ -16,16 +17,16 @@ static inline uint8_t is_fox_falco(uint8_t char_id) {
   return (char_id == (uint8_t)MSL_CHAR_ID_FOX) || (char_id == (uint8_t)MSL_CHAR_ID_FALCO);
 }
 
-static inline uint8_t action_is_shine_reflector_active(uint16_t a) {
-  // Suite-confirmed: Slippi reflect-active bit 0x10 is set in Loop/Turn but not Start/End.
+static inline uint8_t action_is_shine_reflector_active(uint8_t char_id, uint16_t a) {
+  // Suite-confirmed: Slippi reflect-active bit 0x10 is set in Loop/Hit/Turn but not Start/End.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwLoop_Enter (CreateReflectHit)
-  switch (a) {
-    case 0x0169:  // ftFx_MS_SpecialLwLoop
-    case 0x016A:  // ftFx_MS_SpecialLwHit
-    case 0x016C:  // ftFx_MS_SpecialLwTurn
-    case 0x016E:  // ftFx_MS_SpecialAirLwLoop
-    case 0x016F:  // ftFx_MS_SpecialAirLwHit
-    case 0x0171:  // ftFx_MS_SpecialAirLwTurn
+  switch (msl_motion_state_fx_special_kind(char_id, a)) {
+    case MSL_FX_KIND_SPECIAL_LW_LOOP:
+    case MSL_FX_KIND_SPECIAL_LW_HIT:
+    case MSL_FX_KIND_SPECIAL_LW_TURN:
+    case MSL_FX_KIND_SPECIAL_AIR_LW_LOOP:
+    case MSL_FX_KIND_SPECIAL_AIR_LW_HIT:
+    case MSL_FX_KIND_SPECIAL_AIR_LW_TURN:
       return 1;
     default:
       return 0;
@@ -33,27 +34,14 @@ static inline uint8_t action_is_shine_reflector_active(uint16_t a) {
 }
 
 static inline uint8_t action_is_shine(uint8_t char_id, uint16_t a) {
-  // Decomp: refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
-  // (ftFx_MS_SpecialLwStart=360 .. ftFx_MS_SpecialAirLwTurn=369)
-  // Fox/Falco-only: the numeric range is shared with other characters' specials.
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
-  switch (a) {
-    case 0x0168:  // ftFx_MS_SpecialLwStart
-    case 0x0169:  // ftFx_MS_SpecialLwLoop
-    case 0x016A:  // ftFx_MS_SpecialLwHit
-    case 0x016B:  // ftFx_MS_SpecialLwEnd
-    case 0x016C:  // ftFx_MS_SpecialLwTurn
-    case 0x016D:  // ftFx_MS_SpecialAirLwStart
-    case 0x016E:  // ftFx_MS_SpecialAirLwLoop
-    case 0x016F:  // ftFx_MS_SpecialAirLwHit
-    case 0x0170:  // ftFx_MS_SpecialAirLwEnd
-    case 0x0171:  // ftFx_MS_SpecialAirLwTurn
-      return 1;
-    default:
-      return 0;
-  }
+  // Ownership from the extracted MotionState row identity (the full Reflector family,
+  // ftFx_MS_SpecialLwStart .. ftFx_MS_SpecialAirLwTurn); other characters' same-numbered
+  // specials stay kind 0. Kind values are contiguous in table order.
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, a);
+  return (fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_LW_START &&
+          fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_TURN)
+             ? 1u
+             : 0u;
 }
 
 void reflector_bubbles_refresh(MslBatch* batch) {
@@ -80,7 +68,7 @@ void reflector_bubbles_refresh(MslBatch* batch) {
       }
 
       const uint16_t a = batch->state.action_id[idx];
-      const uint8_t active = action_is_shine_reflector_active(a);
+      const uint8_t active = action_is_shine_reflector_active(batch->state.char_id[idx], a);
 
       float rx = batch->state.pos_x[idx];
       float ry = batch->state.pos_y[idx];
@@ -148,15 +136,17 @@ void reflector_bubbles_refresh(MslBatch* batch) {
         // ReflectDesc after changing to SpecialAirLwStart. Carry that already-live fp->reflecting
         // bit until the Start anim reaches Loop, without admitting fresh airborne Start entries.
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Pass
+        const uint8_t bubble_fx_kind =
+            msl_motion_state_fx_special_kind(batch->state.char_id[idx], a);
         const uint8_t shine_start_pass_reflecting =
-            (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-             (a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
-              a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
+            ((bubble_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_LW_START ||
+              bubble_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START) &&
              (f & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) != 0u)
                 ? 1u
                 : 0u;
-        const uint8_t want = (uint8_t)((action_is_shine_reflector_active(a) != 0) ||
-                                       (shine_start_pass_reflecting != 0u));
+        const uint8_t want =
+            (uint8_t)((action_is_shine_reflector_active(batch->state.char_id[idx], a) != 0) ||
+                      (shine_start_pass_reflecting != 0u));
         if (want) {
           f |= (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
           // Decomp: ftColl_CreateReflectHit writes ReflectDesc.x20_behavior into fp->x2218_b5.
@@ -172,9 +162,10 @@ void reflector_bubbles_refresh(MslBatch* batch) {
           }
         } else {
           f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
-          if (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-              (prev_a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
-               prev_a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
+          const uint8_t bubble_prev_kind =
+              msl_motion_state_fx_special_kind(batch->state.char_id[idx], prev_a);
+          if ((bubble_prev_kind == (uint8_t)MSL_FX_KIND_SPECIAL_LW_START ||
+               bubble_prev_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START) &&
               batch->state.action_frame[idx] == 0) {
             // Reflector-start direct exit reset:
             // - SpecialLwStart / SpecialAirLwStart own the transient ReflectDesc.x20_behavior lane

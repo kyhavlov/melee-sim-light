@@ -97,16 +97,10 @@ static inline uint16_t hurtboxes_timer_remaining_from_action_frame(uint16_t init
 }
 
 static inline uint8_t hurtboxes_runtime_specialhi_pose_owner(uint8_t char_id, uint16_t action_id) {
-  if (char_id != (uint8_t)MSL_CHAR_ID_FOX && char_id != (uint8_t)MSL_CHAR_ID_FALCO) {
-    return 0u;
-  }
-  switch (action_id) {
-    case MSL_ACT_FX_SPECIAL_HI:
-    case MSL_ACT_FX_SPECIAL_AIR_HI:
-      return 1u;
-    default:
-      return 0u;
-  }
+  // Ownership from the extracted MotionState row identity (SpecialHi launch rows).
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+  return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI ||
+                   fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI);
 }
 
 static inline uint8_t hurtboxes_float_aobj_pose_owner(uint16_t action_id) {
@@ -148,21 +142,19 @@ static inline uint8_t hurtboxes_guard_tilt_live_body_pose_owner(const MslBatch* 
 
 static inline uint8_t hurtboxes_side_special_end_uses_pre_anim_collision_pose(uint8_t char_id,
                                                                               uint16_t action_id) {
-  if (char_id != (uint8_t)MSL_CHAR_ID_FOX && char_id != (uint8_t)MSL_CHAR_ID_FALCO) {
-    return 0u;
-  }
-  return (uint8_t)(action_id == (uint16_t)MSL_ACT_FX_SPECIAL_S_END ||
-                   action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END);
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+  return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_S_END ||
+                   fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END);
 }
 
 static inline uint8_t hurtboxes_side_special_start_passivewalljump_entry_pose_owner(
     const MslBatch* batch, size_t idx, uint8_t char_id, uint16_t action_id) {
-  if (batch == NULL ||
-      (char_id != (uint8_t)MSL_CHAR_ID_FOX && char_id != (uint8_t)MSL_CHAR_ID_FALCO)) {
+  if (batch == NULL) {
     return 0u;
   }
-  if (action_id != (uint16_t)MSL_ACT_FX_SPECIAL_S_START &&
-      action_id != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START) {
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+  if (fx_kind != (uint8_t)MSL_FX_KIND_SPECIAL_S_START &&
+      fx_kind != (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_START) {
     return 0u;
   }
   if (batch->state.action_frame[idx] > 2) {
@@ -843,9 +835,10 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         // Entry happens after the prio 1 Anim proc and before later callback phases.
         const uint16_t cur_action = batch->state.action_id[idx];
         const uint8_t is_shine_start_entry =
-            (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-             (cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
-              cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START))
+            (msl_motion_state_fx_special_kind(batch->state.char_id[idx], cur_action) ==
+                 (uint8_t)MSL_FX_KIND_SPECIAL_LW_START ||
+             msl_motion_state_fx_special_kind(batch->state.char_id[idx], cur_action) ==
+                 (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START)
                 ? 1u
                 : 0u;
         const uint8_t is_passive_tech_entry = (cur_action == (uint16_t)MSL_ACT_PASSIVE ||

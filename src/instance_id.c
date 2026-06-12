@@ -1,4 +1,5 @@
 #include "instance_id.h"
+#include "motion_state_owners.h"
 #include "ids.h"
 
 #include <stdint.h>
@@ -16,9 +17,12 @@ static inline uint8_t is_fox_falco(uint8_t char_id) {
   return (char_id == (uint8_t)MSL_CHAR_ID_FOX) || (char_id == (uint8_t)MSL_CHAR_ID_FALCO);
 }
 
-static inline uint8_t action_is_blaster_loop(uint16_t action_id) {
-  return (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP ||
-          action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP)
+static inline uint8_t action_is_blaster_loop(uint8_t char_id, uint16_t action_id) {
+  // Ownership from the extracted MotionState row identity (the Blaster loop rows);
+  // ftMs_SpecialNLoop (Marth, same numeric ids) stays kind 0.
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+  return (fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_N_LOOP ||
+          fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP)
              ? 1
              : 0;
 }
@@ -50,9 +54,7 @@ static inline uint8_t motion_state_change_calls_ft_80089824(uint8_t char_id,
   if (next_action_id == (uint16_t)MSL_ACT_CO_ATTACK_LW3) {
     return 1;
   }
-  if (is_fox_falco(char_id) && action_is_blaster_loop(prev_action_id) &&
-      prev_action_id == next_action_id) {
-    // Fox/Falco-only: ftMs_SpecialNLoop (Marth, same numeric ids) installs no x21EC callback.
+  if (action_is_blaster_loop(char_id, prev_action_id) && prev_action_id == next_action_id) {
     return 1;
   }
   return 0;

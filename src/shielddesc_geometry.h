@@ -614,12 +614,14 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
   // proven edge lanes; using the full term on steady Guard/GuardReflect rows regresses adjacent
   // ShieldDesc-miss/BODY boundaries.
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
-  const uint8_t shine_start_enable_edge = (batch->state.hitbox_enable_edge[hb_i] &&
-                                           msl_char_id_is_spacie(batch->state.char_id[a_idx]) &&
-                                           (a_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
-                                            a_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START))
-                                              ? 1u
-                                              : 0u;
+  const uint8_t shine_start_kind =
+      msl_motion_state_fx_special_kind(batch->state.char_id[a_idx], a_action);
+  const uint8_t shine_start_enable_edge =
+      (batch->state.hitbox_enable_edge[hb_i] &&
+       (shine_start_kind == (uint8_t)MSL_FX_KIND_SPECIAL_LW_START ||
+        shine_start_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START))
+          ? 1u
+          : 0u;
   const float shield_extent_scale = (shield_extent_bridge_active || shine_start_enable_edge ||
                                      attackairlw_strong_no_submotion_guard_extent_lane ||
                                      attackairb_weak_tail_tilted_guard_extent_lane)

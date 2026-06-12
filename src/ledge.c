@@ -1,4 +1,5 @@
 #include "ledge.h"
+#include "motion_state_owners.h"
 #include "char_registry.h"
 
 #include <math.h>
@@ -144,17 +145,23 @@ static inline uint8_t is_airborne_action_with_cliffcatch_check(uint8_t char_id, 
     // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
     //   ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll,
     //   ftFx_SpecialHiBound_Coll}
-    case MSL_ACT_FX_SPECIAL_AIR_S_START:
-    case MSL_ACT_FX_SPECIAL_AIR_S:
-    case MSL_ACT_FX_SPECIAL_AIR_S_END:
-    case MSL_ACT_FX_SPECIAL_HI_HOLD_AIR:
-    case MSL_ACT_FX_SPECIAL_AIR_HI:
-    case MSL_ACT_FX_SPECIAL_HI_FALL:
-    case MSL_ACT_FX_SPECIAL_HI_BOUND:
-      return msl_char_id_is_spacie(char_id);
-
-    default:
-      return 0;
+    default: {
+      // Ownership from the extracted MotionState row identity (the aerial SpecialS family
+      // plus the airborne SpecialHi rows whose Coll callbacks include the cliff catch).
+      const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, a);
+      switch (fx_kind) {
+        case MSL_FX_KIND_SPECIAL_AIR_S_START:
+        case MSL_FX_KIND_SPECIAL_AIR_S:
+        case MSL_FX_KIND_SPECIAL_AIR_S_END:
+        case MSL_FX_KIND_SPECIAL_HI_HOLD_AIR:
+        case MSL_FX_KIND_SPECIAL_AIR_HI:
+        case MSL_FX_KIND_SPECIAL_HI_FALL:
+        case MSL_FX_KIND_SPECIAL_HI_BOUND:
+          return 1;
+        default:
+          return 0;
+      }
+    }
   }
 }
 

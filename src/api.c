@@ -240,12 +240,15 @@ static inline uint8_t reseed_action_is_damage_or_firefox_launch_victim(uint8_t c
     case MSL_ACT_DAMAGE_FLY_ROLL:
     case MSL_ACT_FLY_REFLECT_WALL:
     case MSL_ACT_FLY_REFLECT_CEIL:
-    case MSL_ACT_FX_SPECIAL_HI:
-    case MSL_ACT_FX_SPECIAL_AIR_HI:
-      // Firefox launch victims are fox/falco-only (shared 341..372 id range).
+      // Damage-family launch victims gate on the spacie char family.
       return msl_char_id_is_spacie(char_id);
-    default:
-      return 0u;
+    default: {
+      // Firefox launch ownership from the extracted MotionState row identity
+      // (shared 341..372 id range stays kind 0 for other characters).
+      const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action);
+      return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI ||
+                       fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI);
+    }
   }
 }
 
@@ -346,6 +349,9 @@ static inline uint16_t item_seed_bridge_attack_id(const MslBatch* batch, int bi,
   }
   const size_t owner_idx = msl_idx_player(bi, (int)item->owner);
   if (laser_params_for_item_type(item->type) != NULL) {
+    // Raw FX constant as a table KEY (not a predicate): laser/illusion items exist only for
+    // the spacie owners, and the attack-id table is per-char extracted data - pinned by the
+    // dispatch ratchet, not convertible to fx_special_kind (this is a lookup, not a gate).
     // data/attack_id/move_id/{fox,falco}.bin: action 341/342/343 -> move_id 18
     return attack_id_move_id_from_action(batch->state.char_id[owner_idx],
                                          (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP);
@@ -561,9 +567,10 @@ static inline uint8_t seed_bridge_has_shine_start_x1988_masked_x198c(const MslSe
   if (seed == NULL) {
     return 0u;
   }
-  if (!msl_char_id_is_spacie(seed->char_id[p]) ||
-      (seed->action_id[p] != (uint16_t)MSL_ACT_FX_SPECIAL_LW_START &&
-       seed->action_id[p] != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START)) {
+  const uint8_t seed_lw_kind =
+      msl_motion_state_fx_special_kind(seed->char_id[p], seed->action_id[p]);
+  if (seed_lw_kind != (uint8_t)MSL_FX_KIND_SPECIAL_LW_START &&
+      seed_lw_kind != (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START) {
     return 0u;
   }
   if (seed->action_frame[p] != 1 || seed_hurtbox_state != 2u || seed_x1988 != 2u) {
@@ -1596,9 +1603,10 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
-    if (msl_char_id_is_spacie(seed->char_id[victim]) &&
-        (seed->action_id[victim] == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL ||
-         seed->action_id[victim] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) &&
+    const uint8_t victim_fx_kind =
+        msl_motion_state_fx_special_kind(seed->char_id[victim], seed->action_id[victim]);
+    if ((victim_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL ||
+         victim_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END) &&
         seed->on_ground[victim] == 0u && seed->hitlag[victim] == 0u &&
         seed->hitstun[victim] == 0u && seed->instance_hit_by[victim] != 0u) {
       // Spacie special-fall/end source-owner rollout windows can reach a later AttackAirB
@@ -2509,14 +2517,17 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
             // Dolphin Slash source: LandingFallSpecial lag = MarsAttributes x2C.
             // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
             landing_lag = phys->specialhi_landing_lag_frames;
-          } else if (msl_char_id_is_spacie(seed->char_id[p]) &&
-                     src == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
+          } else if (msl_motion_state_fx_special_kind(seed->char_id[p], src) ==
+                     (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END) {
             landing_lag = (float)phys->illusion_landing_lag_frames;
-          } else if (msl_char_id_is_spacie(seed->char_id[p]) &&
-                     (src == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
-                      src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL ||
-                      src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND ||
-                      src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING)) {
+          } else if (msl_motion_state_fx_special_kind(seed->char_id[p], src) ==
+                         (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI ||
+                     msl_motion_state_fx_special_kind(seed->char_id[p], src) ==
+                         (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL ||
+                     msl_motion_state_fx_special_kind(seed->char_id[p], src) ==
+                         (uint8_t)MSL_FX_KIND_SPECIAL_HI_BOUND ||
+                     msl_motion_state_fx_special_kind(seed->char_id[p], src) ==
+                         (uint8_t)MSL_FX_KIND_SPECIAL_HI_LANDING) {
             landing_lag = (float)phys->firefox_landing_lag_frames;
           }
         }
@@ -2723,9 +2734,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
         // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         const uint8_t shine_start_x1990_reseed =
-            (msl_char_id_is_spacie(seed->char_id[p]) &&
-             (seed->action_id[p] == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
-              seed->action_id[p] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
+            ((msl_motion_state_fx_special_kind(seed->char_id[p], seed->action_id[p]) ==
+                  (uint8_t)MSL_FX_KIND_SPECIAL_LW_START ||
+              msl_motion_state_fx_special_kind(seed->char_id[p], seed->action_id[p]) ==
+                  (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START) &&
              seed_hurtbox_state == 2u)
                 ? 1u
                 : 0u;
@@ -5177,8 +5189,9 @@ static uint8_t debug_sample_hitbox_center_proxy(const MslBatch* batch, size_t id
   cy *= model_scale;
   cz *= model_scale;
 
-  if (def->bone_part_id < 256u && msl_char_id_is_spacie(char_id) &&
-      batch->state.action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
+  if (def->bone_part_id < 256u &&
+      msl_motion_state_fx_special_kind(char_id, batch->state.action_id[idx]) ==
+          (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI &&
       msl_anim_part_under_xrotn(char_id, def->bone_part_id)) {
     float xrotn_m[12];
     if (anim_pose_get_matrix(char_id, msid, pose_frame, 2u, xrotn_m) == 0) {

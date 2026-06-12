@@ -22,55 +22,42 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # Whitelisted: per-char special modules and id-definition/registry headers.
+# action_ids.h is NOT blanket-exempt: its enum DEFINITIONS are stripped before counting
+# (see _counts), but behavior helpers in that header are counted like any engine code.
 EXEMPT = {
-    "action_ids.h",
     "blaster.c",
     "shine.c",
     "char_registry.h",
     "motion_state_owners.h",
 }
 
+# Lines that are pure enumerator definitions (the id vocabulary itself), stripped from
+# action_ids.h before counting so the ratchet sees only behavior code.
+_ENUMERATOR_DEF_RE = re.compile(r"^\s*MSL_ACT_FX_[A-Z_0-9]+ = 0x[0-9A-Fa-f]+u?,")
+
 # Baseline as of the retro-cleanup campaign (2026-06-11). Lower is better; raising any
 # number needs an explicit review decision.
 FX_BASELINE = {
-    "anim_timebase.c": 2,
-    "api.c": 16,
-    "combat.c": 51,
-    "damage_terminal_owner.h": 5,
-    "hitboxes.c": 7,
-    "hitlist.c": 2,
-    "hurtboxes.c": 8,
-    "instance_id.c": 2,
-    "items.c": 36,
-    "ledge.c": 7,
-    "locomotion.c": 100,
-    "mpcoll_env.c": 4,
-    "mpcoll_ground.c": 30,
-    "mpcoll_wall_ceil.c": 5,
-    "physics.c": 25,
-    "reflector_bubbles.c": 4,
-    "shielddesc_geometry.h": 2,
-    "specialhi_pose.h": 5,
-    "state_flags.c": 12,
+    # api.c: 2 raw FX constants used as attack-id table KEYS for spacie-article items.
+    "api.c": 2,
+    # damage_terminal_owner.h: case labels whose bodies are kind-keyed (the labels select
+    # the raw id branch; the kind check inside owns the char split).
+    "damage_terminal_owner.h": 3,
+    # items.c: write-side state installs (shine-reflect enters the spacie SpecialLwHit).
+    "items.c": 2,
+    # locomotion.c: spacie special machine bodies (state transitions/write-side vocabulary
+    # behind the 6 module-entry guards) - the blaster.c/shine.c class.
+    "locomotion.c": 69,
 }
 
 SPACIE_GATE_BASELINE = {
-    "anim_timebase.c": 2,
-    "api.c": 7,
-    "combat.c": 28,
-    "hitboxes.c": 1,
-    "hitlist.c": 1,
-    "hurtboxes.c": 1,
-    "items.c": 10,
-    "ledge.c": 1,
-    "locomotion.c": 27,
-    "mpcoll_env.c": 3,
-    "mpcoll_ground.c": 23,
-    "mpcoll_wall_ceil.c": 3,
-    "physics.c": 12,
-    "reflector_bubbles.c": 3,
-    "shielddesc_geometry.h": 1,
-    "state_flags.c": 3,
+    # All remaining gates are char-FAMILY scoping (machine-entry boundaries or
+    # replay-validated rollout owner scoping), not action-id collision guards - the
+    # action checks behind them are kind-keyed.
+    "api.c": 1,
+    "combat.c": 12,
+    "items.c": 1,
+    "locomotion.c": 6,
 }
 
 
@@ -80,7 +67,12 @@ def _counts(pattern: str) -> dict[str, int]:
     for f in sorted((ROOT / "src").iterdir()):
         if f.suffix not in (".c", ".h") or f.name in EXEMPT:
             continue
-        n = len(rx.findall(f.read_text(encoding="utf-8", errors="replace")))
+        text = f.read_text(encoding="utf-8", errors="replace")
+        if f.name == "action_ids.h":
+            text = "\n".join(
+                line for line in text.splitlines() if not _ENUMERATOR_DEF_RE.match(line)
+            )
+        n = len(rx.findall(text))
         if n:
             out[f.name] = n
     return out

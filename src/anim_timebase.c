@@ -951,8 +951,9 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
             // Dolphin Slash direct landing: LandingFallSpecial with MarsAttributes x2C.
             // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
             lag = (ch != NULL) ? ch->specialhi_landing_lag_frames : lag;
-          } else if (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-                     source_prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
+          } else if (msl_motion_state_fx_special_kind(batch->state.char_id[idx],
+                                                      source_prev_action) ==
+                     (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END) {
             // Decomp source split for LandingFallSpecial entry rate:
             // - EscapeAir_Coll enters ftCo_LandingFallSpecial_Enter(..., p_ftCommonData->x344).
             // - Fox/Falco Illusion end collision enters ftCo_LandingFallSpecial_Enter(...,
@@ -1109,8 +1110,8 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // Fighter_ChangeMotionState; fastfall persists across those wraps in decomp.
       if (did_wrap && action_frame_pre >= 0 && batch->state.action_frame[idx] < action_frame_pre) {
         const uint16_t a = batch->state.action_id[idx];
-        if (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-            a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP) {
+        if (msl_motion_state_fx_special_kind(batch->state.char_id[idx], a) ==
+            (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP) {
           batch->state.fall_fast[idx] = 0;
         }
       }

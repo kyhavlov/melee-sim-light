@@ -990,14 +990,14 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList`
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable`
-  - Binary layout: `MSLMSO01` v17 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLMSO01` v18 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLMSO01"`
-    - `u32 version = 17`
+    - `u32 version = 18`
     - `u16 action_count`
     - `u16 reserved = 0`
     - `u32` offsets for `submotion_id`, `x4_flags`, `motion_state_word`, `anim_cb_id`,
-      `iasa_cb_id`, `phys_cb_id`, `coll_cb_id`, `cam_cb_id`, `class_bits`, `class2_bits`, and
-      `class3_bits`
+      `iasa_cb_id`, `phys_cb_id`, `coll_cb_id`, `cam_cb_id`, `class_bits`, `class2_bits`,
+      `class3_bits`, and `fx_special_kind`
     - `u16 submotion_id[action_count]` (`0xFFFF` = unknown/absent)
     - `u32 x4_flags[action_count]`
     - `u32 motion_state_word[action_count]`
@@ -1005,6 +1005,7 @@ Characters (Fox/Falco):
     - `u32 class_bits[action_count]`
     - `u32 class2_bits[action_count]`
     - `u32 class3_bits[action_count]`
+    - `u8 fx_special_kind[action_count]`
   - `data/motion_state/owners/callback_symbols.json` is review/debug metadata mapping callback IDs
     back to decomp symbol names. Runtime loads only the binary tables.
   - Class-bit examples:
@@ -1047,16 +1048,23 @@ Characters (Fox/Falco):
       families. `PHASE4_ATTACK_AIR_COLL`, `PHASE4_ESCAPE_AIR_COLL`,
       `PHASE4_DAMAGE_COMMON_COLL`, `PHASE4_DAMAGE_FLY_COLL`, and `PHASE4_DAMAGE_FALL_COLL`
       select only the source collision callbacks for AttackAir, EscapeAir, and Damage-family
-      routing. `FX_SPECIALHI_HOLD_AIR_PHYS` (v17) selects `ftFx_SpecialHiHoldAir_Phys` - the
-      per-(char, action) owner identity that replaces runtime
-      `msl_char_id_is_spacie && action_id == MSL_ACT_FX_*` predicate gates (the exemplar of
-      that migration; see `tests/test_action_id_dispatch_ratchet.py`). Broad peers that share
-      wrapper helpers, including AirCatch, ItemThrowAir, cargo/capture, item, and the
-      remaining Fox/Falco bespoke special callbacks, stay out of this word until each family
-      is migrated with its own bit.
-  - Stale/non-v17 `MSLMSO01` tables must be rejected. Version 17 adds the
-    `FX_SPECIALHI_HOLD_AIR_PHYS` char-special PHYS owner bit to `class3_bits` (the
-    is_spacie/action-id predicate migration exemplar). Version 16 adds `class3_bits` for narrow
+      routing. Broad peers that share wrapper helpers, including AirCatch, ItemThrowAir,
+      cargo/capture, item, and Fox/Falco bespoke special callbacks, remain excluded from
+      this word.
+    - `fx_special_kind` (v18) is the per-(char, action) identity of the Fox/Falco bespoke
+      special MotionState rows, generated 1:1 from each row's ANIM callback symbol
+      (`FX_SPECIAL_KIND_BY_ANIM_CB` in the extractor; values dense 1..29 in table order, 0 =
+      none, mirrored by `MslMsFxSpecialKind` and the `fx_special_kinds` manifest object,
+      parity-locked by tests). It replaces runtime
+      `msl_char_id_is_spacie && action_id == MSL_ACT_FX_*` predicate gates in generic engine
+      code (`tests/test_action_id_dispatch_ratchet.py` enforces the counts down-only): a new
+      character's same-numbered actions carry its own callbacks and stay kind 0. Per-family
+      kind ranges are contiguous by table order, so family checks are range checks.
+  - Stale/non-v18 `MSLMSO01` tables must be rejected. Version 18 adds the
+    `fx_special_kind` u8 lane (anim-callback-derived Fox/Falco special row identity, the
+    is_spacie/action-id predicate migration target) and retires v17's transitional
+    `FX_SPECIALHI_HOLD_AIR_PHYS` class3 bit in its favor. Version 17 added that bit as the
+    migration exemplar. Version 16 adds `class3_bits` for narrow
     Phase 4 AttackAir/EscapeAir/Damage owner routing. Version 15 extends `class2_bits` with
     wrapper-shaped common grounded B108/B2DC/B4B0 owner classes. Version 14 added `class2_bits` for
     the narrow Phase 3 common grounded/airborne owner classes. Version 13 adds generated

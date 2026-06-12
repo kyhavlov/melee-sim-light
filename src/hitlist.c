@@ -15,11 +15,11 @@ static inline size_t idx_fighter_hitlist(int bi, int p, int hb_id) {
 }
 
 static inline uint8_t hitlist_specialhi_action(uint8_t char_id, uint16_t action_id) {
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
-  return ((uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD <= action_id &&
-          action_id <= (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND)
+  // Ownership from the extracted MotionState row identity: only the spacie SpecialHi rows
+  // carry these kinds; other characters' same-numbered actions are kind 0.
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+  return ((uint8_t)MSL_FX_KIND_SPECIAL_HI_HOLD <= fx_kind &&
+          fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_HI_BOUND)
              ? 1u
              : 0u;
 }

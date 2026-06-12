@@ -340,6 +340,8 @@ def test_specialhi_jobj_ecb_floor_owner_stays_launch_scoped_until_full_packet() 
     assert helper_match is not None
     helper_body = helper_match.group("body")
 
-    assert "MSL_ACT_FX_SPECIAL_AIR_HI" in helper_body
-    assert "MSL_ACT_FX_SPECIAL_HI_FALL" not in helper_body
+    # Owner identity now comes from the extracted MotionState row kind (the spacie
+    # dispatch migration); the launch-scoped set is SpecialHi/SpecialAirHi only.
+    assert "MSL_FX_KIND_SPECIAL_AIR_HI" in helper_body
+    assert "MSL_FX_KIND_SPECIAL_HI_FALL" not in helper_body
     assert "mpColl_LoadECB_JObj" in helper_body

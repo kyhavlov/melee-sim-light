@@ -7,19 +7,17 @@
 #include "batch_internal.h"
 #include "ids.h"
 #include "msl_math.h"
+#include "motion_state_owners.h"
 
 static inline uint8_t msl_specialhi_rotate_model_action(uint8_t char_id, uint16_t action_id) {
-  if (char_id != (uint8_t)MSL_CHAR_ID_FOX && char_id != (uint8_t)MSL_CHAR_ID_FALCO) {
-    // Firefox/Firebird model rotation is fox/falco-only; the 341..372 action-id range is
-    // shared with other characters' specials (see char_registry.h).
-    return 0u;
-  }
-  switch (action_id) {
-    case MSL_ACT_FX_SPECIAL_HI:
-    case MSL_ACT_FX_SPECIAL_AIR_HI:
-    case MSL_ACT_FX_SPECIAL_HI_LANDING:
-    case MSL_ACT_FX_SPECIAL_HI_FALL:
-    case MSL_ACT_FX_SPECIAL_HI_BOUND:
+  // Firefox/Firebird model-rotation ownership from the extracted MotionState row identity;
+  // the 341..372 range stays kind 0 for other characters (see char_registry.h).
+  switch (msl_motion_state_fx_special_kind(char_id, action_id)) {
+    case MSL_FX_KIND_SPECIAL_HI:
+    case MSL_FX_KIND_SPECIAL_AIR_HI:
+    case MSL_FX_KIND_SPECIAL_HI_LANDING:
+    case MSL_FX_KIND_SPECIAL_HI_FALL:
+    case MSL_FX_KIND_SPECIAL_HI_BOUND:
       // `mv.fx.SpecialHi.rotateModel` is written by SpecialHi launch/collision callbacks. The
       // Landing/Fall/Bound callbacks do not rewrite FtPart_XRotN, so the live JObj pose can persist
       // into those followups until a non-Firefox motion state owns the model again.

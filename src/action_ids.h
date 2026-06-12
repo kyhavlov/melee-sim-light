@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include "motion_state_owners.h"
+
 // GALE01 action ids (aka `FtMotionId` / `ftCommon_MotionState`) for common locomotion.
 //
 // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
@@ -738,35 +740,26 @@ static inline uint8_t msl_action_allows_fastfall(uint8_t char_id, uint16_t actio
     // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
     case MSL_ACT_MISS_FOOT:
       return 1u;
-    // Decomp: `ftFx_SpecialAirN{Start,Loop,End}_Phys` call `ft_80084DB0`.
-    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNStart_Phys
-    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Phys
-    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNEnd_Phys
-    case MSL_ACT_FX_SPECIAL_AIR_N_START:
-    case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
-    case MSL_ACT_FX_SPECIAL_AIR_N_END:
-      // ft_80084DB0 fastfall path is the fox/falco AirN family; Marth's air Shield Breaker
-      // (same numeric ids) uses plain ftCommon_Fall (no fastfall).
-      // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c
-      if (char_id != (uint8_t)1u && char_id != (uint8_t)22u) {
-        return 0u;
-      }
-      return 1u;
-    // Decomp: `ftFx_SpecialHiFall_Phys` calls `ft_80084DB0`.
-    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Phys
-    case MSL_ACT_FX_SPECIAL_HI_FALL:
-      if (char_id != (uint8_t)1u && char_id != (uint8_t)22u) {
-        return 0u;
-      }
-      return 1u;
     case MSL_ACT_ESCAPE_AIR:
     // Decomp: both CliffJump2 variants call `ft_80084DB0` after the first-frame x0 gate.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Phys
     case MSL_ACT_CLIFF_JUMP_SLOW2:
     case MSL_ACT_CLIFF_JUMP_QUICK2:
       return 1;
-    default:
-      return 0;
+    default: {
+      // Char-special fastfall ownership from the extracted MotionState row identity:
+      // `ftFx_SpecialAirN{Start,Loop,End}_Phys` and `ftFx_SpecialHiFall_Phys` call
+      // `ft_80084DB0`; Marth's same-numbered air Shield Breaker rows use plain
+      // ftCommon_Fall (kind 0 -> no fastfall).
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+      //   ftFx_SpecialAirNStart_Phys,ftFx_SpecialAirNLoop_Phys,ftFx_SpecialAirNEnd_Phys}
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Phys
+      // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c
+      const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+      return (uint8_t)((fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_START &&
+                        fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END) ||
+                       fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL);
+    }
   }
 }
 

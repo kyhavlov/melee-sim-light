@@ -9,7 +9,7 @@ import numpy as np
 
 
 MAGIC = b"MSLMSO01"
-VERSION = 17
+VERSION = 18
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,7 @@ class MotionStateOwners:
     class_bits: np.ndarray
     class2_bits: np.ndarray
     class3_bits: np.ndarray
+    fx_special_kind: np.ndarray
 
 
 def read_mslmso01_v1(path: Path) -> MotionStateOwners:
@@ -48,8 +49,9 @@ def read_mslmso01_v1(path: Path) -> MotionStateOwners:
         class_bits_off,
         class2_bits_off,
         class3_bits_off,
-    ) = struct.unpack_from("<IIIIIIIIIII", b, 16)
-    file_bytes = class3_bits_off + action_count * 4
+        fx_special_kind_off,
+    ) = struct.unpack_from("<IIIIIIIIIIII", b, 16)
+    file_bytes = fx_special_kind_off + action_count
     if file_bytes != len(b):
         raise ValueError(f"MSLMSO01 size mismatch in {path}: header-derived {file_bytes} != {len(b)}")
 
@@ -71,6 +73,7 @@ def read_mslmso01_v1(path: Path) -> MotionStateOwners:
         class_bits=arr(class_bits_off, "<u4", 4),
         class2_bits=arr(class2_bits_off, "<u4", 4),
         class3_bits=arr(class3_bits_off, "<u4", 4),
+        fx_special_kind=arr(fx_special_kind_off, "u1", 1),
     )
 
 

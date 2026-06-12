@@ -19,7 +19,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 17
+FORMAT_VERSION = 18
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -66,11 +66,51 @@ CLASS3_PHASE4_ESCAPE_AIR_COLL = 1 << 1
 CLASS3_PHASE4_DAMAGE_COMMON_COLL = 1 << 2
 CLASS3_PHASE4_DAMAGE_FLY_COLL = 1 << 3
 CLASS3_PHASE4_DAMAGE_FALL_COLL = 1 << 4
-# Char-special PHYS owner families for generic-engine consumers. These migrate runtime
-# `msl_char_id_is_spacie(char) && action_id == MSL_ACT_FX_*` predicate gates onto the
-# extracted per-(char, action) MotionState callback identity - the source dispatch shape.
-# A new character's same-numbered actions carry its OWN callbacks and never set these bits.
-CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS = 1 << 5
+
+# fx_special_kind (v18): per-(char, action) identity of the Fox/Falco bespoke special
+# MotionState rows, generated 1:1 from each row's ANIM callback symbol (unique per row).
+# This is THE migration target for runtime `msl_char_id_is_spacie(char) && action_id ==
+# MSL_ACT_FX_*` predicate gates: a new character's same-numbered actions carry its own
+# callbacks and stay kind 0 (NONE). Values are the 1-based index of this ordered table;
+# the C enum (motion_state_owners.h MslMsFxSpecialKind) and the callback_symbols.json
+# "fx_special_kinds" manifest are parity-locked to it by tests.
+FX_SPECIAL_KIND_BY_ANIM_CB: tuple[tuple[str, str], ...] = (
+    ("ftFx_SpecialNStart_Anim", "SPECIAL_N_START"),
+    ("ftFx_SpecialNLoop_Anim", "SPECIAL_N_LOOP"),
+    ("ftFx_SpecialNEnd_Anim", "SPECIAL_N_END"),
+    ("ftFx_SpecialAirNStart_Anim", "SPECIAL_AIR_N_START"),
+    ("ftFx_SpecialAirNLoop_Anim", "SPECIAL_AIR_N_LOOP"),
+    ("ftFx_SpecialAirNEnd_Anim", "SPECIAL_AIR_N_END"),
+    ("ftFx_SpecialSStart_Anim", "SPECIAL_S_START"),
+    ("ftFx_SpecialS_Anim", "SPECIAL_S"),
+    ("ftFx_SpecialSEnd_Anim", "SPECIAL_S_END"),
+    ("ftFx_SpecialAirSStart_Anim", "SPECIAL_AIR_S_START"),
+    ("ftFx_SpecialAirS_Anim", "SPECIAL_AIR_S"),
+    ("ftFx_SpecialAirSEnd_Anim", "SPECIAL_AIR_S_END"),
+    ("ftFx_SpecialHiHold_Anim", "SPECIAL_HI_HOLD"),
+    ("ftFx_SpecialHiHoldAir_Anim", "SPECIAL_HI_HOLD_AIR"),
+    ("ftFx_SpecialHi_Anim", "SPECIAL_HI"),
+    ("ftFx_SpecialAirHi_Anim", "SPECIAL_AIR_HI"),
+    ("ftFx_SpecialHiLanding_Anim", "SPECIAL_HI_LANDING"),
+    ("ftFx_SpecialHiFall_Anim", "SPECIAL_HI_FALL"),
+    ("ftFx_SpecialHiBound_Anim", "SPECIAL_HI_BOUND"),
+    ("ftFx_SpecialLwStart_Anim", "SPECIAL_LW_START"),
+    ("ftFx_SpecialLwLoop_Anim", "SPECIAL_LW_LOOP"),
+    ("ftFx_SpecialLwHit_Anim", "SPECIAL_LW_HIT"),
+    ("ftFx_SpecialLwEnd_Anim", "SPECIAL_LW_END"),
+    ("ftFx_SpecialLwTurn_Anim", "SPECIAL_LW_TURN"),
+    ("ftFx_SpecialAirLwStart_Anim", "SPECIAL_AIR_LW_START"),
+    ("ftFx_SpecialAirLwLoop_Anim", "SPECIAL_AIR_LW_LOOP"),
+    ("ftFx_SpecialAirLwHit_Anim", "SPECIAL_AIR_LW_HIT"),
+    ("ftFx_SpecialAirLwEnd_Anim", "SPECIAL_AIR_LW_END"),
+    ("ftFx_SpecialAirLwTurn_Anim", "SPECIAL_AIR_LW_TURN"),
+)
+FX_SPECIAL_KIND_BY_SYMBOL: dict[str, int] = {
+    sym: i + 1 for i, (sym, _name) in enumerate(FX_SPECIAL_KIND_BY_ANIM_CB)
+}
+FX_SPECIAL_KIND_VALUES: dict[str, int] = {
+    name: i + 1 for i, (_sym, name) in enumerate(FX_SPECIAL_KIND_BY_ANIM_CB)
+}
 
 
 @dataclass(frozen=True)
@@ -611,12 +651,6 @@ def _class3_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         # Phase 4 DamageFall callback:
         # ftCo_DamageFall_Coll -> ft_8008370C -> mpColl_800473CC on ordinary airborne floor checks.
         bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
-    if callbacks[2] == "ftFx_SpecialHiHoldAir_Phys":
-        # Firefox/Firebird airborne charge-hold physics owner (the velocity freeze+decay
-        # phase). Consumed by the generic air-physics engine in place of the raw action-id
-        # + is_spacie predicate.
-        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiHoldAir_Phys
-        bits |= CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS
     return bits
 
 
@@ -732,7 +766,7 @@ def _merge_rows(common: dict[int, MotionStateRow], self_rows: dict[int, MotionSt
 def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: dict[str, int]) -> None:
     max_action = max(rows.keys(), default=0)
     action_count = max_action + 1
-    hdr_bytes = 8 + 4 + 2 + 2 + 4 * 11
+    hdr_bytes = 8 + 4 + 2 + 2 + 4 * 12
     submotion_off = hdr_bytes
     x4_flags_off = submotion_off + action_count * 2
     motion_word_off = x4_flags_off + action_count * 4
@@ -744,7 +778,8 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
     class_bits_off = cam_cb_off + action_count * 2
     class2_bits_off = class_bits_off + action_count * 4
     class3_bits_off = class2_bits_off + action_count * 4
-    file_bytes = class3_bits_off + action_count * 4
+    fx_special_kind_off = class3_bits_off + action_count * 4
+    file_bytes = fx_special_kind_off + action_count
 
     submotion = [U16_ABSENT] * action_count
     x4_flags = [0] * action_count
@@ -757,6 +792,7 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
     class_bits = [0] * action_count
     class2_bits = [0] * action_count
     class3_bits = [0] * action_count
+    fx_special_kind = [0] * action_count
     for action_id, row in rows.items():
         submotion[action_id] = row.submotion_id
         x4_flags[action_id] = row.x4_flags
@@ -769,6 +805,7 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
         class_bits[action_id] = row.class_bits
         class2_bits[action_id] = row.class2_bits
         class3_bits[action_id] = row.class3_bits
+        fx_special_kind[action_id] = FX_SPECIAL_KIND_BY_SYMBOL.get(row.anim_cb, 0)
 
     buf = bytearray()
     buf += FORMAT_MAGIC
@@ -787,6 +824,7 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
         class_bits_off,
         class2_bits_off,
         class3_bits_off,
+        fx_special_kind_off,
     ):
         buf += _u32_le(off)
     for value in submotion:
@@ -803,6 +841,8 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
         buf += _u32_le(value)
     for value in class3_bits:
         buf += _u32_le(value)
+    for value in fx_special_kind:
+        buf += bytes((value & 0xFF,))
     if len(buf) != file_bytes:
         raise AssertionError((len(buf), file_bytes))
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -857,8 +897,8 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "PHASE4_DAMAGE_FALL_COLL": CLASS3_PHASE4_DAMAGE_FALL_COLL,
         "PHASE4_DAMAGE_FLY_COLL": CLASS3_PHASE4_DAMAGE_FLY_COLL,
         "PHASE4_ESCAPE_AIR_COLL": CLASS3_PHASE4_ESCAPE_AIR_COLL,
-        "FX_SPECIALHI_HOLD_AIR_PHYS": CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS,
     }
+    fx_special_kinds = dict(FX_SPECIAL_KIND_VALUES)
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {
         "magic": FORMAT_MAGIC.decode("ascii"),
@@ -867,6 +907,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "classes": classes,
         "classes2": classes2,
         "classes3": classes3,
+        "fx_special_kinds": fx_special_kinds,
         "symbols": symbols,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)

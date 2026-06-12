@@ -1513,27 +1513,20 @@ static inline uint8_t throw_blaster_pulse_is_seed_stale_latch(uint16_t action_id
 }
 
 static inline uint8_t action_is_illusion_dash(uint8_t char_id, uint16_t action_id_u16) {
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
   // Ghost article spawn is owned by ftFx_SpecialS_Anim / ftFx_SpecialAirS_Anim
-  // (main dash states), not Start/End states.
+  // (main dash states), not Start/End states. Ownership from the extracted MotionState
+  // row identity.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
   //   ftFx_SpecialS_Anim,ftFx_SpecialAirS_Anim,ftFox_SpecialS_CreateGhostItem}
-  return (action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S ||
-          action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S)
-             ? 1u
-             : 0u;
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id_u16);
+  return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_S ||
+                   fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S);
 }
 
 static inline uint8_t action_is_illusion_end(uint8_t char_id, uint16_t action_id_u16) {
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
-  return (action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END ||
-          action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)
-             ? 1u
-             : 0u;
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id_u16);
+  return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_S_END ||
+                   fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END);
 }
 
 static inline uint8_t action_is_illusion_setphys(uint8_t char_id, uint16_t action_id_u16) {
@@ -1571,12 +1564,14 @@ static inline uint8_t items_row_has_fighter_anim_article_source(const MslBatch* 
     }
     const uint16_t prev_action_id_u16 = batch->state.prev_action_id[idx];
     if (batch->state.action_frame[idx] == 0 &&
-        ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
-          (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-           action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END)) ||
-         (prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
-          (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-           action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)))) {
+        ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], prev_action_id_u16) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_S &&
+          msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id_u16) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_S_END) ||
+         (msl_motion_state_fx_special_kind(batch->state.char_id[idx], prev_action_id_u16) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S &&
+          msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id_u16) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END))) {
       return 1u;
     }
   }
@@ -1619,11 +1614,12 @@ static inline uint8_t illusion_prev_main_msid_for_action(uint8_t char_id, uint16
   if (ms == NULL) {
     return 0u;
   }
-  if (action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S) {
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id_u16);
+  if (fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_S) {
     *out_msid = ms->specials_ground_main;
     return 1u;
   }
-  if (action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S) {
+  if (fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S) {
     *out_msid = ms->specials_air_main;
     return 1u;
   }
@@ -1654,12 +1650,11 @@ static inline int items_find_illusion_slot(const MslBatch* batch, int bi, int ow
 static inline float items_cur_anim_frame_f32(const MslBatch* batch, size_t idx);
 
 static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[msl_idx_player(bi, owner)])) {
-    return;
-  }
   if (batch == NULL) {
     return;
   }
+  // No char-family guard: item_article_illusion_kind() below returns 0 for chars without
+  // the ghost article, and the spawn pulse itself is keyed on extracted MotionState kinds.
   const size_t o_idx = msl_idx_player(bi, owner);
   const uint8_t char_id = batch->state.char_id[o_idx];
   const uint16_t illusion_itkind = item_article_illusion_kind(char_id);
@@ -1684,10 +1679,14 @@ static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
   uint8_t spawn_pulse = illusion_spawn_pulse_crossed(char_id, action_id_u16, msid, af_prev, af);
   if (!spawn_pulse && action_is_illusion_end(char_id, action_id_u16) &&
       batch->state.action_frame[o_idx] == 0 &&
-      ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
-        action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) ||
-       (prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
-        action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END))) {
+      ((msl_motion_state_fx_special_kind(char_id, prev_action_id_u16) ==
+            (uint8_t)MSL_FX_KIND_SPECIAL_S &&
+        msl_motion_state_fx_special_kind(char_id, action_id_u16) ==
+            (uint8_t)MSL_FX_KIND_SPECIAL_S_END) ||
+       (msl_motion_state_fx_special_kind(char_id, prev_action_id_u16) ==
+            (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S &&
+        msl_motion_state_fx_special_kind(char_id, action_id_u16) ==
+            (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END))) {
     // One-step ordering bridge for side-special ghost spawn:
     // - ftFx_SpecialS_Anim / ftFx_SpecialAirS_Anim invokes ftFox_SpecialS_CreateGhostItem during
     //   main dash anim callbacks, while locomotion state progression can advance to End in the same
@@ -3055,9 +3054,6 @@ static inline uint8_t laser_airborne_body_uses_flattened_hurt_z(const MslBatch* 
 static inline uint8_t laser_airborne_damagefall_uses_lbcoll_hurt_radius(
     const MslBatch* batch, size_t d_idx, size_t o_idx, uint8_t laser_state, float laser_age_frames,
     uint16_t item_type, uint16_t item_attack_id) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[o_idx])) {
-    return 0u;
-  }
   if (batch == NULL || laser_state != 0u ||
       (item_type_is_fox_laser(item_type) == 0u && item_type_is_falco_laser(item_type) == 0u) ||
       !(laser_age_frames > 1.0f)) {
@@ -3082,7 +3078,9 @@ static inline uint8_t laser_airborne_damagefall_uses_lbcoll_hurt_radius(
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
   if (batch->state.action_id[o_idx] != (uint16_t)MSL_ACT_LANDING ||
-      batch->state.seed_prev_action_id[o_idx] != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP) {
+      msl_motion_state_fx_special_kind(batch->state.char_id[o_idx],
+                                       batch->state.seed_prev_action_id[o_idx]) !=
+          (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP) {
     return 0u;
   }
   return 1u;
@@ -3364,9 +3362,6 @@ static inline uint8_t illusion_item_hit_params_from_state(const MslCharParams* c
 }
 
 static inline uint8_t illusion_owner_motion_is_active(const MslBatch* batch, size_t owner_idx) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[owner_idx])) {
-    return 0u;
-  }
   if (batch == NULL) {
     return 0u;
   }
@@ -3377,12 +3372,15 @@ static inline uint8_t illusion_owner_motion_is_active(const MslBatch* batch, siz
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_CheckGhostRemove
   // refs/melee/src/melee/it/items/itfoxillusion.c::{itFoxillusion_UnkMotion0_Anim,
   //   itFoxillusion_UnkMotion2_Anim}
-  const uint16_t owner_action = batch->state.action_id[owner_idx];
-  const uint16_t frame_start_action = batch->state.prev_action_id[owner_idx];
-  return ((owner_action >= (uint16_t)MSL_ACT_FX_SPECIAL_S_START &&
-           owner_action <= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) ||
-          (frame_start_action >= (uint16_t)MSL_ACT_FX_SPECIAL_S_START &&
-           frame_start_action <= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END))
+  const uint8_t owner_char = batch->state.char_id[owner_idx];
+  const uint8_t owner_kind =
+      msl_motion_state_fx_special_kind(owner_char, batch->state.action_id[owner_idx]);
+  const uint8_t frame_start_kind =
+      msl_motion_state_fx_special_kind(owner_char, batch->state.prev_action_id[owner_idx]);
+  return ((owner_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_S_START &&
+           owner_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END) ||
+          (frame_start_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_S_START &&
+           frame_start_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END))
              ? 1u
              : 0u;
 }
@@ -4935,16 +4933,14 @@ static inline uint8_t laser_try_shield_bounce_velocity_from_segment(
 
 static inline uint8_t item_reflector_owner_is_shine_callback_state(uint8_t char_id,
                                                                    uint16_t action_id) {
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
-  switch (action_id) {
-    case MSL_ACT_FX_SPECIAL_LW_LOOP:
-    case MSL_ACT_FX_SPECIAL_LW_HIT:
-    case MSL_ACT_FX_SPECIAL_LW_TURN:
-    case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP:
-    case MSL_ACT_FX_SPECIAL_AIR_LW_HIT:
-    case MSL_ACT_FX_SPECIAL_AIR_LW_TURN:
+  // Ownership from the extracted MotionState row identity (Reflector Loop/Hit/Turn rows).
+  switch (msl_motion_state_fx_special_kind(char_id, action_id)) {
+    case MSL_FX_KIND_SPECIAL_LW_LOOP:
+    case MSL_FX_KIND_SPECIAL_LW_HIT:
+    case MSL_FX_KIND_SPECIAL_LW_TURN:
+    case MSL_FX_KIND_SPECIAL_AIR_LW_LOOP:
+    case MSL_FX_KIND_SPECIAL_AIR_LW_HIT:
+    case MSL_FX_KIND_SPECIAL_AIR_LW_TURN:
       return 1u;
     default:
       return 0u;
@@ -5112,6 +5108,9 @@ static inline uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii,
                                                      float x0, float y0, float x, float y, float ux,
                                                      float uy, float sr, float laser_scale_z) {
   if (!msl_char_id_is_spacie(batch->state.char_id[reflector_idx])) {
+    // Char-family machine-entry gate, NOT an action-id collision: a successful reflect
+    // contact INSTALLS the spacie SpecialLwHit state below (the fighter may currently be in
+    // any Reflector state). Ownership of that state machine is a registry char property.
     return 0u;
   }
   if (batch == NULL || lp == NULL) {
@@ -5169,8 +5168,10 @@ static inline uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii,
   // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
   const uint16_t reflector_action = batch->state.action_id[reflector_idx];
   const uint8_t shine_loop_origin_overlap =
-      (reflector_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_LOOP ||
-       reflector_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_LOOP)
+      (msl_motion_state_fx_special_kind(batch->state.char_id[reflector_idx], reflector_action) ==
+           (uint8_t)MSL_FX_KIND_SPECIAL_LW_LOOP ||
+       msl_motion_state_fx_special_kind(batch->state.char_id[reflector_idx], reflector_action) ==
+           (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_LOOP)
           ? 1u
           : 0u;
   if (!reflect_hit && shine_loop_origin_overlap) {
@@ -6451,8 +6452,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       if (!item_hitlist_prefilter_allows) {
         continue;
       }
-      if (msl_char_id_is_spacie(batch->state.char_id[d_idx]) &&
-          batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP &&
+      if (msl_motion_state_fx_special_kind(batch->state.char_id[d_idx],
+                                           batch->state.action_id[d_idx]) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP &&
           ((uint16_t)(batch->state.animation_index[d_idx] & 0xFFFFu)) == lp->air_loop_msid &&
           !move_tables_special_cmd0_raw_active_at_frame(batch->state.char_id[d_idx],
                                                         lp->air_loop_msid,
@@ -6880,8 +6882,10 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         const uint16_t laser_owner_action =
             (owner >= 0) ? batch->state.prev_action_id[msl_idx_player(bi, owner)] : 0u;
         const uint8_t laser_owner_specialn_loop =
-            (laser_owner_action == (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP ||
-             laser_owner_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP)
+            (msl_motion_state_fx_special_kind(batch->state.char_id[o_idx], laser_owner_action) ==
+                 (uint8_t)MSL_FX_KIND_SPECIAL_N_LOOP ||
+             msl_motion_state_fx_special_kind(batch->state.char_id[o_idx], laser_owner_action) ==
+                 (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP)
                 ? 1u
                 : 0u;
         const uint8_t guard_hold_allow_interrupt_behavior_carried_laser =
@@ -9484,10 +9488,14 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
       //   ftFx_SpecialSEnd_Anim,ftFx_SpecialAirSEnd_Anim}
       uint8_t illusion_end_entry_bridge = 0u;
       if (batch->state.action_frame[idx] == 0 &&
-          ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
-            action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) ||
-           (prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
-            action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END))) {
+          ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], prev_action_id_u16) ==
+                (uint8_t)MSL_FX_KIND_SPECIAL_S &&
+            msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id_u16) ==
+                (uint8_t)MSL_FX_KIND_SPECIAL_S_END) ||
+           (msl_motion_state_fx_special_kind(batch->state.char_id[idx], prev_action_id_u16) ==
+                (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S &&
+            msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id_u16) ==
+                (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END))) {
         uint16_t prev_msid = 0u;
         int16_t first_pulse = -1;
         if (illusion_prev_main_msid_for_action(batch->state.char_id[idx], prev_action_id_u16,

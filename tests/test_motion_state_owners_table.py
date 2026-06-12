@@ -34,8 +34,9 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_COMMON_GROUNDED_B4B0_COLL,
     CLASS2_COMMON_GROUNDED_B108_COLL,
     CLASS2_COMMON_GROUNDED_COLL,
-    CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS,
     CLASS3_PHASE4_ATTACK_AIR_COLL,
+    FX_SPECIAL_KIND_BY_SYMBOL,
+    FX_SPECIAL_KIND_VALUES,
     CLASS3_PHASE4_DAMAGE_COMMON_COLL,
     CLASS3_PHASE4_DAMAGE_FALL_COLL,
     CLASS3_PHASE4_DAMAGE_FLY_COLL,
@@ -58,6 +59,7 @@ from tools.slippi.motion_state_owners import VERSION, read_callback_manifest, re
 FOX = Path("data/motion_state/owners/fox.bin")
 FALCO = Path("data/motion_state/owners/falco.bin")
 MANIFEST = Path("data/motion_state/owners/callback_symbols.json")
+MARTH = Path("data/motion_state/owners/marth.bin")
 
 
 def _data_manifest_chars() -> list[str]:
@@ -784,7 +786,7 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
     falco = read_mslmso01_v1(FALCO)
     symbols = read_callback_manifest(MANIFEST)
 
-    def expected_bits(coll_cb: str, phys_cb: str) -> int:
+    def expected_bits(coll_cb: str) -> int:
         bits = 0
         if coll_cb == "ftCo_AttackAir_Coll":
             bits |= CLASS3_PHASE4_ATTACK_AIR_COLL
@@ -796,10 +798,6 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
             bits |= CLASS3_PHASE4_DAMAGE_FLY_COLL
         if coll_cb == "ftCo_DamageFall_Coll":
             bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
-        if phys_cb == "ftFx_SpecialHiHoldAir_Phys":
-            # Char-special PHYS owner family (the is_spacie/MSL_ACT_FX_* migration word):
-            # firefox/firebird airborne charge-hold physics.
-            bits |= CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS
         return bits
 
     # Exhaustive Phase 4 source-callback boundary. These are the later-owner families routed by
@@ -814,8 +812,7 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
     for label, table in (("fox", fox), ("falco", falco)):
         for action_id in range(len(table.class3_bits)):
             coll_cb = symbols[int(table.coll_cb_id[action_id])]
-            phys_cb = symbols[int(table.phys_cb_id[action_id])]
-            assert int(table.class3_bits[action_id]) == expected_bits(coll_cb, phys_cb), (
+            assert int(table.class3_bits[action_id]) == expected_bits(coll_cb), (
                 label,
                 action_id,
                 coll_cb,
@@ -920,3 +917,46 @@ def test_motion_state_owner_extractor_regenerates_stable_artifacts(tmp_path: Pat
     )
     for rel in [f"{ch}.bin" for ch in _data_manifest_chars()] + ["callback_symbols.json"]:
         assert (out_dir / rel).read_bytes() == (Path("data/motion_state/owners") / rel).read_bytes()
+
+
+def test_fx_special_kind_matches_anim_callback_symbols() -> None:
+    # fx_special_kind (v18) is generated 1:1 from each row's ANIM callback symbol; the
+    # is_spacie/MSL_ACT_FX_* predicate migration consumes it. Exhaustive parity: every
+    # action's kind equals the extractor table's mapping for its anim callback, fox and
+    # falco agree (clone shares the ftFx machines), and marth carries kind 0 everywhere
+    # (its same-numbered actions have ftMs callbacks).
+    fox = read_mslmso01_v1(FOX)
+    falco = read_mslmso01_v1(FALCO)
+    marth = read_mslmso01_v1(MARTH)
+    symbols = read_callback_manifest(MANIFEST)
+
+    for label, table in (("fox", fox), ("falco", falco)):
+        for action_id in range(len(table.fx_special_kind)):
+            anim_cb = symbols[int(table.anim_cb_id[action_id])]
+            expected = FX_SPECIAL_KIND_BY_SYMBOL.get(anim_cb, 0)
+            assert int(table.fx_special_kind[action_id]) == expected, (label, action_id, anim_cb)
+
+    assert list(fox.fx_special_kind) == list(falco.fx_special_kind)
+    assert not any(int(k) for k in marth.fx_special_kind), "marth must carry no fx kinds"
+    # The kind value space is dense 1..N with no gaps (C enum parity).
+    assert sorted(FX_SPECIAL_KIND_VALUES.values()) == list(range(1, len(FX_SPECIAL_KIND_VALUES) + 1))
+
+
+def test_fx_special_kind_c_enum_matches_extractor_values() -> None:
+    # The runtime consumes fx_special_kind through the hand-written MslMsFxSpecialKind C
+    # enum (src/motion_state_owners.h); the bytes are generated from FX_SPECIAL_KIND_VALUES.
+    # Parse the C enum and assert exact name/value parity so the generated lane and the
+    # runtime vocabulary cannot drift while tests stay green.
+    import re as _re
+
+    header = Path("src/motion_state_owners.h").read_text(encoding="utf-8")
+    m = _re.search(r"typedef enum MslMsFxSpecialKind \{(?P<body>.*?)\} MslMsFxSpecialKind;",
+                   header, _re.S)
+    assert m is not None, "MslMsFxSpecialKind enum not found in motion_state_owners.h"
+    c_values: dict[str, int] = {}
+    for em in _re.finditer(r"MSL_FX_KIND_([A-Z_0-9]+) = (\d+),", m.group("body")):
+        c_values[em.group(1)] = int(em.group(2))
+    assert c_values.pop("NONE") == 0
+    assert c_values == FX_SPECIAL_KIND_VALUES, (
+        "C MslMsFxSpecialKind diverged from the extractor's FX_SPECIAL_KIND_VALUES"
+    )

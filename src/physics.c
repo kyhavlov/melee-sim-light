@@ -406,10 +406,22 @@ static inline uint8_t physics_action_uses_ft_80084FA8(uint16_t action_id) {
 
 static inline uint8_t physics_action_is_common_ground_friction_only(uint8_t char_id,
                                                                     uint16_t action_id) {
-  if (!msl_char_id_is_spacie(char_id) && action_id >= 341u) {
-    // Non-spacie char specials share the numeric range; their grounded friction is owned by
-    // the per-character special module (marth_specials_phys) or the generic path.
-    return 0u;
+  {
+    // Char-special rows: ownership comes from the extracted MotionState row identity, not
+    // the shared numeric range. Spacie SpecialSStart + grounded Reflector rows use the
+    // common ground-friction helper; every other char's specials are owned by their own
+    // module (marth_specials_phys) or the generic path.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSStart_Phys
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c (grounded Reflector Phys family)
+    const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+    if (fx_kind != (uint8_t)MSL_FX_KIND_NONE) {
+      return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_S_START ||
+                       (fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_LW_START &&
+                        fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_LW_TURN));
+    }
+    if (action_id >= 341u) {
+      return 0u;
+    }
   }
   // Decomp: these callbacks use `ft_80084F3C` (ground friction helper) in their Phys function.
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Phys
@@ -457,12 +469,6 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint8_t char
     case MSL_ACT_ATTACK_LW3:
     case MSL_ACT_ATTACK_HI4:
     case MSL_ACT_ATTACK_LW4:
-    case MSL_ACT_FX_SPECIAL_S_START:
-    case MSL_ACT_FX_SPECIAL_LW_START:
-    case MSL_ACT_FX_SPECIAL_LW_LOOP:
-    case MSL_ACT_FX_SPECIAL_LW_HIT:
-    case MSL_ACT_FX_SPECIAL_LW_END:
-    case MSL_ACT_FX_SPECIAL_LW_TURN:
     case MSL_ACT_DOWN_BOUND_U:
     case MSL_ACT_DOWN_BOUND_D:
       return 1;
@@ -687,9 +693,9 @@ static inline uint8_t physics_shine_air_applies_fall_this_frame(
     uint8_t char_id, const MslCharParams* ch, const MslCommonParams* c, uint16_t action_id,
     uint16_t prev_action_id, uint16_t seed_prev_action_id, int16_t action_frame,
     float speed_y_self) {
-  if (!msl_char_id_is_spacie(char_id) || ch == NULL ||
-      action_id < (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START ||
-      action_id > (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_TURN) {
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+  if (ch == NULL || fx_kind < (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START ||
+      fx_kind > (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_TURN) {
     return 0u;
   }
   // Decomp: all aerial Reflector Phys callbacks decrement `mv.fx.SpecialLw.gravityDelay` until it
@@ -702,19 +708,24 @@ static inline uint8_t physics_shine_air_applies_fall_this_frame(
   //   ftFx_SpecialAirLwLoop_Phys,ftFx_SpecialAirLwHit_Phys,
   //   ftFx_SpecialAirLwTurn_Phys,ftFx_SpecialAirLwEnd_Phys}
   // data/characters/{fox,falco}.json::{reflector_gravity_delay_frames,reflector_fall_accel}
-  if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) {
+  if (fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START) {
     return (uint8_t)(action_frame >= (int16_t)ch->reflector_gravity_delay_frames);
   }
-  const uint8_t prev_was_air_start =
-      (prev_action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) ? 1u : 0u;
+  const uint8_t prev_was_air_start = (msl_motion_state_fx_special_kind(char_id, prev_action_id) ==
+                                      (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START)
+                                         ? 1u
+                                         : 0u;
   const uint8_t seed_prev_was_air_start =
-      (seed_prev_action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) ? 1u : 0u;
-  if (prev_was_air_start != 0u && action_id != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START &&
+      (msl_motion_state_fx_special_kind(char_id, seed_prev_action_id) ==
+       (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START)
+          ? 1u
+          : 0u;
+  if (prev_was_air_start != 0u && fx_kind != (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START &&
       action_frame <= 0) {
     return 0u;
   }
   if (c != NULL && seed_prev_was_air_start != 0u &&
-      action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_LOOP && action_frame <= 1 &&
+      fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_LOOP && action_frame <= 1 &&
       speed_y_self == c->pass_vel_y) {
     // Grounded Reflector platform-pass path:
     // `ftFx_SpecialLwStart_Pass` uses `ftCo_8009A184` to enter SpecialAirLwStart from the grounded
@@ -743,11 +754,9 @@ static inline void physics_apply_shine_air_fall(const MslCharParams* ch, float* 
 }
 
 static inline uint8_t physics_action_is_shine_air(uint8_t char_id, uint16_t action_id) {
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
-  return (action_id >= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START &&
-          action_id <= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_TURN)
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+  return (fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START &&
+          fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_TURN)
              ? 1
              : 0;
 }
@@ -2100,11 +2109,11 @@ void physics_integrate(MslBatch* batch) {
                       batch->state.speed_air_x_self[idx]);
                 }
               }
-            } else if ((msl_motion_state_class3_bits(batch->state.char_id[idx], action_id) &
-                        MSL_MS_CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS) != 0u) {
-              // Owner identity from the extracted MotionState table (ftFx_SpecialHiHoldAir_Phys),
-              // not a raw action-id + char-family predicate: the exemplar conversion for the
-              // is_spacie && MSL_ACT_FX_* migration (see motion_state_owners.h CLASS3 comment).
+            } else if (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+                       (uint8_t)MSL_FX_KIND_SPECIAL_HI_HOLD_AIR) {
+              // Owner identity from the extracted MotionState table (the row whose anim
+              // callback is ftFx_SpecialHiHoldAir_Anim), not a raw action-id + char-family
+              // predicate (see motion_state_owners.h MslMsFxSpecialKind).
               const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
               if (phys != NULL) {
                 physics_apply_specialhi_hold_air(phys, action_frame,
@@ -2271,8 +2280,8 @@ void physics_integrate(MslBatch* batch) {
         //   illusion_gravity_delay_start_frames,illusion_air_friction_start,
         //   illusion_fall_accel_start,terminal_vel
         // }
-        if ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START)) {
+        if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+             (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_START)) {
           const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
           if (ch != NULL) {
             batch->state.speed_air_x_self[idx] = air_apply_friction_step(
@@ -2292,8 +2301,8 @@ void physics_integrate(MslBatch* batch) {
         // fp->x6A4_transNOffset.{y,z} (with facing_dir applied to z).
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirS_Phys
         // refs/melee/src/melee/ft/ft_081B.c::ft_80085134
-        if ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S)) {
+        if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+             (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S)) {
           const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
           if (ch != NULL) {
             float dxyz[3];
@@ -2308,8 +2317,8 @@ void physics_integrate(MslBatch* batch) {
               batch->state.speed_y_self[idx] = dxyz[1];
             }
           }
-        } else if ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-                    action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)) {
+        } else if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+                    (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END)) {
           // Decomp: ftFx_SpecialAirSEnd_Phys applies air friction using ftFox_DatAttrs.x40 and
           // applies gravity after mv.fx.SpecialS.gravityDelay expires (x44 gate, x48 accel).
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Phys
@@ -2333,16 +2342,16 @@ void physics_integrate(MslBatch* batch) {
               batch->state.speed_y_self[idx] = next_vy;
             }
           }
-        } else if ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-                    action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI)) {
+        } else if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+                    (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI)) {
           const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
           if (ch != NULL) {
             physics_apply_specialhi_air_reverse_accel(
                 batch, idx, ch, batch->state.action_frame[idx], &batch->state.speed_air_x_self[idx],
                 &batch->state.speed_y_self[idx]);
           }
-        } else if ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-                    action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND) &&
+        } else if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+                    (uint8_t)MSL_FX_KIND_SPECIAL_HI_BOUND) &&
                    batch->state.on_ground[idx] == 0) {
           // Decomp: airborne Firefox/Firebird rebound Phys runs `ft_800851C0` (vertical
           // self-velocity from `fp->x6A4_transNOffset.y`) and then `ftCommon_8007CF58`
@@ -2425,8 +2434,8 @@ void physics_integrate(MslBatch* batch) {
           // from fp->x6A4_transNOffset.z * facing_dir when TransN motion is active.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_Phys
           // refs/melee/src/melee/ft/ft_081B.c::{ft_80085088,ft_800850E0}
-          if ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-               action_id == (uint16_t)MSL_ACT_FX_SPECIAL_S)) {
+          if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+               (uint8_t)MSL_FX_KIND_SPECIAL_S)) {
             float dxyz[3];
             if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
@@ -2434,8 +2443,8 @@ void physics_integrate(MslBatch* batch) {
                                                  physics_cur_anim_frame_f32(batch, idx), dxyz)) {
               gr_vel = dxyz[2] * facing_dir;
             }
-          } else if ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-                      action_id == (uint16_t)MSL_ACT_FX_SPECIAL_S_END)) {
+          } else if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+                      (uint8_t)MSL_FX_KIND_SPECIAL_S_END)) {
             // Decomp: ftFx_SpecialSEnd_Phys applies ground friction using ftFox_DatAttrs.x38.
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Phys
             gr_vel += ground_friction_step_delta(gr_vel, ch->illusion_ground_friction);
@@ -2553,8 +2562,8 @@ void physics_integrate(MslBatch* batch) {
             } else {
               gr_vel += ground_friction_step_delta(gr_vel, ch->gr_friction);
             }
-          } else if ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-                      action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI)) {
+          } else if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+                      (uint8_t)MSL_FX_KIND_SPECIAL_HI)) {
             // Decomp: ftFx_SpecialHi_Phys increments `mv.fx.SpecialHi.unk`, then applies ground
             // reverse friction x78 once `unk >= x70`.
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHi_Phys
@@ -2776,8 +2785,8 @@ void physics_integrate(MslBatch* batch) {
           } else if (action_id == (uint16_t)MSL_ACT_RUN_BRAKE) {
             const float friction = ch->gr_friction * c->run_friction_mul;
             gr_vel += ground_friction_step_delta(gr_vel, friction);
-          } else if ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-                      action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING)) {
+          } else if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+                      (uint8_t)MSL_FX_KIND_SPECIAL_HI_LANDING)) {
             // Grounded Firefox/Firebird end Phys applies the character x7C ground momentum
             // friction, then calls the common ground movement helper. Since x7C is greater than
             // the small landing gr_vels in this family, the next frame often clears gr_vel to 0.

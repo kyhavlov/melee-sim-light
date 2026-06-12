@@ -55,21 +55,15 @@ static inline uint16_t platform_floor_skip_segment_id(const MslBatch* batch, siz
                                                       uint32_t stage_id);
 
 static inline uint8_t mpcoll_ground_specialhi_uses_jobj_ecb(uint8_t char_id, uint16_t action_id) {
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
-  if (char_id != 1u && char_id != 22u) {
-    return 0u;
-  }
+  // Ownership from the extracted MotionState row identity (SpecialHi launch rows).
   // Source owner: SpecialAirHi_Coll routes through ft_CheckGroundAndLedge, whose mpColl path
   // consumes the live JObj/CollData ECB rather than a public root-only floor probe.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
   //   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_RotateModel}
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_800473CC}
-  return (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI ||
-          action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI)
-             ? 1u
-             : 0u;
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+  return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI ||
+                   fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI);
 }
 
 static inline uint8_t mpcoll_ground_specialhi_rotate_collision_point_xrotn(
@@ -704,9 +698,6 @@ static inline uint8_t is_attackair_action(uint16_t a) {
 }
 
 static inline uint8_t is_spacie_air_special_floor_collision_action(uint8_t char_id, uint16_t a) {
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
   // Fox/Falco aerial special collision callbacks can resolve floor contact while carrying an ECB
   // lock from a preceding jump or ground->air handoff. Use the same locked-bottom floor loading
   // policy as other air-collision owners that explicitly call ground-contact helpers.
@@ -718,9 +709,9 @@ static inline uint8_t is_spacie_air_special_floor_collision_action(uint8_t char_
   //   SpecialAirLwStart_Anim -> Loop handoff grounds Shine startup too early.
   //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
   //     ftFx_SpecialAirLwLoop_Coll,ftFx_SpecialAirLwEnd_Coll}
-  switch (a) {
-    case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP:
-    case MSL_ACT_FX_SPECIAL_AIR_LW_END:
+  switch (msl_motion_state_fx_special_kind(char_id, a)) {
+    case MSL_FX_KIND_SPECIAL_AIR_LW_LOOP:
+    case MSL_FX_KIND_SPECIAL_AIR_LW_END:
       return 1u;
     default:
       return 0u;
@@ -788,12 +779,9 @@ static inline uint8_t mpcoll_ground_escapeair_fall_iasa_source_owner(const MslBa
 }
 
 static inline uint8_t is_spacie_specialhi_end_fallspecial_source(uint8_t char_id, uint16_t a) {
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
-  switch (a) {
-    case MSL_ACT_FX_SPECIAL_HI_FALL:
-    case MSL_ACT_FX_SPECIAL_HI_BOUND:
+  switch (msl_motion_state_fx_special_kind(char_id, a)) {
+    case MSL_FX_KIND_SPECIAL_HI_FALL:
+    case MSL_FX_KIND_SPECIAL_HI_BOUND:
       return 1u;
     default:
       return 0u;
@@ -828,11 +816,11 @@ static inline uint8_t action_uses_ftco_80096cc8_floor_callback(uint16_t a) {
 static inline uint8_t is_just_entered_specialairn_end_from_loop(uint8_t char_id, uint16_t action_id,
                                                                 uint16_t prev_action_id,
                                                                 int16_t action_frame) {
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
-  return (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END &&
-          prev_action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP && action_frame == 0)
+  return (msl_motion_state_fx_special_kind(char_id, action_id) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END &&
+          msl_motion_state_fx_special_kind(char_id, prev_action_id) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP &&
+          action_frame == 0)
              ? 1u
              : 0u;
 }
@@ -2817,13 +2805,9 @@ static inline float specialhi_understage_floor_reject_clearance(const MslEcbWorl
 }
 
 static inline uint8_t specialhi_understage_floor_clip_action(uint8_t char_id, uint16_t action_id) {
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
-  return (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
-          action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL)
-             ? 1u
-             : 0u;
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+  return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI ||
+                   fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL);
 }
 
 static inline uint8_t specialhi_floor_candidate_starts_below_source_floor(
@@ -2840,10 +2824,7 @@ static inline uint8_t specialhi_floor_candidate_starts_below_source_floor(
 static inline uint8_t specialairhi_floor_contact_angle_continues_launch(
     uint16_t action_id, uint8_t char_id, float floor_normal_x, float floor_normal_y,
     float speed_x_self, float speed_y_self) {
-  if (!msl_char_id_is_spacie(char_id)) {
-    return 0u;
-  }
-  if (action_id != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) {
+  if (msl_motion_state_fx_special_kind(char_id, action_id) != (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI) {
     return 0u;
   }
   const MslCharParams* chp = msl_char_params(char_id);
@@ -4427,8 +4408,8 @@ static inline void mpcoll_apply_late_floor_publication_guards(
   }
 
   if (publication->on_ground &&
-      (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-       action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) &&
+      (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+       (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI) &&
       raw_current_floor_line_idx >= 0 && msl_char_params(ctx->char_id) != NULL &&
       batch->state.action_frame[idx] <=
           (int16_t)msl_char_params(ctx->char_id)->firefox_bound_delay_frames &&
@@ -4634,12 +4615,15 @@ static inline uint8_t mpcoll_maybe_refresh_downbound_airborne_floor_index(
 static inline uint8_t mpcoll_maybe_project_specialhi_air_launch_platform_pass(
     const MslMpcollContext* ctx, uint16_t ground_id) {
   if (ctx == NULL || ctx->batch == NULL || ctx->floor_graph == NULL ||
-      !msl_char_id_is_spacie(ctx->char_id) ||
-      ctx->action_id != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
+      msl_motion_state_fx_special_kind(ctx->char_id, ctx->action_id) !=
+          (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI ||
       ctx->batch->state.action_frame[ctx->idx] > 0 ||
-      (ctx->batch->state.seed_prev_action_id[ctx->idx] != (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD &&
-       ctx->batch->state.seed_prev_action_id[ctx->idx] !=
-           (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR) ||
+      (msl_motion_state_fx_special_kind(ctx->char_id,
+                                        ctx->batch->state.seed_prev_action_id[ctx->idx]) !=
+           (uint8_t)MSL_FX_KIND_SPECIAL_HI_HOLD &&
+       msl_motion_state_fx_special_kind(ctx->char_id,
+                                        ctx->batch->state.seed_prev_action_id[ctx->idx]) !=
+           (uint8_t)MSL_FX_KIND_SPECIAL_HI_HOLD_AIR) ||
       ground_id == 0xFFFFu || !stage_collision_floor_line_is_platform(ctx->stage_id, ground_id)) {
     return 0u;
   }
@@ -7833,12 +7817,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
           (ecb_lock_active &&
            ((action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] != 0u) ||
             is_attackair_action(action_id) ||
-            (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START) ||
-            (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP) ||
-            (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END)))
+            (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+             (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_START) ||
+            (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+             (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP) ||
+            (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+             (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END)))
               ? 1u
               : 0u;
       const uint8_t damagefly_release_entry_uses_pose_bottom =
@@ -8066,12 +8050,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
           ((prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
             prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
            (is_attackair_action(action_id) ||
-            (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START) ||
-            (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP) ||
-            (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END)))
+            (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+             (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_START) ||
+            (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+             (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP) ||
+            (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+             (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END)))
               ? 1u
               : 0u;
       const uint8_t damage_entry_attackair_ecb_consumer =
@@ -11941,15 +11925,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 ? 1u
                 : 0u;
         const uint8_t specialhi_bound_entry_airborne =
-            ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-              action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND) &&
+            ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_HI_BOUND) &&
              // ftFx_SpecialHiBound_Enter changes motion state and ticks anim, but it does not call
              // ftCommon_8007D7FC. The rebound remains airborne on the entry collision row; later
              // Bound_Coll owns ground conversion through ft_CheckGroundAndLedge.
              // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
              //   ftFx_SpecialHiBound_Enter,ftFx_SpecialHiBound_Coll}
-             (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-              batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) &&
+             (msl_motion_state_fx_special_kind(batch->state.char_id[idx],
+                                               batch->state.seed_prev_action_id[idx]) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI) &&
              batch->state.action_frame[idx] <= 2)
                 ? 1u
                 : 0u;
@@ -13066,11 +13051,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                                                             resolved_segment_i) &&
                    !stage_height_platform_line_has_live_scheduler_source(batch, bi, stage_id,
                                                                          resolved_segment_i) &&
-                   (((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-                      action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) &&
+                   (((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+                      (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI) &&
                      ecb_lock_active) ||
-                    ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-                      action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL) &&
+                    ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+                      (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL) &&
                      resolved_segment_i != batch->state.ground_id[idx])))
                       ? 1u
                       : 0u;
@@ -14096,8 +14081,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 ? 1u
                 : 0u;
         if (resolved_specialhi_height_platform_current_source &&
-            (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL)) {
+            (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+             (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL)) {
           // SpecialHiFall's current-frame FoD platform contact consumes the same
           // mpLib_8004DD90_Floor correction as hard floors. The generic transformed-platform
           // projection path can publish the floor id while leaving cur_pos on the raw line; apply
@@ -14144,8 +14129,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             //   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_IsBound}
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
             // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpColl_80044628_Floor}
-            ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-              action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) &&
+            ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI) &&
              stage_collision_floor_line_is_platform(stage_id, ground_id))
                 ? 1u
                 : 0u;
@@ -14160,8 +14145,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             //   ftFx_SpecialAirLw_Enter,ftFx_SpecialAirLwStart_Coll}
             // refs/melee/src/melee/ft/ft_081B.c::ft_80081D0C
             // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}
-            ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-              action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
+            ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START) &&
              batch->state.action_frame[idx] <= 1 &&
              (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_F ||
               batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_B) &&
@@ -14180,8 +14165,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             //   ftFx_SpecialHiFall_Coll,ftFx_SpecialHiBound_Coll}
             // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
             (resolved_line_has_platform_transform &&
-             (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-              action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL) &&
+             (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+              (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL) &&
              !resolved_specialhi_height_platform_current_source &&
              ground_id != batch->state.ground_id[idx])
                 ? 1u
@@ -15437,10 +15422,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
       }
 
       mpcoll_materialize_floor_publication_result(&mpcoll_ctx, &floor_publication);
-      if ((floor_publication.on_ground && (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR ||
-                                           (msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-                                            action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) ||
-                                           is_common_fallspecial_action(action_id))) ||
+      if ((floor_publication.on_ground &&
+           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR ||
+            (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+             (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI) ||
+            is_common_fallspecial_action(action_id))) ||
           damage_active_hitlag_downward_sdi_airborne_owner ||
           damage_active_hitlag_root_below_bottom_above_floor_owner) {
         mpcoll_apply_late_floor_publication_guards(

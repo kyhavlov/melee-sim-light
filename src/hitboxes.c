@@ -973,19 +973,12 @@ static inline uint8_t hitboxes_seed_bridge_post_contact_hitlag_hitlist_applies(
 }
 
 static inline uint8_t hitboxes_runtime_specialhi_pose_owner(uint8_t char_id, uint16_t action_id) {
-  if (!(char_id == 1u || char_id == 22u)) {
-    return 0u;
-  }
-  switch (action_id) {
-    case MSL_ACT_FX_SPECIAL_HI:
-    case MSL_ACT_FX_SPECIAL_AIR_HI:
-    case MSL_ACT_FX_SPECIAL_HI_LANDING:
-    case MSL_ACT_FX_SPECIAL_HI_FALL:
-    case MSL_ACT_FX_SPECIAL_HI_BOUND:
-      return 1u;
-    default:
-      return 0u;
-  }
+  // Ownership from the extracted MotionState row identity (SpecialHi launch family rows).
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+  return (fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_HI &&
+          fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_HI_BOUND)
+             ? 1u
+             : 0u;
 }
 
 static inline uint8_t hitboxes_apply_specialhi_local_xrotn(const MslBatch* batch, size_t idx,
@@ -1103,8 +1096,18 @@ static inline uint8_t hitboxes_event_world_capsule(const MslBatch* batch, size_t
 
 static inline uint8_t hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(
     uint8_t char_id, uint16_t action_id) {
-  if (!msl_char_id_is_spacie(char_id) && action_id >= 341u) {
-    return 0u;
+  {
+    // Char-special rows resolve through the extracted MotionState identity: the spacie
+    // SpecialHi/SpecialAirHi launch rows join the damage-victim set, every other char's
+    // same-numbered specials do not.
+    const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+    if (fx_kind != (uint8_t)MSL_FX_KIND_NONE) {
+      return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI ||
+                       fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI);
+    }
+    if (action_id >= 341u) {
+      return 0u;
+    }
   }
   switch (action_id) {
     case MSL_ACT_DAMAGE_HI_1:
@@ -1126,8 +1129,6 @@ static inline uint8_t hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_ac
     case MSL_ACT_DAMAGE_FLY_ROLL:
     case MSL_ACT_FLY_REFLECT_WALL:
     case MSL_ACT_FLY_REFLECT_CEIL:
-    case MSL_ACT_FX_SPECIAL_HI:
-    case MSL_ACT_FX_SPECIAL_AIR_HI:
       return 1u;
     default:
       return 0u;

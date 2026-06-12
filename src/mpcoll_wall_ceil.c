@@ -337,16 +337,10 @@ static int grounded_left_wall_floor_adjacent_line_idx(const MslStageFloorGraph* 
 static inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
 
 static inline uint8_t specialhi_launch_uses_runtime_xrotn_ecb(uint8_t char_id, uint16_t action_id) {
-  if (char_id != (uint8_t)MSL_CHAR_ID_FOX && char_id != (uint8_t)MSL_CHAR_ID_FALCO) {
-    return 0u;
-  }
-  switch (action_id) {
-    case MSL_ACT_FX_SPECIAL_HI:
-    case MSL_ACT_FX_SPECIAL_AIR_HI:
-      return 1u;
-    default:
-      return 0u;
-  }
+  // Ownership from the extracted MotionState row identity (SpecialHi launch rows).
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+  return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI ||
+                   fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI);
 }
 
 static inline uint8_t specialhi_right_wall_push_only_envelope_suppresses(
@@ -454,13 +448,11 @@ static inline uint8_t mpcoll_damagefly_wall_asdi_latch_action(uint16_t action_id
 }
 
 static inline uint8_t mpcoll_wall_asdi_producer_action(uint8_t char_id, uint16_t action_id) {
-  if (!msl_char_id_is_spacie(char_id) && action_id >= 341u) {
-    return 0u;
-  }
-  return (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
-          mpcoll_damagefly_wall_asdi_latch_action(action_id))
-             ? 1u
-             : 0u;
+  // SpecialAirHi ownership from the extracted MotionState row identity; the damage-fly
+  // latch family is char-independent common data.
+  return (uint8_t)(msl_motion_state_fx_special_kind(char_id, action_id) ==
+                       (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI ||
+                   mpcoll_damagefly_wall_asdi_latch_action(action_id));
 }
 
 static inline uint8_t mpcoll_active_hitlag_phase(const MslBatch* batch, size_t idx) {
@@ -586,8 +578,8 @@ static inline uint8_t mpcoll_action_uses_ft_check_ground_ledge_air_collision(uin
   const uint16_t smid = msl_motion_state_submotion_id(char_id, action_id);
   return (uint8_t)((smid >= (uint16_t)MSL_SM_FX_SPECIAL_AIR_S_START &&
                     smid <= (uint16_t)MSL_SM_FX_SPECIAL_AIR_S_END) ||
-                   (msl_char_id_is_spacie(char_id) &&
-                    action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR) ||
+                   msl_motion_state_fx_special_kind(char_id, action_id) ==
+                       (uint8_t)MSL_FX_KIND_SPECIAL_HI_HOLD_AIR ||
                    smid == (uint16_t)MSL_SM_FX_SPECIAL_HI_FALL);
 }
 
@@ -4305,8 +4297,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}
       const uint8_t active_hitlag_phase = mpcoll_active_hitlag_phase(batch, idx);
       const uint8_t same_frame_specialhi_continuing_left_wall =
-          ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-            action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) &&
+          (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
+               (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI &&
            batch->state.wall_kind[idx] == MSL_WALL_LEFT &&
            (batch->state.coll_prev_env_flags[idx] & (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK) != 0u &&
            fabsf(batch->state.wall_normal_y[idx]) <= 1.0e-4f)
