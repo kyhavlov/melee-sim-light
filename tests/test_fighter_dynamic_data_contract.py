@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 def _parse_ssdynn01(path: Path) -> dict[str, object]:
@@ -379,7 +379,7 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
     assert fox["version"] == 8
-    assert fox["collision_msids"] == [17, 36, 58, 242, 243]
+    assert fox["collision_msids"] == [17, 36, 58, 222, 242, 243]
     assert fox["source_step_msids"] == []
     assert fox["cone_msids"] == [242]
     assert fox["catch_grabbable_msids"] == [52]
@@ -447,7 +447,7 @@ def test_extract_fighter_anims_emits_fox_falco_dynamic_contract(tmp_path: Path) 
     assert fox["version"] == 8
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["collision_msids"] == [17, 36, 58, 242, 243]
+    assert fox["collision_msids"] == [17, 36, 58, 222, 242, 243]
     assert fox["source_step_msids"] == []
     assert fox["cone_msids"] == [242]
     assert fox["catch_grabbable_msids"] == [52]
@@ -614,6 +614,66 @@ def test_fox_attackhi3_dynamic_reseed_reconstruction_matches_sequential_carry_bh
     assert int(reconstructed["msid"]) == 58
     for field in ("rot_x", "rot_y", "rot_z", "pos_x", "pos_y", "pos_z", "axis_x", "axis_y", "axis_z", "angle"):
         np.testing.assert_allclose(sequential[field], reconstructed[field], rtol=0.0, atol=1.0e-6, err_msg=field)
+
+
+@pytest.mark.integration
+def test_fox_cliffattackquick_dynamic_collision_pose_rejects_tail_false_body_sds6237() -> None:
+    # SDS:6237 locks the CliffAttackQuick SSDYNN01 BODY owner:
+    # - p0 Fox CliffAttackQuick frame 37 exposes cap12/FtPart-18 near Falco's weak BAir hb2.
+    # - Static baked pose admits a false BODY hit; source consumes the live ftData.x2C tail chain
+    #   through `ftColl_80078C70 -> lbColl_8000805C`, so the row stays in CliffAttackQuick.
+    # - The owner is generated in `data/anims/fox.dyn.bin` as collision msid 222, not a replay-row
+    #   or attacker-action suppressor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AEA4
+    # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+    dataset_path = Path("datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl")
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+    fox_dyn = _parse_ssdynn01_or_skip(Path("data/anims/fox.dyn.bin"))
+    assert 222 in fox_dyn["collision_msids"]
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[6237:6238]
+    player = 0
+    attacker = 1
+
+    assert int(row["seed_t"][0]["action_id"][player]) == 257  # CliffAttackQuick.
+    assert int(row["seed_t"][0]["animation_index"][player]) == 222
+    assert int(row["seed_t"][0]["action_frame"][player]) == 36
+    assert int(row["seed_t"][0]["action_id"][attacker]) == 67  # AttackAirB.
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, _sample_field_bytes(row, "seed_t", seed_stride))
+        binding.debug_step_input_pre_combat(
+            handle,
+            _sample_field_bytes(row, "prev_input_t", input_stride),
+            _sample_field_bytes(row, "input_t", input_stride),
+        )
+        dyn = _dynamic_state_record(binding, handle, player)
+        assert int(dyn["state_valid"]) == 1
+        assert int(dyn["apply_collision_matrix"]) == 1
+        assert int(dyn["msid"]) == 222
+        assert int(dyn["frame"]) == 37
+
+        out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+        binding.write_compare(handle, out_bytes)
+        out = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+    finally:
+        binding.destroy(handle)
+
+    ref = row["ref_t1"][0]
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 257
+    assert int(out["hitlag"][player]) == int(ref["hitlag"][player]) == 0
+    assert int(out["hitstun"][player]) == int(ref["hitstun"][player]) == 0
+    assert float(out["percent"][player]) == pytest.approx(float(ref["percent"][player]), abs=1e-5)
 
 
 @pytest.mark.parametrize(

@@ -221,7 +221,7 @@ def _dyn_contract_ok(
 
 def _ensure_dyn_bins() -> None:
     expected = {
-        "fox": ({17, 36, 58, 242, 243}, set(), {242}, {52}),
+        "fox": ({17, 36, 58, 222, 242, 243}, set(), {242}, {52}),
         "falco": (set(), set(), set(), set()),
     }
     stale = False

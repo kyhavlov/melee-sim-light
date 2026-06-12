@@ -679,6 +679,13 @@ typedef struct MslStateSoA {
   //   ftFx_SpecialAirLwLoop_IASA,ftFx_SpecialAirLwTurn_IASA,ftFx_SpecialAirLwEnd_Anim}
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
   uint8_t* shine_jump_iasa_entered_this_frame;
+  // Runtime/source provenance for a nonzero CollData_X130 desired-bottom packet preserved by
+  // SpecialLw -> JumpAerial. EscapeAir platform sweeps may consume the packet, but non-platform
+  // publication still needs the source bottom-crossing phase.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwLoop_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+  uint8_t* shine_jump_preserved_desired_bottom;
   // GuardReflect reflect timer (decomp: mv.co.guard.x14; seed uses +1 bias, expires at 0).
   uint8_t* guard_reflect_timer_x14;  // [batch * players]
   // GuardReflect powershield-active timer (decomp: mv.co.guard.x18; +1 bias, expires at 0).

@@ -3165,6 +3165,7 @@ def _derive_item_hidden_callback_seed_lanes(
         np.ascontiguousarray(seed_items["owner"], dtype=np.int8),
         np.ascontiguousarray(seed_items["instance_id"], dtype=np.uint16),
         np.ascontiguousarray(seed_items["spawn_id"], dtype=np.uint32),
+        np.ascontiguousarray(seed_items["direction"], dtype=np.float32),
         np.ascontiguousarray(seed_items["vel_x"], dtype=np.float32),
         np.ascontiguousarray(seed_items["vel_y"], dtype=np.float32),
         np.ascontiguousarray(ref_items["exists"], dtype=np.uint8),
@@ -3176,6 +3177,9 @@ def _derive_item_hidden_callback_seed_lanes(
         np.ascontiguousarray(ref_items["vel_y"], dtype=np.float32),
         np.ascontiguousarray(seed_action_id_u16, dtype=np.uint16),
         np.ascontiguousarray(ref_action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(ref_hitlag_u16, dtype=np.uint16),
+        np.ascontiguousarray(ref_hitstun_u16, dtype=np.uint16),
+        np.ascontiguousarray(ref_instance_hit_by_u16, dtype=np.uint16),
         laser_lut,
         int(num_players),
     )

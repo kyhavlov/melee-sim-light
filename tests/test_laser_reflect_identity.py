@@ -19,6 +19,7 @@ ACT_WAIT = 0x000E
 ACT_DASH = 0x0014
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD_REFLECT = 0x00B6
+ACT_DAMAGE_N1 = 0x004E
 
 CHAR_FOX = 1
 CHAR_FALCO = 22
@@ -208,6 +209,7 @@ def test_item_hidden_callback_seed_lanes_keep_shallow_shieldbounced_velocity() -
     seed_owner = np.full((1, 15), -1, dtype=np.int8)
     seed_iid = np.zeros((1, 15), dtype=np.uint16)
     seed_spawn = np.zeros((1, 15), dtype=np.uint32)
+    seed_dir = np.zeros((1, 15), dtype=np.float32)
     seed_vx = np.zeros((1, 15), dtype=np.float32)
     seed_vy = np.zeros((1, 15), dtype=np.float32)
     ref_exists = np.zeros((1, 15), dtype=np.uint8)
@@ -219,6 +221,9 @@ def test_item_hidden_callback_seed_lanes_keep_shallow_shieldbounced_velocity() -
     ref_vy = np.zeros((1, 15), dtype=np.float32)
     seed_action = np.zeros((1, 4), dtype=np.uint16)
     ref_action = np.zeros((1, 4), dtype=np.uint16)
+    ref_hitlag = np.zeros((1, 4), dtype=np.uint16)
+    ref_hitstun = np.zeros((1, 4), dtype=np.uint16)
+    ref_instance_hit_by = np.zeros((1, 4), dtype=np.uint16)
     laser_lut = np.zeros(65536, dtype=np.uint8)
 
     seed_exists[0, 0] = 1
@@ -226,6 +231,7 @@ def test_item_hidden_callback_seed_lanes_keep_shallow_shieldbounced_velocity() -
     seed_owner[0, 0] = 0
     seed_iid[0, 0] = 16
     seed_spawn[0, 0] = 2
+    seed_dir[0, 0] = 1.0
     seed_vx[0, 0] = 5.0
     ref_exists[0, 0] = 1
     ref_type[0, 0] = 55
@@ -244,6 +250,7 @@ def test_item_hidden_callback_seed_lanes_keep_shallow_shieldbounced_velocity() -
         seed_owner,
         seed_iid,
         seed_spawn,
+        seed_dir,
         seed_vx,
         seed_vy,
         ref_exists,
@@ -255,6 +262,9 @@ def test_item_hidden_callback_seed_lanes_keep_shallow_shieldbounced_velocity() -
         ref_vy,
         seed_action,
         ref_action,
+        ref_hitlag,
+        ref_hitstun,
+        ref_instance_hit_by,
         laser_lut,
         2,
     )
@@ -270,6 +280,7 @@ def test_item_hidden_callback_seed_lanes_keep_shallow_shieldbounced_velocity() -
         seed_owner,
         seed_iid,
         seed_spawn,
+        seed_dir,
         seed_vx,
         seed_vy,
         ref_exists,
@@ -281,10 +292,154 @@ def test_item_hidden_callback_seed_lanes_keep_shallow_shieldbounced_velocity() -
         ref_vy,
         seed_action,
         ref_action,
+        ref_hitlag,
+        ref_hitstun,
+        ref_instance_hit_by,
         laser_lut,
         2,
     )
     assert int(bounce_valid[0, 0]) == 0
+
+
+def test_item_hidden_callback_seed_lanes_mark_reflected_laser_body_latch_only_when_proven() -> None:
+    # Reflected laser callbacks can expose public facing/owner before the hidden laser angle and
+    # BODY latch are consumed. The seed lane is source-owned only when the next frame proves this
+    # item instance uniquely damaged a fighter and disappeared; ordinary aligned laser contacts stay
+    # on runtime collision.
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxLaser_Logic94_Reflected,
+    # itFoxlaser_UnkMotion1_Anim}
+    # refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
+    import msl_binding  # type: ignore
+
+    seed_exists = np.zeros((1, 15), dtype=np.uint8)
+    seed_type = np.zeros((1, 15), dtype=np.uint16)
+    seed_owner = np.full((1, 15), -1, dtype=np.int8)
+    seed_iid = np.zeros((1, 15), dtype=np.uint16)
+    seed_spawn = np.zeros((1, 15), dtype=np.uint32)
+    seed_dir = np.zeros((1, 15), dtype=np.float32)
+    seed_vx = np.zeros((1, 15), dtype=np.float32)
+    seed_vy = np.zeros((1, 15), dtype=np.float32)
+    ref_exists = np.zeros((1, 15), dtype=np.uint8)
+    ref_type = np.zeros((1, 15), dtype=np.uint16)
+    ref_owner = np.full((1, 15), -1, dtype=np.int8)
+    ref_iid = np.zeros((1, 15), dtype=np.uint16)
+    ref_spawn = np.zeros((1, 15), dtype=np.uint32)
+    ref_vx = np.zeros((1, 15), dtype=np.float32)
+    ref_vy = np.zeros((1, 15), dtype=np.float32)
+    seed_action = np.zeros((1, 4), dtype=np.uint16)
+    ref_action = np.zeros((1, 4), dtype=np.uint16)
+    ref_hitlag = np.zeros((1, 4), dtype=np.uint16)
+    ref_hitstun = np.zeros((1, 4), dtype=np.uint16)
+    ref_instance_hit_by = np.zeros((1, 4), dtype=np.uint16)
+    laser_lut = np.zeros(65536, dtype=np.uint8)
+
+    seed_exists[0, 0] = 1
+    seed_type[0, 0] = 55
+    seed_owner[0, 0] = 0
+    seed_iid[0, 0] = 131
+    seed_spawn[0, 0] = 3
+    seed_dir[0, 0] = 1.0
+    seed_vx[0, 0] = -5.0
+    ref_action[0, 1] = ACT_DAMAGE_N1
+    ref_hitlag[0, 1] = 4
+    ref_hitstun[0, 1] = 9
+    ref_instance_hit_by[0, 1] = 131
+    laser_lut[55] = 1
+
+    *_, body_victim, body_height, callback_flags = msl_binding.derive_item_hidden_callback_seed_lanes(
+        seed_exists,
+        seed_type,
+        seed_owner,
+        seed_iid,
+        seed_spawn,
+        seed_dir,
+        seed_vx,
+        seed_vy,
+        ref_exists,
+        ref_type,
+        ref_owner,
+        ref_iid,
+        ref_spawn,
+        ref_vx,
+        ref_vy,
+        seed_action,
+        ref_action,
+        ref_hitlag,
+        ref_hitstun,
+        ref_instance_hit_by,
+        laser_lut,
+        2,
+    )
+    assert int(body_victim[0, 0]) == 1
+    assert int(body_height[0, 0]) == 1
+    assert int(callback_flags[0, 0]) == 1
+
+    ref_exists[0, 0] = 1
+    ref_type[0, 0] = 55
+    ref_owner[0, 0] = 1
+    ref_iid[0, 0] = 222
+    ref_spawn[0, 0] = 4
+    *_, body_victim, body_height, callback_flags = msl_binding.derive_item_hidden_callback_seed_lanes(
+        seed_exists,
+        seed_type,
+        seed_owner,
+        seed_iid,
+        seed_spawn,
+        seed_dir,
+        seed_vx,
+        seed_vy,
+        ref_exists,
+        ref_type,
+        ref_owner,
+        ref_iid,
+        ref_spawn,
+        ref_vx,
+        ref_vy,
+        seed_action,
+        ref_action,
+        ref_hitlag,
+        ref_hitstun,
+        ref_instance_hit_by,
+        laser_lut,
+        2,
+    )
+    assert int(body_victim[0, 0]) == 0xFF
+    assert int(body_height[0, 0]) == 0
+    assert int(callback_flags[0, 0]) == 0
+
+    ref_exists[0, 0] = 0
+    ref_type[0, 0] = 0
+    ref_owner[0, 0] = -1
+    ref_iid[0, 0] = 0
+    ref_spawn[0, 0] = 0
+    seed_vx[0, 0] = 5.0
+    *_, body_victim, body_height, callback_flags = msl_binding.derive_item_hidden_callback_seed_lanes(
+        seed_exists,
+        seed_type,
+        seed_owner,
+        seed_iid,
+        seed_spawn,
+        seed_dir,
+        seed_vx,
+        seed_vy,
+        ref_exists,
+        ref_type,
+        ref_owner,
+        ref_iid,
+        ref_spawn,
+        ref_vx,
+        ref_vy,
+        seed_action,
+        ref_action,
+        ref_hitlag,
+        ref_hitstun,
+        ref_instance_hit_by,
+        laser_lut,
+        2,
+    )
+    assert int(body_victim[0, 0]) == 0xFF
+    assert int(body_height[0, 0]) == 0
+    assert int(callback_flags[0, 0]) == 0
 
 
 def _common_attr(name: str) -> float:

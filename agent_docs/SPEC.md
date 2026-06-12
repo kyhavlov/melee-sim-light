@@ -1180,16 +1180,13 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   and remaining active-window carry prefix-causally in native preprocessing; it does not
   seed replay-next fighter position or velocity. The carry is bounded by the source
   `grOldPupupu_802113E0` active window (`xD0` in `(45, 320)`) instead of treating every active row
-  as a fresh full-length episode. Replay playback validation feeds that same prefix-causal stage
-  lane each step, parallel to replay frame-start RNG/camera lanes, while normal `step_input` keeps
-  the live scheduler state. Because Slippi/preprocessing serializes the first active `xDC` on the
-  next seed row after the source callback has already applied one `ftColl_GetWindOffsetVec`, the
-  replay-step API installs a named runtime owner,
-  `replay_frame_dream_whispy_first_apply_pending`, for exactly that first source application when a
-  rollout has advanced past its reseed frame. Rollouts seeded on that row do not take the pending
-  application because they have not advanced past their reseed frame. FEH rec 889->953 locks the
-  replay-playback positive and rec 890 locks the direct-seed negative. This closes the dense Dream
-  Land fighter `pos_x` p95 wind band.
+  as a fresh full-length episode. Native preprocessing assigns the lane to the source step whose
+  `fn_802112F4 -> ftColl_GetWindOffsetVec` callback produced the residual, including the first
+  visible active application; the next replay row then carries the next timer age. Replay playback
+  validation feeds that same prefix-causal stage lane each step, parallel to replay frame-start
+  RNG/camera lanes, while normal `step_input` keeps the live scheduler state. FEH rec 889->953 and
+  SDS rec 2004->2005 lock the first-visible source-step positives, and rec 890 locks the direct-seed
+  negative. This closes the dense Dream Land fighter `pos_x` p95 wind band.
   The remaining
   Dream Land float-norm p95 outlier was not Whispy apple p95; float-norm autopsy identified sparse
   throw-side Fox/Falco laser item lifecycle rows. Runtime now advances the throw-side blaster item
@@ -3157,7 +3154,14 @@ Fox/Falco special-owner split (2026-04-17):
     generated platform floor owner plus `AOBJ_LOOP` timing: loop-wrap hard-floor rows stay airborne
     only while the callback-local previous root is still above the accepted hard floor; adjacent
     ledge-floor rows and the following already-below hard-floor row still land through ordinary
-    `Fall_Coll`. Sources:
+    `Fall_Coll`. A separate static-platform-to-hard-floor edge exists for first sustained Fall
+    callbacks carrying a stale one-way-platform `floor.index`: when the callback-local
+    `mpCollSetFacingDir` state is opposite the horizontal air drift, the first shallow hard-floor
+    bottom crossing does not own the `mpColl_80044838_Floor` landing publication; the next deeper
+    callback does. Same-facing shallow hard-floor crossings remain ordinary landings, and
+    opposite-facing drift by itself is not a suppressor: TVR `1427` and EWT `1601` are
+    deeper/source-owned Landing controls. SDS `7169` locks the airborne frame, while SDS `3439` and
+    `5819` lock adjacent same-facing Landing controls. Sources:
     `data/stages/bin/*.bin::MSLSTG01 platform transform records`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Anim,ftCo_Fall_Coll}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll`,
@@ -4515,9 +4519,23 @@ Fox/Falco special-owner split (2026-04-17):
       carries the same owner attack id (`last_attack_landed == item_attack_id`), the row stays on
       the existing keepalive path, matching `it_8026FAC4` / `lbColl_80008688` victim-list
       ownership instead of creating a fresh BODY consume.
+    - The shallow state0 hb1/Fall low-leg edge is an explicit source packet boundary: extracted
+      `MSLLASR1` hb1 against `data/hurtcaps/{fox,falco}.json` cap11 (bone 7, low,
+      non-grabbable) can be a live `lbColl_8000805C` miss even when the reduced swept replay
+      approximation barely overlaps. This is not a generic low-leg or Fall suppressor: adjacent
+      state0 hb2/hb3 low-leg packets remain BODY-eligible, and same-attack live-shot carry rows
+      stay eligible through the victim-ring/source-attack gate above.
     - Replay-real locks: `TreasuredBackKangaroo.msl:2901` covers the positive BODY hit and laser
-      consume; adjacent `TBK:2900` stays alive; `PriceyPartialAlbatross.msl:4124` protects the
-      same-attack victim-ring negative.
+      consume; adjacent `TBK:2900` stays alive; `ShadyDecimalStarling.msl:148/149` locks the hb1
+      shallow miss followed by the hb2 BODY consume; `PriceyPartialAlbatross.msl:4124` protects the
+      same-attack victim-ring negative; `PPA:4140` protects the same-attack hb1/cap11 positive.
+    - Reflected-laser callback latch: if a seed row exposes a Fox/Falco laser whose public facing
+      and live velocity disagree, the missing source state is the pending reflected-angle/item
+      callback from `itFoxLaser_Logic94_Reflected` / `itFoxlaser_UnkMotion1_Anim`. The replay seed
+      lane may install `item_hidden_body_hit_victim_port` only when the next source frame proves the
+      exact item instance disappeared and exactly one fighter entered damage/hitlag with
+      `instance_hit_by == item_instance_id`; aligned live lasers remain on normal runtime BODY
+      collision. SDS `713` is the motivating lock, with aligned PPA laser rows as negatives.
     - Fresh taxonomy after this slice: primary total `543` (down from `556`);
       `F14c=0`, `F14d=0`, `F15a=0`, `F15b=0`, `F16a=0`, `F16b=0`, `F16c=0`,
       `F16d=14` (down from `27`). Aggregate total `5121` (down from `5134`);
@@ -4526,7 +4544,9 @@ Fox/Falco special-owner split (2026-04-17):
       closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
     Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}`,
     `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80008688}`,
-    `refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C}`.
+    `refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C}`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxLaser_Logic94_Reflected,itFoxlaser_UnkMotion1_Anim}`,
+    `refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}`.
   - Grounded Dash-to-Turn Falco-laser BODY `lbColl` hurt-radius lane:
     - `ftColl_8007925C` reaches item BODY only after reflect/absorb/shield, then calls
       `lbColl_8000805C`; `lbColl_8000805C` forwards `arg1->scale` and
@@ -5923,6 +5943,14 @@ BODY collision-space residual split and rejected seed bridge:
   the vulnerable damage guard in `ftColl_80076ED8`, so preprocessing preserves that hidden
   per-HitCapsule lineage from current-row invincible/no-damage hitlag/hurtbox-state evidence rather
   than hiding Falco CliffAttack data.
+- Fox `CliffAttackQuick` is also an `SSDYNN01` BODY collision owner. The source ledge-attack
+  callback reaches the normal `ftColl_80078C70 -> lbColl_8000805C` BODY path after the fighter
+  dynamic-chain update, so cap12/FtPart-18 must consume the live `ftData.x2C` tail matrix, not the
+  static baked matrix. `SDS:6237` is the negative proof: static cap12 admits Falco weak BAir hb2,
+  while generated collision msid 222 keeps the row in CliffAttackQuick. This is generated in
+  `data/anims/fox.dyn.bin` by `tools/extraction/extract_fighter_anims.py`; Falco remains a negative
+  because its extracted `SSDYNN01` set is empty, and ordinary CliffAttackQuick HitCapsules remain
+  enabled through the common script extraction above.
 - Continuous grounded CliffClimb/CliffAttack/CliffEscape option frames carry `fp->x221D_b5`, the
   same self-nudge suppressor used by continuous Escape frames. `Fighter_8006A360` runs Anim and the
   common `ftCommon_8007E0E4` fighter-overlap pass before the later IASA/input callback, so same-frame

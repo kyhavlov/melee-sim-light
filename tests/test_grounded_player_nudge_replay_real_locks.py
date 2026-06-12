@@ -18,10 +18,14 @@ STAGE_FD = 32
 CHAR_FOX = 1
 ACT_GUARD = 179
 ACT_GUARD_SET_OFF = 181
+ACT_CATCH = 212
 ACT_DAMAGE_FALL = 38
 ACT_ATTACK_DASH = 50
 ACT_DOWN_BOUND_D = 191
 ACT_DOWN_WAIT_D = 199
+ACT_ESCAPE_N = 235
+ACT_SQUAT = 39
+ACT_DAMAGE_FLY_HI = 87
 
 
 def _size(sizes: dict[str, int], key: str) -> int:
@@ -184,6 +188,85 @@ def test_guardsetoff_turnover_nudge_uses_promoted_seed_prev_action_on_rollout() 
     # The exact position guards both halves of the boundary: missing seed-prev provenance leaves the
     # row +0.3000 too far right, while double-counting common + turnover nudge would overshoot left.
     assert float(ref["pos_x"][p]) == pytest.approx(22.10211181640625, abs=2e-6)
+
+
+@pytest.mark.integration
+def test_guard_iasa_catch_entry_keeps_current_frame_player_nudge_sds_3295() -> None:
+    # Guard_IASA -> Catch source-order lock:
+    # - Fighter_8006A360 runs Guard's ftCommon_8007E0E4 overlap nudge before Fighter_procUpdate.
+    # - Guard_IASA then enters Catch through ftCo_Catch_CheckInput later in the same fighter proc.
+    # - The destination Catch row must keep the frame-start Guard-owned self nudge; the peer nudge
+    #   was already admitted by the ordinary overlap path.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    row = 3295
+    seed, ref, out = _run_one_step_row(dataset_path, row, 0)
+    assert int(seed["action_id"][0]) == ACT_GUARD
+    assert int(ref["action_id"][0]) == ACT_CATCH
+    assert int(out["action_id"][0]) == ACT_CATCH
+    assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=2e-6)
+    assert float(out["pos_x"][1]) == pytest.approx(float(ref["pos_x"][1]), abs=2e-6)
+
+    # Both sides lock the x450 split. Without the Guard-source owner, p0 stays 0.3 too far right;
+    # without the ordinary peer overlap path, p1 lands 0.3 too far left.
+    assert float(ref["pos_x"][0]) == pytest.approx(float(seed["pos_x"][0]) - 0.494, abs=5e-6)
+    assert float(ref["pos_x"][1]) == pytest.approx(float(seed["pos_x"][1]) - 0.85, abs=5e-6)
+
+
+@pytest.mark.integration
+def test_escape_n_terminal_wait_squat_keeps_source_player_nudge_sds_5520() -> None:
+    # EscapeN terminal destination lock:
+    # - EscapeN_Anim can enter Wait through ft_8008A2BC before the current fighter proc finishes.
+    # - That destination Wait_IASA can immediately enter Squat through ftCo_800D5FB0.
+    # - The first Squat frame still consumes the common x450 player nudge before Squat_Coll's
+    #   ft_80083F88 ground-to-air edge test. A later stale Squat row must not receive another
+    #   EscapeN-owned nudge.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{ftCo_800D5FB0,ftCo_Squat_Coll}
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    p = 1
+    seed_5520 = samples["seed_t"][5520]
+    assert int(seed_5520["action_id"][p]) == ACT_ESCAPE_N
+
+    ref_5520, out_5520 = _run_aggregate_rollout_window(dataset_path, 5495, 5520)
+    assert int(out_5520["action_id"][p]) == int(ref_5520["action_id"][p]) == ACT_SQUAT
+    assert int(out_5520["action_frame"][p]) == int(ref_5520["action_frame"][p]) == 1
+    assert float(out_5520["pos_x"][p]) == pytest.approx(float(ref_5520["pos_x"][p]), abs=2e-6)
+    assert float(ref_5520["pos_x"][p]) == pytest.approx(
+        float(seed_5520["pos_x"][p]) - 0.3, abs=5e-6
+    )
+
+    seed_5521 = samples["seed_t"][5521]
+    assert int(seed_5521["action_id"][p]) == ACT_SQUAT
+    assert int(seed_5521["seed_prev_action_id"][p]) == ACT_ESCAPE_N
+    ref_5521, out_5521 = _run_aggregate_rollout_window(dataset_path, 5495, 5521)
+    assert float(out_5521["pos_x"][p]) == pytest.approx(float(ref_5521["pos_x"][p]), abs=2e-6)
+    assert float(ref_5521["pos_x"][p]) == pytest.approx(float(seed_5521["pos_x"][p]), abs=5e-6)
+
+    ref_5618, out_5618 = _run_aggregate_rollout_window(dataset_path, 5495, 5618)
+    assert int(out_5618["action_id"][0]) == int(ref_5618["action_id"][0]) == ACT_DAMAGE_FLY_HI
+    assert float(out_5618["percent"][0]) == pytest.approx(float(ref_5618["percent"][0]), abs=1e-6)
+    assert int(out_5618["hitlag"][0]) == int(ref_5618["hitlag"][0])
 
 
 @pytest.mark.integration

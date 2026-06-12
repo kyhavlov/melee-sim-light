@@ -237,3 +237,44 @@ def test_dream_whispy_seed_wind_does_not_stale_carry_after_episode() -> None:
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=5e-5)
+
+
+@pytest.mark.integration
+def test_dream_whispy_sparse_contact_gap_keeps_hidden_xdc_episode_sds_2231() -> None:
+    dataset_path = Path(
+        "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+    )
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples.copy()
+    samples["seed_t"]["stage_dream_whispy_wind_dir_u8"] = np.uint8(0)
+    samples["seed_t"]["stage_dream_whispy_wind_valid_u8"] = np.uint8(0)
+    samples["seed_t"]["stage_dream_whispy_wind_timer_u16"] = np.uint16(0)
+    dream_wind_dir, dream_wind_valid, dream_wind_timer = _derive_dream_whispy_wind_seed_lanes(
+        samples, stage_id=STAGE_DREAM_LAND_N64, num_players=int(ds.header["num_players"])
+    )
+    samples["seed_t"]["stage_dream_whispy_wind_dir_u8"] = dream_wind_dir
+    samples["seed_t"]["stage_dream_whispy_wind_valid_u8"] = dream_wind_valid
+    samples["seed_t"]["stage_dream_whispy_wind_timer_u16"] = dream_wind_timer
+
+    assert int(samples[1991]["seed_t"]["stage_dream_whispy_wind_valid_u8"]) == 1
+    assert int(samples[2004]["seed_t"]["stage_dream_whispy_wind_valid_u8"]) == 1
+    assert int(samples[2004]["seed_t"]["stage_dream_whispy_wind_timer_u16"]) < 274
+
+    ref, out = _rollout_row_ucf(dataset_path, 0, 2231, samples, replay_frame_rng=True)
+    assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 28
+    assert int(out["on_ground"][0]) == int(ref["on_ground"][0]) == 0
+    assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=5e-5)
+
+
+@pytest.mark.integration
+def test_dream_whispy_final_timer_row_does_not_apply_wind_sds_2264() -> None:
+    dataset_path = Path(
+        "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+    )
+    seed, ref, out = _step_one_row(dataset_path, 2264)
+    assert int(seed["stage_dream_whispy_wind_valid_u8"]) == 1
+    assert int(seed["stage_dream_whispy_wind_timer_u16"]) == 1
+    assert int(out["action_id"][0]) == int(ref["action_id"][0])
+    assert int(out["action_id"][1]) == int(ref["action_id"][1])
+    assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=2e-6)
+    assert float(out["pos_x"][1]) == pytest.approx(float(ref["pos_x"][1]), abs=2e-6)

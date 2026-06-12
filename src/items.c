@@ -2855,7 +2855,7 @@ static inline uint8_t laser_grounded_body_landing_fall_special_exact_z_owner(
 
 static inline uint8_t laser_tail_shallow_body_contact_rejected(
     const MslBatch* batch, size_t d_idx, uint16_t item_type, uint8_t laser_state, uint8_t hit_hb_id,
-    float laser_radius, int cap_i, float overlap_amount) {
+    float laser_radius, int cap_i, float overlap_amount, uint16_t item_attack_id) {
   if (batch != NULL && laser_state == 0u && item_type_is_falco_laser(item_type) != 0u &&
       laser_radius > 0.0f && overlap_amount <= laser_radius &&
       batch->state.on_ground[d_idx] == 0u && batch->state.hurtbox_state[d_idx] == 0u &&
@@ -2884,12 +2884,20 @@ static inline uint8_t laser_tail_shallow_body_contact_rejected(
          (uint8_t)MSL_STATE_FLAG_2218_B1)
             ? 1u
             : 0u;
-    if (cap_is_tail != 0u &&
-        ((hit_hb_id == 0u &&
-          (action_id == (uint16_t)MSL_ACT_JUMP_F || action_id == (uint16_t)MSL_ACT_JUMP_B) &&
-          (reflect_behavior_only != 0u || live_item_b1_only != 0u)) ||
-         (hit_hb_id >= 2u && action_id >= (uint16_t)MSL_ACT_JUMP_AERIAL_F &&
-          action_id <= (uint16_t)MSL_ACT_JUMP_AERIAL_B))) {
+    const uint8_t cap_is_low_leg =
+        (hurtcaps_get(char_id, &caps, &cap_count) == 0 && caps != NULL && cap_i >= 0 &&
+         (uint16_t)cap_i < cap_count && caps[cap_i].bone_part_id == (uint16_t)7u &&
+         caps[cap_i].height == 0u && caps[cap_i].is_grabbable == 0u)
+            ? 1u
+            : 0u;
+    if ((cap_is_tail != 0u &&
+         ((hit_hb_id == 0u &&
+           (action_id == (uint16_t)MSL_ACT_JUMP_F || action_id == (uint16_t)MSL_ACT_JUMP_B) &&
+           (reflect_behavior_only != 0u || live_item_b1_only != 0u)) ||
+          (hit_hb_id >= 2u && action_id >= (uint16_t)MSL_ACT_JUMP_AERIAL_F &&
+           action_id <= (uint16_t)MSL_ACT_JUMP_AERIAL_B))) ||
+        (cap_is_low_leg != 0u && hit_hb_id == 1u && action_id == (uint16_t)MSL_ACT_FALL &&
+         batch->state.last_attack_landed[d_idx] != item_attack_id)) {
       // Source-owned shallow item BODY rejection:
       // - state0 Falco laser HitCapsules are authored in MSLLASR1 with four offsets and a radius;
       //   ftColl_8007925C tests each one against extracted hurtcaps via lbColl_8000805C.
@@ -2898,6 +2906,10 @@ static inline uint8_t laser_tail_shallow_body_contact_rejected(
       //   the source reflect-behavior carry or the raw fp+0x2218_b1 live-item callback lane, while
       //   JumpAerial* is limited to the trailing half of the authored laser offsets. Deeper
       //   overlaps and non-tail BODY caps continue to normal BODY damage.
+      // - The same lbColl shallow-miss owner applies to the state0 hb1/Fall low-leg packet: hb1 is
+      //   the only authored offset at the SDS edge whose exact x58->x4C local-radius packet misses
+      //   cap11 (data/hurtcaps/{fox,falco}.json bone 7, low, non-grabbable), while adjacent hb2/hb3
+      //   low-leg rows and same-attack live-shot carry rows remain BODY-eligible.
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
       // data/items/lasers.bin (MSLLASR1 state0 size/offsets)
@@ -2911,12 +2923,14 @@ static inline uint8_t laser_tail_shallow_body_contact_rejected(
 static inline uint8_t laser_exact_lbcoll_body_contact_admits_candidate(
     const MslBatch* batch, size_t d_idx, const MslCommonParams* common, uint8_t hurt_height,
     float overlap_amount, float laser_prev_scale_z, float laser_scale_z, uint16_t item_type,
-    uint8_t laser_state, uint8_t hit_hb_id, float laser_radius, int cap_i) {
+    uint8_t laser_state, uint8_t hit_hb_id, float laser_radius, int cap_i,
+    uint16_t item_attack_id) {
   if (!(overlap_amount > 0.0f)) {
     return 0u;
   }
   if (laser_tail_shallow_body_contact_rejected(batch, d_idx, item_type, laser_state, hit_hb_id,
-                                               laser_radius, cap_i, overlap_amount)) {
+                                               laser_radius, cap_i, overlap_amount,
+                                               item_attack_id)) {
     return 0u;
   }
   if (common != NULL && overlap_amount <= common->phantom_overlap_max_x7a8) {
@@ -4948,6 +4962,117 @@ static inline void item_apply_shine_reflect_callback(MslBatch* batch, size_t ii,
   msl_anim_timebase_enter(batch, reflector_idx, 0.0f, 1.0f);
 }
 
+static inline uint8_t item_stage_shine_reflected_laser_hidden_body_callback(
+    MslBatch* batch, int bi, int it, size_t ii, int reflector_port, const MslLaserParams* lp,
+    uint8_t laser_state, float next_x0, float next_y0, float pre_reflect_vx, float pre_reflect_vy,
+    float sr, float laser_scale_z) {
+  if (batch == NULL || lp == NULL || !batch->state.item_exists[ii]) {
+    return 0u;
+  }
+  if (!(pre_reflect_vx > 0.0f || pre_reflect_vx < 0.0f || pre_reflect_vy > 0.0f ||
+        pre_reflect_vy < 0.0f)) {
+    return 0u;
+  }
+
+  // Hidden BODY callback owner for reflected lasers:
+  // ftColl_80077464 writes the reflected owner/direction snapshot during the fighter/item contact
+  // pass, while the item's callback phase (`Item_8026A294`) can consume an already-latched BODY
+  // damage callback before `Item_80269F14` flips the laser velocity. Build the latch only from a
+  // unique live BODY candidate under the pre-callback HitCapsule travel packet; otherwise the
+  // normal immediate reflected-transfer path remains unchanged. Public item direction has already
+  // been reflected by this point, but the source BODY latch is consumed before the reflected laser
+  // callback rebuilds the laser velocity/angle.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077C60}
+  // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294,Item_80269F14}
+  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_Reflected
+  float ux = 0.0f;
+  float uy = 0.0f;
+  {
+    const float dir2 = (pre_reflect_vx * pre_reflect_vx) + (pre_reflect_vy * pre_reflect_vy);
+    if (!(dir2 > 0.0f)) {
+      return 0u;
+    }
+    const float inv_dir = 1.0f / sqrtf(dir2);
+    ux = pre_reflect_vx * inv_dir;
+    uy = pre_reflect_vy * inv_dir;
+  }
+  const float next_x = next_x0 + pre_reflect_vx;
+  const float next_y = next_y0 + pre_reflect_vy;
+  const uint8_t off_n =
+      (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
+  if (off_n == 0u) {
+    return 0u;
+  }
+
+  uint8_t found_victim = 0xFFu;
+  uint8_t found_height = 0u;
+  for (int def = 0; def < (int)batch->config.num_players; def++) {
+    if (def == reflector_port) {
+      continue;
+    }
+    const size_t d_idx = msl_idx_player(bi, def);
+    if (batch->state.hurtbox_state[d_idx] != 0u || batch->state.hitlag[d_idx] != 0u ||
+        batch->state.hitstun[d_idx] != 0u) {
+      continue;
+    }
+    const uint8_t flags_221b = batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                                        (size_t)MSL_STATE_FLAGS_221B_INDEX];
+    if ((flags_221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u) {
+      continue;
+    }
+    const uint16_t def_iid = batch->state.instance_id[d_idx];
+    const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
+    uint8_t victim_hit = 0u;
+    for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !victim_hit;
+         oi++) {
+      if (!hitlist_allows_item_hitbox_fighter(batch, bi, it, (int)oi, def, def_iid)) {
+        continue;
+      }
+      const float off_x =
+          (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
+      const float s = off_x * laser_collision_offset_scale(lp, laser_state, laser_scale_z,
+                                                           MSL_LASER_COLLISION_SPACE_BODY, 0u, 1u);
+      const float sx0 = next_x0 + (ux * s);
+      const float sy0 = next_y0 + (uy * s);
+      const float sx = next_x + (ux * s);
+      const float sy = next_y + (uy * s);
+      for (uint8_t ci = 0; ci < cap_n; ci++) {
+        uint8_t hurt_height = 0u;
+        float overlap_amount = 0.0f;
+        if (item_swept_sphere_capsule_overlap_amount(batch, bi, def, sx0, sy0, sx, sy, sr, (int)ci,
+                                                     &hurt_height, &overlap_amount, 0u, 1.0f)) {
+          if (laser_tail_shallow_body_contact_rejected(batch, d_idx, batch->state.item_type[ii],
+                                                       laser_state, oi, sr, (int)ci, overlap_amount,
+                                                       batch->state.item_attack_id[ii])) {
+            continue;
+          }
+          victim_hit = 1u;
+          break;
+        }
+      }
+    }
+    if (victim_hit != 0u) {
+      if (found_victim != 0xFFu) {
+        return 0u;
+      }
+      found_victim = (uint8_t)def;
+      // The reflected hidden OnGiveDamage callback consumes the item damage latch before the
+      // ordinary visible BODY resolve has a selected hurtcap-height owner. Replay/source rows enter
+      // grounded DamageN from this path even when the only reconstructed travel overlap is a high
+      // capsule; keep the default medium-height lane scoped to this hidden callback producer.
+      // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
+      found_height = 1u;
+    }
+  }
+  if (found_victim == 0xFFu) {
+    return 0u;
+  }
+  batch->state.item_hidden_body_hit_victim_port[ii] = found_victim;
+  batch->state.item_hidden_body_hit_hurt_height[ii] = found_height;
+  batch->state.item_hidden_callback_flags[ii] = (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_CLEAR;
+  return 1u;
+}
+
 static inline uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii,
                                                      size_t reflector_idx, int reflector_port,
                                                      const MslLaserParams* lp, uint8_t laser_state,
@@ -5026,6 +5151,20 @@ static inline uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii,
   // - ftColl_80077464 writes both multipliers to item reflect snapshot (`item->xC6C` et al).
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
   item_apply_shine_reflect_callback(batch, ii, reflector_idx);
+  const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
+  const int it = (int)(ii % (size_t)MSL_MAX_ITEMS);
+  const uint8_t hidden_body_before_reflect_callback =
+      item_stage_shine_reflected_laser_hidden_body_callback(
+          batch, bi, it, ii, reflector_port, lp, laser_state, x, y, batch->state.item_vel_x[ii],
+          batch->state.item_vel_y[ii], sr, laser_scale_z);
+  if (hidden_body_before_reflect_callback != 0u) {
+    batch->state.item_misc2[ii] = 0u;
+    batch->state.item_misc3[ii] = 0u;
+    msl_item_reflect_commit_owner_snapshot_defer_speed(batch, ii, reflector_port);
+    msl_item_reflect_apply_direction_lane(batch, ii);
+    msl_item_reflect_set_damage_mul(batch, ii, rch->reflector_damage_mul);
+    return 1u;
+  }
   msl_item_reflect_apply_immediate_transfer(batch, ii, reflector_idx, reflector_port,
                                             rch->reflector_damage_mul, rch->reflector_speed_mul);
   return 1u;
@@ -6000,8 +6139,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     // Blaster shots (itfoxlaser.c) can be spawned with msid 0 or 1:
     // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6A4 and ::it_8029C6CC
     const uint8_t laser_state = (batch->state.item_state[ii] != 0) ? 1u : 0u;
-    msl_item_reflect_apply_pending_laser_callback(batch, ii);
-    const int owner = (int)batch->state.item_owner[ii];
+    int owner = (int)batch->state.item_owner[ii];
 
     const uint8_t hidden_victim = batch->state.item_hidden_body_hit_victim_port[ii];
     const uint8_t hidden_flags = batch->state.item_hidden_callback_flags[ii];
@@ -6013,8 +6151,10 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       //   Slippi item post-frame exposes a serializable item state.
       // - Item_8026A294 consumes that latch through OnGiveDamageThink on the next item callback
       //   phase. This seed lane replays that hidden callback once at the reseed boundary.
+      // - Item_8026A294 checks OnGiveDamageThink before Item_80269F14's reflect callback, so the
+      //   hidden BODY callback consumes the pre-reflect velocity/angle lanes when both are pending.
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077C60
-      // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
+      // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_80269F14,Item_8026A294}
       float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
       dmg = msl_item_reflect_damage_lane(batch, ii, dmg);
       const uint16_t angle = (laser_state == 0u) ? lp->angle : lp->state1_angle;
@@ -6046,6 +6186,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       item_slot_clear(batch, ii);
       continue;
     }
+
+    msl_item_reflect_apply_pending_laser_callback(batch, ii);
+    owner = (int)batch->state.item_owner[ii];
 
     // Motion: item->pos += item->vel (generic add in Item_802697D4), and lifetime counts down.
     // Decomp refs:
@@ -8095,7 +8238,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                     &body_overlap_amount, &exact_evaluated, use_landing_fall_special_exact_z) &&
                 laser_exact_lbcoll_body_contact_admits_candidate(
                     batch, d_idx, common, hit_hurt_height, body_overlap_amount, laser_prev_scale_z,
-                    laser_scale_z, batch->state.item_type[ii], laser_state, oi, sr, (int)ci)) {
+                    laser_scale_z, batch->state.item_type[ii], laser_state, oi, sr, (int)ci,
+                    batch->state.item_attack_id[ii])) {
               hit = 1;
               hit_from_exact_lbcoll = 1u;
               hit_hb_id = oi;
@@ -8114,9 +8258,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           if (item_swept_sphere_capsule_overlap_amount(
                   batch, bi, def, hx0, hy0, hx1, hy1, sr, (int)ci, &hit_hurt_height,
                   &body_overlap_amount, flatten_body_hurt_z, 1.0f)) {
-            if (laser_tail_shallow_body_contact_rejected(batch, d_idx, batch->state.item_type[ii],
-                                                         laser_state, oi, sr, (int)ci,
-                                                         body_overlap_amount)) {
+            if (laser_tail_shallow_body_contact_rejected(
+                    batch, d_idx, batch->state.item_type[ii], laser_state, oi, sr, (int)ci,
+                    body_overlap_amount, batch->state.item_attack_id[ii])) {
               continue;
             }
             hit = 1;
@@ -8149,7 +8293,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                   laser_exact_lbcoll_body_contact_admits_candidate(
                       batch, d_idx, common, hit_hurt_height, body_overlap_amount,
                       laser_prev_scale_z, laser_scale_z, batch->state.item_type[ii], laser_state,
-                      0u, sr, (int)ci)) {
+                      0u, sr, (int)ci, batch->state.item_attack_id[ii])) {
                 hit = 1;
                 hit_from_exact_lbcoll = 1u;
                 hit_hb_id = 0u;
@@ -8166,9 +8310,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             if (item_swept_sphere_capsule_overlap_amount(
                     batch, bi, def, hx0, hy0, x, y, sr, (int)ci, &hit_hurt_height,
                     &body_overlap_amount, flatten_body_hurt_z, 1.0f)) {
-              if (laser_tail_shallow_body_contact_rejected(batch, d_idx, batch->state.item_type[ii],
-                                                           laser_state, 0u, sr, (int)ci,
-                                                           body_overlap_amount)) {
+              if (laser_tail_shallow_body_contact_rejected(
+                      batch, d_idx, batch->state.item_type[ii], laser_state, 0u, sr, (int)ci,
+                      body_overlap_amount, batch->state.item_attack_id[ii])) {
                 continue;
               }
               hit = 1;
@@ -8700,7 +8844,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
       item_apply_seeded_reflect_transfer_after_collision(batch, ii);
       msl_item_reflect_clear_seed_lanes(batch, ii);
-      batch->state.item_hidden_callback_flags[ii] = 0u;
+      if (hidden_flags != 0u) {
+        batch->state.item_hidden_callback_flags[ii] = 0u;
+      }
     }
   }
 }

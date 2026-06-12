@@ -415,8 +415,8 @@ def test_landing_fallspecial_allow_interrupt_seed_lane_replay_real_lock() -> Non
 def test_landing_fallspecial_firefox_rate_seed_lane_enters_turn_pte_7232() -> None:
     # Replay-real lock for the hidden Up-B landing allow_interrupt carry:
     # PTE:7232 starts inside a LandingFallSpecial run whose AObj rate is the Firefox/Firebird x90
-    # landing-lag rate. Slippi does not expose mv.co.landing.allow_interrupt directly, so reseed
-    # reconstructs that bit from the source rate and lets ftCo_Landing_IASA consume Turn.
+    # landing-lag rate. The preprocessed hidden allow_interrupt lane is the source owner that lets
+    # ftCo_Landing_IASA consume Turn.
     #
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
     #   ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}
@@ -436,7 +436,7 @@ def test_landing_fallspecial_firefox_rate_seed_lane_enters_turn_pte_7232() -> No
     seed, ref, out = _run_one_step(dataset_path, record)
 
     assert int(seed["action_id"][player]) == 43  # LandingFallSpecial
-    assert int(seed["landing_fallspecial_allow_interrupt"][player]) == 0
+    assert int(seed["landing_fallspecial_allow_interrupt"][player]) == 1
     assert float(seed["frame_speed_mul_f32"][player]) == pytest.approx(30.1 / 18.0, abs=5e-5)
     assert int(ref["action_id"][player]) == 18  # Turn
     assert int(out["action_id"][player]) == int(ref["action_id"][player])
@@ -447,8 +447,9 @@ def test_landing_fallspecial_firefox_rate_seed_lane_enters_turn_pte_7232() -> No
 @pytest.mark.integration
 def test_landing_fallspecial_sideb_rate_does_not_reconstruct_firefox_allow_interrupt_pte_7232() -> None:
     # Adjacent negative: the same LandingFallSpecial row and Turn-capable input must not dispatch
-    # if the source rate is the Illusion/Phantasm x50 landing-lag rate. Side-B collision passes
-    # allow_interrupt=false into LandingFallSpecial, so the Firefox x90 rate is the source owner.
+    # if the source rate is the Illusion/Phantasm x50 landing-lag rate and the hidden
+    # allow_interrupt lane is clear. Side-B collision passes allow_interrupt=false into
+    # LandingFallSpecial, so speed rate by itself is not sufficient source authority.
     dataset_path = (
         Path(__file__).resolve().parents[1]
         / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
@@ -458,6 +459,7 @@ def test_landing_fallspecial_sideb_rate_does_not_reconstruct_firefox_allow_inter
         pytest.skip(f"missing local dataset: {dataset_path}")
 
     def _sideb_rate(seed_t: np.ndarray) -> None:
+        seed_t["landing_fallspecial_allow_interrupt"][0, player] = np.uint8(0)
         seed_t["frame_speed_mul_f32"][0, player] = np.float32(30.1 / 20.0)
 
     record = 7232
