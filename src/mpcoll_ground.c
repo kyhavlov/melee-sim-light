@@ -205,7 +205,7 @@ static inline uint8_t mpcoll_ground_try_sample_damageflyroll_jobj_ecb(
     return 0u;
   }
 
-  const MslCharParams* ch = msl_char_params(char_id);
+  const MslCharParams* ch = msl_char_params_fast(char_id);
   if (ch == NULL || ch->ecb_joint_count == 0u) {
     return 0u;
   }
@@ -310,7 +310,7 @@ static inline uint8_t mpcoll_ground_try_sample_specialhi_jobj_ecb(
     return 0u;
   }
 
-  const MslCharParams* ch = msl_char_params(char_id);
+  const MslCharParams* ch = msl_char_params_fast(char_id);
   if (ch == NULL || ch->ecb_joint_count == 0u) {
     return 0u;
   }
@@ -694,7 +694,7 @@ static inline uint8_t is_capture_lw_allow_ground_to_air_collision_action(uint16_
 }
 
 static inline uint8_t is_attackair_action(uint16_t a) {
-  return msl_motion_state_common_class3_has(a, MSL_MS_CLASS3_PHASE4_ATTACK_AIR_COLL);
+  return msl_motion_state_common_class3_has_fast(a, MSL_MS_CLASS3_PHASE4_ATTACK_AIR_COLL);
 }
 
 static inline uint8_t is_spacie_air_special_floor_collision_action(uint8_t char_id, uint16_t a) {
@@ -810,7 +810,7 @@ static inline uint8_t action_uses_ftco_80096cc8_floor_callback(uint16_t a) {
   // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class FT80083090_PLATFORM_PASS_COLL
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_800831CC,ft_800835B0}
-  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_FT80083090_PLATFORM_PASS_COLL);
+  return msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_FT80083090_PLATFORM_PASS_COLL);
 }
 
 static inline uint8_t is_just_entered_specialairn_end_from_loop(uint8_t char_id, uint16_t action_id,
@@ -911,7 +911,7 @@ static inline uint8_t action_uses_active_hitlag_downward_sdi_floorhug(uint16_t a
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{ftCo_8009F184,ftCo_DownDamage_Coll}
   // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
-  if (msl_motion_state_common_class3_has(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL) ||
+  if (msl_motion_state_common_class3_has_fast(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL) ||
       is_damage_fly_collision_action(action_id) || action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
       action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) {
     return 1u;
@@ -1800,8 +1800,8 @@ static inline uint8_t action_uses_landing_floor_release_coll(uint16_t a) {
   // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor,mpColl_8004A45C_Floor}
   // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 classes LANDING_COLL/LANDING_AIR_COLL)
-  return (uint8_t)(msl_motion_state_common_class_has(a, MSL_MS_CLASS_LANDING_COLL) ||
-                   msl_motion_state_common_class_has(a, MSL_MS_CLASS_LANDING_AIR_COLL));
+  return (uint8_t)(msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_LANDING_COLL) ||
+                   msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_LANDING_AIR_COLL));
 }
 
 static inline uint8_t floor_lines_connected(const MslStageFloorGraph* g, int a, int b) {
@@ -2323,11 +2323,11 @@ static inline uint8_t grounded_action_allows_platform_carry_y_correction(uint16_
   if (action_uses_landing_floor_release_coll(action_id) && action_frame <= 1u) {
     return 0u;
   }
-  if (msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_COLL)) {
+  if (msl_motion_state_common_class2_has_fast(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_COLL)) {
     return 1u;
   }
-  if (msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL) ||
-      msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL)) {
+  if (msl_motion_state_common_class2_has_fast(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL) ||
+      msl_motion_state_common_class2_has_fast(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL)) {
     // Phase-3 grounded floor persistence also covers `ft_800827A0` users such as EscapeF/B/N:
     // the callback writes CollData.cur_pos back after `mpColl_8004B2DC`, whose floor traversal
     // consumes mpLib_8004DD90_Floor's signed correction when the current floor remains valid.
@@ -2351,8 +2351,8 @@ static inline uint8_t grounded_action_allows_platform_carry_y_correction(uint16_
     // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B2DC
     return 1u;
   }
-  return msl_motion_state_common_class_has(action_id,
-                                           MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL);
+  return msl_motion_state_common_class_has_fast(action_id,
+                                                MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL);
 }
 
 static inline uint8_t grounded_action_allows_height_platform_y_correction(uint16_t action_id,
@@ -2383,7 +2383,7 @@ static inline uint8_t grounded_action_allows_height_platform_y_correction(uint16
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
   // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class2 COMMON_GROUNDED_B108_COLL)
   // data/attack_id/move_id/{fox,falco}.bin (MotionState.move_id == FtMoveId_SpecialN)
-  if (msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL)) {
+  if (msl_motion_state_common_class2_has_fast(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL)) {
     return 1u;
   }
   if (action_id == (uint16_t)MSL_ACT_PASSIVE) {
@@ -2409,10 +2409,11 @@ static inline uint8_t grounded_action_allows_b108_generated_slope_y_correction(u
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
   // refs/melee/src/melee/mp/{mpcoll.c::mpColl_8004B108,mplib.c::mpLib_8004DD90_Floor}
   // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class FT80083F88_GROUND_TO_AIR_COLL)
-  if (msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL)) {
+  if (msl_motion_state_common_class2_has_fast(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL)) {
     return 1u;
   }
-  if (msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL)) {
+  if (msl_motion_state_common_class_has_fast(action_id,
+                                             MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL)) {
     return 1u;
   }
   return msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_FX_SPECIALS_GROUND_B108_COLL);
@@ -2428,11 +2429,11 @@ static inline uint8_t grounded_action_allows_stage_object_platform_carry(uint16_
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC,ft_80084104,ft_800845B4}
   // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class2 COMMON_GROUNDED_COLL;
   // retained later-owner class GROUNDED_STAGE_OBJECT_CARRY_COLL)
-  if (msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_COLL)) {
+  if (msl_motion_state_common_class2_has_fast(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_COLL)) {
     return 1u;
   }
-  return msl_motion_state_common_class_has(action_id,
-                                           MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL);
+  return msl_motion_state_common_class_has_fast(action_id,
+                                                MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL);
 }
 
 static inline int mpcoll_find_current_randall_floor_line_at_root(const MslBatch* batch, int bi,
@@ -2785,7 +2786,7 @@ static inline uint8_t jumpaerial_terminal_fastfall_descent(const MslBatch* batch
   if (batch == NULL) {
     return 0u;
   }
-  const MslCharParams* chp = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* chp = msl_char_params_fast(batch->state.char_id[idx]);
   if (chp == NULL || !isfinite(chp->terminal_vel) || !(chp->terminal_vel > 0.0f)) {
     return 0u;
   }
@@ -2827,7 +2828,7 @@ static inline uint8_t specialairhi_floor_contact_angle_continues_launch(
   if (msl_motion_state_fx_special_kind(char_id, action_id) != (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI) {
     return 0u;
   }
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
   if (chp == NULL) {
     return 0u;
   }
@@ -4410,9 +4411,9 @@ static inline void mpcoll_apply_late_floor_publication_guards(
   if (publication->on_ground &&
       (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
        (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI) &&
-      raw_current_floor_line_idx >= 0 && msl_char_params(ctx->char_id) != NULL &&
+      raw_current_floor_line_idx >= 0 && msl_char_params_fast(ctx->char_id) != NULL &&
       batch->state.action_frame[idx] <=
-          (int16_t)msl_char_params(ctx->char_id)->firefox_bound_delay_frames &&
+          (int16_t)msl_char_params_fast(ctx->char_id)->firefox_bound_delay_frames &&
       !(prev_bottom_y > (publication->contact.contact_y + k_floor_y_bias) &&
         cur_bottom_y <= (publication->contact.contact_y + k_floor_y_bias)) &&
       !stage_collision_floor_line_is_platform(ctx->stage_id, seed_ground_id) &&
@@ -4488,7 +4489,7 @@ static inline uint8_t mpcoll_maybe_refresh_downbound_airborne_floor_index(
       }
     }
   }
-  const MslCharParams* chp = msl_char_params(ctx->char_id);
+  const MslCharParams* chp = msl_char_params_fast(ctx->char_id);
   const float ledge_snap_height =
       (chp != NULL && isfinite(chp->ledge_snap_height) && chp->ledge_snap_height > 0.0f)
           ? (chp->ledge_snap_height * batch->state.fighter_scale_y[ctx->idx])
@@ -6093,7 +6094,7 @@ static uint8_t msl_mpcoll_80047e14_flags6_root_floor_projection(
     return 1u;
   }
 
-  const MslCharParams* chp = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* chp = msl_char_params_fast(batch->state.char_id[idx]);
   const uint8_t fall_ledge_floor_uses_expanded_collision_model =
       (chp != NULL && isfinite(chp->model_scaling) && chp->model_scaling > 1.0f) ? 1u : 0u;
   if (fall_ledge_floor_uses_expanded_collision_model && action_id == (uint16_t)MSL_ACT_FALL &&
@@ -6761,7 +6762,7 @@ static uint8_t escapeair_locked_platform_root_projection(
          batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
             ? 1u
             : 0u;
-    const MslCharParams* entry_chp = msl_char_params(batch->state.char_id[idx]);
+    const MslCharParams* entry_chp = msl_char_params_fast(batch->state.char_id[idx]);
     const uint16_t entry_ground_id = batch->state.ground_id[idx];
     float entry_ground_y = 0.0f;
     const int entry_ground_line_idx = stage_collision_floor_line_index(stage_id, entry_ground_id);
@@ -7865,7 +7866,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
             action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
             (action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] != 0u) ||
             is_attackair_action(action_id) ||
-            msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_COMMON_AIR_COLL)))
+            msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_COMMON_AIR_COLL)))
               ? 1u
               : 0u;
       uint8_t use_locked_desired_ecb_bottom = 0u;
@@ -9385,7 +9386,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                    batch->state.speed_y_attack[idx] > 0.0f && batch->state.hitstun[idx] != 0u)
                       ? 1u
                       : 0u;
-              const MslCharParams* damage_floor_chp = msl_char_params(char_id);
+              const MslCharParams* damage_floor_chp = msl_char_params_fast(char_id);
               const float damage_height_platform_edge_slack =
                   (damage_floor_chp != NULL && isfinite(damage_floor_chp->ledge_snap_height))
                       ? (damage_floor_chp->ledge_snap_height * batch->state.fighter_scale_y[idx])
@@ -12377,7 +12378,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                batch->state.prev_pos_y[idx] > iy)
                   ? 1u
                   : 0u;
-          const MslCharParams* floor_cross_chp = msl_char_params(char_id);
+          const MslCharParams* floor_cross_chp = msl_char_params_fast(char_id);
           const uint8_t fall_ledge_floor_uses_expanded_collision_model =
               (floor_cross_chp != NULL && isfinite(floor_cross_chp->model_scaling) &&
                floor_cross_chp->model_scaling > 1.0f)
@@ -12774,7 +12775,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                batch->state.speed_y_attack[idx] > 0.0f && batch->state.hitstun[idx] != 0u)
                   ? 1u
                   : 0u;
-          const MslCharParams* damage_floor_chp = msl_char_params(char_id);
+          const MslCharParams* damage_floor_chp = msl_char_params_fast(char_id);
           const float damage_height_platform_edge_slack =
               (damage_floor_chp != NULL && isfinite(damage_floor_chp->ledge_snap_height))
                   ? (damage_floor_chp->ledge_snap_height * batch->state.fighter_scale_y[idx])
@@ -15610,7 +15611,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
            action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
            action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
            (action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] != 0u) ||
-           msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_COMMON_AIR_COLL)) &&
+           msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_COMMON_AIR_COLL)) &&
           batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
           (msl_escapeair_locked_bottom_owner_any(
                batch->state.coll_desired_ecb_bottom_locked_owner[idx]) ||

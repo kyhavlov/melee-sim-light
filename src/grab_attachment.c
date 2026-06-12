@@ -396,7 +396,7 @@ static inline float pose_model_scale_y(const MslBatch* batch, size_t idx) {
     return 1.0f;
   }
   float scale_y = batch->state.fighter_scale_y[idx];
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (ch != NULL && ch->model_scaling > 0.0f) {
     scale_y *= ch->model_scaling;
   }
@@ -457,8 +457,8 @@ static inline uint8_t attached_nonlow_throw_source_frame(float* out_frame, const
     return 0u;
   }
   const MslCommonParams* c = msl_common_params();
-  const MslCharParams* owner_ch = msl_char_params(batch->state.char_id[owner_idx]);
-  const MslCharParams* victim_ch = msl_char_params(batch->state.char_id[victim_idx]);
+  const MslCharParams* owner_ch = msl_char_params_fast(batch->state.char_id[owner_idx]);
+  const MslCharParams* victim_ch = msl_char_params_fast(batch->state.char_id[victim_idx]);
   if (c == NULL || owner_ch == NULL || victim_ch == NULL) {
     return 0u;
   }
@@ -501,7 +501,7 @@ static inline uint8_t thrown_static_x1a70_offsets(float* out_y, float* out_z, co
   if (out_y == NULL || out_z == NULL || batch == NULL) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[vidx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[vidx]);
   if (ch == NULL) {
     return 0u;
   }
@@ -580,7 +580,7 @@ void grab_attachment_apply_capture_delta_now(MslBatch* batch, int bi, int victim
   float ay = batch->state.pos_y[oidx];
   float az = batch->state.pos_z[oidx];
   uint16_t anchor_part = (uint16_t)MSL_FTPART_TRANSN2;
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[oidx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[oidx]);
   if (ch != NULL) {
     anchor_part = ch->grab_capture_anchor_part_id;
   }
@@ -700,7 +700,7 @@ void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int bi, in
   float ay = batch->state.pos_y[oidx];
   float az = batch->state.pos_z[oidx];
   uint16_t owner_anchor_part = (uint16_t)MSL_FTPART_TRANSN2;
-  const MslCharParams* och = msl_char_params(batch->state.char_id[oidx]);
+  const MslCharParams* och = msl_char_params_fast(batch->state.char_id[oidx]);
   if (och != NULL) {
     owner_anchor_part = och->grab_capture_anchor_part_id;
   }
@@ -800,7 +800,7 @@ static inline void grabbed_victim_anchor_world_at_owner_frame(float* out_x, floa
   float ay = batch->state.pos_y[oidx];
   float az = batch->state.pos_z[oidx];
   uint16_t owner_anchor_part = (uint16_t)MSL_FTPART_TRANSN2;
-  const MslCharParams* och = msl_char_params(batch->state.char_id[oidx]);
+  const MslCharParams* och = msl_char_params_fast(batch->state.char_id[oidx]);
   if (och != NULL) {
     owner_anchor_part = och->grab_capture_anchor_part_id;
   }

@@ -256,7 +256,7 @@ static inline void enter_cliff_catch_immediate(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
   }
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (ch != NULL) {
     // Decomp: CliffCatch entry path calls ftCommon_8007D5D4, which sets
     // fp->x1968_jumpsUsed = 1 on the owning fighter before CliffWait/option processing.
@@ -626,7 +626,7 @@ static inline void cliff_option_phys_airground(MslBatch* batch, int bi, size_t i
     return;
   }
 
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (ch == NULL) {
     return;
   }
@@ -697,7 +697,7 @@ static inline void cliff_hold_phys_snap(MslBatch* batch, int bi, size_t idx, uin
     return;
   }
 
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (ch == NULL) {
     return;
   }
@@ -1063,7 +1063,7 @@ void ledge_update_pre_physics(MslBatch* batch) {
           // Decomp: ftCo_CliffJump1_Anim -> ftCo_8009B2F8 (enter Jump2 and set launch velocity).
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump1_Anim
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_8009B2F8
-          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
           const float fd = facing_dir(batch->state.facing[idx]);
           if (a == (uint16_t)MSL_ACT_CLIFF_JUMP_SLOW1) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_CLIFF_JUMP_SLOW2;
@@ -1093,7 +1093,7 @@ void ledge_update_pre_physics(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Anim
           batch->state.prev_action_id[idx] = a;
           enter_fall_keep_fastfall(batch, idx);
-          const MslCharParams* ch_terminal = msl_char_params(batch->state.char_id[idx]);
+          const MslCharParams* ch_terminal = msl_char_params_fast(batch->state.char_id[idx]);
           (void)ledge_try_terminal_cliffjump2_fall_jumpaerial_iasa(batch, c, ch_terminal, idx);
           a = batch->state.action_id[idx];
         }
@@ -1113,7 +1113,7 @@ void ledge_update_pre_physics(MslBatch* batch) {
           // Wait IASA in the same proc; the detailed floor-clamp portion is collision-owned and is
           // covered by the ledge/platform collision locks.
           const uint16_t cliff_end_action = a;
-          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
           batch->state.ledge_side[idx] = -1;
           enter_wait_on_stage(batch, idx);
           // Source policy: keep the ftCommon_8007D92C -> Wait IASA same-proc ownership for the

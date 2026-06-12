@@ -164,7 +164,7 @@ static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Phys,ftCo_Damage_Phys}
     // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
-    const MslCharParams* ch = msl_char_params(batch->state.char_id[victim_idx]);
+    const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[victim_idx]);
     if (ch != NULL) {
       float next_vy = batch->state.speed_y_self[victim_idx] - ch->grav;
       if (next_vy < -ch->terminal_vel) {

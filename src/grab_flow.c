@@ -253,7 +253,7 @@ static inline void maybe_enter_capture_wait_lw_grounded_handoff(MslBatch* batch,
       batch->state.ground_id[vidx] = floor_result.ground_id;
     }
     batch->state.pos_y[vidx] = floor_result.corrected_pos_y;
-    const MslCharParams* ch = msl_char_params(batch->state.char_id[vidx]);
+    const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[vidx]);
     if (ch != NULL) {
       batch->state.jumps_left[vidx] = ch->max_jumps;
     }
@@ -310,7 +310,7 @@ static inline void maybe_run_capture_pulled_hi_immediate_floor_callback(
     batch->state.ground_id[vidx] = floor_result.ground_id;
   }
   batch->state.pos_y[vidx] = floor_result.corrected_pos_y;
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[vidx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[vidx]);
   if (ch != NULL) {
     batch->state.jumps_left[vidx] = ch->max_jumps;
   }
@@ -969,8 +969,8 @@ uint8_t grab_flow_try_enter_catchdash_from_iasa(MslBatch* batch, const MslCommon
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
     //   ftCo_800D8A38,ftCo_800D8C54,ftCo_CatchDash_Phys}
-    dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, msl_char_params(batch->state.char_id[idx]),
-                                                  idx);
+    dash_iasa_apply_root_motion_exit_gr_vel_clamp(
+        batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
   }
   return 1u;
 }
@@ -1167,8 +1167,8 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   float throw_anim_speed = 1.0f;
   {
     const MslCommonParams* c = msl_common_params();
-    const MslCharParams* owner_ch = msl_char_params(batch->state.char_id[oidx]);
-    const MslCharParams* victim_ch = msl_char_params(batch->state.char_id[vidx]);
+    const MslCharParams* owner_ch = msl_char_params_fast(batch->state.char_id[oidx]);
+    const MslCharParams* victim_ch = msl_char_params_fast(batch->state.char_id[vidx]);
     // Decomp throw-entry anim-speed ownership:
     // - ftCo_800DD4B0 computes throw_index = msid - 219, then:
     //   if (!(weight_independent_throws_mask & (1 << throw_index))) {

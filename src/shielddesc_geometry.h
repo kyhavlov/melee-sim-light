@@ -119,7 +119,7 @@ static inline float msl_shielddesc_model_scale_for_idx(const MslBatch* batch, si
   if (batch == NULL) {
     return 1.0f;
   }
-  const MslCharParams* params = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* params = msl_char_params_fast(batch->state.char_id[idx]);
   return (params != NULL && isfinite(params->model_scaling) && params->model_scaling > 0.0f)
              ? params->model_scaling
              : 1.0f;
@@ -140,7 +140,7 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
   const size_t hb_i = msl_shielddesc_idx_hitbox(bi, attacker, hb_id);
   const size_t a_idx = msl_idx_player(bi, attacker);
   const size_t d_idx = msl_idx_player(bi, defender);
-  const MslCharParams* defender_params = msl_char_params(batch->state.char_id[d_idx]);
+  const MslCharParams* defender_params = msl_char_params_fast(batch->state.char_id[d_idx]);
   const float shield_owner_model_scale = msl_shielddesc_model_scale_for_idx(batch, d_idx);
   const float shield_matrix_scale = shield_owner_scale_y * shield_owner_model_scale;
 
@@ -225,7 +225,8 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
        batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] == UINT32_MAX &&
        batch->state.guard_reflect_origin_guardon[d_idx] == 0u &&
        batch->state.guard_reflect_timer_x18[d_idx] == 0u &&
-       msl_motion_state_common_class_has(batch->state.action_id[a_idx], MSL_MS_CLASS_ATTACK_AIR))
+       msl_motion_state_common_class_has_fast(batch->state.action_id[a_idx],
+                                              MSL_MS_CLASS_ATTACK_AIR))
           ? 1u
           : 0u;
   if (guardreflect_direct_no_submotion) {
@@ -272,7 +273,8 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
        batch->state.guard_on_entered_this_frame[d_idx] == 0u &&
        batch->state.guard_x10[d_idx] != 0u &&
        msl_action_is_live_shield_family(batch->state.seed_prev_action_id[d_idx]) &&
-       msl_motion_state_common_class_has(batch->state.action_id[a_idx], MSL_MS_CLASS_ATTACK_AIR))
+       msl_motion_state_common_class_has_fast(batch->state.action_id[a_idx],
+                                              MSL_MS_CLASS_ATTACK_AIR))
           ? 1u
           : 0u;
   const uint8_t guardon_raise_no_tilt_extent_lane =
@@ -615,7 +617,7 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
   // ShieldDesc-miss/BODY boundaries.
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
   const uint8_t shine_start_kind =
-      msl_motion_state_fx_special_kind(batch->state.char_id[a_idx], a_action);
+      msl_motion_state_fx_special_kind_fast(batch->state.char_id[a_idx], a_action);
   const uint8_t shine_start_enable_edge =
       (batch->state.hitbox_enable_edge[hb_i] &&
        (shine_start_kind == (uint8_t)MSL_FX_KIND_SPECIAL_LW_START ||

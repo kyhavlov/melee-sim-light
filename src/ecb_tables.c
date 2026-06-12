@@ -202,7 +202,7 @@ static int load_table_for_char_into(MslEcbTable* table_by_char, const char* data
     alloc_free(table_by_char[char_id].entries);
     alloc_free(table_by_char[char_id].buf);
   }
-  const MslCharParams* ch = msl_char_params(char_id);
+  const MslCharParams* ch = msl_char_params_fast(char_id);
   const float model_scaling = (ch != NULL) ? ch->model_scaling : 1.0f;
   table_by_char[char_id] = (MslEcbTable){
       .buf = buf,
@@ -506,7 +506,7 @@ static int load_extents_table_for_char(const char* data_dir, const char* rel_pat
     alloc_free(g_extents_table_by_char[char_id].entries);
     alloc_free(g_extents_table_by_char[char_id].buf);
   }
-  const MslCharParams* ch = msl_char_params(char_id);
+  const MslCharParams* ch = msl_char_params_fast(char_id);
   const float model_scaling = (ch != NULL) ? ch->model_scaling : 1.0f;
   g_extents_table_by_char[char_id] = (MslEcbExtentsTable){
       .buf = buf,

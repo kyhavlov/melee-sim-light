@@ -17,7 +17,7 @@
 #include "stage_collision.h"
 
 static inline uint8_t state_flags_2218_allow_interrupt_attackair_action(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_AIR);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t state_flags_is_damage_action(uint16_t action_id) {
@@ -48,7 +48,7 @@ static inline uint8_t state_flags_is_damage_action(uint16_t action_id) {
 }
 
 static inline uint8_t state_flags_is_damage_fly_action(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_DAMAGE_FLY);
 }
 
 static inline uint8_t state_flags_is_down_damage_action(uint16_t action_id) {
@@ -548,7 +548,7 @@ static inline void state_flags_refresh_camera_target_from_pose(MslBatch* batch, 
     return;
   }
   batch->state.camera_target_live_pose_valid[idx] = 0u;
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (ch == NULL || ch->camera_box_radius <= 0.0f) {
     return;
   }
@@ -1604,7 +1604,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         (void)prev_action;
         f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B1;
       }
-      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
       if (action_id == (uint16_t)MSL_ACT_FALL_SPECIAL && ch != NULL &&
           !batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] &&
           state_flags_camera_below_stage_cam_bounds(batch, idx) &&

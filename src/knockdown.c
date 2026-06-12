@@ -943,7 +943,7 @@ static inline void anim_end_wait_try_enter_squat_subset(MslBatch* batch, const M
 
 static inline void enter_down_wait(MslBatch* batch, size_t idx, uint16_t wait_act) {
   if (batch->state.on_ground[idx] == 0u) {
-    const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+    const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
     // Decomp: DownBound->DownWait enters through ftCo_80097E8C. If the DownBound callback is still
     // GA_Air, it first calls ftCommon_8007D7FC, restoring grounded common state before changing to
     // DownWait. FoD transformed-platform rows can otherwise publish impossible grounded actions
@@ -1211,7 +1211,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           !damage_ground && !passive_ceil && !missfoot) {
         continue;
       }
-      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
       if (ch == NULL) {
         continue;
       }
@@ -2098,7 +2098,7 @@ static inline uint8_t down_bound_grounded_overlap_nudge_crosses_ledge(const MslB
     return 0u;
   }
 
-  const MslCharParams* self = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* self = msl_char_params_fast(batch->state.char_id[idx]);
   if (self == NULL) {
     return 0u;
   }
@@ -2131,7 +2131,7 @@ static inline uint8_t down_bound_grounded_overlap_nudge_crosses_ledge(const MslB
       continue;
     }
 
-    const MslCharParams* other = msl_char_params(batch->state.char_id[oidx]);
+    const MslCharParams* other = msl_char_params_fast(batch->state.char_id[oidx]);
     if (other == NULL) {
       continue;
     }
@@ -2678,7 +2678,7 @@ static inline void passivewall_align_entry_x(MslBatch* batch, size_t idx, uint16
   if (anim_pose_get_transn(cid, target_msid, 0u, transn) != 0) {
     transn[2] = 0.0f;
   }
-  const MslCharParams* ch = msl_char_params(cid);
+  const MslCharParams* ch = msl_char_params_fast(cid);
   const float model_scaling =
       (ch != NULL && isfinite(ch->model_scaling) && ch->model_scaling > 0.0f) ? ch->model_scaling
                                                                               : 1.0f;
@@ -2930,7 +2930,7 @@ static inline void damagefly_sample_reflect_ecb(MslEcbWorldPoints* out, const Ms
   }
   const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
   const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL && ch != NULL &&
       ch->ecb_joint_count != 0u) {
     const uint16_t msid = (uint16_t)batch->state.animation_index[idx];
@@ -3322,7 +3322,7 @@ void knockdown_try_throw_release_damage_floor_contact(MslBatch* batch, size_t bi
     return;
   }
   const MslCommonParams* c = msl_common_params();
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (c == NULL || ch == NULL) {
     return;
   }
@@ -3370,7 +3370,7 @@ void knockdown_update_post_collision(MslBatch* batch) {
       const uint8_t was_ground = batch->state.prev_on_ground[idx] ? 1u : 0u;
       const uint8_t now_ground = batch->state.on_ground[idx] ? 1u : 0u;
 
-      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
       if (ch == NULL) {
         continue;
       }

@@ -38,6 +38,11 @@ typedef struct {
 } MslMotionStateOwnerTable;
 
 static MslMotionStateOwnerTable g_table_by_char[256];
+const uint8_t* msl_motion_state_fx_special_kind_by_char[256];
+uint16_t msl_motion_state_action_count_by_char[256];
+uint32_t msl_motion_state_common_class_bits_by_action[MSL_MOTION_STATE_COMMON_ACTION_CAP];
+uint32_t msl_motion_state_common_class2_bits_by_action[MSL_MOTION_STATE_COMMON_ACTION_CAP];
+uint32_t msl_motion_state_common_class3_bits_by_action[MSL_MOTION_STATE_COMMON_ACTION_CAP];
 // 0 = not attempted, 1 = loaded ok, -1 = attempted and failed.
 static int g_load_state = 0;
 
@@ -260,15 +265,40 @@ int motion_state_owners_init(void) {
   }
   int load_failed = 0;
   for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
-    if (load_table_for_char_into(MSL_CHAR_REGISTRY[ci].char_id, MSL_CHAR_REGISTRY[ci].name,
-                                 &g_table_by_char[MSL_CHAR_REGISTRY[ci].char_id]) != 0) {
+    const uint8_t char_id = MSL_CHAR_REGISTRY[ci].char_id;
+    if (load_table_for_char_into(char_id, MSL_CHAR_REGISTRY[ci].name, &g_table_by_char[char_id]) !=
+        0) {
       load_failed = 1;
       break;
     }
+    msl_motion_state_fx_special_kind_by_char[char_id] =
+        g_table_by_char[char_id].fx_special_kind_by_action;
+    msl_motion_state_action_count_by_char[char_id] = g_table_by_char[char_id].action_count;
   }
   if (load_failed) {
     g_load_state = -1;
     return -1;
+  }
+  for (uint16_t action = 0; action < (uint16_t)MSL_MOTION_STATE_COMMON_ACTION_CAP; action++) {
+    uint32_t class_bits = UINT32_MAX;
+    uint32_t class2_bits = UINT32_MAX;
+    uint32_t class3_bits = UINT32_MAX;
+    for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
+      const uint8_t char_id = MSL_CHAR_REGISTRY[ci].char_id;
+      const MslMotionStateOwnerTable* t = &g_table_by_char[char_id];
+      if (t == NULL || action >= t->action_count) {
+        class_bits = 0u;
+        class2_bits = 0u;
+        class3_bits = 0u;
+        break;
+      }
+      class_bits &= read_u32_le(t->class_bits_by_action + (size_t)action * 4u);
+      class2_bits &= read_u32_le(t->class2_bits_by_action + (size_t)action * 4u);
+      class3_bits &= read_u32_le(t->class3_bits_by_action + (size_t)action * 4u);
+    }
+    msl_motion_state_common_class_bits_by_action[action] = class_bits;
+    msl_motion_state_common_class2_bits_by_action[action] = class2_bits;
+    msl_motion_state_common_class3_bits_by_action[action] = class3_bits;
   }
   g_load_state = 1;
   return 0;
@@ -371,11 +401,7 @@ uint32_t msl_motion_state_class3_bits(uint8_t char_id, uint16_t action_id) {
 }
 
 uint8_t msl_motion_state_fx_special_kind(uint8_t char_id, uint16_t action_id) {
-  const MslMotionStateOwnerTable* t = table_for_char(char_id);
-  if (!in_range(t, action_id)) {
-    return (uint8_t)MSL_FX_KIND_NONE;
-  }
-  return t->fx_special_kind_by_action[action_id];
+  return msl_motion_state_fx_special_kind_fast(char_id, action_id);
 }
 
 uint8_t msl_motion_state_class3_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit) {
@@ -386,30 +412,13 @@ uint8_t msl_motion_state_class3_has(uint8_t char_id, uint16_t action_id, uint32_
 }
 
 uint8_t msl_motion_state_common_class_has(uint16_t action_id, uint32_t class_bit) {
-  uint8_t all_have = 1u;
-  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
-    if (!msl_motion_state_class_has(MSL_CHAR_REGISTRY[ci].char_id, action_id, class_bit)) {
-      all_have = 0u;
-      break;
-    }
-  }
-  return all_have ? 1u : 0u;
+  return msl_motion_state_common_class_has_fast(action_id, class_bit);
 }
 
 uint8_t msl_motion_state_common_class2_has(uint16_t action_id, uint32_t class_bit) {
-  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
-    if (!msl_motion_state_class2_has(MSL_CHAR_REGISTRY[ci].char_id, action_id, class_bit)) {
-      return 0u;
-    }
-  }
-  return 1u;
+  return msl_motion_state_common_class2_has_fast(action_id, class_bit);
 }
 
 uint8_t msl_motion_state_common_class3_has(uint16_t action_id, uint32_t class_bit) {
-  for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
-    if (!msl_motion_state_class3_has(MSL_CHAR_REGISTRY[ci].char_id, action_id, class_bit)) {
-      return 0u;
-    }
-  }
-  return 1u;
+  return msl_motion_state_common_class3_has_fast(action_id, class_bit);
 }

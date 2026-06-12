@@ -755,7 +755,7 @@ static inline uint8_t msl_action_allows_fastfall(uint8_t char_id, uint16_t actio
       //   ftFx_SpecialAirNStart_Phys,ftFx_SpecialAirNLoop_Phys,ftFx_SpecialAirNEnd_Phys}
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Phys
       // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c
-      const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+      const uint8_t fx_kind = msl_motion_state_fx_special_kind_fast(char_id, action_id);
       return (uint8_t)((fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_START &&
                         fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END) ||
                        fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL);

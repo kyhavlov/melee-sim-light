@@ -260,10 +260,10 @@ static inline uint8_t physics_landing_from_common_damage_initializes_ground_kb_s
   //   ftCo_Landing_Enter_Basic,ftCo_Landing_Enter}
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007CCE8}
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  return (uint8_t)((msl_motion_state_common_class_has(batch->state.prev_action_id[idx],
-                                                      MSL_MS_CLASS_DAMAGE_COMMON) != 0u ||
-                    msl_motion_state_common_class_has(batch->state.seed_prev_action_id[idx],
-                                                      MSL_MS_CLASS_DAMAGE_COMMON) != 0u)
+  return (uint8_t)((msl_motion_state_common_class_has_fast(batch->state.prev_action_id[idx],
+                                                           MSL_MS_CLASS_DAMAGE_COMMON) != 0u ||
+                    msl_motion_state_common_class_has_fast(batch->state.seed_prev_action_id[idx],
+                                                           MSL_MS_CLASS_DAMAGE_COMMON) != 0u)
                        ? 1u
                        : 0u);
 }
@@ -590,7 +590,7 @@ uint8_t physics_apply_attackdash_entry_phys_now(MslBatch* batch, size_t idx, flo
       batch->state.on_ground[idx] == 0u) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (ch == NULL) {
     return 0u;
   }
@@ -766,7 +766,7 @@ static inline uint8_t physics_action_is_damage_fly(uint16_t action_id) {
   // - ftCo_DamageFly_* for DamageFlyHi/N/Lw/Top/Roll
   // - ftCo_FlyReflect_* for wall/ceiling reflect follow-up states
   // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_DAMAGE_FLY);
 }
 
 static inline uint8_t physics_action_is_common_damage(uint16_t action_id) {
@@ -775,11 +775,11 @@ static inline uint8_t physics_action_is_common_damage(uint16_t action_id) {
   // - ftCo_DownDamage_* for DownDamageU/D, whose Phys delegates to common Damage Phys
   // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Phys
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_COMMON);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_DAMAGE_COMMON);
 }
 
 static inline uint8_t physics_action_is_grounded_common_damage_phys(uint16_t action_id) {
-  if (msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_COMMON) == 0u) {
+  if (msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_DAMAGE_COMMON) == 0u) {
     return 0u;
   }
   // Grounded ftCo_Damage_Phys uses ft_80084F3C for the common DamageHi/N/Lw/Air family.
@@ -1037,7 +1037,7 @@ static inline uint8_t physics_floor_line_contains_or_connects_to_nudged_x(
 }
 
 static inline uint8_t physics_action_uses_generated_b2dc_edge_snap_callback(uint16_t action_id) {
-  if (msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_FT800827A0_EDGE_SNAP_COLL)) {
+  if (msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_FT800827A0_EDGE_SNAP_COLL)) {
     // Generated MSLMSO01 owner for grounded callbacks that route to `ft_800827A0`, directly or
     // through wrappers such as `ft_80084104` / `ft_800841B8`. Common player nudge runs before
     // Fighter_procUpdate and the Coll callback, so these actions may consume an outward x450 nudge
@@ -1051,7 +1051,7 @@ static inline uint8_t physics_action_uses_generated_b2dc_edge_snap_callback(uint
 }
 
 static inline uint8_t physics_action_uses_ft80084280_ottotto_edge_callback(uint16_t action_id) {
-  if (msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR_COLL)) {
+  if (msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_LANDING_AIR_COLL)) {
     return 1u;
   }
   switch (action_id) {
@@ -1115,7 +1115,7 @@ static inline uint8_t physics_action_uses_player_nudge_ft80083f88_ground_to_air_
                 action_id == (uint16_t)MSL_ACT_DOWN_WAIT_D ||
                 action_id == (uint16_t)MSL_ACT_DOWN_STAND_U ||
                 action_id == (uint16_t)MSL_ACT_DOWN_STAND_D);
-  return (uint8_t)(audited_action && msl_motion_state_common_class_has(
+  return (uint8_t)(audited_action && msl_motion_state_common_class_has_fast(
                                          action_id, MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL));
 }
 
@@ -1334,7 +1334,7 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
       continue;
     }
 
-    const MslCharParams* self = msl_char_params(batch->state.char_id[idx]);
+    const MslCharParams* self = msl_char_params_fast(batch->state.char_id[idx]);
     if (self == NULL) {
       continue;
     }
@@ -1404,7 +1404,7 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
           continue;
         }
 
-        const MslCharParams* other = msl_char_params(batch->state.char_id[oidx]);
+        const MslCharParams* other = msl_char_params_fast(batch->state.char_id[oidx]);
         if (other == NULL) {
           continue;
         }
@@ -1599,7 +1599,7 @@ static inline void physics_compute_guardsetoff_turnover_player_nudge(
       continue;
     }
 
-    const MslCharParams* self = msl_char_params(batch->state.char_id[idx]);
+    const MslCharParams* self = msl_char_params_fast(batch->state.char_id[idx]);
     if (self == NULL) {
       continue;
     }
@@ -1620,7 +1620,7 @@ static inline void physics_compute_guardsetoff_turnover_player_nudge(
         continue;
       }
 
-      const MslCharParams* other = msl_char_params(batch->state.char_id[oidx]);
+      const MslCharParams* other = msl_char_params_fast(batch->state.char_id[oidx]);
       if (other == NULL) {
         continue;
       }
@@ -1699,7 +1699,7 @@ void physics_apply_attackdash_downbound_overlap_nudge_post_collision(MslBatch* b
         continue;
       }
 
-      const MslCharParams* self = msl_char_params(batch->state.char_id[idx]);
+      const MslCharParams* self = msl_char_params_fast(batch->state.char_id[idx]);
       if (self == NULL) {
         continue;
       }
@@ -1729,7 +1729,7 @@ void physics_apply_attackdash_downbound_overlap_nudge_post_collision(MslBatch* b
           continue;
         }
 
-        const MslCharParams* other = msl_char_params(batch->state.char_id[oidx]);
+        const MslCharParams* other = msl_char_params_fast(batch->state.char_id[oidx]);
         if (other == NULL) {
           continue;
         }
@@ -2083,7 +2083,7 @@ void physics_integrate(MslBatch* batch) {
                 batch->state.speed_air_x_self[idx] *= c->escapeair_decay;
                 batch->state.speed_y_self[idx] *= c->escapeair_decay;
               } else {
-                const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+                const MslCharParams* phys = msl_char_params_fast(batch->state.char_id[idx]);
                 if (phys != NULL) {
                   const float stick_x = apply_deadzone(
                       stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
@@ -2114,7 +2114,7 @@ void physics_integrate(MslBatch* batch) {
               // Owner identity from the extracted MotionState table (the row whose anim
               // callback is ftFx_SpecialHiHoldAir_Anim), not a raw action-id + char-family
               // predicate (see motion_state_owners.h MslMsFxSpecialKind).
-              const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+              const MslCharParams* phys = msl_char_params_fast(batch->state.char_id[idx]);
               if (phys != NULL) {
                 physics_apply_specialhi_hold_air(phys, action_frame,
                                                  &batch->state.speed_air_x_self[idx],
@@ -2127,7 +2127,7 @@ void physics_integrate(MslBatch* batch) {
               //   runs PassiveWall_Phys: fastfall/fall + pure aerial friction (target_vel=0).
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_Phys
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_Anim
-              const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+              const MslCharParams* phys = msl_char_params_fast(batch->state.char_id[idx]);
               if (phys != NULL) {
                 const float stick_y = apply_deadzone(
                     stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
@@ -2146,17 +2146,17 @@ void physics_integrate(MslBatch* batch) {
                     batch->state.speed_air_x_self[idx], phys->aerial_friction);
               }
             } else if (physics_shine_air_applies_fall_this_frame(
-                           batch->state.char_id[idx], msl_char_params(batch->state.char_id[idx]), c,
-                           action_id, batch->state.prev_action_id[idx],
-                           batch->state.seed_prev_action_id[idx], action_frame,
-                           batch->state.speed_y_self[idx])) {
+                           batch->state.char_id[idx],
+                           msl_char_params_fast(batch->state.char_id[idx]), c, action_id,
+                           batch->state.prev_action_id[idx], batch->state.seed_prev_action_id[idx],
+                           action_frame, batch->state.speed_y_self[idx])) {
               // Aerial Reflector Phys: after the reflector gravityDelay expires, the callback uses
               // ftCommon_Fall with ftFox_DatAttrs.xAC rather than common character gravity.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
               //   ftFx_SpecialAirLwStart_Phys,ftFx_SpecialAirLwLoop_Phys,
               //   ftFx_SpecialAirLwHit_Phys,ftFx_SpecialAirLwTurn_Phys,
               //   ftFx_SpecialAirLwEnd_Phys}
-              physics_apply_shine_air_fall(msl_char_params(batch->state.char_id[idx]),
+              physics_apply_shine_air_fall(msl_char_params_fast(batch->state.char_id[idx]),
                                            &batch->state.speed_y_self[idx]);
             } else if (damage_iasa_lockout || shield_break_fly_uses_air_friction) {
               // DamageFly/DamageFlyRoll/common Damage x221C_b6 path (`ft_80084EEC`): apply
@@ -2175,7 +2175,7 @@ void physics_integrate(MslBatch* batch) {
               // }
               // refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFly.c::ftCo_ShieldBreakFly_Phys
-              const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+              const MslCharParams* phys = msl_char_params_fast(batch->state.char_id[idx]);
               if (phys != NULL) {
                 float next_vy = vy_self_pre - phys->grav;
                 if (next_vy < -phys->terminal_vel) {
@@ -2192,7 +2192,7 @@ void physics_integrate(MslBatch* batch) {
                        physics_damagefall_entry_uses_pre_integration_phys(
                            action_id, batch->state.prev_action_id[idx], action_frame) ||
                        damage_uses_common_air_helper) {
-              const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+              const MslCharParams* phys = msl_char_params_fast(batch->state.char_id[idx]);
               if (phys != NULL) {
                 const uint8_t allow_fastfall =
                     (msl_action_allows_fastfall(batch->state.char_id[idx], action_id) ||
@@ -2245,7 +2245,7 @@ void physics_integrate(MslBatch* batch) {
             // - Fox/Falco Shine aerial states are state-specific: `ftCommon_8007CF58` (not drift
             //   from stick), still via x74_anim_vel.x.
             //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwLoop_Phys
-            const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+            const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
             if (ch != NULL) {
               const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
                                                    c->lstick_deadzone_x);
@@ -2282,7 +2282,7 @@ void physics_integrate(MslBatch* batch) {
         // }
         if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
              (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_START)) {
-          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
           if (ch != NULL) {
             batch->state.speed_air_x_self[idx] = air_apply_friction_step(
                 batch->state.speed_air_x_self[idx], ch->illusion_air_friction_start);
@@ -2303,7 +2303,7 @@ void physics_integrate(MslBatch* batch) {
         // refs/melee/src/melee/ft/ft_081B.c::ft_80085134
         if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
              (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S)) {
-          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
           if (ch != NULL) {
             float dxyz[3];
             if (physics_action_anim_uses_root_motion(batch->state.char_id[idx],
@@ -2326,7 +2326,7 @@ void physics_integrate(MslBatch* batch) {
           // data/characters/{fox,falco}.json::{
           //   illusion_air_friction,illusion_gravity_delay_end_frames,illusion_fall_accel_end,terminal_vel
           // }
-          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
           if (ch != NULL) {
             batch->state.speed_air_x_self[idx] = air_apply_friction_step(
                 batch->state.speed_air_x_self[idx], ch->illusion_air_friction);
@@ -2344,7 +2344,7 @@ void physics_integrate(MslBatch* batch) {
           }
         } else if ((msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id) ==
                     (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI)) {
-          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
           if (ch != NULL) {
             physics_apply_specialhi_air_reverse_accel(
                 batch, idx, ch, batch->state.action_frame[idx], &batch->state.speed_air_x_self[idx],
@@ -2361,7 +2361,7 @@ void physics_integrate(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiBound_Phys
           // refs/melee/src/melee/ft/ft_081B.c::ft_800851C0
           // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58
-          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
           if (ch != NULL) {
             float dxyz[3];
             if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
@@ -2419,7 +2419,7 @@ void physics_integrate(MslBatch* batch) {
         // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800E0060
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Phys
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Phys
-        const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+        const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
         if (ch != NULL) {
           float gr_vel = batch->state.speed_ground_x_self[idx];
           float grounded_self_vel_for_frame = gr_vel;
@@ -2862,7 +2862,7 @@ void physics_integrate(MslBatch* batch) {
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
         // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
         // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007CE4C,ftCommon_8007E2A4}
-        const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+        const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
         float shield_kb = batch->state.attacker_shield_ground_kb_vel[idx];
         if (ch != NULL && shield_kb != 0.0f) {
           const float friction = physics_ground_friction_mul_for_floor(batch, bi, idx) *
@@ -2890,8 +2890,8 @@ void physics_integrate(MslBatch* batch) {
         batch->state.attacker_shield_ground_kb_vel[idx] = 0.0f;
       }
 
-      physics_apply_knockback_decay(batch, bi, idx, msl_char_params(batch->state.char_id[idx]), c,
-                                    action_id, on_ground);
+      physics_apply_knockback_decay(batch, bi, idx, msl_char_params_fast(batch->state.char_id[idx]),
+                                    c, action_id, on_ground);
 
       const float vy_self = batch->state.speed_y_self[idx];
       const float vx_kb = batch->state.speed_x_attack[idx];
@@ -2920,7 +2920,7 @@ void physics_integrate(MslBatch* batch) {
           physics_action_use_post_integration_common_air_gravity(batch, idx, action_id) &&
           !physics_damagefall_entry_uses_pre_integration_phys(
               action_id, batch->state.prev_action_id[idx], action_frame)) {
-        const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+        const MslCharParams* phys = msl_char_params_fast(batch->state.char_id[idx]);
         if (phys != NULL) {
           const uint8_t allow_fastfall =
               msl_action_allows_fastfall(batch->state.char_id[idx], action_id);

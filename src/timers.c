@@ -108,7 +108,8 @@ static inline uint8_t timers_source_clear_active_damagefly_terminal_parks_owner(
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-  return msl_motion_state_common_class_has(batch->state.action_id[idx], MSL_MS_CLASS_DAMAGE_FLY);
+  return msl_motion_state_common_class_has_fast(batch->state.action_id[idx],
+                                                MSL_MS_CLASS_DAMAGE_FLY);
 }
 
 void timers_update(MslBatch* batch) {
@@ -247,7 +248,7 @@ static inline uint8_t damage_post_hitlag_cb_owner_action(uint16_t a) {
 }
 
 static inline uint8_t damage_post_hitlag_cb_damagefly_action(uint16_t a) {
-  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FLY);
+  return msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_DAMAGE_FLY);
 }
 
 static inline uint8_t timers_first_active_sdi_allows_radius_crossing(const MslBatch* batch, int bi,

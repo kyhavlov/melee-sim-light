@@ -365,7 +365,7 @@ static inline uint8_t specialhi_right_wall_push_only_envelope_suppresses(
       batch->state.seed_prev_action_id[idx] != action_id) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params(char_id);
+  const MslCharParams* ch = msl_char_params_fast(char_id);
   if (ch == NULL || ch->firefox_bound_delay_frames == 0u ||
       batch->state.seed_prev_action_frame[idx] < (int16_t)ch->firefox_bound_delay_frames) {
     return 0u;
@@ -458,7 +458,7 @@ static inline uint8_t specialhi_left_wall_endpoint_envelope_stale_from_callback_
 }
 
 static inline uint8_t mpcoll_damagefly_wall_asdi_latch_action(uint16_t action_id) {
-  return msl_motion_state_common_class3_has(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
+  return msl_motion_state_common_class3_has_fast(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
 }
 
 static inline uint8_t mpcoll_wall_asdi_producer_action(uint8_t char_id, uint16_t action_id) {
@@ -529,7 +529,7 @@ static inline uint8_t mpcoll_action_uses_common_air_walljump_callback(uint16_t a
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
   // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
   // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL);
 }
 
 static inline uint8_t mpcoll_action_uses_phase4_ft80081d0c_air_collision(uint8_t char_id,
@@ -678,7 +678,7 @@ static inline uint8_t try_sample_jobj_ecb_points(MslEcbWorldPoints* out, const M
     return 0u;
   }
 
-  const MslCharParams* ch = msl_char_params(char_id);
+  const MslCharParams* ch = msl_char_params_fast(char_id);
   if (ch == NULL || ch->ecb_joint_count == 0u) {
     return 0u;
   }

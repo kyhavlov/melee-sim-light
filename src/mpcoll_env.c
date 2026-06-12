@@ -99,7 +99,7 @@ static inline uint8_t mpcoll_env_specialhi_try_sample_jobj_ecb_points(
     return 0u;
   }
 
-  const MslCharParams* ch = msl_char_params(char_id);
+  const MslCharParams* ch = msl_char_params_fast(char_id);
   if (ch == NULL || ch->ecb_joint_count == 0u) {
     return 0u;
   }
@@ -603,7 +603,7 @@ static inline uint32_t ledge_grab_flags_for_fighter(
     return 0u;
   }
 
-  const MslCharParams* ch = msl_char_params(char_id);
+  const MslCharParams* ch = msl_char_params_fast(char_id);
   if (ch == NULL) {
     return 0u;
   }

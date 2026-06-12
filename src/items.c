@@ -1429,8 +1429,8 @@ static inline int32_t item_throw_anim_rate_fp_from_chars(uint8_t owner_char_id,
   }
   float throw_anim_speed = 1.0f;
   const MslCommonParams* c = msl_common_params();
-  const MslCharParams* owner_ch = msl_char_params(owner_char_id);
-  const MslCharParams* victim_ch = msl_char_params(victim_char_id);
+  const MslCharParams* owner_ch = msl_char_params_fast(owner_char_id);
+  const MslCharParams* victim_ch = msl_char_params_fast(victim_char_id);
   const uint8_t weight_independent =
       (owner_ch != NULL)
           ? ((owner_ch->weight_independent_throws_mask & (uint8_t)(1u << throw_index)) ? 1u : 0u)
@@ -1719,7 +1719,7 @@ static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
   }
   const size_t ii = msl_idx_item(bi, slot);
   item_slot_clear(batch, ii);
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
   if (chp == NULL) {
     return;
   }
@@ -2379,7 +2379,7 @@ static inline uint8_t item_laser_body_lbcoll_matrix_radius_overlap(
     *out_evaluated = 1u;
   }
 
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
   const float model_scaling =
       (chp != NULL && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
           ? chp->model_scaling
@@ -2590,8 +2590,9 @@ static inline uint8_t item_fresh_guardon_locomotion_shielddesc_owner(const MslBa
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80092450}
   // refs/melee/src/melee/it/itcoll.c::it_8027137C
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
-  return msl_motion_state_common_class_has(prev, MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA) ? 1u
-                                                                                             : 0u;
+  return msl_motion_state_common_class_has_fast(prev, MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA)
+             ? 1u
+             : 0u;
 }
 
 static inline float item_guard_shield_radius_from_state(const MslBatch* batch,
@@ -2600,7 +2601,7 @@ static inline float item_guard_shield_radius_from_state(const MslBatch* batch,
   if (batch == NULL || common == NULL || !(common->start_shield_health > 0.0f)) {
     return 0.0f;
   }
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[d_idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[d_idx]);
   if (ch == NULL || !(ch->initial_shield_size > 0.0f)) {
     return 0.0f;
   }
@@ -2685,7 +2686,7 @@ static inline float item_guard_reflect_entry_pose_radius(const MslBatch* batch,
       item_clamp01(batch->state.shield_hp[d_idx] / common->start_shield_health);
   const float entry_scale = ((1.0f - common->shield_size_min_scale) * (entry_hp_ratio * entry_ls)) +
                             common->shield_size_min_scale;
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[d_idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[d_idx]);
   const float init =
       (ch != NULL && ch->initial_shield_size > 0.0f) ? ch->initial_shield_size : 0.0f;
   return common->powershield_reflect_size * entry_scale * init *
@@ -3146,7 +3147,7 @@ static inline uint8_t item_try_guard_fresh_shield_center(const MslBatch* batch, 
     return 0u;
   }
 
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[d_idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[d_idx]);
   const float model_scaling =
       (ch != NULL && isfinite(ch->model_scaling) && ch->model_scaling > 0.0f) ? ch->model_scaling
                                                                               : 1.0f;
@@ -3271,7 +3272,7 @@ static inline uint8_t item_swept_sphere_capsule_intersects_fighter_pose(
                                          m) != 0) {
     return 0u;
   }
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
   const float model_scaling =
       (chp != NULL && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
           ? chp->model_scaling
@@ -3647,7 +3648,7 @@ static inline uint8_t item_guard_shield_bone_center_for_msid(const MslBatch* bat
   if (batch == NULL || out_x == NULL || out_y == NULL || out_z == NULL) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (ch == NULL) {
     return 0u;
   }
@@ -3778,7 +3779,7 @@ static inline uint8_t item_guard_reflect_bone_y(const MslBatch* batch, size_t id
   if (batch == NULL || out_y == NULL) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (ch == NULL) {
     return 0u;
   }
@@ -5135,7 +5136,7 @@ static inline uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii,
 
   const float rx = batch->state.reflector_x[reflector_idx];
   const float ry = batch->state.reflector_y[reflector_idx];
-  const MslCharParams* rch = msl_char_params(batch->state.char_id[reflector_idx]);
+  const MslCharParams* rch = msl_char_params_fast(batch->state.char_id[reflector_idx]);
   if (!isfinite(rx) || !isfinite(ry) || rch == NULL) {
     return 0u;
   }
@@ -5255,7 +5256,7 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
     }
   }
   const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
 
   // Spawn point: model lb_8000B1CC(bone_joint, offset, out) with source joint id plus extracted
   // SSANIM01 pose matrices.
@@ -5624,7 +5625,7 @@ static inline uint8_t throwb_startup_laser_late_owner_damagefly_phys_delta(
   }
 
   const MslCommonParams* c = msl_common_params();
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[v_idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[v_idx]);
   if (c == NULL || ch == NULL) {
     return 0u;
   }
@@ -5877,7 +5878,7 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
       continue;
     }
     const size_t o_idx = msl_idx_player(bi, owner);
-    const MslCharParams* chp = msl_char_params(batch->state.char_id[o_idx]);
+    const MslCharParams* chp = msl_char_params_fast(batch->state.char_id[o_idx]);
     const uint8_t owner_motion_active = illusion_owner_motion_is_active(batch, o_idx);
     if (!illusion_item_anim_step(batch, ii, chp, owner_motion_active)) {
       continue;
@@ -6363,7 +6364,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     {
       const size_t o2_idx = msl_idx_player(bi, owner);
       const uint8_t ocid = batch->state.char_id[o2_idx];
-      const MslCharParams* chp = msl_char_params(ocid);
+      const MslCharParams* chp = msl_char_params_fast(ocid);
       const float cap = (chp && chp->laser_scale_max > 0.0f) ? chp->laser_scale_max : 1.0f;
 
       const float speed = sqrtf(vx * vx + vy * vy);
@@ -7031,7 +7032,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         const float laser_offset_scale = laser_collision_offset_scale(
             lp, laser_state, laser_scale_z, MSL_LASER_COLLISION_SPACE_SHIELD, 0u,
             collision_time_fresh_guardon_shielddesc ? 0u : shield_cap_enabled);
-        const MslCharParams* shield_owner_params = msl_char_params(batch->state.char_id[d_idx]);
+        const MslCharParams* shield_owner_params =
+            msl_char_params_fast(batch->state.char_id[d_idx]);
         const float shield_owner_model_scale =
             (shield_owner_params != NULL && isfinite(shield_owner_params->model_scaling) &&
              shield_owner_params->model_scaling > 0.0f)

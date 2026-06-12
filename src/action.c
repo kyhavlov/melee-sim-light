@@ -328,7 +328,7 @@ static inline void rebound_wait_restore_ground_from_carried_floor(MslBatch* batc
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_Rebound_Anim
   // refs/melee/src/melee/ft/ft_0892.c::ft_8008A348
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   action_apply_ftcommon_8007d7fc_air_to_ground(batch, ch, idx, 1u);
 }
 
@@ -785,8 +785,8 @@ static inline uint8_t dash_iasa_try_enter_opposite_checkinput_turn_before_guard(
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   msl_anim_timebase_tick_once(batch, idx);
-  dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, msl_char_params(batch->state.char_id[idx]),
-                                                idx);
+  dash_iasa_apply_root_motion_exit_gr_vel_clamp(
+      batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
   dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
   return 1u;
 }
@@ -1292,7 +1292,7 @@ static inline void rebound_update_anim_callback_pre_input(MslBatch* batch, size_
     return;
   }
   const MslCommonParams* c = msl_common_params();
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   const uint16_t a0 = batch->state.action_id[idx];
   if (a0 != (uint16_t)MSL_ACT_REBOUND_STOP && a0 != (uint16_t)MSL_ACT_REBOUND) {
     return;
@@ -1579,8 +1579,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
               : 0u;
       const uint8_t guardon_frame_start_x672_seed =
           (guardon_entry_x0_nonshield_seed != 0u &&
-           msl_motion_state_common_class_has(batch->state.seed_prev_action_id[idx],
-                                             MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA))
+           msl_motion_state_common_class_has_fast(batch->state.seed_prev_action_id[idx],
+                                                  MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA))
               ? 1u
               : 0u;
       const uint16_t guard_x0 = (batch->state.action_frame[idx] < 0)
@@ -1703,7 +1703,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
               apply_shield_hold_drain(batch, c, idx, guard_drain_trig, guard_jump_pending);
         }
         if (shield_break_pending) {
-          enter_shield_break_fly(batch, msl_char_params(batch->state.char_id[idx]), idx);
+          enter_shield_break_fly(batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
           return;
         }
       }
@@ -2008,8 +2008,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       batch->state.anim_frame_f32[idx] <= c->dash_iasa_x44 &&
       batch->state.anim_frame_f32[idx] <= c->dash_iasa_x48) {
     enter_escape_roll(batch, idx, (uint16_t)MSL_ACT_ESCAPE_F);
-    dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, msl_char_params(batch->state.char_id[idx]),
-                                                  idx);
+    dash_iasa_apply_root_motion_exit_gr_vel_clamp(
+        batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
     dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
     return;
   }
@@ -2041,7 +2041,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     enter_guard_reflect_from_locomotion(batch, c, idx);
     if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0, a0_anim_frame)) {
       dash_iasa_apply_root_motion_exit_gr_vel_clamp(
-          batch, msl_char_params(batch->state.char_id[idx]), idx);
+          batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
       dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
       const float frame_step = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
       batch->state.guard_reflect_entry_dash_terminal_scalar[idx] =
@@ -2061,7 +2061,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     batch->state.guard_entry_via_dash_91ad8[idx] = entered_via_dash_91ad8;
     if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0, a0_anim_frame)) {
       dash_iasa_apply_root_motion_exit_gr_vel_clamp(
-          batch, msl_char_params(batch->state.char_id[idx]), idx);
+          batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
       dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
     }
     return;
@@ -2149,7 +2149,7 @@ void action_update_anim_callback_pre_input_fighter(const MslFighterCallbackConte
       uint8_t air_state = 0xFFu;
       if (move_tables_airborne_state_event_at_frame(batch->state.char_id[idx], msid, frame,
                                                     &air_state) != 0u) {
-        const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+        const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
         const uint8_t max_jumps = (ch != NULL) ? ch->max_jumps : batch->state.jumps_left[idx];
         // Movescript opcode 25 (ftAction_80071998) dispatch:
         // state=0 -> ftCommon_8007D7FC (air->ground common helper)

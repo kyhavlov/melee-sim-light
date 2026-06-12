@@ -275,7 +275,7 @@ static inline uint8_t reseed_action_uses_basic_fall_ledge_cooldown_tick(uint16_t
 static inline uint8_t reseed_action_is_attackair(uint16_t action) {
   // Generated from MotionState callback symbols ftCo_AttackAir_* for the five common aerial
   // attacks. Exhaustive Fox/Falco equivalence is covered by tests/test_motion_state_owners_table.py.
-  return msl_motion_state_common_class_has(action, MSL_MS_CLASS_ATTACK_AIR);
+  return msl_motion_state_common_class_has_fast(action, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t reseed_damage_allow_sdi_source_action(uint16_t action) {
@@ -535,7 +535,7 @@ static inline uint8_t landing_fallspecial_firefox_rate_seed_owns_allow_interrupt
       seed->landing_fallspecial_allow_interrupt[p] != 0u) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params(seed->char_id[p]);
+  const MslCharParams* ch = msl_char_params_fast(seed->char_id[p]);
   if (ch == NULL || ch->firefox_landing_lag_frames == 0u) {
     return 0u;
   }
@@ -643,8 +643,8 @@ static inline int32_t throw_anim_rate_fp_from_pair(const MslBatch* batch, size_t
   }
   float throw_anim_speed = 1.0f;
   const MslCommonParams* c = msl_common_params();
-  const MslCharParams* owner_ch = msl_char_params(batch->state.char_id[owner_idx]);
-  const MslCharParams* victim_ch = msl_char_params(batch->state.char_id[victim_idx]);
+  const MslCharParams* owner_ch = msl_char_params_fast(batch->state.char_id[owner_idx]);
+  const MslCharParams* victim_ch = msl_char_params_fast(batch->state.char_id[victim_idx]);
   const uint8_t weight_independent =
       (owner_ch != NULL)
           ? ((owner_ch->weight_independent_throws_mask & (uint8_t)(1u << throw_index)) ? 1u : 0u)
@@ -1319,7 +1319,7 @@ static inline uint8_t msl_seed_has_wait_anim_variant_replay_rng_owner(const MslS
     if (seed->action_id[p] != (uint16_t)MSL_ACT_WAIT || seed->animation_index[p] > 0xFFFFu) {
       continue;
     }
-    const MslCharParams* ch = msl_char_params(seed->char_id[p]);
+    const MslCharParams* ch = msl_char_params_fast(seed->char_id[p]);
     if (ch == NULL || ch->wait_anim_choice_count == 0u) {
       continue;
     }
@@ -1755,7 +1755,7 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
         return ENOENT;
       }
 
-      const MslCharParams* ch = msl_char_params(pc->char_id);
+      const MslCharParams* ch = msl_char_params_fast(pc->char_id);
       if (ch == NULL) {
         return ENOENT;
       }
@@ -2510,7 +2510,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       {
         const MslCommonParams* common = msl_common_params();
         float landing_lag = (common != NULL) ? common->landing_fall_special_lag_frames : 0.0f;
-        const MslCharParams* phys = msl_char_params(seed->char_id[p]);
+        const MslCharParams* phys = msl_char_params_fast(seed->char_id[p]);
         const uint16_t src = seed->seed_prev_action_id[p];
         if (phys != NULL) {
           if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_MARTH &&
@@ -2570,7 +2570,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         if (a == (uint16_t)MSL_ACT_FALL_SPECIAL || a == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
             a == (uint16_t)MSL_ACT_FALL_SPECIAL_B) {
           if (!batch->state.fall_fast[idx]) {
-            const MslCharParams* phys = msl_char_params(seed->char_id[p]);
+            const MslCharParams* phys = msl_char_params_fast(seed->char_id[p]);
             if (phys != NULL) {
               if (seed->speed_y_self[p] < -phys->terminal_vel) {
                 batch->state.fallspecial_xc[idx] = 0;
@@ -2671,7 +2671,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.damage_allow_sdi[idx] =
           (seed->hitlag[p] != 0u && reseed_damage_allow_sdi_source_action(seed->action_id[p]) &&
            (((seed_x221a & (uint8_t)MSL_STATE_FLAG_221A_B3) != 0u) ||
-            msl_motion_state_common_class_has(seed->action_id[p], MSL_MS_CLASS_DAMAGE_FLY) ||
+            msl_motion_state_common_class_has_fast(seed->action_id[p], MSL_MS_CLASS_DAMAGE_FLY) ||
             seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
             seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_DAMAGE_D || phantom_damage > 0.0f))
               ? 1u
@@ -3905,11 +3905,11 @@ static uint8_t msl_replay_fod_sparse_velocity_has_floor_callback_owner(const Msl
   for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
     const uint16_t action = seed->action_id[p];
     const uint8_t landing_entry =
-        (uint8_t)((msl_motion_state_common_class_has(action, MSL_MS_CLASS_LANDING_COLL) ||
-                   msl_motion_state_common_class_has(action, MSL_MS_CLASS_LANDING_AIR_COLL)) &&
+        (uint8_t)((msl_motion_state_common_class_has_fast(action, MSL_MS_CLASS_LANDING_COLL) ||
+                   msl_motion_state_common_class_has_fast(action, MSL_MS_CLASS_LANDING_AIR_COLL)) &&
                   seed->seed_prev_action_id[p] != action);
     const uint8_t damage_air =
-        (uint8_t)(msl_motion_state_common_class_has(action, MSL_MS_CLASS_DAMAGE_AIR) &&
+        (uint8_t)(msl_motion_state_common_class_has_fast(action, MSL_MS_CLASS_DAMAGE_AIR) &&
                   seed->hitlag[p] == 0u && seed->hitstun[p] != 0u);
     if (landing_entry == 0u && damage_air == 0u) {
       continue;
@@ -5175,7 +5175,7 @@ static uint8_t debug_sample_hitbox_center_proxy(const MslBatch* batch, size_t id
   const float pos_y = batch->state.pos_y[idx];
   const float pos_z = batch->state.pos_z[idx];
   const float scale_y = batch->state.fighter_scale_y[idx];
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
   const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                   ? chp->model_scaling
                                   : 1.0f;
@@ -6273,7 +6273,7 @@ int msl_batch_debug_shield_display_bubbles_world(const MslBatch* batch, int batc
                 : tv.guard_on_x20_xyz[2] + mag * (tv.xyz[f_i + 2] - tv.guard_on_x20_xyz[2]);
 
     const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-    const MslCharParams* ca = msl_char_params(batch->state.char_id[idx]);
+    const MslCharParams* ca = msl_char_params_fast(batch->state.char_id[idx]);
     const float model_scaling =
         (ca != NULL && isfinite(ca->model_scaling) && ca->model_scaling > 0.0f) ? ca->model_scaling
                                                                                 : 1.0f;

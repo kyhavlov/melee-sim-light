@@ -62,7 +62,7 @@ void reflector_bubbles_refresh(MslBatch* batch) {
         continue;
       }
 
-      const MslCharParams* ch = msl_char_params(cid);
+      const MslCharParams* ch = msl_char_params_fast(cid);
       if (ch == NULL) {
         continue;
       }

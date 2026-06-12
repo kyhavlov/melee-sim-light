@@ -102,7 +102,7 @@ void shields_refresh_guard_tilt_body_owner(MslBatch* batch) {
         continue;
       }
 
-      const MslCharParams* ca = msl_char_params(batch->state.char_id[idx]);
+      const MslCharParams* ca = msl_char_params_fast(batch->state.char_id[idx]);
       MslShieldTiltTableView tv;
       if (ca == NULL || msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) != 0 ||
           tv.xyz == NULL || tv.frame_count == 0u) {
@@ -234,7 +234,7 @@ void shields_refresh(MslBatch* batch) {
       if (stocks != 0 &&
           msl_guard_lifecycle_action_has_shield_callback(batch->state.action_id[idx]) &&
           batch->state.shield_hp[idx] > 0.0f && c->start_shield_health > 0.0f) {
-        const MslCharParams* ca = msl_char_params(batch->state.char_id[idx]);
+        const MslCharParams* ca = msl_char_params_fast(batch->state.char_id[idx]);
         if (ca != NULL) {
           const float scale_y = batch->state.fighter_scale_y[idx];
 

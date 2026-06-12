@@ -162,8 +162,8 @@ static inline float anim_timebase_throw_rate_f32_from_pair(uint8_t owner_char_id
     return 0.0f;
   }
   const MslCommonParams* c = msl_common_params();
-  const MslCharParams* owner_ch = msl_char_params(owner_char_id);
-  const MslCharParams* victim_ch = msl_char_params(victim_char_id);
+  const MslCharParams* owner_ch = msl_char_params_fast(owner_char_id);
+  const MslCharParams* victim_ch = msl_char_params_fast(victim_char_id);
   if (owner_ch == NULL || victim_ch == NULL || c == NULL) {
     return 0.0f;
   }
@@ -527,7 +527,7 @@ static inline uint8_t anim_timebase_is_attackair(uint16_t a) {
   // Generated from decomp MotionState callback symbols ftCo_AttackAir_* for the five common
   // aerial attacks.
   // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
-  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_ATTACK_AIR);
+  return msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t anim_timebase_is_walk(uint16_t a) {
@@ -713,7 +713,7 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // Source of truth for the per-character scaling:
       // - ISO-extracted `data/characters/{fox,falco}.json` `run_animation_scaling`.
       const int16_t action_frame_pre = batch->state.action_frame[idx];
-      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
 
       // PassiveWall / PassiveWallJump startup hold:
       // - ftCo_800C1E64 seeds `fp->mv.co.passivewall.timer = p_ftCommonData->x760`.

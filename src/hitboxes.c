@@ -375,7 +375,7 @@ static inline uint8_t hitboxes_seed_bridge_is_attackair_owner(uint16_t action_id
   // class is backed by MotionState callback symbols ftCo_AttackAir_*.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008A5C,lbColl_8000ACFC}
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_AIR);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t hitboxes_seed_bridge_is_attackair_guard_shield_reentry_owner(
@@ -607,8 +607,8 @@ static inline uint8_t hitboxes_seed_reconstruct_create_edge_powershield_dense_ap
     return 0u;
   }
   const size_t a_idx = msl_idx_player(bi, attacker);
-  if (!msl_motion_state_common_class_has(batch->state.action_id[a_idx],
-                                         MSL_MS_CLASS_GROUNDED_ATTACK) ||
+  if (!msl_motion_state_common_class_has_fast(batch->state.action_id[a_idx],
+                                              MSL_MS_CLASS_GROUNDED_ATTACK) ||
       batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u) {
     return 0u;
   }
@@ -1065,7 +1065,7 @@ static inline uint8_t hitboxes_event_world_capsule(const MslBatch* batch, size_t
     return 0u;
   }
   const float scale_y = batch->state.fighter_scale_y[idx];
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
   const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                   ? chp->model_scaling
                                   : 1.0f;
@@ -2221,7 +2221,7 @@ void hitboxes_refresh(MslBatch* batch) {
               batch->state.special_cmd0[idx] == 0u &&
               (action_id == (uint16_t)MSL_ACT_MS_SPECIAL_N_END0 ||
                action_id == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_N_END0)) {
-            const MslCharParams* ms_ch = msl_char_params(batch->state.char_id[idx]);
+            const MslCharParams* ms_ch = msl_char_params_fast(batch->state.char_id[idx]);
             if (ms_ch != NULL) {
               def[hb].damage = (float)(ms_ch->specialn_release_damage_base +
                                        ((int32_t)batch->state.specialn_charge_frames[idx] / 30) *
@@ -2456,7 +2456,7 @@ void hitboxes_refresh(MslBatch* batch) {
       // - refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58 (inv-scale part `fp->ft_data->x8->x10`)
       // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F6A4 (applies 1/model_scaling at that part)
       // - refs/melee/src/melee/ft/ftparts.c::ftParts_80074B8C (ftCommon_GetModelScale usage)
-      const MslCharParams* chp = msl_char_params(char_id);
+      const MslCharParams* chp = msl_char_params_fast(char_id);
       const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                       ? chp->model_scaling
                                       : 1.0f;

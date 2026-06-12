@@ -46,7 +46,7 @@ static inline uint8_t hitlist_attackair_create_phase_runtime_clear_owns_empty_hi
     return 0u;
   }
   const uint16_t action_id = batch->state.action_id[idx];
-  if (!msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_AIR)) {
+  if (!msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_ATTACK_AIR)) {
     return 0u;
   }
   // AttackAir multi-hit clear/create bands:

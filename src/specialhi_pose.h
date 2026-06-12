@@ -12,7 +12,7 @@
 static inline uint8_t msl_specialhi_rotate_model_action(uint8_t char_id, uint16_t action_id) {
   // Firefox/Firebird model-rotation ownership from the extracted MotionState row identity;
   // the 341..372 range stays kind 0 for other characters (see char_registry.h).
-  switch (msl_motion_state_fx_special_kind(char_id, action_id)) {
+  switch (msl_motion_state_fx_special_kind_fast(char_id, action_id)) {
     case MSL_FX_KIND_SPECIAL_HI:
     case MSL_FX_KIND_SPECIAL_AIR_HI:
     case MSL_FX_KIND_SPECIAL_HI_LANDING:

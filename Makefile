@@ -1,4 +1,4 @@
-.PHONY: build clean-native-shadow test test-parallel test-serial package-smoke preprocess preprocess-aggregate slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-rollout validate-rollout-aggregate validate-rollout-marth validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data viewer-build viewer fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim FORCE
+.PHONY: build build-native clean-native-shadow test test-parallel test-serial package-smoke preprocess preprocess-aggregate slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-rollout validate-rollout-aggregate validate-rollout-marth validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data viewer-build viewer fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -41,6 +41,16 @@ VERBOSE ?=
 CLANG_FORMAT ?= clang-format
 CC ?= cc
 CFLAGS ?= -O3 -Wall -Wextra -std=c11 -ffp-contract=off
+NATIVE_OPT ?= 0
+LTO ?= 0
+export MSL_NATIVE_OPT := $(strip $(NATIVE_OPT))
+export MSL_LTO := $(strip $(LTO))
+ifeq ($(strip $(NATIVE_OPT)),1)
+CFLAGS += -march=native
+endif
+ifeq ($(strip $(LTO)),1)
+CFLAGS += -flto
+endif
 BENCH_SIM ?= build/bench/bench_sim
 BENCH_SIM_SRCS := $(wildcard src/*.c) src/decomp/lb/lb_00ce.c tools/bench/bench_sim.c
 BUILD_FORCE ?= 0
@@ -86,6 +96,9 @@ build: clean-native-shadow $(BUILD_STAMP)
 	@if ! ls $(NATIVE_EXT_GLOB) >/dev/null 2>&1; then \
 		$(MAKE) --no-print-directory BUILD_FORCE=1 "$(BUILD_STAMP)"; \
 	fi
+
+build-native:
+	@$(MAKE) --no-print-directory NATIVE_OPT=1 build
 
 clean-native-shadow:
 	@rm -f $(LEGACY_ROOT_EXT_GLOB)
@@ -216,5 +229,11 @@ build-bench-sim:
 	@mkdir -p build/bench
 	@$(CC) $(CFLAGS) -Isrc $(BENCH_SIM_SRCS) -lm -o "$(BENCH_SIM)"
 
+build-bench-sim-native:
+	@$(MAKE) --no-print-directory NATIVE_OPT=1 build-bench-sim
+
 bench-sim: build-bench-sim
+	@"$(BENCH_SIM)" $(ARGS)
+
+bench-sim-native: build-bench-sim-native
 	@"$(BENCH_SIM)" $(ARGS)

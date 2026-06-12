@@ -104,7 +104,7 @@ static inline uint8_t hurtboxes_runtime_specialhi_pose_owner(uint8_t char_id, ui
 }
 
 static inline uint8_t hurtboxes_float_aobj_pose_owner(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_LANDING_AIR);
 }
 
 static inline float hurtboxes_pose_sample_frame(const MslBatch* batch, size_t idx, uint8_t char_id,
@@ -928,7 +928,7 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
       // in addition to fp->x34_scale.y. Our SSANIM pose matrices are extracted without those runtime
       // scalars, so apply model_scaling here alongside fighter_scale_y.
       // refs/melee/src/melee/ft/ftparts.c::ftParts_80074B8C (uses ftCommon_GetModelScale)
-      const MslCharParams* chp = msl_char_params(char_id);
+      const MslCharParams* chp = msl_char_params_fast(char_id);
       const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                       ? chp->model_scaling
                                       : 1.0f;

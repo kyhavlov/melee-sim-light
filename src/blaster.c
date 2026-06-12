@@ -565,7 +565,7 @@ uint8_t blaster_try_enter_ground_from_iasa_subset(MslBatch* batch, const MslComm
   if ((pressed & (uint16_t)MSL_BUTTON_B) == 0u) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params(cid);
+  const MslCharParams* ch = msl_char_params_fast(cid);
   const MslSpecialMsids* ms = msl_special_msids(cid);
   if (ch == NULL || ms == NULL) {
     return 0u;
@@ -624,7 +624,7 @@ uint8_t blaster_try_enter_ground_specialhi_from_kneebend_iasa(MslBatch* batch,
   if (stick_y < c->special_stick_y_threshold) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params(cid);
+  const MslCharParams* ch = msl_char_params_fast(cid);
   const MslSpecialMsids* ms = msl_special_msids(cid);
   if (ch == NULL || ms == NULL) {
     return 0u;
@@ -654,7 +654,7 @@ uint8_t blaster_try_enter_air_from_iasa_subset(MslBatch* batch, const MslCommonP
   if ((pressed & (uint16_t)MSL_BUTTON_B) == 0u) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params(cid);
+  const MslCharParams* ch = msl_char_params_fast(cid);
   const MslSpecialMsids* ms = msl_special_msids(cid);
   if (ch == NULL || ms == NULL) {
     return 0u;
@@ -850,7 +850,7 @@ void blaster_update_anim_callbacks_pre_input(MslBatch* batch) {
       if (!is_fox_falco(cid)) {
         continue;
       }
-      const MslCharParams* ch = msl_char_params(cid);
+      const MslCharParams* ch = msl_char_params_fast(cid);
       const MslLaserParams* lp = laser_params_get(cid);
       blaster_update_active_timeline_player(batch, c, ch, lp, idx, cid);
     }
@@ -869,7 +869,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
       if (!is_fox_falco(cid)) {
         continue;
       }
-      const MslCharParams* ch = msl_char_params(cid);
+      const MslCharParams* ch = msl_char_params_fast(cid);
       if (ch == NULL) {
         continue;
       }
@@ -1174,7 +1174,7 @@ void blaster_update_post_collision(MslBatch* batch) {
       if (!is_fox_falco(cid)) {
         continue;
       }
-      const MslCharParams* ch = msl_char_params(cid);
+      const MslCharParams* ch = msl_char_params_fast(cid);
       if (ch == NULL) {
         continue;
       }

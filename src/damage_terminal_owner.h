@@ -16,28 +16,28 @@ enum {
 };
 
 static inline uint8_t msl_damage_owner_is_damagefly_action(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_DAMAGE_FLY);
 }
 
 static inline uint8_t msl_damage_owner_is_damage_air_action(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_AIR);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_DAMAGE_AIR);
 }
 
 static inline uint8_t msl_damage_owner_is_damage_ground_action(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_GROUND);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_DAMAGE_GROUND);
 }
 
 static inline uint8_t msl_damage_owner_is_damage_collision_landing_action(uint16_t action_id) {
-  return (uint8_t)(msl_motion_state_common_class3_has(action_id,
-                                                      MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL) ||
-                   msl_motion_state_common_class3_has(action_id,
-                                                      MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL) ||
-                   msl_motion_state_common_class3_has(action_id,
-                                                      MSL_MS_CLASS3_PHASE4_DAMAGE_FALL_COLL));
+  return (uint8_t)(msl_motion_state_common_class3_has_fast(
+                       action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL) ||
+                   msl_motion_state_common_class3_has_fast(action_id,
+                                                           MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL) ||
+                   msl_motion_state_common_class3_has_fast(action_id,
+                                                           MSL_MS_CLASS3_PHASE4_DAMAGE_FALL_COLL));
 }
 
 static inline uint8_t msl_damage_owner_is_damagefly_collision_action(uint16_t action_id) {
-  return msl_motion_state_common_class3_has(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
+  return msl_motion_state_common_class3_has_fast(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
 }
 
 static inline uint8_t msl_damage_owner_allows_sdi_action(uint16_t action_id) {
@@ -81,7 +81,7 @@ static inline uint8_t msl_damage_owner_is_damage_or_firefox_launch_action(uint8_
     default: {
       // Firefox/Firebird launch ownership from the extracted MotionState row identity
       // (the shared 341..372 range stays kind 0 for other characters).
-      const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
+      const uint8_t fx_kind = msl_motion_state_fx_special_kind_fast(char_id, action_id);
       return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI ||
                        fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI);
     }
@@ -309,8 +309,9 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
     case (uint16_t)MSL_ACT_FX_SPECIAL_LW_END:
       // Shine-end pre-action ownership from the extracted MotionState row identity
       // (other characters' same-numbered specials stay kind 0).
-      return (uint8_t)(msl_motion_state_fx_special_kind(batch->state.char_id[d_idx], action_id) ==
-                       (uint8_t)MSL_FX_KIND_SPECIAL_LW_END);
+      return (
+          uint8_t)(msl_motion_state_fx_special_kind_fast(batch->state.char_id[d_idx], action_id) ==
+                   (uint8_t)MSL_FX_KIND_SPECIAL_LW_END);
     case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
       return 1u;
     case (uint16_t)MSL_ACT_LANDING_AIR_LW:
@@ -323,7 +324,7 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
       return 0u;
     case (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI:
-      if (msl_motion_state_fx_special_kind(batch->state.char_id[d_idx], action_id) !=
+      if (msl_motion_state_fx_special_kind_fast(batch->state.char_id[d_idx], action_id) !=
           (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI) {
         return 0u;
       }
@@ -372,7 +373,7 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
       return msl_damage_owner_replay_rollout_advanced_under_rng_owner(batch, d_idx);
     }
     case (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL: {
-      if (msl_motion_state_fx_special_kind(batch->state.char_id[d_idx], action_id) !=
+      if (msl_motion_state_fx_special_kind_fast(batch->state.char_id[d_idx], action_id) !=
           (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL) {
         return 0u;
       }

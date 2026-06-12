@@ -22,6 +22,8 @@ enum {
   MSL_MOTION_FLAG_SKIP_HIT = 1u << 3,
 };
 
+enum { MSL_MOTION_STATE_COMMON_ACTION_CAP = 1024 };
+
 enum {
   MSL_MS_CLASS_ATTACK_AIR = 1u << 0,
   MSL_MS_CLASS_ATTACK_S3 = 1u << 1,
@@ -132,8 +134,62 @@ typedef enum MslMsFxSpecialKind {
 uint8_t msl_motion_state_fx_special_kind(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_class3_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit);
 
-// Common helpers return true only when all currently supported Fox/Falco owner tables agree. This
-// is for migrating common action-family predicates without introducing character-id routing.
+extern const uint8_t* msl_motion_state_fx_special_kind_by_char[256] __attribute__((weak));
+extern uint16_t msl_motion_state_action_count_by_char[256] __attribute__((weak));
+
+static inline uint8_t msl_motion_state_fx_special_kind_fast(uint8_t char_id, uint16_t action_id) {
+  if (msl_motion_state_fx_special_kind_by_char == 0 || msl_motion_state_action_count_by_char == 0) {
+    return msl_motion_state_fx_special_kind(char_id, action_id);
+  }
+  const uint8_t* table = msl_motion_state_fx_special_kind_by_char[char_id];
+  if (table == 0 || action_id >= msl_motion_state_action_count_by_char[char_id]) {
+    return (uint8_t)MSL_FX_KIND_NONE;
+  }
+  return table[action_id];
+}
+
+// Common helpers return true only when all currently supported owner tables agree. This is for
+// migrating common action-family predicates without introducing character-id routing.
 uint8_t msl_motion_state_common_class_has(uint16_t action_id, uint32_t class_bit);
 uint8_t msl_motion_state_common_class2_has(uint16_t action_id, uint32_t class_bit);
 uint8_t msl_motion_state_common_class3_has(uint16_t action_id, uint32_t class_bit);
+
+extern uint32_t msl_motion_state_common_class_bits_by_action[MSL_MOTION_STATE_COMMON_ACTION_CAP]
+    __attribute__((weak));
+extern uint32_t msl_motion_state_common_class2_bits_by_action[MSL_MOTION_STATE_COMMON_ACTION_CAP]
+    __attribute__((weak));
+extern uint32_t msl_motion_state_common_class3_bits_by_action[MSL_MOTION_STATE_COMMON_ACTION_CAP]
+    __attribute__((weak));
+
+static inline uint8_t msl_motion_state_common_class_has_fast(uint16_t action_id,
+                                                             uint32_t class_bit) {
+  if (class_bit == 0u || action_id >= (uint16_t)MSL_MOTION_STATE_COMMON_ACTION_CAP) {
+    return 0u;
+  }
+  if (msl_motion_state_common_class_bits_by_action == 0) {
+    return msl_motion_state_common_class_has(action_id, class_bit);
+  }
+  return ((msl_motion_state_common_class_bits_by_action[action_id] & class_bit) != 0u) ? 1u : 0u;
+}
+
+static inline uint8_t msl_motion_state_common_class2_has_fast(uint16_t action_id,
+                                                              uint32_t class_bit) {
+  if (class_bit == 0u || action_id >= (uint16_t)MSL_MOTION_STATE_COMMON_ACTION_CAP) {
+    return 0u;
+  }
+  if (msl_motion_state_common_class2_bits_by_action == 0) {
+    return msl_motion_state_common_class2_has(action_id, class_bit);
+  }
+  return ((msl_motion_state_common_class2_bits_by_action[action_id] & class_bit) != 0u) ? 1u : 0u;
+}
+
+static inline uint8_t msl_motion_state_common_class3_has_fast(uint16_t action_id,
+                                                              uint32_t class_bit) {
+  if (class_bit == 0u || action_id >= (uint16_t)MSL_MOTION_STATE_COMMON_ACTION_CAP) {
+    return 0u;
+  }
+  if (msl_motion_state_common_class3_bits_by_action == 0) {
+    return msl_motion_state_common_class3_has(action_id, class_bit);
+  }
+  return ((msl_motion_state_common_class3_bits_by_action[action_id] & class_bit) != 0u) ? 1u : 0u;
+}

@@ -501,8 +501,8 @@ static inline void cache_damagefly_hitlag_exit_sweep_root(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       if (batch->state.hitlag[idx] == 0u ||
-          !msl_motion_state_common_class_has(batch->state.action_id[idx],
-                                             MSL_MS_CLASS_DAMAGE_FLY)) {
+          !msl_motion_state_common_class_has_fast(batch->state.action_id[idx],
+                                                  MSL_MS_CLASS_DAMAGE_FLY)) {
         continue;
       }
       // Hitlag-exit ownership:

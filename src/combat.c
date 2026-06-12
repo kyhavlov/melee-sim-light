@@ -593,8 +593,8 @@ static inline uint8_t combat_attackairlw_strong_grounded_high_cap_rejects_lower_
   if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_RUN) {
     return 0u;
   }
-  if (msl_motion_state_common_class_has(batch->state.action_id[d_idx],
-                                        MSL_MS_CLASS_GROUNDED_ATTACK)) {
+  if (msl_motion_state_common_class_has_fast(batch->state.action_id[d_idx],
+                                             MSL_MS_CLASS_GROUNDED_ATTACK)) {
     return 0u;
   }
   const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
@@ -1058,7 +1058,7 @@ static inline uint8_t combat_pstadium_x44_gap_allows_body_contact(
           batch->state.hitbox_bkb[hb_i]) != 0u) {
     if (batch->state.on_ground[d_idx] != 0u && cap->height >= 2u &&
         defender_action != (uint16_t)MSL_ACT_DASH && defender_action != (uint16_t)MSL_ACT_RUN &&
-        !msl_motion_state_common_class_has(defender_action, MSL_MS_CLASS_GROUNDED_ATTACK) &&
+        !msl_motion_state_common_class_has_fast(defender_action, MSL_MS_CLASS_GROUNDED_ATTACK) &&
         lbcoll_overlap_amount >= MSL_PSTADIUM_X44_DAIR_GROUNDED_HIGH_MAX_RESIDUAL) {
       return 1u;
     }
@@ -1250,7 +1250,7 @@ static inline uint8_t combat_shine_start_damageair_entry_pose_allows_body_contac
   msl_mtx34_mul_point(m, cap->b_offset, &bx, &by, &bz);
 
   const float scale_y = batch->state.fighter_scale_y[d_idx];
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
   const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                   ? chp->model_scaling
                                   : 1.0f;
@@ -1374,7 +1374,7 @@ static inline uint8_t combat_attackairb_enable_edge_model_scale_allows_body_cont
     return 1u;
   }
 
-  const MslCharParams* chp = msl_char_params(batch->state.char_id[a_idx]);
+  const MslCharParams* chp = msl_char_params_fast(batch->state.char_id[a_idx]);
   if (chp == NULL || !isfinite(chp->model_scaling) || chp->model_scaling <= 0.0f ||
       fabsf(chp->model_scaling - 1.0f) <= 1e-6f) {
     return 1u;
@@ -1526,7 +1526,7 @@ static inline void combat_catch_hitbox_model_scale_compensated(const MslBatch* b
     return;
   }
   const size_t a_idx = msl_idx_player(bi, attacker);
-  const MslCharParams* chp = msl_char_params(batch->state.char_id[a_idx]);
+  const MslCharParams* chp = msl_char_params_fast(batch->state.char_id[a_idx]);
   const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                   ? chp->model_scaling
                                   : 1.0f;
@@ -1711,7 +1711,7 @@ static inline uint8_t combat_guard_family_catch_hurtcap_world(const MslBatch* ba
   msl_mtx34_mul_point(m, cap->a_offset, &ax, &ay, &az);
   msl_mtx34_mul_point(m, cap->b_offset, &bx, &by, &bz);
 
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
   const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                   ? chp->model_scaling
                                   : 1.0f;
@@ -1784,7 +1784,7 @@ static inline uint8_t combat_catch_grabbable_dynamic_hurtcap_world(
   msl_mtx34_mul_point(m, cap->a_offset, &ax, &ay, &az);
   msl_mtx34_mul_point(m, cap->b_offset, &bx, &by, &bz);
 
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
   const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                   ? chp->model_scaling
                                   : 1.0f;
@@ -1871,7 +1871,7 @@ static inline uint8_t combat_guardreflect_body_hurtcap_world(const MslBatch* bat
   msl_mtx34_mul_point(m, cap->a_offset, &ax, &ay, &az);
   msl_mtx34_mul_point(m, cap->b_offset, &bx, &by, &bz);
 
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
   const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                   ? chp->model_scaling
                                   : 1.0f;
@@ -2096,7 +2096,7 @@ static inline uint32_t combat_down_damage_submotion_from_action(uint16_t action_
 }
 
 static inline uint8_t combat_float_aobj_hurtcap_pose_owner(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_LANDING_AIR);
 }
 
 static inline uint8_t combat_side_special_start_passivewalljump_entry_pose_owner(
@@ -2421,7 +2421,7 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius_impl(
     return 0u;
   }
   const MslHurtCap* cap = &caps[cap_id];
-  const MslCharParams* chp = msl_char_params(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
   const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                   ? chp->model_scaling
                                   : 1.0f;
@@ -3681,7 +3681,7 @@ static inline void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch,
   // Narrow ownership parity for this lane: keep existing velocity ownership in its current
   // systems and source jumpsUsed parity here (jumps_left=max_jumps-1).
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (ch != NULL) {
     batch->state.jumps_left[idx] = (ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
   }
@@ -3758,8 +3758,8 @@ static inline uint8_t combat_defer_late_slot_same_frame_speciallw_entry_hit(
   if (action_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START &&
       attacker_squat_family_platform_pass_source && batch->state.on_ground[d_idx] == 0u &&
       batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] != 0u &&
-      (msl_motion_state_common_class_has(defender_action, MSL_MS_CLASS_DAMAGE_FLY_COLL) ||
-       msl_motion_state_common_class_has(defender_action, MSL_MS_CLASS_DAMAGE_COMMON_COLL))) {
+      (msl_motion_state_common_class_has_fast(defender_action, MSL_MS_CLASS_DAMAGE_FLY_COLL) ||
+       msl_motion_state_common_class_has_fast(defender_action, MSL_MS_CLASS_DAMAGE_COMMON_COLL))) {
     // Fighter BODY pair-order + active airborne damage collision owner:
     // - A frame-start grounded Squat-family state can enter grounded Reflector and immediately
     //   platform-pass into SpecialAirLwStart, preserving the ground-start submotion/hitbox while
@@ -3810,7 +3810,7 @@ static inline uint8_t combat_defer_late_slot_same_frame_speciallw_entry_hit(
   if (action_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START &&
       batch->state.prev_action_id[d_idx] != defender_action &&
       batch->state.action_frame[d_idx] <= 1 &&
-      msl_motion_state_common_class_has(defender_action, MSL_MS_CLASS_GROUNDED_ATTACK)) {
+      msl_motion_state_common_class_has_fast(defender_action, MSL_MS_CLASS_GROUNDED_ATTACK)) {
     // Fighter BODY pair-order + same-frame grounded attack entry owner:
     // - ftColl_80078C70 walks fighter entity pairs after action/IASA entry. For a later entity
     //   entering aerial SpecialLwStart on the same frame an earlier grounded attack state is entered,
@@ -3926,7 +3926,7 @@ static inline uint8_t combat_guard_reflect_active_x14_reflectdesc_blocks_hitshie
   //   ftCo_80093A50,ftCo_80093BC0,ftCo_GuardReflect_Anim}
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
-  const MslCharParams* chp = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* chp = msl_char_params_fast(batch->state.char_id[idx]);
   const float model_scale =
       (chp != NULL && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
           ? chp->model_scaling
@@ -4795,7 +4795,8 @@ static inline int32_t combat_rebound_anim_rate_from_int_dmg(const MslBatch* batc
                                                             const MslCommonParams* c, size_t idx,
                                                             int int_dmg) {
   const float rebound_x191c = combat_rebound_x191c_from_int_dmg(c, int_dmg);
-  const MslCharParams* ch = (batch != NULL) ? msl_char_params(batch->state.char_id[idx]) : NULL;
+  const MslCharParams* ch =
+      (batch != NULL) ? msl_char_params_fast(batch->state.char_id[idx]) : NULL;
   if (!(rebound_x191c > 0.0f) || ch == NULL) {
     return 0;
   }
@@ -5695,7 +5696,7 @@ enum {
 };
 
 static inline uint8_t combat_source_motion_is_attacks3(uint16_t source_motion_id) {
-  if (msl_motion_state_common_class_has(source_motion_id, MSL_MS_CLASS_ATTACK_S3) != 0u) {
+  if (msl_motion_state_common_class_has_fast(source_motion_id, MSL_MS_CLASS_ATTACK_S3) != 0u) {
     return 1u;
   }
   // The generated MSLMSO01 class is keyed by MotionState action id. Some DmgLog/source-motion
@@ -9091,7 +9092,7 @@ static inline uint8_t marth_counter_desc_world_sphere(const MslBatch* batch, siz
                                                       float* out_x, float* out_y, float* out_z,
                                                       float* out_r) {
   const uint8_t cid = batch->state.char_id[d_idx];
-  const MslCharParams* ms_ch = msl_char_params(cid);
+  const MslCharParams* ms_ch = msl_char_params_fast(cid);
   if (ms_ch == NULL || !(ms_ch->speciallw_counter_desc_size > 0.0f)) {
     // FAIL CLOSED: the intercept is descriptor-backed; without extracted AbsorbDesc data there
     // is no counter (no silent fall-back to body-contact admission).
@@ -9176,7 +9177,7 @@ static inline uint8_t marth_counter_intercepts_contact(const MslBatch* batch, si
 static inline void marth_counter_trigger(MslBatch* batch, size_t a_idx, size_t d_idx, size_t hb_i,
                                          uint16_t attacker_motion_id) {
   const MslCommonParams* c = msl_common_params();
-  const MslCharParams* ms_ch = msl_char_params(batch->state.char_id[d_idx]);
+  const MslCharParams* ms_ch = msl_char_params_fast(batch->state.char_id[d_idx]);
   if (c == NULL || ms_ch == NULL) {
     return;
   }
@@ -9204,7 +9205,7 @@ static inline void marth_counter_trigger(MslBatch* batch, size_t a_idx, size_t d
   // (`if (x195c_hitlag_frames < x1964) x195c_hitlag_frames = x1964`).
   // refs/melee/src/melee/ft/ftcoll.c (shield_unk0 -> x1964 tail)
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (x1964 floor)
-  const MslCharParams* floor_ch = msl_char_params(batch->state.char_id[d_idx]);
+  const MslCharParams* floor_ch = msl_char_params_fast(batch->state.char_id[d_idx]);
   const uint16_t hl_floor = (floor_ch != NULL && floor_ch->speciallw_counter_shield_strength > 0.0f)
                                 ? (uint16_t)floor_ch->speciallw_counter_shield_strength
                                 : 0u;
@@ -9532,7 +9533,7 @@ static inline void combat_body_damage_log_select_best_kb_entry(
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
   for (uint8_t i = 0u; i < scratch->count; i++) {
     const MslCombatBodyDamageLogEntry* e = &scratch->entries[i];
-    const MslCharParams* d_ch = msl_char_params(batch->state.char_id[e->d_idx]);
+    const MslCharParams* d_ch = msl_char_params_fast(batch->state.char_id[e->d_idx]);
     float coll_kb_mul = batch->state.match_damage_ratio[(size_t)bi];
     coll_kb_mul *= batch->state.attack_ratio[e->a_idx];
     coll_kb_mul *= batch->state.defense_ratio[e->d_idx];
@@ -10178,7 +10179,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
       marth_counter_desc_overlaps_point(batch, d_idx, item_pos_x, item_pos_y, item_hit_radius)) {
     const int dmg_i = combat_get_env_dmg(damage_product.applied_damage);
     if (dmg_i > 0) {
-      const MslCharParams* ms_ch = msl_char_params(batch->state.char_id[d_idx]);
+      const MslCharParams* ms_ch = msl_char_params_fast(batch->state.char_id[d_idx]);
       uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id, 1.0f);
       if (ms_ch != NULL && ms_ch->speciallw_counter_shield_strength > 0.0f &&
           d_hl < (uint16_t)ms_ch->speciallw_counter_shield_strength) {
@@ -10425,7 +10426,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   //   states via ftCo_8008DCE0.
   // refs/melee/src/melee/ft/fighter.c and refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
   const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
-  const MslCharParams* d_ch = msl_char_params(batch->state.char_id[d_idx]);
+  const MslCharParams* d_ch = msl_char_params_fast(batch->state.char_id[d_idx]);
   if (d_ch == NULL) {
     return MSL_ITEM_HIT_NONE;
   }
@@ -10747,7 +10748,7 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
 
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
 
-  const MslCharParams* d_ch = msl_char_params(batch->state.char_id[d_idx]);
+  const MslCharParams* d_ch = msl_char_params_fast(batch->state.char_id[d_idx]);
   if (d_ch == NULL) {
     return 0;
   }

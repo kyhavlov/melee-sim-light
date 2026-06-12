@@ -363,4 +363,11 @@ typedef struct MslCharParams {
 } MslCharParams;
 
 int char_params_init(void);
+extern const MslCharParams* msl_char_params_ptr_by_char[256];
+
+// Runtime fast path after char_params_init(). Before init, all slots are NULL.
+static inline const MslCharParams* msl_char_params_fast(uint8_t char_id) {
+  return msl_char_params_ptr_by_char[char_id];
+}
+
 const MslCharParams* msl_char_params(uint8_t char_id);

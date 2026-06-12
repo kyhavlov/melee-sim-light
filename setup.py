@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -30,17 +31,42 @@ def _compiler_supports_flag(compiler, flag: str) -> bool:
         return False
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
 class _BuildExt(build_ext):
     def build_extensions(self) -> None:
         # Prevent implicit FMA contraction (cross-machine bitwise risk).
         # GCC defaults `-ffp-contract=fast`; Clang generally supports this flag too.
-        flag = "-ffp-contract=off"
+        self._append_supported_compile_flag("-ffp-contract=off")
+
+        # Keep package/source-install artifacts portable by default. Perf runs can opt in with
+        # MSL_NATIVE_OPT=1, or through the Makefile's build-native / bench-sim-native targets.
+        if _env_flag("MSL_NATIVE_OPT", False):
+            self._append_supported_compile_flag("-march=native")
+
+        # LTO is also opt-in: it improves throughput on local profiles, but increases build cost
+        # and can produce less portable artifacts.
+        if _env_flag("MSL_LTO", False) and self._append_supported_compile_flag("-flto"):
+            for ext in self.extensions:
+                ext.extra_link_args = list(ext.extra_link_args or [])
+                if "-flto" not in ext.extra_link_args:
+                    ext.extra_link_args.append("-flto")
+
+        super().build_extensions()
+
+    def _append_supported_compile_flag(self, flag: str) -> bool:
         if _compiler_supports_flag(self.compiler, flag):
             for ext in self.extensions:
                 ext.extra_compile_args = list(ext.extra_compile_args or [])
                 if flag not in ext.extra_compile_args:
                     ext.extra_compile_args.append(flag)
-        super().build_extensions()
+            return True
+        return False
 
 
 class _BuildPy(build_py):

@@ -772,7 +772,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
         //   ftFx_SpecialAirHi_Enter
         // }
         if (on_ground &&
-            specialhi_try_ground_launch_from_hold(batch, idx, msl_char_params(char_id))) {
+            specialhi_try_ground_launch_from_hold(batch, idx, msl_char_params_fast(char_id))) {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI;
         } else {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
@@ -789,7 +789,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
             batch->state.speed_ground_x_self[idx] = 0.0f;
             batch->state.ecb_lock_timer[idx] = 5u;
           }
-          const MslCharParams* ch = msl_char_params(char_id);
+          const MslCharParams* ch = msl_char_params_fast(char_id);
           if (ch != NULL) {
             specialhi_apply_air_launch_ownership(batch, idx, ch);
           } else {
@@ -805,7 +805,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       batch->state.animation_index[idx] = (uint32_t)ms->specialhi_air_hold;
       if (anim_finished(char_id, ms->specialhi_air_hold, batch->state.anim_frame_f32[idx])) {
         if (on_ground &&
-            specialhi_try_ground_launch_from_hold(batch, idx, msl_char_params(char_id))) {
+            specialhi_try_ground_launch_from_hold(batch, idx, msl_char_params_fast(char_id))) {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI;
         } else {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
@@ -820,7 +820,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
             batch->state.speed_ground_x_self[idx] = 0.0f;
             batch->state.ecb_lock_timer[idx] = 5u;
           }
-          const MslCharParams* ch = msl_char_params(char_id);
+          const MslCharParams* ch = msl_char_params_fast(char_id);
           if (ch != NULL) {
             specialhi_apply_air_launch_ownership(batch, idx, ch);
           } else {
@@ -847,7 +847,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // Data bridge (ISO-extracted): ftFox_DatAttrs.x70 stores launch travel duration.
       // refs/melee/src/melee/ft/chara/ftFox/types.h::ftFox_DatAttrs
       // data/characters/{fox,falco}.json::firefox_launch_duration_frames
-      const MslCharParams* ch_hi = msl_char_params(char_id);
+      const MslCharParams* ch_hi = msl_char_params_fast(char_id);
       const uint8_t launch_done_hi =
           (ch_hi != NULL && ch_hi->firefox_launch_duration_frames > 0u)
               ? (batch->state.action_frame[idx] >= (int16_t)ch_hi->firefox_launch_duration_frames)
@@ -864,7 +864,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // Decomp: SpecialHi and SpecialAirHi share ftFx_SM_SpecialHi (same launch submotion id).
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c
       batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
-      const MslCharParams* ch_air_hi = msl_char_params(char_id);
+      const MslCharParams* ch_air_hi = msl_char_params_fast(char_id);
       const uint8_t launch_done_air_hi =
           (ch_air_hi != NULL && ch_air_hi->firefox_launch_duration_frames > 0u)
               ? (batch->state.action_frame[idx] >=
@@ -883,7 +883,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // Decomp: ftFx_SpecialHiLanding_Coll falls back to FallSpecial when the state becomes airborne.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
       if (!on_ground) {
-        const MslCharParams* ch = msl_char_params(char_id);
+        const MslCharParams* ch = msl_char_params_fast(char_id);
         enter_fall_special_via_ftco_80096900(
             batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f, 1u);
         return 1;
@@ -910,7 +910,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Anim
       if (anim_finished(char_id, (uint16_t)MSL_SM_FX_SPECIAL_HI_FALL,
                         batch->state.anim_frame_f32[idx])) {
-        const MslCharParams* ch = msl_char_params(char_id);
+        const MslCharParams* ch = msl_char_params_fast(char_id);
         enter_fall_special_via_ftco_80096900(
             batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f, 1u);
       }
@@ -922,7 +922,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiBound_Anim
       if (!on_ground && anim_finished(char_id, (uint16_t)MSL_SM_FX_SPECIAL_HI_BOUND,
                                       batch->state.anim_frame_f32[idx])) {
-        const MslCharParams* ch = msl_char_params(char_id);
+        const MslCharParams* ch = msl_char_params_fast(char_id);
         enter_fall_special_via_ftco_80096900(
             batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f, 1u);
       }
@@ -1185,7 +1185,7 @@ static inline uint8_t action_uses_common_air_walljump_callback(uint16_t a) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
   // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
-  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL);
+  return msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL);
 }
 
 static inline void align_passivewalljump_entry_x(MslBatch* batch, size_t idx) {
@@ -1203,7 +1203,7 @@ static inline void align_passivewalljump_entry_x(MslBatch* batch, size_t idx) {
   if (anim_pose_get_transn(cid, (uint16_t)MSL_SM_PASSIVE_WALL_JUMP, 0u, transn) != 0) {
     transn[2] = 0.0f;
   }
-  const MslCharParams* ch = msl_char_params(cid);
+  const MslCharParams* ch = msl_char_params_fast(cid);
   const float model_scaling =
       (ch != NULL && isfinite(ch->model_scaling) && ch->model_scaling > 0.0f) ? ch->model_scaling
                                                                               : 1.0f;
@@ -1659,11 +1659,11 @@ static inline uint32_t grounded_attack_submotion_from_action(uint16_t action_id)
 }
 
 static inline uint8_t action_is_attack_s3_family(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_S3);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_ATTACK_S3);
 }
 
 static inline uint8_t action_is_attack_s4_family(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_S4);
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_ATTACK_S4);
 }
 
 static inline uint8_t grounded_attack_wait_iasa_specials_action(uint16_t action_id) {
@@ -1675,8 +1675,8 @@ static inline uint8_t grounded_attack_wait_iasa_specials_action(uint16_t action_
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_IASA
-  return msl_motion_state_common_class_has(action_id,
-                                           MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS);
+  return msl_motion_state_common_class_has_fast(action_id,
+                                                MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS);
 }
 
 static inline uint8_t grounded_attack_wait_iasa_interrupt_dest_action(uint16_t action_id) {
@@ -1703,8 +1703,8 @@ static inline uint8_t grounded_attack_wait_iasa_locomotion_action(uint16_t actio
   // Wait_IASA's jump/dash/squat/turn/walk tail after `fp->allow_interrupt`.
   // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-  return msl_motion_state_common_class_has(action_id,
-                                           MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION);
+  return msl_motion_state_common_class_has_fast(action_id,
+                                                MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION);
 }
 
 static inline uint8_t grounded_attack_wait_iasa_catch_guard_action(uint16_t action_id) {
@@ -1717,8 +1717,8 @@ static inline uint8_t grounded_attack_wait_iasa_catch_guard_action(uint16_t acti
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::ftCo_AttackS3_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_IASA
-  return msl_motion_state_common_class_has(action_id,
-                                           MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD);
+  return msl_motion_state_common_class_has_fast(action_id,
+                                                MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD);
 }
 
 static inline uint8_t locomotion_has_opponent_active_catch_connect_window(const MslBatch* batch,
@@ -2581,15 +2581,18 @@ static inline uint8_t action_is_phase3_common_grounded_collision_owner(uint16_t 
   // specials stay on their retained owners even when they share lower-level mpColl helpers.
   // refs/melee/src/melee/ft/ft_081B.c common grounded wrappers
   // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class2_bits
-  return (uint8_t)(msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_GROUNDED_COLL) ||
-                   msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL) ||
-                   msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL) ||
-                   msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL));
+  return (
+      uint8_t)(msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_COMMON_GROUNDED_COLL) ||
+               msl_motion_state_common_class2_has_fast(a,
+                                                       MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL) ||
+               msl_motion_state_common_class2_has_fast(a,
+                                                       MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL) ||
+               msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL));
 }
 
 static inline uint8_t action_is_ground_locomotion(uint16_t a) {
   if (action_is_phase3_common_grounded_collision_owner(a) ||
-      msl_motion_state_common_class_has(a, MSL_MS_CLASS_LANDING_AIR_COLL)) {
+      msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_LANDING_AIR_COLL)) {
     return 1;
   }
   if (a == MSL_ACT_ESCAPE_F || a == MSL_ACT_ESCAPE_B || a == MSL_ACT_ESCAPE_N ||
@@ -2894,7 +2897,7 @@ static inline float ottotto_floor_loss_player_nudge_x(const MslBatch* batch,
     return 0.0f;
   }
 
-  const MslCharParams* self = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* self = msl_char_params_fast(batch->state.char_id[idx]);
   if (self == NULL) {
     return 0.0f;
   }
@@ -2913,7 +2916,7 @@ static inline float ottotto_floor_loss_player_nudge_x(const MslBatch* batch,
         msl_action_is_grabbed_victim(batch->state.action_id[oidx])) {
       continue;
     }
-    const MslCharParams* other = msl_char_params(batch->state.char_id[oidx]);
+    const MslCharParams* other = msl_char_params_fast(batch->state.char_id[oidx]);
     if (other == NULL) {
       continue;
     }
@@ -2943,14 +2946,14 @@ static inline float ottotto_floor_loss_player_nudge_x(const MslBatch* batch,
 }
 
 static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
-  if (msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL)) {
+  if (msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL)) {
     // Phase 3 common ft_80084280/mpColl_8004B4B0 owner. The generated callback bit covers Wait,
     // Walk*, RunBrake, Landing, and LandingFallSpecial without a local action-id scan.
     // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
     // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class2_bits
     return 1u;
   }
-  if (msl_motion_state_common_class_has(a, MSL_MS_CLASS_LANDING_AIR_COLL)) {
+  if (msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_LANDING_AIR_COLL)) {
     // Decomp: ftCo_LandingAir_Coll delegates to ftCo_Landing_Coll, which calls ft_80084280.
     // That common collision callback lets ftCo_8009A3C8 consume Collide_Edge and enter Ottotto
     // before the generic Fall handoff.
@@ -3012,7 +3015,7 @@ static inline uint8_t ft80084280_ottotto_edge_admits(const MslBatch* batch,
 }
 
 static inline uint8_t action_is_air_locomotion(uint16_t a) {
-  if (msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_AIRBORNE_COLL)) {
+  if (msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_COMMON_AIRBORNE_COLL)) {
     // Phase 3 common airborne Coll callbacks: Fall/FallSpecial/Jump/JumpAerial/Pass/MissFoot and
     // CliffJump2 route through the generated common owner. AttackAir, EscapeAir, damage, item, and
     // bespoke specials remain explicit retained owners.
@@ -3020,7 +3023,7 @@ static inline uint8_t action_is_air_locomotion(uint16_t a) {
     // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class2_bits
     return 1;
   }
-  if (msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FALL_COLL)) {
+  if (msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_DAMAGE_FALL_COLL)) {
     return 1;
   }
   return 0;
@@ -3112,7 +3115,7 @@ static inline uint8_t action_is_attackair(uint16_t a) {
   // Generated from decomp MotionState callback symbols ftCo_AttackAir_* for the five common
   // aerial attacks.
   // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
-  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_ATTACK_AIR);
+  return msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t action_is_grounded_specialn_ft80083f88_floor_loss(uint8_t char_id,
@@ -3923,7 +3926,7 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
       // Dolphin Slash landing: ftMs_SpecialHi_Coll -> ftMs_SpecialHi_80138884 enters
       // LandingFallSpecial with MarsAttributes x2C.
       // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
-      const MslCharParams* ms_ch = msl_char_params(batch->state.char_id[idx]);
+      const MslCharParams* ms_ch = msl_char_params_fast(batch->state.char_id[idx]);
       const float ms_lag = (ms_ch != NULL) ? ms_ch->specialhi_landing_lag_frames : 0.0f;
       speed = (ms_lag > 0.0f && end_frame > 0.0f) ? ((end_frame + 0.1f) / ms_lag) : 1.0f;
     } else if (source_act == (uint16_t)MSL_ACT_FALL_SPECIAL ||
@@ -4081,7 +4084,7 @@ void locomotion_update_pre(MslBatch* batch) {
       if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
-      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
       if (ch == NULL) {
         continue;
       }
@@ -4095,7 +4098,7 @@ void locomotion_update_pre(MslBatch* batch) {
         continue;
       }
 
-      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
       if (ch == NULL) {
         continue;
       }
@@ -6823,7 +6826,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
       const uint8_t was_ground = batch->state.prev_on_ground[idx] ? 1 : 0;
       const uint8_t now_ground = batch->state.on_ground[idx] ? 1 : 0;
 
-      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
       const MslSpecialMsids* ms = msl_special_msids(batch->state.char_id[idx]);
       if (ch == NULL) {
         continue;
@@ -6868,7 +6871,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           (floor_skip_segment != 0xFFFFu && now_ground == 0u &&
            stage_collision_floor_line_has_height_platform_transform(stage_id, floor_skip_segment) &&
            batch->state.prev_action_id[idx] == a &&
-           msl_motion_state_common_class_has(a, MSL_MS_CLASS_COMMON_AIR_COLL))
+           msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_COMMON_AIR_COLL))
               ? 1u
               : 0u;
       const uint8_t keep_shine_platform_pass_floor_skip =

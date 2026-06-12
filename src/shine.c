@@ -588,7 +588,7 @@ void shine_enter_ground_start_from_iasa(MslBatch* batch, size_t idx) {
   if (!is_fox_falco(cid)) {
     return;
   }
-  const MslCharParams* ch = msl_char_params(cid);
+  const MslCharParams* ch = msl_char_params_fast(cid);
   const MslSpecialMsids* ms = msl_special_msids(cid);
   if (ch == NULL || ms == NULL) {
     return;
@@ -685,7 +685,7 @@ void shine_update_pre_physics(MslBatch* batch) {
       if (!is_fox_falco(cid)) {
         continue;
       }
-      const MslCharParams* ch = msl_char_params(cid);
+      const MslCharParams* ch = msl_char_params_fast(cid);
       const MslSpecialMsids* ms = msl_special_msids(cid);
       if (c == NULL || ch == NULL || ms == NULL) {
         continue;
@@ -1118,7 +1118,7 @@ void shine_update_post_collision(MslBatch* batch) {
         //   ftFx_SpecialLwHit_GroundToAir,ftFx_SpecialLwEnd_GroundToAir,
         //   ftFx_SpecialLwTurn_GroundToAir}
         // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
-        const MslCharParams* ch = msl_char_params(cid);
+        const MslCharParams* ch = msl_char_params_fast(cid);
         if (ch != NULL) {
           batch->state.jumps_left[idx] = (ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
         }
@@ -1135,7 +1135,7 @@ void shine_update_post_collision(MslBatch* batch) {
         msl_anim_timebase_enter(batch, idx, cur_frame, 1.0f);
       } else if (action_is_shine_air(a) && on_ground) {
         // Air -> ground: preserve anim frame.
-        const MslCharParams* ch = msl_char_params(cid);
+        const MslCharParams* ch = msl_char_params_fast(cid);
         batch->state.action_id[idx] =
             (uint16_t)(a - (uint16_t)MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA);
         const uint16_t a2 = batch->state.action_id[idx];

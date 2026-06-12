@@ -166,7 +166,7 @@ static inline void msl_ecb_world_points_sample(MslEcbWorldPoints* out, uint8_t c
 
   float side_offset_y = 0.0f;
   {
-    const MslCharParams* ch = msl_char_params(char_id);
+    const MslCharParams* ch = msl_char_params_fast(char_id);
     if (ch != NULL) {
       side_offset_y = ch->ecb_side_y_offset;
     }
@@ -197,7 +197,7 @@ static inline void msl_ecb_world_points_override_bottom_rel_y(MslEcbWorldPoints*
   }
   float side_offset_y = 0.0f;
   {
-    const MslCharParams* ch = msl_char_params(char_id);
+    const MslCharParams* ch = msl_char_params_fast(char_id);
     if (ch != NULL) {
       side_offset_y = ch->ecb_side_y_offset;
     }

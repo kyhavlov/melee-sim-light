@@ -517,7 +517,7 @@ uint8_t marth_specials_phys(MslBatch* batch, size_t idx) {
   if (!marth_action_is_special(a)) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (ch == NULL) {
     return 0u;
   }
@@ -681,7 +681,7 @@ static uint8_t ms_b_entry_mask(const MslBatch* batch, size_t idx, uint16_t a, ui
       case MSL_ACT_LANDING: {
         // Landing_IASA runs the full chain only past the landing-lag gate.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
-        const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+        const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
         const float cur = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
         return (ch != NULL && cur >= (float)ch->landing_lag_frames) ? (uint8_t)MS_B_ALL : 0u;
       }
@@ -837,7 +837,7 @@ void marth_specials_update_pre_physics(MslBatch* batch) {
           batch->state.stocks[idx] == 0u) {
         continue;
       }
-      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
       if (ch == NULL) {
         continue;
       }

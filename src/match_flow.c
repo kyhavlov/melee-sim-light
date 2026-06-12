@@ -127,7 +127,7 @@ static inline float entry_x20(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0.0f;
   }
-  const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+  const MslCharParams* phys = msl_char_params_fast(batch->state.char_id[idx]);
   if (phys == NULL) {
     return 0.0f;
   }
@@ -304,7 +304,7 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   {
-    const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+    const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
     if (ch != NULL) {
       // Decomp/asm: Dead*->Rebirth enter path (ftCo_800D4FF4) calls ftCommon_8007D5D4 before the
       // Rebirth motion callback chain; ftCommon_8007D5D4 sets fp->x1968_jumpsUsed = 1.
