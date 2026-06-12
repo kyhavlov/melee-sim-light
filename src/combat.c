@@ -3611,7 +3611,7 @@ static inline void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch,
   }
   // Decomp common helper ownership:
   // - ftCommon_8007D5D4 sets ground_or_air=Air, gr_vel=0, jumpsUsed=1, ecb_lock=10, and
-  //   CollData_X130_Locked.
+  //   CollData_X130_Locked, and clears `cur_pos.z`.
   // - Damage entry / throw-release lanes call this helper when launching victim airborne.
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
@@ -3636,6 +3636,7 @@ static inline void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch,
   batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
       (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130;
   batch->state.on_ground[idx] = 0u;
+  batch->state.pos_z[idx] = 0.0f;
   batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR;
   // Narrow ownership parity for this lane: keep existing velocity ownership in its current
   // systems and source jumpsUsed parity here (jumps_left=max_jumps-1).

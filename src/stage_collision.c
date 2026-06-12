@@ -3759,9 +3759,13 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch) {
     // This keeps same-episode rollout continuity without stale-carrying a wind direction across an
     // arbitrary long replay.
     // refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
-    if ((dir != 1u && dir != 2u) || batch->state.stage_dream_whispy_wind_timer[bi] == 0u) {
+    // `timer == 1` is the replay-visible carry after the final source wind application, not another
+    // ftColl_GetWindOffsetVec application. The last applied row is timer 2; grOldPupupu clears xDC
+    // before fighters can consume the following row.
+    if ((dir != 1u && dir != 2u) || batch->state.stage_dream_whispy_wind_timer[bi] <= 1u) {
       batch->state.stage_dream_whispy_wind_dir[bi] = 0u;
       batch->state.stage_dream_whispy_wind_valid[bi] = 0u;
+      batch->state.stage_dream_whispy_wind_timer[bi] = 0u;
       continue;
     }
     const float x_add = (dir == 1u) ? -params->wind_speed : params->wind_speed;
@@ -3778,17 +3782,22 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch) {
       if (batch->state.stocks[idx] == 0u || batch->state.hitlag[idx] != 0u) {
         continue;
       }
+      const uint8_t source_first_frame_fighter_inside =
+          (uint8_t)(source_first_frame_catchup != 0u &&
+                    stage_collision_whispy_point_inside(batch->state.prev_pos_x[idx],
+                                                        batch->state.prev_pos_y[idx], left, right,
+                                                        params->rect_bottom, params->rect_top));
       if (stage_collision_whispy_point_inside(batch->state.pos_x[idx], batch->state.pos_y[idx],
                                               left, right, params->rect_bottom, params->rect_top)) {
         batch->state.pos_x[idx] += x_add;
-        if (source_first_frame_catchup != 0u &&
-            stage_collision_whispy_point_inside(batch->state.pos_x[idx], batch->state.pos_y[idx],
-                                                left, right, params->rect_bottom,
-                                                params->rect_top)) {
+        if (source_first_frame_fighter_inside != 0u) {
           // Replay-stage lane owner: apply the one source Whispy wind displacement that happened
-          // before Slippi could serialize the first visible `grOldPupupu.xDC` active row. The
-          // owner bit is installed only by replay playback; free-running stage state never enters
-          // this catch-up path.
+          // before Slippi could serialize the first visible `grOldPupupu.xDC` active row. Source
+          // ftColl_GetWindOffsetVec samples the fighter root at the callback point, so the catch-up
+          // is per fighter: only roots already inside the wind rectangle at frame start receive the
+          // prior application. Fighters that enter the rectangle during current physics get only the
+          // ordinary current-frame wind above. The owner bit is installed only by replay playback;
+          // free-running stage state never enters this catch-up path.
           // refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
           // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
           batch->state.pos_x[idx] += x_add;

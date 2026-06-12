@@ -8555,9 +8555,50 @@ PyObject* msl_derive_dream_whispy_wind_seed_lanes_py(PyObject* self, PyObject* a
       row_dir = d;
     }
     if (row_dir != 0u && conflict == 0u) {
+      // This lane represents hidden `grOldPupupu.xDC` after the source
+      // `ftColl_GetWindOffsetVec -> fn_802112F4` callback. Slippi exposes the next frame-start
+      // replay row, so the replay seed lane is shifted forward one row.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+      // refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
       dir[i + 1] = row_dir;
       valid[i + 1] = 1u;
     }
+  }
+
+  // Sparse one-step residuals only reveal Whispy `xDC` on rows where at least one fighter receives
+  // a wind displacement. Source `grOldPupupu_802113E0` keeps xDC live across the full active window
+  // while `fn_802112F4` independently gates each fighter by rectangle. Fill same-direction,
+  // contiguous replay-frame gaps between observed contacts so replay playback preserves the hidden
+  // stage state without teacher-forcing fighter position.
+  // refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
+  npy_intp prev_sparse_i = -1;
+  uint8_t prev_sparse_dir = 0u;
+  for (npy_intp i = 0; i < n; i++) {
+    const uint8_t d = dir[i];
+    if (valid[i] == 0u || (d != 1u && d != 2u)) {
+      continue;
+    }
+    if (prev_sparse_i >= 0 && d == prev_sparse_dir && i - prev_sparse_i <= 274) {
+      uint8_t contiguous = 1u;
+      for (npy_intp j = prev_sparse_i; j < i; j++) {
+        const MslSeed* a = (const MslSeed*)(const void*)(seed_bytes + (size_t)j * seed_stride);
+        const MslSeed* b =
+            (const MslSeed*)(const void*)(seed_bytes + (size_t)(j + 1) * seed_stride);
+        if (a->stage_id != (uint32_t)stage_id || b->stage_id != (uint32_t)stage_id ||
+            b->frame_id != a->frame_id + (int32_t)1) {
+          contiguous = 0u;
+          break;
+        }
+      }
+      if (contiguous != 0u) {
+        for (npy_intp j = prev_sparse_i + 1; j < i; j++) {
+          dir[j] = d;
+          valid[j] = 1u;
+        }
+      }
+    }
+    prev_sparse_i = i;
+    prev_sparse_dir = d;
   }
 
   uint8_t episode_dir = 0u;
@@ -8590,6 +8631,7 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
   PyObject* seed_owner_obj = NULL;
   PyObject* seed_iid_obj = NULL;
   PyObject* seed_spawn_obj = NULL;
+  PyObject* seed_dir_obj = NULL;
   PyObject* seed_vx_obj = NULL;
   PyObject* seed_vy_obj = NULL;
   PyObject* ref_exists_obj = NULL;
@@ -8601,13 +8643,17 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
   PyObject* ref_vy_obj = NULL;
   PyObject* seed_action_obj = NULL;
   PyObject* ref_action_obj = NULL;
+  PyObject* ref_hitlag_obj = NULL;
+  PyObject* ref_hitstun_obj = NULL;
+  PyObject* ref_instance_hit_by_obj = NULL;
   PyObject* laser_lut_obj = NULL;
   int num_players = 0;
-  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOOOOOOi", &seed_exists_obj, &seed_type_obj,
-                        &seed_owner_obj, &seed_iid_obj, &seed_spawn_obj, &seed_vx_obj, &seed_vy_obj,
-                        &ref_exists_obj, &ref_type_obj, &ref_owner_obj, &ref_iid_obj,
-                        &ref_spawn_obj, &ref_vx_obj, &ref_vy_obj, &seed_action_obj, &ref_action_obj,
-                        &laser_lut_obj, &num_players)) {
+  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOOOOOOOOOOi", &seed_exists_obj, &seed_type_obj,
+                        &seed_owner_obj, &seed_iid_obj, &seed_spawn_obj, &seed_dir_obj,
+                        &seed_vx_obj, &seed_vy_obj, &ref_exists_obj, &ref_type_obj, &ref_owner_obj,
+                        &ref_iid_obj, &ref_spawn_obj, &ref_vx_obj, &ref_vy_obj, &seed_action_obj,
+                        &ref_action_obj, &ref_hitlag_obj, &ref_hitstun_obj,
+                        &ref_instance_hit_by_obj, &laser_lut_obj, &num_players)) {
     return NULL;
   }
   PyArrayObject* seed_exists =
@@ -8620,6 +8666,8 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
       require_contiguous_array(seed_iid_obj, NPY_UINT16, 2, "seed_item_instance_id_u16");
   PyArrayObject* seed_spawn =
       require_contiguous_array(seed_spawn_obj, NPY_UINT32, 2, "seed_item_spawn_id_u32");
+  PyArrayObject* seed_dir =
+      require_contiguous_array(seed_dir_obj, NPY_FLOAT32, 2, "seed_item_direction_f32");
   PyArrayObject* seed_vx =
       require_contiguous_array(seed_vx_obj, NPY_FLOAT32, 2, "seed_item_vel_x_f32");
   PyArrayObject* seed_vy =
@@ -8642,13 +8690,20 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
       require_contiguous_array(seed_action_obj, NPY_UINT16, 2, "seed_action_id_u16");
   PyArrayObject* ref_action =
       require_contiguous_array(ref_action_obj, NPY_UINT16, 2, "ref_action_id_u16");
+  PyArrayObject* ref_hitlag =
+      require_contiguous_array(ref_hitlag_obj, NPY_UINT16, 2, "ref_hitlag_u16");
+  PyArrayObject* ref_hitstun =
+      require_contiguous_array(ref_hitstun_obj, NPY_UINT16, 2, "ref_hitstun_u16");
+  PyArrayObject* ref_instance_hit_by =
+      require_contiguous_array(ref_instance_hit_by_obj, NPY_UINT16, 2, "ref_instance_hit_by_u16");
   PyArrayObject* laser_lut =
       require_contiguous_array(laser_lut_obj, NPY_UINT8, 1, "laser_type_lut");
   if (seed_exists == NULL || seed_type == NULL || seed_owner == NULL || seed_iid == NULL ||
-      seed_spawn == NULL || seed_vx == NULL || seed_vy == NULL || ref_exists == NULL ||
-      ref_type == NULL || ref_owner == NULL || ref_iid == NULL || ref_spawn == NULL ||
-      ref_vx == NULL || ref_vy == NULL || seed_action == NULL || ref_action == NULL ||
-      laser_lut == NULL) {
+      seed_spawn == NULL || seed_dir == NULL || seed_vx == NULL || seed_vy == NULL ||
+      ref_exists == NULL || ref_type == NULL || ref_owner == NULL || ref_iid == NULL ||
+      ref_spawn == NULL || ref_vx == NULL || ref_vy == NULL || seed_action == NULL ||
+      ref_action == NULL || ref_hitlag == NULL || ref_hitstun == NULL ||
+      ref_instance_hit_by == NULL || laser_lut == NULL) {
     return NULL;
   }
   const npy_intp n = PyArray_DIM(seed_exists, 0);
@@ -8657,6 +8712,7 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
       require_exact_2d_shape(seed_owner, n, slots, "seed_item_owner_i8") < 0 ||
       require_exact_2d_shape(seed_iid, n, slots, "seed_item_instance_id_u16") < 0 ||
       require_exact_2d_shape(seed_spawn, n, slots, "seed_item_spawn_id_u32") < 0 ||
+      require_exact_2d_shape(seed_dir, n, slots, "seed_item_direction_f32") < 0 ||
       require_exact_2d_shape(seed_vx, n, slots, "seed_item_vel_x_f32") < 0 ||
       require_exact_2d_shape(seed_vy, n, slots, "seed_item_vel_y_f32") < 0 ||
       require_exact_2d_shape(ref_exists, n, slots, "ref_item_exists_u8") < 0 ||
@@ -8669,8 +8725,14 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
     return NULL;
   }
   if (PyArray_NDIM(seed_action) != 2 || PyArray_NDIM(ref_action) != 2 ||
-      PyArray_DIM(seed_action, 0) != n || PyArray_DIM(ref_action, 0) != n ||
+      PyArray_NDIM(ref_hitlag) != 2 || PyArray_NDIM(ref_hitstun) != 2 ||
+      PyArray_NDIM(ref_instance_hit_by) != 2 || PyArray_DIM(seed_action, 0) != n ||
+      PyArray_DIM(ref_action, 0) != n || PyArray_DIM(ref_hitlag, 0) != n ||
+      PyArray_DIM(ref_hitstun, 0) != n || PyArray_DIM(ref_instance_hit_by, 0) != n ||
       PyArray_DIM(seed_action, 1) != PyArray_DIM(ref_action, 1) ||
+      PyArray_DIM(seed_action, 1) != PyArray_DIM(ref_hitlag, 1) ||
+      PyArray_DIM(seed_action, 1) != PyArray_DIM(ref_hitstun, 1) ||
+      PyArray_DIM(seed_action, 1) != PyArray_DIM(ref_instance_hit_by, 1) ||
       PyArray_SIZE(laser_lut) < 65536) {
     PyErr_SetString(PyExc_ValueError, "item hidden callback action/LUT inputs are invalid");
     return NULL;
@@ -8712,6 +8774,7 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
   const int8_t* so = (const int8_t*)PyArray_DATA(seed_owner);
   const uint16_t* siid = (const uint16_t*)PyArray_DATA(seed_iid);
   const uint32_t* sspawn = (const uint32_t*)PyArray_DATA(seed_spawn);
+  const float* sdir = (const float*)PyArray_DATA(seed_dir);
   const float* svx = (const float*)PyArray_DATA(seed_vx);
   const float* svy = (const float*)PyArray_DATA(seed_vy);
   const uint8_t* re = (const uint8_t*)PyArray_DATA(ref_exists);
@@ -8723,6 +8786,9 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
   const float* rvy = (const float*)PyArray_DATA(ref_vy);
   const uint16_t* sa = (const uint16_t*)PyArray_DATA(seed_action);
   const uint16_t* ra = (const uint16_t*)PyArray_DATA(ref_action);
+  const uint16_t* rhitlag = (const uint16_t*)PyArray_DATA(ref_hitlag);
+  const uint16_t* rhitstun = (const uint16_t*)PyArray_DATA(ref_hitstun);
+  const uint16_t* rhitby = (const uint16_t*)PyArray_DATA(ref_instance_hit_by);
   const uint8_t* laser = (const uint8_t*)PyArray_DATA(laser_lut);
   uint16_t* riid_out = (uint16_t*)PyArray_DATA(reflect_iid);
   uint8_t* bvalid = (uint8_t*)PyArray_DATA(bounce_valid);
@@ -8737,7 +8803,6 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
         break;
       }
     }
-    if (!guard_context) continue;
     for (npy_intp it = 0; it < slots; it++) {
       const npy_intp idx = (i * slots) + it;
       if (se[idx] == 0u) continue;
@@ -8748,7 +8813,7 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
       const bool ref_exists_now = re[idx] != 0u;
       const bool ref_same_item = ref_exists_now && rt[idx] == item_type &&
                                  riid[idx] == seed_item_iid && rspawn[idx] == sspawn[idx];
-      if (ref_exists_now && rt[idx] == item_type && rspawn[idx] == sspawn[idx]) {
+      if (guard_context && ref_exists_now && rt[idx] == item_type && rspawn[idx] == sspawn[idx]) {
         const int ref_item_owner = (int)ro[idx];
         const uint16_t ref_item_iid = riid[idx];
         if (ref_item_owner >= 0 && ref_item_owner < players &&
@@ -8757,7 +8822,7 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
           riid_out[idx] = ref_item_iid;
         }
       }
-      if (ref_same_item && (int)ro[idx] == seed_item_owner) {
+      if (guard_context && ref_same_item && (int)ro[idx] == seed_item_owner) {
         const float dx = rvx[idx] - svx[idx];
         const float dy = rvy[idx] - svy[idx];
         if (isfinite(svx[idx]) && isfinite(svy[idx]) && isfinite(rvx[idx]) && isfinite(rvy[idx]) &&
@@ -8773,6 +8838,33 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
           bvalid[idx] = 1u;
           bvx[idx] = rvx[idx];
           bvy[idx] = rvy[idx];
+        }
+      }
+      if (!ref_exists_now && !ref_same_item && isfinite(sdir[idx]) && isfinite(svx[idx]) &&
+          sdir[idx] * svx[idx] < 0.0f) {
+        uint8_t victim = 0xFFu;
+        for (int p = 0; p < players; p++) {
+          const npy_intp pidx = (i * width) + p;
+          if (rhitlag[pidx] == 0u || rhitstun[pidx] == 0u || rhitby[pidx] != seed_item_iid) {
+            continue;
+          }
+          if (victim != 0xFFu) {
+            victim = 0xFEu;
+            break;
+          }
+          victim = (uint8_t)p;
+        }
+        if (victim < 0xFEu) {
+          // Reflected laser hidden BODY callback:
+          // Item_8026A294 consumes OnGiveDamageThink before Item_80269F14's reflected-velocity
+          // callback. When public item direction and velocity are opposed and the next fighter row
+          // uniquely proves this item instance caused hitlag/hitstun, seed the item-internal
+          // damage latch; otherwise runtime collision remains the owner.
+          // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294,Item_80269F14}
+          // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_Reflected
+          bvictim[idx] = victim;
+          ((uint8_t*)PyArray_DATA(body_height))[idx] = 1u;
+          ((uint8_t*)PyArray_DATA(callback_flags))[idx] = 1u;
         }
       }
     }

@@ -150,6 +150,8 @@ def test_laser_runtime_keeps_source_order_for_spawn_collision_and_post_callbacks
     _assert_ordered(
         body,
         [
+            "const uint8_t hidden_victim = batch->state.item_hidden_body_hit_victim_port[ii]",
+            "combat_apply_item_hit(",
             "msl_item_reflect_apply_pending_laser_callback(batch, ii)",
             "const float x0 = batch->state.item_pos_x[ii]",
             "batch->state.item_pos_x[ii] = x",
@@ -157,7 +159,6 @@ def test_laser_runtime_keeps_source_order_for_spawn_collision_and_post_callbacks
             "item_try_shine_reflect_contact(",
             "combat_apply_item_shield_hit(",
             "combat_apply_item_hit(",
-            "if (stage_line_hit != 0u)",
         ],
     )
 

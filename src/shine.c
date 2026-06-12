@@ -405,6 +405,12 @@ static inline void enter_jump_aerial_basic(MslBatch* batch, size_t idx, const Ms
   batch->state.tilt_timer_y[idx] = 0xFEu;
   batch->state.fall_fast[idx] = 0;
   batch->state.jumps_left[idx]--;
+  const uint8_t source_creates_new_colldata_lock =
+      (batch->state.ecb_lock_timer[idx] == 0u &&
+       batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+       batch->state.coll_desired_ecb_bottom_rel_y[idx] > 0.00001f)
+          ? 1u
+          : 0u;
   // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4 before ChangeMotionState.
   // When this entry is reached from SpecialAirLw Loop/Turn/End IASA, that same callback owns the
   // frame's input consumption; destination JumpAerial special dispatch must wait for the next frame.
@@ -427,6 +433,17 @@ static inline void enter_jump_aerial_basic(MslBatch* batch, size_t idx, const Ms
     batch->state.coll_desired_ecb_bottom_locked_owner[idx] = 1u;
   }
   batch->state.ecb_lock_timer[idx] = 10u;
+  if (source_creates_new_colldata_lock != 0u) {
+    // `ftCommon_8007D5D4` creates CollData_X130_Locked from the current SpecialAirLw CollData
+    // packet when the source callback was previously unlocked. Later JumpAerial/EscapeAir map
+    // callbacks must preserve the nonzero desired bottom, but final floor publication still needs
+    // the source bottom-sweep phase before a root projection can ground.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+    //   ftFx_SpecialAirLwStart_Anim,ftFx_SpecialAirLwLoop_IASA}
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+    batch->state.shine_jump_preserved_desired_bottom[idx] = 1u;
+  }
   batch->state.shine_jump_iasa_entered_this_frame[idx] = 1u;
 }
 

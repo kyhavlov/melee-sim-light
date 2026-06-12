@@ -122,7 +122,9 @@ def test_shine_reflectdesc_precedes_item_body_hurt_status_gate() -> None:
     assert int(out["items"][0]["exists"]) == 1
     assert int(out["items"][0]["owner"]) == 1
     assert int(out["items"][0]["instance_id"]) == 222
-    assert float(out["items"][0]["vel_x"]) == -1.0
+    # Hidden BODY-before-reflect-callback rows flip public direction immediately but defer the
+    # reflected speed lane until the item callback consumes the BODY latch.
+    assert float(out["items"][0]["vel_x"]) == 1.0
     assert float(out["items"][0]["direction"]) == -1.0
 
 

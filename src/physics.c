@@ -1059,7 +1059,10 @@ static inline uint8_t physics_action_uses_player_nudge_ft80083f88_ground_to_air_
   // - Passive: neutral tech recovery calls the same `ft_80083F88` wrapper; the nudge direction is
   //   not constrained to facing before `mpColl_8004B108` can enter Fall.
   // - Squat: destination Wait IASA can enter Squat before Phys/Coll on terminal downed/passive
-  //   frames, and Squat_Coll also calls `ft_80083F88`.
+  //   frames, and Squat_Coll also calls `ft_80083F88`. The same callback ordering applies when
+  //   terminal EscapeN_Anim enters Wait through ft_8008A2BC and the destination Wait_IASA
+  //   immediately enters Squat through ftCo_800D5FB0; this is bounded to the first destination
+  //   Squat frame with EscapeN frame-start provenance.
   // Other ft_80083F88 callback families remain table-visible but are not runtime-closed by this
   // helper; a broader all-class nudge edge admission caused unrelated Battlefield float drift.
   //
@@ -1076,9 +1079,16 @@ static inline uint8_t physics_action_uses_player_nudge_ft80083f88_ground_to_air_
         batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_PASSIVE))
           ? 1u
           : 0u;
+  const uint8_t escape_n_terminal_source_squat =
+      (batch != NULL && action_id == (uint16_t)MSL_ACT_SQUAT &&
+       batch->state.action_frame[idx] <= 1 &&
+       (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_N ||
+        batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_N))
+          ? 1u
+          : 0u;
   const uint8_t audited_action =
       (uint8_t)(action_id == (uint16_t)MSL_ACT_KNEE_BEND || passive_source_squat ||
-                action_id == (uint16_t)MSL_ACT_PASSIVE ||
+                escape_n_terminal_source_squat || action_id == (uint16_t)MSL_ACT_PASSIVE ||
                 action_id == (uint16_t)MSL_ACT_DOWN_WAIT_U ||
                 action_id == (uint16_t)MSL_ACT_DOWN_WAIT_D ||
                 action_id == (uint16_t)MSL_ACT_DOWN_STAND_U ||
@@ -1531,10 +1541,10 @@ static inline void physics_compute_guardsetoff_turnover_player_nudge(
             ? physics_action_is_guardsetoff_turnover_owner(batch->state.action_id[idx],
                                                            batch->state.seed_prev_action_id[idx])
             : 0u;
-    // GuardSetOff -> Guard -> EscapeN same-proc turnover:
+    // GuardSetOff -> Guard -> EscapeN/Catch same-proc turnover:
     // - GuardSetOff_Anim can promote to Guard in Fighter_8006A360.
     // - The common overlap pass (`ftCommon_8007E0E4`) then runs before Fighter_procUpdate's Guard
-    //   IASA can enter EscapeN through `ftCo_8009980C`.
+    //   IASA can enter EscapeN through `ftCo_8009980C` or Catch through `ftCo_Catch_CheckInput`.
     // - Preserve exactly that source-owned nudge; ordinary/stale EscapeN rows stay outside this
     //   helper.
     // - The same callback phase can continue through Guard/Wait IASA into KneeBend after the
@@ -1545,6 +1555,7 @@ static inline void physics_compute_guardsetoff_turnover_player_nudge(
     //   ftCo_GuardSetOff_Anim,ftCo_80093BC0}
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Enter
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_8009980C,ftCo_800998EC}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
     // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
     const uint8_t guardsetoff_turnover_escape_n_from_guard =
         (batch->state.action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_N &&
@@ -1553,8 +1564,16 @@ static inline void physics_compute_guardsetoff_turnover_player_nudge(
          batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF)
             ? 1u
             : 0u;
+    const uint8_t guardsetoff_turnover_catch_from_guard =
+        (batch->state.action_id[idx] == (uint16_t)MSL_ACT_CATCH &&
+         batch->state.action_frame[idx] <= 0 &&
+         (batch->state.frame_start_action_id[idx] == (uint16_t)MSL_ACT_GUARD ||
+          batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD) &&
+         batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF)
+            ? 1u
+            : 0u;
     if (!guardsetoff_turnover_from_prev && !guardsetoff_turnover_from_promoted_seed_prev &&
-        !guardsetoff_turnover_escape_n_from_guard) {
+        !guardsetoff_turnover_escape_n_from_guard && !guardsetoff_turnover_catch_from_guard) {
       continue;
     }
 

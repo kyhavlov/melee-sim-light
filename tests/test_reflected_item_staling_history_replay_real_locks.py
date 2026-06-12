@@ -17,6 +17,10 @@ def _field_bytes(samples: np.ndarray, record: int, field: str, stride: int) -> n
 
 
 def _run_rollout_to_records(ds, records: tuple[int, ...]) -> dict[int, np.void]:
+    return _run_rollout_window_to_records(ds, 0, records)
+
+
+def _run_rollout_window_to_records(ds, start: int, records: tuple[int, ...]) -> dict[int, np.void]:
     binding = pytest.importorskip("msl_binding")
     samples = ds.samples
     sizes = binding.sizes()
@@ -35,8 +39,8 @@ def _run_rollout_to_records(ds, records: tuple[int, ...]) -> dict[int, np.void]:
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        binding.reseed_seed_rollout(handle, _field_bytes(samples, 0, "seed_t", seed_stride))
-        for rec in range(stop + 1):
+        binding.reseed_seed_rollout(handle, _field_bytes(samples, start, "seed_t", seed_stride))
+        for rec in range(start, stop + 1):
             binding.step_input_replay_frame_rng(
                 handle,
                 _field_bytes(samples, rec, "seed_t", seed_stride),

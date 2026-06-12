@@ -98,6 +98,70 @@ def test_falco_laser_airborne_fall_z_lane_respects_same_attack_hitlist_carry() -
     assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
 
 
+def test_sds_falco_laser_airborne_fall_exact_lbcoll_keeps_edge_no_hit_alive() -> None:
+    # SDS:148/149 is the same airborne Fall flattened-Z source owner as TBK, but the first frame is
+    # a live lbColl edge miss. The source path must use the exact x58->x4C HitCapsule matrix/local
+    # radius packet instead of a broad 2D swept approximation that consumes the shot one frame early.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    edge_seed, edge_ref, edge_out = _run_one_step_row(dataset_path, 148, 0)
+    p = 0
+    slot = 0
+    assert int(edge_seed["action_id"][p]) == 29  # Fall
+    assert int(edge_seed["items"][slot]["type"]) == 55  # Falco laser
+    assert int(edge_seed["items"][slot]["state"]) == 0
+    assert int(edge_ref["items"][slot]["exists"]) == 1
+    assert int(edge_out["items"][slot]["exists"]) == 1
+    assert int(edge_out["action_id"][p]) == int(edge_ref["action_id"][p]) == 29
+    assert int(edge_out["hitlag"][p]) == int(edge_ref["hitlag"][p]) == 0
+    assert int(edge_out["hitstun"][p]) == int(edge_ref["hitstun"][p]) == 0
+
+    hit_seed, hit_ref, hit_out = _run_one_step_row(dataset_path, 149, 0)
+    assert int(hit_seed["action_id"][p]) == 29
+    assert int(hit_seed["items"][slot]["type"]) == 55
+    assert int(hit_seed["items"][slot]["state"]) == 0
+    assert int(hit_ref["items"][slot]["exists"]) == 0
+    assert int(hit_out["items"][slot]["exists"]) == 0
+    assert int(hit_out["action_id"][p]) == int(hit_ref["action_id"][p]) == 84  # DamageAir1
+    assert int(hit_out["hitlag"][p]) == int(hit_ref["hitlag"][p]) == 4
+    assert int(hit_out["hitstun"][p]) == int(hit_ref["hitstun"][p]) == 9
+
+
+def test_ppa_same_attack_low_leg_laser_body_remains_eligible() -> None:
+    # Adjacent aggregate control for the SDS hb1/cap11 shallow-miss owner: PPA:4140 is also a
+    # state0 Falco laser against airborne Fall low-leg geometry, but the defender is carrying the
+    # same source attack id from a prior DamageAir sequence and source accepts the live shot. The
+    # low-leg miss owner must not become a broad hb1/cap11 suppressor.
+    # refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, 4140, 0)
+    p = 0
+    slot = 1
+    assert int(seed["action_id"][p]) == 29  # Fall
+    assert int(seed["seed_prev_action_id"][p]) == 84  # DamageAir1
+    assert int(seed["items"][slot]["type"]) == 55  # Falco laser
+    assert int(seed["last_attack_landed"][p]) == int(seed["items"][slot]["attack_id"])
+    assert int(ref["items"][slot]["exists"]) == 0
+    assert int(out["items"][slot]["exists"]) == 0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 84
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 4
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 9
+
+
 def test_tvr_jumpf_reflect_behavior_shallow_laser_contact_waits_for_deep_body() -> None:
     # TVR:3905/3906 covers early JumpF with stale reflect-behavior state and a Falco laser exact
     # lbColl edge candidate. The shallow frame must not consume the shot; the next deeper overlap
