@@ -1717,6 +1717,25 @@ static inline MslMpcollCeilingResult mpcoll_ceiling_result_make(uint8_t mode, ui
   return r;
 }
 
+static inline void mpcoll_wall_probe_clear(MslBatch* batch, size_t idx) {
+  batch->state.coll_wall_probe_valid[idx] = 0u;
+  batch->state.coll_wall_probe_side[idx] = 0u;
+  batch->state.coll_wall_probe_commit_kind[idx] = 0u;
+  batch->state.coll_wall_probe_candidate_count[idx] = 0u;
+  batch->state.coll_wall_probe_segment_id[idx] = -1;
+  batch->state.coll_wall_probe_corr_x[idx] = 0.0f;
+}
+
+// Diagnostic-only wall probe record (mirror of the floor probe family): which side's
+// candidate collection ran and how many de-duplicated candidates it produced. Last pass
+// wins within a frame; a commit overwrites with the committed line/push.
+static inline void mpcoll_wall_probe_note_candidates(MslBatch* batch, size_t idx, uint8_t side,
+                                                     uint8_t count) {
+  batch->state.coll_wall_probe_valid[idx] = 1u;
+  batch->state.coll_wall_probe_side[idx] = side;
+  batch->state.coll_wall_probe_candidate_count[idx] = count;
+}
+
 static inline void mpcoll_commit_wall_result(MslBatch* batch, size_t idx,
                                              const MslMpcollWallResult* r) {
   if (batch == NULL || r == NULL || r->hit == 0u || r->mode == MSL_MPCOLL_WALL_RESULT_NONE) {
@@ -1725,6 +1744,11 @@ static inline void mpcoll_commit_wall_result(MslBatch* batch, size_t idx,
   batch->state.pos_x[idx] += r->dx;
   batch->state.wall_kind[idx] = r->side;
   batch->state.coll_wall_commit_runtime[idx] = 1u;
+  batch->state.coll_wall_probe_valid[idx] = 1u;
+  batch->state.coll_wall_probe_side[idx] = r->side;
+  batch->state.coll_wall_probe_commit_kind[idx] = r->mode;
+  batch->state.coll_wall_probe_segment_id[idx] = (int16_t)r->segment_id;
+  batch->state.coll_wall_probe_corr_x[idx] = r->dx;
   batch->state.wall_id[idx] = r->segment_id;
   batch->state.wall_contact_x[idx] = r->contact_x;
   batch->state.wall_contact_y[idx] = r->contact_y;
@@ -2731,6 +2755,7 @@ static uint8_t grounded_ordered_left_wall(MslBatch* batch, size_t idx, const Msl
                            prev_ecb->top_y, cur_ecb->right_x, cur_ecb->right_y, cur_ecb->top_x,
                            cur_ecb->top_y);
   wall_candidate_list_remove_connected(&candidates, lwg, excluded_floor_wall);
+  mpcoll_wall_probe_note_candidates(batch, idx, (uint8_t)MSL_WALL_LEFT, candidates.count);
 
   float envelope_x = 0.0f;
   int envelope_line_idx = -1;
@@ -2839,6 +2864,7 @@ static uint8_t grounded_ordered_right_wall(MslBatch* batch, size_t idx,
                             prev_ecb->top_y, cur_ecb->left_x, cur_ecb->left_y, cur_ecb->top_x,
                             cur_ecb->top_y);
   wall_candidate_list_remove_connected(&candidates, rwg, excluded_floor_wall);
+  mpcoll_wall_probe_note_candidates(batch, idx, (uint8_t)MSL_WALL_RIGHT, candidates.count);
 
   float envelope_x = 0.0f;
   int envelope_line_idx = -1;
@@ -3109,6 +3135,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
 
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      mpcoll_wall_probe_clear(batch, idx);
       MslMpcollContext ctx = mpcoll_context_make(batch, bi, idx, stage_id, fg, cg, lwg, rwg);
       const uint16_t action_id = ctx.action_id;
       const int16_t joint_id_skip = batch->state.mpcoll_joint_id_skip[idx];
@@ -3508,6 +3535,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                                    left_cur_ecb->right_x, left_cur_ecb->right_y,
                                    left_cur_ecb->top_x, left_cur_ecb->top_y);
 
+          mpcoll_wall_probe_note_candidates(batch, idx, (uint8_t)MSL_WALL_LEFT, candidates.count);
           float envelope_x = 0.0f;
           int envelope_line_idx = -1;
           float envelope_nx = -1.0f, envelope_ny = 0.0f;
@@ -3958,6 +3986,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               right_prev_ecb->top_x, right_prev_ecb->top_y, right_cur_ecb->left_x,
               right_cur_ecb->left_y, right_cur_ecb->top_x, right_cur_ecb->top_y);
 
+          mpcoll_wall_probe_note_candidates(batch, idx, (uint8_t)MSL_WALL_RIGHT, candidates.count);
           float envelope_x = 0.0f;
           int envelope_line_idx = -1;
           float envelope_nx = 1.0f, envelope_ny = 0.0f;

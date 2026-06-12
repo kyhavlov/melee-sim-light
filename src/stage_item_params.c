@@ -1,4 +1,5 @@
 #include "stage_item_params.h"
+#include "data_dir.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -197,10 +198,7 @@ int stage_item_params_init(void) {
     return 0;
   }
 
-  const char* data_dir = getenv("MSL_DATA_DIR");
-  if (data_dir == NULL || data_dir[0] == '\0') {
-    data_dir = "data";
-  }
+  const char* data_dir = msl_data_dir();
 
   char path[512];
   int n = snprintf(path, sizeof(path), "%s/stage_items/yoshi_shyguy.bin", data_dir);

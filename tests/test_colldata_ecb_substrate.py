@@ -177,6 +177,12 @@ def _colldata_ecb_dtype() -> np.dtype:
             ("right_wall_speed_y", ("<f4", (4,))),
             ("ceiling_speed_x", ("<f4", (4,))),
             ("ceiling_speed_y", ("<f4", (4,))),
+            ("wall_probe_corr_x", ("<f4", (4,))),
+            ("wall_probe_segment_id", ("<i2", (4,))),
+            ("wall_probe_valid", ("u1", (4,))),
+            ("wall_probe_side", ("u1", (4,))),
+            ("wall_probe_commit_kind", ("u1", (4,))),
+            ("wall_probe_candidate_count", ("u1", (4,))),
         ],
         align=False,
     )
@@ -1152,5 +1158,43 @@ def test_colldata_debug_snapshot_does_not_allocate_after_init() -> None:
         stats = msl_binding.alloc_stats()
         assert int(stats["calls"]) == 0
         assert int(stats["bytes"]) == 0
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_wall_probe_lanes_record_air_wall_commit() -> None:
+    # Diagnostic wall probe (mirror of the floor probe family): a fall drifting into FD's
+    # right-side wall band must leave a probe record - side, commit kind, committed segment,
+    # and the push dx - so wall-pass debugging does not need throwaway printf builds.
+    import msl_binding
+
+    seed = _seed_base(STAGE_FD, ACT_FALL, SM_FALL, 88.5, -20.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["speed_air_x_self"][0, 0] = np.float32(-2.0)
+    seed["speed_y_self"][0, 0] = np.float32(-0.5)
+
+    sizes = msl_binding.sizes()
+    colldata_dtype = _colldata_ecb_dtype()
+    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        saw_commit = False
+        for _ in range(12):
+            msl_binding.step_input(handle, _input_bytes(), _input_bytes())
+            colldata = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+            msl_binding.debug_write_colldata_ecb(handle, colldata)
+            snap = colldata.view(colldata_dtype).reshape((1,))[0]
+            if int(snap["wall_probe_valid"][0]) and int(snap["wall_probe_commit_kind"][0]) != 0:
+                assert int(snap["wall_probe_side"][0]) == 2  # MSL_WALL_RIGHT
+                # The probe must record exactly the committed contact: FD's upper right
+                # wall segment (data/stages/final_destination.json i=9, the vertical face
+                # at x=85.5657 spanning y 0..-10.5 - the fighter's side point rides above
+                # the root at y~-20), pushed rightward (positive dx).
+                assert int(snap["wall_probe_segment_id"][0]) == 9
+                assert float(snap["wall_probe_corr_x"][0]) > 0.0
+                saw_commit = True
+                break
+        assert saw_commit, "no wall commit recorded by the probe lanes"
     finally:
         msl_binding.destroy(handle)

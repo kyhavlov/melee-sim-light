@@ -1,4 +1,5 @@
 #include "stage_collision.h"
+#include "data_dir.h"
 #include "ids.h"
 
 #include <float.h>
@@ -1551,10 +1552,7 @@ int stage_collision_init(void) {
   // All allocations and IO for stage collision must happen here (init-time).
   // stage_collision_apply() is on the per-frame hot path and must remain allocation-free.
 
-  const char* data_dir = getenv("MSL_DATA_DIR");
-  if (data_dir == NULL || data_dir[0] == '\0') {
-    data_dir = "data";
-  }
+  const char* data_dir = msl_data_dir();
 
   for (size_t i = 0; i < sizeof(g_stage_slots) / sizeof(g_stage_slots[0]); i++) {
     MslStageSlot* slot = &g_stage_slots[i];
@@ -1577,10 +1575,7 @@ uint8_t stage_collision_require_stage(uint32_t stage_id) {
   if (slot->loaded && slot->match_flow_loaded) {
     return 1u;
   }
-  const char* data_dir = getenv("MSL_DATA_DIR");
-  if (data_dir == NULL || data_dir[0] == '\0') {
-    data_dir = "data";
-  }
+  const char* data_dir = msl_data_dir();
   if (stage_load_slot_from_data_dir(slot, data_dir) != 0) {
     return 0u;
   }

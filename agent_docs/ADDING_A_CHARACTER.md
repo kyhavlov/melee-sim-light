@@ -32,10 +32,12 @@ Collect before writing any code:
   variants, charge states, followups. Marth: SpecialN ShieldBreaker
   (charge, 341-348), SpecialS Dancing Blade (4 stages x 3 directions x air,
   349-366), SpecialHi Dolphin Slash (367-368), SpecialLw Counter (369-372).
-- **A validation replay**: at least one `.slp` containing the character (ideally
-  vs an already-supported character). Accept up front that one replay will NOT
-  cover all moves — Marth's replay had zero ground specials, zero Counter. The
-  decomp is the implementation source; the replay only verifies.
+- **Validation replays**: ideally 2-3 `.slp` files containing the character on
+  different stages (aggregate suites support multiple replays - see
+  `replays/suites/aggregate_recent.json`). One replay will NOT cover all moves —
+  Marth's single replay had zero ground specials, zero Counter — and every hole
+  in the action inventory becomes decomp-tests-plus-webplay-only verification.
+  The decomp is the implementation source; replays only verify.
 
 ## Phase 1 — Registry + data pipeline (gate: build_data end-to-end, fox/falco bins byte-identical)
 

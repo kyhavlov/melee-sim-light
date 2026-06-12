@@ -891,23 +891,61 @@ def test_guardoff_special_blocked_without_x1c() -> None:
     ] * 12)
     acts = [int(o["action_id"][0]) for o in outs]
     assert 180 in acts, f"never entered GuardOff: {sorted(set(acts))}"
-    assert ACT_DS_GROUND not in acts, "up-B entered from GuardOff without the x1C window"
+    # The x1C gate blocks the special chain FROM GuardOff itself. The held up+B still jumps
+    # out of shield (up = jump OoS) and the presence-based grounded up-special admission
+    # (ftCo_Attack100_CheckInput, x686 == 0) then legitimately enters DS from KneeBend - the
+    # real up-B out-of-shield route. Assert no GuardOff -> DS transition, not DS absence.
+    for i in range(len(acts) - 1):
+        assert not (acts[i] == 180 and acts[i + 1] == ACT_DS_GROUND), (
+            "up-B entered directly from GuardOff without the x1C window"
+        )
 
 
-def test_aerial_up_b_buffer_not_modeled() -> None:
-    # Locked conservative behavior: ftCo_800D69C4 admits a BUFFERED aerial up-special
-    # (x68B >= x1C reverse-buffer); the engine has no x68B input-history lane, so a B press
-    # whose up-stick arrived earlier (no same-frame edge) does not enter. Flip this test when
-    # the input-history lane lands.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D69C4
+def test_aerial_up_b_requires_up_b_presence() -> None:
+    # Source shape (x686/x68B lanes landed): ftCo_800D69C4 admits the aerial up-special on
+    # up+B PRESENCE (held B with stick.y >= x21C) with the x68B >= x1C freshness gate. An
+    # up-stick that ended before the B press leaves no presence frame, so no entry - x68B is
+    # a re-trigger debounce, not a forward buffer.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D69C4,ftCo_800D6928}
     seed = _air_seed()
-    # up-stick first, B edge 3 frames later WITHOUT up held (stick back to neutral): vanilla's
-    # buffer would still admit the up-special within the window; we conservatively do not.
     outs = _run(seed, [_mk_inputs(main_y=127)] * 3 + [_mk_inputs(buttons=B)] + [_mk_inputs()] * 8)
     acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_DS_AIR not in acts, "aerial up-B entered with no up+B presence frame"
+
+
+def test_aerial_up_b_held_b_late_up_flick_enters() -> None:
+    # Presence admission: B held from earlier, stick flicked up later - the first up+B
+    # presence frame has x686 == 0 and x68B = the pre-period gap (large, fresh) -> enters.
+    # The old edge-gated dispatcher missed this (no B edge on the flick frame).
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D69C4
+    seed = _air_seed()
+    # hitstun masks the initial B-hold frames (a bare held B would otherwise dispatch
+    # neutral-B on its press edge); the up-flick lands after hitstun clears, with B held
+    # the whole time - so the flick frame has NO B edge, only presence.
+    seed["hitstun"][0, 0] = np.uint8(5)
+    outs = _run(seed, [_mk_inputs(buttons=B)] * 6 +
+                [_mk_inputs(buttons=B, main_y=127)] + [_mk_inputs(main_y=127)] * 10)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_DS_AIR in acts, f"held-B late up-flick never entered aerial up-B: {sorted(set(acts))}"
+
+
+def test_aerial_up_b_mash_within_x1c_rejected() -> None:
+    # Freshness gate: a second up+B press whose gap from the previous press period is below
+    # p_ftCommonData->x1C is rejected (x68B carries the short gap on its first frame).
+    # The first press here is consumed by an immediate hitstun-free... simply: press up+B,
+    # return to neutral for fewer than x1C frames (x1C = tech_lr_debounce_frames = 20 on the
+    # extracted table for vanilla), press again - the second press must not enter while the
+    # first DS is still running anyway; so instead seed the gap directly: neutral 2 frames
+    # between releases is below the window and the second press must NOT re-enter after the
+    # first DS completes. Locked via a fall-window scenario: up+B held 1 frame WITHOUT
+    # entering (hitstun blocks dispatch), neutral 2, then up+B again in Fall - stale gap.
+    seed = _air_seed()
+    seed["hitstun"][0, 0] = np.uint8(2)  # blocks the first press from dispatching
+    outs = _run(seed, [_mk_inputs(buttons=B, main_y=127)] + [_mk_inputs()] * 2 +
+                [_mk_inputs(buttons=B, main_y=127)] + [_mk_inputs()] * 8)
+    acts = [int(o["action_id"][0]) for o in outs]
     assert ACT_DS_AIR not in acts, (
-        "aerial up-B entered without a same-frame up+B edge - the x68B buffer lane landed; "
-        "update this test to assert the source behavior instead"
+        f"mashed up+B within the x1C window re-entered aerial up-B: {sorted(set(acts))}"
     )
 
 

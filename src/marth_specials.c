@@ -776,11 +776,9 @@ static uint8_t ms_b_entry_mask(const MslBatch* batch, size_t idx, uint16_t a, ui
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Fall.c,ftCo_Jump.c,ftCo_JumpAerial.c,
   //   ftCo_Pass.c,ftCo_DamageFall.c}
   //
-  // TODO(source-backed, blocked on an input-history lane): ftCo_800D69C4 admits the aerial
-  // up-special on a BUFFERED press (fp->x686 == 0 && fp->x68B >= p_ftCommonData->x1C, the
-  // reverse-buffer window). The engine has no x68B input-history lane yet, so the aerial
-  // dispatcher requires the same-frame B edge; test_aerial_up_b_buffer_not_modeled locks the
-  // conservative behavior until the lane lands.
+  // RESOLVED (x686/x68B input-history lanes landed): the aerial up-special is admitted on
+  // up+B PRESENCE with the x68B >= x1C freshness gate (ftCo_800D69C4); grounded on presence
+  // alone (ftCo_Attack100_CheckInput). See the dispatch block below.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D69C4
   switch (a) {
     case MSL_ACT_JUMP_F:
@@ -862,7 +860,18 @@ void marth_specials_update_pre_physics(MslBatch* batch) {
         continue;
       }
       const uint16_t pressed = batch->state.input_buttons_pressed[idx];
-      if ((pressed & (uint16_t)MSL_BUTTON_B) == 0u) {
+      const uint8_t b_edge = ((pressed & (uint16_t)MSL_BUTTON_B) != 0u) ? 1u : 0u;
+      // Source up-special admission is PRESENCE-based, not edge-based: grounded
+      // ftCo_Attack100_CheckInput fires on x686 == 0 (up+B present this frame, including a
+      // held B with a late up-flick); aerial ftCo_800D69C4 adds the x68B >= x1C freshness
+      // gate (x68B carries the gap before the current press period only on its first frame,
+      // so a mashed second up+B within the window is rejected).
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+      //   ftCo_Attack100_CheckInput,ftCo_800D69C4,ftCo_800D6928}
+      const uint8_t up_b_present = (batch->state.x686[idx] == 0u) ? 1u : 0u;
+      const uint8_t air_up_b_fresh =
+          (uint8_t)(up_b_present && batch->state.x68B[idx] >= c->tech_lr_debounce_frames);
+      if (!b_edge && !up_b_present) {
         continue;
       }
       const uint8_t mask = ms_b_entry_mask(batch, idx, a, on_ground);
@@ -882,31 +891,32 @@ void marth_specials_update_pre_physics(MslBatch* batch) {
       // mutually exclusive, but the check order matches the source chain regardless.
       // Directions absent from the action's chain do not enter.
       if (on_ground) {
-        if ((mask & MS_B_SIDE) != 0u && ax >= c->special_stick_x_threshold_side) {
+        if ((mask & MS_B_SIDE) != 0u && b_edge && ax >= c->special_stick_x_threshold_side) {
           if ((sx > 0.0f) != (batch->state.facing[idx] != 0u)) {
             batch->state.facing[idx] = (uint8_t)(sx > 0.0f);
           }
           ms_enter_specials(batch, ch, idx, 1u);
-        } else if ((mask & MS_B_UP) != 0u && sy >= c->special_stick_y_threshold) {
+        } else if ((mask & MS_B_UP) != 0u && up_b_present) {
           ms_enter_specialhi(batch, ch, idx, 1u);
-        } else if ((mask & MS_B_NEUTRAL) != 0u && ax < c->special_stick_x_threshold_side &&
-                   sy < c->special_stick_y_threshold && sy > -c->special_stick_y_threshold) {
+        } else if ((mask & MS_B_NEUTRAL) != 0u && b_edge &&
+                   ax < c->special_stick_x_threshold_side && sy < c->special_stick_y_threshold &&
+                   sy > -c->special_stick_y_threshold) {
           ms_enter_specialn(batch, ch, idx, 1u);
-        } else if ((mask & MS_B_DOWN) != 0u && sy <= -c->special_stick_y_threshold) {
+        } else if ((mask & MS_B_DOWN) != 0u && b_edge && sy <= -c->special_stick_y_threshold) {
           ms_enter_speciallw(batch, ch, idx, 1u);
         }
       } else {
-        if ((mask & MS_B_UP) != 0u && sy >= c->special_stick_y_threshold) {
+        if ((mask & MS_B_UP) != 0u && air_up_b_fresh) {
           ms_enter_specialhi(batch, ch, idx, 0u);
-        } else if ((mask & MS_B_DOWN) != 0u && sy <= -c->special_stick_y_threshold) {
+        } else if ((mask & MS_B_DOWN) != 0u && b_edge && sy <= -c->special_stick_y_threshold) {
           ms_enter_speciallw(batch, ch, idx, 0u);
-        } else if ((mask & MS_B_SIDE) != 0u && ax >= c->special_stick_x_threshold_side) {
+        } else if ((mask & MS_B_SIDE) != 0u && b_edge && ax >= c->special_stick_x_threshold_side) {
           if ((sx > 0.0f) != (batch->state.facing[idx] != 0u)) {
             batch->state.facing[idx] = (uint8_t)(sx > 0.0f);
           }
           ms_enter_specials(batch, ch, idx, 0u);
-        } else if ((mask & MS_B_NEUTRAL) != 0u && ax < c->special_stick_x_threshold_side &&
-                   sy < c->special_stick_y_threshold) {
+        } else if ((mask & MS_B_NEUTRAL) != 0u && b_edge &&
+                   ax < c->special_stick_x_threshold_side && sy < c->special_stick_y_threshold) {
           ms_enter_specialn(batch, ch, idx, 0u);
         }
       }

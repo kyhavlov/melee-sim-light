@@ -1,4 +1,5 @@
 #include "attack_id_tables.h"
+#include "data_dir.h"
 #include "char_registry.h"
 #include "ids.h"
 
@@ -55,10 +56,7 @@ static uint32_t read_u32_le(const uint8_t* p) {
 }
 
 static const char* data_dir_or_default(void) {
-  const char* data_dir = getenv("MSL_DATA_DIR");
-  if (data_dir == NULL || data_dir[0] == '\0') {
-    data_dir = "data";
-  }
+  const char* data_dir = msl_data_dir();
   return data_dir;
 }
 

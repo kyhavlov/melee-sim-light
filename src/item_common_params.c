@@ -1,4 +1,5 @@
 #include "item_common_params.h"
+#include "data_dir.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -70,10 +71,7 @@ int item_common_params_init(void) {
     return 0;
   }
 
-  const char* data_dir = getenv("MSL_DATA_DIR");
-  if (data_dir == NULL || data_dir[0] == '\0') {
-    data_dir = "data";
-  }
+  const char* data_dir = msl_data_dir();
 
   char path[512];
   const int n = snprintf(path, sizeof(path), "%s/items/item_common.json", data_dir);

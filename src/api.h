@@ -18,7 +18,11 @@ enum { MSL_MAX_HITBOXES = 4 };
 // Current target-domain fighter dynamic chains. Fox's ftData.x2C chain has four nodes; Falco has
 // no fighter dynamics in the extracted target data. Keep fixed capacity for allocation-free
 // runtime ownership while leaving the data loader schema able to reject larger unsupported chains.
-enum { MSL_MAX_DYNAMIC_NODES = 4 };
+// Dynamic JObj chain node capacity. Fox's tail (the only current collision-owner chain)
+// uses 4; Marth-class cosmetic chains reach 12 (3 chains); sized for the registry headroom
+// so a character whose hurt/hit geometry rides longer chains is a data change, not a
+// contract change. SSDYNN01 loads fail loudly past this cap (anim_pose.c).
+enum { MSL_MAX_DYNAMIC_NODES = 16 };
 // Decomp: `spawn_hitbox_0.hit_group` is a 3-bit field (0..7).
 // refs/melee/src/melee/lb/types.h::spawn_hitbox_0
 enum { MSL_HITLIST_GROUPS = 8 };
@@ -2003,6 +2007,13 @@ typedef struct MslDebugCollDataEcb {
   float right_wall_speed_y[MSL_MAX_PLAYERS];
   float ceiling_speed_x[MSL_MAX_PLAYERS];
   float ceiling_speed_y[MSL_MAX_PLAYERS];
+  // Wall-pass diagnostic probe (mirror of the floor probe family).
+  float wall_probe_corr_x[MSL_MAX_PLAYERS];
+  int16_t wall_probe_segment_id[MSL_MAX_PLAYERS];
+  uint8_t wall_probe_valid[MSL_MAX_PLAYERS];
+  uint8_t wall_probe_side[MSL_MAX_PLAYERS];
+  uint8_t wall_probe_commit_kind[MSL_MAX_PLAYERS];
+  uint8_t wall_probe_candidate_count[MSL_MAX_PLAYERS];
 } MslDebugCollDataEcb;
 
 // Debug/validation helper: record a single hitbox-vs-hurtcap contact candidate.

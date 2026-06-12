@@ -34,6 +34,7 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_COMMON_GROUNDED_B4B0_COLL,
     CLASS2_COMMON_GROUNDED_B108_COLL,
     CLASS2_COMMON_GROUNDED_COLL,
+    CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS,
     CLASS3_PHASE4_ATTACK_AIR_COLL,
     CLASS3_PHASE4_DAMAGE_COMMON_COLL,
     CLASS3_PHASE4_DAMAGE_FALL_COLL,
@@ -783,7 +784,7 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
     falco = read_mslmso01_v1(FALCO)
     symbols = read_callback_manifest(MANIFEST)
 
-    def expected_bits(coll_cb: str) -> int:
+    def expected_bits(coll_cb: str, phys_cb: str) -> int:
         bits = 0
         if coll_cb == "ftCo_AttackAir_Coll":
             bits |= CLASS3_PHASE4_ATTACK_AIR_COLL
@@ -795,6 +796,10 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
             bits |= CLASS3_PHASE4_DAMAGE_FLY_COLL
         if coll_cb == "ftCo_DamageFall_Coll":
             bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
+        if phys_cb == "ftFx_SpecialHiHoldAir_Phys":
+            # Char-special PHYS owner family (the is_spacie/MSL_ACT_FX_* migration word):
+            # firefox/firebird airborne charge-hold physics.
+            bits |= CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS
         return bits
 
     # Exhaustive Phase 4 source-callback boundary. These are the later-owner families routed by
@@ -809,7 +814,8 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
     for label, table in (("fox", fox), ("falco", falco)):
         for action_id in range(len(table.class3_bits)):
             coll_cb = symbols[int(table.coll_cb_id[action_id])]
-            assert int(table.class3_bits[action_id]) == expected_bits(coll_cb), (
+            phys_cb = symbols[int(table.phys_cb_id[action_id])]
+            assert int(table.class3_bits[action_id]) == expected_bits(coll_cb, phys_cb), (
                 label,
                 action_id,
                 coll_cb,

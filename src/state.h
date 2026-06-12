@@ -214,6 +214,14 @@ typedef struct MslStateSoA {
   float* coll_floor_probe_prev_bottom_y;
   float* coll_floor_probe_cur_bottom_x;
   float* coll_floor_probe_cur_bottom_y;
+  // Wall-pass diagnostic probe lanes (mirror of the floor probe family; written by
+  // mpcoll_wall_ceil candidate collectors + commit, debug-only consumers).
+  uint8_t* coll_wall_probe_valid;
+  uint8_t* coll_wall_probe_side;         // MSL_WALL_LEFT / MSL_WALL_RIGHT of the last record
+  uint8_t* coll_wall_probe_commit_kind;  // MSL_MPCOLL_WALL_RESULT_* of the last commit (0 none)
+  uint8_t* coll_wall_probe_candidate_count;
+  int16_t* coll_wall_probe_segment_id;  // committed wall segment id (-1 none)
+  float* coll_wall_probe_corr_x;        // committed push dx
   float* coll_substep_prev_pos_x;
   float* coll_substep_prev_pos_y;
   float* coll_substep_cur_pos_x;
@@ -896,6 +904,13 @@ typedef struct MslStateSoA {
   uint8_t* x682;  // fp->x682
   uint8_t* x683;  // fp->x683
   uint8_t* x684;  // fp->x684
+  // fp->x686/x68B: up+B input-presence timer pair. x686 = frames since up+B was last
+  // PRESENT (held B with stick.y >= p_ftCommonData->x21C), zeroed every present frame;
+  // x68B captures the prior gap on the first frame of a present period (the source
+  // aerial up-special freshness gate: ftCo_800D69C4 admits x686 == 0 && x68B >= x1C).
+  // refs/melee/src/melee/ft/fighter.c (input history block), ftCo_Attack100.c::ftCo_800D6928
+  uint8_t* x686;  // fp->x686
+  uint8_t* x68B;  // fp->x68B
 
   // UCF pad buffer (seeded, multi-frame).
   // refs/ucf/include/ucf/pad_buffer.h

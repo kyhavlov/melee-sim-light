@@ -1,4 +1,5 @@
 #include "staling_tables.h"
+#include "data_dir.h"
 #include "char_registry.h"
 #include "ids.h"
 
@@ -66,10 +67,7 @@ static float read_f32_le(const uint8_t* p) {
 }
 
 static const char* data_dir_or_default(void) {
-  const char* data_dir = getenv("MSL_DATA_DIR");
-  if (data_dir == NULL || data_dir[0] == '\0') {
-    data_dir = "data";
-  }
+  const char* data_dir = msl_data_dir();
   return data_dir;
 }
 
@@ -244,10 +242,17 @@ int staling_tables_init(void) {
     return 0;
   }
 
-  // Treat missing artifacts as non-fatal (groundwork is allowed to be debug-only).
-  (void)load_staling_weights();
+  // Staling weights + per-char move-id tables are gameplay-consumed; a registry character
+  // with a missing artifact must fail loudly (the silent-degradation class found in
+  // move_tables during the marth port).
+  if (load_staling_weights() != 0) {
+    return -1;
+  }
   for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
-    (void)load_move_id_table_for_char(MSL_CHAR_REGISTRY[ci].char_id, MSL_CHAR_REGISTRY[ci].name);
+    if (load_move_id_table_for_char(MSL_CHAR_REGISTRY[ci].char_id, MSL_CHAR_REGISTRY[ci].name) !=
+        0) {
+      return -1;
+    }
   }
 
   g_loaded = 1;

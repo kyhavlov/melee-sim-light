@@ -167,6 +167,12 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->coll_floor_probe_candidate_segment_id, 0xFF, sizeof(uint16_t) * bp);
   memset(state->coll_floor_probe_projected_segment_id, 0xFF, sizeof(uint16_t) * bp);
   memset(state->coll_floor_probe_candidate_line_idx, 0xFF, sizeof(int16_t) * bp);
+  memset(state->coll_wall_probe_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_wall_probe_side, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_wall_probe_commit_kind, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_wall_probe_candidate_count, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_wall_probe_segment_id, 0xFF, sizeof(int16_t) * bp);
+  memset(state->coll_wall_probe_corr_x, 0, sizeof(float) * bp);
   memset(state->coll_floor_probe_projected_line_idx, 0xFF, sizeof(int16_t) * bp);
   memset(state->coll_floor_probe_prev_bottom_x, 0, sizeof(float) * bp);
   memset(state->coll_floor_probe_prev_bottom_y, 0, sizeof(float) * bp);

@@ -1,4 +1,5 @@
 #include "api.h"
+#include "data_dir.h"
 #include "char_registry.h"
 #include "ids.h"
 
@@ -844,8 +845,12 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
 
-  // Staling tables are optional (groundwork only): missing artifacts should not prevent running.
-  (void)staling_tables_init();
+  // Staling tables are gameplay-consumed (staling.c damage weights + move-id attribution);
+  // a registry character with a missing artifact must fail init loudly, not stale silently.
+  if (staling_tables_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
 
   // Fighter attack identity (x2068/x206C) uses decomp-derived MotionState move_id tables.
   // Require these tables at init: attack identity and staling attribution depend on them.
@@ -871,8 +876,12 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
 
-  // Shield tilt tables are debug-geometry only; treat as optional for now.
-  (void)shield_tilt_table_init();
+  // Shield tilt tables are gameplay-consumed (shields.c/hurtboxes.c shield geometry);
+  // a registry character with a missing artifact must fail init loudly.
+  if (shield_tilt_table_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
 
   if (hurtcaps_tables_init() != 0) {
     msl_batch_destroy(batch);
@@ -2598,6 +2607,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.x682[idx] = seed->x682[p];
       batch->state.x683[idx] = seed->x683[p];
       batch->state.x684[idx] = seed->x684[p];
+      // x686/x68B (up+B presence pair) have no seed lanes: vanilla spawns them at 0xFF
+      // ("long ago"), and replay seeds carry no press-period history. 0xFF keeps the first
+      // post-reseed up+B press fresh (x68B >= x1C), matching a fresh fighter.
+      // refs/melee/src/melee/ft/fighter.c (0xFF init block)
+      batch->state.x686[idx] = 0xFFu;
+      batch->state.x68B[idx] = 0xFFu;
 
       batch->state.ucf_padbuf_index[idx] = seed->ucf_padbuf_index[p];
       batch->state.ucf_padbuf_sdrop_up_frames[idx] = seed->ucf_padbuf_sdrop_up_frames[p];
@@ -4669,6 +4684,12 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
           batch, bi, idx, &out->right_wall_speed_x[p], &out->right_wall_speed_y[p]);
       out->ceiling_speed_valid[p] = mpcoll_get_speed_ceiling_static(
           batch, bi, idx, &out->ceiling_speed_x[p], &out->ceiling_speed_y[p]);
+      out->wall_probe_corr_x[p] = batch->state.coll_wall_probe_corr_x[idx];
+      out->wall_probe_segment_id[p] = batch->state.coll_wall_probe_segment_id[idx];
+      out->wall_probe_valid[p] = batch->state.coll_wall_probe_valid[idx];
+      out->wall_probe_side[p] = batch->state.coll_wall_probe_side[idx];
+      out->wall_probe_commit_kind[p] = batch->state.coll_wall_probe_commit_kind[idx];
+      out->wall_probe_candidate_count[p] = batch->state.coll_wall_probe_candidate_count[idx];
       out->squeeze_restore_valid[p] = batch->state.coll_squeeze_restore_ecb_valid[idx];
       out->joint_id_skip[p] = batch->state.mpcoll_joint_id_skip[idx];
       out->joint_id_only[p] = batch->state.mpcoll_joint_id_only[idx];
@@ -6879,6 +6900,9 @@ int msl_debug_point_segment_dist2(float px, float py, float pz, float ax, float 
 int msl_debug_reset_pose_and_hitboxes_tables(void) {
   // Intended only for synthetic unit tests that need to swap MSL_DATA_DIR within a single process.
   // Do not call this while any batches exist; they may depend on cached table pointers.
+  // A prior msl_set_data_dir override would silently outrank the swapped env var, so the
+  // table-swap contract clears it: resolution falls back to MSL_DATA_DIR/"data".
+  msl_clear_data_dir();
   anim_pose_reset_for_tests();
   hitboxes_tables_reset_for_tests();
   return 0;

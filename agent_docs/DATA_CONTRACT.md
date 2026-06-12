@@ -990,9 +990,9 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList`
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable`
-  - Binary layout: `MSLMSO01` v16 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLMSO01` v17 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLMSO01"`
-    - `u32 version = 16`
+    - `u32 version = 17`
     - `u16 action_count`
     - `u16 reserved = 0`
     - `u32` offsets for `submotion_id`, `x4_flags`, `motion_state_word`, `anim_cb_id`,
@@ -1043,13 +1043,20 @@ Characters (Fox/Falco):
       `COMMON_GROUNDED_B4B0_COLL`, and `COMMON_AIRBORNE_COLL` select only common
       grounded/airborne callback families and deliberately exclude AttackAir, EscapeAir, Damage,
       item/projectile, catch/throw/capture, and Fox/Falco bespoke special callbacks.
-    - `class3_bits` is the narrow Phase 4 later-owner word. `PHASE4_ATTACK_AIR_COLL`,
-      `PHASE4_ESCAPE_AIR_COLL`, `PHASE4_DAMAGE_COMMON_COLL`, `PHASE4_DAMAGE_FLY_COLL`, and
-      `PHASE4_DAMAGE_FALL_COLL` select only the source collision callbacks for AttackAir,
-      EscapeAir, and Damage-family routing. Broad peers that share wrapper helpers, including
-      AirCatch, ItemThrowAir, cargo/capture, item, and Fox/Falco bespoke special callbacks, remain
-      excluded from this word.
-  - Stale/non-v16 `MSLMSO01` tables must be rejected. Version 16 adds `class3_bits` for narrow
+    - `class3_bits` is the narrow Phase 4 later-owner word plus char-special PHYS owner
+      families. `PHASE4_ATTACK_AIR_COLL`, `PHASE4_ESCAPE_AIR_COLL`,
+      `PHASE4_DAMAGE_COMMON_COLL`, `PHASE4_DAMAGE_FLY_COLL`, and `PHASE4_DAMAGE_FALL_COLL`
+      select only the source collision callbacks for AttackAir, EscapeAir, and Damage-family
+      routing. `FX_SPECIALHI_HOLD_AIR_PHYS` (v17) selects `ftFx_SpecialHiHoldAir_Phys` - the
+      per-(char, action) owner identity that replaces runtime
+      `msl_char_id_is_spacie && action_id == MSL_ACT_FX_*` predicate gates (the exemplar of
+      that migration; see `tests/test_action_id_dispatch_ratchet.py`). Broad peers that share
+      wrapper helpers, including AirCatch, ItemThrowAir, cargo/capture, item, and the
+      remaining Fox/Falco bespoke special callbacks, stay out of this word until each family
+      is migrated with its own bit.
+  - Stale/non-v17 `MSLMSO01` tables must be rejected. Version 17 adds the
+    `FX_SPECIALHI_HOLD_AIR_PHYS` char-special PHYS owner bit to `class3_bits` (the
+    is_spacie/action-id predicate migration exemplar). Version 16 adds `class3_bits` for narrow
     Phase 4 AttackAir/EscapeAir/Damage owner routing. Version 15 extends `class2_bits` with
     wrapper-shaped common grounded B108/B2DC/B4B0 owner classes. Version 14 added `class2_bits` for
     the narrow Phase 3 common grounded/airborne owner classes. Version 13 adds generated

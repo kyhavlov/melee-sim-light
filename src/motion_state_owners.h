@@ -71,6 +71,11 @@ enum {
   MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL = 1u << 2,
   MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL = 1u << 3,
   MSL_MS_CLASS3_PHASE4_DAMAGE_FALL_COLL = 1u << 4,
+  // Char-special PHYS owner families for generic-engine consumers: per-(char, action)
+  // MotionState callback identity in place of `is_spacie && action_id == MSL_ACT_FX_*`
+  // predicate gates. A new character's same-numbered actions carry its own callbacks and
+  // never set these bits.
+  MSL_MS_CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS = 1u << 5,
 };
 
 uint16_t msl_motion_state_submotion_id(uint8_t char_id, uint16_t action_id);

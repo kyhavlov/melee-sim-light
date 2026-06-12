@@ -383,6 +383,8 @@ static inline void opening_input_lock_apply_Fighter_UnkInitLoad_80068914_Inner1_
   batch->state.x682[idx] = 0xFFu;
   batch->state.x683[idx] = 0xFFu;
   batch->state.x684[idx] = 0xFFu;
+  batch->state.x686[idx] = 0xFFu;
+  batch->state.x68B[idx] = 0xFFu;
   batch->state.lr_press_timer[idx] = 0xFFu;
 }
 
@@ -802,6 +804,26 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
         batch->state.x67D[idx] = 0;
       } else {
         batch->state.x67D[idx] = clamp_inc_u8_ff(batch->state.x67D[idx]);
+      }
+
+      // fp->x686/x68B: up+B presence timer pair (held B + stick.y >= x21C). On each present
+      // frame the source copies the running gap into x68B then zeroes x686, so x68B carries
+      // the gap BEFORE the current press period only on its first frame - the aerial
+      // up-special freshness gate consumes exactly that.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessGamePlay (input history block)
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D6928,ftCo_800D69C4}
+      {
+        const uint8_t up_b_present =
+            (((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_B) != 0u) &&
+             stick_y >= com->special_stick_y_threshold)
+                ? 1u
+                : 0u;
+        if (up_b_present) {
+          batch->state.x68B[idx] = batch->state.x686[idx];
+          batch->state.x686[idx] = 0u;
+        } else {
+          batch->state.x686[idx] = clamp_inc_u8_ff(batch->state.x686[idx]);
+        }
       }
 
       if ((pressed & XY) != 0) {

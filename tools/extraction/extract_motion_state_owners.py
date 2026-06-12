@@ -19,7 +19,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 16
+FORMAT_VERSION = 17
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -66,6 +66,11 @@ CLASS3_PHASE4_ESCAPE_AIR_COLL = 1 << 1
 CLASS3_PHASE4_DAMAGE_COMMON_COLL = 1 << 2
 CLASS3_PHASE4_DAMAGE_FLY_COLL = 1 << 3
 CLASS3_PHASE4_DAMAGE_FALL_COLL = 1 << 4
+# Char-special PHYS owner families for generic-engine consumers. These migrate runtime
+# `msl_char_id_is_spacie(char) && action_id == MSL_ACT_FX_*` predicate gates onto the
+# extracted per-(char, action) MotionState callback identity - the source dispatch shape.
+# A new character's same-numbered actions carry its OWN callbacks and never set these bits.
+CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS = 1 << 5
 
 
 @dataclass(frozen=True)
@@ -606,6 +611,12 @@ def _class3_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         # Phase 4 DamageFall callback:
         # ftCo_DamageFall_Coll -> ft_8008370C -> mpColl_800473CC on ordinary airborne floor checks.
         bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
+    if callbacks[2] == "ftFx_SpecialHiHoldAir_Phys":
+        # Firefox/Firebird airborne charge-hold physics owner (the velocity freeze+decay
+        # phase). Consumed by the generic air-physics engine in place of the raw action-id
+        # + is_spacie predicate.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiHoldAir_Phys
+        bits |= CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS
     return bits
 
 
@@ -846,6 +857,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "PHASE4_DAMAGE_FALL_COLL": CLASS3_PHASE4_DAMAGE_FALL_COLL,
         "PHASE4_DAMAGE_FLY_COLL": CLASS3_PHASE4_DAMAGE_FLY_COLL,
         "PHASE4_ESCAPE_AIR_COLL": CLASS3_PHASE4_ESCAPE_AIR_COLL,
+        "FX_SPECIALHI_HOLD_AIR_PHYS": CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {

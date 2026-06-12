@@ -72,7 +72,26 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     assert (out_dir / "motion_state/owners/callback_symbols.json").exists()
     manifest = out_dir / "manifest.json"
     assert manifest.exists()
-    assert '"motion_state_owners": 16' in manifest.read_text(encoding="utf-8")
+    from tools.extraction.extract_motion_state_owners import FORMAT_VERSION
+
+    assert f'"motion_state_owners": {FORMAT_VERSION}' in manifest.read_text(encoding="utf-8")
+    # The manifest alone is not enough: the packaged no-decomp artifacts must THEMSELVES be
+    # at the runtime version, or Python preflight passes and native init then rejects the
+    # bins (the v16-packaged/v17-runtime skew class). Check the copied headers.
+    import json as _json
+    import struct as _struct
+
+    for ch in ("fox", "falco"):
+        b = (out_dir / "motion_state" / "owners" / f"{ch}.bin").read_bytes()
+        assert b[:8] == b"MSLMSO01"
+        assert _struct.unpack_from("<I", b, 8)[0] == FORMAT_VERSION, (
+            f"packaged {ch}.bin is not MSLMSO01 v{FORMAT_VERSION} - regenerate "
+            "tools/extraction/source_artifacts/motion_state/owners/"
+        )
+    symbols = _json.loads(
+        (out_dir / "motion_state" / "owners" / "callback_symbols.json").read_text(encoding="utf-8")
+    )
+    assert int(symbols["version"]) == FORMAT_VERSION
     assert not any(cmd[0] == "tools.extraction.extract_staling_move_id" for cmd in commands)
     assert not any(cmd[0] == "tools.extraction.extract_attack_id_move_id" for cmd in commands)
     assert not any(cmd[0] == "tools.extraction.extract_motion_state_owners" for cmd in commands)

@@ -11,6 +11,7 @@
 #include <numpy/arrayobject.h>
 
 #include "msl_preprocess_native.h"
+#include "data_dir.h"
 #include "msl_taxonomy_native.h"
 
 #include "../src/alloc.h"
@@ -4326,6 +4327,26 @@ static PyObject* msl_sizes(PyObject* self, PyObject* args) {
                        (int)sizeof(MslDebugCollDataEcb));
 }
 
+static PyObject* msl_clear_data_dir_py(PyObject* self, PyObject* args) {
+  (void)self;
+  (void)args;
+  msl_clear_data_dir();
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_set_data_dir_py(PyObject* self, PyObject* args) {
+  (void)self;
+  const char* path = NULL;
+  if (!PyArg_ParseTuple(args, "s", &path)) {
+    return NULL;
+  }
+  if (msl_set_data_dir(path) != 0) {
+    PyErr_SetString(PyExc_ValueError, "set_data_dir: empty or oversized path");
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_data_schema_versions(PyObject* self, PyObject* args) {
   (void)self;
   (void)args;
@@ -7063,6 +7084,12 @@ static PyMethodDef methods[] = {
     {"debug_body_matrix_overlap", msl_debug_body_matrix_overlap_py, METH_VARARGS,
      "debug_body_matrix_overlap(handle, batch_index, attacker, hb_id, defender, cap_id) -> float"},
     {"sizes", msl_sizes, METH_NOARGS, "sizes() -> dict of struct sizes"},
+    {"clear_data_dir", msl_clear_data_dir_py, METH_NOARGS,
+     "clear_data_dir() -> None. Drop the set_data_dir override; resolution falls back to "
+     "the MSL_DATA_DIR env var / 'data'."},
+    {"set_data_dir", msl_set_data_dir_py, METH_VARARGS,
+     "set_data_dir(path) -> None. Process-wide data root override for the table loaders "
+     "(replaces MSL_DATA_DIR env mutation; must be called before init())."},
     {"data_schema_versions", msl_data_schema_versions, METH_NOARGS,
      "data_schema_versions() -> dict of extracted data schema versions expected by this runtime"},
     {"alloc_reset", msl_alloc_reset, METH_NOARGS,

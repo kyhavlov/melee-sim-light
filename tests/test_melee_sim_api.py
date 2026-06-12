@@ -18,9 +18,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(autouse=True)
 def _pin_repo_data_root(monkeypatch):
-    # EnvBatch(data_dir=...) writes MSL_DATA_DIR into os.environ as a side effect,
-    # so no-arg EnvBatch tests here were order-dependent on that leak. Pin the repo
-    # data root per-test (monkeypatch restores it) to make each test standalone.
+    # Pin the repo data root per-test (monkeypatch restores it) so every test here is
+    # standalone. _resolve_data_dir no longer mutates os.environ (the root reaches the
+    # native loaders via _native.set_data_dir); this fixture supplies the read-only env
+    # input the no-arg EnvBatch constructions resolve from.
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
 
 
@@ -50,8 +51,9 @@ def test_default_data_dir_is_dot_msl(monkeypatch, tmp_path) -> None:
     (tmp_path / ".msl").mkdir()
 
     assert _resolve_data_dir(None) == str(tmp_path / ".msl")
-    assert os.environ["MSL_DATA_DIR"] == str(tmp_path / ".msl")
-    os.environ.pop("MSL_DATA_DIR", None)
+    # Resolution must NOT write the host environment (the data root reaches the native
+    # loaders via _native.set_data_dir instead).
+    assert "MSL_DATA_DIR" not in os.environ
 
 
 def test_missing_default_data_dir_error_is_actionable(monkeypatch, tmp_path) -> None:
@@ -300,3 +302,23 @@ def test_gamestate_dtype_exposes_items_randall_and_invulnerability() -> None:
         assert np.all(obs["stage"]["randall"]["exists"] == 1)
         assert np.all(np.isfinite(obs["stage"]["randall"]["x"]))
         assert np.all(np.isfinite(obs["stage"]["randall"]["y"]))
+
+
+def test_resolve_data_dir_is_side_effect_free_for_later_native_init(monkeypatch, tmp_path) -> None:
+    # Lifecycle regression: _resolve_data_dir(None) resolving a temp .msl must NOT set the
+    # native process-global override - a later DIRECT msl_binding.init() (env/repo data)
+    # must still load from the real root. The override is set only inside EnvBatch.__init__
+    # after the preflights pass.
+    import msl_binding
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MSL_DATA_DIR", raising=False)
+    (tmp_path / ".msl").mkdir()
+    assert _resolve_data_dir(None) == str(tmp_path / ".msl")
+
+    # Native init must not see the temp root. The autouse fixture pins MSL_DATA_DIR to the
+    # repo data dir, but the loaders may already be latched from earlier inits in this
+    # process - either way, init succeeding proves the stale temp .msl did not win.
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    msl_binding.destroy(handle)

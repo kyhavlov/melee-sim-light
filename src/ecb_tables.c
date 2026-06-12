@@ -1,4 +1,5 @@
 #include "ecb_tables.h"
+#include "data_dir.h"
 #include "char_registry.h"
 #include "ids.h"
 
@@ -224,10 +225,7 @@ int ecb_table_init(void) {
     return -1;
   }
 
-  const char* data_dir = getenv("MSL_DATA_DIR");
-  if (data_dir == NULL || data_dir[0] == '\0') {
-    data_dir = "data";
-  }
+  const char* data_dir = msl_data_dir();
 
   // If these artifacts are missing, fail loudly so developers run `tools.extraction.build_data`.
   for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
@@ -531,10 +529,7 @@ int ecb_extents_table_init(void) {
     return -1;
   }
 
-  const char* data_dir = getenv("MSL_DATA_DIR");
-  if (data_dir == NULL || data_dir[0] == '\0') {
-    data_dir = "data";
-  }
+  const char* data_dir = msl_data_dir();
 
   for (int ci = 0; ci < MSL_CHAR_REGISTRY_COUNT; ci++) {
     char rel[64];

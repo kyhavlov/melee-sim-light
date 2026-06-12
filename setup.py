@@ -66,6 +66,7 @@ ext = Extension(
         "src/api.c",
         "src/alloc.c",
         "src/config.c",
+        "src/data_dir.c",
         "src/common_params.c",
         "src/char_params.c",
         "src/special_msids.c",

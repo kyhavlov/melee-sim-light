@@ -1,4 +1,5 @@
 #include "motion_state_owners.h"
+#include "data_dir.h"
 #include "char_registry.h"
 #include "ids.h"
 
@@ -15,7 +16,7 @@ enum {
 };
 
 static const uint8_t k_magic[TABLE_MAGIC_LEN] = {'M', 'S', 'L', 'M', 'S', 'O', '0', '1'};
-static const uint32_t k_format_version = 16;
+static const uint32_t k_format_version = 17;
 
 typedef struct {
   uint8_t* buf;
@@ -52,10 +53,7 @@ static uint32_t read_u32_le(const uint8_t* p) {
 }
 
 static const char* data_dir_or_default(void) {
-  const char* data_dir = getenv("MSL_DATA_DIR");
-  if (data_dir == NULL || data_dir[0] == '\0') {
-    data_dir = "data";
-  }
+  const char* data_dir = msl_data_dir();
   return data_dir;
 }
 

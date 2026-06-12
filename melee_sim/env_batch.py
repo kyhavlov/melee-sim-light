@@ -16,37 +16,47 @@ from .config import Character, MatchConfig, PlayerConfig, Stage
 _DEFAULT_DATA_DIR = ".msl"
 _DATA_MANIFEST = "manifest.json"
 
-_REQUIRED_DATA_FILES = (
+# Char-independent artifacts every data root must carry.
+_REQUIRED_COMMON_DATA_FILES = (
     "stages/bin/grnla.bin",
     "common/ft_common_data.json",
-    "characters/fox.json",
-    "characters/falco.json",
-    "special_msids/fox.json",
-    "special_msids/falco.json",
     "items/lasers.bin",
     "items/item_common.json",
     "items/articles/fox_falco.bin",
     "stage_items/yoshi_shyguy.bin",
     "stage_items/dream_whispy.bin",
-    "moves/fox.json",
-    "moves/falco.json",
-    "attack_id/move_id/fox.bin",
-    "attack_id/move_id/falco.bin",
-    "motion_state/owners/fox.bin",
-    "motion_state/owners/falco.bin",
-    "anims/fox.bin",
-    "anims/falco.bin",
-    "hurtcaps/fox.bin",
-    "hurtcaps/falco.bin",
-    "scripts/fox.bin",
-    "scripts/falco.bin",
-    "hitboxes/fox.bin",
-    "hitboxes/falco.bin",
-    "ecb/fox_bottom.bin",
-    "ecb/falco_bottom.bin",
-    "ecb/fox_extents.bin",
-    "ecb/falco_extents.bin",
 )
+
+# Per-character artifact templates. The character list comes from the data root's own
+# manifest ("chars", written by build_data from the registry), so a root built for
+# fox/falco/marth preflights ALL three - hardcoding fox/falco here let a marth-less root
+# pass Python preflight and fail later as a generic native init error.
+_REQUIRED_CHAR_DATA_FILE_TEMPLATES = (
+    "characters/{char}.json",
+    "special_msids/{char}.json",
+    "moves/{char}.json",
+    "attack_id/move_id/{char}.bin",
+    "motion_state/owners/{char}.bin",
+    "anims/{char}.bin",
+    "hurtcaps/{char}.bin",
+    "scripts/{char}.bin",
+    "hitboxes/{char}.bin",
+    "ecb/{char}_bottom.bin",
+    "ecb/{char}_extents.bin",
+)
+
+_FALLBACK_DATA_CHARS = ("fox", "falco")
+
+
+def _data_manifest_chars(data_dir: Path) -> tuple[str, ...]:
+    try:
+        payload = json.loads((data_dir / _DATA_MANIFEST).read_text(encoding="utf-8"))
+        chars = payload.get("chars")
+        if isinstance(chars, list) and chars and all(isinstance(c, str) for c in chars):
+            return tuple(chars)
+    except (OSError, json.JSONDecodeError):
+        pass
+    return _FALLBACK_DATA_CHARS
 
 
 class EnvBatch:
@@ -83,12 +93,22 @@ class EnvBatch:
             data_path = Path(self.data_dir)
             _check_data_dir(data_path)
             _check_data_manifest(data_path)
-        self._handle = _native.init(
-            batch_size=self.batch_size,
-            num_players=self.num_players,
-            ucf_enabled=int(ucf_enabled),
-            ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
-        )
+            # Hand the validated root to the native loaders. This is process-global by the
+            # C loaders' design (they latch on first init); set it only now - after both
+            # preflights passed - and roll it back if construction fails so an aborted
+            # EnvBatch cannot leave a stale override behind.
+            _native.set_data_dir(self.data_dir)
+        try:
+            self._handle = _native.init(
+                batch_size=self.batch_size,
+                num_players=self.num_players,
+                ucf_enabled=int(ucf_enabled),
+                ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
+            )
+        except BaseException:
+            if self.data_dir is not None:
+                _native.clear_data_dir()
+            raise
         self._bound: Buffers | None = None
         self._closed = False
         self.bind(
@@ -480,10 +500,13 @@ def _u8(name: str, value: int) -> int:
 
 
 def _resolve_data_dir(data_dir: str | os.PathLike[str] | None) -> str | None:
+    # Pure resolution - NO side effects. The chosen root reaches the native loaders via
+    # _native.set_data_dir, but that happens in EnvBatch.__init__ only AFTER the data-dir
+    # and manifest preflights pass: resolving a path (this helper, also called directly by
+    # tests) must never poison the process-global override for later native init calls.
+    # The MSL_DATA_DIR env var is read-only input; os.environ is never written.
     if data_dir is not None:
-        resolved = str(Path(data_dir).expanduser().resolve())
-        os.environ["MSL_DATA_DIR"] = resolved
-        return resolved
+        return str(Path(data_dir).expanduser().resolve())
 
     msl_data = os.environ.get("MSL_DATA_DIR")
     if msl_data:
@@ -491,9 +514,7 @@ def _resolve_data_dir(data_dir: str | os.PathLike[str] | None) -> str | None:
 
     default_data = Path(_DEFAULT_DATA_DIR).resolve()
     if default_data.exists():
-        resolved = str(default_data)
-        os.environ["MSL_DATA_DIR"] = resolved
-        return resolved
+        return str(default_data)
 
     raise FileNotFoundError(_missing_data_dir_message(default_data))
 
@@ -515,7 +536,10 @@ def _missing_data_dir_message(default_data: Path) -> str:
 
 
 def _check_data_dir(data_dir: Path) -> None:
-    missing = [rel for rel in _REQUIRED_DATA_FILES if not (data_dir / rel).exists()]
+    required = list(_REQUIRED_COMMON_DATA_FILES)
+    for char in _data_manifest_chars(data_dir):
+        required.extend(t.format(char=char) for t in _REQUIRED_CHAR_DATA_FILE_TEMPLATES)
+    missing = [rel for rel in required if not (data_dir / rel).exists()]
     if missing:
         preview = "\n".join(f"  - {rel}" for rel in missing[:8])
         extra = "" if len(missing) <= 8 else f"\n  ... and {len(missing) - 8} more"
@@ -554,6 +578,16 @@ def _check_data_manifest(data_dir: Path) -> None:
         ) from exc
 
     mismatches: list[tuple[str, int | None, int | None]] = []
+    if isinstance(runtime_schemas, dict):
+        # A manifest that simply OMITS a runtime-known schema key must be reported like a
+        # mismatch, not silently skipped (omission is how a stale generator hides skew).
+        for name in runtime_schemas:
+            if isinstance(name, str) and name not in schemas:
+                try:
+                    runtime_version = int(runtime_schemas[name])
+                except (TypeError, ValueError):
+                    runtime_version = None
+                mismatches.append((name, None, runtime_version))
     for name, data_version_obj in schemas.items():
         if not isinstance(name, str):
             continue

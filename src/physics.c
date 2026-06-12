@@ -2100,8 +2100,11 @@ void physics_integrate(MslBatch* batch) {
                       batch->state.speed_air_x_self[idx]);
                 }
               }
-            } else if ((msl_char_id_is_spacie(batch->state.char_id[idx]) &&
-                        action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR)) {
+            } else if ((msl_motion_state_class3_bits(batch->state.char_id[idx], action_id) &
+                        MSL_MS_CLASS3_FX_SPECIALHI_HOLD_AIR_PHYS) != 0u) {
+              // Owner identity from the extracted MotionState table (ftFx_SpecialHiHoldAir_Phys),
+              // not a raw action-id + char-family predicate: the exemplar conversion for the
+              // is_spacie && MSL_ACT_FX_* migration (see motion_state_owners.h CLASS3 comment).
               const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
               if (phys != NULL) {
                 physics_apply_specialhi_hold_air(phys, action_frame,

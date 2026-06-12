@@ -266,6 +266,42 @@ def _extract_wait_anim_choices(buf: bytes, wait_abs: int) -> dict:
     }
 
 
+# MarsAttributes layout consumed by _extract_mars_sword_attrs: (key, offset, kind).
+# kind: "i32" | "f32" | "vec3" . Offsets verified against the parsed decomp struct
+# (refs/melee/src/melee/ft/chara/ftMars/types.h::_MarsAttributes) by
+# tests/test_decomp_struct_layout.py - transcription errors fail there, not at runtime.
+MARS_SWORD_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
+    ("specialn_charge_max_seconds", 0x00, "i32"),
+    ("specialn_release_damage_base", 0x04, "i32"),
+    ("specialn_release_damage_per_second", 0x08, "i32"),
+    ("specialn_entry_vel_divisor", 0x0C, "f32"),
+    ("specialn_start_friction", 0x10, "f32"),
+    ("specials_air_entry_vel_x_divisor", 0x14, "f32"),
+    ("specials_air_friction", 0x18, "f32"),
+    ("specials_air_entry_vel_y", 0x1C, "f32"),
+    ("specials_fall_accel", 0x20, "f32"),
+    ("specials_terminal_vel", 0x24, "f32"),
+    ("specialhi_freefall_mobility_mul", 0x28, "f32"),
+    ("specialhi_landing_lag_frames", 0x2C, "f32"),
+    ("specialhi_breverse_stick_threshold", 0x30, "f32"),
+    ("specialhi_angle_stick_threshold", 0x34, "f32"),
+    ("specialhi_angle_max_degrees", 0x38, "f32"),
+    ("specialhi_air_entry_vel_x_mul", 0x3C, "f32"),
+    ("specialhi_launch_decay_mul", 0x40, "f32"),
+    ("specialhi_fall_accel", 0x44, "f32"),
+    ("specialhi_terminal_vel", 0x48, "f32"),
+    ("speciallw_air_entry_vel_x_divisor", 0x4C, "f32"),
+    ("speciallw_air_friction", 0x50, "f32"),
+    ("speciallw_fall_accel", 0x54, "f32"),
+    ("speciallw_terminal_vel", 0x58, "f32"),
+    ("speciallw_counter_damage_mul", 0x5C, "f32"),
+    ("speciallw_counter_shield_strength", 0x60, "f32"),
+    ("speciallw_counter_desc_bone", 0x64, "i32"),
+    ("speciallw_counter_desc_offset", 0x68, "vec3"),
+    ("speciallw_counter_desc_size", 0x74, "f32"),
+]
+
+
 def _extract_mars_sword_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
     """Extract MarsAttributes (ftData.x4 ext block) for Marth-style sword characters.
 
@@ -294,38 +330,19 @@ def _extract_mars_sword_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
     ext_abs = arc.ptr32(ftdata_abs + 0x04)
     if ext_abs == arc.data_base:
         return out
-    out["specialn_charge_max_seconds"] = int(_i32_be(buf, ext_abs + 0x00))
-    out["specialn_release_damage_base"] = int(_i32_be(buf, ext_abs + 0x04))
-    out["specialn_release_damage_per_second"] = int(_i32_be(buf, ext_abs + 0x08))
-    out["specialn_entry_vel_divisor"] = float(_f32_be(buf, ext_abs + 0x0C))
-    out["specialn_start_friction"] = float(_f32_be(buf, ext_abs + 0x10))
-    out["specials_air_entry_vel_x_divisor"] = float(_f32_be(buf, ext_abs + 0x14))
-    out["specials_air_friction"] = float(_f32_be(buf, ext_abs + 0x18))
-    out["specials_air_entry_vel_y"] = float(_f32_be(buf, ext_abs + 0x1C))
-    out["specials_fall_accel"] = float(_f32_be(buf, ext_abs + 0x20))
-    out["specials_terminal_vel"] = float(_f32_be(buf, ext_abs + 0x24))
-    out["specialhi_freefall_mobility_mul"] = float(_f32_be(buf, ext_abs + 0x28))
-    out["specialhi_landing_lag_frames"] = float(_f32_be(buf, ext_abs + 0x2C))
-    out["specialhi_breverse_stick_threshold"] = float(_f32_be(buf, ext_abs + 0x30))
-    out["specialhi_angle_stick_threshold"] = float(_f32_be(buf, ext_abs + 0x34))
-    out["specialhi_angle_max_degrees"] = float(_f32_be(buf, ext_abs + 0x38))
-    out["specialhi_air_entry_vel_x_mul"] = float(_f32_be(buf, ext_abs + 0x3C))
-    out["specialhi_launch_decay_mul"] = float(_f32_be(buf, ext_abs + 0x40))
-    out["specialhi_fall_accel"] = float(_f32_be(buf, ext_abs + 0x44))
-    out["specialhi_terminal_vel"] = float(_f32_be(buf, ext_abs + 0x48))
-    out["speciallw_air_entry_vel_x_divisor"] = float(_f32_be(buf, ext_abs + 0x4C))
-    out["speciallw_air_friction"] = float(_f32_be(buf, ext_abs + 0x50))
-    out["speciallw_fall_accel"] = float(_f32_be(buf, ext_abs + 0x54))
-    out["speciallw_terminal_vel"] = float(_f32_be(buf, ext_abs + 0x58))
-    out["speciallw_counter_damage_mul"] = float(_f32_be(buf, ext_abs + 0x5C))
-    out["speciallw_counter_shield_strength"] = float(_f32_be(buf, ext_abs + 0x60))
-    out["speciallw_counter_desc_bone"] = int(_i32_be(buf, ext_abs + 0x64))
-    out["speciallw_counter_desc_offset"] = [
-        float(_f32_be(buf, ext_abs + 0x68)),
-        float(_f32_be(buf, ext_abs + 0x6C)),
-        float(_f32_be(buf, ext_abs + 0x70)),
-    ]
-    out["speciallw_counter_desc_size"] = float(_f32_be(buf, ext_abs + 0x74))
+    for key, off, kind in MARS_SWORD_ATTRS_LAYOUT:
+        if kind == "i32":
+            out[key] = int(_i32_be(buf, ext_abs + off))
+        elif kind == "f32":
+            out[key] = float(_f32_be(buf, ext_abs + off))
+        elif kind == "vec3":
+            out[key] = [
+                float(_f32_be(buf, ext_abs + off)),
+                float(_f32_be(buf, ext_abs + off + 4)),
+                float(_f32_be(buf, ext_abs + off + 8)),
+            ]
+        else:  # pragma: no cover - layout table typo
+            raise ValueError(f"unknown layout kind {kind!r} for {key}")
     return out
 
 
