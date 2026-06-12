@@ -2980,6 +2980,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.instance_id[idx] = seed->instance_id[p];
       batch->state.motion_entry_instance_id_override[idx] =
           seed->motion_entry_instance_id_override_u16[p];
+      batch->state.specialn_blaster_loop_requested[idx] =
+          seed->specialn_blaster_loop_requested[p] ? 1u : 0u;
       {
         batch->state.capture_grab_timer[idx] = seed->capture_grab_timer_f32[p];
         batch->state.capture_wait_counter[idx] = seed->capture_wait_counter_f32[p];

@@ -30,6 +30,7 @@ from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso
 from tools.slippi.rollback import finalized_frame_indices
 from tools.slippi.slpz import replay_path_for_peppi
 from tools.slippi.motion_state_owners import read_mslmso01_v1
+from tools.extraction.known_data_artifacts import read_mslftsc1_v1
 
 
 def manifest_registry_chars(data_root: Path) -> list[tuple[int, str]]:
@@ -1759,6 +1760,42 @@ def _load_throw_pulse_seed_tables(
                 int(cmd1_set_on[0]) if cmd1_set_on else -1
             )
     return pulse_frames_by_char_action, cmd1_start_by_char_action, shot_itkind_by_char
+
+
+def _load_specialn_loop_cmd0_windows(*, data_root) -> dict[tuple[int, int], tuple[int, int]]:
+    """Load Fox/Falco SpecialN Loop cmd_var[0] windows from MSLFTSC1 script data.
+
+    Runtime uses move_tables_special_cmd0_active_at_frame(), which includes a small latch-clear
+    tail after cmd0 is set back to zero. Mirror that source window here for one-step replay seeding
+    of mv.fx.SpecialN.isBlasterLoop.
+    """
+
+    tail_frames = 2  # src/move_tables.c::MSL_SPECIAL_CMD0_LATCH_CLEAR_TAIL_FRAMES
+    windows: dict[tuple[int, int], tuple[int, int]] = {}
+    for char_id, key in ((1, "fox"), (22, "falco")):
+        table = read_mslftsc1_v1(data_root / "scripts" / f"{key}.bin")
+        manifest = json.loads((data_root / "scripts" / f"{key}_manifest.json").read_text())
+        kind_names = {int(row["id"]): str(row["name"]) for row in manifest.get("event_kinds", [])}
+        for msid in (296, 299):
+            entry = next((entry for entry in table.entries if int(entry.msid) == int(msid)), None)
+            if entry is None:
+                continue
+            events = table.events[entry.first_event : entry.first_event + entry.event_count]
+            on_frame = -1
+            off_frame = -1
+            for ev in events:
+                if kind_names.get(int(ev.kind_id)) != "set_cmd_var":
+                    continue
+                if int(ev.payload.get("idx", -1)) != 0:
+                    continue
+                value = int(ev.payload.get("value", 0))
+                if value != 0 and on_frame < 0:
+                    on_frame = int(ev.frame)
+                elif value == 0 and on_frame >= 0 and off_frame < 0:
+                    off_frame = int(ev.frame)
+            if on_frame >= 0 and off_frame >= 0:
+                windows[(int(char_id), int(msid))] = (int(on_frame), int(off_frame) + tail_frames)
+    return windows
 
 
 def _load_runbrake_cmd0_seed_tables(*, data_root) -> tuple[dict[int, int], dict[int, int]]:
@@ -3957,6 +3994,7 @@ def _main_impl(args) -> Dataset:
         data_root=data_root,
         throw_action_to_move=throw_action_to_move,
     )
+    specialn_loop_cmd0_windows_by_char_msid = _load_specialn_loop_cmd0_windows(data_root=data_root)
     runbrake_cmd0_on_by_char, runbrake_cmd0_off_by_char = _load_runbrake_cmd0_seed_tables(
         data_root=data_root
     )
@@ -6058,6 +6096,24 @@ def _main_impl(args) -> Dataset:
         )
         & (post_action_frame[1:, :] == np.int16(0))
     )
+    specialn_blaster_loop_latch_owner = specialn_loop_restart_owner & np.isin(
+        post_char_id_u8[1:, :],
+        np.array([1, 22], dtype=np.uint8),
+    )
+    specialn_cmd0_edge_latch_owner = np.zeros((n_frames - 1, 4), dtype=bool)
+    seed_char = samples["seed_t"]["char_id"]
+    seed_msid = samples["seed_t"]["animation_index"].astype(np.uint32) & np.uint32(0xFFFF)
+    seed_af = samples["seed_t"]["action_frame"].astype(np.int16)
+    seed_b_timer = samples["seed_t"]["x67D"].astype(np.uint8)
+    b_press_af = seed_af.astype(np.int32) - seed_b_timer.astype(np.int32)
+    for (char_id, msid), (cmd0_on, cmd0_off_tail) in specialn_loop_cmd0_windows_by_char_msid.items():
+        specialn_cmd0_edge_latch_owner |= (
+            (seed_char == np.uint8(char_id))
+            & (seed_msid == np.uint32(msid))
+            & (seed_b_timer != np.uint8(0xFF))
+            & (b_press_af >= int(cmd0_on))
+            & (b_press_af < int(cmd0_off_tail))
+        )
     act_dead_down = np.uint16(0)
     act_dead_left = np.uint16(1)
     act_dead_right = np.uint16(2)
@@ -6145,6 +6201,18 @@ def _main_impl(args) -> Dataset:
         motion_entry_override_mask
     ]
     samples["seed_t"]["motion_entry_instance_id_override_u16"][:, :] = motion_entry_iid_override
+    # Hidden Fox/Falco SpecialN Loop repeat latch.
+    #
+    # The instance override above preserves source ordering for ft_80089824, but it is not proof
+    # that `mv.fx.SpecialN.isBlasterLoop` was set. Seed that latch separately for one-step replay
+    # rows where the source-visible post-frame proves the Loop Anim callback restarted the same
+    # action at frame 0. Free-running rollout still produces the latch from cmd_vars[0] + B edge.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    #   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,
+    #   ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA,ftFx_SpecialN_OnChangeAction}
+    samples["seed_t"]["specialn_blaster_loop_requested"][:, :] = (
+        (specialn_blaster_loop_latch_owner | specialn_cmd0_edge_latch_owner).astype(np.uint8)
+    )
 
     samples["seed_t"]["match_flow_pending_rebirth_char_id"][:, :] = _derive_match_flow_pending_rebirth_char_id(
         post_action_id_u16=post_action_id_u16,

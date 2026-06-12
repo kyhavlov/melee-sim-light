@@ -14,6 +14,7 @@ ACT_THROWN_LW = 0x00F2
 # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable (ftFx_MS_SpecialNStart=341)
 ACT_FX_SPECIAL_N_START = 0x0155
 ACT_FX_SPECIAL_AIR_N_LOOP = 0x0159
+ACT_FX_SPECIAL_AIR_N_END = 0x015A
 MSID_FX_SPECIAL_AIR_N_LOOP = 299
 
 BUTTON_B = 0x0200
@@ -195,7 +196,7 @@ def test_attached_victim_port_reseed_uses_lowest_victim_port_deterministically()
     assert int(internals["attached_victim_port"][2]) == 0xFF
 
 
-def test_instance_id_bumps_on_blaster_loop_restart_same_action_id() -> None:
+def test_blaster_loop_restart_requires_hidden_latch_not_instance_override_only() -> None:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -219,8 +220,9 @@ def test_instance_id_bumps_on_blaster_loop_restart_same_action_id() -> None:
     seed["defense_ratio"][0, :2] = np.float32(1.0)
     seed["fighter_scale_y"][0, :2] = np.float32(1.0)
 
-    # Seed directly into SpecialAirNLoop at an end-frame so the sim restarts the loop when a prior
-    # B press landed inside the command-script cmd_var[0] window.
+    # The generic motion-entry instance override lane is not sufficient proof of the hidden
+    # isBlasterLoop latch. Landing/entry rows can also use that lane, so a direct terminal Loop seed
+    # with no live latch must enter End even when the override is present.
     # Decomp:
     # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
     #   (when mv.fx.SpecialN.isBlasterLoop is true, sets fp->x21EC=ftFx_SpecialN_OnChangeAction and calls
@@ -231,13 +233,8 @@ def test_instance_id_bumps_on_blaster_loop_restart_same_action_id() -> None:
     seed["anim_frame_f32"][0, 0] = np.float32(15.0)
     seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(MSID_FX_SPECIAL_AIR_N_LOOP)
-    # Fox SpecialAirNLoop data/moves cmd_var[0] window is [0,14). With action_frame advancing to
-    # 16 before Anim callback, x67D=7 means the B edge happened at action-frame 9 and the hidden
-    # mv.fx.SpecialN.isBlasterLoop latch is set.
-    seed["x67D"][0, 0] = np.uint8(7)
 
-    # Keep P1 inert so this test isolates P0's SpecialAirNLoop restart path and does not consume
-    # plAttack_80037B08 through unrelated match-flow transitions.
+    # Keep P1 inert so this test isolates P0's SpecialAirNLoop terminal path.
     seed["action_id"][0, 1] = np.uint16(ACT_WAIT)
     seed["action_frame"][0, 1] = np.int16(0)
     seed["anim_frame_f32"][0, 1] = np.float32(0.0)
@@ -245,8 +242,9 @@ def test_instance_id_bumps_on_blaster_loop_restart_same_action_id() -> None:
     seed["on_ground"][0, 1] = np.uint8(1)
 
     seed["instance_id"][0, 0] = np.uint16(100)
-    # Force a non-matching prior x2073 compare byte so the same-action loop restart exercises both
-    # writers: ft_800895E0 (x4 low-byte mismatch) and ft_80089824 (OnChangeAction callback).
+    seed["motion_entry_instance_id_override_u16"][0, 0] = np.uint16(102)
+    # This used to be misinterpreted as Blaster-loop latch provenance. It is only an instance-order
+    # seed lane and must not decide Loop vs End.
     seed["instance_id_x2073"][0, 0] = np.uint8(16)
     seed["on_ground"][0, 0] = np.uint8(0)
 
@@ -254,8 +252,6 @@ def test_instance_id_bumps_on_blaster_loop_restart_same_action_id() -> None:
 
     prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
     inp = np.zeros((1, input_stride), dtype=np.uint8)
-    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
-    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
 
     out_cmp = np.zeros((1, compare_stride), dtype=np.uint8)
 
@@ -268,7 +264,4 @@ def test_instance_id_bumps_on_blaster_loop_restart_same_action_id() -> None:
         msl_binding.destroy(handle)
 
     cmp0 = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0]
-    assert int(cmp0["action_id"][0]) == ACT_FX_SPECIAL_AIR_N_LOOP
-    # In GALE01, the loop restart runs Fighter_ChangeMotionState (ft_800895E0) and then x21EC
-    # OnChangeAction (ft_80089824), so fp->x2088 bumps twice on this frame.
-    assert int(cmp0["instance_id"][0]) == 102
+    assert int(cmp0["action_id"][0]) == ACT_FX_SPECIAL_AIR_N_END

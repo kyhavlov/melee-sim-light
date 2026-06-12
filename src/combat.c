@@ -68,6 +68,8 @@ enum {
   // source record is anchored to FtPart 18, the dynamic tail chain consumed by lb_8000B1CC.
   // data/hurtcaps/{fox,falco}.json cap12 -> FtPart 18.
   MSL_HURTCAP_FOX_FALCO_TAIL_PART_ID = 18,
+  // data/scripts/{fox,falco}.bin (MSLFTSC1 ftCo_SM_AttackLw3 first create_hitbox frame).
+  MSL_ATTACK_LW3_FIRST_CREATE_FRAME = 7,
 };
 
 enum {
@@ -2298,6 +2300,41 @@ static inline uint8_t combat_shield_active_action(uint16_t action_id) {
   }
 }
 
+static inline uint8_t combat_single_create_grounded_guardreflect_enable_edge_allows_shield(
+    const MslBatch* batch, size_t a_idx, size_t d_idx, size_t hb_i) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if ((batch->state.hitbox_enable_edge[hb_i] == 0u &&
+       batch->state.hitbox_pose_create[hb_i] == 0u) ||
+      batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT) {
+    return 0u;
+  }
+  const uint16_t attacker_action = batch->state.action_id[a_idx];
+  if (attacker_action != (uint16_t)MSL_ACT_ATTACK_LW3 ||
+      batch->state.animation_index[a_idx] != (uint32_t)MSL_SM_ATTACK_LW3) {
+    return 0u;
+  }
+  if (batch->state.action_frame[a_idx] != (int16_t)MSL_ATTACK_LW3_FIRST_CREATE_FRAME) {
+    return 0u;
+  }
+
+  // AttackLw3 first-create / GuardReflect ShieldDesc owner:
+  // `ftAction_8007121C -> ftColl_800768A0` clears HitCapsule.victims_1 on an enable edge unless
+  // an already-active same-group HitCapsule can be copied. For AttackLw3's extracted frame-7
+  // single-create script, the dense group seed is not a concrete per-HitCapsule victim list and can
+  // stale-carry a previous shield miss into the first live create frame. Do not let that stale
+  // dense proxy suppress the source ShieldDesc hit; generated AttackS4 late-payload powershield
+  // latches remain on their separate owner.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80078C70}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC}
+  // data/scripts/{fox,falco}.bin (MSLFTSC1 grounded Attack* create_hitbox frame)
+  return 1u;
+}
+
 static inline void combat_preserve_guard_x10_for_immediate_setoff(
     MslBatch* batch, size_t d_idx, uint16_t d_motion_id_pre, const MslCommonParams* c,
     uint8_t fighter_powershield_active) {
@@ -2665,6 +2702,56 @@ static inline uint8_t combat_hitcapsule_is_authored_same_group_primary(const Msl
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   // data/hitboxes/{fox,falco}.bin (MSLHITB1 damage + hit_group + hitbox id/order)
   return saw_same_group_sibling;
+}
+
+static inline uint8_t combat_primary_phantom_tiplog_allows_later_same_group_body(
+    const MslBatch* batch, const MslCommonParams* c, int bi, int attacker, int hb_id, int defender,
+    uint8_t hit_group) {
+  if (batch == NULL || c == NULL || bi < 0 || attacker < 0 || defender < 0 ||
+      attacker >= (int)MSL_MAX_PLAYERS || defender >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= MSL_MAX_HITBOXES || hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  const size_t d_idx = msl_idx_player(bi, defender);
+  const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
+  const uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
+  for (int other_hb = hb_id + 1; other_hb < MSL_MAX_HITBOXES; other_hb++) {
+    const size_t other_i = idx_hitbox(bi, attacker, other_hb);
+    if (batch->state.hitbox_enabled[other_i] == 0u ||
+        hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[other_i]) != hit_group) {
+      continue;
+    }
+    const uint16_t other_flags = batch->state.hitbox_flags[other_i];
+    if (defender_on_ground) {
+      if ((other_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0u) {
+        continue;
+      }
+    } else if ((other_flags & MSL_HITBOX_FLAG_HIT_AERIAL) == 0u) {
+      continue;
+    }
+
+    const float hx = batch->state.hitbox_x[other_i];
+    const float hy = batch->state.hitbox_y[other_i];
+    const float hz = batch->state.hitbox_z[other_i];
+    const float hr = batch->state.hitbox_radius[other_i];
+    for (uint8_t cap_id = 0u; cap_id < hurtcap_count; cap_id++) {
+      const size_t cap_i = idx_hurtcap(bi, defender, (int)cap_id);
+      if (batch->state.hurtcap_enabled[cap_i] == 0u) {
+        continue;
+      }
+      float overlap_amount = 0.0f;
+      const uint8_t overlaps = combat_body_overlap_lbColl_80006E58_matrix_radius(
+          batch, bi, attacker, other_hb, defender, (int)cap_id, hx, hy, hz, hr,
+          batch->state.hurtcap_a_x[cap_i], batch->state.hurtcap_a_y[cap_i],
+          batch->state.hurtcap_a_z[cap_i], batch->state.hurtcap_b_x[cap_i],
+          batch->state.hurtcap_b_y[cap_i], batch->state.hurtcap_b_z[cap_i], 0u, &overlap_amount,
+          NULL);
+      if (overlaps != 0u && overlap_amount > c->phantom_overlap_max_x7a8) {
+        return 1u;
+      }
+    }
+  }
+  return 0u;
 }
 
 static inline uint8_t combat_replay_rollout_advanced_past_reseed(const MslBatch* batch, int bi) {
@@ -7133,14 +7220,20 @@ static inline uint8_t combat_damageflyroll_attackairb_late_attackairn_hitcapsule
   if (source_hb_i < hb_base || source_hb_i >= hb_base + (size_t)MSL_MAX_HITBOXES) {
     return 0u;
   }
+  const size_t source_hb_id = source_hb_i - hb_base;
+  if (source_hb_id != 0u) {
+    return 0u;
+  }
   if (!combat_attackairn_hitbox_payload_is_authored_late(
           source_hitcapsule_int_dmg, source_hitbox_angle, source_hitbox_kbg, source_hitbox_bkb)) {
     return 0u;
   }
   // Current ProcessHit source owner for AttackAirB -> late AttackAirN DamageFlyRoll:
-  // this same-frame trade reaches ftCo_8008DCE0 with an authored late NAir BODY HitCapsule. The
-  // extracted payload proves the source owner; this family admits the DamageFlyRoll gate but does
-  // not add a Fighter_8006CDA4 pre-gate consume (the explicit seed marker for exact rows is `4`).
+  // this same-frame trade reaches ftCo_8008DCE0 with the authored late NAir root/body hb0
+  // HitCapsule. Limb hb1/hb2 contacts use the same late payload but do not carry this gate owner.
+  // The selected hb0 plus extracted payload proves the source owner; this family admits the
+  // DamageFlyRoll gate but does not add a Fighter_8006CDA4 pre-gate consume (the explicit seed
+  // marker for exact rows is `4`).
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
@@ -12143,6 +12236,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
           if (!allows && shield_seed_kind == 2u) {
             allows = 1u;
+          } else if (!allows &&
+                     combat_single_create_grounded_guardreflect_enable_edge_allows_shield(
+                         batch, a_idx, d_idx, hb_i)) {
+            allows = 1u;
           }
           if (!allows) {
             continue;
@@ -13008,10 +13105,18 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                combat_hitcapsule_is_authored_same_group_primary(batch, bi, attacker, hb_id))
                   ? 1u
                   : 0u;
+          const uint8_t primary_phantom_has_later_same_group_body =
+              same_group_primary_full_body && !shield_active && lbcoll_overlap_valid &&
+                      lbcoll_overlap_amount > 0.0f &&
+                      lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8
+                  ? combat_primary_phantom_tiplog_allows_later_same_group_body(
+                        batch, c, bi, attacker, hb_id, defender, hit_group)
+                  : 0u;
           const uint8_t fighter_phantom_tiplog_range =
               (!attackairb_stale_owner_candidate && lbcoll_overlap_valid &&
                lbcoll_overlap_amount > 0.0f &&
-               ((!shield_active && !same_group_primary_full_body &&
+               ((!shield_active &&
+                 (!same_group_primary_full_body || primary_phantom_has_later_same_group_body) &&
                  lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8) ||
                 guard_shield_poke_phantom_boundary))
                   ? 1u
@@ -13521,6 +13626,17 @@ static inline void combat_preserve_fresh_air_damage_entry_root_y(MslBatch* batch
   }
 }
 
+static inline void combat_clear_replay_shield_contact_seed_lanes(MslBatch* batch) {
+  if (batch == NULL || batch->state.combat_shield_contact_hb_kind == NULL) {
+    return;
+  }
+  const size_t total = (size_t)batch->batch_size * (size_t)MSL_MAX_PLAYERS *
+                       (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS;
+  for (size_t i = 0; i < total; i++) {
+    batch->state.combat_shield_contact_hb_kind[i] = 0u;
+  }
+}
+
 void combat_resolve(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -13559,6 +13675,13 @@ void combat_resolve(MslBatch* batch) {
   }
 
   combat_preserve_fresh_air_damage_entry_root_y(batch);
+  // `combat_shield_contact_hb_kind` is one-step replay provenance for lbColl_80007BCC /
+  // ftColl_80076CBC admission. It is authoritative for the frame seeded by replay validation, but
+  // it is not live HitCapsule/ShieldDesc state and must not persist into the next rollout step.
+  // Runtime free-running rows keep this lane zero after init.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+  combat_clear_replay_shield_contact_seed_lanes(batch);
 }
 
 int combat_debug_select_body_hits(MslBatch* batch, int batch_index,

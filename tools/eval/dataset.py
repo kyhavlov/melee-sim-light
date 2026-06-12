@@ -463,6 +463,10 @@ SEED_DTYPE = np.dtype(
         # Narrow replay-facing same-frame fighter-proc order lane for simultaneous instance_id
         # counter consumers. 0 = no override; nonzero = replay-visible fp->x2088 for this entry.
         ("motion_entry_instance_id_override_u16", _arr("<u2", MAX_PLAYERS)),
+        # Hidden Fox/Falco Blaster Loop repeat latch (`mv.fx.SpecialN.isBlasterLoop`).
+        # One-step replay seeds set this only for same-action Loop -> Loop restarts; live runtime
+        # owns ordinary cmd_vars[0] + B-edge production.
+        ("specialn_blaster_loop_requested", _arr("u1", MAX_PLAYERS)),
         ("attack_id", _arr("<u2", MAX_PLAYERS)),
         ("attack_instance", _arr("<u2", MAX_PLAYERS)),
         ("last_attack_landed", _arr("u1", MAX_PLAYERS)),

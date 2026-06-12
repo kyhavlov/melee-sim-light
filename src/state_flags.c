@@ -454,6 +454,7 @@ static inline uint8_t state_flags_magnify_runtime_visibility_kind(const MslBatch
                   MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR);
     const uint8_t damageflyhi_hitstun_only_visible_edge =
         (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_HI &&
+                  batch->state.action_frame[idx] <= 9 &&
                   (flags_2218 &
                    (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
                              MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR |
@@ -1654,8 +1655,29 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       }
       const uint8_t magnify_runtime_visibility_kind =
           state_flags_magnify_runtime_visibility_kind(batch, idx, action_id, f221f);
-      const uint8_t magnify_runtime_visibility_owner =
+      uint8_t magnify_runtime_visibility_owner =
           magnify_runtime_visibility_kind != (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NONE ? 1u : 0u;
+      const uint8_t replay_frame_playback =
+          (replay_rollout != 0u && batch->replay_frame_rng_applied != NULL &&
+           batch->replay_frame_rng_applied[bi] != 0u)
+              ? 1u
+              : 0u;
+      if (replay_frame_playback != 0u &&
+          magnify_runtime_visibility_kind == (uint8_t)MSL_MAGNIFY_LOCAL_EPISODE_NO_INSIDE_CARRY &&
+          batch->state.magnify_damage_seed_episode_active[idx] == 0u &&
+          batch->state.magnify_damage_counter_x1910[idx] == 0u &&
+          batch->state.camera_box_visible_x221f_b0[idx] == 0u &&
+          batch->state.camera_box_visible_x221f_b0_replay_rise[idx] == 0u) {
+        // Replay-frame playback feeds Slippi's source camera-box bit every step. A fresh
+        // zero-counter magnify episode in that mode must therefore be owned by the replay-fed
+        // x221F publication or by a seeded x1910 episode, not by MSL's root-bound approximation
+        // alone. Normal free-running step_input keeps the approximation for source ifMagnify
+        // root exits.
+        // refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+        // refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FC7C0,ifMagnify_802FC998}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+        magnify_runtime_visibility_owner = 0u;
+      }
       const uint8_t magnify_damageflytop_local_visible_owner =
           state_flags_magnify_damageflytop_local_episode_visible_owner(batch, idx, f221f);
       const uint8_t magnify_replay_visible_local_carry =

@@ -5,8 +5,9 @@ import math
 from pathlib import Path
 
 import numpy as np
+import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
 from tools.modelplay.sim_env import build_match_config_array
 
 
@@ -23,6 +24,7 @@ ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_ATTACK_HI4 = 0x003F
 ACT_LANDING_AIR_N = 0x0046
+ACT_LANDING_AIR_LW = 0x004A
 ACT_ESCAPE_AIR = 0x00EC
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
@@ -36,6 +38,7 @@ SM_JUMPF = 16
 SM_LANDING = 35
 SM_LANDING_FALL_SPECIAL = 36
 SM_LANDING_AIR_N = 73
+SM_LANDING_AIR_LW = 77
 
 CHAR_FOX = 1
 STAGE_FD = 32
@@ -147,6 +150,30 @@ def _step_once(seed: np.ndarray, prev_inp: np.ndarray, inp: np.ndarray) -> np.nd
         return out.view(COMPARE_DTYPE).reshape((1,))[0]
     finally:
         msl_binding.destroy(handle)
+
+
+def _step_replay_record(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
+    import msl_binding
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    seed = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_inp = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    inp = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        msl_binding.reseed_seed(handle, seed)
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.write_compare(handle, out)
+    finally:
+        msl_binding.destroy(handle)
+    return row["seed_t"][0], out.view(COMPARE_DTYPE).reshape(-1)[0], row["ref_t1"][0]
 
 
 def _run_opening_init_match_until_p0_interrupt(
@@ -285,6 +312,42 @@ def test_landing_air_n_exits_to_wait_after_lag_frames() -> None:
     assert int(out["action_id"][0]) == ACT_WAIT
     assert int(out["animation_index"][0]) == SM_WAIT1_0
     assert int(out["action_frame"][0]) == 0
+
+
+def test_landing_air_lw_floor_span_loss_enters_fall_feh_2318() -> None:
+    # LandingAir floor-span owner:
+    # - FEH:2318 starts Falco in LandingAirLw on Dream Land platform segment 1.
+    # - ftCo_LandingAir_Coll delegates to ftCo_Landing_Coll -> ft_80084280; after LandingAir root
+    #   motion, the current floor no longer supports the root, so source enters Fall.
+    # - FEH:2317 is the adjacent in-span row and must stay in LandingAirLw, proving this is not a
+    #   broad LandingAir suppressor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    dataset_path = Path("datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl")
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed_before, out_before, ref_before = _step_replay_record(dataset_path, 2317)
+    assert int(seed_before["action_id"][1]) == ACT_LANDING_AIR_LW
+    assert int(seed_before["animation_index"][1]) == SM_LANDING_AIR_LW
+    assert int(out_before["action_id"][1]) == int(ref_before["action_id"][1]) == ACT_LANDING_AIR_LW
+    assert int(out_before["on_ground"][1]) == int(ref_before["on_ground"][1]) == 1
+
+    moving_path = Path("datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl")
+    if moving_path.exists():
+        moving_seed, moving_out, moving_ref = _step_replay_record(moving_path, 5743)
+        assert int(moving_seed["action_id"][0]) == ACT_LANDING_AIR_LW
+        assert float(moving_seed["speed_air_x_self"][0]) != 0.0
+        assert int(moving_out["action_id"][0]) == int(moving_ref["action_id"][0]) == ACT_LANDING_AIR_LW
+        assert int(moving_out["on_ground"][0]) == int(moving_ref["on_ground"][0]) == 1
+
+    seed, out, ref = _step_replay_record(dataset_path, 2318)
+    assert int(seed["action_id"][1]) == ACT_LANDING_AIR_LW
+    assert int(seed["animation_index"][1]) == SM_LANDING_AIR_LW
+    assert int(ref["action_id"][1]) == 0x001D  # Fall
+    for field in ("action_id", "animation_index", "action_frame", "pos_x", "pos_y", "on_ground", "ground_id"):
+        np.testing.assert_array_equal(out[field], ref[field], err_msg=field)
 
 
 def test_landing_fall_special_exits_to_wait_after_lag_frames() -> None:

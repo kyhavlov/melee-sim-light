@@ -60,38 +60,49 @@ static inline uint8_t specialn_is_blaster_loop_requested(const MslBatch* batch, 
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNStart_IASA
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_IASA
   //
-  // This simulator does not yet model mv.fx.SpecialN.isBlasterLoop directly. However, extracted
-  // command data gives the cmd_vars[0] window, and the seed schema includes fp->x67D ("frames since
-  // last B press", saturating at 0xFF). Infer the latch only when that B press happened during the
-  // cmd_vars[0] window, rather than anywhere in the motion state.
-  // data/moves/{fox,falco}.json specials_by_msid["<msid>"].events set_cmd_var(idx=0)
+  // MSL models the source latch as specialn_blaster_loop_requested. Replay reseed reconstructs
+  // the latch only when the B edge happened inside the extracted cmd_vars[0] window; free-running
+  // gameplay sets it from the live IASA callback below and consumes it in Loop Anim.
+  // data/scripts/{fox,falco}.bin MSLFTSC1 set_cmd_var(idx=0)
   if (batch == NULL) {
     return 0;
   }
+  if (batch->state.specialn_blaster_loop_requested[idx] != 0u) {
+    return 1u;
+  }
+  return 0u;
+}
+
+static inline void specialn_update_blaster_loop_request_iasa(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint16_t a = batch->state.action_id[idx];
+  if (a != (uint16_t)MSL_ACT_FX_SPECIAL_N_START && a != (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP &&
+      a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START &&
+      a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP) {
+    return;
+  }
+  if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u) {
+    return;
+  }
   const uint32_t msid_u32 = batch->state.animation_index[idx];
   if (msid_u32 > 0xFFFFu) {
-    return 0;
+    return;
   }
   const int af = (int)batch->state.action_frame[idx];
   if (af < 0) {
-    return 0;
+    return;
   }
-  const int x67d = (int)batch->state.x67D[idx];
-  if (x67d < 0 || x67d > 255) {
-    return 0;
+  // Decomp: ftFx_SpecialN{Start,Loop}_IASA and aerial counterparts set
+  // `mv.fx.SpecialN.isBlasterLoop` when cmd_vars[0] is live and the current input edge contains B.
+  // The latch persists until the next Loop Anim callback consumes it.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+  //   ftFx_SpecialNStart_IASA,ftFx_SpecialNLoop_IASA,
+  //   ftFx_SpecialAirNStart_IASA,ftFx_SpecialAirNLoop_IASA}
+  if (move_tables_special_cmd0_active_at_frame(batch->state.char_id[idx], (uint16_t)msid_u32, af)) {
+    batch->state.specialn_blaster_loop_requested[idx] = 1u;
   }
-  if (x67d == 0xFF) {
-    return 0;
-  }
-  if (x67d >= af) {
-    return 0;
-  }
-  if ((batch->state.prev_input_buttons[idx] & (uint16_t)MSL_BUTTON_B) != 0u) {
-    return 1u;
-  }
-  const int b_press_af = af - x67d;
-  return move_tables_special_cmd0_active_at_frame(batch->state.char_id[idx], (uint16_t)msid_u32,
-                                                  b_press_af);
 }
 
 static inline uint8_t action_allows_special_entry_ground(const MslBatch* batch, size_t idx,
@@ -429,6 +440,7 @@ static inline void enter_blaster_start(MslBatch* batch, size_t idx, const MslLas
     // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
     batch->state.fall_fast[idx] = 0u;
   }
+  batch->state.specialn_blaster_loop_requested[idx] = 0u;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   // Decomp: both grounded and aerial SpecialN enter paths call ftAnim_8006EBA4 immediately after
   // ChangeMotionState.
@@ -746,7 +758,9 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
     case MSL_ACT_FX_SPECIAL_N_LOOP:
       if (anim_finished(cid, lp->ground_loop_msid, anim_frame_f32)) {
         const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
-        if (specialn_is_blaster_loop_requested(batch, idx)) {
+        const uint8_t loop_requested = specialn_is_blaster_loop_requested(batch, idx);
+        batch->state.specialn_blaster_loop_requested[idx] = 0u;
+        if (loop_requested) {
           // Loop -> Loop: request another shot cycle.
           // Decomp: Loop restarts itself via Fighter_ChangeMotionState without KeepFastFall, then
           // ftFx_SpecialN_OnChangeAction calls ft_800892A0 before the shot accessory callback.
@@ -797,7 +811,9 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
     case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
       if (anim_finished(cid, lp->air_loop_msid, anim_frame_f32)) {
         const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
-        if (specialn_is_blaster_loop_requested(batch, idx)) {
+        const uint8_t loop_requested = specialn_is_blaster_loop_requested(batch, idx);
+        batch->state.specialn_blaster_loop_requested[idx] = 0u;
+        if (loop_requested) {
           // Decomp: Aerial loop restarts itself via Fighter_ChangeMotionState without KeepFastFall.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
           batch->state.fall_fast[idx] = 0;
@@ -1068,7 +1084,9 @@ void blaster_update_pre_physics(MslBatch* batch) {
           break;
         case MSL_ACT_FX_SPECIAL_N_LOOP:
           if (anim_finished(cid, lp->ground_loop_msid, anim_frame_f32)) {
-            if (specialn_is_blaster_loop_requested(batch, idx)) {
+            const uint8_t loop_requested = specialn_is_blaster_loop_requested(batch, idx);
+            batch->state.specialn_blaster_loop_requested[idx] = 0u;
+            if (loop_requested) {
               const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
               // Loop -> Loop: request another shot cycle.
               // Decomp: Loop restarts itself via Fighter_ChangeMotionState without KeepFastFall.
@@ -1117,7 +1135,9 @@ void blaster_update_pre_physics(MslBatch* batch) {
           break;
         case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
           if (anim_finished(cid, lp->air_loop_msid, anim_frame_f32)) {
-            if (specialn_is_blaster_loop_requested(batch, idx)) {
+            const uint8_t loop_requested = specialn_is_blaster_loop_requested(batch, idx);
+            batch->state.specialn_blaster_loop_requested[idx] = 0u;
+            if (loop_requested) {
               const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
               // Decomp: Aerial loop restarts itself via Fighter_ChangeMotionState without KeepFastFall.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
@@ -1154,6 +1174,8 @@ void blaster_update_pre_physics(MslBatch* batch) {
         default:
           break;
       }
+
+      specialn_update_blaster_loop_request_iasa(batch, idx);
     }
   }
 }

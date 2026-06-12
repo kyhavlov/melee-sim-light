@@ -191,6 +191,55 @@ def _selected_body_hitbox_hurtcap(
     )
 
 
+@pytest.mark.integration
+def test_late_nair_to_attackairb_damageflyroll_owner_is_root_hb0_only() -> None:
+    # The reciprocal late-NAir -> BAir DamageFlyRoll owner is selected-hitbox provenance, not
+    # visible action shape. DCC's positive uses late NAir hb0/root, while FEH rec1362 selects hb1
+    # limb against cap9 and must stay on the normal DamageFlyLw path in rollout.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dcc_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    feh_path = root / "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+    if not dcc_path.exists() or not feh_path.exists():
+        pytest.skip("missing local DCC/FEH datasets")
+
+    assert _selected_body_hitbox_hurtcap(dcc_path, 4968, attacker=0, defender=1) == (0, 10)
+    assert _selected_body_hitbox_hurtcap(feh_path, 1362, attacker=1, defender=0) == (1, 9)
+
+    dcc_seed, dcc_ref, dcc_out = _run_one_step_row(
+        dcc_path,
+        4968,
+        1,
+        rng_damage_fly_roll_gate=True,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    assert int(dcc_seed["action_id"][1]) == 67  # AttackAirB.
+    assert int(dcc_seed["fighter_8006cda4_pre_gate_consume_count"][1]) == 4
+    assert int(dcc_ref["action_id"][1]) == 91  # DamageFlyRoll.
+    assert int(dcc_out["action_id"][1]) == 91
+
+    trace_path = root / "reports/triage/feh1362_late_nair_limb_negative.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        feh_path,
+        start_record=0,
+        window_records=(1362,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    feh_ref, feh_out, site1_count = rows[1362]
+    assert int(feh_ref["action_id"][0]) == 89  # DamageFlyLw, not DamageFlyRoll.
+    assert int(feh_out["action_id"][0]) == 89
+    assert site1_count == 0
+
+
 @dataclass(frozen=True)
 class _DamageFlyRoll8006CDA4Case:
     dataset_rel: str

@@ -68,6 +68,43 @@ def _run_one_step(dataset_path: Path, record: int, *, seed_mutator=None) -> tupl
     return seed_t[0], row["ref_t1"][0], out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
 
 
+def _run_replay_rollout_row(dataset_path: Path, start_record: int, end_record: int) -> tuple[np.void, np.void]:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > int(end_record), f"dataset too short for record={end_record}"
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.frombuffer(
+            samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8
+        ).copy().reshape(1, seed_stride)
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start_record, end_record + 1):
+            row = samples[record : record + 1]
+            frame_seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, seed_stride
+            )
+            prev_input_bytes = np.frombuffer(
+                row["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+            ).copy().reshape(1, input_stride)
+            input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            binding.step_input_replay_frame_rng(handle, frame_seed_bytes, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return samples[end_record]["ref_t1"], out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+
+
 def _run_one_step_from_slp(slp_path: Path, record: int, *, ports: list[int]) -> tuple[np.void, np.void, np.void]:
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
@@ -111,6 +148,47 @@ def _run_one_step_from_slp(slp_path: Path, record: int, *, ports: list[int]) -> 
         binding.destroy(handle)
 
     return row["seed_t"][0], row["ref_t1"][0], out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+
+
+@pytest.mark.integration
+def test_specialairnloop_hidden_loop_latch_uses_same_action_restart_provenance_feh() -> None:
+    # ftFx_SpecialAirNLoop_Anim reads mv.fx.SpecialN.isBlasterLoop before current-frame IASA can
+    # set the next latch. The latch is live hidden runtime state: FEH:216 presses B inside cmd0,
+    # FEH:228 consumes that earlier latch and restarts Loop, while FEH:2518 has the same terminal
+    # held-B/x67D shape but no earlier live latch and enters End. Do not use the generic
+    # motion_entry_instance_id_override lane as latch proof; landing/entry rows also use that lane.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    #   ftFx_SpecialAirNLoop_Anim,ftFx_SpecialAirNLoop_IASA,ftFx_SpecialN_OnChangeAction}
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    restart_seed, restart_ref, restart_out = _run_one_step(dataset_path, 228)
+    p = 1
+    assert int(restart_seed["action_id"][p]) == 345  # SpecialAirNLoop
+    assert int(restart_seed["x67D"][p]) == 1
+    assert int(restart_seed["specialn_blaster_loop_requested"][p]) == 1
+    assert int(restart_ref["action_id"][p]) == 345
+    assert int(restart_ref["action_frame"][p]) == 0
+    assert int(restart_out["action_id"][p]) == int(restart_ref["action_id"][p])
+    assert int(restart_out["action_frame"][p]) == int(restart_ref["action_frame"][p])
+    assert int(restart_out["instance_id"][p]) == int(restart_ref["instance_id"][p])
+
+    rollout_ref, rollout_out = _run_replay_rollout_row(dataset_path, 216, 228)
+    assert int(rollout_out["action_id"][p]) == int(rollout_ref["action_id"][p])
+    assert int(rollout_out["action_frame"][p]) == int(rollout_ref["action_frame"][p])
+
+    end_seed, end_ref, end_out = _run_one_step(dataset_path, 2518)
+    assert int(end_seed["action_id"][p]) == 345
+    assert int(end_seed["x67D"][p]) == 1
+    assert int(end_seed["motion_entry_instance_id_override_u16"][p]) == 0
+    assert int(end_seed["specialn_blaster_loop_requested"][p]) == 0
+    assert int(end_ref["action_id"][p]) == 346
+    assert int(end_out["action_id"][p]) == int(end_ref["action_id"][p])
 
 
 @pytest.mark.integration

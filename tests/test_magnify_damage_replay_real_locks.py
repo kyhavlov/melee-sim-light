@@ -638,6 +638,49 @@ def test_magnify_rollout_feh_damageflytop_reflect_b1_visible_edge_does_not_tick(
 
 
 @pytest.mark.integration
+def test_magnify_rollout_feh_damageflyhi_no_source_lane_does_not_tick_replay_playback() -> None:
+    # FEH has a replay-frame-fed DamageFlyHi stretch where MSL's root/camera approximation can see
+    # an offscreen trajectory, but the source replay lanes expose neither x221F_b0 nor a nonzero
+    # x1910 counter. Replay playback must trust those source lanes and avoid a hidden +1% magnify
+    # tick before the later LandingAirN boundary.
+    # refs/melee/src/melee/ft/ftlib.c::{ftLib_80086A8C,ftLib_80086B64,ftLib_80086B90}
+    # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FC7C0,ifMagnify_802FC998}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    start = 1700
+    visible_record = 1744
+    tick_record = 1803
+    land_record = 2302
+    visible_seed = ds.samples[visible_record]["seed_t"]
+    assert int(visible_seed["action_id"][p]) == 87  # DamageFlyHi.
+    assert int(visible_seed["action_frame"][p]) == 9
+    assert int(visible_seed["magnify_damage_counter_x1910"][p]) == 0
+    assert int(visible_seed["camera_box_visible_x221f_b0"][p]) == 1
+    assert int(ds.samples[visible_record - 1]["seed_t"]["camera_box_visible_x221f_b0"][p]) == 0
+    assert (int(visible_seed["state_flags"][p, 0]) & 0xF4) == 0
+    assert (int(visible_seed["state_flags"][p, 3]) & 0xF7) == 0x02
+
+    tick_ref = ds.samples[tick_record]["ref_t1"]
+    tick_out = _run_rollout(ds, start, tick_record, replay_frame_lanes=True)
+    assert float(tick_out["percent"][p]) == pytest.approx(float(tick_ref["percent"][p]), abs=1e-5)
+
+    land_ref = ds.samples[land_record]["ref_t1"]
+    land_out = _run_rollout(ds, start, land_record, replay_frame_lanes=True)
+    assert float(land_out["percent"][p]) == pytest.approx(float(land_ref["percent"][p]), abs=1e-5)
+    assert int(land_out["action_id"][1]) == int(land_ref["action_id"][1]) == 74
+
+
+@pytest.mark.integration
 def test_magnify_rollout_lim_damageflytop_early_visible_episode_ticks() -> None:
     # LIM exposes a source camera-box visibility start on DamageFlyTop frame 8: ftLib_80086A8C has
     # already set fp->x221F_b0, but the replay-derived camera-target-inside lane is still true and

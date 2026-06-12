@@ -2786,6 +2786,42 @@ static inline uint8_t ottotto_edge_matches_facing(const MslBatch* batch, int bi,
   return facing ? (uint8_t)(pos_x >= line->x1) : (uint8_t)(pos_x <= line->x0);
 }
 
+static inline uint8_t ottotto_position_past_facing_edge(const MslBatch* batch, int bi,
+                                                        uint16_t ground_id, uint8_t facing,
+                                                        float pos_x) {
+  const uint32_t stage_id = (batch != NULL && bi >= 0) ? batch->state.stage_id[(size_t)bi] : 0u;
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (line_idx < 0) {
+    return 0u;
+  }
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  MslStageFloorLine world = {0};
+  (void)stage_collision_floor_line_world(batch, bi, &g->lines[(size_t)line_idx], &world);
+  const MslStageFloorLine* line = &world;
+  return facing ? (uint8_t)(pos_x > line->x1) : (uint8_t)(pos_x < line->x0);
+}
+
+static inline uint8_t position_past_floor_span(const MslBatch* batch, int bi, uint16_t ground_id,
+                                               float pos_x) {
+  const uint32_t stage_id = (batch != NULL && bi >= 0) ? batch->state.stage_id[(size_t)bi] : 0u;
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (line_idx < 0) {
+    return 0u;
+  }
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  MslStageFloorLine world = {0};
+  (void)stage_collision_floor_line_world(batch, bi, &g->lines[(size_t)line_idx], &world);
+  const float lo = (world.x0 < world.x1) ? world.x0 : world.x1;
+  const float hi = (world.x0 < world.x1) ? world.x1 : world.x0;
+  return (uint8_t)(pos_x < lo || pos_x > hi);
+}
+
 static inline uint8_t dash_turn_floor_loss_is_source_facing_stage_ledge(const MslBatch* batch,
                                                                         int bi, uint16_t ground_id,
                                                                         uint8_t dash_source_facing,
@@ -5325,8 +5361,16 @@ void locomotion_update_pre(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
           const uint16_t before_guard = action_id;
-          if (ottotto_edge_matches_facing(batch, bi, batch->state.ground_id[idx],
-                                          batch->state.facing[idx], batch->state.pos_x[idx]) &&
+          const float ottotto_guard_trig = msl_trigger_unit_from_input(
+              buttons, batch->state.input_l[idx], batch->state.input_r[idx]);
+          const uint8_t analog_only_guard =
+              ((buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) == 0u &&
+               ottotto_guard_trig > c->trigger_deadzone)
+                  ? 1u
+                  : 0u;
+          if ((analog_only_guard != 0u ||
+               ottotto_edge_matches_facing(batch, bi, batch->state.ground_id[idx],
+                                           batch->state.facing[idx], batch->state.pos_x[idx])) &&
               !((buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R)) != 0u &&
                 (stick_x * facing_dir) < 0.0f)) {
             guard_update_grounded(batch, c, idx, 1u);
@@ -7063,6 +7107,29 @@ void locomotion_update_post_collision(MslBatch* batch) {
         continue;
       }
 
+      if (was_ground && now_ground && a == (uint16_t)MSL_ACT_LANDING_AIR_LW &&
+          batch->state.speed_air_x_self[idx] == 0.0f &&
+          batch->state.speed_ground_x_self[idx] == 0.0f && batch->state.speed_y_self[idx] == 0.0f &&
+          position_past_floor_span(batch, bi, batch->state.ground_id[idx],
+                                   batch->state.pos_x[idx])) {
+        // LandingAir floor-span loss:
+        // - ftCo_LandingAir_Coll delegates to ftCo_Landing_Coll.
+        // - ftCo_Landing_Coll calls ft_80084280, whose mpColl_8004B4B0 result falls through to
+        //   ftCo_Fall_Enter when the current floor no longer supports the post-Phys root.
+        // - Keep this to LandingAirLw rows with no self-motion velocity: the root displacement is
+        //   callback/player-displacement owned, not an ordinary moving floor sweep. Moving
+        //   LandingAir rows stay on the mpColl-owned current floor result.
+        // - Use generated MSLSTG01 floor endpoints from the current CollData segment, not a
+        //   Dream Land or replay-row predicate. In-span LandingAir rows keep the ordinary grounded
+        //   callback path.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B4B0
+        enter_fall_from_grounded_floor_loss(batch, ch, idx);
+        continue;
+      }
+
       if (was_ground && now_ground && a == (uint16_t)MSL_ACT_WAIT &&
           grounded_attack_submotion_from_action(batch->state.prev_action_id[idx]) != 0xFFFFFFFFu &&
           batch->state.action_frame[idx] <= 0 &&
@@ -7147,6 +7214,35 @@ void locomotion_update_post_collision(MslBatch* batch) {
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           continue;
         }
+      }
+
+      if (was_ground && now_ground && a == (uint16_t)MSL_ACT_SQUAT &&
+          (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO ||
+           batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
+          batch->state.action_frame[idx] <= 1 &&
+          ottotto_position_past_facing_edge(batch, bi, batch->state.ground_id[idx],
+                                            batch->state.facing[idx], batch->state.pos_x[idx])) {
+        // Ottotto crouch IASA at the facing endpoint:
+        // - Fighter_8006A360 computes the common xF8 player-overlap displacement while the
+        //   frame-start action is still Ottotto/OttottoWait.
+        // - Fighter_procUpdate later runs ftCo_Ottotto_IASA, whose down-input branch calls
+        //   ftCo_800D5FB0 -> ftCo_Squat_Enter.
+        // - The same proc then runs Squat_Coll, which calls ft_80083F88 -> ft_80082708 and lets
+        //   mpColl_8004B108 consume the already-displaced root against the facing floor endpoint.
+        // Keep this to the first destination Squat frame and a generated floor endpoint overrun;
+        // ordinary center-stage Ottotto crouch rows stay grounded.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{ftCo_800D5FB0,ftCo_Squat_Coll}
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+        float ottotto_x = 0.0f;
+        float ottotto_y = 0.0f;
+        if (ottotto_edge_point_for_facing(batch, bi, batch->state.ground_id[idx],
+                                          batch->state.facing[idx], &ottotto_x, &ottotto_y)) {
+          batch->state.pos_y[idx] = ottotto_y;
+        }
+        enter_fall_from_grounded_floor_loss(batch, ch, idx);
+        continue;
       }
 
       if (was_ground && now_ground &&

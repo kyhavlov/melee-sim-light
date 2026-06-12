@@ -801,6 +801,12 @@ typedef struct MslStateSoA {
   uint8_t* special_cmd0;
   uint8_t* special_cmd1;
   uint8_t* special_cmd2;
+  // Fox/Falco `mv.fx.SpecialN.isBlasterLoop`: IASA sets this hidden latch from cmd_vars[0] + B
+  // edge, and the Loop Anim callback consumes it before current-frame input can set a new latch.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+  //   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,
+  //   ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA}
+  uint8_t* specialn_blaster_loop_requested;
   uint16_t* specialn_charge_frames;
   uint16_t* speciallw_countered_damage;
   // fp->lstick_angle for special launch tilt (Dolphin Slash); ftMars_FighterVars.x222C

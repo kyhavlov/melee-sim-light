@@ -1178,28 +1178,28 @@ overall.float_norm_mae_p95: 0.00001934
 
 == datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl ==
 Records: 12471  Players/scored per record: 2  Total player-frames: 24942
-mismatch.action_id: 15 / 24942 (0.000601)
-mismatch.action_frame: 13 / 24942 (0.000521)
-mismatch.on_ground: 5 / 24942 (0.000200)
+mismatch.action_id: 9 / 24942 (0.000361)
+mismatch.action_frame: 9 / 24942 (0.000361)
+mismatch.on_ground: 2 / 24942 (0.000080)
 mismatch.facing: 3 / 24942 (0.000120)
 mismatch.stocks: 0 / 24942 (0.000000)
-mismatch.jumps_left: 5 / 24942 (0.000200)
+mismatch.jumps_left: 2 / 24942 (0.000080)
 mismatch.is_dead: 0 / 24942 (0.000000)
 mismatch.hitlag: 17 / 24942 (0.000682)
 mismatch.hitstun: 4 / 24942 (0.000160)
 mismatch.l_cancel: 1 / 24942 (0.000040)
 mismatch.hurtbox_state: 4 / 24942 (0.000160)
 mismatch.ground_id: 0 / 24942 (0.000000)
-mismatch.animation_index: 15 / 24942 (0.000601)
+mismatch.animation_index: 9 / 24942 (0.000361)
 mismatch.instance_hit_by: 4 / 24942 (0.000160)
-mismatch.instance_id: 10 / 24942 (0.000401)
+mismatch.instance_id: 7 / 24942 (0.000281)
 mismatch.last_attack_landed: 5 / 24942 (0.000200)
 mismatch.combo_count: 0 / 24942 (0.000000)
 mismatch.last_hit_by: 12 / 24942 (0.000481)
-mismatch.state_flags: 29 / 124710 (0.000233)
+mismatch.state_flags: 27 / 124710 (0.000217)
 mismatch.item_exists: 2 / 187065 (0.000011)
 mismatch.item_type: 2 / 187065 (0.000011)
-mismatch.item_state: 1 / 187065 (0.000005)
+mismatch.item_state: 0 / 187065 (0.000000)
 mismatch.item_owner: 3 / 187065 (0.000016)
 mismatch.item_instance_id: 3 / 187065 (0.000016)
 ignored_mismatch.state_flags[4]&0x80: 118 / 24942 (0.004731)
@@ -1211,13 +1211,13 @@ err.speed_y_self: mae=0.000651 p95=0.000000 max=3.228612
 err.speed_x_attack: mae=0.000351 p95=0.000000 max=2.674170
 err.speed_y_attack: mae=0.000342 p95=0.000000 max=4.159091
 err.percent: mae=0.000891 p95=0.000000 max=8.369999
-err.shield_hp: mae=0.000034 p95=0.000000 max=0.700001
+err.shield_hp: mae=0.000031 p95=0.000000 max=0.700001
 err.item_pos_x: mae=0.040422 p95=0.000000 max=17.184387
 err.item_pos_y: mae=0.006178 p95=0.000000 max=10.261638
 err.item_vel_x: mae=0.015052 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000062
-overall.discrete_mismatch: 153 / 1508991
-overall.strict_discrete_mismatch: 271 / 1508991
+overall.discrete_mismatch: 125 / 1508991
+overall.strict_discrete_mismatch: 243 / 1508991
 overall.ignored_discrete_mismatch: 118
 overall.float_norm_mae_p95: 0.00200595
 
@@ -1807,7 +1807,7 @@ overall.ignored_discrete_mismatch: 116
 overall.float_norm_mae_p95: 0.00042294
 
 == suite summary ==
-overall.discrete_mismatch: 3954 / 44129063
-overall.strict_discrete_mismatch: 5886 / 44129063
+overall.discrete_mismatch: 3926 / 44129063
+overall.strict_discrete_mismatch: 5858 / 44129063
 overall.ignored_discrete_mismatch: 1932
 overall.float_norm_mae_p95: 0.98263257

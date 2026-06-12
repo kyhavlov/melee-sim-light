@@ -1595,9 +1595,13 @@ Prefer completing these projects in order rather than “patching symptoms” in
      Replay-visible state can therefore look like a no-hit GuardReflect window while the hidden
      `HitCapsule.victims_1` latch still suppresses later BODY fallthrough from the same hit group.
      Replay-rollout reconstruction is limited to hitbox create edges where the defender is still
-     in GuardOn-origin `GuardReflect` with powershield provenance and the dense group seed names the
-     victim. Ordinary `Guard`/`GuardSetOff` transitions stay excluded because the dense group lane
-     cannot prove their per-HitCapsule clear/copy owner.
+     in GuardOn-origin `GuardReflect` with powershield provenance, the dense group seed names the
+     victim, and the attacker is in a generated AttackS4 script family. Ordinary `Guard`/
+     `GuardSetOff` transitions and single-payload grounded attacks stay excluded because the dense
+     group lane cannot prove their per-HitCapsule clear/copy owner. FEH `rec11420 -> 11421` is the
+     AttackLw3 negative: the dense seed names an old DamageAir instance, but source
+     `ftColl_800768A0` clears the AttackLw3 HitCapsule before the later ShieldDesc hit enters
+     GuardSetOff.
      Positive/negative locks: `Game_20260509T152622.msl:2048..2064` and the existing TBK/GAT
      GuardReflect final/expired-x14 controls.
      Source anchors:
@@ -1605,6 +1609,17 @@ Prefer completing these projects in order rather than “patching symptoms” in
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076808,ftColl_800768A0,ftColl_80076CBC,ftColl_80078C70}`,
      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80094138`,
      `refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}`.
+   - ShieldDesc accepted/missed seed lanes (`combat_shield_contact_hb_kind`) are one-frame replay
+     provenance for `lbColl_80007BCC -> ftColl_80076CBC`, not live ShieldDesc/HitCapsule state.
+     Runtime clears them after combat consumes the frame so rollout playback falls back to live
+     geometry on the next step. FEH `rec11420 -> 11421` is the motivating boundary: a replay-proven
+     miss on the previous AttackLw3 frame must not stale-carry and block the following frame-7
+     ShieldDesc hit.
+   - AttackLw3 frame-7 GuardReflect admission: when the extracted `ftCo_SM_AttackLw3` first
+     create_hitbox command reaches a neutral GuardReflect victim, stale dense hitlist carry is not
+     enough to suppress the shield hit. Source `ftColl_800768A0` owns the per-HitCapsule clear/copy
+     before `ftColl_80078C70` tests ShieldDesc; MSL admits the shield path at this source-script
+     boundary while leaving the AttackS4 late-payload powershield owner above intact.
    - Grounded SpecialLwStart -> terminal DamageFlyTop dense-hitlist boundary:
      a grounded Shine entry can overlap a terminal same-port DamageFlyTop victim while the replay
      seed still carries three hidden proofs: dense group-0 `HitCapsule.victims_1`, explicit
@@ -3546,16 +3561,24 @@ Fox/Falco special-owner split (2026-04-17):
     SpecialAirNStart can therefore carry DamageFlyRoll knockback into the first blaster frame.
     Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialN_Enter,ftFx_SpecialAirN_Enter}`,
     `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`.
-  - Active SpecialN loop/end handoffs use extracted `cmd_vars[0]` command-window data plus the
-    seeded `x67D` B timer to infer whether the persistent `mv.fx.SpecialN.isBlasterLoop` latch was
-    set by an in-window B edge. Held prior-B rows preserve the existing latch behavior, while stale
-    and current-frame-only B timers enter End. Same-action Loop->Loop instance ordering still uses
-    only the explicit `motion_entry_instance_id_override_u16` seed lane. Deep under-floor
+  - Active SpecialN loop/end handoffs carry the hidden `mv.fx.SpecialN.isBlasterLoop` latch as a
+    runtime lane: IASA sets it only when extracted `cmd_vars[0]` is active and the current input
+    edge contains B, and the later Loop Anim callback consumes it before current-frame input can
+    arm another request. Replay seeds initialize this latch only from the dedicated Fox/Falco
+    same-action Loop->Loop seed lane or from `x67D` proving the latest B edge landed inside the
+    extracted SpecialN Loop cmd0 window; they do not infer it from generic instance-order lanes,
+    because landing/entry rows also use `motion_entry_instance_id_override_u16` and non-Blaster
+    fighters can reuse the same numeric action ids. Held-B or `x67D` outside the source cmd0 window
+    is not latch provenance; FEH rec2518 is the adjacent terminal held-B negative, while FEH rec228
+    is the same-shape positive when the dedicated latch lane or an earlier live IASA edge owns the
+    repeat.
+    Deep under-floor
     `SpecialAirNLoop_Anim -> SpecialAirNEnd` rows run the entered End collision callback through
     `AirCatchHit_Coll -> Landing_Enter_Basic`, preserving both ground and air self-X lanes on the
     Landing frame. `F19` is zero in the refreshed primary and aggregate special-family taxonomy.
     Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
-    ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialAirNEnd_Coll}`,
+    ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialNLoop_IASA,
+    ftFx_SpecialAirNLoop_IASA,ftFx_SpecialN_OnChangeAction,ftFx_SpecialAirNEnd_Coll}`,
     `refs/melee/src/melee/ft/ft_081B.c::ftCo_AirCatchHit_Coll`, and
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic`.
   - Rows where SpecialN/Shine is only the previous action and the current row is already generic
@@ -5969,11 +5992,17 @@ BODY collision-space residual split and rejected seed bridge:
   the normal damage path until the exact scalar is ported for all edge/non-edge cases.
 - Fighter BODY phantom/tip-log rows use active HitCapsule data, not action-slot proxies. The
   authored same-group primary is identified from active MSLHITB1 `damage`, `hit_group`, and source
-  HitCapsule id/order data and remains on the full BODY path; later/equal siblings and lower-damage
-  same-group limb capsules may take the victims_2 tip-log branch. Same-action grounded Attack*
-  restarts use the generated MSLMSO01 grounded-attack class for `Fighter_ChangeMotionState ->
-  ftColl_8007AFF8 -> ftColl_800768A0` HitCapsule clears; non-grounded AttackAir states are negative
-  controls.
+  HitCapsule id/order data. It remains on the full BODY path unless the selected source scalar is
+  already inside the decomp phantom range and a later same-group HitCapsule has a concrete full
+  BODY overlap. That matches `ftColl_80078C70`: after `ftColl_80076ED8` handles the primary
+  victims_2/tip-log contact, the HitCapsule loop advances and a later full DmgLog entry can own
+  `fp->dmg.x184c_damaged_hurtbox`. FEH `rec12440` locks the positive: AttackAirN hb0 grazes
+  cap2/head-high in the x7A8 range, while later hb1 selects a medium-cap full BODY hit and source
+  enters `DamageFlyN`. The paired focused negative moves hb0 to a full high-cap overlap while hb1
+  still overlaps medium, proving this is source-order DmgLog ownership rather than an
+  AttackAirN/SpecialAirHi damage-height override. Same-action grounded Attack* restarts use the
+  generated MSLMSO01 grounded-attack class for `Fighter_ChangeMotionState -> ftColl_8007AFF8 ->
+  ftColl_800768A0` HitCapsule clears; non-grounded AttackAir states are negative controls.
 - Late `AttackAirB` vs `DamageFlyTop` phantom/tip-log followups now carry the same hidden delayed
   damage owner as decomp: `ftColl_80076ED8` stores phantom damage into `dmg.x1898`, starts hitlag
   through the `x1840/x18a0` branch, and `Fighter_ProcessHit` applies `ftColl_8007BE3C` when
@@ -6085,6 +6114,17 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA`
+- AttackAirB victims in same-frame reciprocal trades can also receive a zero-consume
+  DamageFlyRoll gate marker from an authored late `AttackAirN` source, but only for the selected
+  root/body hb0 packet. DCC `rec4968` is the positive (`AttackAirN` hb0 selected before the BAir
+  victim enters damage); FEH `rec1362` is the adjacent negative where the selected source is late
+  NAir hb1 limb against cap9 and must stay on the ordinary `DamageFlyLw` path. This keeps the owner
+  on ftColl-selected HitCapsule provenance instead of admitting all late NAir action shape.
+  Source anchors:
+  - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`
+  - `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`
+  - `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox`
 - Catch-family, grounded Dash, and basic grounded-attack severe-airborne damage entries use the
   same explicit seed lane only as immediate replay seed reconstruction. `Fighter_8006CDA4` runs
   before the `ftCo_8008DCE0` DamageFlyRoll gate regardless of the visible pre-action, but Slippi
@@ -7219,6 +7259,15 @@ BODY collision-space residual split and rejected seed bridge:
     visible/top rows cannot fresh-start from visible pose reconstruction and may only consume a
     nonzero seeded x1910 episode, a still-source-visible runtime-started local episode, or their
     separate terminal damage owners.
+    Replay-frame-fed playback is stricter than free-running rollout for fresh zero-counter starts:
+    because `step_input_replay_frame_rng` installs the replay row's source `fp+0x221F_b0` every
+    frame, a new replay-playback x1910 episode must be proven by that x221F publication or by a
+    nonzero seeded x1910 lane. The root-bound `NO_INSIDE_CARRY` approximation remains available to
+    normal/free-running `step_input`, but cannot by itself create hidden magnify damage when the
+    replay source lanes are both clear.
+    Hitstun-only DamageFlyHi visible-edge starts are bounded to the early action-frame-8
+    publication proved by TVR `rec9413 -> 9472`; FEH `rec1744 -> 1803` is the adjacent frame-9
+    negative where the replay-visible x221F bit is stale and must not start x1910.
     `Fighter_procUpdate` resets `fp->dmg.x1910` whenever `ifMagnify_802FC998` is false, so a
     runtime-started local counter is not its own visibility proof after the replay camera lane
     returns inside; LIM's early DamageFlyHi -> Jump/SpecialHiHoldAir stretch is the negative.

@@ -328,7 +328,8 @@ Source/generation:
 - Fox/Falco SpecialN Loop -> Loop restarts are visible as same-action SpecialNLoop instance-id
   changes with action-frame reset; they run `ftFx_SpecialN_OnChangeAction -> ft_800892A0`, which
   bumps `fp->x206C_attack_instance` for the current move id so repeated laser hits do not collide
-  under stale-table duplicate suppression.
+  under stale-table duplicate suppression. The separate hidden loop-repeat latch is carried by
+  `seed_t.specialn_blaster_loop_requested`; do not infer it from generic instance ordering.
 - Reflected/projectile item hits use the item-owned stale path when `last_hit_by_instance` matches a
   unique item row: the item's current owner selects the stale table, while the item
   `attack_id`/`attack_instance` provide the `(move_id, instance)` pair. The previous post-frame item
@@ -765,13 +766,42 @@ Seed generation:
 - Source-owned extra writers that are already modeled in runtime, such as AttackLw3's
   `x21EC -> ft_80089824` callback, remain outside the lane so the runtime path stays exercised.
   Current Fox/Falco audit found no other runtime-modeled action-entry extra `fp->x2088` writer to
-  exclude beyond AttackLw3 and the explicit SpecialN loop-restart callback lane; other decomp
+  exclude beyond AttackLw3 and the SpecialN loop-restart callback lane; other decomp
   `ft_80089824` callsites are non-Fox/Falco, item/rapid paths not modeled as Fox/Falco action-entry
-  extra writers, or separately owned match-flow/guard counter consumers.
+  extra writers, or separately owned match-flow/guard counter consumers. The SpecialN lane here
+  still owns only the `fp->x2088` ordering callback; the Loop-vs-End decision is owned by
+  `specialn_blaster_loop_requested` below.
 
 Decomp contract:
 - `refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}`.
 - `refs/melee/src/melee/pl/plattack.c::plAttack_80037B08`.
+
+## Replay Seed Contract: SpecialN Loop Repeat Latch
+
+The replay seed contains `specialn_blaster_loop_requested[player]`, the hidden
+`mv.fx.SpecialN.isBlasterLoop` latch used by Fox/Falco Blaster Loop Anim callbacks.
+
+Runtime default:
+- Live/free-running runtime produces the latch only in the SpecialN Start/Loop IASA callbacks when
+  extracted `cmd_vars[0]` is active and the current input edge contains B.
+- The next Loop Anim callback consumes and clears the latch before same-frame input can set a new
+  repeat request.
+
+Seed generation:
+- One-step replay seeds set the lane when either replay-visible post-frame data proves a
+  same-action Fox/Falco SpecialNLoop restart with action frame reset to 0, or when `x67D` places the
+  most recent B edge inside the extracted SpecialN Loop `cmd_vars[0]` window. The character-id gate
+  is part of the source owner: other fighters can reuse the same numeric action ids for unrelated
+  states.
+- Held B and `motion_entry_instance_id_override_u16` are not sufficient latch proof. They can also
+  appear on terminal Loop -> End and landing/entry rows. `x67D` only proves the latch when the
+  derived B-edge action frame is inside the MSLFTSC1 cmd0 window (including the runtime latch-clear
+  tail from `move_tables_special_cmd0_active_at_frame`).
+- `tools/slippi/preprocess_suite.py` cache version 22 is the first valid cache generation for this
+  seed lane and its expanded `MSLDSLT` record size.
+
+Decomp contract:
+- `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA}`.
 
 ## Replay Seed Contract: Item Spawn ID Counter
 

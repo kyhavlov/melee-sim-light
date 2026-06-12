@@ -1463,6 +1463,14 @@ typedef struct MslSeed {
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
   // refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
   uint16_t motion_entry_instance_id_override_u16[MSL_MAX_PLAYERS];
+  // Hidden Fox/Falco Blaster Loop repeat latch (`mv.fx.SpecialN.isBlasterLoop`).
+  // - Runtime IASA sets this from cmd_vars[0] + B edge.
+  // - One-step replay seeds set it only for source-visible same-action Loop -> Loop restarts,
+  //   not from generic motion-entry instance overrides.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+  //   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,
+  //   ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA}
+  uint8_t specialn_blaster_loop_requested[MSL_MAX_PLAYERS];
   // Staling "attack id" (GALE01): fp->x2068_attackID.
   // Slippi post-frames do not expose fp->x2068 directly; preprocessing derives it causally from
   // replay history (see tools/slippi/staling_history.py).

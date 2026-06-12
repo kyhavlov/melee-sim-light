@@ -42,7 +42,17 @@ def _run_one_step(binding: object, row: np.ndarray, *, num_players: int) -> np.v
     return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
 
 
-def _run_rollout_to_record(binding: object, samples: np.ndarray, start: int, target: int, *, num_players: int) -> np.void:
+def _run_rollout_to_record(
+    binding: object,
+    samples: np.ndarray,
+    start: int,
+    target: int,
+    *,
+    num_players: int,
+    ucf_enabled: bool | None = None,
+    ucf_cardinals_1_0_enabled: bool | None = None,
+    rollout_reseed: bool = False,
+) -> np.void:
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -54,9 +64,17 @@ def _run_rollout_to_record(binding: object, samples: np.ndarray, start: int, tar
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=num_players)
+    init_kwargs = {"batch_size": 1, "num_players": num_players}
+    if ucf_enabled is not None:
+        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
+    if ucf_cardinals_1_0_enabled is not None:
+        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
+    handle = binding.init(**init_kwargs)
     try:
-        binding.reseed_seed(handle, seed_bytes)
+        if rollout_reseed:
+            binding.reseed_seed_rollout(handle, seed_bytes)
+        else:
+            binding.reseed_seed(handle, seed_bytes)
         for record in range(start, target + 1):
             step_seed_bytes = (
                 np.frombuffer(samples[record:record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8)
@@ -333,7 +351,14 @@ def test_aerial_shine_start_late_slot_grounded_attack_entry_rollout_uses_pair_ph
     assert int(ds.samples[target]["ref_t1"]["action_id"][defender]) == 56
 
     out = _run_rollout_to_record(
-        binding, ds.samples, start, target, num_players=int(ds.header["num_players"])
+        binding,
+        ds.samples,
+        start,
+        target,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+        rollout_reseed=True,
     )
     for field in ("action_id", "action_frame", "hitlag", "hitstun"):
         assert int(out[field][defender]) == int(ds.samples[target]["ref_t1"][field][defender]), field
@@ -372,13 +397,75 @@ def test_attacks4_guard_family_runtime_victim_latch_survives_late_payload_double
     assert int(ds.samples[target]["ref_t1"]["action_id"][defender]) == 179  # Guard
 
     out = _run_rollout_to_record(
-        binding, ds.samples, start, target, num_players=int(ds.header["num_players"])
+        binding,
+        ds.samples,
+        start,
+        target,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id"):
         assert int(out[field][defender]) == int(ds.samples[target]["ref_t1"][field][defender]), field
     assert float(out["percent"][defender]) == pytest.approx(
         float(ds.samples[target]["ref_t1"]["percent"][defender])
     )
+
+
+@pytest.mark.integration
+def test_single_payload_grounded_attack_guardreflect_dense_latch_clears_before_later_shield_hit_feh() -> None:
+    # Negative for the GuardOn-origin GuardReflect dense victims_1 materializer: FEH rec11420
+    # starts from a single-payload AttackLw3 seed whose dense group hitlist names p0's old
+    # DamageAir instance, but that grounded-attack payload should take ftColl_800768A0's clear
+    # lane. If the dense latch is reconstructed broadly, rec11421 suppresses the real ShieldDesc
+    # contact and stays GuardReflect; source enters GuardSetOff.
+    #
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80078C70}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(ds_path))
+    start = 11420
+    target = 11421
+    attacker = 1
+    defender = 0
+
+    seed = ds.samples[start]["seed_t"]
+    target_seed = ds.samples[target]["seed_t"]
+    assert int(seed["action_id"][attacker]) == 57  # AttackLw3.
+    assert int(seed["animation_index"][attacker]) == 59  # ftCo_SM_AttackLw3.
+    assert int(seed["action_id"][defender]) == 182  # GuardReflect.
+    assert int(seed["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
+    assert int(seed["combat_hitlist_victim_iid"][attacker, 0, defender]) != int(
+        seed["instance_id"][defender]
+    )
+    assert [int(target_seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) for hb in range(4)] == [
+        2,
+        2,
+        2,
+        2,
+    ]
+
+    out = _run_rollout_to_record(
+        binding,
+        ds.samples,
+        start,
+        target,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+        rollout_reseed=True,
+    )
+    ref = ds.samples[target]["ref_t1"]
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 7
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 7
 
 
 @pytest.mark.integration

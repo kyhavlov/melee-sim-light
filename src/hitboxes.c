@@ -607,8 +607,8 @@ static inline uint8_t hitboxes_seed_reconstruct_create_edge_powershield_dense_ap
     return 0u;
   }
   const size_t a_idx = msl_idx_player(bi, attacker);
-  if (!msl_motion_state_common_class_has_fast(batch->state.action_id[a_idx],
-                                              MSL_MS_CLASS_GROUNDED_ATTACK) ||
+  if (!msl_motion_state_class_has(batch->state.char_id[a_idx], batch->state.animation_index[a_idx],
+                                  MSL_MS_CLASS_ATTACK_S4) ||
       batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u) {
     return 0u;
   }
@@ -650,6 +650,10 @@ static inline uint8_t hitboxes_seed_reconstruct_create_edge_powershield_dense_ap
     //   before branching on x221C_b2. The x221C_b2 branch suppresses ordinary shield damage /
     //   GuardSetOff effects, so replay-visible state can look like "no hit" while the hidden
     //   victims_1 latch still suppresses a later BODY fallthrough from the same hit_group.
+    // - Keep this to generated AttackS4 scripts, where the late same-action create payload is the
+    //   proven source owner. Single-payload grounded attacks such as AttackLw3 use the normal
+    //   ftColl_800768A0 clear lane; dense GuardReflect seeds there are too coarse and can suppress
+    //   a later accepted ShieldDesc hit.
     // - This helper is gated by `replay_rollout_reseeded`; ordinary one-step reseed and
     //   free-running runtime paths cannot enter it.
     // - This is not source-closed runtime HitCapsule authority. The source-closed shape is an
