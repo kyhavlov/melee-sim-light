@@ -1,0 +1,104 @@
+{
+  "name": "marth",
+  "notes": "Marth validation suite (vs Falco/Fox and Marth dittos across legal stages). Started as the single Marth/Falco BF replay for the Marth port; porting is decomp-first - replays verify, they do not cover all moves.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/marth/VictoriousSpitefulAlpaca.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Marth",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/InternalPowerlessWallaby.slpz",
+      "ports": [
+        1,
+        4
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Marth",
+        "4": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/LoudDullGoat.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Fox",
+        "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/MetallicUniqueGrouse.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Marth",
+        "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/ParallelFamiliarZebra.slpz",
+      "ports": [
+        1,
+        4
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Marth",
+        "4": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/QuestionableHarmfulPanther.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Falco",
+        "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/RipeWealthySeahorse.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Marth",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/WellWornSmallGoshawk.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Fox",
+        "2": "Marth"
+      }
+    }
+  ]
+}

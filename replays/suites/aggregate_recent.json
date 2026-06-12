@@ -1,6 +1,6 @@
 {
   "name": "aggregate_recent",
-  "notes": "Mixed Fox/Fox, Fox/Falco, and Falco/Falco human replays across occupied port combinations and supported legal stages. Secondary aggregate suite; keep fox_falco_fd_ucf084_recent as the primary FD regression gate. Pokemon Stadium entries are frozen-stadium replays only. Excludes the MeatyExtraneousGoldfish outlier, de-duplicates the HungryImportantSnake/ElaborateEverlastingGerbil duplicate pair, and omits four-player local stage repros until 4p validation is in scope.",
+  "notes": "Mixed Fox/Fox, Fox/Falco, and Falco/Falco human replays across occupied port combinations and supported legal stages. Secondary aggregate suite; keep fox_falco_fd_ucf084_recent as the primary FD regression gate. Pokemon Stadium entries are frozen-stadium replays only. Excludes the MeatyExtraneousGoldfish outlier, de-duplicates the HungryImportantSnake/ElaborateEverlastingGerbil duplicate pair, and omits four-player local stage repros until 4p validation is in scope. Includes the marth suite replays (Marth vs Falco/Fox and Marth dittos across FoD/YS/BF/DL/FD) so validate-all covers Marth.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -386,6 +386,102 @@
       "characters": {
         "1": "Falco",
         "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/VictoriousSpitefulAlpaca.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Marth",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/InternalPowerlessWallaby.slpz",
+      "ports": [
+        1,
+        4
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Marth",
+        "4": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/LoudDullGoat.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Fox",
+        "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/MetallicUniqueGrouse.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Marth",
+        "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/ParallelFamiliarZebra.slpz",
+      "ports": [
+        1,
+        4
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Marth",
+        "4": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/QuestionableHarmfulPanther.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Falco",
+        "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/RipeWealthySeahorse.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Marth",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/WellWornSmallGoshawk.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Fox",
+        "2": "Marth"
       }
     }
   ]

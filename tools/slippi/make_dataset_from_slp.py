@@ -346,29 +346,26 @@ def _derive_fod_floor_skip_segments(
 
     data_root_path = Path(data_root)
     data_root_text = str(data_root_path)
-    attackair_actions = _common_motion_state_owner_actions(
+    attackair_actions_by_char = _motion_state_owner_actions_by_char(
         data_root_text, class_bit=MSL_MS_CLASS_ATTACK_AIR
     )
-    shallow_attackair_submotions = _common_move_submotion_ids(
-        data_root_text, ("ftCo_SM_AttackAirN", "ftCo_SM_AttackAirHi", "ftCo_SM_AttackAirLw")
-    )
-    shallow_attackair_actions = _common_motion_state_owner_actions(
+    shallow_attackair_actions_by_char = _motion_state_owner_actions_by_char(
         data_root_text,
         class_bit=MSL_MS_CLASS_ATTACK_AIR,
-        submotion_ids=shallow_attackair_submotions,
+        submotion_move_names=("ftCo_SM_AttackAirN", "ftCo_SM_AttackAirHi", "ftCo_SM_AttackAirLw"),
     )
-    attackair_first_phase_by_action = _common_attackair_first_hitbox_phase_by_action(data_root_text)
-    escapeair_actions = _common_motion_state_owner_actions(
+    attackair_first_phase_by_char_action = _attackair_first_hitbox_phase_by_char_action(
+        data_root_text
+    )
+    escapeair_actions_by_char = _motion_state_owner_actions_by_char(
         data_root_text, coll_callbacks=("ftCo_EscapeAir_Coll",)
     )
-    active_skip_actions = attackair_actions | escapeair_actions
-    jump_skip_actions = _common_motion_state_owner_actions(
+    jump_skip_actions_by_char = _motion_state_owner_actions_by_char(
         data_root_text, coll_callbacks=("ftCo_Jump_Coll",)
     )
-    fall_skip_actions = _common_motion_state_owner_actions(
+    fall_skip_actions_by_char = _motion_state_owner_actions_by_char(
         data_root_text, coll_callbacks=("ftCo_Fall_Coll",)
     )
-    common_air_skip_actions = jump_skip_actions | fall_skip_actions
     active_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 127.0))
     jump_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 80.0))
     active_skip = [0xFFFF] * players
