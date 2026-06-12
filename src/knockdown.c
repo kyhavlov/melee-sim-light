@@ -3331,6 +3331,17 @@ void knockdown_try_throw_release_damage_floor_contact(MslBatch* batch, size_t bi
     return;
   }
 
+  // Launch-direction gate: ftCo_800DDDE4 places the detached fighter and the SAME frame's
+  // collision pass only floor-contacts a non-rising sweep (mpCheckFloor ay >= by). An
+  // upward-launching ThrowLw (marth dthrow, kb_y > 0) lifts the victim off the release
+  // spot before any floor test can accept - grounding it here synthesized a DownBound the
+  // source never had. Downward/flat release KB keeps the existing ladder.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // refs/melee/src/melee/mp/mpcoll.c::mpCheckFloor (ay >= by descent gate)
+  if (batch->state.speed_y_attack[idx] > 0.0f) {
+    return;
+  }
+
   MslMpcollFloorMaskResult floor_result = {0};
   if (!mpcoll_800477e0_floor_mask_probe(batch, idx, &floor_result)) {
     return;

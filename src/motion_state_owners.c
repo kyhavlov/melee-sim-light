@@ -34,6 +34,9 @@ typedef struct {
   uint8_t* class2_bits_by_action;
   uint8_t* class3_bits_by_action;
   uint8_t* fx_special_kind_by_action;
+  // Reverse identity: per-char action id owning each fx_special_kind (1..MSL_FX_KIND_COUNT-1),
+  // built at load from the 1:1 kind lane. 0xFFFF = this char owns no row for the kind.
+  uint16_t action_by_fx_kind[MSL_FX_KIND_COUNT];
   uint8_t have;
 } MslMotionStateOwnerTable;
 
@@ -247,6 +250,16 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
   out->class2_bits_by_action = buf + class2_bits_off;
   out->class3_bits_by_action = buf + class3_bits_off;
   out->fx_special_kind_by_action = buf + fx_special_kind_off;
+  for (size_t k = 0; k < (size_t)MSL_FX_KIND_COUNT; k++) {
+    out->action_by_fx_kind[k] = 0xFFFFu;
+  }
+  for (uint32_t a = 0; a < (uint32_t)out->action_count; a++) {
+    const uint8_t k = out->fx_special_kind_by_action[a];
+    if (k != (uint8_t)MSL_FX_KIND_NONE && k < (uint8_t)MSL_FX_KIND_COUNT &&
+        out->action_by_fx_kind[k] == 0xFFFFu) {
+      out->action_by_fx_kind[k] = (uint16_t)a;
+    }
+  }
   out->have = 1u;
   return 0;
 }
@@ -368,6 +381,21 @@ uint32_t msl_motion_state_class3_bits(uint8_t char_id, uint16_t action_id) {
     return 0u;
   }
   return read_u32_le(t->class3_bits_by_action + (size_t)action_id * 4u);
+}
+
+uint16_t msl_motion_state_action_for_fx_kind(uint8_t char_id, uint8_t fx_kind) {
+  // Reverse of msl_motion_state_fx_special_kind: the char's action id owning the kind row
+  // (the kind lane is 1:1 per char by construction/parity tests). 0xFFFF when the char has
+  // no row (e.g. marth for the spacie special kinds) - machine writers must treat that as
+  // "machine not owned by this char".
+  if (fx_kind == (uint8_t)MSL_FX_KIND_NONE || fx_kind >= (uint8_t)MSL_FX_KIND_COUNT) {
+    return 0xFFFFu;
+  }
+  const MslMotionStateOwnerTable* t = table_for_char(char_id);
+  if (t == NULL || !t->have) {
+    return 0xFFFFu;
+  }
+  return t->action_by_fx_kind[fx_kind];
 }
 
 uint8_t msl_motion_state_fx_special_kind(uint8_t char_id, uint16_t action_id) {

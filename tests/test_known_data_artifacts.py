@@ -1894,3 +1894,106 @@ def test_data_manifest_covers_registry_chars() -> None:
         f"data/manifest.json is missing registry chars {sorted(missing)}; "
         "run `make build_data` to regenerate the data tree"
     )
+
+
+def test_fx_kind_lane_is_one_to_one_and_spacie_reverse_matches_legacy_ids() -> None:
+    # The kind-keyed special machines write through msl_motion_state_action_for_fx_kind,
+    # whose correctness rests on the owners kind lane being 1:1 per char (first-match =
+    # only-match). Pin that data property, plus: fox/falco's reverse map must resolve the
+    # legacy MSL_ACT_FX_* numeric ids the machines used to hardcode, and marth must own
+    # NO rows for the spacie illusion/firefox kinds.
+    from pathlib import Path as _Path
+
+    from tools.extraction.extract_motion_state_owners import FX_SPECIAL_KIND_VALUES
+    from tools.slippi.motion_state_owners import read_mslmso01_v1
+
+    root = _Path("data/motion_state/owners")
+    # Values mirror src/action_ids.h MSL_ACT_FX_* (the machines' former hardcoded ids).
+    legacy_spacie = {
+        "SPECIAL_S_START": 0x015B,
+        "SPECIAL_S": 0x015C,
+        "SPECIAL_S_END": 0x015D,
+        "SPECIAL_AIR_S_START": 0x015E,
+        "SPECIAL_AIR_S": 0x015F,
+        "SPECIAL_AIR_S_END": 0x0160,
+        "SPECIAL_HI_HOLD": 0x0161,
+        "SPECIAL_HI_HOLD_AIR": 0x0162,
+        "SPECIAL_HI": 0x0163,
+        "SPECIAL_AIR_HI": 0x0164,
+        "SPECIAL_HI_LANDING": 0x0165,
+        "SPECIAL_HI_FALL": 0x0166,
+        "SPECIAL_HI_BOUND": 0x0167,
+    }
+    for char in ("fox", "falco", "marth"):
+        tbl = read_mslmso01_v1(root / f"{char}.bin")
+        by_kind: dict[int, list[int]] = {}
+        for a, k in enumerate(tbl.fx_special_kind):
+            if int(k) != 0:
+                by_kind.setdefault(int(k), []).append(a)
+        dupes = {k: v for k, v in by_kind.items() if len(v) > 1}
+        assert not dupes, f"{char}: fx_special_kind lane not 1:1: {dupes}"
+        if char in ("fox", "falco"):
+            for name, want_action in legacy_spacie.items():
+                k = FX_SPECIAL_KIND_VALUES[name]
+                got = by_kind.get(k)
+                assert got == [want_action], (char, name, got, hex(want_action))
+        else:
+            for name in ("SPECIAL_AIR_S_END", "SPECIAL_HI_FALL", "SPECIAL_HI_BOUND"):
+                assert FX_SPECIAL_KIND_VALUES[name] not in by_kind, (char, name)
+
+
+def test_machine_admitted_chars_own_their_full_writable_kind_surface() -> None:
+    # The special machines are admitted by a single DEFINING kind
+    # (char_owns_*_machine in blaster.c/shine.c/locomotion.c) but WRITE a larger kind
+    # surface through msl_motion_state_action_for_fx_kind. Current fox/falco data covers
+    # every surface; this lock makes the framework fail loudly if a future char's owners
+    # table maps an admission kind while missing kinds the admitted machine can write
+    # (which would install 0xFFFF action ids at runtime).
+    from pathlib import Path as _Path
+
+    from tools.extraction.char_registry import CHARS as _CHARS
+    from tools.extraction.extract_motion_state_owners import FX_SPECIAL_KIND_VALUES as _K
+    from tools.slippi.motion_state_owners import read_mslmso01_v1
+
+    surfaces = {
+        # blaster.c: B-dispatch admitted via SPECIAL_N_START also routes Side-B and Up-B
+        # entries (blaster_update_pre_physics writes S_START/AIR_S_START and
+        # HI_HOLD/HI_HOLD_AIR), plus the full N machine.
+        "SPECIAL_N_START": [
+            "SPECIAL_N_LOOP", "SPECIAL_N_END",
+            "SPECIAL_AIR_N_START", "SPECIAL_AIR_N_LOOP", "SPECIAL_AIR_N_END",
+            "SPECIAL_S_START", "SPECIAL_AIR_S_START",
+            "SPECIAL_HI_HOLD", "SPECIAL_HI_HOLD_AIR",
+        ],
+        # shine.c: the LW machine writes the full ground+air LW family.
+        "SPECIAL_LW_START": [
+            "SPECIAL_LW_LOOP", "SPECIAL_LW_HIT", "SPECIAL_LW_END", "SPECIAL_LW_TURN",
+            "SPECIAL_AIR_LW_START", "SPECIAL_AIR_LW_LOOP", "SPECIAL_AIR_LW_HIT",
+            "SPECIAL_AIR_LW_END", "SPECIAL_AIR_LW_TURN",
+        ],
+        # locomotion.c side-B helpers write the full S transition set.
+        "SPECIAL_S_START": [
+            "SPECIAL_S", "SPECIAL_S_END",
+            "SPECIAL_AIR_S_START", "SPECIAL_AIR_S", "SPECIAL_AIR_S_END",
+        ],
+        # locomotion.c specialhi machine writes the full HI transition set.
+        "SPECIAL_HI_HOLD": [
+            "SPECIAL_HI_HOLD_AIR", "SPECIAL_HI", "SPECIAL_AIR_HI",
+            "SPECIAL_HI_LANDING", "SPECIAL_HI_FALL", "SPECIAL_HI_BOUND",
+        ],
+    }
+    root = _Path("data/motion_state/owners")
+    for info in _CHARS.values():
+        path = root / f"{info.name}.bin"
+        if not path.exists():
+            continue
+        tbl = read_mslmso01_v1(path)
+        owned = {int(k) for k in tbl.fx_special_kind if int(k) != 0}
+        for admission, required in surfaces.items():
+            if _K[admission] not in owned:
+                continue
+            missing = [name for name in required if _K[name] not in owned]
+            assert not missing, (
+                f"{info.name}: owns machine-admission kind {admission} but is missing "
+                f"writable kinds {missing} - the machine would install 0xFFFF action ids"
+            )

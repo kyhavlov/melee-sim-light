@@ -8,10 +8,11 @@ migration moves these onto extracted per-(char, action) MotionState owner class 
 motion_state_owners.h).
 
 This test is a RATCHET, not a ban: per-file counts of `MSL_ACT_FX_` references and
-`msl_char_id_is_spacie` gates must never INCREASE. Converting a site to class bits
-(count goes down) requires updating the baseline downward. Files owned entirely by the
-spacie machines (blaster.c, shine.c) and the id definition headers are exempt - raw
-ids are their proper vocabulary.
+`msl_char_id_is_spacie` gates must never INCREASE. Converting a site to kind identity
+(count goes down) requires updating the baseline downward. The engine is now at ZERO
+raw FX action ids outside the id-definition/registry headers and two documented api.c
+table keys: every special machine (locomotion.c, shine.c, blaster.c) is kind-keyed
+end to end via msl_motion_state_fx_special_kind / msl_motion_state_action_for_fx_kind.
 """
 
 from __future__ import annotations
@@ -25,8 +26,6 @@ ROOT = Path(__file__).resolve().parents[1]
 # action_ids.h is NOT blanket-exempt: its enum DEFINITIONS are stripped before counting
 # (see _counts), but behavior helpers in that header are counted like any engine code.
 EXEMPT = {
-    "blaster.c",
-    "shine.c",
     "char_registry.h",
     "motion_state_owners.h",
 }
@@ -40,25 +39,26 @@ _ENUMERATOR_DEF_RE = re.compile(r"^\s*MSL_ACT_FX_[A-Z_0-9]+ = 0x[0-9A-Fa-f]+u?,"
 FX_BASELINE = {
     # api.c: 2 raw FX constants used as attack-id table KEYS for spacie-article items.
     "api.c": 2,
-    # damage_terminal_owner.h: case labels whose bodies are kind-keyed (the labels select
-    # the raw id branch; the kind check inside owns the char split).
-    "damage_terminal_owner.h": 3,
-    # items.c: write-side state installs (shine-reflect enters the spacie SpecialLwHit).
-    "items.c": 2,
-    # locomotion.c: spacie special machine bodies (state transitions/write-side vocabulary
-    # behind the 6 module-entry guards, incl. machine-entry call arguments whose admission
-    # is kind-guarded) - the blaster.c/shine.c class.
-    "locomotion.c": 72,
+    # damage_terminal_owner.h: kind-keyed (hoisted kind switch).
+    "damage_terminal_owner.h": 0,
+    # items.c: kind-keyed (shine-reflect enters via the reverse kind map).
+    "items.c": 0,
+    # The special machines are kind-keyed end to end (compares via
+    # msl_motion_state_fx_special_kind, writes via msl_motion_state_action_for_fx_kind,
+    # submotions via the owners table).
+    "locomotion.c": 0,
+    "shine.c": 0,
+    "blaster.c": 0,
 }
 
 SPACIE_GATE_BASELINE = {
-    # All remaining gates are char-FAMILY scoping (machine-entry boundaries or
-    # replay-validated rollout owner scoping), not action-id collision guards - the
-    # action checks behind them are kind-keyed.
+    # Machine ADMISSION is now data-driven (char_owns_*_machine = the owners table maps
+    # the machine's defining kind; locomotion/shine/blaster carry NO char-id lists). The
+    # remaining gates are replay-validated rollout owner scoping in shared combat code.
     "api.c": 1,
     "combat.c": 12,
     "items.c": 1,
-    "locomotion.c": 6,
+    "locomotion.c": 0,
 }
 
 

@@ -957,6 +957,8 @@ def test_fx_special_kind_c_enum_matches_extractor_values() -> None:
     for em in _re.finditer(r"MSL_FX_KIND_([A-Z_0-9]+) = (\d+),", m.group("body")):
         c_values[em.group(1)] = int(em.group(2))
     assert c_values.pop("NONE") == 0
+    # COUNT is the C-side array-size sentinel (one past the last kind), not a kind row.
+    assert c_values.pop("COUNT") == max(FX_SPECIAL_KIND_VALUES.values()) + 1
     assert c_values == FX_SPECIAL_KIND_VALUES, (
         "C MslMsFxSpecialKind diverged from the extractor's FX_SPECIAL_KIND_VALUES"
     )
