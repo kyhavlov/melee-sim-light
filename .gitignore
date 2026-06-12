@@ -47,6 +47,7 @@ build/
 dist/
 target/
 reports/triage/
+reports/marth_port/
 reports/bench/
 reports/modelplay/
 manual_repros/
