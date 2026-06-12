@@ -510,14 +510,16 @@ def classify_reds(
     )
 
 
-def _print_classification_group(name: str, rows: tuple[MetricDelta, ...], *, top: int) -> None:
+def _print_classification_group(
+    name: str, rows: tuple[MetricDelta, ...], *, top: int, marker: str | None = None
+) -> None:
     print(f"{name}:")
     if not rows:
         print("- none")
         return
     shown = rows[: max(1, top)]
     for delta in shown:
-        _print_delta(delta)
+        _print_delta(delta, marker=marker)
     extra = len(rows) - len(shown)
     if extra > 0:
         print(f"- ... {extra} more")
@@ -530,9 +532,10 @@ def print_red_classification(classification: RedClassification, *, top: int) -> 
         "distribution-only reds", classification.distribution_only, top=top
     )
     _print_classification_group(
-        "ignored-lane-only reds (diagnostic, outside the scored profile)",
+        "ignored-lane-only movements (diagnostic, outside the scored profile)",
         classification.ignored_lane_only,
         top=top,
+        marker="diagnostic",
     )
     _print_classification_group(
         "unclassified regressions", classification.unclassified, top=top
@@ -552,7 +555,7 @@ def print_summary(
     print("suite totals:")
     if suite_rows:
         for delta in suite_rows:
-            _print_delta(delta)
+            _print_delta(delta, marker="diagnostic" if delta in diagnostic_only else None)
     else:
         print("- no suite total changes")
 
@@ -580,7 +583,7 @@ def print_summary(
     replay_rows = [d for d in rows if d.section != "suite"]
     if replay_rows:
         for delta in replay_rows[: max(1, top)]:
-            _print_delta(delta)
+            _print_delta(delta, marker="diagnostic" if delta in diagnostic_only else None)
     else:
         print("- none")
     return len(regressions)

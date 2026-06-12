@@ -186,6 +186,35 @@ def test_validation_report_diff_ignored_lane_only_strict_movement_is_not_hard(
     main(["--before", str(before), "--after", str(after), "--fail-on-regression"])
 
 
+def test_validation_report_diff_ignored_lane_rows_print_as_diagnostic_everywhere(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Output lock: diagnostic ignored-lane-only rows must never carry the REGRESSION
+    # marker - not in the summary listings and not in the classification section
+    # (named "movements", not "reds").
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    rollout = _rollout(streak_count=30, first=30, seeded=8, median=100, p90=200)
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=29, p95="0.20", ignored=19),
+        rollout=rollout,
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=30, p95="0.20", ignored=20),
+        rollout=rollout,
+    )
+
+    main(["--before", str(before), "--after", str(after)])
+    out = capsys.readouterr().out
+
+    assert "REGRESSION" not in out
+    assert "ignored-lane-only movements (diagnostic, outside the scored profile):" in out
+    strict_rows = [line for line in out.splitlines() if "strict_discrete_mismatch" in line and "->" in line]
+    assert strict_rows and all(line.rstrip().endswith("diagnostic") for line in strict_rows)
+
+
 def test_validation_report_diff_scored_strict_movement_stays_hard(tmp_path: Path) -> None:
     # Control: strict movement carried by SCORED lanes (ignored unchanged) stays hard.
     before = tmp_path / "before"
