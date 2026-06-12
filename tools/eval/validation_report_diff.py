@@ -56,6 +56,12 @@ ROLLOUT_METADATA_METRICS: frozenset[str] = frozenset(
     }
 )
 
+# Carried for classification context only (no delta rows): the strict counter scores
+# every compare lane INCLUDING the bits the validation profile explicitly ignores
+# (state_flags[4]&0x80 camera visibility). This per-section counter lets the classifier
+# attribute strict movement to that diagnostic lane.
+ONE_STEP_METADATA_METRICS: frozenset[str] = frozenset({"overall.ignored_discrete_mismatch"})
+
 
 @dataclass(frozen=True)
 class MetricValue:
@@ -89,6 +95,7 @@ class MetricDelta:
 class RedClassification:
     hard: tuple[MetricDelta, ...]
     distribution_only: tuple[MetricDelta, ...]
+    ignored_lane_only: tuple[MetricDelta, ...]
     unclassified: tuple[MetricDelta, ...]
 
 
@@ -155,7 +162,11 @@ def parse_report(text: str, *, label: str) -> dict[str, dict[str, MetricValue]]:
         if metric is None:
             continue
         key = metric.group("key")
-        if key not in wanted and key not in ROLLOUT_METADATA_METRICS:
+        if (
+            key not in wanted
+            and key not in ROLLOUT_METADATA_METRICS
+            and key not in ONE_STEP_METADATA_METRICS
+        ):
             continue
         sections.setdefault(section, {})[key] = _parse_metric_value(metric.group("value"))
     return sections
@@ -226,8 +237,9 @@ def _sort_key(delta: MetricDelta) -> tuple[int, float, str, str, str]:
     )
 
 
-def _print_delta(delta: MetricDelta) -> None:
-    marker = "REGRESSION" if delta.is_regression else "ok"
+def _print_delta(delta: MetricDelta, *, marker: str | None = None) -> None:
+    if marker is None:
+        marker = "REGRESSION" if delta.is_regression else "ok"
     print(
         f"- {delta.report} / {_short_section(delta.section)} / {delta.metric}: "
         f"{delta.before.raw} -> {delta.after.raw} ({_fmt_delta(delta.delta)}) {marker}"
@@ -392,6 +404,35 @@ def _is_one_step_float_only_ok(
     )
 
 
+def is_ignored_lane_only_strict_movement(
+    before: dict[str, dict[str, dict[str, MetricValue]]],
+    after: dict[str, dict[str, dict[str, MetricValue]]],
+    delta: MetricDelta,
+) -> bool:
+    """True when a strict regression is fully explained by the profile-ignored lane.
+
+    `overall.strict_discrete_mismatch` = scored lanes + the explicitly-ignored
+    diagnostic lane (`overall.ignored_discrete_mismatch`, currently the
+    state_flags[4]&0x80 camera-visibility bit). When the scored counter is
+    non-regressing and the strict movement decomposes exactly into
+    scored_delta + ignored_delta, the red is diagnostic-only - outside the
+    validation profile's scored target - not a gameplay regression.
+    """
+    if "one-step" not in delta.report or delta.metric != "overall.strict_discrete_mismatch":
+        return False
+    if _metric_non_regressing(before, after, delta, "overall.discrete_mismatch") is not True:
+        return False
+    scored_before = _metric_value(before, delta, "overall.discrete_mismatch")
+    scored_after = _metric_value(after, delta, "overall.discrete_mismatch")
+    ignored_before = _metric_value(before, delta, "overall.ignored_discrete_mismatch")
+    ignored_after = _metric_value(after, delta, "overall.ignored_discrete_mismatch")
+    if scored_before is None or scored_after is None or ignored_before is None or ignored_after is None:
+        return False
+    scored_delta = scored_after.value - scored_before.value
+    ignored_delta = ignored_after.value - ignored_before.value
+    return delta.delta == scored_delta + ignored_delta
+
+
 def classify_reds(
     before: dict[str, dict[str, dict[str, MetricValue]]],
     after: dict[str, dict[str, dict[str, MetricValue]]],
@@ -399,6 +440,7 @@ def classify_reds(
 ) -> RedClassification:
     hard: list[MetricDelta] = []
     distribution_only: list[MetricDelta] = []
+    ignored_lane_only: list[MetricDelta] = []
     unclassified: list[MetricDelta] = []
     rows = tuple(deltas)
     exception_backed_replay_metrics = {
@@ -431,6 +473,9 @@ def classify_reds(
         ):
             distribution_only.append(delta)
             continue
+        if is_ignored_lane_only_strict_movement(before, after, delta):
+            ignored_lane_only.append(delta)
+            continue
         if _is_hard_red(delta):
             hard.append(delta)
             continue
@@ -460,6 +505,7 @@ def classify_reds(
     return RedClassification(
         hard=tuple(hard),
         distribution_only=tuple(distribution_only),
+        ignored_lane_only=tuple(ignored_lane_only),
         unclassified=tuple(unclassified),
     )
 
@@ -484,13 +530,23 @@ def print_red_classification(classification: RedClassification, *, top: int) -> 
         "distribution-only reds", classification.distribution_only, top=top
     )
     _print_classification_group(
+        "ignored-lane-only reds (diagnostic, outside the scored profile)",
+        classification.ignored_lane_only,
+        top=top,
+    )
+    _print_classification_group(
         "unclassified regressions", classification.unclassified, top=top
     )
 
 
-def print_summary(deltas: Iterable[MetricDelta], *, top: int) -> int:
+def print_summary(
+    deltas: Iterable[MetricDelta],
+    *,
+    top: int,
+    diagnostic_only: frozenset[MetricDelta] = frozenset(),
+) -> int:
     rows = sorted(deltas, key=_sort_key)
-    regressions = [d for d in rows if d.is_regression]
+    regressions = [d for d in rows if d.is_regression and d not in diagnostic_only]
     suite_rows = [d for d in rows if d.section == "suite"]
 
     print("suite totals:")
@@ -512,6 +568,14 @@ def print_summary(deltas: Iterable[MetricDelta], *, top: int) -> int:
     else:
         print("- none")
 
+    replay_diagnostic = [
+        d for d in rows if d.section != "suite" and d.is_regression and d in diagnostic_only
+    ]
+    if replay_diagnostic:
+        print("replay-level ignored-lane-only movements (diagnostic, not regressions):")
+        for delta in replay_diagnostic[: max(1, top)]:
+            _print_delta(delta, marker="diagnostic")
+
     print("largest replay-level movements:")
     replay_rows = [d for d in rows if d.section != "suite"]
     if replay_rows:
@@ -529,8 +593,13 @@ def print_report(
     top: int,
 ) -> int:
     deltas = diff_report_sets(before, after)
-    regression_count = print_summary(deltas, top=top)
     rows = sorted(deltas, key=_sort_key)
+    diagnostic_only = frozenset(
+        d
+        for d in rows
+        if d.is_regression and is_ignored_lane_only_strict_movement(before, after, d)
+    )
+    regression_count = print_summary(deltas, top=top, diagnostic_only=diagnostic_only)
     print_red_classification(classify_reds(before, after, rows), top=top)
     return regression_count
 

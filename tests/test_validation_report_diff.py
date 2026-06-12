@@ -18,20 +18,30 @@ def _write_reports(root: Path, *, one_step: str, rollout: str, include_doubles: 
         (root / "doubles_recent_rollout_suite_eval.txt").write_text(rollout, encoding="utf-8")
 
 
-def _one_step(*, total: int, strict: int, p95: str, replay_total: int | None = None) -> str:
+def _one_step(
+    *,
+    total: int,
+    strict: int,
+    p95: str,
+    replay_total: int | None = None,
+    ignored: int | None = None,
+) -> str:
     replay = total if replay_total is None else replay_total
+    ignored_line = (
+        f"overall.ignored_discrete_mismatch: {ignored}\n" if ignored is not None else ""
+    )
     return f"""
 suite: synthetic
 
 == datasets/suite/Foo.msl ==
 overall.discrete_mismatch: {replay} / 100
 overall.strict_discrete_mismatch: {strict} / 100
-overall.float_norm_mae_p95: {p95}
+{ignored_line}overall.float_norm_mae_p95: {p95}
 
 == suite summary ==
 overall.discrete_mismatch: {total} / 100
 overall.strict_discrete_mismatch: {strict} / 100
-overall.float_norm_mae_p95: {p95}
+{ignored_line}overall.float_norm_mae_p95: {p95}
 """
 
 
@@ -138,6 +148,95 @@ def test_validation_report_diff_classifies_hard_reds(tmp_path: Path) -> None:
 
     assert any(d.metric == "overall.discrete_mismatch" for d in classification.hard)
     assert not classification.distribution_only
+
+
+def test_validation_report_diff_ignored_lane_only_strict_movement_is_not_hard(
+    tmp_path: Path,
+) -> None:
+    # A strict regression fully explained by the profile-ignored diagnostic lane
+    # (state_flags[4]&0x80 camera visibility) with scored lanes non-regressing must be
+    # classified diagnostic-only, not a hard replay-level regression (TBK/PPA class
+    # from re-widening the camera gates to the source's char-blind shape).
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    rollout = _rollout(streak_count=30, first=30, seeded=8, median=100, p90=200)
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=29, p95="0.20", ignored=19),
+        rollout=rollout,
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=30, p95="0.20", ignored=20),
+        rollout=rollout,
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert not classification.hard
+    assert not classification.unclassified
+    moved = {d.metric for d in classification.ignored_lane_only}
+    assert moved == {"overall.strict_discrete_mismatch"}
+
+    # --fail-on-regression must not fire for diagnostic-only movement.
+    main(["--before", str(before), "--after", str(after), "--fail-on-regression"])
+
+
+def test_validation_report_diff_scored_strict_movement_stays_hard(tmp_path: Path) -> None:
+    # Control: strict movement carried by SCORED lanes (ignored unchanged) stays hard.
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    rollout = _rollout(streak_count=30, first=30, seeded=8, median=100, p90=200)
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=29, p95="0.20", ignored=19),
+        rollout=rollout,
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=11, strict=30, p95="0.20", ignored=19),
+        rollout=rollout,
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert any(d.metric == "overall.strict_discrete_mismatch" for d in classification.hard)
+    assert not classification.ignored_lane_only
+
+
+def test_validation_report_diff_undecomposed_strict_movement_stays_hard(tmp_path: Path) -> None:
+    # Control: strict +2 with ignored +1 and scored flat does NOT decompose - the extra
+    # row is a real (unattributed) strict regression and must stay hard.
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    rollout = _rollout(streak_count=30, first=30, seeded=8, median=100, p90=200)
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=29, p95="0.20", ignored=19),
+        rollout=rollout,
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=31, p95="0.20", ignored=20),
+        rollout=rollout,
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert any(d.metric == "overall.strict_discrete_mismatch" for d in classification.hard)
+    assert not classification.ignored_lane_only
 
 
 def test_validation_report_diff_treats_improved_first_counts_as_clean_streak_reshuffle(
