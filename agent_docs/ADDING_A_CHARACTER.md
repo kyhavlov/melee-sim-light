@@ -179,9 +179,10 @@ cover most of it.
 6. **Per-special mechanics** found for Marth that generalize:
    - charge specials: charge-damage hitbox override (SB), charge persistence;
    - launch specials: TransN-driven launch + special landing lag (DS 34f);
-   - ledge interaction: stop-at-ledge classification from ftXx coll data (DB),
-     ledge-grab `cd->ecb.bottom.x` term with per-char bottom_x tables (under-lip
-     sweetspot);
+   - ledge interaction: stop-at-ledge classification from ftXx coll data (DB);
+     the ledge-grab `cd->ecb.bottom.x` term is CENTERED (bottom.x = 0) because
+     mpCollInterpolateECB snaps cd->ecb to desired_ecb at time=1.0 - do NOT add
+     posed bottom-X tables (over-fit; breaks flip-pose apex catches);
    - cliffcatch cmd sequencing: cmd1 arms in the Phys descent branch (vanilla
      two-pass Coll), teacher-forced cmd1/cmd2 reseed derivation;
    - counter/absorb specials: combat intercept (`combat.c`), descriptor-sphere

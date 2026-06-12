@@ -631,12 +631,15 @@ static inline uint32_t ledge_grab_flags_for_fighter(
   msl_ecb_world_points_sample(&ecb, char_id, animation_index, ecb_frame, ecb_facing_dir, coll_cur_x,
                               coll_cur_y,
                               /*lock_bottom_to_zero=*/0u);
-  // The ledge AABB builders consume cd->ecb (interpolated, posed) whose bottom point carries a
-  // real X displacement (e.g. Marth Dolphin Slash's flip pose) - unlike desired_ecb where
-  // bottom.x is always 0. Source the term from the extracted per-frame bottom-X tables.
-  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044164,mpColl_800443C4} (cd->ecb.bottom.x)
-  ecb.bottom_x =
-      coll_cur_x + ecb_facing_dir * msl_ecb_bottom_rel_x(char_id, animation_index, (int)ecb_frame);
+  // The ledge AABB gates consume cd->ecb.bottom.x, but mpCollInterpolateECB runs with
+  // time = 1/(steps-step), i.e. time=1.0 on the final (usually only) substep - cd->ecb
+  // snaps to desired_ecb, whose bottom point is centered (bottom.x = 0 relative to
+  // cur_pos). Sampling the instantaneous POSED bottom-X table here was over-fit: marth's
+  // JumpAerial flip swings the posed bottom +/-4.7 units across a single frame and pushed
+  // the bottom past the ledge-side gate, costing real ledge catches (the JumpAerialF ->
+  // CliffCatch rollout cluster, freq 22).
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_80044164,mpColl_800443C4}
+  ecb.bottom_x = coll_cur_x;
   const uint8_t env_fx_kind =
       msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id);
   if (env_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI ||
