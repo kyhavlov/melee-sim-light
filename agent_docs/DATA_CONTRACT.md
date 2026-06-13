@@ -26,6 +26,20 @@ The basic air-to-ground landing callback owns a Wait-vs-Landing split through
 The shared runtime helper is `src/common_params.h::msl_ftco_80082b1c_enters_wait`; callers should
 not duplicate `ftCo_CalcYScaledKnockback` or local threshold constants.
 
+The common Fall/FallAerial/FallSpecial animation callbacks also require the hidden pose-blend
+constants used by `ftCo_Fall_Anim_Inner`:
+
+- `common_fall_blend_air_drift_threshold`: `p_ftCommonData->x444`
+- `common_fall_blend_lerp`: `p_ftCommonData->x448`
+
+Runtime loads both keys through `src/common_params.c`; they are required keys, not optional
+fallbacks. Free-running runtime updates the corresponding hidden `mv.co.fall*.x4` blend lane
+causally, while one-step reseed reconstructs it from visible action age so BODY/collision pose
+sampling can match source on Fall/FallAerial/FallSpecial rows. Source anchors:
+`refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner`,
+`refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::ftCo_FallAerial_Anim`, and
+`refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Anim`.
+
 ## Replay Seed Contract: HitCapsule Victim Lists
 
 The replay dataset seed contains hidden fighter HitCapsule victim-list state used by the C core

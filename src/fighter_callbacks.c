@@ -170,6 +170,8 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
           batch->state.throw_pulse_crossed_curr_frame[idx];
       batch->state.throw_command_pending_pulse_frame[idx] = 0u;
       batch->state.throw_command_pending_seed_valid[idx] = 0u;
+      batch->state.fall_fast_seed_frame_start[idx] = 0u;
+      batch->state.fall_fast_seed_frame_start_valid[idx] = 0u;
       const uint16_t action_id = batch->state.action_id[idx];
       if (action_id != (uint16_t)MSL_ACT_THROW_B && action_id != (uint16_t)MSL_ACT_THROW_HI &&
           action_id != (uint16_t)MSL_ACT_THROW_LW) {
@@ -307,7 +309,7 @@ static inline void sync_runbrake_cmd0_post_frame(MslBatch* batch) {
       //   ftCo_RunBrake_Enter,ftCo_RunBrake_IASA}
       // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
       // Source of truth:
-      // - data/moves/{fox,falco}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
+      // - data/moves/<char>.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
       batch->state.runbrake_cmd0[idx] = move_tables_runbrake_cmd0_active(
           batch->state.char_id[idx], batch->state.anim_frame_f32[idx]);
     }
@@ -331,6 +333,10 @@ static inline void cache_prev_action_state(MslBatch* batch) {
       batch->state.frame_start_attack_instance[idx] = batch->state.attack_instance[idx];
       batch->state.frame_start_instance_id[idx] = batch->state.instance_id[idx];
       batch->state.frame_start_on_ground[idx] = batch->state.on_ground[idx] ? 1u : 0u;
+      batch->state.fall_fast_frame_start[idx] =
+          batch->state.fall_fast_seed_frame_start_valid[idx]
+              ? (batch->state.fall_fast_seed_frame_start[idx] ? 1u : 0u)
+              : (batch->state.fall_fast[idx] ? 1u : 0u);
       batch->state.dash_entered_this_frame[idx] = 0u;
       batch->state.blaster_gun_spawned_this_frame[idx] = 0u;
     }

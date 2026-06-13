@@ -273,6 +273,12 @@ typedef struct MslStateSoA {
   uint8_t* facing;
   // Motion-state facing lane (decomp: fp->facing_dir1).
   int8_t* facing_dir1;
+  // Marth Counter facing lane (`fp->specialn_facing_dir`).
+  // ftColl writes this on Counter descriptor contact, and ftMs_SpecialLw_80139140 copies it to
+  // fp->facing_dir when entering CounterHit. It is not derived from the hit callback position.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80077688}
+  // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::ftMs_SpecialLw_80139140
+  int8_t* specialn_facing_dir1;
   // Grounded knockback friction multiplier lane (decomp: ft_GetGroundFrictionMultiplier(fp)).
   float* ground_friction_mul;
   // Smash charge lane (decomp: fp->smash_attrs.state == SmashState_Charging).
@@ -751,6 +757,26 @@ typedef struct MslStateSoA {
   // same-frame downward edge.
   uint8_t* tilt_timer_y_frame_start;
   uint8_t* fall_fast;  // fp->fall_fast (refs/melee/src/melee/ft/ftcommon.c:505-520)
+  // Frame-start fp->fall_fast, before same-frame callbacks may clear the mutable latch.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  uint8_t* fall_fast_frame_start;
+  // One-step internal fastfall seed provenance. Slippi's raw fp+0x221A bit can disagree with the
+  // derived internal fp->fall_fast lane, so source-owned collision audits consume this for the
+  // reseeded frame only.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
+  uint8_t* fall_fast_seed_frame_start;
+  uint8_t* fall_fast_seed_frame_start_valid;
+  // Hidden mv.co.{fall,fallaerial,fallspecial}.x4 live JObj blend scalar and selected smid.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+  float* common_fall_blend_x4;
+  uint16_t* common_fall_blend_msid;
+  // Hidden mv.co.squat.x0/x4 platform-pass latch/countdown. ftCo_80099F9C arms it while down is
+  // held on a platform; ftCo_Squat_IASA_inline later decrements x4 and enters Pass without
+  // rechecking stick down.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA_inline
+  uint8_t* squat_pass_x0;
+  uint8_t* squat_pass_x4;
   // fp+0x2340 AttackDash lane:
   // - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA

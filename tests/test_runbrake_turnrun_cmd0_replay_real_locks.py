@@ -6,7 +6,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset, read_dataset_window
+
+ACT_WAIT = 14
+ACT_TURN_RUN = 19
+ACT_RUN_BRAKE = 23
+SM_TURN_RUN = 11
+SM_RUN_BRAKE = 14
 
 
 def _one_step_out_compare(*, ds, row) -> np.ndarray:
@@ -99,6 +105,62 @@ def test_runbrake_turnrun_cmd0_replay_rows(case: _Case) -> None:
     assert got_flags == exp_flags, (
         f"{case.dataset} rec{case.record} p{p}: state_flags expected={exp_flags} got={got_flags}"
     )
+
+
+@pytest.mark.integration
+def test_marth_runbrake_cmd0_clear_suppresses_same_frame_turnrun_qhp_2131() -> None:
+    # Replay-real negative for RunBrake script phase:
+    # - seed has post-frame `runbrake_cmd0=1` from the prior frame,
+    # - Fighter_procUpdate advances the RunBrake script to frame 15 before IASA,
+    # - frame 15 runs set_cmd_var(0,0), so `fn_800C9CEC` must not enter TurnRun.
+    #
+    # Source owner:
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::fn_800C9CEC
+    # - data/moves/marth.json moves["ftCo_SM_RunBrake"].events set_cmd_var(0,0) at frame 15.
+    root = Path(__file__).resolve().parents[1]
+    dataset = root / "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    if not dataset.exists():
+        pytest.skip(f"missing local dataset: {dataset}")
+
+    ds = read_dataset_window(str(dataset), 2131, 2132)
+    row = ds.samples[0:1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+    p = 0
+    assert int(seed["action_id"][p]) == ACT_RUN_BRAKE
+    assert int(seed["animation_index"][p]) == SM_RUN_BRAKE
+    assert int(seed["action_frame"][p]) == 14
+    assert int(seed["runbrake_cmd0"][p]) == 1
+    assert int(row["input_t"][0]["p"]["main_x"][p]) == 80
+    assert int(ref["action_id"][p]) == ACT_RUN_BRAKE
+
+    out = _one_step_out_compare(ds=ds, row=row)[0]
+    for field in ("action_id", "action_frame", "animation_index", "on_ground"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+
+
+@pytest.mark.integration
+def test_marth_runbrake_cmd0_active_frame_can_enter_turnrun_before_clear() -> None:
+    # Adjacent positive for the same owner: one frame earlier, the advanced script frame is still
+    # inside the cmd_var[0] window, so a patched opposite-stick input may enter TurnRun.
+    root = Path(__file__).resolve().parents[1]
+    dataset = root / "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    if not dataset.exists():
+        pytest.skip(f"missing local dataset: {dataset}")
+
+    ds = read_dataset_window(str(dataset), 2130, 2131)
+    row = ds.samples[0:1].copy()
+    p = 0
+    seed = row["seed_t"][0]
+    assert int(seed["action_id"][p]) == ACT_RUN_BRAKE
+    assert int(seed["action_frame"][p]) == 13
+    assert int(seed["runbrake_cmd0"][p]) == 1
+
+    row["input_t"][0]["p"]["main_x"][p] = np.int8(80)
+    out = _one_step_out_compare(ds=ds, row=row)[0]
+    assert int(out["action_id"][p]) == ACT_TURN_RUN
+    assert int(out["animation_index"][p]) == SM_TURN_RUN
 
 
 @pytest.mark.integration

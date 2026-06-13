@@ -130,8 +130,190 @@ Collect before writing any code:
    hitboxes, catchattack, hit_status, hurtbox masks were ALL silently NULL for
    the new char. Grep for fixed-size per-char caches and `{1,22}`/`char_slot`
    patterns when a test fails mysteriously.
-3. Re-run the replay numbers; common-action fixes should cut them sharply
-   (Marth: one-step 1150 -> 684, rollout median 49 -> 75).
+   **Script-phase seed lanes are not IASA-phase truth**: replay seed lanes such
+   as `runbrake_cmd0` serialize the previous post-frame hidden value. If the
+   current frame's Anim/script callback can run before IASA, re-check the
+   extracted script table at the already-advanced animation frame before gating
+   runtime behavior. Marth exposed this at
+   `QuestionableHarmfulPanther.msl:2131:p0`: seed RunBrake frame 14 carried
+   `runbrake_cmd0=1`, but the frame-15 `set_cmd_var(0,0)` script event had
+   already cleared the `ftCo_RunBrake_IASA -> fn_800C9CEC` TurnRun gate. Add a
+   replay negative on the clear frame and an adjacent positive before the clear.
+   Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::fn_800C9CEC`, and
+   `data/moves/<char>.json::moves.ftCo_SM_RunBrake.events`.
+   **Common collision owners can be stage-shape-sensitive**: fresh
+   `KneeBend -> Jump -> EscapeAir` reaches `EscapeAir_Coll` in the same
+   callback, but floor publication is not simply "same floor id still present."
+   Downward airdodge handoffs can publish `LandingFallSpecial` through
+   `ft_80082C74 -> mpColl_800471F8 -> mpColl_80044838_Floor`; a horizontal
+   airdodge already resting at the carried legal-stage floor's root bias stays
+   airborne on both soft platforms and hard floors. Add both positives and
+   negatives when porting a character whose start positions or ECBs exercise
+   different legal-stage floor geometry. Marth exposed this at
+   `QuestionableHarmfulPanther.msl:90:p0` on a Dream Land platform and
+   `QuestionableHarmfulPanther.msl:3900:p0` on Dream Land's main hard floor;
+   existing downward positives include `ParallelTemptingElk.msl:2170:p1` and
+   `ShadyDecimalStarling.msl:571:p1`. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
+   and `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044838_Floor}`.
+   **JumpAerial -> EscapeAir first-callback floor checks are floor-graph
+   sensitive**: the entry callback can publish fighter-solid ledge/hard-floor
+   bottom sweeps using the pre-entry JumpAerial prev ECB and the loaded EscapeAir
+   current ECB. Flat non-platform floors are admitted directly. Generated sloped
+   ledges are admitted only when the carried floor already names that slope or is
+   connected through the extracted floor graph; an unlinked carried floor such as
+   a side platform waits until the following EscapeAir callback's runtime floor
+   producer. Add flat positives, same/connected-slope positives, and unlinked
+   slope-remap negatives when a new character's ECB shape reaches ledges
+   differently from Fox/Falco. Marth exposed flat positives at
+   `InternalPowerlessWallaby.msl:290:p0`,
+   `InternalPowerlessWallaby.msl:4210:p0`,
+   `ParallelFamiliarZebra.msl:7821:p0`, and
+   `QuestionableHarmfulPanther.msl:4388:p1`; the Yoshi slope boundary is
+   `LoudDullGoat.msl:3757..3758:p1` for the unlinked side-platform remap and
+   `MetallicUniqueGrouse.msl:{947:p1,1990:p0,3967:p1}` for same/connected floor
+   chain positives. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
+   `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`,
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}`,
+   and `data/stages/bin/*.bin::MSLSTG01 fighter_solid/is_ledge/floor graph links`.
+   **AttackAir floor publication is script-shape and stage-source sensitive**:
+   `AttackAir_Coll -> ft_80082C74 -> mpColl_800471F8` may publish
+   `LandingAir*` only after the callback has a source-owned
+   `mpColl_80044628_Floor` ECB-bottom result. Do not infer a FoD
+   height-platform landing only because the seed names a plausible platform
+   line and the public root can be snapped there. For single-create fair-style
+   scripts, add a positive where a no-current-source FoD height platform stays
+   airborne, a positive where a current/same-step platform source lands, and a
+   multi-create spacie fair negative so future characters do not inherit the
+   pending owner through action id alone. Marth exposed this at
+   `InternalPowerlessWallaby.msl:{1550,1966,8480}`; the hard-floor
+   `VictoriousSpitefulAlpaca.msl:8175` row is a separate floor-publication
+   audit and should not be folded into the height-platform rule. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
+   `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`,
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
+   `data/motion_state/owners/<char>.bin::MSLMSO01 submotion_id`,
+   `data/moves/<char>.json::moves.ftCo_SM_AttackAirF.events`, and
+   `data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)`.
+   **Multi-hit AttackAir late tails need the same floor-source audit**: after
+   the final `clear_hitboxes` command, `cmd_var[0]` may still be active and the
+   action can still enter `LandingAir*`, but FoD height-platform publication
+   still needs current/same-step/live platform authority or a callback-local
+   bottom/projection floor producer. Do not treat the cmd_var tail as proof that
+   a reconstructed platform line may publish a landing. Add a no-current-source
+   positive after the final clear, plus current-source negatives on both side
+   platforms. Marth exposed this at
+   `InternalPowerlessWallaby.msl:{1037,1038}:p1`; current-source landing
+   controls are `InternalPowerlessWallaby.msl:{488,3095}:p1`. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
+   `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`,
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
+   `data/motion_state/owners/<char>.bin::MSLMSO01 submotion_id`,
+   `data/moves/<char>.json::moves.ftCo_SM_AttackAir*.events`, and
+   `data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)`.
+   **FallSpecial connected hard-floor publication consumes frame-start fastfall
+   provenance**: `FallSpecial_Coll -> ft_80083090 -> mpColl_80047E14` can
+   publish `LandingFallSpecial` from a source-owned `CollData.prev_pos` /
+   `floor.index` endpoint onto a connected hard floor even when the loaded
+   FallSpecial ECB bottom is still above the floor. Do not broaden this into
+   "any off-span carried floor lands": fastfall rows need the frame-start
+   internal `fp->fall_fast` lane, because Slippi's raw fp+0x221A bit can
+   disagree with the derived internal lane and same-frame callbacks may clear
+   the mutable latch before collision. Add a positive connected-floor
+   publication, a previous-callback negative, a no-source-endpoint negative,
+   and a frame-start-fastfall negative. Marth exposed the positive at
+   `InternalPowerlessWallaby.msl:1240:p1` and the fastfall negative at
+   `ParallelFamiliarZebra.msl:5199:p1`. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}`,
+   `refs/melee/src/melee/ft/ft_081B.c::ft_80083090`,
+   `refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast`,
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
+   `data/stages/bin/*.bin::MSLSTG01 floor graph links`.
+   **Same-frame GuardOn entry BODY pose can be owned by the frame-start
+   action, not GuardOn's submotion**: `ftCo_800924C0` enters `GuardOn` with
+   `Ft_MF_SkipAnim` after the source action's Anim proc has already interpreted
+   that frame's live JObj tree. If ShieldDesc misses and BODY collision falls
+   through via `ftColl_80078C70 -> lbColl_8000805C`, vanilla can consume the
+   frame-start action pose while Slippi publishes `GuardOn` with
+   `animation_index=-1` / `action_frame=-1`. Do not rebuild BODY capsules from
+   `ftCo_SM_GuardOn` frame 0 for these same-frame entry rows. Add a motivating
+   positive where the previous common-action pose admits BODY contact, plus
+   adjacent GuardOn/GuardSetOff negatives so the entry-pose owner does not
+   broaden steady shield rows. Marth exposed this at
+   `VictoriousSpitefulAlpaca.msl:4317:p0` (Dash frame-start pose, Fair hitbox
+   0, hurtcap 6/bone 29); aggregate leak guards include
+   `MotionlessAggressiveJay.msl:734:p1` and
+   `PriceyPartialAlbatross.msl:5142:p0`. Source/proof anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0`,
+   `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ChangeMotionState}`,
+   `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`,
+   `refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C`, and the
+   Dolphin collision probe for VSA:4317.
+   **SkipHit aerial victim lists can carry through GuardOn -> Guard**:
+   multi-hit aerials with `Ft_MF_SkipHit` can preserve HitCapsule `x914`
+   victim rings across active windows while the defender transitions from
+   `GuardOn` into no-submotion `Guard`. If ShieldDesc misses, BODY fallthrough
+   still checks `lbColl_8000ACFC` before percent/KB. Do not treat a first
+   steady-Guard frame as a fresh empty victim list when dense hitlist/source
+   lanes prove the current defender iid is still in the same hit group and
+   BODY attribution names the same source port from an older attacker instance.
+   Add a positive first-Guard dense-latch row, plus negatives for continuing
+   Guard and stale victim-iid rows. Marth exposed this at
+   `InternalPowerlessWallaby.msl:4229:p0`; controls include
+   `InternalPowerlessWallaby.msl:464:p0` (continuing Guard still takes BODY)
+   and `VictoriousSpitefulAlpaca.msl:5706:p0` (first Guard with stale dense
+   victim iid still takes BODY). Source anchors:
+   `data/scripts/<char>.bin::MSLFTSC1 AttackAirN create_hitbox/hit_group`,
+   `refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_AttackAirN`,
+   `refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_ProcessHit_8006D1EC}`,
+   `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}`,
+   and `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`.
+   **Squat platform-pass countdown is hidden state, not current-input truth**:
+   `ftCo_80099F9C` arms `mv.co.squat.x0/x4` when down is held on a platform,
+   but `ftCo_Squat_IASA_inline` later consumes the countdown without rechecking
+   `lstick.y`. Free-running runtime must carry the hidden latch across Squat
+   frames so a released-stick consume frame still enters `Pass`. Teacher-forced
+   one-step rows that do not serialize the latch may only reconstruct it from
+   bounded visible evidence: Squat owner, platform floor, the `x470` action-age
+   window, `x671` still inside the arm/consume window, and a previous-frame down
+   input. The helper belongs to `ftCo_Squat_IASA`; do not arm/consume it on the
+   same source callback pass that entered Squat from another state through
+   destination-Wait IASA. Add a rollout positive for release-after-arm, an
+   adjacent one-frame-too-early negative, a no-visible-latch negative, and a
+   non-Marth callback-order negative so this does not turn into "any Squat frame
+   3 on a platform passes." Marth exposed this at
+   `LoudDullGoat.msl:90:p0` and `VictoriousSpitefulAlpaca.msl:91:p1` in
+   free-running rollout, with the one-step latch case at
+   `VictoriousSpitefulAlpaca.msl:3269:p1`; `MediumVirtualPig.msl:2593:p0`
+   proved the same-frame Squat-entry negative.
+   Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA_inline`,
+   and `data/common/ft_common_data.json::{floor_skip_frames,pass_tilt_max_frames,pass_stick_threshold}`.
+   **Captured-victim escape states need their own Phys/Coll sweep**:
+   `CaptureJump` is not just a visual continuation of `CaptureCut`. Its Phys
+   callback applies `ftCommon_Fall` gravity plus `ftCommon_8007D268` air drift
+   without inheriting the generic fastfall latch, and its Coll callback enters
+   `ftCo_AirCatchHit_Coll -> ft_80082B1C`, so floor contact can publish
+   `Landing` or `Wait`. Put this in the generated MotionState owner table
+   (`MSLMSO01`), not a local replay-row or action-id exception. Add positive
+   rows where `CaptureJump` lands, and adjacent negatives proving
+   `CapturePulled*`/`CaptureWait*` do not inherit the same floor-contact path.
+   Marth exposed this at `QuestionableHarmfulPanther.msl:3110:p0` and
+   `WellWornSmallGoshawk.msl:{5180,5322}:p0`. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_CaptureJump_Phys,ftCo_CaptureJump_Coll}`,
+   `refs/melee/src/melee/ft/ft_081B.c::{ftCo_AirCatchHit_Coll,ft_80082B1C}`,
+   and `data/motion_state/owners/<char>.bin::MSLMSO01`.
+3. Re-run the replay numbers after each retained common-action fix. Do not
+   carry stale burn-down totals in review notes; as of the current Marth branch
+   the public reports show Marth one-step 1238 and rollout median 147, and the
+   useful signal is the fresh diff against that batch's baseline.
 4. **Throw/capture release publication audit**: do not stop after the throw
    hitbox table works. `ftCo_800DDDE4` samples the selected throw-side TransN2
    part, writes the victim's `x1A70` release vector, clears/restores XRotN
@@ -150,6 +332,109 @@ Collect before writing any code:
    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}`, and
    the probe-backed character-data mask in
    `data/characters/*::throw_release_mpcoll_floor_publication_mask`.
+5. **Throw-release damage facing audit**: throw damage entry has two source
+   facing lanes. `ftCo_800DDDE4` writes `victim->dmg.facing_dir_1 =
+   -thrower->facing_dir`; `ftCo_8008DCE0` uses that lane for knockback velocity.
+   Separately, `ftCo_800DE7C0` passes a final visible/root facing override of
+   `-dmg.facing_dir_1` into `ftCo_8008DCE0` when the raw throw-hit angle is
+   strictly between 90 and 270 degrees. Do not collapse the KB sign and final
+   facing into one lane when a new character's throw table differs from the
+   spacies. Marth ThrowHi (raw angle 93) exposed this at
+   `QuestionableHarmfulPanther.msl:231..265:p0`: the wrong final facing mirrored
+   terminal DamageFlyTop hurtcaps and changed the later `AttackHi3` BODY contact.
+   Add an in-range throw positive and an out-of-range adjacent throw negative for
+   each new throw table family. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4`,
+   `refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Thrown.s::ftCo_800DE7C0`,
+   and `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`.
+6. **CapturePulled/Wait/Damage attachment pose audit**: grounded catch-connect
+   entry (`fn_800DAADC`) and steady victim Phys (`fn_800DAD18`) are different
+   source phases. Grounded entry installs CapturePulledLw and publishes only the
+   immediate collision callback; the next steady CapturePulled/Wait/Damage Phys
+   aligns victim XRotN to the grabber's `capturedamage.x18` by sampling live JObj
+   world positions through `lb_8000B1CC` after AObj interpretation. Do not reuse
+   integer SSANIM pose matrices for this delta just because the spacie rows are
+   close: Marth CatchPull exposed a persistent X drift at
+   `QuestionableHarmfulPanther.msl:191..264:p0`. Add a steady pulled/wait
+   positive and a grounded connect negative for every new character with a remapped
+   grab/capture anchor. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAADC,fn_800DAD18}`,
+   `refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim`, and
+   `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`.
+7. **Offensive hitbox TransN pose audit**: sword/limb hitboxes are published
+   from the live JObj matrix via `lb_8000B1CC`, not just the stripped SSANIM01
+   joint matrix. If the animation's `data/anims/<char>.tracks.bin`
+   `uses_root_motion` bit (`fp->x594_b0`) is clear, active hitboxes under
+   FtPart_XRotN may need the SSANIM01 TransN tail recomposed before root facing.
+   If `uses_root_motion` is set, Phys has already consumed that TransN into
+   `cur_pos` through `ft_80085030`, so adding it again will double-shift spacie
+   root-motion attacks. Marth AttackS4 exposed this at
+   `ParallelFamiliarZebra.msl:1838:p0`: Dolphin selected the 14-damage hb0 sour
+   hit using a live sword JObj matrix equal to the extracted matrix plus the
+   current TransN tail; without the tail MSL selected the 20-damage hb3 tipper.
+   Add a motivating new-character positive and a root-motion negative (Fox/Falco
+   AttackS4 is a good control) when auditing sword/contact rows. Source anchors:
+   `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`,
+   `refs/melee/src/melee/ft/ft_081B.c::{ft_80085030,ft_800850E0}`,
+   `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`, and
+   `data/anims/<char>.{bin,tracks.bin}`.
+8. **Catch/CatchDash collision-skeleton scale audit**: do not assume the
+   spacie catch-scale correction applies uniformly to a new character's grab
+   scripts. Audit `data/moves/<char>.json::{ftCo_SM_Catch,ftCo_SM_CatchDash}`
+   `create_hitbox` bone ids and lock standing-Catch positives/negatives
+   separately from dash-grab positives. The current source-backed split is:
+   non-root authored Catch capsules and CatchDash keep the existing
+   `lbColl_80007ECC` collision-skeleton scale counterfactual, while
+   root-authored standing Catch stays on the root-scaled pose path. Marth
+   required this because standing Catch root bubbles should connect on
+   `VictoriousSpitefulAlpaca.msl:6788` / `RipeWealthySeahorse.msl:1811` but
+   should not over-admit simultaneous standing Catch at
+   `InternalPowerlessWallaby.msl:7737`; Marth root CatchDash still connects at
+   `InternalPowerlessWallaby.msl:7311`. Source anchors:
+   `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`,
+   `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_8007AD18}`,
+   and `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC`.
+9. **CommonFall/FallAerial/FallSpecial hidden pose blend audit**: new-character
+   contact bugs can be caused by the opponent's common-state live pose, not the
+   new character's hitboxes. `ftCo_Fall_Anim_Inner` maintains hidden
+   `mv.co.fall*.x4` from air-drift ratio and stores the selected FallF/FallB
+   family `smid` before collision. The publication path is local-SRT, not final
+   matrix interpolation: `ftCo_800CC988` calls `ftAnim_8006FE9C` starting at
+   `FtPart_TransN`, so `TopN` and other pre-TransN ancestors stay on the active
+   selected submotion while TransN descendants are blended through
+   `lb_8000C490`. Slippi does not serialize `x4`; one-step reseed must
+   reconstruct it from visible action age, and free-running runtime must carry
+   the hidden entry-frame recurrence because a visible post-frame
+   `action_frame==0` Fall-family row has already passed the source Anim owner.
+   Locks for this owner should assert the hidden `x4/smid` lane directly before
+   BODY/contact selection and compute expected values from
+   `data/common/ft_common_data.json` plus the row character's
+   `data/characters/<char>.json::air_drift_max`; do not bake Fox/Falco drift
+   caps, common-data thresholds, lerp factors, or Fall-family submotion ids into
+   the test as duplicated literals.
+   Marth UAir exposed the strong positive on `LoudDullGoat.msl:4539:p0`;
+   aggregate Falco rows `DistinctCaringCobra.msl:5573:p1` and
+   `ImpassionedAlarmedTarsier.msl:6428:p1` exposed the tight no-hit and
+   entry-tick positive controls. Add a motivating positive plus adjacent
+   no-hit/entry-phase controls before adjusting hitbox endpoints. Source
+   anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_800CC988`,
+   `refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FE9C`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::ftCo_FallAerial_Anim`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Anim`,
+   and `data/common/ft_common_data.json::{common_fall_blend_air_drift_threshold,common_fall_blend_lerp}`.
+10. **Grounded Damage -> Wait_IASA ordering audit**: terminal grounded
+    DamageHi/N/Lw delegates to the full `ftCo_Wait_IASA` ordering once
+    `x221C_b6` clears. Catch input is before grounded A-attacks, so raw Z
+    synthesis (`held_inputs` LR plus `input.x668` A) must enter Catch instead
+    of being consumed as Attack11. Marth exposed this at
+    `VictoriousSpitefulAlpaca.msl:387:p0`. Add a positive with Z/LR+A catch
+    input and a negative where only A remains and the row still falls through to
+    Attack11. Source anchors:
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA`, and
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput`.
 
 ## Phase 4 — Specials, decomp-first (gate: per-special unit tests + full audit table)
 
@@ -194,7 +479,20 @@ cover most of it.
    can cross the boundary mid-move (walk-off, landing, Stadium transform).
    Test air->ground AND ground->air per family; document the ones with no
    reachable seed surface.
-6. **Per-special mechanics** found for Marth that generalize:
+6. **Anim-end common-state handoffs**: if a char-special Anim callback exits
+   through `ftCo_Fall_Enter`, `ftCo_80096900`, `ft_8008A2BC`, or another
+   common-state entry, audit whether the destination state's IASA can run in the
+   same `Fighter_procUpdate`. Marth exposed this on airborne Dancing Blade:
+   `ftMs_SpecialAirS1_Anim` enters Fall at the terminal frame, and a same-frame
+   jump edge then reaches `ftCo_Fall_IASA_Inner -> ftCo_800CB870`, producing
+   `JumpAerialF` without ever serializing the intermediate Fall row. Add a real
+   witness lock plus an adjacent no-input negative, and add an action-id-overlap
+   negative when the same numeric special id means a different move for another
+   character (Marth action 358 is `SpecialAirS1`; Fox/Falco action 358 is
+   `SpecialHiFall`). Source anchors:
+   `refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialS.c::ftMs_SpecialAirS1_Anim`
+   and `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_IASA_Inner}`.
+7. **Per-special mechanics** found for Marth that generalize:
    - charge specials: charge-damage hitbox override (SB), charge persistence;
    - launch specials: TransN-driven launch + special landing lag (DS 34f);
    - ledge interaction: stop-at-ledge classification from ftXx coll data (DB);
@@ -207,13 +505,26 @@ cover most of it.
      geometry bone-posed and FAIL-CLOSED (no body-admission fallback), real
      projectile geometry threaded through ALL `combat_apply_item_hit` callers
      (8 of them; geometry-less callers fail closed), shield-strength hitlag
-     floor (x60/x1964);
+     floor (x60/x1964), and post-frame `state_flags[2]` publication from the
+     descriptor lifecycle. Marth Counter proved this is not the same owner as
+     the combat window: `ftColl_8007B1B8` publishes `x221B_b0` (Slippi
+     `0x80`), `ftMs_SpecialLw_Anim` immediately sets `x221B_b1` (`0x40`), and
+     the CounterHit `Fighter_ChangeMotionState` reset clears `b0` while the
+     post-frame row can still expose `b1` (`0xC0 -> 0x40`). Drive this from the
+     post-action script command/descriptor state, not from a raw action id or a
+     generic shield flag. Add activation-edge, ground/air-swap carry,
+     hit-transition clear, and same-numeric-action non-character negative locks.
+     Source anchors:
+     `refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c`,
+     `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8`,
+     `refs/melee/src/melee/ft/fighter.c`, and
+     `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`;
    - per-special hitlag/SFX attrs.
-7. **Tests**: decomp-anchored unit tests per special — frame windows,
+8. **Tests**: decomp-anchored unit tests per special — frame windows,
    velocities, transition gates, full-chain dispatch tests (e.g. down-B during
    run). Marth ended at ~130 char tests. Every reviewer pass found real bugs;
    write the negative tests too (e.g. "no special from jab IASA").
-8. **GATE**: all specials tests green; fox/falco validate-all "no suite total
+9. **GATE**: all specials tests green; fox/falco validate-all "no suite total
    changes" (byte-stable) after every retained change.
 
 ## Phase 5 — Replay burn-down (gate: remaining rows classified char-boundary vs shared debt)
@@ -252,11 +563,13 @@ this way), stop A/B-testing configurations and capture truth:
    commit the superproject gitlink.
 2. **Interpreter event traces** (PC-hook probes: within-frame call order,
    register-level gate inputs): use only focused, env-gated probes committed in
-   `refs/Ishiiruka` and documented in `tools/dolphin/README.md`. Keep the hook
-   scoped to one source boundary, force interpreter mode through the wrapper,
-   and record the exact witness rows. The `ftCo_800DDDE4` throw-release probe is
-   the model: it captured the TransN2/XRotN selection and `mpColl_800471F8`
-   publication phases without changing normal Dolphin playback.
+   `refs/Ishiiruka` and documented in `tools/dolphin/README.md`. Keep playback
+   in JIT for the prefix, then switch to interpreter only for a small bounded
+   target window through the wrapper. Interpreter mode is extremely slow; do not
+   request long consecutive windows. Record the exact witness rows. The
+   `ftCo_800DDDE4` throw-release probe is the model: it captured the
+   TransN2/XRotN selection and `mpColl_800471F8` publication phases without
+   changing normal Dolphin playback.
 
 Process rules learned the hard way (apply to ALL ports):
 

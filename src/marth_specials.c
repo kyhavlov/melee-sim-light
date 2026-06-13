@@ -47,6 +47,9 @@ static inline float ms_facing_dir(const MslBatch* batch, size_t idx) {
   return batch->state.facing[idx] ? 1.0f : -1.0f;
 }
 
+static uint8_t ms_try_enter_air_b_special_from_fall_iasa(MslBatch* batch, const MslCommonParams* c,
+                                                         const MslCharParams* ch, size_t idx);
+
 // ---------------------------------------------------------------------------
 // Entries (decomp: ftMs_Special*_Enter)
 // ---------------------------------------------------------------------------
@@ -128,6 +131,8 @@ static void ms_enter_speciallw(MslBatch* batch, const MslCharParams* ch, size_t 
   ms_reset_cmds(batch, idx);
   batch->state.speciallw_countered_damage[idx] = 0u;
   batch->state.speciallw_counter_window[idx] = 0u;
+  batch->state.specialn_facing_dir1[idx] =
+      (batch->state.facing_dir1[idx] < 0) ? (int8_t)-1 : (int8_t)1;
   ms_enter(batch, idx,
            on_ground ? (uint16_t)MSL_ACT_MS_SPECIAL_LW : (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW, 0.0f);
   msl_anim_timebase_tick_once(batch, idx);
@@ -204,15 +209,26 @@ static inline uint8_t ms_db_is_final_stage(uint16_t a) {
 // Anim-end exits
 // ---------------------------------------------------------------------------
 
-static void ms_exit_to_wait_or_fall(MslBatch* batch, size_t idx) {
+static void ms_exit_to_wait_or_fall(MslBatch* batch, const MslCommonParams* c,
+                                    const MslCharParams* ch, size_t idx) {
   if (batch->state.on_ground[idx]) {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   } else {
-    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-    batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+    // Source callback ordering:
+    // - Marth aerial special Anim callbacks exit through ftCo_Fall_Enter when the move ends.
+    // - Fighter_procUpdate then calls the destination Fall IASA in the same proc, so a same-frame
+    //   jump/airdodge/attack edge can overwrite Fall immediately.
+    // refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Lw}.c
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+    //   ftCo_Fall_Enter,ftCo_Fall_IASA_Inner}
+    msl_locomotion_enter_fall_via_ftco_fall_enter(batch, ch, idx);
+    if (ms_try_enter_air_b_special_from_fall_iasa(batch, c, ch, idx)) {
+      return;
+    }
+    (void)msl_locomotion_run_fall_iasa_non_special_tail(batch, c, ch, idx);
   }
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static void ms_enter_fall_special_from_specialhi(MslBatch* batch, const MslCharParams* ch,
@@ -287,7 +303,7 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
       // The End0 charge-damage override is applied by the combat hitbox refresh hook
       // (marth_specialn_end_damage_override) so it tracks live HitCapsules exactly.
       if (ms_anim_finished(cid, msid, frame)) {
-        ms_exit_to_wait_or_fall(batch, idx);
+        ms_exit_to_wait_or_fall(batch, c, ch, idx);
       }
       break;
 
@@ -313,7 +329,7 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
           }
         }
         if (ms_anim_finished(cid, msid, frame)) {
-          ms_exit_to_wait_or_fall(batch, idx);
+          ms_exit_to_wait_or_fall(batch, c, ch, idx);
         }
         break;
       }
@@ -378,7 +394,7 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
         }
         if (ms_anim_finished(cid, msid, frame)) {
           batch->state.speciallw_counter_window[idx] = 0u;
-          ms_exit_to_wait_or_fall(batch, idx);
+          ms_exit_to_wait_or_fall(batch, c, ch, idx);
         }
         break;
       }
@@ -387,7 +403,7 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
         // CounterAttack: hitboxes/damage come from the movescript (Marth keeps authored
         // damage; the speciallw_countered_damage override is the FTKIND_EMBLEM/Roy path).
         if (ms_anim_finished(cid, msid, frame)) {
-          ms_exit_to_wait_or_fall(batch, idx);
+          ms_exit_to_wait_or_fall(batch, c, ch, idx);
         }
         break;
       }
@@ -777,9 +793,11 @@ static uint8_t ms_b_entry_mask(const MslBatch* batch, size_t idx, uint16_t a, ui
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Fall.c,ftCo_Jump.c,ftCo_JumpAerial.c,
   //   ftCo_Pass.c,ftCo_DamageFall.c}
   //
-  // RESOLVED (x686/x68B input-history lanes landed): the aerial up-special is admitted on
-  // up+B PRESENCE with the x68B >= x1C freshness gate (ftCo_800D69C4); grounded on presence
-  // alone (ftCo_Attack100_CheckInput). See the dispatch block below.
+  // Aerial Fall/Jump/Pass/DamageFall owners call ftCo_SpecialAir_CheckInput, which first gates the
+  // whole chain on input.x668 & HSD_PAD_B. Airborne Damage/DamageFly uses a different callsite
+  // (`ftCo_800D69C4`) for Up-B only; that path is x686/x68B presence-owned.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D69C4
   switch (a) {
     case MSL_ACT_JUMP_F:
@@ -819,6 +837,76 @@ static uint8_t ms_b_entry_mask(const MslBatch* batch, size_t idx, uint16_t a, ui
     default:
       return 0u;
   }
+}
+
+static uint8_t ms_aerial_up_b_uses_presence_gate(uint16_t action_id) {
+  switch (action_id) {
+    // Airborne Damage/DamageFly doIasa calls ftCo_800D69C4 before jump IASA. This is not the
+    // ordinary ftCo_SpecialAir_CheckInput chain and intentionally consumes x686/x68B.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_1 + 1:
+    case MSL_ACT_DAMAGE_AIR_1 + 2:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static uint8_t ms_try_enter_air_b_special_from_fall_iasa(MslBatch* batch, const MslCommonParams* c,
+                                                         const MslCharParams* ch, size_t idx) {
+  if (batch == NULL || c == NULL || ch == NULL || batch->state.on_ground[idx] != 0u ||
+      batch->state.hitlag[idx] != 0u || batch->state.hitstun[idx] != 0u) {
+    return 0u;
+  }
+
+  const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+  const uint8_t b_edge = ((pressed & (uint16_t)MSL_BUTTON_B) != 0u) ? 1u : 0u;
+  if (!b_edge) {
+    return 0u;
+  }
+
+  const uint8_t mask = ms_b_entry_mask(batch, idx, (uint16_t)MSL_ACT_FALL, 0u);
+  if (mask == 0u) {
+    return 0u;
+  }
+
+  const float sx =
+      ms_apply_deadzone(ms_stick_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float sy =
+      ms_apply_deadzone(ms_stick_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float ax = fabsf(sx);
+
+  // ftCo_Fall_IASA_Inner calls ftCo_SpecialAir_CheckInput before the non-special Fall IASA tail.
+  // Marth's aerial special resolver priority is Up -> Down -> Side -> Neutral.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  if ((mask & MS_B_UP) != 0u && sy >= c->special_stick_y_threshold) {
+    ms_enter_specialhi(batch, ch, idx, 0u);
+    return 1u;
+  }
+  if ((mask & MS_B_DOWN) != 0u && b_edge && sy <= -c->special_stick_y_threshold) {
+    ms_enter_speciallw(batch, ch, idx, 0u);
+    return 1u;
+  }
+  if ((mask & MS_B_SIDE) != 0u && b_edge && ax >= c->special_stick_x_threshold_side) {
+    if ((sx > 0.0f) != (batch->state.facing[idx] != 0u)) {
+      batch->state.facing[idx] = (uint8_t)(sx > 0.0f);
+    }
+    ms_enter_specials(batch, ch, idx, 0u);
+    return 1u;
+  }
+  if ((mask & MS_B_NEUTRAL) != 0u && b_edge && ax < c->special_stick_x_threshold_side &&
+      sy < c->special_stick_y_threshold) {
+    ms_enter_specialn(batch, ch, idx, 0u);
+    return 1u;
+  }
+  return 0u;
 }
 
 void marth_specials_update_pre_physics(MslBatch* batch) {
@@ -862,17 +950,25 @@ void marth_specials_update_pre_physics(MslBatch* batch) {
       }
       const uint16_t pressed = batch->state.input_buttons_pressed[idx];
       const uint8_t b_edge = ((pressed & (uint16_t)MSL_BUTTON_B) != 0u) ? 1u : 0u;
-      // Source up-special admission is PRESENCE-based, not edge-based: grounded
-      // ftCo_Attack100_CheckInput fires on x686 == 0 (up+B present this frame, including a
-      // held B with a late up-flick); aerial ftCo_800D69C4 adds the x68B >= x1C freshness
-      // gate (x68B carries the gap before the current press period only on its first frame,
-      // so a mashed second up+B within the window is rejected).
+      // Up-special admission has two source owners:
+      // - grounded Attack100_CheckInput fires on x686 == 0 (up+B present this frame, including a
+      //   held B with a late up-flick);
+      // - airborne Damage/DamageFly doIasa calls ftCo_800D69C4, adding x68B >= x1C freshness;
+      // - ordinary aerial Fall/Jump/Pass/DamageFall calls ftCo_SpecialAir_CheckInput and requires
+      //   a current B edge for every direction, including Up-B.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
       //   ftCo_Attack100_CheckInput,ftCo_800D69C4,ftCo_800D6928}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
       const uint8_t up_b_present = (batch->state.x686[idx] == 0u) ? 1u : 0u;
       const uint8_t air_up_b_fresh =
           (uint8_t)(up_b_present && batch->state.x68B[idx] >= c->tech_lr_debounce_frames);
-      if (!b_edge && !up_b_present) {
+      const uint8_t air_up_b_presence_gate =
+          (uint8_t)((!on_ground) && ms_aerial_up_b_uses_presence_gate(a));
+      if (on_ground) {
+        if (!b_edge && !up_b_present) {
+          continue;
+        }
+      } else if (!b_edge && !(air_up_b_presence_gate && up_b_present)) {
         continue;
       }
       const uint8_t mask = ms_b_entry_mask(batch, idx, a, on_ground);
@@ -907,7 +1003,9 @@ void marth_specials_update_pre_physics(MslBatch* batch) {
           ms_enter_speciallw(batch, ch, idx, 1u);
         }
       } else {
-        if ((mask & MS_B_UP) != 0u && air_up_b_fresh) {
+        if ((mask & MS_B_UP) != 0u &&
+            ((air_up_b_presence_gate && air_up_b_fresh) ||
+             (!air_up_b_presence_gate && b_edge && sy >= c->special_stick_y_threshold))) {
           ms_enter_specialhi(batch, ch, idx, 0u);
         } else if ((mask & MS_B_DOWN) != 0u && b_edge && sy <= -c->special_stick_y_threshold) {
           ms_enter_speciallw(batch, ch, idx, 0u);

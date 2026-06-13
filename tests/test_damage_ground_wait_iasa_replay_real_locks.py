@@ -85,6 +85,14 @@ class _DamageGroundWaitIasaCase:
             expected_animation_index=67,  # ftCo_SM_AttackLw4
             note="DamageHi3 grounded Wait_IASA keeps earlier grounded A-attack ownership before guard",
         ),
+        _DamageGroundWaitIasaCase(
+            dataset_rel="datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl",
+            record=387,
+            player=0,
+            expected_action_id=212,  # Catch
+            expected_animation_index=242,  # ftCo_SM_Catch
+            note="DamageN1 grounded Wait_IASA checks Catch before Attack11 on raw-Z A+LR synthesis",
+        ),
     ],
 )
 def test_damage_ground_wait_iasa_replay_real_transition_locks(case: _DamageGroundWaitIasaCase) -> None:
@@ -119,11 +127,50 @@ def test_damage_ground_wait_iasa_replay_real_transition_locks(case: _DamageGroun
         assert int(row["input_t"][0]["p"]["buttons"][p]) == 0x0200, case.note
         assert int(row["input_t"][0]["p"]["main_x"][p]) == 0, case.note
         assert int(row["input_t"][0]["p"]["main_y"][p]) == -102, case.note
+    if record == 387:
+        assert int(row["prev_input_t"][0]["p"]["buttons"][p]) & 0x0010 == 0, case.note
+        assert int(row["input_t"][0]["p"]["buttons"][p]) & 0x0010, case.note
     assert int(ref["action_id"][0, p]) == case.expected_action_id, case.note
     assert int(ref["animation_index"][0, p]) == case.expected_animation_index, case.note
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
     _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+
+
+@pytest.mark.integration
+def test_grounded_damage_wait_iasa_plain_a_without_lr_stays_attack11_vsa_387() -> None:
+    # Negative/control for the VSA:387 Catch positive above:
+    # Wait_IASA checks Catch before Attack11, but ftCo_Catch_CheckInput requires both held LR and
+    # the internal A edge. If the raw-Z LR half is removed and only A remains, the same terminal
+    # grounded DamageN1 row must fall through to Attack11, not Catch.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    record = 387
+    p = 0
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    assert int(row["seed_t"][0]["action_id"][p]) == 78  # DamageN1
+    assert int(row["ref_t1"][0]["action_id"][p]) == 212  # Catch with raw Z.
+
+    def plain_a_without_lr(prev_input_t: np.ndarray, input_t: np.ndarray) -> None:
+        prev_input_t["p"]["buttons"][0, p] = np.uint16(0)
+        input_t["p"]["buttons"][0, p] = np.uint16(0x0100)  # A only: no L/R/Z held LR lane.
+        prev_input_t["p"]["l"][0, p] = np.uint8(0)
+        prev_input_t["p"]["r"][0, p] = np.uint8(0)
+        input_t["p"]["l"][0, p] = np.uint8(0)
+        input_t["p"]["r"][0, p] = np.uint8(0)
+
+    _, _, out_row = _run_one_step_row(dataset_path, record, p, input_mutator=plain_a_without_lr)
+
+    assert int(out_row["action_id"][p]) == 44  # Attack11
+    assert int(out_row["animation_index"][p]) == 46  # ftCo_SM_Attack11
 
 
 @pytest.mark.integration

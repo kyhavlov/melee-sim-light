@@ -69,6 +69,27 @@ int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uin
 int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx, uint16_t msid,
                                        float anim_frame, uint16_t part_id, float out_3x4[12]);
 
+// Common Fall/FallAerial/FallSpecial live local-SRT blend matrix sampler.
+//
+// Source owner:
+// - ftCo_Fall_Anim_Inner chooses neutral/F/B submotions from air drift and updates
+//   mv.co.{fall,fallaerial,fallspecial}.x4.
+// - ftCo_800CC988 / ftCo_Fall_Anim_Inner call ftAnim_8006FE9C(fp, FtPart_TransN, ...), which keeps
+//   pre-TransN ancestors on the active selected submotion and blends eligible TransN descendants'
+//   local SRT with lb_8000C490 before collision refresh samples the requested part matrix.
+// Returns 0 and writes out_3x4 only when the current fighter state owns a nonzero source blend.
+int anim_pose_get_common_fall_blend_collision_matrix_f32(const MslBatch* batch, size_t player_idx,
+                                                         uint16_t msid, float anim_frame,
+                                                         uint16_t part_id, float out_3x4[12]);
+
+// Debug/test helper for the CommonFall local-SRT blend path. This samples the same matrix builder
+// used by anim_pose_get_common_fall_blend_collision_matrix_f32 without requiring a live batch
+// state, so tests can lock source-owned endpoints such as x4 == 1.0 matching the target
+// submotion matrix.
+int anim_pose_debug_common_fall_blend_matrix(uint8_t char_id, uint16_t neutral_msid,
+                                             uint16_t target_msid, float anim_frame,
+                                             uint16_t part_id, float weight, float out_3x4[12]);
+
 // Catch-selection collision-pose sampler.
 //
 // `ftColl_80078A2C` routes grabbable hurt capsules through `lbColl_80007ECC`, which consumes the

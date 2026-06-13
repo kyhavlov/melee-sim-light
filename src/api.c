@@ -704,6 +704,12 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
   memset(batch->replay_frame_rng_applied, 0, (size_t)batch_size * sizeof(uint8_t));
+  batch->replay_reseed_frame_active = (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
+  if (batch->replay_reseed_frame_active == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->replay_reseed_frame_active, 0, (size_t)batch_size * sizeof(uint8_t));
   batch->replay_frame_dream_whispy_first_apply_pending =
       (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
   if (batch->replay_frame_dream_whispy_first_apply_pending == NULL) {
@@ -941,6 +947,7 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch->replay_frame_top_blast_rng_owned);
   alloc_free(batch->replay_frame_dream_whispy_first_apply_pending);
   alloc_free(batch->replay_frame_rng_applied);
+  alloc_free(batch->replay_reseed_frame_active);
   alloc_free(batch->rollout_yoshi_shyguy_spawn_rng_installed);
   alloc_free(batch->rollout_clock_rng_owned);
   alloc_free(batch->match_init_seed_scratch);
@@ -978,6 +985,7 @@ static void msl_batch_copy_runtime_lane(MslBatch* dst, const MslBatch* src, int3
   MSL_BATCH_COPY_FIELD(rollout_clock_rng_owned, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(rollout_yoshi_shyguy_spawn_rng_installed, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_frame_rng_applied, uint8_t, 1u);
+  MSL_BATCH_COPY_FIELD(replay_reseed_frame_active, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_frame_dream_whispy_first_apply_pending, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_frame_top_blast_rng_owned, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(replay_rollout_reseeded, uint8_t, 1u);
@@ -2135,6 +2143,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         facing_dir1 = batch->state.facing[idx] ? (int8_t)1 : (int8_t)-1;
       }
       batch->state.facing_dir1[idx] = facing_dir1;
+      batch->state.specialn_facing_dir1[idx] = facing_dir1;
       float ground_friction_mul = seed->ground_friction_mul[p];
       if (!(ground_friction_mul > 0.0f)) {
         ground_friction_mul = 1.0f;
@@ -2350,6 +2359,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.
       msl_anim_timebase_seed(batch, idx, seed->anim_frame_f32[p], seed->frame_speed_mul_f32[p]);
+      // Hidden CommonFall/FallAerial/FallSpecial JObj blend reconstruction:
+      // Slippi exposes cur_anim_frame but not mv.co.{fall,fallaerial,fallspecial}.x4. Reconstruct
+      // the source recurrence from action entry so the next live Anim callback and BODY collision
+      // consume the same Fall/F/B blended pose without adding replay-row gameplay logic.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+      anim_timebase_seed_common_fall_blend(batch, idx, seed->action_frame[p]);
       // Narrow GuardSetOff hidden-rate override:
       // frame_speed_mul_f32 above remains strictly causal. For GuardSetOff last-hitlag rows,
       // Slippi exposes the ftCo_80092F2C x19A4/lightshield-owned rate only after hitlag exits, so
@@ -2445,6 +2460,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         fall_fast = slippi_fall_fast;
       }
       batch->state.fall_fast[idx] = fall_fast;
+      batch->state.fall_fast_seed_frame_start[idx] = seed->fall_fast[p] ? 1u : 0u;
+      batch->state.fall_fast_seed_frame_start_valid[idx] = 1u;
       // Decomp: Fighter_ChangeMotionState clears fp->fall_fast unless the motion-state flags
       // include Ft_MF_KeepFastFall.
       // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState; clears when (flags & Ft_MF_KeepFastFall)==0)
@@ -3794,6 +3811,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->replay_rollout_reseeded[bi] =
           (rollout_owned_after == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) ? 1u : 0u;
     }
+    if (batch->replay_reseed_frame_active != NULL) {
+      batch->replay_reseed_frame_active[bi] = 1u;
+    }
     if (batch->replay_rollout_seed_frame_id != NULL) {
       batch->replay_rollout_seed_frame_id[bi] = seed->frame_id;
     }
@@ -4105,6 +4125,9 @@ static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
                                                                                                : 0u;
     if (batch->replay_frame_rng_applied != NULL) {
       batch->replay_frame_rng_applied[bi] = 0u;
+    }
+    if (batch->replay_reseed_frame_active != NULL) {
+      batch->replay_reseed_frame_active[bi] = 0u;
     }
     if (batch->replay_frame_top_blast_rng_owned != NULL) {
       batch->replay_frame_top_blast_rng_owned[bi] = 0u;
@@ -4951,6 +4974,7 @@ int msl_batch_debug_set_player_root(MslBatch* batch, int batch_index, int player
   batch->state.dynamic_pose_pos_y[idx] = pos_y;
   batch->state.facing[idx] = facing ? 1u : 0u;
   batch->state.facing_dir1[idx] = facing ? 1 : -1;
+  batch->state.specialn_facing_dir1[idx] = facing ? 1 : -1;
   return 0;
 }
 
@@ -5146,6 +5170,23 @@ static inline void debug_hb_defs_apply_event(const MslHitboxEvent* ev,
   }
 }
 
+static inline void debug_apply_live_transn_tail(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                                uint16_t part_id, float model_scale, float* io_x,
+                                                float* io_y, float* io_z) {
+  if (io_x == NULL || io_y == NULL || io_z == NULL ||
+      !msl_anim_part_under_xrotn(char_id, part_id) ||
+      msl_anim_uses_root_motion(char_id, msid) != 0u) {
+    return;
+  }
+  float transn[3];
+  if (anim_pose_get_transn(char_id, msid, frame, transn) != 0) {
+    return;
+  }
+  *io_x += transn[0] * model_scale;
+  *io_y += transn[1] * model_scale;
+  *io_z += transn[2] * model_scale;
+}
+
 static uint8_t debug_sample_hitbox_center_proxy(const MslBatch* batch, size_t idx, uint8_t char_id,
                                                 uint16_t msid, uint16_t pose_frame,
                                                 const MslHitboxEvent* def, float* out_x,
@@ -5231,6 +5272,12 @@ static uint8_t debug_sample_hitbox_center_proxy(const MslBatch* batch, size_t id
       }
     }
   }
+
+  // Match hitboxes_refresh()/preprocess hidden x58 reconstruction: SSANIM01 strips TransN into a
+  // tail, while ftColl_8007AD18/lbColl_8000805C consume live-JObj hitcapsule endpoints.
+  // Probe-backed witness: RipeWealthySeahorse.msl:2119 Marth AttackS4 hb3 x58.
+  debug_apply_live_transn_tail(char_id, msid, pose_frame, def->bone_part_id, model_scale, &cx, &cy,
+                               &cz);
 
   const float cx_rot_x = facing_dir * cz;
   const float cx_rot_z = -facing_dir * cx;

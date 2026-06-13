@@ -6,12 +6,15 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from tools.dolphin.engine_dump_io import read_engine_dump
+
+INTERPRETER_PROBE_WARN_FRAMES = 3
 
 
 def _timestamp() -> str:
@@ -71,7 +74,7 @@ def _set_ini_key(lines: list[str], section: str, required: dict[str, str]) -> li
     return out
 
 
-def _write_dolphin_ini(user_dir: Path, *, force_interpreter: bool = False) -> None:
+def _write_dolphin_ini(user_dir: Path) -> None:
     cfg_dir = user_dir / "Config"
     cfg_dir.mkdir(parents=True, exist_ok=True)
     ini_path = cfg_dir / "Dolphin.ini"
@@ -85,7 +88,7 @@ def _write_dolphin_ini(user_dir: Path, *, force_interpreter: bool = False) -> No
         "Core",
         {
             "GFXBackend": "Null",
-            "CPUCore": "0" if force_interpreter else "1",
+            "CPUCore": "1",
             "EmulationSpeed": "0.000",
             "DSPHLE": "True",
         },
@@ -197,6 +200,8 @@ def capture_engine_dump(
     damagefall_probe_path: str | Path | None = None,
     damagefall_probe_frame_start: int | None = None,
     damagefall_probe_frame_end: int | None = None,
+    probe_interpreter_frame_start: int | None = None,
+    probe_interpreter_frame_end: int | None = None,
     throw_release_probe_path: str | Path | None = None,
     throw_laser_event_probe_path: str | Path | None = None,
     laser_shield_reflect_event_probe_path: str | Path | None = None,
@@ -216,21 +221,15 @@ def capture_engine_dump(
 
     user_dir = Path(user_dir)
     user_dir.mkdir(parents=True, exist_ok=True)
-    force_interpreter = (
-        collision_probe_path is not None
-        or damagefall_probe_path is not None
-        or throw_release_probe_path is not None
-        or throw_laser_event_probe_path is not None
-        or laser_shield_reflect_event_probe_path is not None
-    )
-    _write_dolphin_ini(
-        user_dir,
-        force_interpreter=force_interpreter,
-    )
+    _write_dolphin_ini(user_dir)
 
     resolved_start, resolved_end = _resolve_frame_window(
         replay=replay, start_frame=start_frame, end_frame=end_frame
     )
+    if (probe_interpreter_frame_start is None) != (probe_interpreter_frame_end is None):
+        raise ValueError(
+            "probe_interpreter_frame_start and probe_interpreter_frame_end must be provided together"
+        )
 
     playback_txt = _write_playback_txt(
         user_dir,
@@ -244,17 +243,72 @@ def capture_engine_dump(
     dolphin = Path(dolphin)
     if not dolphin.exists():
         raise FileNotFoundError(dolphin)
+    iso = Path(iso)
+    if not iso.exists():
+        raise FileNotFoundError(iso)
 
     proc_args = [
         str(dolphin),
         "-e",
-        str(Path(iso).resolve()),
+        str(iso.resolve()),
         "-u",
         str(user_dir.resolve()),
         "--slippi-input",
         str(playback_txt.resolve()),
     ]
     env = os.environ.copy()
+    probe_windows: list[tuple[int, int]] = []
+
+    def add_probe_window(
+        probe_path: str | Path | None,
+        probe_start: int | None = None,
+        probe_end: int | None = None,
+    ) -> None:
+        if probe_path is None:
+            return
+        default_start = (
+            resolved_start
+            if probe_interpreter_frame_start is None
+            else int(probe_interpreter_frame_start)
+        )
+        default_end = (
+            resolved_end
+            if probe_interpreter_frame_end is None
+            else int(probe_interpreter_frame_end)
+        )
+        window_start = default_start if probe_start is None else int(probe_start)
+        window_end = default_end if probe_end is None else int(probe_end)
+        probe_windows.append((window_start, window_end))
+
+    add_probe_window(
+        collision_probe_path,
+        collision_probe_frame_start,
+        collision_probe_frame_end,
+    )
+    add_probe_window(
+        damagefall_probe_path,
+        damagefall_probe_frame_start,
+        damagefall_probe_frame_end,
+    )
+    add_probe_window(throw_release_probe_path)
+    add_probe_window(throw_laser_event_probe_path)
+    add_probe_window(laser_shield_reflect_event_probe_path)
+    if probe_windows:
+        interpreter_start = min(start for start, _end in probe_windows)
+        interpreter_end = max(end for _start, end in probe_windows)
+        interpreter_frame_count = interpreter_end - interpreter_start + 1
+        if interpreter_frame_count > INTERPRETER_PROBE_WARN_FRAMES:
+            print(
+                "WARNING: Dolphin interpreter probes are extremely slow. "
+                f"This run requested {interpreter_frame_count} consecutive interpreter frames "
+                f"({interpreter_start}..{interpreter_end}). Keep interpreter windows to the "
+                "exact target frames; do not use broad context windows unless you deliberately "
+                "accept a very slow run.",
+                file=sys.stderr,
+            )
+        env["MSL_PROBE_INTERPRETER_FRAME_START"] = str(interpreter_start)
+        env["MSL_PROBE_INTERPRETER_FRAME_END"] = str(interpreter_end)
+
     if collision_probe_path is not None:
         env["MSL_COLLISION_PROBE_PATH"] = str(Path(collision_probe_path).resolve())
         env["MSL_COLLISION_PROBE_FRAME_START"] = str(
@@ -381,7 +435,7 @@ def main() -> int:
         "--collision-probe",
         type=Path,
         default=None,
-        help="optional JSONL path for pre-collision primitive probes; forces interpreter CPU core",
+        help="optional JSONL path for pre-collision primitive probes; uses a bounded interpreter CPU window",
     )
     ap.add_argument("--collision-probe-frame-start", type=int, default=None)
     ap.add_argument("--collision-probe-frame-end", type=int, default=None)
@@ -389,27 +443,39 @@ def main() -> int:
         "--damagefall-probe",
         type=Path,
         default=None,
-        help="optional JSONL path for DamageFall IASA/Fall_Enter events; forces interpreter CPU core",
+        help="optional JSONL path for DamageFall IASA/Fall_Enter events; uses a bounded interpreter CPU window",
     )
     ap.add_argument("--damagefall-probe-frame-start", type=int, default=None)
     ap.add_argument("--damagefall-probe-frame-end", type=int, default=None)
     ap.add_argument(
+        "--probe-interpreter-frame-start",
+        type=int,
+        default=None,
+        help="first frame where interpreter CPU mode may be enabled; keep this window tiny because interpreter mode is very slow",
+    )
+    ap.add_argument(
+        "--probe-interpreter-frame-end",
+        type=int,
+        default=None,
+        help="last frame where interpreter CPU mode may be enabled; keep this window tiny because interpreter mode is very slow",
+    )
+    ap.add_argument(
         "--throw-release-probe",
         type=Path,
         default=None,
-        help="optional JSONL path for ftCo_800DDDE4 throw-release position publication events; forces interpreter CPU core",
+        help="optional JSONL path for ftCo_800DDDE4 throw-release position publication events; uses a bounded interpreter CPU window",
     )
     ap.add_argument(
         "--throw-laser-event-probe",
         type=Path,
         default=None,
-        help="optional JSONL path for throw-laser item spawn/body/damage/delete events; forces interpreter CPU core",
+        help="optional JSONL path for throw-laser item spawn/body/damage/delete events; uses a bounded interpreter CPU window",
     )
     ap.add_argument(
         "--laser-shield-reflect-event-probe",
         type=Path,
         default=None,
-        help="optional JSONL path for laser shield/reflect branch events; forces interpreter CPU core",
+        help="optional JSONL path for laser shield/reflect branch events; uses a bounded interpreter CPU window",
     )
     args = ap.parse_args()
 
@@ -429,6 +495,8 @@ def main() -> int:
         damagefall_probe_path=args.damagefall_probe,
         damagefall_probe_frame_start=args.damagefall_probe_frame_start,
         damagefall_probe_frame_end=args.damagefall_probe_frame_end,
+        probe_interpreter_frame_start=args.probe_interpreter_frame_start,
+        probe_interpreter_frame_end=args.probe_interpreter_frame_end,
         throw_release_probe_path=args.throw_release_probe,
         throw_laser_event_probe_path=args.throw_laser_event_probe,
         laser_shield_reflect_event_probe_path=args.laser_shield_reflect_event_probe,

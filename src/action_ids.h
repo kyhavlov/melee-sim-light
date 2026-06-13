@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "motion_state_owners.h"
@@ -704,6 +705,55 @@ static inline uint8_t msl_action_is_air_locomotion(uint16_t action_id) {
     default:
       return 0;
   }
+}
+
+static inline uint8_t msl_action_common_fall_blend_msids(uint16_t action_id,
+                                                         uint16_t* out_neutral_msid,
+                                                         uint16_t* out_forwards_msid,
+                                                         uint16_t* out_backwards_msid) {
+  // Shared source owner: Fall, FallAerial, and FallSpecial all call ftCo_Fall_Anim_Inner with a
+  // neutral/F/B submotion family and store the blend scalar in their mv.co.*.x4 lane.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::ftCo_FallAerial_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Anim
+  uint16_t neutral = 0u;
+  uint16_t forwards = 0u;
+  uint16_t backwards = 0u;
+  switch (action_id) {
+    case MSL_ACT_FALL:
+    case MSL_ACT_FALL_F:
+    case MSL_ACT_FALL_B:
+      neutral = (uint16_t)MSL_SM_FALL;
+      forwards = (uint16_t)MSL_SM_FALL_F;
+      backwards = (uint16_t)MSL_SM_FALL_B;
+      break;
+    case MSL_ACT_FALL_AERIAL:
+    case MSL_ACT_FALL_AERIAL_F:
+    case MSL_ACT_FALL_AERIAL_B:
+      neutral = (uint16_t)MSL_SM_FALL_AERIAL;
+      forwards = (uint16_t)MSL_SM_FALL_AERIAL_F;
+      backwards = (uint16_t)MSL_SM_FALL_AERIAL_B;
+      break;
+    case MSL_ACT_FALL_SPECIAL:
+    case MSL_ACT_FALL_SPECIAL_F:
+    case MSL_ACT_FALL_SPECIAL_B:
+      neutral = (uint16_t)MSL_SM_FALL_SPECIAL;
+      forwards = (uint16_t)MSL_SM_FALL_SPECIAL_F;
+      backwards = (uint16_t)MSL_SM_FALL_SPECIAL_B;
+      break;
+    default:
+      return 0u;
+  }
+  if (out_neutral_msid != NULL) {
+    *out_neutral_msid = neutral;
+  }
+  if (out_forwards_msid != NULL) {
+    *out_forwards_msid = forwards;
+  }
+  if (out_backwards_msid != NULL) {
+    *out_backwards_msid = backwards;
+  }
+  return 1u;
 }
 
 static inline uint8_t msl_action_allows_fastfall(uint8_t char_id, uint16_t action_id) {

@@ -1515,13 +1515,17 @@ static inline uint8_t combat_catch_overlap_lbColl_80007ECC(const MslBatch* batch
 }
 
 static inline void combat_catch_hitbox_model_scale_compensated(const MslBatch* batch, int bi,
-                                                               int attacker, float* io_hx,
-                                                               float* io_hy, float* io_hz,
-                                                               float* io_hr) {
+                                                               int attacker, int hb_id,
+                                                               float* io_hx, float* io_hy,
+                                                               float* io_hz, float* io_hr) {
   if (batch == NULL || io_hx == NULL || io_hy == NULL || io_hz == NULL || io_hr == NULL) {
     return;
   }
+  const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
   const size_t a_idx = msl_idx_player(bi, attacker);
+  if (batch->state.hitbox_bone_part_id[hb_i] == 0u) {
+    return;
+  }
   const MslCharParams* chp = msl_char_params_fast(batch->state.char_id[a_idx]);
   const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                   ? chp->model_scaling
@@ -1531,14 +1535,16 @@ static inline void combat_catch_hitbox_model_scale_compensated(const MslBatch* b
   }
 
   // Catch selection forwards HitCapsule.x58/x4C and HitCapsule.scale to lbColl_80007ECC with
-  // this_fp->x34_scale.y as the hit-side scalar. HitCapsule points and radius are produced from the
-  // collision skeleton before the catch narrowphase; remove the simulator's generic pose-space
-  // model_scaling expansion for enlarged models so the catch bubble uses that source skeleton. Do
-  // not use this helper to extend reach for model_scaling < 1; the reviewed generic hitbox path
-  // remains the source for those rows until the broader hitbox geometry owner is replaced.
+  // this_fp->x34_scale.y as the hit-side scalar. For non-root authored Catch capsules, the live
+  // HitCapsule point consumed by lb_8000B1CC follows the collision skeleton rather than the
+  // simulator's generic pose-space model_scaling expansion; Falco's part-1 standing Catch lock is
+  // the replay-real positive. Root-authored Catch/CatchDash capsules stay on the root-scaled pose
+  // path; do not compensate them through a row-fit CatchDash exception without source data proving
+  // that split.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_8007AD18}
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC
   // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
   const float pos_x = batch->state.pos_x[a_idx];
   const float pos_y = batch->state.pos_y[a_idx];
   const float pos_z = batch->state.pos_z[a_idx];
@@ -1616,6 +1622,158 @@ static inline uint8_t combat_guardreflect_expired_x14_body_fallback_applies(cons
       batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON) {
     return 0u;
   }
+  return 1u;
+}
+
+static inline uint8_t combat_guard_family_no_submotion_body_source_msid(const MslBatch* batch,
+                                                                        size_t d_idx,
+                                                                        uint16_t* out_msid) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.animation_index[d_idx] <= 0xFFFFu || batch->state.action_frame[d_idx] >= 0) {
+    return 0u;
+  }
+
+  uint16_t msid = 0u;
+  switch (batch->state.action_id[d_idx]) {
+    case (uint16_t)MSL_ACT_GUARD_ON:
+      msid = (uint16_t)MSL_SM_GUARD_ON;
+      break;
+    case (uint16_t)MSL_ACT_GUARD:
+      msid = (uint16_t)MSL_SM_GUARD;
+      break;
+    case (uint16_t)MSL_ACT_GUARD_SET_OFF:
+      msid = (uint16_t)MSL_SM_GUARD_DAMAGE;
+      break;
+    case (uint16_t)MSL_ACT_GUARD_REFLECT:
+      if (!combat_guardreflect_expired_x14_body_fallback_applies(batch, d_idx)) {
+        return 0u;
+      }
+      msid = (uint16_t)MSL_SM_GUARD_ON;
+      break;
+    default:
+      return 0u;
+  }
+
+  if (out_msid != NULL) {
+    *out_msid = msid;
+  }
+  return 1u;
+}
+
+static inline uint8_t combat_common_entry_carry_action_to_msid(uint16_t action_id,
+                                                               uint16_t* out_msid) {
+  if (out_msid == NULL) {
+    return 0u;
+  }
+  switch (action_id) {
+    case MSL_ACT_WAIT:
+      *out_msid = (uint16_t)MSL_SM_WAIT1_0;
+      return 1u;
+    case MSL_ACT_WALK_SLOW:
+      *out_msid = (uint16_t)MSL_SM_WALK_SLOW;
+      return 1u;
+    case MSL_ACT_TURN:
+      *out_msid = (uint16_t)MSL_SM_TURN;
+      return 1u;
+    case MSL_ACT_DASH:
+      *out_msid = (uint16_t)MSL_SM_DASH;
+      return 1u;
+    case MSL_ACT_RUN:
+      *out_msid = (uint16_t)MSL_SM_RUN;
+      return 1u;
+    case MSL_ACT_SQUAT_RV:
+      *out_msid = (uint16_t)MSL_SM_SQUAT_RV;
+      return 1u;
+    case MSL_ACT_ATTACK_DASH:
+      *out_msid = (uint16_t)MSL_SM_ATTACK_DASH;
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t combat_guardon_live_pose_source(const MslBatch* batch, size_t d_idx,
+                                                      uint16_t* out_action, uint32_t* out_anim) {
+  if (batch == NULL || out_action == NULL || out_anim == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON ||
+      batch->state.action_frame[d_idx] >= 0 || batch->state.animation_index[d_idx] <= 0xFFFFu ||
+      batch->state.frame_start_action_id[d_idx] == batch->state.action_id[d_idx] ||
+      batch->state.frame_start_animation_index[d_idx] > 0xFFFFu) {
+    return 0u;
+  }
+  *out_action = batch->state.frame_start_action_id[d_idx];
+  *out_anim = batch->state.frame_start_animation_index[d_idx];
+  uint16_t dummy_msid = 0u;
+  return combat_common_entry_carry_action_to_msid(*out_action, &dummy_msid);
+}
+
+static inline uint8_t combat_guard_family_no_submotion_body_source_pose(const MslBatch* batch,
+                                                                        size_t d_idx,
+                                                                        uint16_t* out_msid,
+                                                                        float* out_frame) {
+  if (out_msid == NULL || out_frame == NULL) {
+    return 0u;
+  }
+  uint16_t msid = 0u;
+  if (!combat_guard_family_no_submotion_body_source_msid(batch, d_idx, &msid)) {
+    return 0u;
+  }
+
+  float pose_frame = (float)msl_anim_frame_floor_u16(
+      msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]));
+  if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+      batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] > 0xFFFFu) {
+    uint16_t prev_msid = 0u;
+    uint16_t source_action = batch->state.prev_action_id[d_idx];
+    uint32_t source_anim = UINT32_MAX;
+    uint8_t have_source =
+        combat_guardon_live_pose_source(batch, d_idx, &source_action, &source_anim);
+    if (!have_source && batch->state.prev_action_id[d_idx] != batch->state.action_id[d_idx]) {
+      have_source = 1u;
+    }
+    if (!have_source) {
+      goto use_current_guard_pose;
+    }
+    if (source_anim <= 0xFFFFu) {
+      prev_msid = (uint16_t)source_anim;
+    } else {
+      (void)combat_common_entry_carry_action_to_msid(source_action, &prev_msid);
+    }
+    if (prev_msid != 0u) {
+      uint16_t prev_frame = 0u;
+      if (batch->state.prev_action_frame[d_idx] >= 0) {
+        prev_frame = (uint16_t)batch->state.prev_action_frame[d_idx];
+        if (prev_frame != 0xFFFFu) {
+          prev_frame = (uint16_t)(prev_frame + 1u);
+        }
+      }
+      const float end_frame = msl_anim_end_frame(batch->state.char_id[d_idx], prev_msid);
+      if (end_frame > 0.0f && (float)prev_frame > end_frame) {
+        prev_frame = msl_anim_frame_floor_u16(end_frame);
+      }
+      // Ft_MF_SkipAnim GuardOn entry BODY pose:
+      // ftCo_800924C0 enters GuardOn with Ft_MF_SkipAnim after the previous action's Anim proc has
+      // already interpreted the live JObj tree for this frame. ftColl_80078C70/lbColl_8000805C
+      // therefore consume the previous common-action collision pose even though Slippi publishes
+      // action=GuardOn and animation_index=-1. Probe proof: VSA:4317 Marth Dash -> GuardOn accepts
+      // BODY on cap6/bone29 at Dash frame 2 after ShieldDesc misses.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ChangeMotionState}
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+      *out_msid = prev_msid;
+      *out_frame = (float)prev_frame;
+      return 1u;
+    }
+  }
+use_current_guard_pose:
+
+  *out_msid = msid;
+  *out_frame = pose_frame;
   return 1u;
 }
 
@@ -1824,7 +1982,7 @@ static inline uint8_t combat_defender_downed_catch_mask_blocks(uint16_t action_i
   }
 }
 
-static inline uint8_t combat_guardreflect_body_hurtcap_world(const MslBatch* batch, size_t d_idx,
+static inline uint8_t combat_guard_family_body_hurtcap_world(const MslBatch* batch, size_t d_idx,
                                                              const MslHurtCap* cap, uint8_t cap_id,
                                                              uint16_t cap_count, float* out_ax,
                                                              float* out_ay, float* out_az,
@@ -1835,30 +1993,35 @@ static inline uint8_t combat_guardreflect_body_hurtcap_world(const MslBatch* bat
     return 0u;
   }
 
-  // Expired-x14 GuardReflect no-submotion BODY fallback:
-  // - ftCo_GuardReflect_Anim calls ftCo_80093BC0 before ftColl_80078C70.
-  // - When x14 expires, ftCo_80093BC0 recreates ShieldDesc through ftCo_80092450, but if that
-  //   shield overlap misses, the fighter-vs-fighter BODY path still consumes the GuardReflect
-  //   motion-state's GuardOn submotion hurtcaps.
+  uint16_t msid = 0u;
+  float pose_frame = 0.0f;
+  if (!combat_guard_family_no_submotion_body_source_pose(batch, d_idx, &msid, &pose_frame)) {
+    return 0u;
+  }
+
+  // Guard-family no-submotion BODY fallback:
+  // - ftCo_800924C0/ftCo_80092F2C enter GuardOn/GuardSetOff with Slippi's no-submotion snapshot
+  //   shape, but ftColl_80078C70 still owns fighter BODY fallthrough after a ShieldDesc miss.
+  // - GuardReflect keeps the narrower expired-x14 owner: ftCo_GuardReflect_Anim calls
+  //   ftCo_80093BC0 before ftColl_80078C70; only after that recreates ShieldDesc can a missed
+  //   shield overlap fall through to BODY.
   // - Keep this local to fighter BODY selection. Global hurtboxes_refresh() stays empty for this
-  //   no-submotion slice so item collision does not turn stale/frozen GuardReflect rows into item
-  //   BODY contacts.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_GuardReflect_Anim}
-  // refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_GuardReflect
+  //   same-frame entry slice so item collision does not inherit new BODY contacts.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_800924C0,ftCo_80092F2C,ftCo_80093BC0,ftCo_GuardReflect_Anim}
+  // refs/melee/src/melee/ft/ftmotionstates.c::{
+  //   ftCo_MS_GuardOn,ftCo_MS_Guard,ftCo_MS_GuardSetOff,ftCo_MS_GuardReflect}
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80076ED8,ftColl_80078C70}
   uint32_t can_hit_mask = 0xFFFFFFFFu;
-  (void)move_tables_hurtbox_can_hit_mask_at_frame(
-      batch->state.char_id[d_idx], (uint16_t)MSL_SM_GUARD_ON, 0u, cap_count, &can_hit_mask);
+  (void)move_tables_hurtbox_can_hit_mask_at_frame(batch->state.char_id[d_idx], msid, 0u, cap_count,
+                                                  &can_hit_mask);
   if (((can_hit_mask >> cap_id) & 0x1u) == 0u) {
     return 0u;
   }
 
-  const uint8_t char_id = batch->state.char_id[d_idx];
-  const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
-  const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
   float m[12];
-  if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD_ON, (float)frame,
-                                         cap->bone_part_id, m) != 0) {
+  if (anim_pose_get_collision_matrix_f32(batch, d_idx, msid, pose_frame, cap->bone_part_id, m) !=
+      0) {
     return 0u;
   }
 
@@ -1867,6 +2030,7 @@ static inline uint8_t combat_guardreflect_body_hurtcap_world(const MslBatch* bat
   msl_mtx34_mul_point(m, cap->a_offset, &ax, &ay, &az);
   msl_mtx34_mul_point(m, cap->b_offset, &bx, &by, &bz);
 
+  const uint8_t char_id = batch->state.char_id[d_idx];
   const MslCharParams* chp = msl_char_params_fast(char_id);
   const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                   ? chp->model_scaling
@@ -2149,17 +2313,15 @@ static inline uint8_t combat_body_matrix_positive_pose_reliable(const MslBatch* 
     if (batch->state.action_frame[d_idx] <= 2) {
       return 1u;
     }
-    // After Fall entry, replay-visible state_age is not sufficient to reconstruct the live JObj
-    // pose that ftColl_80078C70/lbColl_8000805C consumes. Dolphin collision probes on later Fall
-    // frames show `x894_currentAnimFrame` staying at 0 while the live leg JObj matrix changes.
-    // Later CommonFall BODY positives are therefore only source-backed when the ordinary
-    // world/sphere geometry path already overlaps; the generated state-age matrix may reject a
-    // false positive but must not create a matrix-only positive over a world-geometry miss without
-    // an explicit live JObj pose lane. The entry step stays eligible because
-    // Fighter_ChangeMotionState has just initialized the source JObj chain; after the normal
-    // per-frame tick this appears as action_frame 2 in the combat pass, matching DCC's frame-1
-    // seeded Fall BODY admission.
+    if (batch->state.common_fall_blend_x4[d_idx] > 0.0f) {
+      return 1u;
+    }
+    // After Fall entry, replay-visible state_age alone is not sufficient to reconstruct the live
+    // JObj pose that ftColl_80078C70/lbColl_8000805C consumes. Later CommonFall matrix-only BODY
+    // positives are admitted only when the source-owned mv.co.*.x4 blend lane is live; otherwise
+    // the generated state-age matrix may reject a false positive but must not create one.
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
     // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     // reports/triage/grape_item05_ewt1019_dolphin_collision_probe/
@@ -2432,11 +2594,17 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius_impl(
     return 0u;
   }
   uint16_t msid = 0u;
+  float no_submotion_pose_frame = 0.0f;
+  uint8_t no_submotion_body_pose = 0u;
   if (anim_u32 > 0xFFFFu) {
-    if (action_id != (uint16_t)MSL_ACT_GUARD) {
+    if (action_id == (uint16_t)MSL_ACT_GUARD) {
+      msid = (uint16_t)MSL_SM_GUARD;
+    } else if (!combat_guard_family_no_submotion_body_source_pose(batch, d_idx, &msid,
+                                                                  &no_submotion_pose_frame)) {
       return 0u;
+    } else {
+      no_submotion_body_pose = 1u;
     }
-    msid = (uint16_t)MSL_SM_GUARD;
   } else {
     msid = (uint16_t)anim_u32;
   }
@@ -2493,7 +2661,7 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius_impl(
       attacker_hitbox_active);
   const size_t cap_i = idx_hurtcap(bi, defender, cap_id);
   const uint8_t can_use_cached_matrix =
-      (!use_catch_grabbable_pose && !attackdash_post_hitbox_pose &&
+      (!use_catch_grabbable_pose && no_submotion_body_pose == 0u && !attackdash_post_hitbox_pose &&
        !side_special_start_pre_anim_pose && !combat_guard_tilt_live_body_pose_owner(batch, d_idx) &&
        batch->hurtcap_matrix_valid[cap_i] != 0u)
           ? 1u
@@ -2514,8 +2682,11 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius_impl(
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
       combat_pose_frame = (uint16_t)(combat_pose_frame - 1u);
     }
-    const float pose_sample_frame = combat_hurtcap_pose_sample_frame(
-        batch, d_idx, char_id, msid, action_id, anim_frame_f32, combat_pose_frame);
+    const float pose_sample_frame =
+        no_submotion_body_pose != 0u
+            ? no_submotion_pose_frame
+            : combat_hurtcap_pose_sample_frame(batch, d_idx, char_id, msid, action_id,
+                                               anim_frame_f32, combat_pose_frame);
     const int matrix_status =
         use_catch_grabbable_pose ? anim_pose_get_catch_grabbable_matrix_f32(
                                        batch, d_idx, msid, pose_sample_frame, cap->bone_part_id, m)
@@ -3241,6 +3412,70 @@ static inline uint8_t combat_attackairn_guardoff_dense_seed_suppresses_full_body
                                                batch->state.action_id[d_idx])) {
     return 0u;
   }
+  return 1u;
+}
+
+static inline uint8_t combat_attackairn_guard_dense_seed_suppresses_full_body(
+    const MslBatch* batch, int bi, int attacker, int hb_id, int defender, uint16_t defender_iid) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= MSL_MAX_HITBOXES || defender < 0 || defender >= (int)MSL_MAX_PLAYERS ||
+      attacker == defender) {
+    return 0u;
+  }
+  const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const size_t d_idx = msl_idx_player(bi, defender);
+  const uint16_t attacker_action = batch->state.action_id[a_idx];
+  if (attacker_action != (uint16_t)MSL_ACT_ATTACK_AIR_N || hb_id != 0 ||
+      !msl_motion_state_has_motion_flag(batch->state.char_id[a_idx], attacker_action,
+                                        MSL_MOTION_FLAG_SKIP_HIT) ||
+      batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD ||
+      batch->state.seed_prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON) {
+    return 0u;
+  }
+  const size_t valid_i =
+      ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+      (size_t)hb_id;
+  if (batch->state.combat_hitlist_hb_valid[valid_i] != 0u) {
+    return 0u;
+  }
+  const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+  if (hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  const size_t cd_i =
+      group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                        (size_t)MSL_MAX_PLAYERS +
+                    (size_t)defender);
+  if (batch->state.combat_hitlist_cd[cd_i] == 0u ||
+      batch->state.combat_hitlist_victim_iid[cd_i] != defender_iid) {
+    return 0u;
+  }
+  const MslDamageSourceEpisode d_source =
+      msl_damage_source_episode_from_victim(batch, bi, defender, d_idx);
+  if (d_source.source_slot != attacker || d_source.instance_matches_source != 0u ||
+      d_source.x18c8_active == 0u ||
+      !msl_damage_source_victim_port_matches_attacker(batch, d_idx, a_idx, attacker)) {
+    return 0u;
+  }
+  // AttackAirN hb0 -> first steady Guard victim-list carry:
+  // - AttackAirN has Ft_MF_SkipHit, so Fighter_ChangeMotionState can preserve x914 HitCapsule
+  //   victim rings across the aerial's active windows.
+  // - GuardOn -> Guard advances the visible no-submotion Shield state, but does not by itself
+  //   clear a same-group HitCapsule victim already present in lbColl_8000ACFC. When the dense
+  //   group seed names the current defender iid and BODY attribution still names the same source
+  //   port from an older attacker instance, suppress only the full BODY fallthrough for that first
+  //   Guard frame. Continuing Guard rows with stale dense ids remain eligible for ordinary BODY
+  //   hits, and authoritative per-HitCapsule seed lanes win when present.
+  // data/scripts/{fox,falco,marth}.bin (MSLFTSC1 AttackAirN create_hitbox/hit_group timeline)
+  // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_AttackAirN
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_ProcessHit_8006D1EC}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
   return 1u;
 }
 
@@ -4590,7 +4825,8 @@ static inline uint8_t combat_source_order_earlier_body_hitcapsule_precedes_shiel
   uint16_t fallback_count_u16 = 0u;
   uint8_t use_fallback_caps = 0u;
   uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
-  if (hurtcap_count == 0u && combat_guardreflect_expired_x14_body_fallback_applies(batch, d_idx)) {
+  if (hurtcap_count == 0u &&
+      combat_guard_family_no_submotion_body_source_msid(batch, d_idx, NULL)) {
     if (hurtcaps_get(batch->state.char_id[d_idx], &fallback_caps, &fallback_count_u16) == 0 &&
         fallback_caps != NULL && fallback_count_u16 != 0u) {
       use_fallback_caps = 1u;
@@ -4675,7 +4911,7 @@ static inline uint8_t combat_source_order_earlier_body_hitcapsule_precedes_shiel
       float bx = 0.0f, by = 0.0f, bz = 0.0f;
       float cr = 0.0f;
       if (use_fallback_caps) {
-        if (!combat_guardreflect_body_hurtcap_world(batch, d_idx, &fallback_caps[cap_id], cap_id,
+        if (!combat_guard_family_body_hurtcap_world(batch, d_idx, &fallback_caps[cap_id], cap_id,
                                                     fallback_count_u16, &ax, &ay, &az, &bx, &by,
                                                     &bz, &cr)) {
           continue;
@@ -9323,11 +9559,15 @@ static inline void marth_counter_trigger(MslBatch* batch, size_t a_idx, size_t d
   }
   batch->state.speciallw_countered_damage[d_idx] = (uint16_t)stash;
   batch->state.speciallw_counter_window[d_idx] = 0u;
-  // Face the attacker (the live counterplay outcome; specialn_facing_dir is the B-press facing
-  // which the entry already latched as the current facing in this engine).
-  if (batch->state.pos_x[a_idx] != batch->state.pos_x[d_idx]) {
-    batch->state.facing[d_idx] = (uint8_t)(batch->state.pos_x[a_idx] > batch->state.pos_x[d_idx]);
-  }
+  // ftColl_80076CBC writes specialn_facing_dir from the descriptor contact side; the
+  // CounterHit callback then copies that stored lane into facing_dir. This matters for cross-up
+  // contacts because the hit callback does not recompute facing from the attacker position.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::ftMs_SpecialLw_80139140
+  batch->state.specialn_facing_dir1[d_idx] =
+      (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? (int8_t)-1 : (int8_t)1;
+  batch->state.facing_dir1[d_idx] = batch->state.specialn_facing_dir1[d_idx];
+  batch->state.facing[d_idx] = (uint8_t)(batch->state.facing_dir1[d_idx] > 0);
   const uint8_t grounded = batch->state.on_ground[d_idx] ? 1u : 0u;
   batch->state.action_id[d_idx] =
       grounded ? (uint16_t)MSL_ACT_MS_SPECIAL_LW_HIT : (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW_HIT;
@@ -10286,9 +10526,14 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
       }
       batch->state.speciallw_countered_damage[d_idx] = (uint16_t)stash;
       batch->state.speciallw_counter_window[d_idx] = 0u;
-      if (item_pos_x != batch->state.pos_x[d_idx]) {
-        batch->state.facing[d_idx] = (uint8_t)(item_pos_x > batch->state.pos_x[d_idx]);
-      }
+      // Item/projectile Counter follows the same source lane: ftColl_80077688 writes
+      // specialn_facing_dir from item position, and ftMs_SpecialLw_80139140 copies it.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+      // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::ftMs_SpecialLw_80139140
+      batch->state.specialn_facing_dir1[d_idx] =
+          (batch->state.pos_x[d_idx] > item_pos_x) ? (int8_t)-1 : (int8_t)1;
+      batch->state.facing_dir1[d_idx] = batch->state.specialn_facing_dir1[d_idx];
+      batch->state.facing[d_idx] = (uint8_t)(batch->state.facing_dir1[d_idx] > 0);
       const uint8_t grounded = batch->state.on_ground[d_idx] ? 1u : 0u;
       batch->state.action_id[d_idx] =
           grounded ? (uint16_t)MSL_ACT_MS_SPECIAL_LW_HIT : (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW_HIT;
@@ -10929,6 +11174,19 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   batch->state.facing[d_idx] = (uint8_t)(defender_facing_dir_1 > 0.0f);
   const float kb_x = -x * defender_facing_dir_1;
   const float kb_y = y;
+  if (p->angle > 90u && p->angle < 270u) {
+    // Throw-release final facing override:
+    // - ftCo_800DDDE4 writes `victim->dmg.facing_dir_1 = -thrower->facing_dir`; ftCo_8008DCE0
+    //   uses that sign for KB velocity (`kb_x = -x * facing_dir_1`).
+    // - ftCo_800DE7C0 then passes `facing_dir = -dmg.facing_dir_1` to ftCo_8008DCE0 for raw
+    //   throw-hit angles strictly between 90 and 270 degrees, and ftCo_8008DCE0 overwrites
+    //   `fp->facing_dir` with that argument after velocity selection but before motion entry.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Thrown.s::ftCo_800DE7C0
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    const float final_facing_dir = -defender_facing_dir_1;
+    batch->state.facing[d_idx] = (uint8_t)(final_facing_dir > 0.0f);
+  }
 
   // Throw-release hits do not apply hitlag in the suite (Slippi hitlag stays 0), and `x221A_b3`
   // is observed unset. Do not set it here.
@@ -11577,7 +11835,7 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
         float hz = batch->state.hitbox_z[hb_i];
         const float raw_hr = batch->state.hitbox_radius[hb_i];
         float hr = raw_hr;
-        combat_catch_hitbox_model_scale_compensated(batch, bi, attacker, &hx, &hy, &hz, &hr);
+        combat_catch_hitbox_model_scale_compensated(batch, bi, attacker, hb_id, &hx, &hy, &hz, &hr);
 
         uint8_t found_grab_contact = 0u;
         for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
@@ -12564,13 +12822,13 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       (void)hurtcaps_get(batch->state.char_id[d_idx], &defender_caps, &defender_cap_count_u16);
       const MslHurtCap* body_fallback_caps = NULL;
       uint16_t body_fallback_count_u16 = 0u;
-      uint8_t use_guardreflect_body_fallback_caps = 0u;
+      uint8_t use_guard_family_body_fallback_caps = 0u;
       if (hurtcap_count == 0 &&
-          combat_guardreflect_expired_x14_body_fallback_applies(batch, d_idx)) {
+          combat_guard_family_no_submotion_body_source_msid(batch, d_idx, NULL)) {
         if (hurtcaps_get(batch->state.char_id[d_idx], &body_fallback_caps,
                          &body_fallback_count_u16) == 0 &&
             body_fallback_caps != NULL && body_fallback_count_u16 != 0u) {
-          use_guardreflect_body_fallback_caps = 1u;
+          use_guard_family_body_fallback_caps = 1u;
           hurtcap_count = body_fallback_count_u16 > (uint16_t)MSL_MAX_HURTCAPS
                               ? (uint8_t)MSL_MAX_HURTCAPS
                               : (uint8_t)body_fallback_count_u16;
@@ -12774,6 +13032,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         }
         uint8_t attackairn_wait_dense_seed_suppresses_full_body = 0u;
         uint8_t attackairn_guardoff_dense_seed_suppresses_full_body = 0u;
+        uint8_t attackairn_guard_dense_seed_suppresses_full_body = 0u;
         if (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_N) {
           attackairn_wait_dense_seed_suppresses_full_body =
               combat_attackairn_wait_dense_seed_suppresses_full_body(batch, bi, attacker, hb_id,
@@ -12781,6 +13040,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           attackairn_guardoff_dense_seed_suppresses_full_body =
               combat_attackairn_guardoff_dense_seed_suppresses_full_body(batch, bi, attacker, hb_id,
                                                                          defender, defender_iid);
+          attackairn_guard_dense_seed_suppresses_full_body =
+              combat_attackairn_guard_dense_seed_suppresses_full_body(batch, bi, attacker, hb_id,
+                                                                      defender, defender_iid);
         }
         if (combat_pstadium_specialhi_launch_air_reflector_pre_turn_rejects_body(
                 batch, bi, attacker, (uint8_t)hb_id, a_idx, d_idx)) {
@@ -12793,8 +13055,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           float ax = 0.0f, ay = 0.0f, az = 0.0f;
           float bx = 0.0f, by = 0.0f, bz = 0.0f;
           float cr = 0.0f;
-          if (use_guardreflect_body_fallback_caps) {
-            if (!combat_guardreflect_body_hurtcap_world(batch, d_idx, &body_fallback_caps[cap_id],
+          if (use_guard_family_body_fallback_caps) {
+            if (!combat_guard_family_body_hurtcap_world(batch, d_idx, &body_fallback_caps[cap_id],
                                                         cap_id, body_fallback_count_u16, &ax, &ay,
                                                         &az, &bx, &by, &bz, &cr)) {
               continue;
@@ -12857,7 +13119,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           uint8_t overlaps = (lbcoll_overlap_evaluated && guard_tilt_live_body_pose == 0u)
                                  ? lbcoll_overlap_valid
                                  : (uint8_t)(baseline_overlaps || lbcoll_overlap_valid);
-          if (!overlaps && !use_guardreflect_body_fallback_caps &&
+          if (!overlaps && !use_guard_family_body_fallback_caps &&
               combat_guard_tilt_live_body_z_owner_applies(batch, d_idx, shield_active)) {
             // Source owner: lbColl_8000805C recomputes hurtcap endpoints through lb_8000B1CC from
             // the same live angled-Guard JObj/AObj chain used by ShieldDesc. The simulator lacks a
@@ -12891,7 +13153,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
           if (overlaps && combat_damageflylw_dynamic_high_part_rejects_body_contact(
                               batch, a_idx, d_idx, hb_id,
-                              use_guardreflect_body_fallback_caps || defender_caps == NULL ||
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
                                       cap_id >= defender_cap_count_u16
                                   ? NULL
                                   : &defender_caps[cap_id])) {
@@ -12899,7 +13161,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
           if (overlaps && combat_attackairlw_damageflytop_fox_tail_rejects_body_contact(
                               batch, a_idx, d_idx, hb_id,
-                              use_guardreflect_body_fallback_caps || defender_caps == NULL ||
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
                                       cap_id >= defender_cap_count_u16
                                   ? NULL
                                   : &defender_caps[cap_id],
@@ -12908,18 +13170,18 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
           if (overlaps && combat_attackairlw_strong_grounded_high_cap_rejects_lower_body_contact(
                               batch, bi, attacker, hb_id, defender, a_idx, d_idx,
-                              use_guardreflect_body_fallback_caps || defender_caps == NULL ||
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
                                       cap_id >= defender_cap_count_u16
                                   ? NULL
                                   : &defender_caps[cap_id],
-                              use_guardreflect_body_fallback_caps ? NULL : defender_caps,
-                              use_guardreflect_body_fallback_caps ? 0u : defender_cap_count_u16, hx,
+                              use_guard_family_body_fallback_caps ? NULL : defender_caps,
+                              use_guard_family_body_fallback_caps ? 0u : defender_cap_count_u16, hx,
                               hy, hz, hr)) {
             overlaps = 0u;
           }
           if (overlaps && combat_attackairlw_attackdash_tail_allow_interrupt_rejects_body_contact(
                               batch, bi, attacker, hb_id, a_idx, d_idx,
-                              use_guardreflect_body_fallback_caps || defender_caps == NULL ||
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
                                       cap_id >= defender_cap_count_u16
                                   ? NULL
                                   : &defender_caps[cap_id])) {
@@ -12927,18 +13189,18 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
           if (overlaps && combat_attackairlw_down_forward_tail_rejects_body_contact(
                               batch, bi, attacker, hb_id, defender, a_idx, d_idx,
-                              use_guardreflect_body_fallback_caps || defender_caps == NULL ||
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
                                       cap_id >= defender_cap_count_u16
                                   ? NULL
                                   : &defender_caps[cap_id],
-                              use_guardreflect_body_fallback_caps ? NULL : defender_caps,
-                              use_guardreflect_body_fallback_caps ? 0u : defender_cap_count_u16, hx,
+                              use_guard_family_body_fallback_caps ? NULL : defender_caps,
+                              use_guard_family_body_fallback_caps ? 0u : defender_cap_count_u16, hx,
                               hy, hz, hr)) {
             overlaps = 0u;
           }
           if (overlaps && combat_attackairlw_late_high_cap_sibling_rejects_body_contact(
                               batch, bi, attacker, hb_id, defender,
-                              use_guardreflect_body_fallback_caps || defender_caps == NULL ||
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
                                       cap_id >= defender_cap_count_u16
                                   ? NULL
                                   : &defender_caps[cap_id])) {
@@ -12946,7 +13208,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
           if (overlaps && combat_attackairhi_attackdash_tail_allow_interrupt_rejects_body_contact(
                               batch, bi, attacker, hb_id, a_idx, d_idx,
-                              use_guardreflect_body_fallback_caps || defender_caps == NULL ||
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
                                       cap_id >= defender_cap_count_u16
                                   ? NULL
                                   : &defender_caps[cap_id])) {
@@ -12954,7 +13216,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
           if (overlaps && combat_damagefly_terminal_state_blocks_enable_edge_body(
                               batch, hb_i, a_idx, d_idx,
-                              use_guardreflect_body_fallback_caps || defender_caps == NULL ||
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
                                       cap_id >= defender_cap_count_u16
                                   ? NULL
                                   : &defender_caps[cap_id])) {
@@ -12983,12 +13245,12 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
           if (overlaps && combat_attackairb_jump_tail_rejects_body_contact(
                               batch, bi, attacker, hb_id, defender, a_idx, d_idx, (uint8_t)cap_id,
-                              use_guardreflect_body_fallback_caps || defender_caps == NULL ||
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
                                       cap_id >= defender_cap_count_u16
                                   ? NULL
                                   : &defender_caps[cap_id],
-                              use_guardreflect_body_fallback_caps ? NULL : defender_caps,
-                              use_guardreflect_body_fallback_caps ? 0u : defender_cap_count_u16, hx,
+                              use_guard_family_body_fallback_caps ? NULL : defender_caps,
+                              use_guard_family_body_fallback_caps ? 0u : defender_cap_count_u16, hx,
                               hy, hz, hr)) {
             overlaps = 0u;
           }
@@ -12996,7 +13258,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                               batch, hb_i, a_idx, d_idx, hb_id, cap_id)) {
             overlaps = 0u;
           }
-          if (!overlaps && !use_guardreflect_body_fallback_caps) {
+          if (!overlaps && !use_guard_family_body_fallback_caps) {
             const MslHurtCap* source_cap =
                 (defender_caps == NULL || cap_id >= defender_cap_count_u16)
                     ? NULL
@@ -13187,7 +13449,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               attackairb_live_hitlist_suppresses_full_body ||
               attackairhi_create_edge_suppresses_full_body ||
               attackairn_wait_dense_seed_suppresses_full_body ||
-              attackairn_guardoff_dense_seed_suppresses_full_body) {
+              attackairn_guardoff_dense_seed_suppresses_full_body ||
+              attackairn_guard_dense_seed_suppresses_full_body) {
             continue;
           }
           // Marth Counter intercept consumes the BODY contact before damage intake.
@@ -13204,7 +13467,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             combat_mutations_pass1_future_apply_body_hit_invincible(batch, a_idx, hb_i,
                                                                     a_motion_id);
           } else {
-            if (use_guardreflect_body_fallback_caps) {
+            if (use_guard_family_body_fallback_caps) {
               batch->state.hurtcap_height[cap_i] = body_fallback_caps[cap_id].height;
             }
             const uint8_t first_defender_log = (body_damage_logs[defender].count == 0u) ? 1u : 0u;
@@ -13296,13 +13559,13 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
       uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
       const MslHurtCap* body_fallback_caps = NULL;
       uint16_t body_fallback_count_u16 = 0u;
-      uint8_t use_guardreflect_body_fallback_caps = 0u;
+      uint8_t use_guard_family_body_fallback_caps = 0u;
       if (hurtcap_count == 0 &&
-          combat_guardreflect_expired_x14_body_fallback_applies(batch, d_idx)) {
+          combat_guard_family_no_submotion_body_source_msid(batch, d_idx, NULL)) {
         if (hurtcaps_get(batch->state.char_id[d_idx], &body_fallback_caps,
                          &body_fallback_count_u16) == 0 &&
             body_fallback_caps != NULL && body_fallback_count_u16 != 0u) {
-          use_guardreflect_body_fallback_caps = 1u;
+          use_guard_family_body_fallback_caps = 1u;
           hurtcap_count = body_fallback_count_u16 > (uint16_t)MSL_MAX_HURTCAPS
                               ? (uint8_t)MSL_MAX_HURTCAPS
                               : (uint8_t)body_fallback_count_u16;
@@ -13389,8 +13652,8 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
           float ax = 0.0f, ay = 0.0f, az = 0.0f;
           float bx = 0.0f, by = 0.0f, bz = 0.0f;
           float cr = 0.0f;
-          if (use_guardreflect_body_fallback_caps) {
-            if (!combat_guardreflect_body_hurtcap_world(batch, d_idx, &body_fallback_caps[cap_id],
+          if (use_guard_family_body_fallback_caps) {
+            if (!combat_guard_family_body_hurtcap_world(batch, d_idx, &body_fallback_caps[cap_id],
                                                         cap_id, body_fallback_count_u16, &ax, &ay,
                                                         &az, &bx, &by, &bz, &cr)) {
               continue;

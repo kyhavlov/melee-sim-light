@@ -399,6 +399,7 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0023,
         0x0024,
         0x0025,
+        0x00E6,
         0x00FB,
         0x0105,
         0x0107,

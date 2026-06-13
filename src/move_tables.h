@@ -330,7 +330,7 @@ uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
 // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
 //
-// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
+// Source of truth: data/scripts/<char>.bin (MSLFTSC1) moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
 uint8_t move_tables_runbrake_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 
 // Returns whether cmd_var[1] is set at the given cur_anim_frame for TurnRun.

@@ -532,6 +532,7 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_JumpAerial_Coll",
         "ftCo_CliffJump2_Coll",
         "ftCo_MissFoot_Coll",
+        "ftCo_CaptureJump_Coll",
         "ftFx_SpecialAirNStart_Coll",
         "ftFx_SpecialAirNLoop_Coll",
         "ftFx_SpecialAirNEnd_Coll",
@@ -540,6 +541,7 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         # contact. Keep this generated from decomp callback symbols so runtime landing selection
         # does not carry a parallel action-id list.
         # refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ft_800831CC,ft_800835B0}
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureJump_Coll
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::*_Coll
         bits |= CLASS_FT80082B1C_BASIC_LANDING_COLL
     return bits

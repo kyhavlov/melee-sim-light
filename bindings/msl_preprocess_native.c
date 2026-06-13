@@ -5134,6 +5134,33 @@ static inline uint8_t msl_py_apply_specialhi_xrotn(uint8_t char_id, uint16_t act
   return 1u;
 }
 
+static inline void msl_py_apply_live_transn_tail(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                                 uint16_t part_id, float model_scale, float* io_x,
+                                                 float* io_y, float* io_z) {
+  if (io_x == NULL || io_y == NULL || io_z == NULL ||
+      !msl_anim_part_under_xrotn(char_id, part_id) ||
+      msl_anim_uses_root_motion(char_id, msid) != 0u) {
+    return;
+  }
+
+  float transn[3];
+  if (anim_pose_get_transn(char_id, msid, frame, transn) != 0) {
+    return;
+  }
+
+  // Source owner: ftColl_8007AD18 keeps HitCapsule.x58/x4C in the same live-JObj space consumed
+  // by ftColl_80076ED8/lbColl_8000805C. MSL SSANIM01 matrices strip FtPart_TransN into the
+  // extracted TransN tail, so teacher-forced seed reconstruction must recompose that tail for
+  // non-root-motion hitboxes under FtPart_XRotN just like free-running hitboxes_refresh().
+  // Probe-backed witness: RipeWealthySeahorse.msl:2119 Marth AttackS4 hb3 x58.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80076ED8}
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+  // data/anims/<char>.tracks.bin uses_root_motion / data/anims/<char>.bin TransN tail
+  *io_x += transn[0] * model_scale;
+  *io_y += transn[1] * model_scale;
+  *io_z += transn[2] * model_scale;
+}
+
 PyObject* msl_derive_hitbox_prev_centers_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* char_obj = NULL;
@@ -5321,6 +5348,8 @@ PyObject* msl_derive_hitbox_prev_centers_py(PyObject* self, PyObject* args) {
         (void)msl_py_apply_specialhi_xrotn(cid, action, (uint16_t)anim_p[pi], frame,
                                            ev->bone_part_id, model_scale, rotate_model_val,
                                            rotate_valid_val, &lx, &ly, &lz);
+        msl_py_apply_live_transn_tail(cid, (uint16_t)anim_p[pi], frame, ev->bone_part_id,
+                                      model_scale, &lx, &ly, &lz);
         const npy_intp oi =
             (fi * (npy_intp)MSL_MAX_PLAYERS + p) * (npy_intp)MSL_MAX_HITBOXES + hb_id;
         valid_p[oi] = 1u;

@@ -4046,6 +4046,28 @@ static PyObject* msl_debug_dynamic_pose_state_py(PyObject* self, PyObject* args)
   return (PyObject*)arr;
 }
 
+static PyObject* msl_debug_common_fall_blend_state_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  if (!PyArg_ParseTuple(args, "Oii", &handle_obj, &batch_index, &player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (batch_index < 0 || batch_index >= h->batch->batch_size || player_index < 0 ||
+      player_index >= MSL_MAX_PLAYERS) {
+    PyErr_SetString(PyExc_ValueError, "batch_index/player_index out of range");
+    return NULL;
+  }
+  const size_t idx = (size_t)batch_index * (size_t)MSL_MAX_PLAYERS + (size_t)player_index;
+  return Py_BuildValue("dI", (double)h->batch->state.common_fall_blend_x4[idx],
+                       (unsigned int)h->batch->state.common_fall_blend_msid[idx]);
+}
+
 static PyObject* msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py(PyObject* self,
                                                                           PyObject* args) {
   (void)self;
@@ -4967,6 +4989,41 @@ static PyObject* msl_anim_pose_matrix_py(PyObject* self, PyObject* args) {
   if (err != 0) {
     Py_DECREF(arr);
     PyErr_SetString(PyExc_ValueError, "anim_pose_get_matrix failed");
+    return NULL;
+  }
+  return (PyObject*)arr;
+}
+
+static PyObject* msl_anim_pose_common_fall_blend_matrix_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int char_id_u = 0;
+  unsigned int neutral_msid_u = 0;
+  unsigned int target_msid_u = 0;
+  double anim_frame = 0.0;
+  unsigned int part_id_u = 0;
+  double weight = 0.0;
+  if (!PyArg_ParseTuple(args, "IIIdId", &char_id_u, &neutral_msid_u, &target_msid_u, &anim_frame,
+                        &part_id_u, &weight)) {
+    return NULL;
+  }
+  if (char_id_u > 255u || neutral_msid_u > 0xFFFFu || target_msid_u > 0xFFFFu ||
+      part_id_u > 0xFFFFu) {
+    PyErr_SetString(PyExc_ValueError, "char_id/msid/part_id out of range");
+    return NULL;
+  }
+
+  npy_intp dims[1] = {(npy_intp)12};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_FLOAT32);
+  if (arr == NULL) {
+    return NULL;
+  }
+  float* out = (float*)PyArray_DATA(arr);
+  const int err = anim_pose_debug_common_fall_blend_matrix(
+      (uint8_t)char_id_u, (uint16_t)neutral_msid_u, (uint16_t)target_msid_u, (float)anim_frame,
+      (uint16_t)part_id_u, (float)weight, out);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_SetString(PyExc_ValueError, "anim_pose_debug_common_fall_blend_matrix failed");
     return NULL;
   }
   return (PyObject*)arr;
@@ -7076,6 +7133,8 @@ static PyMethodDef methods[] = {
     {"debug_dynamic_pose_state", msl_debug_dynamic_pose_state_py, METH_VARARGS,
      "debug_dynamic_pose_state(handle, batch_index, player_index) -> "
      "bytes[1,sizeof(MslDebugDynamicPoseState)]"},
+    {"debug_common_fall_blend_state", msl_debug_common_fall_blend_state_py, METH_VARARGS,
+     "debug_common_fall_blend_state(handle, batch_index, player_index) -> (x4, msid)"},
     {"debug_get_fighter_8006cda4_pre_gate_consume_count",
      msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py, METH_VARARGS,
      "debug_get_fighter_8006cda4_pre_gate_consume_count(handle, batch_index, player_index) -> int"},
@@ -7401,6 +7460,9 @@ static PyMethodDef methods[] = {
      "ecb_extents_rel(char_id, animation_index, action_frame) -> (min_x, max_x, min_y, max_y)"},
     {"anim_pose_matrix", msl_anim_pose_matrix_py, METH_VARARGS,
      "anim_pose_matrix(char_id, msid, frame, part_id) -> np.ndarray[float32] shape=(12,)"},
+    {"anim_pose_common_fall_blend_matrix", msl_anim_pose_common_fall_blend_matrix_py, METH_VARARGS,
+     "anim_pose_common_fall_blend_matrix(char_id, neutral_msid, target_msid, anim_frame, "
+     "part_id, weight) -> np.ndarray[float32] shape=(12,)"},
     {"move_tables_debug_query", msl_move_tables_debug_query_py, METH_VARARGS,
      "move_tables_debug_query(kind, char_id, action_or_msid, a, b) -> test helper"},
     {"move_tables_throw_has_release", msl_move_tables_throw_has_release_py, METH_VARARGS,

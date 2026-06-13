@@ -274,9 +274,55 @@ static inline uint8_t hurtboxes_action_entry_carries_previous_jobj_pose(uint16_t
     case MSL_ACT_WALK_SLOW:
       return (uint8_t)(prev_action == (uint16_t)MSL_ACT_SQUAT_RV ||
                        prev_action == (uint16_t)MSL_ACT_TURN);
+    case MSL_ACT_GUARD_ON:
+      // Ft_MF_SkipAnim GuardOn entries preserve the previous live JObj pose for collision:
+      // ftCo_800924C0 changes to GuardOn after the source action's Anim proc has already
+      // interpreted that frame's skeleton, and ftColl_80078C70 then samples BODY capsules from
+      // the live JObj tree. Probe proof: VSA:4317 Marth Dash -> GuardOn publishes GuardOn/-1 but
+      // accepts BODY on Dash frame 2 cap6/bone29 after ShieldDesc misses.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ChangeMotionState}
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+      return (uint8_t)(prev_action == (uint16_t)MSL_ACT_WAIT ||
+                       prev_action == (uint16_t)MSL_ACT_WALK_SLOW ||
+                       prev_action == (uint16_t)MSL_ACT_TURN ||
+                       prev_action == (uint16_t)MSL_ACT_DASH ||
+                       prev_action == (uint16_t)MSL_ACT_RUN ||
+                       prev_action == (uint16_t)MSL_ACT_SQUAT_RV ||
+                       prev_action == (uint16_t)MSL_ACT_ATTACK_DASH);
     default:
       return 0u;
   }
+}
+
+static inline uint8_t hurtboxes_action_entry_live_pose_source(const MslBatch* batch, size_t idx,
+                                                              uint16_t cur_action,
+                                                              uint16_t* out_action,
+                                                              uint32_t* out_anim) {
+  if (batch == NULL || out_action == NULL || out_anim == NULL) {
+    return 0u;
+  }
+  uint16_t src_action = batch->state.prev_action_id[idx];
+  uint32_t src_anim = UINT32_MAX;
+  if (cur_action == (uint16_t)MSL_ACT_GUARD_ON && batch->state.action_frame[idx] < 0 &&
+      batch->state.animation_index[idx] > 0xFFFFu &&
+      batch->state.frame_start_action_id[idx] != cur_action &&
+      batch->state.frame_start_animation_index[idx] <= 0xFFFFu) {
+    // GuardOn can be entered after the frame-start action's Anim proc has already interpreted the
+    // live JObj tree. The frame-start action/submotion is therefore the source pose owner; the
+    // live prev_action lane may already have been advanced by later entry bookkeeping.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ChangeMotionState}
+    src_action = batch->state.frame_start_action_id[idx];
+    src_anim = batch->state.frame_start_animation_index[idx];
+  }
+  if (!hurtboxes_action_entry_carries_previous_jobj_pose(src_action, cur_action)) {
+    return 0u;
+  }
+  *out_action = src_action;
+  *out_anim = src_anim;
+  return 1u;
 }
 
 static inline uint8_t hurtboxes_apply_specialhi_local_xrotn(const MslBatch* batch, size_t idx,
@@ -665,11 +711,17 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
       uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
       uint16_t pose_msid = msid;
       uint16_t pose_frame = frame;
-      if (batch->state.prev_action_id[idx] != action_id &&
-          hurtboxes_action_entry_carries_previous_jobj_pose(batch->state.prev_action_id[idx],
-                                                            action_id)) {
+      uint16_t source_action = 0u;
+      uint32_t source_anim = UINT32_MAX;
+      if (hurtboxes_action_entry_live_pose_source(batch, idx, action_id, &source_action,
+                                                  &source_anim)) {
         uint16_t prev_msid = 0u;
-        if (hurtboxes_common_action_to_msid(batch->state.prev_action_id[idx], &prev_msid)) {
+        if (source_anim <= 0xFFFFu) {
+          prev_msid = (uint16_t)source_anim;
+        } else {
+          (void)hurtboxes_common_action_to_msid(source_action, &prev_msid);
+        }
+        if (prev_msid != 0u) {
           uint16_t prev_frame = 0u;
           if (batch->state.prev_action_frame[idx] >= 0) {
             prev_frame = (uint16_t)batch->state.prev_action_frame[idx];
@@ -682,9 +734,8 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
             //   ftCo_Turn_Anim,ftCo_Turn_IASA}
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Enter
             // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
-            if (prev_frame != 0xFFFFu &&
-                !(batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_TURN &&
-                  action_id == (uint16_t)MSL_ACT_WALK_SLOW)) {
+            if (prev_frame != 0xFFFFu && !(source_action == (uint16_t)MSL_ACT_TURN &&
+                                           action_id == (uint16_t)MSL_ACT_WALK_SLOW)) {
               prev_frame = (uint16_t)(prev_frame + 1u);
             }
           }

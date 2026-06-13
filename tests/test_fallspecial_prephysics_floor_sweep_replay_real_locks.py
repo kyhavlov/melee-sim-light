@@ -80,6 +80,86 @@ def test_fallspecial_lands_when_callback_visible_bottom_sweep_hits() -> None:
     assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1.0e-6)
 
 
+def test_fallspecial_connected_hard_floor_root_projection_uses_source_prev_endpoint_ipw() -> None:
+    # IPW:1240 carries FoD center hard floor 5 while the current FallSpecial root has drifted over
+    # connected ledge hard floor 3. Vanilla's ft_80083090/mpColl_80047E14 callback can publish
+    # LandingFallSpecial through mpColl_80044838_Floor even though the loaded FallSpecial ECB bottom
+    # is still above the ledge floor. The owner is the source-owned CollData.prev_pos/floor.index
+    # endpoint; clearing that endpoint must not synthesize the landing from visible root state.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
+    #   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80083090
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor,
+    #   mpColl_80044838_Floor}
+    path = "datasets/aggregate_recent/replays/validation/marth/InternalPowerlessWallaby.msl"
+    rec = 1240
+    player = 1
+    ds = read_dataset(path)
+    sample = ds.samples[rec : rec + 1].copy()
+    seed = sample["seed_t"][0]
+    ref = sample["ref_t1"][0]
+    assert int(seed["action_id"][player]) == 0x0023
+    assert int(seed["ground_id"][player]) == 5
+    assert int(seed["floor_sweep_prev_pos_valid_u8"][player]) == 1
+    assert int(ref["action_id"][player]) == 0x002B
+    assert int(ref["ground_id"][player]) == 3
+
+    out = _step_sample(sample)
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 0x002B
+    assert int(out["on_ground"][player]) == 1
+    assert int(out["ground_id"][player]) == 3
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1.0e-6)
+
+    no_source_endpoint = sample.copy()
+    no_source_endpoint["seed_t"]["floor_sweep_prev_pos_valid_u8"][0, player] = np.uint8(0)
+    out_no_source = _step_sample(no_source_endpoint)
+    assert int(out_no_source["action_id"][player]) == 0x0023
+    assert int(out_no_source["on_ground"][player]) == 0
+    assert int(out_no_source["ground_id"][player]) == 5
+
+    prior = ds.samples[rec - 1 : rec].copy()
+    prior_seed = prior["seed_t"][0]
+    prior_ref = prior["ref_t1"][0]
+    assert int(prior_seed["action_id"][player]) == 0x0023
+    assert int(prior_seed["action_frame"][player]) == 2
+    assert int(prior_ref["action_id"][player]) == 0x0023
+    out_prior = _step_sample(prior)
+    assert int(out_prior["action_id"][player]) == 0x0023
+    assert int(out_prior["on_ground"][player]) == 0
+
+
+def test_fallspecial_connected_hard_floor_root_projection_rejects_frame_start_fastfall_pfz() -> None:
+    # PFZ:5199 carries Battlefield main hard floor 1 and the root drifts beyond the connected right
+    # ledge floor. The seed/frame-start fp->fall_fast latch remains source evidence for
+    # FallSpecial_Coll even if the mutable latch is cleared before this helper runs; vanilla stays
+    # airborne rather than publishing LandingFallSpecial from the connected same-height ledge.
+    #
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
+    #   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor,
+    #   mpColl_80044838_Floor}
+    path = "datasets/aggregate_recent/replays/validation/marth/ParallelFamiliarZebra.msl"
+    rec = 5199
+    player = 1
+    ds = read_dataset(path)
+    sample = ds.samples[rec : rec + 1].copy()
+    seed = sample["seed_t"][0]
+    ref = sample["ref_t1"][0]
+    assert int(seed["action_id"][player]) == 0x0023
+    assert int(seed["ground_id"][player]) == 1
+    assert int(seed["fall_fast"][player]) == 1
+    assert int(ref["action_id"][player]) == 0x0023
+    assert int(ref["on_ground"][player]) == 0
+
+    out = _step_sample(sample)
+
+    assert int(out["action_id"][player]) == 0x0023
+    assert int(out["on_ground"][player]) == 0
+    assert int(out["ground_id"][player]) == 1
+
+
 def test_fallspecial_current_ecb_owner_does_not_land_first_sustained_frame_pec() -> None:
     # PEC:6952 is the first sustained FallSpecial callback after entry. Its current ECB bottom is
     # near the Yoshi floor, but vanilla keeps FallSpecial airborne for this frame and lands on the

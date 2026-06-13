@@ -511,6 +511,7 @@ def _load_or_build_locate_rows(
     dataset_filter: str,
     max_records: int,
     limit: int | None,
+    profile: str,
     locate_tsv_in: Path | None,
     locate_tsv_out: Path | None,
 ) -> list[RolloutLocateRow]:
@@ -557,6 +558,7 @@ def _load_or_build_locate_rows(
                 row_limit=remaining,
                 ucf_enabled=suite.ucf_enabled,
                 ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
+                profile=profile,
             )
         )
 
@@ -763,6 +765,7 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=0, help="Optional first-break row cap.")
     ap.add_argument("--horizon", type=int, default=20, help="Frames to score from each first-break row.")
     ap.add_argument("--top", type=int, default=12, help="Top-N cluster summaries to print.")
+    ap.add_argument("--profile", default="rl1_gameplay", help="Validation profile used by rollout locate.")
     ap.add_argument("--locate-tsv-in", type=Path, default=None, help="Optional precomputed rollout locate TSV.")
     ap.add_argument("--locate-tsv-out", type=Path, default=None, help="Optional rollout locate TSV output path.")
     ap.add_argument("--out", type=Path, required=True, help="Output TSV path for row-level impact scores.")
@@ -781,6 +784,7 @@ def main() -> None:
         dataset_filter=str(args.dataset_filter),
         max_records=int(args.max_records),
         limit=None if int(args.limit) <= 0 else int(args.limit),
+        profile=str(args.profile),
         locate_tsv_in=args.locate_tsv_in,
         locate_tsv_out=args.locate_tsv_out,
     )

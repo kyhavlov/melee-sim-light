@@ -35,7 +35,8 @@ The pinned revision provides:
   timers, x672..x677 input counters), `fp+0x2344/0x2348/0x234C` (capturewait anim-rate window, x8
   mash latch), `fp+0x68C..0x694` (TransN-tracked position), `fp+0x1A50` (GrabMash stick-sign
   latches + mash counter). `engine_dump_io.py` parses all dump versions 6..12.
-- **Interpreter event probes** (env-gated, interpreter mode only — see sections below).
+- **Interpreter event probes** (env-gated; Dolphin switches to interpreter only for the requested
+  probe frame window — see sections below).
 
 ## Primary command (known row triage)
 
@@ -47,9 +48,9 @@ uv run python -m tools.dolphin.forensic_row_dump \
 ```
 
 Outputs are written under `reports/triage/<timestamp>_dolphin_forensic_row/`.
-The wrapper writes an uncapped playback config (`EmulationSpeed = 0.000`, null video/audio, JIT
-unless an interpreter-only probe is requested) and records `*.stdout.log` / `*.stderr.log` paths in
-`summary.json`.
+The wrapper writes an uncapped playback config (`EmulationSpeed = 0.000`, null video/audio, JIT)
+and records `*.stdout.log` / `*.stderr.log` paths in `summary.json`. Interpreter-only probes keep
+the fast-forward path on JIT and switch CPU mode only for the target probe frames.
 
 Requires the pinned `refs/Ishiiruka` probe build with engine dump v12. v12 includes the actual
 active controller port map, the prior v7 fighter hitlist provenance, v10 item callback/hitlist
@@ -78,14 +79,28 @@ It runs shallow, mid, deep, and IPW smoke windows through `forensic_row_dump.py`
 `elapsed_sec`, first/last captured frame, row count, event count, and active port ids. Outputs go
 under `reports/triage/<timestamp>_dolphin_probe_benchmark/`.
 
+## Interpreter Probe Warning
+
+Interpreter-only probes are orders of magnitude slower than normal JIT engine dumps. Keep the
+interpreter CPU window to the exact target frame or two needed for the hidden event. Do not run
+large consecutive interpreter windows for surrounding context; use a wider JIT dump window and a
+tiny interpreter probe window instead.
+
+`forensic_row_dump.py` defaults the interpreter window to the row's seed/ref target frames even
+when the capture window includes surrounding context. `dolphin_engine_dump.py` prints a warning
+when the requested interpreter window exceeds three consecutive frames. Treat that warning as a
+mistake unless the long interpreter span is deliberate and worth the runtime.
+
 ## DamageFall IASA event probe
 
 Logs every `Fighter_Spaghetti`, `ftCo_DamageFall_IASA`, and `ftCo_Fall_Enter` entry (with
 `lstick.x`, `lstick1.x`, and `x670`) as JSONL. Use `forensic_row_dump.py --damagefall-probe` or
 `dolphin_engine_dump.py --damagefall-probe <path.jsonl>`. The wrapper sets
-`MSL_DAMAGEFALL_PROBE_PATH` plus `MSL_DAMAGEFALL_PROBE_FRAME_START/END` and forces interpreter mode.
+`MSL_DAMAGEFALL_PROBE_PATH` plus `MSL_DAMAGEFALL_PROBE_FRAME_START/END`; the wrapper also sets a
+bounded interpreter CPU window for the target frames.
 This probe is how the UCF 0.84 tumble component (`x670 == 1` wiggle with a UCF 1f x-smash) was
-identified. Budget interpreter probes around the requested window, not for normal JIT dumps.
+identified. Budget interpreter probes around the requested target frames, not the surrounding JIT
+dump context.
 
 ## Collision primitive probe
 
@@ -95,8 +110,8 @@ this interpreter hook.
 
 Then pass `--collision-probe` through `forensic_row_dump.py`, or pass
 `--collision-probe <path.jsonl>` through `dolphin_engine_dump.py`. The wrapper sets
-`MSL_COLLISION_PROBE_PATH` plus `MSL_COLLISION_PROBE_FRAME_START/END` and forces interpreter mode so
-the probe interpreter hook can record:
+`MSL_COLLISION_PROBE_PATH` plus `MSL_COLLISION_PROBE_FRAME_START/END`; the wrapper switches to
+interpreter only for the target probe frames so the probe interpreter hook can record:
 
 - `ftColl_80076ED8`
 - `lbColl_8000805C`
@@ -110,9 +125,9 @@ rows after deletion. The pinned probe build includes this event hook.
 
 Then pass `--throw-laser-event-probe <path.jsonl>` through `dolphin_engine_dump.py`, or use
 `forensic_row_dump.py --throw-laser-event-probe`. The wrapper sets
-`MSL_THROW_LASER_EVENT_PROBE_PATH` and forces interpreter mode. The probe records JSONL events for
-Fox/Falco throw-laser item spawn, BODY hitlist propagation, damage callback, hitlag/give-damage,
-and destroy paths:
+`MSL_THROW_LASER_EVENT_PROBE_PATH` and a bounded interpreter CPU window. The probe records JSONL
+events for Fox/Falco throw-laser item spawn, BODY hitlist propagation, damage callback,
+hitlag/give-damage, and destroy paths:
 
 - `it_8029C6CC`
 - `it_8029C4D4`
@@ -135,8 +150,8 @@ release boundary.
 
 Then pass `--throw-release-probe <path.jsonl>` through `dolphin_engine_dump.py`, or use
 `forensic_row_dump.py --throw-release-probe`. The wrapper sets `MSL_THROW_RELEASE_PROBE_PATH` and
-forces interpreter mode. The probe records JSONL for `ftCo_800DDDE4` entry, selected TransN2 and
-XRotN bone returns, the sampled TransN2 vector, the post-`x1A70` vector, the internal
+uses a bounded interpreter CPU window. The probe records JSONL for `ftCo_800DDDE4` entry, selected
+TransN2 and XRotN bone returns, the sampled TransN2 vector, the post-`x1A70` vector, the internal
 `mpColl_800471F8` load/clamp/air-collision/end phases, and function return. Each event includes the
 thrower/victim roles, selected sample/publish fighter, `x221B_b7`, `x2226_b2`, `x1A70`, `x2174`,
 CollData cur/prev/last/ECB, and root JObj translate.
@@ -150,8 +165,8 @@ pinned probe build includes this event hook.
 
 Then pass `--laser-shield-reflect-event-probe <path.jsonl>` through `dolphin_engine_dump.py`, or
 use `forensic_row_dump.py --laser-shield-reflect-event-probe`. The wrapper sets
-`MSL_LASER_SHIELD_REFLECT_EVENT_PROBE_PATH` and forces interpreter mode. The probe records JSONL
-events for:
+`MSL_LASER_SHIELD_REFLECT_EVENT_PROBE_PATH` and a bounded interpreter CPU window. The probe records
+JSONL events for:
 
 - `ftColl_80077688` shield-collision entry
 - `ftColl_80077464` reflect-collision entry

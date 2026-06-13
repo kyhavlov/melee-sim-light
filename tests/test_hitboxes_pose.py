@@ -238,3 +238,123 @@ def test_hitboxes_refresh_matches_pose_bytes() -> None:
     assert int(row[6]) == int(ev["u16_1"])
     assert int(row[7]) == int(ev["u16_3"])
     assert int(row[8]) == int(ev["bone_part_id"])
+
+
+@pytest.mark.integration
+def test_root_motion_hitbox_pose_does_not_recompose_transn_tail() -> None:
+    # Negative lock for src/hitboxes.c::hitboxes_apply_live_transn_tail:
+    # Fox AttackS4S has a non-zero TransN tail at the active hitbox frame, but the animation's
+    # ftData entry has fp->x594_b0/uses_root_motion set. Source Phys consumes that TransN into
+    # cur_pos through ft_80085030, so HitCapsule pose publication must not add the SSANIM01 tail
+    # again when sampling lb_8000B1CC-style centers.
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80085030,ft_800850E0}
+    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    import msl_binding
+
+    if not Path("data/hitboxes/fox.bin").exists():
+        pytest.skip("missing local artifact: data/hitboxes/fox.bin")
+    if not Path("data/anims/fox.bin").exists():
+        pytest.skip("missing local artifact: data/anims/fox.bin")
+    if not Path("data/characters/fox.json").exists():
+        pytest.skip("missing local artifact: data/characters/fox.json")
+
+    char_id = 1
+    msid = 62  # ftCo_SM_AttackS4S
+    frame = 12
+    hb_id = 0
+
+    events = _read_hitbox_events(Path("data/hitboxes/fox.bin"))[msid]
+    active = _active_hitboxes_at_frame(events, frame)
+    ev = active[hb_id]
+    assert int(ev["bone_part_id"]) == 13
+
+    anim_buf = Path("data/anims/fox.bin").read_bytes()
+    joint_count, anim_count, joint_parts = _read_header(anim_buf)
+    part_to_joint_index = {int(p): i for i, p in enumerate(joint_parts)}
+    frame_count, base = _find_anim_base_offset(
+        buf=anim_buf, joint_count=joint_count, anim_count=anim_count, msid=msid
+    )
+    assert frame < frame_count
+    transn_base = base + frame_count * joint_count * _MAT_BYTES
+    transn = np.frombuffer(anim_buf, dtype="<f4", count=3, offset=transn_base + frame * 12)
+    assert float(abs(transn[2])) > 1.0
+
+    joint_index = part_to_joint_index[int(ev["bone_part_id"])]
+    off = base + frame * joint_count * _MAT_BYTES + joint_index * _MAT_BYTES
+    m = np.frombuffer(anim_buf, dtype="<f4", count=12, offset=off)
+    local = _mtx34_mul_point(m, np.array([ev["x"], ev["y"], ev["z"]], dtype=np.float32))
+    with open("data/characters/fox.json", encoding="utf-8") as f:
+        local *= np.float32(json.load(f)["model_scaling"])
+
+    pos_x = np.float32(10.0)
+    pos_y = np.float32(20.0)
+    pos_z = np.float32(-3.0)
+    facing_dir = np.float32(1.0)
+    expected = np.array(
+        [
+            np.float32(pos_x + facing_dir * local[2]),
+            np.float32(pos_y + local[1]),
+            np.float32(pos_z - facing_dir * local[0]),
+            ev["radius"],
+            ev["damage"],
+        ],
+        dtype=np.float32,
+    )
+
+    # Negative lock for the native seed-lane owner as well as runtime publication:
+    # teacher-forced HitCapsule.x58 derivation uses the same live-JObj policy, but must not add the
+    # stripped SSANIM01 TransN tail when ftData says root motion has already consumed it into pos.
+    valid, prev_x, prev_y, prev_z = msl_binding.derive_hitbox_prev_centers(
+        2,
+        np.array([[char_id, char_id]], dtype=np.uint8),
+        np.array([[60, 60]], dtype=np.uint16),
+        np.array([[msid, msid]], dtype=np.uint32),
+        np.array([[frame, frame]], dtype=np.int16),
+        np.array([[np.float32(frame), np.float32(frame)]], dtype=np.float32),
+        np.array([[pos_x, np.float32(0.0)]], dtype=np.float32),
+        np.array([[pos_y, np.float32(0.0)]], dtype=np.float32),
+        np.array([[pos_z, np.float32(0.0)]], dtype=np.float32),
+        np.array([[1, 1]], dtype=np.uint8),
+        np.array([[np.float32(1.0), np.float32(1.0)]], dtype=np.float32),
+        None,
+        None,
+    )
+    assert int(valid[0, 0, hb_id]) == 1
+    got_seed = np.array([prev_x[0, 0, hb_id], prev_y[0, 0, hb_id], prev_z[0, 0, hb_id]], dtype=np.float32)
+    assert np.array_equal(got_seed.view(np.uint32), expected[:3].view(np.uint32))
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(32)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, 0] = np.uint8(char_id)
+    seed["char_id"][0, 1] = np.uint8(char_id)
+    seed["action_id"][0, :2] = np.uint16(0xFFFF)
+    seed["facing"][0, :2] = np.uint8(1)
+    seed["pos_x"][0, 0] = pos_x
+    seed["pos_y"][0, 0] = pos_y
+    seed["pos_z"][0, 0] = pos_z
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    seed["action_frame"][0, 0] = np.int16(frame)
+    seed["anim_frame_f32"][0, 0] = np.float32(frame)
+    seed["animation_index"][0, 0] = np.uint32(msid)
+    seed["hitlag"][0, :2] = np.uint16(2)
+
+    prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
+    inp = np.zeros((1, input_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, prev_inp, inp)
+        hitboxes, _count = msl_binding.hitboxes_world(handle, 0, 0)
+    finally:
+        msl_binding.destroy(handle)
+
+    row = hitboxes[hb_id]
+    assert int(row[9]) == 1
+    assert np.array_equal(row[:5].astype(np.float32, copy=False).view(np.uint32), expected.view(np.uint32))

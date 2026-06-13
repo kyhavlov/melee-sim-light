@@ -12,6 +12,7 @@
 #include "common_params.h"
 #include "char_params.h"
 #include "guard_lifecycle.h"
+#include "marth_specials.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
 #include "stage_collision.h"
@@ -93,6 +94,38 @@ static inline uint8_t state_flags_2218_allow_interrupt_grounded_attack_action(ui
     default:
       return 0u;
   }
+}
+
+static inline uint8_t state_flags_marth_counter_shielddesc_active(const MslBatch* batch, size_t idx,
+                                                                  uint16_t action_id) {
+  if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_MARTH) {
+    return 0u;
+  }
+  if (action_id != (uint16_t)MSL_ACT_MS_SPECIAL_LW &&
+      action_id != (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW) {
+    return 0u;
+  }
+
+  // Marth Counter creates its AbsorbDesc through the ShieldDesc owner when movescript cmd var 1
+  // is live. The post-frame Slippi `isShieldActive` bit is fp+0x221B_b0, so derive it from the
+  // post-action animation frame's script command rather than from the combat-only counter window.
+  // Source:
+  // - refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+  //     ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim}
+  // - refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+  // - refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x221B -> state_flags[2])
+  const uint16_t msid = marth_special_submotion(action_id);
+  const float frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+  return move_tables_special_cmd_var_value_at_frame((uint8_t)MSL_CHAR_ID_MARTH, msid, 1u, frame)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t state_flags_marth_counter_hit_action(const MslBatch* batch, size_t idx,
+                                                           uint16_t action_id) {
+  return (uint8_t)(batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+                   (action_id == (uint16_t)MSL_ACT_MS_SPECIAL_LW_HIT ||
+                    action_id == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW_HIT));
 }
 
 static inline uint8_t state_flags_2218_attack12_allow_interrupt_action(uint16_t action_id) {
@@ -643,6 +676,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
 
   // fp+0x221B:
   // - 0x80 = isShieldActive (fp->x221B_b0 in the decomp bitfield layout)
+  // - 0x40 = fp->x221B_b1 (ShieldDesc local-hit-position publication)
   // - 0x04 = fp->x221B_b5 (grab-owner latch; set while this fighter owns a grabbed victim)
   // Bit-order note: fp+0x221B b* numbering is MSB-first in GALE01/Slippi packing
   // (b0==0x80 ... b5==0x04), matching refs/melee/src/melee/ft/types.h + SendGamePostFrame.asm.
@@ -1082,6 +1116,21 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState reset clears fp->x221B_b0)
       // refs/melee/src/melee/ft/chara/ftCommon/forward.h (CapturePulled*/CaptureWait*/CaptureDamage*)
       if (msl_action_is_grabbed_victim(action_id)) {
+        f221b &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+      }
+      if (state_flags_marth_counter_shielddesc_active(batch, idx, action_id)) {
+        f221b |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        f221b |= (uint8_t)MSL_STATE_FLAG_221B_B1;
+      } else if (state_flags_marth_counter_hit_action(batch, idx, action_id) ||
+                 (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+                  (action_id == (uint16_t)MSL_ACT_MS_SPECIAL_LW ||
+                   action_id == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW))) {
+        // CounterHit is entered through Fighter_ChangeMotionState from the ShieldDesc callback,
+        // and this motion-state reset clears fp+0x221B_b0 while preserving fp+0x221B_b1 on the
+        // published post-frame row. Counter/CounterAir outside cmd1 likewise do not own a live
+        // ShieldDesc.
+        // refs/melee/src/melee/ft/fighter.c (ChangeMotionState reset)
+        // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::ftMs_SpecialLw_80139140
         f221b &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
       }
       // Approximate fp->x221A_b7 from shield activation (fp->x221B_b0), but only for the

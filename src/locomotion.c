@@ -202,6 +202,9 @@ static inline uint8_t locomotion_try_enter_jump_aerial_iasa(
     MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, size_t idx,
     uint8_t jump_input, float stick_x, float facing_dir, uint8_t block_from_jump_aerial);
 static inline uint32_t submotion_for_action(uint8_t char_id, uint16_t a);
+static inline void enter_fall_keep_fastfall_ftco_fall_enter(MslBatch* batch, size_t idx);
+static inline void ftco_fall_enter_clamp_air_drift_x(MslBatch* batch, const MslCharParams* ch,
+                                                     size_t idx);
 static inline uint8_t run_iasa_has_spacie_b_special_intent(uint8_t char_id,
                                                            uint16_t buttons_pressed);
 static inline uint8_t wait_iasa_locomotion_subset_try_enter(
@@ -566,6 +569,48 @@ void msl_locomotion_enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t
                                                          float landing_lag,
                                                          uint8_t allow_interrupt) {
   enter_fall_special_via_ftco_80096900(batch, idx, landing_lag, allow_interrupt);
+}
+
+void msl_locomotion_enter_fall_via_ftco_fall_enter(MslBatch* batch, const MslCharParams* ch,
+                                                   size_t idx) {
+  enter_fall_keep_fastfall_ftco_fall_enter(batch, idx);
+  ftco_fall_enter_clamp_air_drift_x(batch, ch, idx);
+}
+
+uint8_t msl_locomotion_run_fall_iasa_non_special_tail(MslBatch* batch, const MslCommonParams* c,
+                                                      const MslCharParams* ch, size_t idx) {
+  if (batch == NULL || c == NULL || ch == NULL) {
+    return 0u;
+  }
+
+  const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+
+  if (escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
+    return 1u;
+  }
+
+  // The caller owns ftCo_SpecialAir_CheckInput before this tail. Keep the existing common-air
+  // policy that B-edge rows are left for the character-special owner, matching the broader
+  // locomotion IASA block below.
+  if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0u &&
+      locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
+    return 1u;
+  }
+
+  const uint8_t jump_aerial_input = ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) ||
+                                     did_tap_jump(c, stick_y, batch->state.tilt_timer_y[idx]))
+                                        ? 1u
+                                        : 0u;
+  if (locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, stick_x,
+                                            facing_dir, 1u)) {
+    return 1u;
+  }
+  return 0u;
 }
 
 static inline void enter_specialhi_bound_from_airhi_collision(MslBatch* batch,
@@ -3424,32 +3469,72 @@ static inline uint8_t common_pass_input_gate(const MslBatch* batch, const MslCom
                    stick_y <= -c->pass_stick_threshold && tilt_timer_y < c->pass_tilt_max_frames);
 }
 
-static inline uint8_t squat_pass_countdown_consume_gate(const MslBatch* batch,
-                                                        const MslCommonParams* c, size_t idx,
-                                                        float stick_y, uint8_t tilt_timer_y) {
+static inline uint8_t squat_pass_try_arm_countdown(MslBatch* batch, const MslCommonParams* c,
+                                                   size_t idx, float stick_y,
+                                                   uint8_t tilt_timer_y) {
+  if (batch == NULL || c == NULL || batch->state.squat_pass_x0[idx] != 0u) {
+    return 0u;
+  }
+  if (!common_pass_input_gate(batch, c, idx, stick_y, tilt_timer_y)) {
+    return 0u;
+  }
+
+  // Decomp: ftCo_80099F9C arms mv.co.squat.x0/x4 and returns true; Squat_IASA does not run
+  // ftCo_Squat_IASA_inline on the same frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C
+  batch->state.squat_pass_x0[idx] = 1u;
+  batch->state.squat_pass_x4[idx] = c->floor_skip_frames;
+  return 1u;
+}
+
+static inline uint8_t squat_pass_countdown_try_consume(MslBatch* batch, const MslCommonParams* c,
+                                                       size_t idx, float stick_y,
+                                                       float prev_stick_y, uint8_t tilt_timer_y) {
   if (batch == NULL || c == NULL) {
     return 0u;
   }
   const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
   const uint16_t ground_id = batch->state.ground_id[idx];
-  if (ground_id == 0xFFFFu || !stage_collision_floor_line_is_platform(stage_id, ground_id) ||
-      stick_y > -c->pass_stick_threshold) {
+  if (ground_id == 0xFFFFu || !stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+    return 0u;
+  }
+  if (batch->state.squat_pass_x0[idx] != 0u) {
+    if (batch->state.squat_pass_x4[idx] != 0u) {
+      batch->state.squat_pass_x4[idx]--;
+      return (batch->state.squat_pass_x4[idx] == 0u) ? 1u : 0u;
+    }
+    return 0u;
+  }
+
+  if (stick_y > -c->pass_stick_threshold && prev_stick_y > -c->pass_stick_threshold) {
     return 0u;
   }
   if (tilt_timer_y < c->pass_tilt_max_frames) {
     return 1u;
   }
 
-  // Source separates the arming gate from the countdown consumer:
-  // - ftCo_80099F9C requires x671 < x468 only when it sets mv.co.pass.x0/x4.
-  // - ftCo_Squat_IASA_inline later decrements x4 and enters Pass without rechecking x671.
-  // For teacher-forced seeds where mv.co.pass is not serialized, a still-held down input can have
-  // advanced by the x470 countdown frames by the time Squat consumes the armed pass owner.
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const uint8_t replay_seed_frame =
+      (batch->replay_reseed_frame_active != NULL && batch->replay_reseed_frame_active[bi] != 0u)
+          ? 1u
+          : 0u;
+  if (replay_seed_frame &&
+      (uint16_t)tilt_timer_y < (uint16_t)c->pass_tilt_max_frames + (uint16_t)c->floor_skip_frames) {
+    // Teacher-forced replay seed reconstruction only: datasets do not serialize
+    // mv.co.squat.x0/x4, but the first reseeded frame can expose a released-stick consume row
+    // whose previous/current input and x671 prove that ftCo_80099F9C armed the real latch earlier.
+    // Do not use this in free-running runtime; after the seed frame, Squat must carry x0/x4.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA_inline
+    return 1u;
+  }
+
+  // Source separates the arming gate from the countdown consumer. Free-running runtime must carry
+  // mv.co.squat.x0/x4 from ftCo_80099F9C; visible input is not accepted as a late substitute for a
+  // missing hidden latch.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA_inline
-  const uint16_t consume_tilt_window =
-      (uint16_t)c->pass_tilt_max_frames + (uint16_t)c->floor_skip_frames;
-  return (uint8_t)((uint16_t)tilt_timer_y < consume_tilt_window);
+  return 0u;
 }
 
 static inline uint8_t guardsetoff_platform_edge_floor_loss_before_destination_iasa(
@@ -4202,6 +4287,8 @@ void locomotion_update_pre(MslBatch* batch) {
           apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
       stick_y =
           apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+      const float prev_stick_y = apply_deadzone(
+          stick_i8_to_unit(batch->state.prev_input_main_y[idx]), c->lstick_deadzone_y);
       cstick_y =
           apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
 
@@ -4354,18 +4441,31 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.kneebend_is_short_hop[idx] = 0;
               action_id = (uint16_t)MSL_ACT_KNEE_BEND;
             } else if (action_id == MSL_ACT_SQUAT &&
-                       batch->state.action_frame[idx] > ((int16_t)c->floor_skip_frames + 1) &&
+                       batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_SQUAT &&
                        !speciallw_preempts_squat_iasa &&
-                       squat_pass_countdown_consume_gate(batch, c, idx, stick_y, tilt_timer_y)) {
+                       batch->state.action_frame[idx] < ((int16_t)c->floor_skip_frames + 1) &&
+                       squat_pass_try_arm_countdown(batch, c, idx, stick_y, tilt_timer_y)) {
+              continue;
+            } else if (action_id == MSL_ACT_SQUAT &&
+                       batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_SQUAT &&
+                       !speciallw_preempts_squat_iasa &&
+                       (batch->state.squat_pass_x0[idx] != 0u ||
+                        batch->state.action_frame[idx] > ((int16_t)c->floor_skip_frames + 1)) &&
+                       squat_pass_countdown_try_consume(batch, c, idx, stick_y, prev_stick_y,
+                                                        tilt_timer_y)) {
               // Squat platform pass:
-              // ftCo_80099F9C arms mv.co.pass.x4 with p_ftCommonData->x470, then Squat_Anim
-              // enters Pass once the countdown reaches zero while still on a platform.
+              // ftCo_80099F9C arms mv.co.squat.x4 with p_ftCommonData->x470, then
+              // ftCo_Squat_IASA_inline enters Pass once the countdown reaches zero while still on
+              // a platform.
+              // The pass helper belongs to ftCo_Squat_IASA, not to upstream callbacks that enter
+              // Squat this frame through destination-Wait IASA. Require a prior Squat frame before
+              // arming/consuming so PassiveStand/DownStand/Wait handoffs do not tick the hidden
+              // countdown one frame early.
               // SquatWait_IASA calls ftCo_80099F9C but does not call ftCo_Squat_IASA_inline, so
               // an armed countdown is only consumed by the Squat callback owner.
-              // Model that hidden countdown with the current Squat action age. The arm helper
-              // returns before Squat_IASA_inline decrements x4, and the simulator's action_frame
-              // has already advanced for this step. Therefore x470==2 first admits Pass after one
-              // extra held frame beyond the raw countdown.
+              // Teacher-forced one-step rows without serialized mv.co.squat keep the older bounded
+              // visible-latch reconstruction; free-running rollout carries the real hidden x0/x4
+              // state and can pass after the down input has been released.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA_inline
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
@@ -6096,14 +6196,19 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.kneebend_is_short_hop[idx] = 0;
             action_id = (uint16_t)MSL_ACT_KNEE_BEND;
           } else if (batch->state.runbrake_cmd0[idx] != 0u &&
+                     move_tables_runbrake_cmd0_active(cid, cur_anim_frame) != 0u &&
                      (stick_x * facing_dir) <= c->turn_run_stick_x_threshold) {
             // Decomp: RunBrake IASA enters TurnRun via fn_800C9CEC only while cmd_vars[0] is enabled
-            // by the RunBrake command script; TurnRun_Enter preserves the current anim frame.
+            // by the RunBrake command script; TurnRun_Enter preserves the current anim frame. The
+            // replay seed lane is post-frame, so re-check the extracted script at the already
+            // advanced current frame before IASA. This lets the frame-15 set_cmd_var(0,0) clear
+            // suppress same-frame TurnRun, matching Fighter_procUpdate's Anim/script-before-IASA
+            // order.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::fn_800C9CEC
             // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
             // Source of truth:
-            // - data/moves/{fox,falco}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
+            // - data/moves/{fox,falco,marth}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN_RUN;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN_RUN;
             batch->state.runbrake_cmd0[idx] = 0u;
@@ -6624,6 +6729,8 @@ void locomotion_update_pre(MslBatch* batch) {
       // ----------------------
       // Air locomotion updates
       // ----------------------
+      const uint8_t uses_basic_landing_callback =
+          action_uses_ft80082b1c_basic_landing_callback(batch->state.char_id[idx], action_id);
       uint8_t is_air_loco = msl_action_is_air_locomotion(action_id) ? 1 : 0;
       // DamageFall has its own IASA chain (ftCo_DamageFall_IASA), including JumpAerial input
       // (ftCo_800CB870). This simulator models that subset in the shared airborne IASA block below,
@@ -6643,7 +6750,8 @@ void locomotion_update_pre(MslBatch* batch) {
         is_air_loco = 1;
       }
       uint8_t is_attack_air = action_is_attackair(action_id) ? 1 : 0;
-      if (!is_air_loco && !is_attack_air && action_id != (uint16_t)MSL_ACT_ESCAPE_AIR) {
+      if (!is_air_loco && !is_attack_air && action_id != (uint16_t)MSL_ACT_ESCAPE_AIR &&
+          uses_basic_landing_callback == 0u) {
         continue;
       }
 
@@ -7482,6 +7590,15 @@ void locomotion_update_post_collision(MslBatch* batch) {
           continue;
         }
 
+        // Non-locomotion callback owners such as CaptureJump use the same ft_80082B1C
+        // Wait/Landing selector, but the generated class also includes FallSpecial. Keep
+        // common air-locomotion states in the source-shaped fallback below so FallSpecial still
+        // enters LandingFallSpecial.
+        if (land == 0 &&
+            action_uses_ft80082b1c_basic_landing_callback(batch->state.char_id[idx], a) &&
+            !action_is_air_locomotion(a)) {
+          land = ft80082b1c_basic_landing_action(batch, c, idx, a);
+        }
         // Locomotion-only fallback: fall states land into Landing/LandingFallSpecial.
         if (land == 0 && action_is_air_locomotion(a)) {
           land = ft80082b1c_basic_landing_action(batch, c, idx, a);

@@ -1055,6 +1055,41 @@ static inline uint8_t hitboxes_apply_specialhi_local_xrotn(const MslBatch* batch
   return 1u;
 }
 
+static inline void hitboxes_apply_live_transn_tail(uint8_t char_id, uint16_t msid,
+                                                   uint16_t pose_frame, uint16_t part_id,
+                                                   float model_scale, float* io_x, float* io_y,
+                                                   float* io_z) {
+  if (io_x == NULL || io_y == NULL || io_z == NULL ||
+      !msl_anim_part_under_xrotn(char_id, part_id)) {
+    return;
+  }
+  if (msl_anim_uses_root_motion(char_id, msid) != 0u) {
+    return;
+  }
+
+  float transn[3];
+  if (anim_pose_get_transn(char_id, msid, pose_frame, transn) != 0) {
+    return;
+  }
+
+  // Source owner: ftAction_8007121C creates HitCapsules whose center is refreshed by lb_8000B1CC
+  // from the live HSD_JObj matrix. MSL's SSANIM01 matrices intentionally strip FtPart_TransN into
+  // a per-frame tail for root-motion consumers, so collision attachments under FtPart_XRotN must
+  // recompose that tail before the root facing publication below only when fp->x594_b0 is not
+  // already consuming TransN into cur_pos. Probe-backed witness: ParallelFamiliarZebra.msl:1838
+  // Marth AttackS4 hb0 (x594_b0=0); Dolphin's accepted hit JObj matrix equals the extracted part
+  // matrix plus the current TransN tail, while the un-recomposed sim selected the hb3 tipper. Fox
+  // and Falco AttackS4 keep x594_b0=1, so their already-consumed TransN must not be added twice.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80085030,ft_800850E0}
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  // data/anims/<char>.tracks.bin per-msid uses_root_motion / fp->x594_b0
+  // data/anims/<char>.bin SSANIM01 v4 TransN tail, read by anim_pose_get_transn()
+  *io_x += transn[0] * model_scale;
+  *io_y += transn[1] * model_scale;
+  *io_z += transn[2] * model_scale;
+}
+
 static inline uint8_t hitboxes_event_world_capsule(const MslBatch* batch, size_t idx,
                                                    uint8_t char_id, uint16_t msid,
                                                    uint16_t pose_frame, const MslHitboxEvent* ev,
@@ -1086,6 +1121,8 @@ static inline uint8_t hitboxes_event_world_capsule(const MslBatch* batch, size_t
   (void)hitboxes_apply_specialhi_local_xrotn(batch, idx, char_id, msid, pose_frame,
                                              ev->bone_part_id, facing_dir, model_scale, &cx, &cy,
                                              &cz);
+  hitboxes_apply_live_transn_tail(char_id, msid, pose_frame, ev->bone_part_id, model_scale, &cx,
+                                  &cy, &cz);
   *out_x = batch->state.pos_x[idx] + facing_dir * cz;
   *out_y = batch->state.pos_y[idx] + cy;
   *out_z = batch->state.pos_z[idx] - facing_dir * cx;
@@ -2530,6 +2567,8 @@ void hitboxes_refresh(MslBatch* batch) {
         (void)hitboxes_apply_specialhi_local_xrotn(batch, idx, char_id, msid, pose_frame,
                                                    def[hi].bone_part_id, facing_dir, model_scale,
                                                    &cx, &cy, &cz);
+        hitboxes_apply_live_transn_tail(char_id, msid, pose_frame, def[hi].bone_part_id,
+                                        model_scale, &cx, &cy, &cz);
 
         // Decomp: apply root facing rotation (rotY = M_PI_2 * facing_dir), mixing X/Z.
         const float cx_rot_x = facing_dir * cz;

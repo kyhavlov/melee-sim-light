@@ -1,5 +1,6 @@
 #include "anim_pose.h"
 #include "data_dir.h"
+#include "action_ids.h"
 #include "char_registry.h"
 #include "ids.h"
 
@@ -42,7 +43,6 @@ enum {
 static const float kDynColliderSkinRadius = 0.1f;  // lb_00F9.s::lb_804D7BE0
 
 static const uint8_t k_anim_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'A', 'N', 'I', 'M', '0', '1'};
-
 typedef struct {
   uint16_t part_id;
   float c[15];
@@ -60,6 +60,13 @@ typedef struct {
   float offset[3];
   float radius;
 } MslAnimDynColliderData;
+
+typedef struct {
+  float x;
+  float y;
+  float z;
+  float w;
+} MslQuat;
 
 typedef struct {
   uint8_t* buf;
@@ -1708,6 +1715,141 @@ static void mtx34_srt_simple(const float rot[3], const float pos[3], const float
   out[11] = pos[2];
 }
 
+static void quat_from_unit_mtx34(const float m[12], MslQuat* out) {
+  const float trace = m[0] + m[5] + m[10];
+  if (trace > 0.0f) {
+    const float s = sqrtf(trace + 1.0f) * 2.0f;
+    out->w = 0.25f * s;
+    out->x = (m[9] - m[6]) / s;
+    out->y = (m[2] - m[8]) / s;
+    out->z = (m[4] - m[1]) / s;
+  } else if (m[0] > m[5] && m[0] > m[10]) {
+    const float s = sqrtf(1.0f + m[0] - m[5] - m[10]) * 2.0f;
+    out->w = (m[9] - m[6]) / s;
+    out->x = 0.25f * s;
+    out->y = (m[1] + m[4]) / s;
+    out->z = (m[2] + m[8]) / s;
+  } else if (m[5] > m[10]) {
+    const float s = sqrtf(1.0f + m[5] - m[0] - m[10]) * 2.0f;
+    out->w = (m[2] - m[8]) / s;
+    out->x = (m[1] + m[4]) / s;
+    out->y = 0.25f * s;
+    out->z = (m[6] + m[9]) / s;
+  } else {
+    const float s = sqrtf(1.0f + m[10] - m[0] - m[5]) * 2.0f;
+    out->w = (m[4] - m[1]) / s;
+    out->x = (m[2] + m[8]) / s;
+    out->y = (m[6] + m[9]) / s;
+    out->z = 0.25f * s;
+  }
+}
+
+static void quat_from_euler_srt_order(const float rot[3], MslQuat* out) {
+  const float pos[3] = {0.0f, 0.0f, 0.0f};
+  const float scl[3] = {1.0f, 1.0f, 1.0f};
+  float m[12];
+  mtx34_srt_simple(rot, pos, scl, NULL, m);
+  quat_from_unit_mtx34(m, out);
+}
+
+static void quat_normalize(MslQuat* q) {
+  const float len2 = q->x * q->x + q->y * q->y + q->z * q->z + q->w * q->w;
+  if (!(len2 > 0.0f)) {
+    q->x = 0.0f;
+    q->y = 0.0f;
+    q->z = 0.0f;
+    q->w = 1.0f;
+    return;
+  }
+  const float inv = 1.0f / sqrtf(len2);
+  q->x *= inv;
+  q->y *= inv;
+  q->z *= inv;
+  q->w *= inv;
+}
+
+static void quat_slerp_lb_c490(const MslQuat* target, const MslQuat* neutral, float neutral_t,
+                               MslQuat* out) {
+  MslQuat q2 = *neutral;
+  float dot = target->x * q2.x + target->y * q2.y + target->z * q2.z + target->w * q2.w;
+  if (dot < 0.0f) {
+    q2.x = -q2.x;
+    q2.y = -q2.y;
+    q2.z = -q2.z;
+    q2.w = -q2.w;
+    dot = -dot;
+  }
+  if (dot > 0.9995f) {
+    const float target_t = 1.0f - neutral_t;
+    out->x = target->x * target_t + q2.x * neutral_t;
+    out->y = target->y * target_t + q2.y * neutral_t;
+    out->z = target->z * target_t + q2.z * neutral_t;
+    out->w = target->w * target_t + q2.w * neutral_t;
+    quat_normalize(out);
+    return;
+  }
+  const float theta0 = acosf(dot);
+  const float sin_theta0 = sinf(theta0);
+  const float target_t = 1.0f - neutral_t;
+  const float s0 = sinf(target_t * theta0) / sin_theta0;
+  const float s1 = sinf(neutral_t * theta0) / sin_theta0;
+  out->x = target->x * s0 + q2.x * s1;
+  out->y = target->y * s0 + q2.y * s1;
+  out->z = target->z * s0 + q2.z * s1;
+  out->w = target->w * s0 + q2.w * s1;
+}
+
+static void mtx34_quat_srt_simple(const MslQuat* q, const float pos[3], const float scl[3],
+                                  const float* parent_scl, float out[12]) {
+  float sx = scl[0], sy = scl[1], sz = scl[2];
+  float sx2 = sx, sy2 = sy, sz2 = sz;
+  float sx1 = sx, sy1 = sy, sz1 = sz;
+  if (parent_scl != NULL) {
+    const float psx = parent_scl[0], psy = parent_scl[1], psz = parent_scl[2];
+    if (psx != 0.0f && psy != 0.0f && psz != 0.0f) {
+      sy2 = sy2 * (psy / psx);
+      sz2 = sz2 * (psz / psx);
+      sx1 = sx1 * (psx / psy);
+      sz1 = sz1 * (psz / psy);
+      sx = sx * (psx / psz);
+      sy = sy * (psy / psz);
+    }
+  }
+
+  const float xx = q->x * q->x;
+  const float yy = q->y * q->y;
+  const float zz = q->z * q->z;
+  const float xy = q->x * q->y;
+  const float xz = q->x * q->z;
+  const float yz = q->y * q->z;
+  const float wx = q->w * q->x;
+  const float wy = q->w * q->y;
+  const float wz = q->w * q->z;
+
+  const float r00 = 1.0f - 2.0f * (yy + zz);
+  const float r01 = 2.0f * (xy - wz);
+  const float r02 = 2.0f * (xz + wy);
+  const float r10 = 2.0f * (xy + wz);
+  const float r11 = 1.0f - 2.0f * (xx + zz);
+  const float r12 = 2.0f * (yz - wx);
+  const float r20 = 2.0f * (xz - wy);
+  const float r21 = 2.0f * (yz + wx);
+  const float r22 = 1.0f - 2.0f * (xx + yy);
+
+  out[0] = r00 * sx2;
+  out[4] = r10 * sx1;
+  out[8] = r20 * sx;
+  out[1] = r01 * sy2;
+  out[5] = r11 * sy1;
+  out[9] = r21 * sy;
+  out[2] = r02 * sz2;
+  out[6] = r12 * sz1;
+  out[10] = r22 * sz;
+  out[3] = pos[0];
+  out[7] = pos[1];
+  out[11] = pos[2];
+}
+
 static void mtx34_apply_world_axis_angle(float m[12], const float axis[3], float angle) {
   float col0[3] = {m[0], m[4], m[8]};
   float col1[3] = {m[1], m[5], m[9]};
@@ -2458,8 +2600,9 @@ int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uin
   return 0;
 }
 
-int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx, uint16_t msid,
-                                       float anim_frame, uint16_t part_id, float out_3x4[12]) {
+static int anim_pose_get_collision_matrix_f32_base(const MslBatch* batch, size_t player_idx,
+                                                   uint16_t msid, float anim_frame,
+                                                   uint16_t part_id, float out_3x4[12]) {
   if (out_3x4 == NULL || batch == NULL) {
     return -1;
   }
@@ -2511,6 +2654,241 @@ int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx,
     memcpy(out_3x4, dyn, MAT_BYTES);
   }
   return 0;
+}
+
+static uint8_t anim_pose_common_fall_target_msid(const MslBatch* batch, size_t player_idx,
+                                                 uint16_t msid, uint16_t* out_target_msid,
+                                                 float* out_weight) {
+  if (batch == NULL || out_target_msid == NULL || out_weight == NULL) {
+    return 0u;
+  }
+  uint16_t neutral = 0u;
+  uint16_t forwards = 0u;
+  uint16_t backwards = 0u;
+  if (!msl_action_common_fall_blend_msids(batch->state.action_id[player_idx], &neutral, &forwards,
+                                          &backwards)) {
+    return 0u;
+  }
+  if (msid != neutral && msid != forwards && msid != backwards) {
+    return 0u;
+  }
+  const float x4 = batch->state.common_fall_blend_x4[player_idx];
+  if (x4 == 0.0f) {
+    return 0u;
+  }
+  const uint16_t stored_msid = batch->state.common_fall_blend_msid[player_idx];
+  if (stored_msid != neutral && stored_msid != forwards && stored_msid != backwards) {
+    return 0u;
+  }
+  *out_target_msid = stored_msid;
+  *out_weight = (x4 > 1.0f) ? 1.0f : x4;
+  return 1u;
+}
+
+static int local_parent_for_part(const MslAnimPoseTable* t, uint16_t part_id, int16_t* out_parent) {
+  if (t == NULL || out_parent == NULL || t->local_part_to_index == NULL ||
+      t->local_parent_part_by_index == NULL) {
+    return -1;
+  }
+  const uint16_t li = t->local_part_to_index[part_id];
+  if (li == 0xFFFFu || li >= t->local_count) {
+    return -1;
+  }
+  *out_parent = t->local_parent_part_by_index[li];
+  return 0;
+}
+
+static int common_fall_blended_local_matrix(const MslAnimPoseTable* t, uint16_t neutral_msid,
+                                            uint16_t target_msid, float anim_frame,
+                                            uint16_t part_id, float weight, const float* parent_scl,
+                                            float out[12], float out_scl[3], uint32_t* out_flags,
+                                            int16_t* out_parent) {
+  if (out_flags == NULL || out_parent == NULL) {
+    return -1;
+  }
+  enum { MSL_FTPART_TRANSN = 1 };
+  if (part_id < (uint16_t)MSL_FTPART_TRANSN) {
+    // ftAnim_8006FE9C starts at FtPart_TransN. Ancestors such as TopN keep the active selected
+    // submotion JObj written by ftAnim_8006EDD0 / HSD_JObjAnimAll; only TransN and descendants are
+    // overwritten by lb_8000C490.
+    // refs/melee/src/melee/ft/forward.h::{FtPart_TopN,FtPart_TransN}
+    // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FE9C
+    float rot[3], pos[3], scl[3];
+    if (local_srt_for_part_f32(t, target_msid, anim_frame, part_id, rot, pos, scl, out_flags,
+                               out_parent) != 0) {
+      return -1;
+    }
+    memcpy(out_scl, scl, 3u * sizeof(float));
+    mtx34_srt_simple(rot, pos, scl, parent_scl, out);
+    return 0;
+  }
+  float neutral_rot[3], neutral_pos[3], neutral_scl[3];
+  float target_rot[3], target_pos[3], target_scl[3];
+  int16_t neutral_parent = -1;
+  int16_t target_parent = -1;
+  uint32_t neutral_flags = 0u;
+  uint32_t target_flags = 0u;
+  if (local_srt_for_part_f32(t, neutral_msid, anim_frame, part_id, neutral_rot, neutral_pos,
+                             neutral_scl, &neutral_flags, &neutral_parent) != 0 ||
+      local_srt_for_part_f32(t, target_msid, anim_frame, part_id, target_rot, target_pos,
+                             target_scl, &target_flags, &target_parent) != 0 ||
+      neutral_parent != target_parent || neutral_flags != target_flags) {
+    return -1;
+  }
+  *out_flags = neutral_flags;
+  *out_parent = neutral_parent;
+
+  const float inv = 1.0f - weight;
+  float pos[3], scl[3];
+  for (int i = 0; i < 3; i++) {
+    // ftAnim_8006FE9C calls lb_8000C490(x4_jobj2, joint, joint, x4, 1-x4). Position and scale
+    // are linear SRT blends; rotation follows lb_8000C490's quaternion path below.
+    pos[i] = target_pos[i] * weight + neutral_pos[i] * inv;
+    scl[i] = target_scl[i] * weight + neutral_scl[i] * inv;
+    out_scl[i] = scl[i];
+  }
+  MslQuat target_q;
+  MslQuat neutral_q;
+  MslQuat blended_q;
+  quat_from_euler_srt_order(target_rot, &target_q);
+  quat_from_euler_srt_order(neutral_rot, &neutral_q);
+  quat_slerp_lb_c490(&target_q, &neutral_q, inv, &blended_q);
+  mtx34_quat_srt_simple(&blended_q, pos, scl, parent_scl, out);
+  return 0;
+}
+
+static int matrix_from_common_fall_blended_locals(const MslAnimPoseTable* t, uint16_t neutral_msid,
+                                                  uint16_t target_msid, float anim_frame,
+                                                  uint16_t part_id, float weight,
+                                                  float out_3x4[12]) {
+  if (weight == 1.0f) {
+    // ftCo_Fall_Anim_Inner calls ftAnim_8006FF74, not ftAnim_8006FE9C, once x4 reaches 1.0.
+    // That path copies the selected FallF/FallB submotion pose instead of running lb_8000C490.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+    // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FF74
+    return matrix_from_locals_f32(t, target_msid, anim_frame, part_id, out_3x4);
+  }
+  if (weight == 0.0f) {
+    return matrix_from_locals_f32(t, neutral_msid, anim_frame, part_id, out_3x4);
+  }
+  enum { MAX_CHAIN = 64 };
+  uint16_t chain[MAX_CHAIN];
+  uint16_t count = 0u;
+  uint16_t cur = part_id;
+  for (;;) {
+    if (count >= (uint16_t)MAX_CHAIN) {
+      return -1;
+    }
+    chain[count++] = cur;
+    int16_t parent = -1;
+    if (local_parent_for_part(t, cur, &parent) != 0) {
+      return -1;
+    }
+    if (parent < 0) {
+      break;
+    }
+    cur = (uint16_t)parent;
+  }
+
+  float world[12];
+  mtx34_identity(world);
+  float parent_world_scl[3] = {0.0f, 0.0f, 0.0f};
+  uint8_t have_parent_scl = 0u;
+  for (int ci = (int)count - 1; ci >= 0; ci--) {
+    float local[12];
+    float scl[3];
+    uint32_t flags = 0u;
+    int16_t parent = -1;
+    const float* parent_scl = NULL;
+    if (local_parent_for_part(t, chain[ci], &parent) != 0) {
+      return -1;
+    }
+    if (parent >= 0 && have_parent_scl) {
+      parent_scl = parent_world_scl;
+    }
+    if (common_fall_blended_local_matrix(t, neutral_msid, target_msid, anim_frame, chain[ci],
+                                         weight, parent_scl, local, scl, &flags, &parent) != 0) {
+      return -1;
+    }
+    mtx34_concat(world, local, world);
+
+    if ((flags & 8u) != 0u) {
+      if (parent >= 0 && have_parent_scl) {
+        have_parent_scl = 1u;
+      } else {
+        have_parent_scl = 0u;
+      }
+    } else {
+      if (parent >= 0 && have_parent_scl) {
+        parent_world_scl[0] *= scl[0];
+        parent_world_scl[1] *= scl[1];
+        parent_world_scl[2] *= scl[2];
+      } else {
+        memcpy(parent_world_scl, scl, 3u * sizeof(float));
+      }
+      have_parent_scl = 1u;
+    }
+  }
+  memcpy(out_3x4, world, MAT_BYTES);
+  return 0;
+}
+
+int anim_pose_debug_common_fall_blend_matrix(uint8_t char_id, uint16_t neutral_msid,
+                                             uint16_t target_msid, float anim_frame,
+                                             uint16_t part_id, float weight, float out_3x4[12]) {
+  if (out_3x4 == NULL) {
+    return -1;
+  }
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL) {
+    return -1;
+  }
+  if (weight < 0.0f) {
+    weight = 0.0f;
+  } else if (weight > 1.0f) {
+    weight = 1.0f;
+  }
+  return matrix_from_common_fall_blended_locals(t, neutral_msid, target_msid, anim_frame, part_id,
+                                                weight, out_3x4);
+}
+
+int anim_pose_get_common_fall_blend_collision_matrix_f32(const MslBatch* batch, size_t player_idx,
+                                                         uint16_t msid, float anim_frame,
+                                                         uint16_t part_id, float out_3x4[12]) {
+  if (batch == NULL || out_3x4 == NULL) {
+    return -1;
+  }
+  uint16_t target_msid = 0u;
+  float weight = 0.0f;
+  if (!anim_pose_common_fall_target_msid(batch, player_idx, msid, &target_msid, &weight)) {
+    return -1;
+  }
+  const uint8_t char_id = batch->state.char_id[player_idx];
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL || matrix_from_common_fall_blended_locals(t, msid, target_msid, anim_frame, part_id,
+                                                          weight, out_3x4) != 0) {
+    return -1;
+  }
+  // ftCo_800CC988 / ftCo_Fall_Anim_Inner run the selected Fall/FallF/FallB submotion, then call
+  // ftAnim_8006FE9C(fp, FtPart_TransN, x4, 1-x4). ftAnim_8006FE9C leaves pre-TransN ancestors on
+  // the active selected JObj tree and uses lb_8000C490 to blend TransN descendants in local SRT
+  // before collision refresh samples matrices in Fighter_8006CB94. Rebuild the selected part
+  // through that local owner instead of interpolating final 3x4 matrices.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+  //   ftCo_800CC988,ftCo_Fall_Anim_Inner}
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FE9C
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000C490
+  return 0;
+}
+
+int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx, uint16_t msid,
+                                       float anim_frame, uint16_t part_id, float out_3x4[12]) {
+  if (anim_pose_get_common_fall_blend_collision_matrix_f32(batch, player_idx, msid, anim_frame,
+                                                           part_id, out_3x4) == 0) {
+    return 0;
+  }
+  return anim_pose_get_collision_matrix_f32_base(batch, player_idx, msid, anim_frame, part_id,
+                                                 out_3x4);
 }
 
 int anim_pose_get_catch_grabbable_matrix_f32(const MslBatch* batch, size_t player_idx,
@@ -2604,6 +2982,8 @@ int anim_pose_get_collision_matrices_f32(const MslBatch* batch, size_t player_id
       }
       const uint64_t mat_off_u = frame_base_u + (uint64_t)joint_index * (uint64_t)MAT_BYTES;
       memcpy(&out_mats_12[(size_t)i * 12u], t->buf + (size_t)mat_off_u, (size_t)MAT_BYTES);
+      (void)anim_pose_get_common_fall_blend_collision_matrix_f32(
+          batch, player_idx, msid, safe_frame, part_ids[i], &out_mats_12[(size_t)i * 12u]);
       out_ok[i] = 1u;
     }
     return 0;
@@ -2618,6 +2998,8 @@ int anim_pose_get_collision_matrices_f32(const MslBatch* batch, size_t player_id
           continue;
         }
       }
+      (void)anim_pose_get_common_fall_blend_collision_matrix_f32(batch, player_idx, msid,
+                                                                 safe_frame, part_ids[i], out);
       out_ok[i] = 1u;
     }
     return 0;

@@ -634,6 +634,13 @@ static inline uint8_t physics_action_uses_common_air_drift(uint8_t char_id, uint
   if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
     return 0;
   }
+  if (action_id == (uint16_t)MSL_ACT_CAPTURE_JUMP) {
+    // CaptureJump Phys calls ftCommon_8007D268 directly after ftCommon_Fall. It gets common air
+    // drift without inheriting ft_80084DB0's fastfall latch.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureJump_Phys
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D268
+    return 1;
+  }
   return msl_action_allows_fastfall(char_id, action_id);
 }
 
@@ -893,7 +900,8 @@ static inline uint8_t physics_action_use_pre_integration_common_air_gravity(cons
   // - DamageFly is handled via its own x221C_b6-gated branch below.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Phys
   if (!msl_action_allows_fastfall(batch->state.char_id[idx], action_id)) {
-    return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_2);
+    return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_2 ||
+                     action_id == (uint16_t)MSL_ACT_CAPTURE_JUMP);
   }
   if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL) {
     return (uint8_t)(physics_damagefall_seed_allow_interrupt(batch, idx) ||

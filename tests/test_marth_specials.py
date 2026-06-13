@@ -24,9 +24,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 
 from test_char_common_action_coverage import _mk_inputs, _run, _seed_base  # noqa: E402
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset_window  # noqa: E402
 
 B = 0x0200
+Y = 0x0800
 SM_FALL = 20
+SM_DB_AIR_S1 = 312
+SM_FX_SPECIAL_HI_FALL = 311
 
 # ftMs_MotionState action ids (341 base; see src/action_ids.h MSL_ACT_MS_*).
 ACT_SB_START = 341
@@ -56,11 +60,15 @@ ACT_COUNTER_AIR_HIT = 372
 ACT_FALL_SPECIAL = 0x0023
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_WAIT = 0x000E
+ACT_JUMP_AERIAL_F = 0x001B
 ACT_FALL = 0x001D
+ACT_THROW_F = 0x00DB
 ACT_THROW_B = 0x00DC
 ACT_THROW_HI = 0x00DD
+ACT_THROWN_F = 0x00EF
 ACT_THROWN_B = 0x00F0
 ACT_THROWN_HI = 0x00F1
+ACT_DAMAGE_AIR_3 = 0x0056
 ACT_DAMAGE_FLY_N = 0x0058
 ACT_DAMAGE_FLY_TOP = 0x005A
 
@@ -94,6 +102,7 @@ def _throw_pair_seed(owner_char: str, victim_char_id: int, throw_action: int, fr
     seed["action_id"][0, 0] = np.uint16(throw_action)
     seed["animation_index"][0, 0] = np.uint32(throw_action)
     thrown_action = {
+        ACT_THROW_F: ACT_THROWN_F,
         ACT_THROW_B: ACT_THROWN_B,
         ACT_THROW_HI: ACT_THROWN_HI,
     }[throw_action]
@@ -107,6 +116,41 @@ def _throw_pair_seed(owner_char: str, victim_char_id: int, throw_action: int, fr
 
 def _run_throw_pair(owner_char: str, victim_char_id: int, throw_action: int, frame: int) -> np.ndarray:
     return _run(_throw_pair_seed(owner_char, victim_char_id, throw_action, frame), [_mk_inputs()])[0]
+
+
+def _step_real_row(dataset: str, record: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    msl_binding = pytest.importorskip("msl_binding")
+
+    dataset_path = ROOT / dataset
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset}")
+
+    ds = read_dataset_window(str(dataset_path), record, record + 1)
+    row = ds.samples[0]
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    seed = np.frombuffer(row["seed_t"].tobytes(), dtype=np.uint8).reshape(1, seed_stride).copy()
+    prev = (
+        np.frombuffer(row["prev_input_t"].tobytes(), dtype=np.uint8)
+        .reshape(1, input_stride)
+        .copy()
+    )
+    inp = np.frombuffer(row["input_t"].tobytes(), dtype=np.uint8).reshape(1, input_stride).copy()
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        msl_binding.reseed_seed(handle, seed)
+        msl_binding.step_input(handle, prev, inp)
+        msl_binding.write_compare(handle, out_bytes)
+    finally:
+        msl_binding.destroy(handle)
+    return (
+        out_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy(),
+        row["seed_t"].copy(),
+        row["ref_t1"].copy(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +199,21 @@ def test_marth_non_low_throw_snap_boundaries_are_not_early() -> None:
     crossed_hi = _run_throw_pair("marth", 22, ACT_THROW_HI, 11)
     assert int(crossed_hi["action_id"][1]) == ACT_DAMAGE_FLY_TOP
     assert float(crossed_hi["percent"][1]) == pytest.approx(4.0)
+
+
+def test_throw_release_final_facing_override_is_raw_angle_bounded() -> None:
+    # ftCo_800DE7C0 passes `facing_dir = -dmg.facing_dir_1` into ftCo_8008DCE0 only for throw-hit
+    # raw angles strictly between 90 and 270 degrees. Marth ThrowHi (93) gets the final-facing
+    # override; Marth ThrowF (50) keeps the earlier `dmg.facing_dir_1` facing used for KB velocity.
+    # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Thrown.s::ftCo_800DE7C0
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    throw_hi = _run_throw_pair("marth", 22, ACT_THROW_HI, 11)
+    assert int(throw_hi["action_id"][1]) == ACT_DAMAGE_FLY_TOP
+    assert int(throw_hi["facing"][1]) == 1
+
+    throw_f = _run_throw_pair("marth", 22, ACT_THROW_F, 13)
+    assert int(throw_f["action_id"][1]) == ACT_DAMAGE_AIR_3
+    assert int(throw_f["facing"][1]) == 0
 
 
 def test_fox_falco_throw_timing_invariant_stays_on_existing_boundaries() -> None:
@@ -418,6 +477,56 @@ def test_db_air_first_swing_has_hop_once() -> None:
     assert expect - 2.5 * grav <= vy <= expect + 1e-3, f"air DB hop vy {vy} vs {expect}"
 
 
+@pytest.mark.integration
+def test_db_air_s1_anim_end_runs_destination_fall_iasa_jump_qhp_2123() -> None:
+    # Source owner:
+    # ftMs_SpecialAirS1_Anim exits through ftCo_Fall_Enter when the swing ends; the same
+    # Fighter_procUpdate then runs the destination Fall IASA, so a current-frame jump edge reaches
+    # ftCo_800CB870 and enters JumpAerial instead of serializing the intermediate Fall.
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialS.c::ftMs_SpecialAirS1_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_IASA_Inner}
+    path = "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    out, seed, ref = _step_real_row(path, 2123)
+    p = 1
+    assert int(seed["action_id"][p]) == ACT_DB_AIR_S1
+    assert int(seed["animation_index"][p]) == SM_DB_AIR_S1
+    assert int(seed["jumps_left"][p]) == 1
+    assert int(ref["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
+    assert int(out["jumps_left"][p]) == 0
+
+
+def test_db_air_s1_anim_end_without_iasa_input_stays_fall() -> None:
+    # Adjacent negative: the destination Fall IASA tail must not invent an interrupt when the
+    # SpecialAirS1 end frame has no current-frame input edge.
+    seed = _air_seed()
+    seed["action_id"][0, 0] = np.uint16(ACT_DB_AIR_S1)
+    seed["animation_index"][0, 0] = np.uint32(SM_DB_AIR_S1)
+    seed["action_frame"][0, 0] = np.int16(29)
+    seed["anim_frame_f32"][0, 0] = np.float32(29.0)
+    seed["jumps_left"][0, 0] = np.uint8(1)
+    outs = _run(seed, [_mk_inputs()])
+    assert int(outs[0]["action_id"][0]) == ACT_FALL
+    assert int(outs[0]["action_id"][0]) != ACT_JUMP_AERIAL_F
+    assert int(outs[0]["jumps_left"][0]) == 1
+
+
+def test_fox_action_358_overlap_does_not_inherit_marth_dancing_blade_jump_tail() -> None:
+    # Numeric action 358 is Marth SpecialAirS1 but Fox/Falco SpecialHiFall. Keep the fix tied to
+    # the Marth MotionState owner, not to raw action id 358.
+    # data/motion_state/owners/{marth,fox}.bin prove the callback split.
+    seed = _seed_base("fox", grounded=False, pos_y=60.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_DB_AIR_S1)
+    seed["animation_index"][0, 0] = np.uint32(SM_FX_SPECIAL_HI_FALL)
+    seed["action_frame"][0, 0] = np.int16(3)
+    seed["anim_frame_f32"][0, 0] = np.float32(3.0)
+    seed["jumps_left"][0, 0] = np.uint8(1)
+    outs = _run(seed, [_mk_inputs(buttons=Y)])
+    assert int(outs[0]["action_id"][0]) != ACT_JUMP_AERIAL_F
+    assert int(outs[0]["jumps_left"][0]) == 1
+
+
 # ---------------------------------------------------------------------------
 # Counter (window state only here; combat trigger covered in the counter combat tests)
 # ---------------------------------------------------------------------------
@@ -430,6 +539,68 @@ def test_counter_window_opens_and_closes_with_script() -> None:
     on = next(e["frame"] for e in evs if e["kind"] == "set_cmd_var" and e["data"]["idx"] == 1 and e["data"]["value"] == 1)
     off = next(e["frame"] for e in evs if e["kind"] == "set_cmd_var" and e["data"]["idx"] == 1 and e["data"]["value"] == 0)
     assert 0 < on < off
+
+
+@pytest.mark.integration
+def test_counter_shielddesc_state_flags_publish_on_script_open_real_rows() -> None:
+    # ftMs_SpecialLw_Anim/ftMs_SpecialAirLw_Anim create a ShieldDesc when script cmd var 1 opens:
+    # ftColl_8007B1B8 publishes x221B_b0 (Slippi state_flags[2] 0x80), and Marth immediately
+    # sets x221B_b1 (0x40). The publication is post-action-frame owned, so seed frame 4 publishes
+    # 0xC0 on the frame that serializes action_frame 5.
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+    #   ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+    path = "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
+    for rec in (3959, 3960, 3963):
+        out, _seed, ref = _step_real_row(path, rec)
+        p = 1
+        assert int(ref["action_id"][p]) == ACT_COUNTER_AIR
+        assert int(ref["state_flags"][p, 2]) == 0xC0
+        assert int(out["state_flags"][p, 2]) == int(ref["state_flags"][p, 2])
+
+
+@pytest.mark.integration
+def test_counter_shielddesc_state_flags_carry_across_ground_air_swap_real_rows() -> None:
+    # Counter's Coll callbacks recreate the descriptor after ground/air swaps when cmd var 1 has
+    # reached the armed value, so the same x221B_b0|b1 publication survives SpecialAirLw -> SpecialLw.
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+    #   ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
+    path = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    for rec, act in ((846, ACT_COUNTER_AIR), (851, ACT_COUNTER), (858, ACT_COUNTER)):
+        out, _seed, ref = _step_real_row(path, rec)
+        p = 1
+        assert int(ref["action_id"][p]) == act
+        assert int(ref["state_flags"][p, 2]) == 0xC0
+        assert int(out["state_flags"][p, 2]) == int(ref["state_flags"][p, 2])
+
+
+@pytest.mark.integration
+def test_counter_shielddesc_state_flags_clear_b0_on_hit_transition_real_row() -> None:
+    # The ShieldDesc callback enters SpecialAirLwHit through Fighter_ChangeMotionState. That reset
+    # clears x221B_b0 while x221B_b1 remains published on the post-frame row (0xC0 -> 0x40).
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::ftMs_SpecialLw_80139140
+    # refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState reset)
+    path = "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
+    out, _seed, ref = _step_real_row(path, 3964)
+    p = 1
+    assert int(ref["action_id"][p]) == ACT_COUNTER_AIR_HIT
+    assert int(ref["state_flags"][p, 2]) == 0x40
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 11
+    assert int(out["state_flags"][p, 2]) == int(ref["state_flags"][p, 2])
+
+
+def test_counter_shielddesc_state_flags_do_not_leak_to_fox_action_overlap() -> None:
+    # Numeric action 369 is Marth SpecialLw but Fox SpecialAirLwTurn. The publication is the
+    # Marth ftMs_SpecialLw owner, not a raw action-id rule.
+    seed = _seed_base("fox", grounded=False, pos_y=60.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_COUNTER)
+    seed["animation_index"][0, 0] = np.uint32(0)
+    seed["action_frame"][0, 0] = np.int16(6)
+    seed["anim_frame_f32"][0, 0] = np.float32(6.0)
+    seed["state_flags"][0, 0, 2] = np.uint8(0)
+    outs = _run(seed, [_mk_inputs()])
+    assert int(outs[0]["state_flags"][0, 2]) & 0xC0 == 0
 
 
 def test_counter_states_enter_and_exit() -> None:
@@ -489,6 +660,8 @@ def test_counter_triggers_inside_window() -> None:
     rows = _counter_combat_run(press_offset=4)
     a0 = [int(r["action_id"][0]) for r in rows]
     assert ACT_COUNTER_HIT in a0, f"counter never triggered: {sorted(set(a0))}"
+    first_hit = next(r for r in rows if int(r["action_id"][0]) == ACT_COUNTER_HIT)
+    assert int(first_hit["facing"][0]) == 1
     assert all(float(r["percent"][0]) == 0.0 for r in rows), "marth took damage through counter"
     assert any(float(r["percent"][1]) > 0.0 for r in rows), "counterattack never hit fox"
 
@@ -549,6 +722,12 @@ def test_counter_triggers_on_back_hit() -> None:
         msl_binding.destroy(handle)
     a0 = [int(r["action_id"][0]) for r in rows]
     assert ACT_COUNTER_HIT in a0, f"back hit not countered: {sorted(set(a0))}"
+    first_hit = next(r for r in rows if int(r["action_id"][0]) == ACT_COUNTER_HIT)
+    # ftColl stores specialn_facing_dir from the contact side; CounterHit copies that lane instead
+    # of facing the attacker in the hit callback. A behind/cross-up contact must face left.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::ftMs_SpecialLw_80139140
+    assert int(first_hit["facing"][0]) == 0
     assert all(float(r["percent"][0]) == 0.0 for r in rows), "marth took damage through counter"
 
 
@@ -696,6 +875,10 @@ def test_counter_intercepts_projectile() -> None:
     rows = _laser_counter_run(counter_delay=1)
     a0 = [int(r["action_id"][0]) for r in rows]
     assert ACT_COUNTER_HIT in a0, f"laser never countered: {sorted(set(a0))}"
+    first_hit = next(r for r in rows if int(r["action_id"][0]) == ACT_COUNTER_HIT)
+    # ftColl_80077688 writes specialn_facing_dir from the projectile's actual contact position
+    # before ftMs_SpecialLw_80139140 enters CounterHit.
+    assert int(first_hit["facing"][0]) == 0
     assert all(float(r["percent"][0]) == 0.0 for r in rows), "marth took laser damage"
 
 
@@ -1060,11 +1243,12 @@ def test_aerial_up_b_requires_up_b_presence() -> None:
     assert ACT_DS_AIR not in acts, "aerial up-B entered with no up+B presence frame"
 
 
-def test_aerial_up_b_held_b_late_up_flick_enters() -> None:
-    # Presence admission: B held from earlier, stick flicked up later - the first up+B
-    # presence frame has x686 == 0 and x68B = the pre-period gap (large, fresh) -> enters.
-    # The old edge-gated dispatcher missed this (no B edge on the flick frame).
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D69C4
+def test_aerial_fall_up_b_held_b_late_up_flick_does_not_enter() -> None:
+    # Ordinary Fall IASA uses ftCo_SpecialAir_CheckInput, which gates the whole aerial special
+    # chain on a current B edge. The presence-owned ftCo_800D69C4 path is a Damage/DamageFly
+    # callsite, not a generic Fall/SpecialAir resolver.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
     seed = _air_seed()
     # hitstun masks the initial B-hold frames (a bare held B would otherwise dispatch
     # neutral-B on its press edge); the up-flick lands after hitstun clears, with B held
@@ -1073,27 +1257,17 @@ def test_aerial_up_b_held_b_late_up_flick_enters() -> None:
     outs = _run(seed, [_mk_inputs(buttons=B)] * 6 +
                 [_mk_inputs(buttons=B, main_y=127)] + [_mk_inputs(main_y=127)] * 10)
     acts = [int(o["action_id"][0]) for o in outs]
-    assert ACT_DS_AIR in acts, f"held-B late up-flick never entered aerial up-B: {sorted(set(acts))}"
+    assert ACT_DS_AIR not in acts, f"Fall admitted held-B late up-flick: {sorted(set(acts))}"
 
 
-def test_aerial_up_b_mash_within_x1c_rejected() -> None:
-    # Freshness gate: a second up+B press whose gap from the previous press period is below
-    # p_ftCommonData->x1C is rejected (x68B carries the short gap on its first frame).
-    # The first press here is consumed by an immediate hitstun-free... simply: press up+B,
-    # return to neutral for fewer than x1C frames (x1C = tech_lr_debounce_frames = 20 on the
-    # extracted table for vanilla), press again - the second press must not enter while the
-    # first DS is still running anyway; so instead seed the gap directly: neutral 2 frames
-    # between releases is below the window and the second press must NOT re-enter after the
-    # first DS completes. Locked via a fall-window scenario: up+B held 1 frame WITHOUT
-    # entering (hitstun blocks dispatch), neutral 2, then up+B again in Fall - stale gap.
+def test_aerial_fall_up_b_current_b_edge_enters_without_presence_gate() -> None:
+    # Adjacent positive for the ordinary SpecialAir_CheckInput owner: a current B edge with up-stick
+    # from Fall still enters Dolphin Slash. This path must not depend on x686 presence freshness.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
     seed = _air_seed()
-    seed["hitstun"][0, 0] = np.uint8(2)  # blocks the first press from dispatching
-    outs = _run(seed, [_mk_inputs(buttons=B, main_y=127)] + [_mk_inputs()] * 2 +
-                [_mk_inputs(buttons=B, main_y=127)] + [_mk_inputs()] * 8)
+    outs = _run(seed, [_mk_inputs(buttons=B, main_y=127)] + [_mk_inputs()] * 8)
     acts = [int(o["action_id"][0]) for o in outs]
-    assert ACT_DS_AIR not in acts, (
-        f"mashed up+B within the x1C window re-entered aerial up-B: {sorted(set(acts))}"
-    )
+    assert ACT_DS_AIR in acts, f"B-edge Fall up-B did not enter: {sorted(set(acts))}"
 
 
 def test_under_lip_jump_lands_safely() -> None:

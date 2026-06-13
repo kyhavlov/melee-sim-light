@@ -188,6 +188,13 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->walk_retarget_tick_source_vel, 0, sizeof(float) * bp);
   memset(state->run_anim_source_vel, 0, sizeof(float) * bp);
   memset(state->turn_kneebend_facing_override, 0, sizeof(uint8_t) * bp);
+  memset(state->fall_fast_frame_start, 0, sizeof(uint8_t) * bp);
+  memset(state->fall_fast_seed_frame_start, 0, sizeof(uint8_t) * bp);
+  memset(state->fall_fast_seed_frame_start_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->common_fall_blend_x4, 0, sizeof(float) * bp);
+  memset(state->common_fall_blend_msid, 0, sizeof(uint16_t) * bp);
+  memset(state->squat_pass_x0, 0, sizeof(uint8_t) * bp);
+  memset(state->squat_pass_x4, 0, sizeof(uint8_t) * bp);
   memset(state->walk_use_raw_input_once, 0, sizeof(uint8_t) * bp);
   memset(state->x2228_b7, 0, sizeof(uint8_t) * bp);
   memset(state->fallspecial_landing_lag, 0, sizeof(float) * bp);

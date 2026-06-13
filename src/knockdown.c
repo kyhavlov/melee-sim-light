@@ -15,6 +15,7 @@
 #include "coll_env_flags.h"
 #include "common_params.h"
 #include "damage_terminal_owner.h"
+#include "grab_flow.h"
 #include "guard_lifecycle.h"
 #include "input.h"
 #include "input_axis.h"
@@ -1560,10 +1561,12 @@ void knockdown_update_pre_physics(MslBatch* batch) {
 
         if (!iasa_locked) {
           // Damage_IASA grounded path delegates to Wait_IASA when x221C_b6 is clear.
-          // Keep the grounded subset in decomp order: grounded A-attacks first, then guard
-          // ownership, then the later Wait IASA locomotion chain (jump, dash, squat, turn, walk).
+          // Keep the grounded subset in decomp order: Catch_CheckInput before grounded A-attacks,
+          // then guard ownership, then the later Wait IASA locomotion chain (jump, dash, squat,
+          // turn, walk).
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
           const uint16_t wait_iasa_owner_action = batch->state.action_id[idx];
           const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
           const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
@@ -1573,6 +1576,9 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           const uint8_t tilt_timer_x = batch->state.tilt_timer_x[idx];
           const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
           const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+          if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+            continue;
+          }
           if (locomotion_grounded_a_attack_try_enter_from_wait_iasa(batch, c, idx, buttons_pressed,
                                                                     stick_x, stick_y, tilt_timer_x,
                                                                     tilt_timer_y, facing_dir)) {

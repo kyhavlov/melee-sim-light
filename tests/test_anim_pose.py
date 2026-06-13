@@ -157,3 +157,47 @@ def test_anim_pose_matrix_raises_on_invalid_inputs() -> None:
             msl_binding.anim_pose_matrix(1, msid, 0, missing_part_id)
     finally:
         msl_binding.destroy(handle)
+
+
+def test_commonfall_blend_x4_one_matches_target_submotion_matrix() -> None:
+    # Source endpoint lock: ftCo_Fall_Anim_Inner runs ftAnim_8006FF74 rather than the
+    # lb_8000C490 blend helper when mv.co.fall*.x4 is exactly 1.0, so the collision sampler must
+    # publish the selected FallF/FallB target submotion matrix exactly.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+    # refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FF74
+    import msl_binding
+
+    fall_families = (
+        (20, 21, 22),  # ftCo_SM_Fall, ftCo_SM_FallF, ftCo_SM_FallB
+        (23, 24, 25),  # ftCo_SM_FallAerial, ftCo_SM_FallAerialF, ftCo_SM_FallAerialB
+        (26, 27, 28),  # ftCo_SM_FallSpecial, ftCo_SM_FallSpecialF, ftCo_SM_FallSpecialB
+    )
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        for char_id, anim_path in (
+            (1, Path("data/anims/fox.bin")),
+            (22, Path("data/anims/falco.bin")),
+            (18, Path("data/anims/marth.bin")),
+        ):
+            buf = anim_path.read_bytes()
+            joint_count, anim_count, joint_parts = _read_header(buf)
+            part_ids = [int(p) for p in joint_parts]
+            assert part_ids
+
+            for neutral_msid, forward_msid, backward_msid in fall_families:
+                for target_msid in (forward_msid, backward_msid):
+                    frame_count, _base = _find_anim_base_offset(
+                        buf=buf, joint_count=joint_count, anim_count=anim_count, msid=target_msid
+                    )
+                    frame = min(3, frame_count - 1)
+                    for part_id in part_ids:
+                        target = msl_binding.anim_pose_common_fall_blend_matrix(
+                            char_id, target_msid, target_msid, float(frame), part_id, 0.0
+                        )
+                        blended = msl_binding.anim_pose_common_fall_blend_matrix(
+                            char_id, neutral_msid, target_msid, float(frame), part_id, 1.0
+                        )
+                        assert np.array_equal(blended.view(np.uint32), target.view(np.uint32))
+    finally:
+        msl_binding.destroy(handle)

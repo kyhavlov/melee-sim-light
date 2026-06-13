@@ -64,6 +64,9 @@ struct MslBatch {
   // frame_pre_random_seed before this step. This disables old synthetic replay-clock advancement
   // while preserving source-site admission through rollout_clock_rng_owned.
   uint8_t* replay_frame_rng_applied;  // [batch]
+  // Runtime-only teacher-forced seed marker for the first frame after `reseed_seed*`. This is
+  // narrower than normal gameplay runtime and is cleared after the committed step.
+  uint8_t* replay_reseed_frame_active;  // [batch]
   // Runtime-only replay playback stage marker: the current Dream Land seed row exposes the first
   // post-publication Whispy wind state after a rollout has advanced past its reseed frame, so the
   // frame owes one source `ftColl_GetWindOffsetVec` application that happened before Slippi could

@@ -40,3 +40,12 @@ uint8_t locomotion_wait_iasa_locomotion_subset_try_enter(
 void msl_locomotion_enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t idx,
                                                          float landing_lag,
                                                          uint8_t allow_interrupt);
+
+// ftCo_Fall_Enter entry and the modeled non-special tail of ftCo_Fall_IASA_Inner. Character
+// modules that source-enter Fall from an Anim callback should run their character-special
+// ftCo_SpecialAir_CheckInput equivalent before calling the tail.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_IASA_Inner}
+void msl_locomotion_enter_fall_via_ftco_fall_enter(MslBatch* batch, const MslCharParams* ch,
+                                                   size_t idx);
+uint8_t msl_locomotion_run_fall_iasa_non_special_tail(MslBatch* batch, const MslCommonParams* c,
+                                                      const MslCharParams* ch, size_t idx);

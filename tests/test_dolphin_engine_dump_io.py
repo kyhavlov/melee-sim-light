@@ -144,7 +144,7 @@ def _build_dump(path: Path, *, version: int, port_ids: tuple[int, ...] | None = 
 
 
 def test_dolphin_ini_defaults_to_uncapped_jit_null_backends(tmp_path: Path) -> None:
-    _write_dolphin_ini(tmp_path, force_interpreter=False)
+    _write_dolphin_ini(tmp_path)
     ini = (tmp_path / "Config" / "Dolphin.ini").read_text()
     assert "GFXBackend = Null" in ini
     assert "CPUCore = 1" in ini
@@ -153,10 +153,11 @@ def test_dolphin_ini_defaults_to_uncapped_jit_null_backends(tmp_path: Path) -> N
     assert "Backend = NullSound" in ini
 
 
-def test_dolphin_ini_forces_interpreter_only_for_probe_hooks(tmp_path: Path) -> None:
-    _write_dolphin_ini(tmp_path, force_interpreter=True)
+def test_dolphin_ini_keeps_jit_for_bounded_probe_hooks(tmp_path: Path) -> None:
+    _write_dolphin_ini(tmp_path)
     ini = (tmp_path / "Config" / "Dolphin.ini").read_text()
-    assert "CPUCore = 0" in ini
+    assert "CPUCore = 1" in ini
+    assert "CPUCore = 0" not in ini
     assert "EmulationSpeed = 0.000" in ini
 
 

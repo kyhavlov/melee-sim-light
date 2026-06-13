@@ -286,6 +286,20 @@ static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t i
     batch->state.smash_charge_frames[idx] = 0u;
     batch->state.smash_charge_hold_frames_max[idx] = 0u;
     batch->state.smash_charge_saved_rate_fp_q16_16[idx] = 0;
+    // Common Fall/FallAerial/FallSpecial entry initializes mv.co.*.x4=0 and the selected smid to
+    // the neutral submotion. Clearing on all motion entries prevents stale blend pose from
+    // surviving into non-Fall states; the Anim callback reconstructs source x4/smid only while a
+    // Fall-family state is live.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::ftCo_FallAerial_Enter
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::inline0
+    batch->state.common_fall_blend_x4[idx] = 0.0f;
+    batch->state.common_fall_blend_msid[idx] = 0u;
+    // Decomp: Squat_Enter clears mv.co.squat.x0 before the platform-pass helper can arm it.
+    // Clearing on all motion entries prevents stale armed countdowns from surviving out of Squat.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Enter
+    batch->state.squat_pass_x0[idx] = 0u;
+    batch->state.squat_pass_x4[idx] = 0u;
   }
 
   attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
@@ -330,6 +344,7 @@ static inline void msl_anim_timebase_set_rate(MslBatch* batch, size_t idx, float
 }
 
 void anim_timebase_update_pre_input(MslBatch* batch);
+void anim_timebase_seed_common_fall_blend(MslBatch* batch, size_t idx, int16_t action_frame);
 
 // Apply deferred "tick once" requests (see MslState::anim_defer_tick_once).
 void anim_timebase_apply_deferred_tick_once_pre_collision(MslBatch* batch);

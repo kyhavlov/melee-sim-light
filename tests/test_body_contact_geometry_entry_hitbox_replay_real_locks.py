@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 import numpy as np
 import pytest
 from pathlib import Path
@@ -11,7 +13,38 @@ from tests.test_items_spawn_joint_replay_real_locks import (
 from tests.test_combat_ownership_seed_guardrail_locks import _DEBUG_SHIELD_CANDIDATE_DTYPE
 from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
 from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.extraction.char_registry import CHAR_BY_INTERNAL_ID
 from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+
+_DEBUG_CONTACT_CLASSIFIED_DTYPE = np.dtype(
+    [
+        ("attacker", "u1"),
+        ("defender", "u1"),
+        ("hitbox_id", "u1"),
+        ("contact_kind", "u1"),  # 0=BODY, 1=SHIELD
+        ("hurtcap_id", "u1"),
+        ("_pad0", "u1", (3,)),
+        ("attacker_msid", "<u2"),
+        ("attacker_action_frame", "<i2"),
+        ("hitbox_x", "<f4"),
+        ("hitbox_y", "<f4"),
+        ("hitbox_z", "<f4"),
+        ("hitbox_radius", "<f4"),
+        ("hitbox_damage", "<f4"),
+        ("hurtcap_ax", "<f4"),
+        ("hurtcap_ay", "<f4"),
+        ("hurtcap_az", "<f4"),
+        ("hurtcap_bx", "<f4"),
+        ("hurtcap_by", "<f4"),
+        ("hurtcap_bz", "<f4"),
+        ("hurtcap_radius", "<f4"),
+        ("shield_x", "<f4"),
+        ("shield_y", "<f4"),
+        ("shield_z", "<f4"),
+        ("shield_radius", "<f4"),
+    ],
+    align=False,
+)
 
 
 def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -> tuple[np.void, np.void]:
@@ -47,6 +80,43 @@ def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -
         binding.destroy(handle)
 
     return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0], ref
+
+
+def _rollout_window_with_seed(
+    dataset_path: Path, start: int, stop: int, seed: np.ndarray
+) -> tuple[np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    samples_u8, _seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, stop + 1):
+            binding.step_input(
+                handle,
+                samples_u8[record : record + 1, prev_input_off : prev_input_off + input_stride].copy(),
+                samples_u8[record : record + 1, input_off : input_off + input_stride].copy(),
+            )
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0], samples["ref_t1"][stop]
 
 
 def _step_one_row_with_seed_one_step(dataset_path: Path, record: int, seed: np.ndarray) -> tuple[np.void, np.void]:
@@ -94,6 +164,39 @@ def _dataset_byte_views(ds):
         int(samples.dtype.fields["prev_input_t"][1]),
         int(samples.dtype.fields["input_t"][1]),
     )
+
+
+def _collect_contact_debug_for_row(dataset_path: Path, record: int) -> tuple[np.void, np.ndarray]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    row = samples[record : record + 1]
+
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_bytes = samples_u8[record : record + 1, seed_off : seed_off + seed_stride].copy()
+    prev_input_bytes = samples_u8[
+        record : record + 1, prev_input_off : prev_input_off + input_stride
+    ].copy()
+    input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        contacts_raw, count = binding.debug_combat_contacts_classified(handle, 0, 256)
+        contacts = contacts_raw.reshape(-1).view(_DEBUG_CONTACT_CLASSIFIED_DTYPE)[:count].copy()
+    finally:
+        binding.destroy(handle)
+    return row["seed_t"][0], contacts
 
 
 def _step_one_row_with_inputs(
@@ -211,6 +314,148 @@ def _run_dataset_rollout_records(
     finally:
         binding.destroy(handle)
     return out_by_record
+
+
+def _action_id_enum_values(root: Path) -> dict[str, int]:
+    text = (root / "src/action_ids.h").read_text()
+    values: dict[str, int] = {}
+    for match in re.finditer(r"^\s*(MSL_(?:ACT|SM)_[A-Z0-9_]+)\s*=\s*(0x[0-9A-Fa-f]+|\d+)", text, re.MULTILINE):
+        values[match.group(1)] = int(match.group(2), 0)
+    return values
+
+
+def _commonfall_msids_for_action(root: Path, action_id: int) -> tuple[int, int, int]:
+    values = _action_id_enum_values(root)
+    families = (
+        (
+            ("MSL_ACT_FALL", "MSL_ACT_FALL_F", "MSL_ACT_FALL_B"),
+            ("MSL_SM_FALL", "MSL_SM_FALL_F", "MSL_SM_FALL_B"),
+        ),
+        (
+            ("MSL_ACT_FALL_AERIAL", "MSL_ACT_FALL_AERIAL_F", "MSL_ACT_FALL_AERIAL_B"),
+            ("MSL_SM_FALL_AERIAL", "MSL_SM_FALL_AERIAL_F", "MSL_SM_FALL_AERIAL_B"),
+        ),
+        (
+            ("MSL_ACT_FALL_SPECIAL", "MSL_ACT_FALL_SPECIAL_F", "MSL_ACT_FALL_SPECIAL_B"),
+            ("MSL_SM_FALL_SPECIAL", "MSL_SM_FALL_SPECIAL_F", "MSL_SM_FALL_SPECIAL_B"),
+        ),
+    )
+    for action_names, smid_names in families:
+        if action_id in {values[name] for name in action_names}:
+            return tuple(values[name] for name in smid_names)
+    raise AssertionError(f"action_id {action_id} is not a CommonFall blend action")
+
+
+def _commonfall_data_for_row(
+    root: Path, seed: np.void, player: int
+) -> tuple[float, float, float, tuple[int, int, int]]:
+    common = json.loads((root / "data/common/ft_common_data.json").read_text())
+    char_id = int(seed["char_id"][player])
+    char_info = CHAR_BY_INTERNAL_ID.get(char_id)
+    assert char_info is not None, f"unsupported char_id for CommonFall lock: {char_id}"
+    char_data = json.loads((root / f"data/characters/{char_info.name}.json").read_text())
+    msids = _commonfall_msids_for_action(root, int(seed["action_id"][player]))
+    return (
+        float(common["common_fall_blend_air_drift_threshold"]),
+        float(common["common_fall_blend_lerp"]),
+        float(char_data["air_drift_max"]),
+        msids,
+    )
+
+
+def _commonfall_target_from_speed(
+    speed_x: float,
+    facing_dir: float,
+    *,
+    threshold: float,
+    air_drift_max: float,
+    msids: tuple[int, int, int],
+) -> tuple[float, int]:
+    assert air_drift_max > 0.0
+    frac = float(speed_x) / float(air_drift_max)
+    frac = max(-1.0, min(1.0, frac))
+    abs_frac = abs(frac)
+    neutral, forwards, backwards = msids
+    if abs_frac <= threshold:
+        return 0.0, neutral
+    target = (abs_frac - threshold) / (1.0 - threshold)
+    msid = forwards if frac * float(facing_dir) > 0.0 else backwards
+    return target, msid
+
+
+def _commonfall_tick(x4: float, target: float, lerp: float) -> float:
+    return x4 + lerp * (target - x4)
+
+
+def _debug_commonfall_precombat_state_from_rollout(
+    dataset_path: Path, *, start: int, target_record: int, player: int
+) -> tuple[float, int]:
+    ds = read_dataset(str(dataset_path))
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(
+            handle, samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+        )
+        for record in range(start, target_record):
+            binding.step_input_replay_frame_rng(
+                handle,
+                samples_u8[record : record + 1, seed_off : seed_off + seed_stride].copy(),
+                samples_u8[record : record + 1, prev_input_off : prev_input_off + input_stride].copy(),
+                samples_u8[record : record + 1, input_off : input_off + input_stride].copy(),
+            )
+        binding.apply_replay_frame_rng(
+            handle,
+            samples_u8[target_record : target_record + 1, seed_off : seed_off + seed_stride].copy(),
+        )
+        binding.debug_step_input_pre_combat(
+            handle,
+            samples_u8[target_record : target_record + 1, prev_input_off : prev_input_off + input_stride].copy(),
+            samples_u8[target_record : target_record + 1, input_off : input_off + input_stride].copy(),
+        )
+        x4, msid = binding.debug_common_fall_blend_state(handle, 0, player)
+    finally:
+        binding.destroy(handle)
+    return float(x4), int(msid)
+
+
+def _debug_commonfall_precombat_state_from_seed(
+    dataset_path: Path, *, record: int, player: int
+) -> tuple[float, int]:
+    ds = read_dataset(str(dataset_path))
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, samples_u8[record : record + 1, seed_off : seed_off + seed_stride].copy())
+        binding.debug_step_input_pre_combat(
+            handle,
+            samples_u8[record : record + 1, prev_input_off : prev_input_off + input_stride].copy(),
+            samples_u8[record : record + 1, input_off : input_off + input_stride].copy(),
+        )
+        x4, msid = binding.debug_common_fall_blend_state(handle, 0, player)
+    finally:
+        binding.destroy(handle)
+    return float(x4), int(msid)
 
 
 def _run_slp_rollout_records(
@@ -512,7 +757,7 @@ def test_attackairlw_commonfall_matrix_only_positive_rejects_false_body_ewt_1019
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
@@ -531,6 +776,194 @@ def test_attackairlw_commonfall_matrix_only_positive_rejects_false_body_ewt_1019
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
     assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
     assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+
+    rollout, rollout_ref = _rollout_window_with_seed(dataset_path, 0, 1019, ds.samples[0]["seed_t"])
+    assert int(rollout["action_id"][defender]) == int(rollout_ref["action_id"][defender]) == 29
+    assert int(rollout["hitlag"][attacker]) == int(rollout_ref["hitlag"][attacker]) == 0
+    assert int(rollout["hitlag"][defender]) == int(rollout_ref["hitlag"][defender]) == 0
+    assert int(rollout["hitstun"][defender]) == int(rollout_ref["hitstun"][defender]) == 0
+
+
+@pytest.mark.integration
+def test_commonfall_transn_local_blend_rejects_false_body_dcc_5573() -> None:
+    # CommonFall collision-pose negative:
+    # DCC:5573 is a tight no-hit boundary after a Fall animation loop. Dolphin lbColl probes reject
+    # the p0 AttackS BODY candidate against p1's live Fall JObj pose, so the simulator must rebuild
+    # the ftAnim_8006FE9C local-SRT owner without blending pre-TransN ancestors or stale seed pose.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+    #   ftCo_Fall_Anim_Inner,ftCo_800CC988}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing validation dataset: {dataset_path}")
+
+    rows = _run_dataset_rollout_records(dataset_path, start=0, records=(5573,), replay_frame_rng=True)
+    out, ref = rows[5573]
+    defender = 1
+    assert int(ref["action_id"][defender]) == 29  # Fall, no BODY hit.
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "percent"):
+        assert out[field][defender] == pytest.approx(ref[field][defender])
+
+
+@pytest.mark.integration
+def test_commonfall_entry_tick_hidden_lane_iat_6425() -> None:
+    # Direct phase lock for the hidden CommonFall recurrence: after rolling through the
+    # Fall entry frame, the next pre-combat phase must have consumed the entry recurrence
+    # plus the current ftCo_Fall_Anim_Inner tick before BODY selection. This checks
+    # mv.co.fall.x4/smid directly rather than relying on downstream hit admission.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+    #   ftCo_Fall_Anim,ftCo_Fall_Anim_Inner,ftCo_800CC988}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing validation dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    player = 1
+    record = 6425
+    seed = ds.samples[record]["seed_t"]
+    enum_values = _action_id_enum_values(root)
+    assert int(seed["action_id"][player]) == enum_values["MSL_ACT_FALL"]
+    assert int(seed["action_frame"][player]) == 0
+
+    threshold, lerp, air_drift_max, msids = _commonfall_data_for_row(root, seed, player)
+    target, expected_msid = _commonfall_target_from_speed(
+        float(seed["speed_air_x_self"][player]),
+        float(seed["facing_dir1"][player]),
+        threshold=threshold,
+        air_drift_max=air_drift_max,
+        msids=msids,
+    )
+    expected_x4 = _commonfall_tick(_commonfall_tick(0.0, target, lerp), target, lerp)
+
+    x4, msid = _debug_commonfall_precombat_state_from_rollout(
+        dataset_path, start=0, target_record=record, player=player
+    )
+    assert msid == expected_msid
+    assert x4 == pytest.approx(expected_x4, abs=1.0e-6)
+
+
+@pytest.mark.integration
+def test_commonfall_seeded_fall_frame1_does_not_apply_entry_tick_iat_6426() -> None:
+    # Adjacent seeded Fall control: reseed reconstructs the real hidden x4 from action_frame,
+    # so a frame-1 Fall row must consume only the current Anim tick before BODY selection.
+    # Over-applying the entry recurrence here would advance mv.co.fall.x4 one tick too far.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing validation dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    player = 1
+    record = 6426
+    seed = ds.samples[record]["seed_t"]
+    enum_values = _action_id_enum_values(root)
+    assert int(seed["action_id"][player]) == enum_values["MSL_ACT_FALL"]
+    assert int(seed["action_frame"][player]) == 1
+
+    threshold, lerp, air_drift_max, msids = _commonfall_data_for_row(root, seed, player)
+    target, expected_msid = _commonfall_target_from_speed(
+        float(seed["speed_air_x_self"][player]),
+        float(seed["facing_dir1"][player]),
+        threshold=threshold,
+        air_drift_max=air_drift_max,
+        msids=msids,
+    )
+    seeded_x4 = _commonfall_tick(0.0, target, lerp)
+    expected_x4 = _commonfall_tick(seeded_x4, target, lerp)
+
+    x4, msid = _debug_commonfall_precombat_state_from_seed(
+        dataset_path, record=record, player=player
+    )
+    assert msid == expected_msid
+    assert x4 == pytest.approx(expected_x4, abs=1.0e-6)
+
+
+@pytest.mark.integration
+def test_commonfall_entry_tick_admits_attackairhi_iat_6428() -> None:
+    # Adjacent positive for the same CommonFall owner: IAT:6428 is reached through a free-running
+    # Fall entry, and Dolphin lbColl probes show the contact-phase Fall JObj consuming the hidden
+    # entry-frame x4 recurrence before p0 AttackAirHi hb0 hits p1 cap12. This guards the source
+    # phase owner, not a replay-derived scalar threshold.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+    #   ftCo_Fall_Anim_Inner,ftCo_800CC988}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing validation dataset: {dataset_path}")
+
+    rows = _run_dataset_rollout_records(dataset_path, start=0, records=(6428,), replay_frame_rng=True)
+    out, ref = rows[6428]
+    defender = 1
+    assert int(ref["action_id"][defender]) == 84  # DamageFlyHi.
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "percent"):
+        assert out[field][defender] == pytest.approx(ref[field][defender])
+
+
+@pytest.mark.integration
+def test_marth_uair_admits_commonfall_blended_body_pose_ldg_4539() -> None:
+    # Common Fall live blend BODY positive:
+    # - p1 Marth AttackAirHi hb0 is already extracted exactly to Dolphin's live hit center.
+    # - Vanilla accepts p0 Fox hurtcap 9 only after ftCo_Fall_Anim_Inner blends Fall toward FallB
+    #   via mv.co.fall.x4; the neutral state-age Fall pose misses.
+    # - This lock proves the owner is the defender-side CommonFall/FallF/FallB live JObj blend,
+    #   not a Marth sword hitbox adjustment or row-local combat exception.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+    #   ftCo_Fall_Anim_Inner,ftCo_800CC988}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    # reports/triage/marth_burndown_20260613T093537Z/batch15_ldg4539_collision_probe/
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing validation dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[4539]["seed_t"]
+    out, ref = _step_one_row_with_seed_one_step(dataset_path, 4539, seed)
+
+    defender = 0
+    attacker = 1
+    assert int(seed["action_id"][defender]) == 29  # Fall.
+    assert int(seed["animation_index"][defender]) == 20  # ftCo_SM_Fall.
+    assert int(seed["action_frame"][defender]) == 3
+    assert int(seed["action_id"][attacker]) == 68  # AttackAirHi.
+    assert int(ref["action_id"][defender]) == 90  # DamageFlyTop.
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "percent"):
+        assert out[field][defender] == pytest.approx(ref[field][defender])
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 7
+
+
+@pytest.mark.integration
+def test_commonfall_blend_positive_requires_drift_target_ldg_4539() -> None:
+    # Adjacent source-completion negative for the same CommonFall owner: when self_vel.x is inside
+    # p_ftCommonData->x444, ftCo_Fall_Anim_Inner filters x4 toward 0 and ftCo_800CC988 does not
+    # publish the FallB leg pose that admits LDG:4539.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing validation dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[4539]["seed_t"].copy()
+    defender = 0
+    seed["speed_air_x_self"][defender] = np.float32(0.0)
+    out, _ref = _step_one_row_with_seed_one_step(dataset_path, 4539, seed)
+
+    assert int(seed["action_id"][defender]) == 29  # Fall.
+    assert int(out["action_id"][defender]) == 29
+    assert int(out["hitlag"][defender]) == 0
+    assert int(out["hitstun"][defender]) == 0
 
 
 @pytest.mark.integration
@@ -2843,3 +3276,146 @@ def test_turn_to_walkslow_entry_hurtcaps_use_turn_pose_for_shine_body_iat_5052_r
         assert int(out[field][defender]) == int(ref[field][defender]), f"defender field={field}"
     assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)
     assert float(out["pos_x"][defender]) == pytest.approx(float(ref["pos_x"][defender]), abs=3e-5)
+
+
+@pytest.mark.integration
+def test_marth_dash_to_guardon_uses_frame_start_dash_body_pose_vsa_4317() -> None:
+    # Dash -> GuardOn Ft_MF_SkipAnim BODY pose owner:
+    # - Probe-backed vanilla evidence on VSA:4317 shows ftCo_800924C0 publishes GuardOn/-1 after
+    #   Dash_Anim has interpreted the live JObj tree, then ftColl_80078C70/lbColl_8000805C accept
+    #   Marth Fair against defender cap6/bone29 at Dash frame 2 after ShieldDesc misses.
+    # - The current action's GuardOn submotion frame-0 capsules are far above the sword and miss;
+    #   the same-frame frame-start Dash pose is the source-owned BODY publication.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ChangeMotionState}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, contacts = _collect_contact_debug_for_row(dataset_path, 4317)
+    defender = 0
+    attacker = 1
+    assert int(seed["action_id"][defender]) == 20  # Dash
+    assert int(seed["action_id"][attacker]) == 60  # AttackAirF
+    accepted = [
+        c
+        for c in contacts
+        if int(c["attacker"]) == attacker
+        and int(c["defender"]) == defender
+        and int(c["hitbox_id"]) == 0
+        and int(c["contact_kind"]) == 0
+        and int(c["hurtcap_id"]) == 6
+    ]
+    assert len(accepted) == 1
+
+    _seed, out, ref = _step_one_row(dataset_path, 4317)
+    for field in ("action_id", "animation_index", "action_frame", "hitlag", "hitstun", "instance_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_marth_attackairn_guardon_to_guard_dense_hitlist_suppresses_body_ipw_4229() -> None:
+    # AttackAirN Ft_MF_SkipHit victim-list carry into the first steady Guard frame:
+    # - p1 Marth NAir has a dense group-0 victim seed for p0's current Guard iid, while visible
+    #   BODY attribution still names the same source port from an older attacker instance.
+    # - GuardOn -> Guard does not clear that x914 HitCapsule victim ring on the source frame;
+    #   lbColl_8000ACFC therefore rejects the hb0 BODY fallthrough after ShieldDesc misses.
+    # - This lock is intentionally one-step only: stale dense seed provenance is not promoted into
+    #   free-running HitCapsule state without a current victims-ring owner.
+    # - Clearing only the dense group seed exposes the underlying geometry and reproduces the false
+    #   DamageHi3 transition, proving the lock is hitlist ownership rather than a Guard pose fit.
+    # refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_AttackAirN
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_ProcessHit_8006D1EC}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    attacker = 1
+    defender = 0
+    seed = ds.samples[4229:4230]["seed_t"].copy()
+    assert int(seed[0]["action_id"][attacker]) == 65  # AttackAirN
+    assert int(seed[0]["action_id"][defender]) == 179  # Guard
+    assert int(seed[0]["seed_prev_action_id"][defender]) == 178  # GuardOn
+    assert int(seed[0]["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
+    assert int(seed[0]["combat_hitlist_victim_iid"][attacker, 0, defender]) == int(
+        seed[0]["instance_id"][defender]
+    )
+    assert int(seed[0]["last_hit_by"][defender]) == int(seed[0]["source_port0"][attacker])
+    assert int(seed[0]["instance_hit_by"][defender]) != int(seed[0]["instance_id"][attacker])
+
+    out, ref = _step_one_row_with_seed(dataset_path, 4229, seed)
+    for field in ("action_id", "hitlag", "hitstun", "instance_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)
+
+    cleared = seed.copy()
+    cleared[0]["combat_hitlist_cd"][attacker, 0, defender] = np.uint16(0)
+    cleared[0]["combat_hitlist_victim_iid"][attacker, 0, defender] = np.uint16(0)
+    out_without_latch, _ = _step_one_row_with_seed(dataset_path, 4229, cleared)
+    assert int(out_without_latch["action_id"][defender]) == 77  # DamageHi3
+    assert int(out_without_latch["hitlag"][defender]) > 0
+    assert float(out_without_latch["percent"][defender]) > float(ref["percent"][defender])
+
+
+@pytest.mark.integration
+def test_marth_attackairn_stale_dense_guard_rows_still_allow_body_ipw_vsa() -> None:
+    # Negative boundary for the Guard dense-latch owner:
+    # - Continuing Guard rows can carry stale dense group state from older victim objects.
+    # - If the defender iid is not the dense victim iid, or the previous visible action was already
+    #   Guard, the source ring is not trusted to suppress a fresh BODY hit.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    cases = [
+        ("InternalPowerlessWallaby.msl", 464, 0, 76),  # continuing Guard, current iid seed.
+        ("VictoriousSpitefulAlpaca.msl", 5706, 0, 77),  # first Guard, stale victim iid.
+    ]
+    for dataset_name, record, defender, expected_action in cases:
+        dataset_path = root / "datasets/marth/replays/validation/marth" / dataset_name
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_path}")
+        ds = read_dataset(str(dataset_path))
+        seed = ds.samples[record:record + 1]["seed_t"].copy()
+        out, ref = _step_one_row_with_seed(dataset_path, record, seed)
+        assert int(ref["action_id"][defender]) == expected_action
+        for field in ("action_id", "hitlag", "hitstun", "instance_hit_by"):
+            assert int(out[field][defender]) == int(ref[field][defender]), (
+                f"{dataset_name}:{record}: field={field}"
+            )
+        assert float(out["percent"][defender]) == pytest.approx(
+            float(ref["percent"][defender]), abs=1e-6
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "defender", "expected_action"),
+    [
+        ("MotionlessAggressiveJay.msl", 734, 1, 178),  # GuardOn stays no-hit.
+        ("PriceyPartialAlbatross.msl", 5142, 0, 181),  # GuardSetOff shield-hit path stays exact.
+    ],
+)
+def test_guardon_frame_start_body_pose_does_not_broaden_adjacent_shield_rows(
+    dataset_name: str, record: int, defender: int, expected_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent" / dataset_name
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, record)
+    assert int(seed["action_id"][defender]) in (20, expected_action)
+    assert int(ref["action_id"][defender]) == expected_action
+    for field in ("action_id", "animation_index", "action_frame", "hitlag", "hitstun", "instance_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)

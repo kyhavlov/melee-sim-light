@@ -268,6 +268,14 @@ Interpreter-only probes are opt-in with flags such as `--collision-probe`,
 `MSL_*_PROBE_PATH` environment variables and frame gates. Normal engine dumps
 stay on the JIT/null-backend path.
 
+Interpreter mode is extremely slow. Keep the interpreter window to the exact
+target frame or two needed for the hidden event; do not use broad context
+windows in interpreter mode. Use a wider JIT dump window for surrounding rows
+and a tiny interpreter probe window for the event. `forensic_row_dump.py`
+defaults the interpreter window to the seed/ref target frames; direct
+`dolphin_engine_dump.py` calls warn when the interpreter span exceeds three
+consecutive frames.
+
 Rank fixed-horizon rollout-disruptive desyncs:
 
 ```bash

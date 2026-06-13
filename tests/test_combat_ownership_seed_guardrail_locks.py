@@ -365,6 +365,63 @@ def _run_rollout_window_rows_with_trace(
     return result
 
 
+def _run_rollout_window_rows(
+    ds_path: Path,
+    *,
+    start_record: int,
+    window_records: tuple[int, ...],
+    ucf_enabled: bool | None = None,
+    ucf_cardinals_1_0_enabled: bool | None = None,
+) -> dict[int, tuple[np.void, np.void]]:
+    ds = read_dataset(str(ds_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > max(window_records), "dataset too short for rollout lock window"
+    assert start_record <= min(window_records), "rollout start must be <= window start"
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = (
+        np.frombuffer(samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, seed_stride)
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    init_kwargs = {"batch_size": 1, "num_players": int(ds.header["num_players"])}
+    if ucf_enabled is not None:
+        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
+    if ucf_cardinals_1_0_enabled is not None:
+        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
+    handle = binding.init(**init_kwargs)
+    window_out: dict[int, np.void] = {}
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for rec in range(start_record, max(window_records) + 1):
+            row = samples[rec : rec + 1]
+            prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            if rec in window_records:
+                binding.write_compare(handle, out_compare_bytes)
+                window_out[rec] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+    finally:
+        binding.destroy(handle)
+
+    result: dict[int, tuple[np.void, np.void]] = {}
+    for rec in window_records:
+        ref_row = samples[rec : rec + 1]["ref_t1"][0]
+        result[rec] = (ref_row, window_out[rec])
+    return result
+
+
 def _run_pre_combat_debug_row(
     ds_path: Path, record: int, attacker: int, hb_id: int
 ) -> tuple[np.void, np.ndarray, np.ndarray, np.void]:
@@ -4033,6 +4090,151 @@ def test_throwhi_owner_before_victim_deferred_hitstun_tick_rows_and_adjacent_con
         _assert_transition_lock_fields_match_ref(
             out_row=out_row, ref_row=ref_row, record=rec, p=victim_p
         )
+
+
+@pytest.mark.integration
+def test_marth_throwhi_release_final_facing_carries_damageflytop_hurtcaps_qhp_rollout() -> None:
+    # Throw-release final-facing override:
+    # - ftCo_800DDDE4 writes `dmg.facing_dir_1 = -thrower->facing_dir` and that sign owns KB.
+    # - ftCo_800DE7C0 passes `facing_dir = -dmg.facing_dir_1` into ftCo_8008DCE0 when the raw
+    #   throw-hit angle is in (90,270), and ftCo_8008DCE0 applies that final facing before motion
+    #   entry/JObj publication.
+    # - QHP:231 is Marth ThrowHi (raw angle 93) entering DamageFlyTop; the carried facing determines
+    #   the terminal DamageFlyTop hurtcaps that Marth AttackHi3 samples at QHP:265.
+    # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Thrown.s::ftCo_800DE7C0
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    rows = _run_rollout_window_rows(
+        dataset_path,
+        start_record=190,
+        window_records=(231, 264, 265),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    ref_231, out_231 = rows[231]
+    assert int(out_231["action_id"][0]) == int(ref_231["action_id"][0]) == 90  # DamageFlyTop.
+    assert int(out_231["facing"][0]) == int(ref_231["facing"][0]) == 0
+    assert int(out_231["hitstun"][0]) == int(ref_231["hitstun"][0]) == 36
+
+    ref_264, out_264 = rows[264]
+    assert int(out_264["action_id"][0]) == int(ref_264["action_id"][0]) == 90
+    assert int(out_264["facing"][0]) == int(ref_264["facing"][0]) == 0
+    assert int(out_264["hitstun"][0]) == int(ref_264["hitstun"][0]) == 3
+
+    ref_265, out_265 = rows[265]
+    for field in ("action_id", "animation_index", "action_frame", "facing", "hitlag", "hitstun"):
+        assert int(out_265[field][0]) == int(ref_265[field][0]), f"field={field}"
+    assert float(out_265["percent"][0]) == pytest.approx(float(ref_265["percent"][0]))
+    assert float(out_265["speed_x_attack"][0]) == pytest.approx(float(ref_265["speed_x_attack"][0]))
+    assert float(out_265["speed_y_attack"][0]) == pytest.approx(float(ref_265["speed_y_attack"][0]))
+
+
+@pytest.mark.integration
+def test_marth_attacks4_hitbox_pose_recomposes_transn_tail_pfz() -> None:
+    # Offensive HitCapsule pose publication:
+    # - ftAction_8007121C creates Marth AttackS4 hitboxes on sword bones under FtPart_XRotN.
+    # - lb_8000B1CC samples the live JObj matrix, which includes the current FtPart_TransN tail.
+    # - MSL strips TransN from SSANIM01 matrices, so hitbox refresh must recompose that tail for
+    #   BODY collision attachments before root facing. PFZ:1838 is the witness: without the tail,
+    #   the sim selected hb3/tipper (20 damage, hitlag 9); vanilla selected hb0/sour
+    #   (14 damage, hitlag 7).
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    # data/anims/marth.bin SSANIM01 v4 TransN tail
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/ParallelFamiliarZebra.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    target_record = 1838
+    attacker = 1
+    victim = 0
+    seed, contacts, _shield_world, _timing = _run_pre_combat_debug_row(
+        dataset_path, target_record, attacker, 0
+    )
+    assert int(seed["action_id"][attacker]) == 60  # ftCo_SM_AttackS4S
+    assert int(seed["action_frame"][attacker]) == 10
+
+    body_hits = [
+        c
+        for c in contacts
+        if int(c["attacker"]) == attacker
+        and int(c["defender"]) == victim
+        and int(c["contact_kind"]) == 0
+    ]
+    assert body_hits, "expected Marth AttackS4 BODY contact candidates before combat"
+    sour_hb0 = [
+        c
+        for c in body_hits
+        if int(c["hitbox_id"]) == 0 and float(c["hitbox_damage"]) == pytest.approx(14.0)
+    ]
+    assert sour_hb0, "expected source hb0 sour contact after TransN-tail recomposition"
+    assert float(sour_hb0[0]["hitbox_x"]) == pytest.approx(-67.94525146484375, abs=2e-5)
+    assert float(sour_hb0[0]["hitbox_y"]) == pytest.approx(12.447785377502441, abs=2e-5)
+
+    _seed, ref, out = _run_one_step_row(
+        dataset_path,
+        target_record,
+        victim,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    for p in (attacker, victim):
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=target_record, p=p)
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]))
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 7
+
+
+@pytest.mark.integration
+def test_marth_attacks4_seed_x58_recomposes_transn_tail_rws() -> None:
+    # Teacher-forced HitCapsule.x58 seed reconstruction:
+    # - ftColl_8007AD18 stores previous/current HitCapsule endpoints as x58/x4C.
+    # - Marth AttackS4 sword hitboxes under FtPart_XRotN need the previous live JObj endpoint
+    #   after recomposing the FtPart_TransN tail, not the stripped SSANIM01 matrix alone.
+    # - RWS:2119 is the witness: Dolphin's lbColl_8000805C accepted hb3 with x58.x=63.235756;
+    #   the stripped seed endpoint missed Falco's hurtcap and left the victim in Wait.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+    # data/anims/marth.tracks.bin uses_root_motion / data/anims/marth.bin TransN tail
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[2119]
+    attacker = 0
+    victim = 1
+    assert int(row["seed_t"]["action_id"][attacker]) == 60  # ftCo_SM_AttackS4S.
+    assert int(row["seed_t"]["action_frame"][attacker]) == 11
+    assert int(row["seed_t"]["combat_hitbox_prev_valid"][attacker, 3]) == 1
+    assert float(row["seed_t"]["combat_hitbox_prev_x"][attacker, 3]) == pytest.approx(
+        63.235755920410156, abs=2e-5
+    )
+    assert float(row["seed_t"]["combat_hitbox_prev_y"][attacker, 3]) == pytest.approx(
+        15.834148406982422, abs=2e-5
+    )
+
+    _seed, ref, out = _run_one_step_row(
+        dataset_path,
+        2119,
+        victim,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    for p in (attacker, victim):
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=2119, p=p)
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 9
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim]) == 69
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]))
 
 
 @pytest.mark.integration

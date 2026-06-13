@@ -584,23 +584,41 @@ void grab_attachment_apply_capture_delta_now(MslBatch* batch, int bi, int victim
   if (ch != NULL) {
     anchor_part = ch->grab_capture_anchor_part_id;
   }
-  // Contract: SSANIM01 matrices are unscaled; multiply translations by fighter_scale_y*model_scaling
-  // to match lb_8000B1CC world space (ftCo_Attack100.s::fn_800DAD18).
+  // CapturePulled/Wait/Damage Phys samples the live JObj graph with lb_8000B1CC after the frame's
+  // AObj interpretation. Use the f32 collision-matrix path here; the integer SSANIM01 helper is a
+  // close authored-pose approximation, but it can publish a different grabber anchor/XRotN delta
+  // for Marth CatchPull and drift later BODY hit selection.
+  // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18
   const float owner_scale_y = pose_model_scale_y(batch, oidx);
-  (void)pose_part_origin_world_facing_yrot90(
-      &ax, &ay, &az, batch->state.char_id[oidx], batch->state.animation_index[oidx],
-      batch->state.anim_frame_f32[oidx], anchor_part, batch->state.pos_x[oidx],
-      batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y, batch->state.facing[oidx]);
+  if (pose_part_origin_world_f32_facing_yrot90(
+          &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx],
+          batch->state.anim_frame_f32[oidx], anchor_part, batch->state.pos_x[oidx],
+          batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y,
+          batch->state.facing[oidx]) != 0) {
+    (void)pose_part_origin_world_facing_yrot90(
+        &ax, &ay, &az, batch->state.char_id[oidx], batch->state.animation_index[oidx],
+        batch->state.anim_frame_f32[oidx], anchor_part, batch->state.pos_x[oidx],
+        batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y,
+        batch->state.facing[oidx]);
+  }
 
   float vx = batch->state.pos_x[vidx];
   float vy = batch->state.pos_y[vidx];
   float vz = batch->state.pos_z[vidx];
   const float victim_scale_y = pose_model_scale_y(batch, vidx);
-  (void)pose_part_origin_world_facing_yrot90(
-      &vx, &vy, &vz, batch->state.char_id[vidx], batch->state.animation_index[vidx],
-      batch->state.anim_frame_f32[vidx], (uint16_t)MSL_FTPART_XROTN, batch->state.pos_x[vidx],
-      batch->state.pos_y[vidx], batch->state.pos_z[vidx], victim_scale_y,
-      batch->state.facing[vidx]);
+  if (pose_part_origin_world_f32_facing_yrot90(
+          &vx, &vy, &vz, batch, vidx, batch->state.animation_index[vidx],
+          batch->state.anim_frame_f32[vidx], (uint16_t)MSL_FTPART_XROTN, batch->state.pos_x[vidx],
+          batch->state.pos_y[vidx], batch->state.pos_z[vidx], victim_scale_y,
+          batch->state.facing[vidx]) != 0) {
+    (void)pose_part_origin_world_facing_yrot90(
+        &vx, &vy, &vz, batch->state.char_id[vidx], batch->state.animation_index[vidx],
+        batch->state.anim_frame_f32[vidx], (uint16_t)MSL_FTPART_XROTN, batch->state.pos_x[vidx],
+        batch->state.pos_y[vidx], batch->state.pos_z[vidx], victim_scale_y,
+        batch->state.facing[vidx]);
+  }
 
   // Decomp-shaped application: `cur_pos += (sp20 - sp2c)` in world space.
   batch->state.pos_x[vidx] += ax - vx;

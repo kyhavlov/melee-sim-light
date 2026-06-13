@@ -54,6 +54,8 @@
   "combo_push_stronger_count_threshold": 13,
   "combo_push_timer_frames": 20,
   "combo_timer_post_hitstun_frames": 2,
+  "common_fall_blend_air_drift_threshold": 0.10000000149011612,
+  "common_fall_blend_lerp": 0.5,
   "crouch_release_stick_threshold": 0.625,
   "crouch_stick_threshold": 0.6875,
   "cstick_smash_threshold": 0.800000011920929,

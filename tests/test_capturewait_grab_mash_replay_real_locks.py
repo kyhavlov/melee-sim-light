@@ -231,6 +231,118 @@ def test_grab_breakout_cut_actions_end_through_common_source_paths() -> None:
     assert int(out["action_id"][2, p]) == 29  # Fall
 
 
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "player"),
+    [
+        ("QuestionableHarmfulPanther.msl", 3110, 0),
+        ("WellWornSmallGoshawk.msl", 5180, 0),
+        ("WellWornSmallGoshawk.msl", 5322, 0),
+    ],
+)
+def test_capturejump_floor_contact_uses_aircatchhit_basic_landing(
+    dataset_name: str, record: int, player: int
+) -> None:
+    # CaptureJump has its own Phys/Coll owner:
+    # - Phys calls ftCommon_Fall + ftCommon_8007D268, so gravity and common air drift apply before
+    #   integration without inheriting ft_80084DB0's fastfall latch.
+    # - Coll calls ftCo_AirCatchHit_Coll, which routes floor contact through ft_80082B1C into
+    #   Landing/Wait. The MSLMSO01 FT80082B1C_BASIC_LANDING_COLL class owns this runtime predicate.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CaptureJump_Phys,ftCo_CaptureJump_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::{ftCo_AirCatchHit_Coll,ft_80082B1C}
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / "datasets/marth/replays/validation/marth" / dataset_name
+    seed, ref, out = _run_one_step_row(ds_path, record, player)
+
+    assert int(seed["action_id"][player]) == 230  # CaptureJump
+    assert int(ref["action_id"][player]) == 42  # Landing
+    assert int(out["action_id"][player]) == int(ref["action_id"][player])
+    assert int(out["animation_index"][player]) == int(ref["animation_index"][player])
+    assert int(out["action_frame"][player]) == int(ref["action_frame"][player])
+    assert int(out["on_ground"][player]) == int(ref["on_ground"][player])
+    assert int(out["instance_id"][player]) == int(ref["instance_id"][player])
+    np.testing.assert_allclose(float(out["pos_x"][player]), float(ref["pos_x"][player]), atol=1e-6)
+    np.testing.assert_allclose(float(out["pos_y"][player]), float(ref["pos_y"][player]), atol=1e-6)
+    np.testing.assert_allclose(
+        float(out["speed_air_x_self"][player]), float(ref["speed_air_x_self"][player]), atol=1e-6
+    )
+    np.testing.assert_allclose(
+        float(out["speed_ground_x_self"][player]),
+        float(ref["speed_ground_x_self"][player]),
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        float(out["speed_y_self"][player]), float(ref["speed_y_self"][player]), atol=1e-6
+    )
+
+
+def test_capturewait_and_pulled_do_not_inherit_capturejump_landing_callback() -> None:
+    # Negative control for the generated owner: CapturePulled*/CaptureWait* have separate captured
+    # victim collision callbacks and must not become basic Landing merely because their root crosses
+    # the floor. The ft_80082B1C AirCatchHit path is specific here to CaptureJump.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CapturePulledHi_Coll,ftCo_CaptureWaitHi_Coll,ftCo_CaptureJump_Coll}
+    seed = np.zeros((3,), dtype=SEED_DTYPE)
+    seed["stage_id"] = np.uint32(32)
+    seed["num_players"] = np.uint8(2)
+    seed["char_id"][:, :2] = np.uint8([1, 2])
+    seed["stocks"][:, :2] = np.uint8([4, 4])
+    seed["facing"][:, :2] = np.uint8([1, 1])
+    seed["facing_dir1"][:, :2] = np.int8([1, 1])
+    seed["jumps_left"][:, :2] = np.uint8([2, 2])
+    seed["frame_speed_mul_f32"][:, :2] = np.float32(1.0)
+    seed["fighter_scale_y"][:, :2] = np.float32(1.0)
+    seed["grab_owner_port"][:, 0] = np.uint8(1)
+
+    p = 0
+    seed["action_id"][:, p] = np.uint16([223, 224, 227])  # PulledHi/WaitHi/WaitLw
+    seed["animation_index"][:, p] = np.uint32([253, 254, 255])
+    seed["action_frame"][:, p] = np.int16([5, 5, 5])
+    seed["anim_frame_f32"][:, p] = np.float32([5.0, 5.0, 5.0])
+    seed["on_ground"][:, p] = np.uint8(0)
+    seed["ground_id"][:, p] = np.uint16(0xFFFF)
+    seed["pos_x"][:, p] = np.float32(0.0)
+    seed["pos_y"][:, p] = np.float32(-2.0)
+    seed["speed_y_self"][:, p] = np.float32(-2.0)
+
+    binding = pytest.importorskip("msl_binding")
+    input_stride = int(binding.sizes()["input"])
+    prev_input = np.zeros((3, input_stride), dtype=np.uint8)
+    cur_input = np.zeros((3, input_stride), dtype=np.uint8)
+
+    out = _step(seed, prev_input, cur_input, num_players=2)
+    assert int(out["action_id"][0, p]) != 42
+    assert int(out["action_id"][1, p]) != 42
+    assert int(out["action_id"][2, p]) != 42
+
+
+@pytest.mark.integration
+def test_fallspecial_keeps_landingfallspecial_despite_basic_landing_callback_class() -> None:
+    # Regression control for the CaptureJump owner admission gate:
+    # FallSpecial also carries the generated FT80082B1C_BASIC_LANDING_COLL class, but the common
+    # air-locomotion fallback has a source-owned override to LandingFallSpecial. The CaptureJump
+    # non-locomotion admission must not steal FallSpecial into basic Landing.
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ft_800831CC}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    seed, ref, out = _run_one_step_row(
+        ds_path,
+        2648,
+        0,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    assert int(seed["action_id"][0]) == 35  # FallSpecial.
+    assert int(ref["action_id"][0]) == 43  # LandingFallSpecial.
+    assert int(out["action_id"][0]) == int(ref["action_id"][0])
+    assert int(out["animation_index"][0]) == int(ref["animation_index"][0])
+    assert int(out["on_ground"][0]) == int(ref["on_ground"][0])
+
+
 @pytest.mark.integration
 def test_doubles_capturewait_seed_lanes_prevent_zero_timer_false_breakout() -> None:
     # Regression lock for 4-player preprocessing:

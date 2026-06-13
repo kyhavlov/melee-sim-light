@@ -28,10 +28,13 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
         "data/common/ft_common_data.json",
         "data/characters/fox.json",
         "data/characters/falco.json",
+        "data/characters/marth.json",
         "data/anims/fox.tracks.bin",
         "data/anims/falco.tracks.bin",
+        "data/anims/marth.tracks.bin",
         "data/ecb/fox_bottom.bin",
         "data/ecb/falco_bottom.bin",
+        "data/ecb/marth_bottom.bin",
     ]
     missing = [rel for rel in required if not (root / rel).exists()]
     if missing:
@@ -432,6 +435,50 @@ def test_capturepulledlw_catchdash_connect_runs_immediate_floor_callbacks_qgd_ro
         assert int(out["action_id"][victim_p]) == int(ref["action_id"][victim_p]) == ACT_CAPTURE_WAIT_LW
         assert int(out["instance_id"][victim_p]) == int(ref["instance_id"][victim_p]) == 992
         assert int(out["action_frame"][victim_p]) == int(ref["action_frame"][victim_p]) == expected_frame
+
+
+@pytest.mark.integration
+def test_capturepulledlw_steady_phys_uses_live_jobj_delta_qhp_marth_rollout() -> None:
+    # Replay-real lock for steady grounded CapturePulledLw attachment:
+    # - fn_800DAADC grounded catch-connect entry does not move X immediately.
+    # - The next CapturePulledLw Phys callback runs fn_800DAD18, sampling the grabber's
+    #   capturedamage.x18 joint and victim XRotN through live JObjs (`lb_8000B1CC`) after AObj
+    #   interpretation. Integer SSANIM matrices underpublish Marth CatchPull's attachment delta and
+    #   leave a persistent X drift that later changes BODY contact selection.
+    # - Row 265's remaining DamageFlyN/Lw split is intentionally not locked here; that belongs to
+    #   the terminal DamageFlyTop hurtcap-pose owner once the capture position is correct.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAADC,fn_800DAD18}
+    # refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _aggregate_validation_dataset_path(
+        root, "marth", "QuestionableHarmfulPanther.msl"
+    )
+
+    victim_p = 0
+    owner_p = 1
+    rollout = _run_rollout_records(dataset_path, 190, (191, 192, 264))
+
+    ref_191, out_191 = rollout[191]
+    assert int(out_191["action_id"][victim_p]) == int(ref_191["action_id"][victim_p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out_191["action_frame"][victim_p]) == int(ref_191["action_frame"][victim_p]) == 2
+    assert int(out_191["action_id"][owner_p]) == int(ref_191["action_id"][owner_p]) == 213
+    assert int(out_191["action_frame"][owner_p]) == int(ref_191["action_frame"][owner_p]) == 7
+    assert float(out_191["pos_x"][victim_p]) == pytest.approx(float(ref_191["pos_x"][victim_p]), abs=1e-5)
+    assert float(out_191["pos_y"][victim_p]) == pytest.approx(float(ref_191["pos_y"][victim_p]), abs=1e-6)
+
+    ref_192, out_192 = rollout[192]
+    assert int(out_192["action_id"][victim_p]) == int(ref_192["action_id"][victim_p]) == ACT_CAPTURE_WAIT_LW
+    assert int(out_192["action_id"][owner_p]) == int(ref_192["action_id"][owner_p]) == 216
+    assert float(out_192["pos_x"][victim_p]) == pytest.approx(float(ref_192["pos_x"][victim_p]), abs=1e-5)
+    assert float(out_192["pos_y"][victim_p]) == pytest.approx(float(ref_192["pos_y"][victim_p]), abs=1e-6)
+
+    ref_264, out_264 = rollout[264]
+    assert int(out_264["action_id"][victim_p]) == int(ref_264["action_id"][victim_p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out_264["action_frame"][victim_p]) == int(ref_264["action_frame"][victim_p]) == 34
+    assert float(out_264["pos_x"][victim_p]) == pytest.approx(float(ref_264["pos_x"][victim_p]), abs=1e-5)
+    assert float(out_264["pos_y"][victim_p]) == pytest.approx(float(ref_264["pos_y"][victim_p]), abs=1e-6)
 
 
 @pytest.mark.integration

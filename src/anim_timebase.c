@@ -17,6 +17,123 @@
 
 enum { Ft_MF_KeepFastFall = 1 << 0 };
 
+static float anim_timebase_common_fall_blend_target(const MslBatch* batch, size_t idx,
+                                                    const MslCommonParams* c,
+                                                    const MslCharParams* ch, uint16_t neutral_smid,
+                                                    uint16_t forwards_smid, uint16_t backwards_smid,
+                                                    uint16_t* out_smid) {
+  if (batch == NULL || c == NULL || ch == NULL || !(ch->air_drift_max > 0.0f)) {
+    if (out_smid != NULL) {
+      *out_smid = neutral_smid;
+    }
+    return 0.0f;
+  }
+  float frac = batch->state.speed_air_x_self[idx] / ch->air_drift_max;
+  if (frac > 1.0f) {
+    frac = 1.0f;
+  } else if (frac < -1.0f) {
+    frac = -1.0f;
+  }
+  const float abs_frac = fabsf(frac);
+  const float threshold = c->common_fall_blend_air_drift_threshold;
+  if (!(abs_frac > threshold) || !(threshold < 1.0f)) {
+    if (out_smid != NULL) {
+      *out_smid = neutral_smid;
+    }
+    return 0.0f;
+  }
+  if (out_smid != NULL) {
+    const float facing_dir = (batch->state.facing_dir1[idx] < 0) ? -1.0f : 1.0f;
+    *out_smid = (frac * facing_dir > 0.0f) ? forwards_smid : backwards_smid;
+  }
+  return (abs_frac - threshold) / (1.0f - threshold);
+}
+
+static void anim_timebase_common_fall_blend_tick(MslBatch* batch, size_t idx,
+                                                 const MslCommonParams* c,
+                                                 const MslCharParams* ch) {
+  if (batch == NULL) {
+    return;
+  }
+  uint16_t neutral = 0u;
+  uint16_t forwards = 0u;
+  uint16_t backwards = 0u;
+  if (!msl_action_common_fall_blend_msids(batch->state.action_id[idx], &neutral, &forwards,
+                                          &backwards)) {
+    batch->state.common_fall_blend_x4[idx] = 0.0f;
+    batch->state.common_fall_blend_msid[idx] = 0u;
+    return;
+  }
+  if (batch->state.common_fall_blend_msid[idx] == 0u) {
+    batch->state.common_fall_blend_msid[idx] = neutral;
+  }
+  float x4 = batch->state.common_fall_blend_x4[idx];
+  uint16_t target_smid = neutral;
+  const float target = anim_timebase_common_fall_blend_target(batch, idx, c, ch, neutral, forwards,
+                                                              backwards, &target_smid);
+  if (x4 == 0.0f && batch->state.action_frame[idx] == 1) {
+    // A visible post-frame Fall-family action_frame==0 row has already passed the source Anim
+    // owner that initializes mv.co.*.x4 before Slippi publishes it. When free-running into the
+    // next frame, carry that hidden entry tick before applying the current frame's Anim tick.
+    // Dolphin lbColl probes on ImpassionedAlarmedTarsier.msl:6428 show contact-phase Fall JObjs
+    // consuming this hidden recurrence before BODY admission; without it the live rollout samples
+    // one CommonFall blend tick behind source.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+    //   ftCo_Fall_Anim,ftCo_Fall_Anim_Inner,ftCo_800CC988}
+    x4 += c->common_fall_blend_lerp * (target - x4);
+    if (x4 != 0.0f && target_smid != batch->state.common_fall_blend_msid[idx]) {
+      batch->state.common_fall_blend_msid[idx] = target_smid;
+    }
+  }
+  x4 += c->common_fall_blend_lerp * (target - x4);
+  if (x4 < 0.0f) {
+    x4 = 0.0f;
+  } else if (x4 > 1.0f) {
+    x4 = 1.0f;
+  }
+  // Source updates fp->mv.co.fall.smid only from the same branch that publishes the alternate
+  // submotion JObj. A zero x4 leaves the previous selected smid live, but collision consumes no
+  // CommonFall blend while the scalar is zero.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+  if (x4 != 0.0f && target_smid != batch->state.common_fall_blend_msid[idx]) {
+    batch->state.common_fall_blend_msid[idx] = target_smid;
+  }
+  batch->state.common_fall_blend_x4[idx] = x4;
+}
+
+void anim_timebase_seed_common_fall_blend(MslBatch* batch, size_t idx, int16_t action_frame) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+  float x4 = 0.0f;
+  uint16_t neutral = 0u;
+  uint16_t forwards = 0u;
+  uint16_t backwards = 0u;
+  uint16_t stored_smid = 0u;
+  if (c != NULL && msl_action_common_fall_blend_msids(batch->state.action_id[idx], &neutral,
+                                                      &forwards, &backwards)) {
+    stored_smid = neutral;
+    for (int16_t i = 0; i < action_frame; i++) {
+      uint16_t target_smid = neutral;
+      const float target = anim_timebase_common_fall_blend_target(
+          batch, idx, c, ch, neutral, forwards, backwards, &target_smid);
+      x4 += c->common_fall_blend_lerp * (target - x4);
+      if (x4 < 0.0f) {
+        x4 = 0.0f;
+      } else if (x4 > 1.0f) {
+        x4 = 1.0f;
+      }
+      if (x4 != 0.0f && target_smid != stored_smid) {
+        stored_smid = target_smid;
+      }
+    }
+  }
+  batch->state.common_fall_blend_x4[idx] = x4;
+  batch->state.common_fall_blend_msid[idx] = stored_smid;
+}
+
 static inline uint8_t anim_timebase_try_rebound_anim_speed_from_ground_vel(const MslCommonParams* c,
                                                                            const MslCharParams* ch,
                                                                            float ground_speed_x,
@@ -1187,6 +1304,12 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       }
 
       msl_anim_timebase_recompute_derived(batch, idx);
+      // Fall/FallAerial/FallSpecial Anim callback owner:
+      // source advances the AObj timeline, then ftCo_Fall_Anim_Inner updates mv.co.*.x4 and
+      // ftCo_800CC988 publishes the blended neutral/F/B JObj pose before BODY collision refresh.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+      //   ftCo_Fall_Anim,ftCo_Fall_Anim_Inner,ftCo_800CC988}
+      anim_timebase_common_fall_blend_tick(batch, idx, c, ch);
 
       // Action-script pseudo-random SFX command RNG lane:
       // - Command opcode 38 (`ftAction_80071FC8`) consumes one HSD_Randi(random_range) when the

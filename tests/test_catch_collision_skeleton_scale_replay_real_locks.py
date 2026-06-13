@@ -24,13 +24,19 @@ _MAJ_DATASET = (
 _MGS_DATASET = (
     "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl"
 )
+_MARTH_VSA_DATASET = "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+_MARTH_RWS_DATASET = "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+_MARTH_IPW_DATASET = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
 
 _ACT_CATCH = 212
 _ACT_CATCH_PULL = 213
+_ACT_CATCH_DASH = 214
+_ACT_CATCH_DASH_PULL = 215
 _ACT_JUMP_F = 25
 _ACT_FX_SPECIAL_LW_START = 360
 _ACT_DAMAGE_FLY_TOP = 90
 _ACT_CAPTURE_PULLED_HI = 223
+_ACT_CAPTURE_PULLED_LW = 226
 _STAGE_FINAL_DESTINATION = 32
 
 
@@ -113,6 +119,92 @@ def test_catch_collision_skeleton_scale_still_connects_nearby_positive() -> None
     assert int(ref["action_id"][victim]) == _ACT_CAPTURE_PULLED_HI
     assert int(out["action_id"][catcher]) == _ACT_CATCH_PULL
     assert int(out["action_id"][victim]) == _ACT_CAPTURE_PULLED_HI
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset", "miss_record", "connect_record"),
+    [
+        (_MARTH_VSA_DATASET, 6787, 6788),
+        (_MARTH_RWS_DATASET, 1810, 1811),
+    ],
+)
+def test_marth_root_authored_catch_keeps_source_reach_without_early_connect(
+    dataset: str, miss_record: int, connect_record: int
+) -> None:
+    # Marth's Catch/CatchDash HitCapsules are authored on FtPart 0. The non-root
+    # collision-skeleton scale counterfactual used by Falco's part-1 Catch miss must not shrink
+    # these root-authored capsules: vanilla accepts the marginal connect on the next active row, but
+    # the adjacent row stays a miss.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_8007AD18}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC
+    # data/moves/marth.json::ftCo_SM_Catch create_hitbox bone=0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    ds_path = root / dataset
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {dataset}")
+
+    catcher = 0
+    victim = 1
+    seed, ref, out = _run_one_step_row(ds_path, miss_record, catcher)
+    assert int(seed["action_id"][catcher]) == _ACT_CATCH
+    assert int(ref["action_id"][catcher]) == _ACT_CATCH
+    assert int(out["action_id"][catcher]) == _ACT_CATCH
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim])
+
+    seed, ref, out = _run_one_step_row(ds_path, connect_record, catcher)
+    assert int(seed["action_id"][catcher]) == _ACT_CATCH
+    assert int(ref["action_id"][catcher]) == _ACT_CATCH_PULL
+    assert int(ref["action_id"][victim]) == _ACT_CAPTURE_PULLED_LW
+    assert int(out["action_id"][catcher]) == _ACT_CATCH_PULL
+    assert int(out["action_id"][victim]) == _ACT_CAPTURE_PULLED_LW
+    assert int(out["instance_id"][catcher]) == int(ref["instance_id"][catcher])
+    assert int(out["instance_id"][victim]) == int(ref["instance_id"][victim])
+
+
+@pytest.mark.integration
+@pytest.mark.xfail(
+    strict=False,
+    reason=(
+        "Residual witness: IPW:7311 needs source/data proof for any root-authored CatchDash "
+        "scale distinction before it can be a normal source-positive lock."
+    ),
+)
+def test_marth_root_catchdash_scale_distinction_residual_witness() -> None:
+    # Marth root-authored standing Catch and CatchDash both use part-0 HitCapsules in extracted
+    # data. The runtime deliberately does not apply the non-root model-scale compensation to
+    # CatchDash until a source owner proves that distinction. Keep IPW:7311 visible as residual
+    # debt, while IPW:7737 remains the standing-Catch over-admission negative.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_8007AD18}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC
+    # data/moves/marth.json::{ftCo_SM_Catch,ftCo_SM_CatchDash} create_hitbox bone=0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    ds_path = root / _MARTH_IPW_DATASET
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {_MARTH_IPW_DATASET}")
+
+    owner = 1
+    victim = 0
+    seed, ref, out = _run_one_step_row(ds_path, 7311, owner)
+    assert int(seed["action_id"][owner]) == _ACT_CATCH_DASH
+    assert int(ref["action_id"][owner]) == _ACT_CATCH_DASH_PULL
+    assert int(ref["action_id"][victim]) == _ACT_CAPTURE_PULLED_LW
+    assert int(out["action_id"][owner]) == _ACT_CATCH_DASH_PULL
+    assert int(out["action_id"][victim]) == _ACT_CAPTURE_PULLED_LW
+
+    owner = 1
+    other = 0
+    seed, ref, out = _run_one_step_row(ds_path, 7737, owner)
+    assert int(seed["action_id"][owner]) == _ACT_CATCH
+    assert int(seed["action_id"][other]) == _ACT_CATCH
+    assert int(ref["action_id"][owner]) == _ACT_CATCH
+    assert int(ref["action_id"][other]) == _ACT_CATCH
+    assert int(out["action_id"][owner]) == _ACT_CATCH
+    assert int(out["action_id"][other]) == _ACT_CATCH
 
 
 @pytest.mark.integration

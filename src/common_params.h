@@ -73,6 +73,14 @@ typedef struct MslCommonParams {
   // Run IASA lockout init used by fn_800CA644 (TurnRun->Run).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA644 (arg0 = p_ftCommonData->x430)
   float run_x0_init_x430;  // p_ftCommonData->x430
+  // Common Fall/FallAerial/FallSpecial live F/B pose blend.
+  //
+  // Decomp: ftCo_Fall_Anim_Inner filters mv.co.{fall,fallaerial,fallspecial}.x4 toward the
+  // current air-drift fraction and ftCo_800CC988 blends neutral/F/B JObjs before BODY collision.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+  //   ftCo_Fall_Anim_Inner,ftCo_800CC988}
+  float common_fall_blend_air_drift_threshold;  // p_ftCommonData->x444
+  float common_fall_blend_lerp;                 // p_ftCommonData->x448
 
   // Special move direction thresholds (B specials).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput

@@ -46,7 +46,9 @@ ACT_SQUAT_WAIT = 0x0028
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_LANDING_AIR_N = 0x0046
+ACT_LANDING_AIR_F = 0x0047
 ACT_LANDING_AIR_LW = 0x004A
+ACT_LANDING_AIR_HI = 0x0049
 ACT_GUARD_ON = 0x00B2
 ACT_DAMAGE_FALL = 0x0026
 ACT_GUARD = 0x00B3
@@ -101,6 +103,8 @@ ACT_FX_SPECIAL_AIR_N_START = 0x0158
 ACT_MISS_FOOT = 0x00FB
 
 MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY = 1 << 11
+MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM = 1 << 31
+MPCOLL_REJECT_ATTACKAIR_SINGLE_CREATE_NO_BOTTOM_OWNER = 1 << 35
 
 SM_WAIT1_0 = 2
 SM_TURN = 10
@@ -7354,6 +7358,184 @@ def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_rea
     assert int(right_prev_row["seed_t"]["stage_fod_platform_height_source_u8"][0]) == 0
     assert int(right_prev_out["action_id"][p]) == int(right_prev_row["ref_t1"]["action_id"][p])
     assert int(right_prev_out["on_ground"][p]) == int(right_prev_row["ref_t1"]["on_ground"][p]) == 0
+
+
+def _step_replay_row_with_colldata(ds, record: int):
+    row = ds.samples[record]
+    seed = np.array([row["seed_t"]], dtype=row["seed_t"].dtype)
+    prev_input = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    input_t = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed,
+        prev_input.reshape(1, INPUT_DTYPE.itemsize),
+        input_t.reshape(1, INPUT_DTYPE.itemsize),
+    )
+    return out, colldata
+
+
+@pytest.mark.parametrize(
+    ("replay_name", "record", "player"),
+    [
+        ("InternalPowerlessWallaby.msl", 1550, 1),
+        ("InternalPowerlessWallaby.msl", 1966, 0),
+        ("InternalPowerlessWallaby.msl", 8480, 1),
+    ],
+)
+def test_marth_single_create_attackair_final_floor_without_bottom_owner_stays_airborne(
+    replay_name: str, record: int, player: int
+) -> None:
+    # Marth fair is a single-create AttackAir script. When its AttackAir_Coll callback has no
+    # source-shaped ECB-bottom floor hit for FoD's height-transform side platform, a final root/
+    # platform publication from below must stay airborne instead of entering LandingAirF.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    # data/moves/marth.json moves["ftCo_SM_AttackAirF"].events create/clear_hitboxes
+    path = Path(__file__).resolve().parents[1] / "datasets/marth/replays/validation/marth" / replay_name
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][player]) == ACT_ATTACK_AIR_F
+    assert int(row["ref_t1"]["action_id"][player]) == ACT_ATTACK_AIR_F
+    assert int(row["ref_t1"]["on_ground"][player]) == 0
+
+    out, colldata = _step_replay_row_with_colldata(ds, record)
+
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][player]) == int(row["ref_t1"][field][player]), (record, field)
+    assert float(out["pos_y"][player]) == pytest.approx(
+        float(row["ref_t1"]["pos_y"][player]), abs=1e-6
+    )
+    # Current mpColl source-state accounting leaves these rows airborne before a final floor
+    # candidate exists, so there is no retained reject bit to assert. Lock the stable source state
+    # instead: no candidate/projected floor was published for the common AttackAir_Coll owner.
+    assert int(colldata["floor_probe_candidate_line_idx"][player]) == -1
+    assert int(colldata["floor_probe_projected_line_idx"][player]) == -1
+
+
+def test_spacie_multicreate_attackairf_final_floor_keeps_landing_negative() -> None:
+    # Fox/Falco fair have repeated create_hitbox bands in MSLFTSC1. They must not inherit the
+    # single-create pending-floor owner just because they share AttackAir_Coll/AttackAirF.
+    #
+    # data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirF"].events create/clear_hitboxes
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    record = 10549
+    player = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][player]) == ACT_ATTACK_AIR_F
+    assert int(row["ref_t1"]["action_id"][player]) == ACT_LANDING_AIR_F
+    assert int(row["ref_t1"]["on_ground"][player]) == 1
+
+    out, colldata = _step_replay_row_with_colldata(ds, record)
+
+    assert int(out["action_id"][player]) == ACT_LANDING_AIR_F
+    assert int(out["on_ground"][player]) == 1
+    assert int(out["ground_id"][player]) == int(row["ref_t1"]["ground_id"][player])
+    assert float(out["pos_y"][player]) == pytest.approx(
+        float(row["ref_t1"]["pos_y"][player]), abs=2e-4
+    )
+    assert (
+        int(colldata["floor_probe_reject_bits"][player])
+        & MPCOLL_REJECT_ATTACKAIR_SINGLE_CREATE_NO_BOTTOM_OWNER
+    ) == 0
+
+
+@pytest.mark.parametrize("record", [5419, 5420])
+def test_marth_single_create_attackairhi_no_current_height_platform_stays_airborne(
+    record: int,
+) -> None:
+    # Marth up-air is a single-create AttackAir script. A sparse FoD height-platform line with no
+    # current grIzumi/mpLib source is not enough for AttackAir_Coll to publish LandingAirHi, even
+    # after the create->clear window has passed.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # data/moves/marth.json moves["ftCo_SM_AttackAirHi"].events create/clear_hitboxes
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_HI
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0]) == 0
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][1]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ATTACK_AIR_HI
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out, colldata = _step_replay_row_with_colldata(ds, record)
+
+    assert int(out["action_id"][p]) == ACT_ATTACK_AIR_HI
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(row["ref_t1"]["ground_id"][p])
+    assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-6)
+    assert int(colldata["floor_result_valid"][p]) == 0
+
+    seed = np.array([row["seed_t"]], dtype=row["seed_t"].dtype)
+    seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(1)
+    prev_input = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    input_t = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    sourced_out = _step_once(
+        seed,
+        prev_input.reshape(1, INPUT_DTYPE.itemsize),
+        input_t.reshape(1, INPUT_DTYPE.itemsize),
+    )
+
+    assert int(sourced_out["action_id"][p]) == ACT_LANDING_AIR_HI
+    assert int(sourced_out["on_ground"][p]) == 1
+
+
+def test_marth_attackairhi_hard_floor_root_projection_requires_bottom_owner() -> None:
+    # On a flat hard floor, AttackAir_Coll still reaches the root snap only after
+    # mpColl_80044628_Floor accepts a current ECB-bottom hit. PFZ 3612 has the root below stage
+    # floor but both bottom endpoints above it, so vanilla remains in AttackAirHi for the frame.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,
+    #   mpColl_80044838_Floor}
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/marth/replays/validation/marth/ParallelFamiliarZebra.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    record = 3612
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_HI
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ATTACK_AIR_HI
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out, colldata = _step_replay_row_with_colldata(ds, record)
+
+    assert int(out["action_id"][p]) == ACT_ATTACK_AIR_HI
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(row["ref_t1"]["ground_id"][p])
+    assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-6)
+    assert (
+        int(colldata["floor_probe_reject_bits"][p])
+        & MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM
+    )
 
 
 def test_fod_attackair_height_platform_no_current_source_stays_pending_replay_real() -> None:

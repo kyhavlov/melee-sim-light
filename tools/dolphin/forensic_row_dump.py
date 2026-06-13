@@ -151,6 +151,8 @@ def main() -> int:
             start_frame=start_frame,
             end_frame=end_frame,
             timeout=float(args.timeout),
+            probe_interpreter_frame_start=min(seed_frame, ref_frame),
+            probe_interpreter_frame_end=max(seed_frame, ref_frame),
             collision_probe_path=collision_probe_path,
             damagefall_probe_path=damagefall_probe_path,
             throw_release_probe_path=throw_release_probe_path,

@@ -71,6 +71,12 @@ def main() -> None:
         "turn_run_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x38)),
         "run_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x58)),
         "ottotto_walk_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x474)),
+        # Common Fall/FallAerial/FallSpecial live submotion blend:
+        # ftCo_Fall_Anim_Inner chooses neutral/F/B submotion from self_vel.x / air_drift_max, then
+        # low-pass filters mv.co.{fall,fallaerial,fallspecial}.x4 by p_ftCommonData->x448.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+        "common_fall_blend_air_drift_threshold": float(_f32_be(buf, ft_common_abs + 0x444)),
+        "common_fall_blend_lerp": float(_f32_be(buf, ft_common_abs + 0x448)),
         # Run IASA lockout init (fp->mv.co.run.x0) used for specific Run entries (notably TurnRun->Run).
         # Decomp:
         # - fn_800CA644 passes p_ftCommonData->x430 as arg0 to ftCo_Run_Enter (stores into mv.co.run.x0).
