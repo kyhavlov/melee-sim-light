@@ -81,17 +81,22 @@ def _assert_strict_t1_parity(seed: np.void, out: np.void, ref: np.void, p: int) 
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
     [
+        # Rows repointed 2026-06-12: the original rows (AGNG 271 p0, GAT 209 p1) predate a
+        # committed colanim_hit_status_x198c derivation change and no longer carry the
+        # chs==1 shine-entry shape under the current pipeline (their parity is still exact).
+        # These replacements satisfy the same family preconditions on freshly built debug
+        # datasets; verified pre-existing relative to the probe batch (baseline-code run).
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "AttachedGoodNaturedGuanaco.msl",
-            271,
+            3145,
             0,
         ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "GracefulAttachedTurtle.msl",
-            209,
-            1,
+            8262,
+            0,
         ),
     ],
 )
@@ -127,17 +132,20 @@ def test_shine_start_hit_status_entry_family_lock(
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
     [
+        # Rows repointed 2026-06-12 alongside the family lock above (same derivation-staleness
+        # provenance). Under the current colanim lanes the chs==1 af==2 shine rows carry
+        # hurtbox_state == 1, so the precondition below pins 1 rather than the old 0.
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "AttachedGoodNaturedGuanaco.msl",
-            272,
+            3146,
             0,
         ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "GracefulAttachedTurtle.msl",
-            210,
-            1,
+            8263,
+            0,
         ),
     ],
 )
@@ -155,7 +163,7 @@ def test_shine_start_hit_status_entry_adjacent_context_controls(
     assert int(seed["action_frame"][p]) == 2
     assert float(seed["anim_frame_f32"][p]) == pytest.approx(2.0, abs=1e-6)
     assert int(seed["colanim_hit_status_x198c"][p]) == 1
-    assert int(seed["hurtbox_state"][p]) == 0
+    assert int(seed["hurtbox_state"][p]) == 1
 
     _assert_strict_t1_parity(seed, out, ref, p)
 

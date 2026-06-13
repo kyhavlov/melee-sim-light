@@ -1,6 +1,6 @@
 # Dolphin Forensic Tooling
 
-This directory now supports a single playback-only workflow:
+This directory supports a single playback-only workflow:
 
 1. Capture an engine dump from playback Dolphin (`dolphin_engine_dump.py`).
 2. Extract deterministic frame rows from that dump (`extract_engine_dump_rows.py`).
@@ -11,6 +11,31 @@ No `libmelee` session control is used by the active tooling. Python only writes 
 launches Dolphin with CLI args, and parses the dump output. Active captures run Dolphin in a
 separate process group with stdout/stderr redirected beside the dump; do not run the legacy memory
 reader scripts for new probes.
+
+## Dolphin revision
+
+All probe instrumentation (engine-dump lanes and interpreter event probes) lives as ordinary
+commits in the `refs/Ishiiruka` repo. There are no patch files to apply. The required revision is
+pinned by the `refs/Ishiiruka` submodule gitlink; setup is:
+
+```bash
+git submodule update --init refs/Ishiiruka
+cmake --build refs/Ishiiruka/build_probe --target dolphin-nogui -j8
+```
+
+When probe instrumentation changes, commit it in `refs/Ishiiruka` (branch
+`engine-dump-v12-probes`), push that branch, then update and commit the superproject gitlink. Do
+not leave the nested repo dirty and do not export patch files into this repo.
+
+The pinned revision provides:
+
+- **Engine dump v12** (`EngineDumpWriter`): the v6/v7 fighter record plus item hitlist/callback
+  lanes (`xC34`/`xC48`/`xC4C`/`xC50`/`xCA8`/`xCBC`/`xCC0`, `xDA8`/`xDC8`/`xDCE`, laser misc,
+  per-item HitCapsule victim entries) and hidden fighter lanes: `fp+0x670/0x674` (lstick tilt
+  timers, x672..x677 input counters), `fp+0x2344/0x2348/0x234C` (capturewait anim-rate window, x8
+  mash latch), `fp+0x68C..0x694` (TransN-tracked position), `fp+0x1A50` (GrabMash stick-sign
+  latches + mash counter). `engine_dump_io.py` parses all dump versions 6..12.
+- **Interpreter event probes** (env-gated, interpreter mode only — see sections below).
 
 ## Primary command (known row triage)
 
@@ -53,6 +78,15 @@ It runs shallow, mid, deep, and IPW smoke windows through `forensic_row_dump.py`
 `elapsed_sec`, first/last captured frame, row count, event count, and active port ids. Outputs go
 under `reports/triage/<timestamp>_dolphin_probe_benchmark/`.
 
+## DamageFall IASA event probe
+
+Logs every `Fighter_Spaghetti`, `ftCo_DamageFall_IASA`, and `ftCo_Fall_Enter` entry (with
+`lstick.x`, `lstick1.x`, and `x670`) as JSONL. Use `forensic_row_dump.py --damagefall-probe` or
+`dolphin_engine_dump.py --damagefall-probe <path.jsonl>`. The wrapper sets
+`MSL_DAMAGEFALL_PROBE_PATH` plus `MSL_DAMAGEFALL_PROBE_FRAME_START/END` and forces interpreter mode.
+This probe is how the UCF 0.84 tumble component (`x670 == 1` wiggle with a UCF 1f x-smash) was
+identified. Budget interpreter probes around the requested window, not for normal JIT dumps.
+
 ## Collision primitive probe
 
 Some BODY-contact investigations need primitives at the pre-`ftColl_80076ED8` phase, before the
@@ -67,13 +101,6 @@ the probe interpreter hook can record:
 - `ftColl_80076ED8`
 - `lbColl_8000805C`
 - `lbColl_80006E58`
-
-## DamageFall IASA probe
-
-The active probe build also exposes a DamageFall/Fall-enter event stream. Use
-`forensic_row_dump.py --damagefall-probe` or `dolphin_engine_dump.py --damagefall-probe <path.jsonl>`.
-The wrapper sets `MSL_DAMAGEFALL_PROBE_PATH` plus `MSL_DAMAGEFALL_PROBE_FRAME_START/END` and forces
-interpreter mode.
 
 ## Throw-laser intra-frame event probe
 
@@ -186,7 +213,7 @@ The rerun7 frame-2124 shield investigation used this workflow: neutral/toward sh
 ## Active scripts
 
 - `dolphin_engine_dump.py`: playback CLI wrapper -> `.bin` engine dump.
-- `engine_dump_io.py`: v6/v7/v8/v9/v10/v12 dump parser (schema + typed readers, including fighter/item hitlist provenance and v12 hidden fighter lanes).
+- `engine_dump_io.py`: dump parser for versions 6..12 (schema + typed readers, including fighter/item hitlist provenance, v11/v12 hidden fighter lanes, and v12 active port ids).
 - `extract_engine_dump_rows.py`: deterministic JSON/txt extraction for frame windows (including item/fighter hitlist provenance lanes when available).
 - `forensic_row_dump.py`: dataset row => frame window => dump + extracted rows.
 - `slp_scenario_probe.py`: scenario JSON => patched replay => baseline/scenario dump rows.

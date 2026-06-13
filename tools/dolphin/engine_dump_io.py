@@ -9,7 +9,7 @@ import numpy as np
 
 ENGINE_DUMP_MAGIC = b"MSIMDMP\0"
 ENGINE_DUMP_VERSION = 12
-ENGINE_DUMP_SUPPORTED_VERSIONS = (6, 7, 8, 9, 10, 12)
+ENGINE_DUMP_SUPPORTED_VERSIONS = (6, 7, 8, 9, 10, 11, 12)
 
 HEADER_DTYPE = np.dtype(
     [
@@ -157,10 +157,11 @@ FIGHTER_DTYPE_V9 = np.dtype(
     align=False,
 )
 
-FIGHTER_DTYPE_V12 = np.dtype(
-    FIGHTER_DTYPE_V7.descr[:-1]
+# v11 keeps the v10 record (v7 fighter layout + item extensions) and appends the
+# hidden-lane probe words after the trailing pad.
+FIGHTER_DTYPE_V11 = np.dtype(
+    FIGHTER_DTYPE_V7.descr
     + [
-        ("_pad0", "V2"),
         ("x670_timers_bits", "<u4"),
         ("x674_timers_bits", "<u4"),
         ("x2344_bits", "<u4"),
@@ -169,8 +170,13 @@ FIGHTER_DTYPE_V12 = np.dtype(
         ("transn_x_bits", "<u4"),
         ("transn_y_bits", "<u4"),
         ("transn_z_bits", "<u4"),
-        ("x1a50_bits", "<u4"),
     ],
+    align=False,
+)
+
+# v12 appends the x1A50 grab-mash latch word.
+FIGHTER_DTYPE_V12 = np.dtype(
+    FIGHTER_DTYPE_V11.descr + [("x1a50_bits", "<u4")],
     align=False,
 )
 
@@ -344,9 +350,13 @@ def read_engine_dump(path: str | Path) -> EngineDump:
 
     frames = _read(FRAME_DTYPE, frame_count, int(header["frames_offset"]))
     inputs = _read(INPUT_DTYPE, frame_count * port_count, int(header["inputs_offset"]))
+    # v10 is a targeted item-hitlist/callback extension built on the v7 fighter record layout.
+    # v11 appends the hidden-lane probe words to the v10 fighter record.
     fighter_dtype = (
         FIGHTER_DTYPE_V12
-        if version == 12
+        if version >= 12
+        else FIGHTER_DTYPE_V11
+        if version >= 11
         else FIGHTER_DTYPE_V7
         if version == 10
         else FIGHTER_DTYPE_V9

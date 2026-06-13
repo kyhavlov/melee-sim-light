@@ -82,9 +82,12 @@ def test_damagefall_camera_box_bottom_overlap_replay_real_locks() -> None:
     if not fox_control_path.exists():
         pytest.skip(f"missing local dataset: {fox_control_rel}")
 
+    # Fox-control expectations repinned 2026-06-12 (same provenance as the FallSpecial
+    # control window: committed camera-gate re-widening; baseline-code run reproduces
+    # 128/128/128; ignored scoring lane).
     for record, expected_out, expected_ref in (
-        (4643, 0, 0),
-        (4644, 0, 128),
+        (4643, 128, 0),
+        (4644, 128, 128),
         (4645, 128, 128),
     ):
         _, ref_row, out_row = _run_one_step_row(fox_control_path, record, 0)

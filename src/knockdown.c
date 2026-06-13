@@ -16,6 +16,7 @@
 #include "common_params.h"
 #include "damage_terminal_owner.h"
 #include "guard_lifecycle.h"
+#include "input.h"
 #include "input_axis.h"
 #include "jump_input.h"
 #include "locomotion.h"
@@ -2280,10 +2281,25 @@ static inline uint8_t damagefall_iasa_try_stick_fall(MslBatch* batch, const MslC
     }
   }
 
-  if (msl_absf(stick_x) >= c->damagefall_fall_stick_x_threshold &&
-      x670_for_iasa < c->damagefall_fall_tilt_max_frames) {
-    enter_fall_from_damagefall_iasa(batch, idx);
-    return 1u;
+  if (msl_absf(stick_x) >= c->damagefall_fall_stick_x_threshold) {
+    if (x670_for_iasa < c->damagefall_fall_tilt_max_frames) {
+      enter_fall_from_damagefall_iasa(batch, idx);
+      return 1u;
+    }
+    // UCF 0.84 tumble component (same gecko-extended gate as the locomotion copy): at
+    // x670 == 1, allow the fall when the previous processed stick was below the wiggle
+    // threshold and the raw pad delta is a UCF 1f x-smash.
+    // refs/ucf/src/tumble/tumble.cpp
+    // refs/ucf/include/ucf/pad_buffer.h::check_ucf_xsmash
+    if (batch->config.ucf_enabled && x670_for_iasa == 1u) {
+      const float prev_stick_x = apply_deadzone(
+          stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
+      if (msl_absf(prev_stick_x) < c->damagefall_fall_stick_x_threshold &&
+          msl_ucf_check_xsmash(&batch->state, idx)) {
+        enter_fall_from_damagefall_iasa(batch, idx);
+        return 1u;
+      }
+    }
   }
   return 0u;
 }
@@ -3328,6 +3344,17 @@ void knockdown_try_throw_release_damage_floor_contact(MslBatch* batch, size_t bi
   }
   if (!is_damage_fly_action(batch->state.action_id[idx]) &&
       batch->state.action_id[idx] != (uint16_t)MSL_ACT_DAMAGE_FALL) {
+    return;
+  }
+
+  // Launch-direction gate: ftCo_800DDDE4 places the detached fighter and the SAME frame's
+  // collision pass only floor-contacts a non-rising sweep (mpCheckFloor ay >= by). An
+  // upward-launching ThrowLw (marth dthrow, kb_y > 0) lifts the victim off the release
+  // spot before any floor test can accept - grounding it here synthesized a DownBound the
+  // source never had. Downward/flat release KB keeps the existing ladder.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // refs/melee/src/melee/mp/mpcoll.c::mpCheckFloor (ay >= by descent gate)
+  if (batch->state.speed_y_attack[idx] > 0.0f) {
     return;
   }
 

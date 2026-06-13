@@ -4977,10 +4977,12 @@ static inline void item_apply_shine_reflect_callback(MslBatch* batch, size_t ii,
   }
   batch->state.facing[reflector_idx] = (uint8_t)(reflect_dir > 0.0f);
   if (batch->state.on_ground[reflector_idx] != 0u) {
-    batch->state.action_id[reflector_idx] = (uint16_t)MSL_ACT_FX_SPECIAL_LW_HIT;
+    batch->state.action_id[reflector_idx] = msl_motion_state_action_for_fx_kind(
+        batch->state.char_id[reflector_idx], (uint8_t)MSL_FX_KIND_SPECIAL_LW_HIT);
     batch->state.animation_index[reflector_idx] = (uint32_t)ms->speciallw_ground_hit;
   } else {
-    batch->state.action_id[reflector_idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_HIT;
+    batch->state.action_id[reflector_idx] = msl_motion_state_action_for_fx_kind(
+        batch->state.char_id[reflector_idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_HIT);
     batch->state.animation_index[reflector_idx] = (uint32_t)ms->speciallw_air_hit;
   }
   msl_anim_timebase_enter(batch, reflector_idx, 0.0f, 1.0f);

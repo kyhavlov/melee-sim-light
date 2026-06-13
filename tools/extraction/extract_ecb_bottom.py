@@ -222,20 +222,12 @@ def main() -> None:
     _write_ecb_bottom_table(out, ecb)
     print(f"wrote {out} ({len(ecb)} animations)")
 
-    # Parallel bottom-X table (the min-ty joint's model-Z; ledge-grab cd->ecb.bottom.x term).
-    # Fox/Falco intentionally do NOT ship this table: their validated ledge-grab behavior was
-    # locked with bottom.x == 0 (the desired_ecb approximation), and regenerating it moves
-    # reviewed rows (e.g. Yoshi platform-drop Pass grabs). Revisit in a dedicated fox/falco
-    # ledge-geometry pass; queries return 0 when the file is absent.
-    if ch in ("fox", "falco"):
-        return
-    out_x = out.with_name(out.name.replace("_bottom.bin", "_bottom_x.bin"))
-    ecb_x = [
-        _EcbAnim(msid=a.msid, frame_count=a.frame_count, values=a.values_x, values_x=a.values_x)
-        for a in ecb
-    ]
-    _write_ecb_bottom_table(out_x, ecb_x)
-    print(f"wrote {out_x} ({len(ecb_x)} animations)")
+    # NOTE: a parallel *_bottom_x.bin (posed bottom-X) table was generated here historically
+    # for the ledge-grab cd->ecb.bottom.x term. It was retired: mpCollInterpolateECB runs with
+    # time=1.0 on the final substep, so cd->ecb snaps to desired_ecb whose bottom point is
+    # CENTERED (bottom.x = 0 relative to cur_pos); the posed sample was over-fit and broke
+    # flip-pose apex catches (see tests/test_ledge_grab_ecb_replay_real_locks.py).
+    # refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
 
 
 if __name__ == "__main__":

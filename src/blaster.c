@@ -20,18 +20,22 @@
 #include "special_msids.h"
 #include "throw_flow.h"
 
-static inline uint8_t is_fox_falco(uint8_t char_id) {
-  return (char_id == (uint8_t)MSL_CHAR_ID_FOX) || (char_id == (uint8_t)MSL_CHAR_ID_FALCO);
+static inline uint8_t char_owns_blaster_machine(uint8_t char_id) {
+  // Data-driven machine admission: a character enters the SpecialN (blaster) machine iff
+  // its owners table maps the machine's defining kind. No char-id list: a future char
+  // whose extracted MotionState rows carry the SpecialN kinds gets the machine by data.
+  return msl_motion_state_action_for_fx_kind(char_id, (uint8_t)MSL_FX_KIND_SPECIAL_N_START) !=
+         0xFFFFu;
 }
 
-static inline uint8_t action_is_blaster(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_FX_SPECIAL_N_START:
-    case MSL_ACT_FX_SPECIAL_N_LOOP:
-    case MSL_ACT_FX_SPECIAL_N_END:
-    case MSL_ACT_FX_SPECIAL_AIR_N_START:
-    case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
-    case MSL_ACT_FX_SPECIAL_AIR_N_END:
+static inline uint8_t action_is_blaster(uint8_t char_id, uint16_t action_id) {
+  switch (msl_motion_state_fx_special_kind(char_id, action_id)) {
+    case MSL_FX_KIND_SPECIAL_N_START:
+    case MSL_FX_KIND_SPECIAL_N_LOOP:
+    case MSL_FX_KIND_SPECIAL_N_END:
+    case MSL_FX_KIND_SPECIAL_AIR_N_START:
+    case MSL_FX_KIND_SPECIAL_AIR_N_LOOP:
+    case MSL_FX_KIND_SPECIAL_AIR_N_END:
       return 1;
     default:
       return 0;
@@ -78,10 +82,14 @@ static inline void specialn_update_blaster_loop_request_iasa(MslBatch* batch, si
     return;
   }
   const uint16_t a = batch->state.action_id[idx];
-  if (a != (uint16_t)MSL_ACT_FX_SPECIAL_N_START && a != (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP &&
-      a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START &&
-      a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP) {
-    return;
+  switch (msl_motion_state_fx_special_kind_fast(batch->state.char_id[idx], a)) {
+    case MSL_FX_KIND_SPECIAL_N_START:
+    case MSL_FX_KIND_SPECIAL_N_LOOP:
+    case MSL_FX_KIND_SPECIAL_AIR_N_START:
+    case MSL_FX_KIND_SPECIAL_AIR_N_LOOP:
+      break;
+    default:
+      return;
   }
   if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u) {
     return;
@@ -429,10 +437,12 @@ static inline void enter_blaster_start(MslBatch* batch, size_t idx, const MslLas
     return;
   }
   if (grounded) {
-    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_START;
+    batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+        batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_N_START);
     batch->state.animation_index[idx] = (uint32_t)lp->ground_start_msid;
   } else {
-    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START;
+    batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+        batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_START);
     batch->state.animation_index[idx] = (uint32_t)lp->air_start_msid;
     // Decomp: ftFx_SpecialAirN_Enter calls Fighter_ChangeMotionState(..., flags=0), i.e. no
     // Ft_MF_KeepFastFall. ChangeMotionState clears fp->fall_fast when KeepFastFall is absent.
@@ -491,7 +501,8 @@ static inline void enter_side_special_start(MslBatch* batch, size_t idx, const M
     if (ch->illusion_ground_vel_x > 0.0f) {
       batch->state.speed_ground_x_self[idx] /= ch->illusion_ground_vel_x;
     }
-    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_S_START;
+    batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+        batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_S_START);
     batch->state.animation_index[idx] = (uint32_t)ms->specials_ground_start;
     if (source_action_id == (uint16_t)MSL_ACT_DASH) {
       // Dash_IASA falls through to its terminal gr_vel scalar even when the early Side-B branch
@@ -507,7 +518,8 @@ static inline void enter_side_special_start(MslBatch* batch, size_t idx, const M
     if (ch->illusion_ground_vel_x > 0.0f) {
       batch->state.speed_air_x_self[idx] /= ch->illusion_ground_vel_x;
     }
-    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START;
+    batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+        batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_START);
     batch->state.animation_index[idx] = (uint32_t)ms->specials_air_start;
     // Decomp: ftFx_SpecialAirSStart_Enter zeroes self_vel.y at aerial Side-B entry.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSStart_Enter
@@ -533,7 +545,8 @@ static inline void enter_specialhi_hold(MslBatch* batch, size_t idx, const MslSp
     if (ch->firefox_hold_vel_x > 0.0f) {
       batch->state.speed_ground_x_self[idx] /= ch->firefox_hold_vel_x;
     }
-    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD;
+    batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+        batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_HI_HOLD);
     batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_hold;
   } else {
     // Decomp: aerial Firefox charge entry divides self_vel.x by the same attr, then zeroes
@@ -543,7 +556,8 @@ static inline void enter_specialhi_hold(MslBatch* batch, size_t idx, const MslSp
     if (ch->firefox_hold_vel_x > 0.0f) {
       batch->state.speed_air_x_self[idx] /= ch->firefox_hold_vel_x;
     }
-    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR;
+    batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+        batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_HI_HOLD_AIR);
     batch->state.animation_index[idx] = (uint32_t)ms->specialhi_air_hold;
     // Decomp: ftFx_SpecialAirHiStart_Enter zeroes self_vel.y before entering HoldAir.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHiStart_Enter
@@ -570,7 +584,7 @@ uint8_t blaster_try_enter_ground_from_iasa_subset(MslBatch* batch, const MslComm
     return 0u;
   }
   const uint8_t cid = batch->state.char_id[idx];
-  if (!is_fox_falco(cid) || !batch->state.on_ground[idx]) {
+  if (!char_owns_blaster_machine(cid) || !batch->state.on_ground[idx]) {
     return 0u;
   }
   const uint16_t pressed = batch->state.input_buttons_pressed[idx];
@@ -624,7 +638,7 @@ uint8_t blaster_try_enter_ground_specialhi_from_kneebend_iasa(MslBatch* batch,
     return 0u;
   }
   const uint8_t cid = batch->state.char_id[idx];
-  if (!is_fox_falco(cid)) {
+  if (!char_owns_blaster_machine(cid)) {
     return 0u;
   }
   const uint16_t pressed = batch->state.input_buttons_pressed[idx];
@@ -659,7 +673,7 @@ uint8_t blaster_try_enter_air_from_iasa_subset(MslBatch* batch, const MslCommonP
     return 0u;
   }
   const uint8_t cid = batch->state.char_id[idx];
-  if (!is_fox_falco(cid) || batch->state.on_ground[idx]) {
+  if (!char_owns_blaster_machine(cid) || batch->state.on_ground[idx]) {
     return 0u;
   }
   const uint16_t pressed = batch->state.input_buttons_pressed[idx];
@@ -699,30 +713,30 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
   }
 
   const uint16_t action_id = batch->state.action_id[idx];
-  if (!action_is_blaster(action_id)) {
+  if (!action_is_blaster(batch->state.char_id[idx], action_id)) {
     return;
   }
 
   // Ensure SpecialN/SpecialAirN always has a valid msid-backed animation_index.
   // This keeps the ECB/collision substrate stable under reseed and removes the need for
   // teacher-forcing guards in post-collision landing logic.
-  switch (action_id) {
-    case MSL_ACT_FX_SPECIAL_N_START:
+  switch (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id)) {
+    case MSL_FX_KIND_SPECIAL_N_START:
       batch->state.animation_index[idx] = (uint32_t)lp->ground_start_msid;
       break;
-    case MSL_ACT_FX_SPECIAL_N_LOOP:
+    case MSL_FX_KIND_SPECIAL_N_LOOP:
       batch->state.animation_index[idx] = (uint32_t)lp->ground_loop_msid;
       break;
-    case MSL_ACT_FX_SPECIAL_N_END:
+    case MSL_FX_KIND_SPECIAL_N_END:
       batch->state.animation_index[idx] = (uint32_t)lp->ground_end_msid;
       break;
-    case MSL_ACT_FX_SPECIAL_AIR_N_START:
+    case MSL_FX_KIND_SPECIAL_AIR_N_START:
       batch->state.animation_index[idx] = (uint32_t)lp->air_start_msid;
       break;
-    case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
+    case MSL_FX_KIND_SPECIAL_AIR_N_LOOP:
       batch->state.animation_index[idx] = (uint32_t)lp->air_loop_msid;
       break;
-    case MSL_ACT_FX_SPECIAL_AIR_N_END:
+    case MSL_FX_KIND_SPECIAL_AIR_N_END:
       batch->state.animation_index[idx] = (uint32_t)lp->air_end_msid;
       break;
     default:
@@ -738,11 +752,12 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
   const float anim_frame_f32 = batch->state.anim_frame_f32[idx];
   const uint8_t on_ground = batch->state.on_ground[idx] ? 1u : 0u;
 
-  switch (action_id) {
-    case MSL_ACT_FX_SPECIAL_N_START:
+  switch (msl_motion_state_fx_special_kind(cid, action_id)) {
+    case MSL_FX_KIND_SPECIAL_N_START:
       if (anim_finished(cid, lp->ground_start_msid, anim_frame_f32)) {
         const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
-        batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP;
+        batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+            batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_N_LOOP);
         batch->state.animation_index[idx] = (uint32_t)lp->ground_loop_msid;
         // Decomp: ftFx_SpecialNStart_Anim transitions via Fighter_ChangeMotionState without
         // Ft_MF_KeepFastFall, so fp->fall_fast is cleared on entry.
@@ -755,7 +770,7 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
       }
       break;
-    case MSL_ACT_FX_SPECIAL_N_LOOP:
+    case MSL_FX_KIND_SPECIAL_N_LOOP:
       if (anim_finished(cid, lp->ground_loop_msid, anim_frame_f32)) {
         const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
         const uint8_t loop_requested = specialn_is_blaster_loop_requested(batch, idx);
@@ -774,7 +789,8 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           attack_identity_restart_same_move_ft_800892A0(batch, idx);
         } else {
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_END;
+          batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+              batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_N_END);
           batch->state.animation_index[idx] = (uint32_t)lp->ground_end_msid;
           // Decomp: Loop -> End uses Fighter_ChangeMotionState without KeepFastFall.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
@@ -786,16 +802,17 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
         }
       }
       break;
-    case MSL_ACT_FX_SPECIAL_N_END:
+    case MSL_FX_KIND_SPECIAL_N_END:
       if (anim_finished(cid, lp->ground_end_msid, anim_frame_f32)) {
         enter_wait(batch, idx);
         (void)specialn_end_try_destination_wait_forward_dash(batch, c, idx);
       }
       break;
-    case MSL_ACT_FX_SPECIAL_AIR_N_START:
+    case MSL_FX_KIND_SPECIAL_AIR_N_START:
       if (anim_finished(cid, lp->air_start_msid, anim_frame_f32)) {
         const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
-        batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP;
+        batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+            batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP);
         batch->state.animation_index[idx] = (uint32_t)lp->air_loop_msid;
         // Decomp: ftFx_SpecialAirNStart_Anim transitions via Fighter_ChangeMotionState without
         // Ft_MF_KeepFastFall, so fp->fall_fast is cleared on entry.
@@ -808,7 +825,7 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
       }
       break;
-    case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
+    case MSL_FX_KIND_SPECIAL_AIR_N_LOOP:
       if (anim_finished(cid, lp->air_loop_msid, anim_frame_f32)) {
         const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
         const uint8_t loop_requested = specialn_is_blaster_loop_requested(batch, idx);
@@ -823,7 +840,8 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           attack_identity_restart_same_move_ft_800892A0(batch, idx);
         } else {
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END;
+          batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+              batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END);
           batch->state.animation_index[idx] = (uint32_t)lp->air_end_msid;
           // Decomp: Aerial loop -> end uses Fighter_ChangeMotionState without KeepFastFall.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
@@ -835,7 +853,7 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
         }
       }
       break;
-    case MSL_ACT_FX_SPECIAL_AIR_N_END:
+    case MSL_FX_KIND_SPECIAL_AIR_N_END:
       if (anim_finished(cid, lp->air_end_msid, anim_frame_f32)) {
         if (on_ground) {
           enter_wait(batch, idx);
@@ -863,7 +881,7 @@ void blaster_update_anim_callbacks_pre_input(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint8_t cid = batch->state.char_id[idx];
-      if (!is_fox_falco(cid)) {
+      if (!char_owns_blaster_machine(cid)) {
         continue;
       }
       const MslCharParams* ch = msl_char_params_fast(cid);
@@ -882,7 +900,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint8_t cid = batch->state.char_id[idx];
-      if (!is_fox_falco(cid)) {
+      if (!char_owns_blaster_machine(cid)) {
         continue;
       }
       const MslCharParams* ch = msl_char_params_fast(cid);
@@ -902,7 +920,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
       // Entry: route grounded/aerial B-special to Side/Up/Neutral.
       // Down-B is entered in shine_update_pre_physics() earlier in action_update() ordering.
       const uint16_t pressed = batch->state.input_buttons_pressed[idx];
-      if (!action_is_blaster(a) && (pressed & (uint16_t)MSL_BUTTON_B) != 0) {
+      if (!action_is_blaster(cid, a) && (pressed & (uint16_t)MSL_BUTTON_B) != 0) {
         uint8_t allow = 0;
         if (on_ground) {
           // Landing special-case: Landing lag actions should not be interruptible until their IASA
@@ -1022,30 +1040,30 @@ void blaster_update_pre_physics(MslBatch* batch) {
 
       // Update the active SpecialN timeline and handle Start/Loop/End transitions.
       const uint16_t a2 = batch->state.action_id[idx];
-      if (!action_is_blaster(a2)) {
+      if (!action_is_blaster(cid, a2)) {
         continue;
       }
 
       // Ensure SpecialN/SpecialAirN always has a valid msid-backed animation_index.
       // This keeps the ECB/collision substrate stable under reseed and removes the need for
       // teacher-forcing guards in post-collision landing logic.
-      switch (a2) {
-        case MSL_ACT_FX_SPECIAL_N_START:
+      switch (msl_motion_state_fx_special_kind(cid, a2)) {
+        case MSL_FX_KIND_SPECIAL_N_START:
           batch->state.animation_index[idx] = (uint32_t)lp->ground_start_msid;
           break;
-        case MSL_ACT_FX_SPECIAL_N_LOOP:
+        case MSL_FX_KIND_SPECIAL_N_LOOP:
           batch->state.animation_index[idx] = (uint32_t)lp->ground_loop_msid;
           break;
-        case MSL_ACT_FX_SPECIAL_N_END:
+        case MSL_FX_KIND_SPECIAL_N_END:
           batch->state.animation_index[idx] = (uint32_t)lp->ground_end_msid;
           break;
-        case MSL_ACT_FX_SPECIAL_AIR_N_START:
+        case MSL_FX_KIND_SPECIAL_AIR_N_START:
           batch->state.animation_index[idx] = (uint32_t)lp->air_start_msid;
           break;
-        case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
+        case MSL_FX_KIND_SPECIAL_AIR_N_LOOP:
           batch->state.animation_index[idx] = (uint32_t)lp->air_loop_msid;
           break;
-        case MSL_ACT_FX_SPECIAL_AIR_N_END:
+        case MSL_FX_KIND_SPECIAL_AIR_N_END:
           batch->state.animation_index[idx] = (uint32_t)lp->air_end_msid;
           break;
         default:
@@ -1060,11 +1078,12 @@ void blaster_update_pre_physics(MslBatch* batch) {
         continue;
       }
 
-      switch (a2) {
-        case MSL_ACT_FX_SPECIAL_N_START:
+      switch (msl_motion_state_fx_special_kind(cid, a2)) {
+        case MSL_FX_KIND_SPECIAL_N_START:
           if (anim_finished(cid, lp->ground_start_msid, anim_frame_f32)) {
             const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
-            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP;
+            batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+                batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_N_LOOP);
             batch->state.animation_index[idx] = (uint32_t)lp->ground_loop_msid;
             // Decomp: ftFx_SpecialNStart_Anim transitions via Fighter_ChangeMotionState without
             // Ft_MF_KeepFastFall, so fp->fall_fast is cleared on entry.
@@ -1082,7 +1101,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           }
           break;
-        case MSL_ACT_FX_SPECIAL_N_LOOP:
+        case MSL_FX_KIND_SPECIAL_N_LOOP:
           if (anim_finished(cid, lp->ground_loop_msid, anim_frame_f32)) {
             const uint8_t loop_requested = specialn_is_blaster_loop_requested(batch, idx);
             batch->state.specialn_blaster_loop_requested[idx] = 0u;
@@ -1099,7 +1118,8 @@ void blaster_update_pre_physics(MslBatch* batch) {
               attack_identity_restart_same_move_ft_800892A0(batch, idx);
             } else {
               const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
-              batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_END;
+              batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+                  batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_N_END);
               batch->state.animation_index[idx] = (uint32_t)lp->ground_end_msid;
               // Decomp: Loop -> End uses Fighter_ChangeMotionState without KeepFastFall.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
@@ -1111,16 +1131,17 @@ void blaster_update_pre_physics(MslBatch* batch) {
             }
           }
           break;
-        case MSL_ACT_FX_SPECIAL_N_END:
+        case MSL_FX_KIND_SPECIAL_N_END:
           if (anim_finished(cid, lp->ground_end_msid, anim_frame_f32)) {
             enter_wait(batch, idx);
             (void)specialn_end_try_destination_wait_forward_dash(batch, c, idx);
           }
           break;
-        case MSL_ACT_FX_SPECIAL_AIR_N_START:
+        case MSL_FX_KIND_SPECIAL_AIR_N_START:
           if (anim_finished(cid, lp->air_start_msid, anim_frame_f32)) {
             const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
-            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP;
+            batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+                batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP);
             batch->state.animation_index[idx] = (uint32_t)lp->air_loop_msid;
             // Decomp: ftFx_SpecialAirNStart_Anim transitions via Fighter_ChangeMotionState without
             // Ft_MF_KeepFastFall, so fp->fall_fast is cleared on entry.
@@ -1133,7 +1154,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           }
           break;
-        case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
+        case MSL_FX_KIND_SPECIAL_AIR_N_LOOP:
           if (anim_finished(cid, lp->air_loop_msid, anim_frame_f32)) {
             const uint8_t loop_requested = specialn_is_blaster_loop_requested(batch, idx);
             batch->state.specialn_blaster_loop_requested[idx] = 0u;
@@ -1149,7 +1170,8 @@ void blaster_update_pre_physics(MslBatch* batch) {
               attack_identity_restart_same_move_ft_800892A0(batch, idx);
             } else {
               const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
-              batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END;
+              batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+                  batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END);
               batch->state.animation_index[idx] = (uint32_t)lp->air_end_msid;
               // Decomp: Aerial loop -> end uses Fighter_ChangeMotionState without KeepFastFall.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
@@ -1161,7 +1183,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
             }
           }
           break;
-        case MSL_ACT_FX_SPECIAL_AIR_N_END:
+        case MSL_FX_KIND_SPECIAL_AIR_N_END:
           if (anim_finished(cid, lp->air_end_msid, anim_frame_f32)) {
             if (on_ground) {
               enter_wait(batch, idx);
@@ -1193,7 +1215,7 @@ void blaster_update_post_collision(MslBatch* batch) {
       }
 
       const uint8_t cid = batch->state.char_id[idx];
-      if (!is_fox_falco(cid)) {
+      if (!char_owns_blaster_machine(cid)) {
         continue;
       }
       const MslCharParams* ch = msl_char_params_fast(cid);
@@ -1208,9 +1230,10 @@ void blaster_update_post_collision(MslBatch* batch) {
       }
 
       const uint16_t a = batch->state.action_id[idx];
-      if (a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START &&
-          a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP &&
-          a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END) {
+      const uint8_t a_kind = msl_motion_state_fx_special_kind(cid, a);
+      if (a_kind != (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_START &&
+          a_kind != (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP &&
+          a_kind != (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END) {
         continue;
       }
 

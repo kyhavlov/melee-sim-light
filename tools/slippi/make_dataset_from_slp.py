@@ -2426,7 +2426,7 @@ def _derive_throw_laser_item_hitlist_seed_lanes(
     refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C,it_80272460}
     refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
     refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-    tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch
+    refs/Ishiiruka branch engine-dump-v12-probes (EngineDumpWriter item hitlist lanes)
     """
     n_samples = int(seed_action_id_u16.shape[0])
     if n_samples == 0:
@@ -6302,6 +6302,9 @@ def _main_impl(args) -> Dataset:
         mash_x, mash_y = derive_grab_mash_stick_sign_post(
             stick_x_unit=stick_x,
             stick_y_unit=stick_y,
+            action_id_u16=post_action_id[:, slot],
+            action_frame_i16=post_action_frame[:, slot],
+            grab_owner_port_u8=grab_owner[:, slot],
             grab_mash_stick_threshold=grab_mash_stick_threshold,
         )
         grab_mash_x_sign_post[:, slot] = mash_x

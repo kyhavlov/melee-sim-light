@@ -24,8 +24,11 @@
 #include "stage_collision.h"
 #include "throw_flow.h"
 
-static inline uint8_t is_fox_falco(uint8_t char_id) {
-  return (char_id == (uint8_t)MSL_CHAR_ID_FOX) || (char_id == (uint8_t)MSL_CHAR_ID_FALCO);
+static inline uint8_t char_owns_shine_machine(uint8_t char_id) {
+  // Data-driven machine admission: a character enters the SpecialLw (shine) machine iff
+  // its owners table maps the machine's defining kind (see blaster.c sibling).
+  return msl_motion_state_action_for_fx_kind(char_id, (uint8_t)MSL_FX_KIND_SPECIAL_LW_START) !=
+         0xFFFFu;
 }
 
 uint8_t shine_char_supports_reflector(uint8_t char_id) {
@@ -35,41 +38,38 @@ uint8_t shine_char_supports_reflector(uint8_t char_id) {
   //   spacie reflector enters, so gate the caller explicitly before any control-flow consume.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
   // refs/melee/src/melee/ft/chara/ftFalco/ftFc_SpecialLw.c
-  return is_fox_falco(char_id);
+  return char_owns_shine_machine(char_id);
 }
 
 // Decomp: in ftFx_Init.c, the aerial SpecialAirLw* motion states are a contiguous block following
-// the grounded SpecialLw* block (Start..Turn).
-enum { MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA = 5 };
+// the grounded SpecialLw* block (Start..Turn). The fx_special_kind values mirror that
+// contiguity (LW_START..LW_TURN = 20..24, AIR_LW_START..AIR_LW_TURN = 25..29), so the
+// ground<->air pairing is a kind delta.
+enum { MSL_FX_SHINE_GROUND_TO_AIR_KIND_DELTA = 5 };
 
-static inline uint8_t action_is_shine(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_FX_SPECIAL_LW_START:
-    case MSL_ACT_FX_SPECIAL_LW_LOOP:
-    case MSL_ACT_FX_SPECIAL_LW_HIT:
-    case MSL_ACT_FX_SPECIAL_LW_END:
-    case MSL_ACT_FX_SPECIAL_LW_TURN:
-    case MSL_ACT_FX_SPECIAL_AIR_LW_START:
-    case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP:
-    case MSL_ACT_FX_SPECIAL_AIR_LW_HIT:
-    case MSL_ACT_FX_SPECIAL_AIR_LW_END:
-    case MSL_ACT_FX_SPECIAL_AIR_LW_TURN:
-      return 1;
-    default:
-      return 0;
-  }
+static inline uint8_t shine_kind(uint8_t char_id, uint16_t action_id) {
+  return msl_motion_state_fx_special_kind(char_id, action_id);
 }
 
-static inline uint8_t action_is_shine_ground(uint16_t action_id) {
-  return (action_id >= (uint16_t)MSL_ACT_FX_SPECIAL_LW_START &&
-          action_id <= (uint16_t)MSL_ACT_FX_SPECIAL_LW_TURN)
+static inline uint8_t action_is_shine(uint8_t char_id, uint16_t action_id) {
+  const uint8_t k = shine_kind(char_id, action_id);
+  return (k >= (uint8_t)MSL_FX_KIND_SPECIAL_LW_START &&
+          k <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_TURN)
              ? 1
              : 0;
 }
 
-static inline uint8_t action_is_shine_air(uint16_t action_id) {
-  return (action_id >= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START &&
-          action_id <= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_TURN)
+static inline uint8_t action_is_shine_ground(uint8_t char_id, uint16_t action_id) {
+  const uint8_t k = shine_kind(char_id, action_id);
+  return (k >= (uint8_t)MSL_FX_KIND_SPECIAL_LW_START && k <= (uint8_t)MSL_FX_KIND_SPECIAL_LW_TURN)
+             ? 1
+             : 0;
+}
+
+static inline uint8_t action_is_shine_air(uint8_t char_id, uint16_t action_id) {
+  const uint8_t k = shine_kind(char_id, action_id);
+  return (k >= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START &&
+          k <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_TURN)
              ? 1
              : 0;
 }
@@ -112,7 +112,8 @@ static inline void shine_ground_start_platform_pass_enter(MslBatch* batch, const
   batch->state.on_ground[idx] = 0u;
   batch->state.pos_z[idx] = 0.0f;
   batch->state.ecb_lock_timer[idx] = 10u;
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START;
+  batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+      batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START);
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_start;
   batch->state.speed_ground_x_self[idx] = 0.0f;
   batch->state.speed_y_self[idx] = c->pass_vel_y;
@@ -490,7 +491,8 @@ static inline uint8_t stick_wants_turn(const MslCommonParams* c, int8_t main_x, 
 
 static inline void enter_shine_ground_start(MslBatch* batch, size_t idx,
                                             const MslSpecialMsids* ms) {
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_LW_START;
+  batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+      batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_LW_START);
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_start;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   // Decomp: ftFx_SpecialLw_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState, before
@@ -545,7 +547,8 @@ static inline void enter_shine_air_start(MslBatch* batch, size_t idx, const MslC
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
   batch->state.fall_fast[idx] = 0u;
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START;
+  batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+      batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START);
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_start;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   // Decomp: ftFx_SpecialAirLw_Enter has the same immediate post-ChangeMotionState animation tick
@@ -585,7 +588,7 @@ void shine_enter_ground_start_from_iasa(MslBatch* batch, size_t idx) {
     return;
   }
   const uint8_t cid = batch->state.char_id[idx];
-  if (!is_fox_falco(cid)) {
+  if (!char_owns_shine_machine(cid)) {
     return;
   }
   const MslCharParams* ch = msl_char_params_fast(cid);
@@ -632,25 +635,29 @@ static inline uint8_t shine_release_should_end(const MslBatch* batch, size_t idx
 }
 
 static inline void enter_shine_ground_loop(MslBatch* batch, size_t idx, const MslSpecialMsids* ms) {
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_LW_LOOP;
+  batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+      batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_LW_LOOP);
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_loop;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static inline void enter_shine_air_loop(MslBatch* batch, size_t idx, const MslSpecialMsids* ms) {
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_LOOP;
+  batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+      batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_LOOP);
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_loop;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static inline void enter_shine_ground_end(MslBatch* batch, size_t idx, const MslSpecialMsids* ms) {
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_LW_END;
+  batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+      batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_LW_END);
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_end;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static inline void enter_shine_air_end(MslBatch* batch, size_t idx, const MslSpecialMsids* ms) {
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_END;
+  batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+      batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_END);
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_end;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
@@ -658,14 +665,16 @@ static inline void enter_shine_air_end(MslBatch* batch, size_t idx, const MslSpe
 static inline void enter_shine_ground_turn(MslBatch* batch, size_t idx, const MslSpecialMsids* ms) {
   // Decomp: ftFx_SpecialLwTurn_Check enters the turn motion state and flips facing on entry.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwTurn_Check
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_LW_TURN;
+  batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+      batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_LW_TURN);
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_loop;  // Turn uses Loop msid.
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
 }
 
 static inline void enter_shine_air_turn(MslBatch* batch, size_t idx, const MslSpecialMsids* ms) {
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_TURN;
+  batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+      batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_TURN);
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_loop;  // Turn uses Loop msid.
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
@@ -682,7 +691,7 @@ void shine_update_pre_physics(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint8_t cid = batch->state.char_id[idx];
-      if (!is_fox_falco(cid)) {
+      if (!char_owns_shine_machine(cid)) {
         continue;
       }
       const MslCharParams* ch = msl_char_params_fast(cid);
@@ -712,7 +721,7 @@ void shine_update_pre_physics(MslBatch* batch) {
                      : 0u);
 
       // Entry (minimal): B press + down stick from basic locomotion.
-      if (!action_is_shine(a) && (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0 &&
+      if (!action_is_shine(cid, a) && (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0 &&
           stick_wants_speciallw(c, batch->state.input_main_y[idx])) {
         if (on_ground) {
           const uint8_t grounded_side_special_preempts_down_special =
@@ -754,40 +763,40 @@ void shine_update_pre_physics(MslBatch* batch) {
       }
 
       const uint16_t a2 = batch->state.action_id[idx];
-      if (!action_is_shine(a2)) {
+      if (!action_is_shine(cid, a2)) {
         continue;
       }
 
       // Keep animation_index stable for shine states (avoid seed carry-through).
-      switch (a2) {
-        case MSL_ACT_FX_SPECIAL_LW_START:
+      switch (shine_kind(cid, a2)) {
+        case MSL_FX_KIND_SPECIAL_LW_START:
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_start;
           break;
-        case MSL_ACT_FX_SPECIAL_LW_LOOP:
+        case MSL_FX_KIND_SPECIAL_LW_LOOP:
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_loop;
           break;
-        case MSL_ACT_FX_SPECIAL_LW_HIT:
+        case MSL_FX_KIND_SPECIAL_LW_HIT:
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_hit;
           break;
-        case MSL_ACT_FX_SPECIAL_LW_END:
+        case MSL_FX_KIND_SPECIAL_LW_END:
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_end;
           break;
-        case MSL_ACT_FX_SPECIAL_LW_TURN:
+        case MSL_FX_KIND_SPECIAL_LW_TURN:
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_loop;
           break;
-        case MSL_ACT_FX_SPECIAL_AIR_LW_START:
+        case MSL_FX_KIND_SPECIAL_AIR_LW_START:
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_start;
           break;
-        case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP:
+        case MSL_FX_KIND_SPECIAL_AIR_LW_LOOP:
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_loop;
           break;
-        case MSL_ACT_FX_SPECIAL_AIR_LW_HIT:
+        case MSL_FX_KIND_SPECIAL_AIR_LW_HIT:
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_hit;
           break;
-        case MSL_ACT_FX_SPECIAL_AIR_LW_END:
+        case MSL_FX_KIND_SPECIAL_AIR_LW_END:
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_end;
           break;
-        case MSL_ACT_FX_SPECIAL_AIR_LW_TURN:
+        case MSL_FX_KIND_SPECIAL_AIR_LW_TURN:
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_loop;
           break;
         default:
@@ -814,8 +823,8 @@ void shine_update_pre_physics(MslBatch* batch) {
       uint16_t a_work = a2;
       uint8_t loop_entered_from_anim_callback = 0u;
       for (int it = 0; it < 2; it++) {
-        switch (a_work) {
-          case MSL_ACT_FX_SPECIAL_LW_START:
+        switch (shine_kind(cid, a_work)) {
+          case MSL_FX_KIND_SPECIAL_LW_START:
             if (shine_entered_this_frame == 0u) {
               // Decomp: Start_Anim latches isRelease only; releaseLag is not decremented in Start.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Anim
@@ -836,7 +845,7 @@ void shine_update_pre_physics(MslBatch* batch) {
               break;
             }
             break;
-          case MSL_ACT_FX_SPECIAL_AIR_LW_START:
+          case MSL_FX_KIND_SPECIAL_AIR_LW_START:
             if (shine_entered_this_frame == 0u) {
               // Decomp: SpecialAirLwStart_Anim latches isRelease only.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwStart_Anim
@@ -852,7 +861,7 @@ void shine_update_pre_physics(MslBatch* batch) {
               continue;
             }
             break;
-          case MSL_ACT_FX_SPECIAL_LW_LOOP: {
+          case MSL_FX_KIND_SPECIAL_LW_LOOP: {
             if (loop_entered_from_anim_callback == 0u) {
               // Slippi post-frame alignment: gate Loop->End from the reseeded lag value before
               // decrementing for this simulated frame, so teacher-forced one-step mirrors when the
@@ -891,7 +900,7 @@ void shine_update_pre_physics(MslBatch* batch) {
               break;
             }
           } break;
-          case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP: {
+          case MSL_FX_KIND_SPECIAL_AIR_LW_LOOP: {
             if (loop_entered_from_anim_callback == 0u) {
               shine_release_latch_anim(batch, idx, held);
               if (shine_release_should_end(batch, idx)) {
@@ -921,7 +930,7 @@ void shine_update_pre_physics(MslBatch* batch) {
               }
             }
           } break;
-          case MSL_ACT_FX_SPECIAL_LW_HIT:
+          case MSL_FX_KIND_SPECIAL_LW_HIT:
             shine_release_tick_anim(batch, idx, held);
             if (anim_finished(cid, ms->speciallw_ground_hit, anim_frame_f32)) {
               if (shine_release_should_end(batch, idx)) {
@@ -934,7 +943,7 @@ void shine_update_pre_physics(MslBatch* batch) {
               }
             }
             break;
-          case MSL_ACT_FX_SPECIAL_AIR_LW_HIT:
+          case MSL_FX_KIND_SPECIAL_AIR_LW_HIT:
             shine_release_tick_anim(batch, idx, held);
             if (anim_finished(cid, ms->speciallw_air_hit, anim_frame_f32)) {
               if (shine_release_should_end(batch, idx)) {
@@ -947,7 +956,7 @@ void shine_update_pre_physics(MslBatch* batch) {
               }
             }
             break;
-          case MSL_ACT_FX_SPECIAL_LW_TURN: {
+          case MSL_FX_KIND_SPECIAL_LW_TURN: {
             shine_release_tick_anim(batch, idx, held);
             const int16_t tf = (int16_t)ch->reflector_turn_frames;
             const int16_t af = batch->state.action_frame[idx];
@@ -962,7 +971,7 @@ void shine_update_pre_physics(MslBatch* batch) {
               }
             }
           } break;
-          case MSL_ACT_FX_SPECIAL_AIR_LW_TURN: {
+          case MSL_FX_KIND_SPECIAL_AIR_LW_TURN: {
             shine_release_tick_anim(batch, idx, held);
             const int16_t tf = (int16_t)ch->reflector_turn_frames;
             const int16_t af = batch->state.action_frame[idx];
@@ -977,7 +986,7 @@ void shine_update_pre_physics(MslBatch* batch) {
               }
             }
           } break;
-          case MSL_ACT_FX_SPECIAL_LW_END:
+          case MSL_FX_KIND_SPECIAL_LW_END:
             if (anim_finished(cid, ms->speciallw_ground_end, anim_frame_f32)) {
               // Decomp callback order:
               // - ftFx_SpecialLwEnd_Anim calls ftCommon_8007DB24 then ftCommon_8007D92C.
@@ -1030,10 +1039,11 @@ void shine_update_pre_physics(MslBatch* batch) {
               }
               (void)locomotion_wait_iasa_locomotion_subset_try_enter(
                   batch, c, ch, idx, buttons, buttons_pressed, stick_x, stick_y, tilt_timer_x,
-                  tilt_timer_y, facing_dir, (uint16_t)MSL_ACT_FX_SPECIAL_LW_END);
+                  tilt_timer_y, facing_dir,
+                  msl_motion_state_action_for_fx_kind(cid, (uint8_t)MSL_FX_KIND_SPECIAL_LW_END));
             }
             break;
-          case MSL_ACT_FX_SPECIAL_AIR_LW_END:
+          case MSL_FX_KIND_SPECIAL_AIR_LW_END:
             if (anim_finished(cid, ms->speciallw_air_end, anim_frame_f32)) {
               if (on_ground) {
                 enter_wait(batch, idx);
@@ -1073,7 +1083,7 @@ void shine_update_post_collision(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint8_t cid = batch->state.char_id[idx];
-      if (!is_fox_falco(cid)) {
+      if (!char_owns_shine_machine(cid)) {
         continue;
       }
       const MslSpecialMsids* ms = msl_special_msids(cid);
@@ -1085,29 +1095,30 @@ void shine_update_post_collision(MslBatch* batch) {
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1u : 0u;
       const float cur_frame = batch->state.anim_frame_f32[idx];
 
-      if (action_is_shine_ground(a) && !on_ground) {
+      if (action_is_shine_ground(cid, a) && !on_ground) {
         const MslCommonParams* c = msl_common_params();
         const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
         const uint16_t ground_id = batch->state.ground_id[idx];
         const uint8_t special_lw_start_platform_pass =
-            (uint8_t)(a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START && c != NULL &&
+            (uint8_t)(shine_kind(cid, a) == (uint8_t)MSL_FX_KIND_SPECIAL_LW_START && c != NULL &&
                       ground_id != 0xFFFFu &&
                       stage_collision_floor_line_is_platform(stage_id, ground_id) &&
                       batch->state.speed_y_self[idx] == c->pass_vel_y);
-        // Ground -> air: preserve anim frame.
-        batch->state.action_id[idx] =
-            (uint16_t)(a + (uint16_t)MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA);
+        // Ground -> air: preserve anim frame (the kind pairing is the same +5 delta the
+        // contiguous action block carried; route through the per-char reverse map).
+        batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+            cid, (uint8_t)(shine_kind(cid, a) + (uint8_t)MSL_FX_SHINE_GROUND_TO_AIR_KIND_DELTA));
         // Remap msid per-state.
         const uint16_t a2 = batch->state.action_id[idx];
-        if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) {
+        if (shine_kind(cid, a2) == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_start;
-        } else if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_LOOP) {
+        } else if (shine_kind(cid, a2) == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_LOOP) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_loop;
-        } else if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_HIT) {
+        } else if (shine_kind(cid, a2) == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_HIT) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_hit;
-        } else if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_END) {
+        } else if (shine_kind(cid, a2) == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_END) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_end;
-        } else if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_TURN) {
+        } else if (shine_kind(cid, a2) == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_TURN) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_loop;
         }
         // Decomp: every grounded Shine ground->air collision handler calls ftCommon_8007D5D4
@@ -1133,21 +1144,21 @@ void shine_update_post_collision(MslBatch* batch) {
               (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
         }
         msl_anim_timebase_enter(batch, idx, cur_frame, 1.0f);
-      } else if (action_is_shine_air(a) && on_ground) {
+      } else if (action_is_shine_air(cid, a) && on_ground) {
         // Air -> ground: preserve anim frame.
         const MslCharParams* ch = msl_char_params_fast(cid);
-        batch->state.action_id[idx] =
-            (uint16_t)(a - (uint16_t)MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA);
+        batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+            cid, (uint8_t)(shine_kind(cid, a) - (uint8_t)MSL_FX_SHINE_GROUND_TO_AIR_KIND_DELTA));
         const uint16_t a2 = batch->state.action_id[idx];
-        if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START) {
+        if (shine_kind(cid, a2) == (uint8_t)MSL_FX_KIND_SPECIAL_LW_START) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_start;
-        } else if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_LW_LOOP) {
+        } else if (shine_kind(cid, a2) == (uint8_t)MSL_FX_KIND_SPECIAL_LW_LOOP) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_loop;
-        } else if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_LW_HIT) {
+        } else if (shine_kind(cid, a2) == (uint8_t)MSL_FX_KIND_SPECIAL_LW_HIT) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_hit;
-        } else if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_LW_END) {
+        } else if (shine_kind(cid, a2) == (uint8_t)MSL_FX_KIND_SPECIAL_LW_END) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_end;
-        } else if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_LW_TURN) {
+        } else if (shine_kind(cid, a2) == (uint8_t)MSL_FX_KIND_SPECIAL_LW_TURN) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_loop;
         }
         // Decomp: every SpecialAirLw* AirToGround handler calls ftCommon_8007D7FC before

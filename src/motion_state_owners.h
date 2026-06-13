@@ -129,9 +129,14 @@ typedef enum MslMsFxSpecialKind {
   MSL_FX_KIND_SPECIAL_AIR_LW_HIT = 27,
   MSL_FX_KIND_SPECIAL_AIR_LW_END = 28,
   MSL_FX_KIND_SPECIAL_AIR_LW_TURN = 29,
+  MSL_FX_KIND_COUNT = 30,
 } MslMsFxSpecialKind;
 
 uint8_t msl_motion_state_fx_special_kind(uint8_t char_id, uint16_t action_id);
+// Reverse identity: the char's action id owning the kind row (0xFFFF when the char has no
+// row for the kind). The kind lane is 1:1 per char (pinned by the owners parity tests), so
+// special-machine writers can be kind-keyed instead of raw-action-id-keyed.
+uint16_t msl_motion_state_action_for_fx_kind(uint8_t char_id, uint8_t fx_kind);
 uint8_t msl_motion_state_class3_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit);
 
 extern const uint8_t* msl_motion_state_fx_special_kind_by_char[256] __attribute__((weak));

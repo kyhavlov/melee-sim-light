@@ -4851,7 +4851,8 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C,it_80272460}`,
     `refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688`,
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim`,
-    `tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch`.
+    `refs/Ishiiruka` branch `engine-dump-v12-probes` and
+    `tools/dolphin/engine_dump_io.py`.
   - ThrowHi pending-spawn item HitCapsule carry:
     - The first ThrowHi command-pending pulse now seeds the newly spawned state1 throw laser's
       item hitbox 2 victim ring when there is a unique non-attached same-source throw-laser victim
@@ -4872,7 +4873,8 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC`,
     `refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}`,
     `refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688`,
-    `tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch`.
+    `refs/Ishiiruka` branch `engine-dump-v12-probes` and
+    `tools/dolphin/engine_dump_io.py`.
   - Falco ThrowLw frame-28 callback-phase split:
     - Runtime now treats Falco kind-55 item victims_1 seed masks as per-HitCapsule state in the
       laser BODY prefilter: hb2/3 entries do not suppress hb0/1. This preserves the primary QGD
@@ -4946,7 +4948,8 @@ Fox/Falco special-owner split (2026-04-17):
       remain closed: `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`. The checklist item remains active.
     Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}`,
     `refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}`,
-    `tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch`.
+    `refs/Ishiiruka` branch `engine-dump-v12-probes` and
+    `tools/dolphin/engine_dump_io.py`.
   - Crossed-prev ThrowHi first-pulse carry:
     - The accepted current-frame ThrowHi first-pulse carry now also applies to the one-step
       crossed-prev frame-18 state1 article when the already-hit victim is on the non-projectile
@@ -4964,10 +4967,11 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}`,
     `refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}`,
     `refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688`,
-    `tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch`.
+    `refs/Ishiiruka` branch `engine-dump-v12-probes` and
+    `tools/dolphin/engine_dump_io.py`.
   - Throw-laser intra-frame event probe:
     - The Dolphin forensic path now has a reviewable throw-laser event patch at
-      `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch` plus parser
+      `refs/Ishiiruka` branch `engine-dump-v12-probes` plus parser
       `tools/dolphin/throw_laser_event_dump.py`. It hooks `it_8029C6CC`, `it_8029C4D4`,
       `it_8026FAC4`, `it_80272460`, `Item_8026A294`, and `Item_8026A8EC` through playback
       interpreter events and records JSONL spawn/body/damage/destroy state for throw lasers.
@@ -5007,7 +5011,8 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}`,
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}`,
-    `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`.
+    `refs/Ishiiruka` branch `engine-dump-v12-probes` and
+    `tools/dolphin/throw_laser_event_dump.py`.
   - Falco ThrowHi same-frame state1 laser damage top-off:
     - When multiple ThrowHi state1 articles overlap the same already-damaged victim in one item
       pass, their HitCapsule damage contributes to the same `Fighter_ProcessHit` percent-temp
@@ -5039,7 +5044,8 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}`,
     `refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}`,
     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}`,
-    `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`.
+    `refs/Ishiiruka` branch `engine-dump-v12-probes` and
+    `tools/dolphin/throw_laser_event_dump.py`.
   - ThrowLw late attached replacement spawn and narrowed Falco ThrowB startup callback:
     - Fox ThrowLw rows with a pending frame-28/31 command, attached ThrownLw victim, exactly one
       expiring state1 article (`item_timer <= 1`), and hb0/1 victim-ring evidence now emit the
@@ -5059,7 +5065,8 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}`,
     `refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}`,
-    `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`.
+    `refs/Ishiiruka` branch `engine-dump-v12-probes` and
+    `tools/dolphin/throw_laser_event_dump.py`.
   - GuardReflect ShieldBounced keepalive:
     - Established GuardReflect snapshots bypass the temporary high-shield HP guard in the laser
       shield-bounce path. `Item_80269DC8` owns this branch through hidden item bounce internals
@@ -5115,7 +5122,7 @@ Fox/Falco special-owner split (2026-04-17):
       active.
     Sources: `refs/melee/src/melee/it/item.c::Item_80269DC8`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced`,
-    `tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch`,
+    `refs/Ishiiruka` branch `engine-dump-v12-probes`,
     `reports/triage/current_f15b_keepalive_dolphin_maj6337/rows/engine_dump_rows.json`.
   - Remaining F14c callback-combo blocker:
     - The four remaining aggregate F14c clusters (`DCC:1053`, `PRH:8385`, `PJO:305`, `TCH:270`)
@@ -5130,7 +5137,8 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}`,
     `refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294,checkHitLag}`,
     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}`,
-    `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`.
+    `refs/Ishiiruka` branch `engine-dump-v12-probes` and
+    `tools/dolphin/throw_laser_event_dump.py`.
   - Powershield reflect-size source visibility:
     - `p_ftCommonData->x2A8` is extracted as `powershield_reflect_size`, matching
       `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained only as source/data
@@ -5168,7 +5176,7 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/ftcommon.h::p_ftCommonData`.
   - Laser shield/reflect event probe:
     - Reviewable intra-frame instrumentation now exists at
-      `tools/dolphin/patches/ishiiruka_laser_shield_reflect_event_probe.patch`, with parser
+      `refs/Ishiiruka` branch `engine-dump-v12-probes`, with parser
       `tools/dolphin/laser_shield_reflect_event_dump.py` and wrapper support in
       `tools/dolphin/{dolphin_engine_dump.py,forensic_row_dump.py}`. It logs
       `ftColl_80077688`, `ftColl_80077464`, `Item_80269DC8`, `Item_80269F14`,
@@ -5202,7 +5210,8 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688}`,
     `refs/melee/src/melee/it/item.c::{Item_80269DC8,Item_80269F14}`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxLaser_Logic94_ShieldBounced,itFoxLaser_Logic94_HitShield}`,
-    `tools/dolphin/patches/ishiiruka_laser_shield_reflect_event_probe.patch`,
+    `refs/Ishiiruka` branch `engine-dump-v12-probes` and
+    `tools/dolphin/laser_shield_reflect_event_dump.py`,
     `reports/triage/current_f15_probe_dcc2905/DistinctCaringCobra_rec2905_p0_f2780_2785_laser_shield_reflect_events.jsonl`,
     `reports/triage/current_f15_probe_maj6337/MotionlessAggressiveJay_rec6337_p1_f6212_6217_laser_shield_reflect_events.jsonl`,
     `reports/triage/current_f15_probe_maj118/MotionlessAggressiveJay_rec118_p1_f-7_-2_laser_shield_reflect_events.jsonl`,

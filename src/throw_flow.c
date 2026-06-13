@@ -306,8 +306,46 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
   // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
   uint8_t rel_hit_idx = 0xFFu;
   float rel_anim_frame = owner_af;
+  // 1-ulp release-edge reconstruction for attached weight-scaled throws: the source AObj
+  // accumulates the 1/(weight * x37C) rate in f32 and can sit one ulp BELOW the integer
+  // command frame while the Slippi-seeded/Q16.16 timebase reports it exactly (marth
+  // ThrowHi at internal 11.999999 vs seeded 12.000). Without this, released_prev reads
+  // "already past frame 12" on the crossing step and the set_throw_flags edge never
+  // fires (the victim holds ThrownHi one frame past truth). Same source model as the
+  // attached-window timebase snap (anim_timebase_non_low_throw_rate_snap_delta).
+  // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD724}
+  float released_prev_af = owner_prev_af;
+  {
+    const uint8_t victim_attached = batch->state.attached_victim_port[oidx];
+    const int32_t rate_fp = batch->state.frame_speed_mul_fp_q16_16[oidx];
+    if (victim_attached != 0xFFu && (int)victim_attached < num_players &&
+        (int)victim_attached != owner_p && rate_fp > 0 && rate_fp != (int32_t)MSL_Q16_16_ONE) {
+      const size_t v_idx = msl_idx_player(bi, (int)victim_attached);
+      const MslCommonParams* common = msl_common_params();
+      const MslCharParams* owner_ch = msl_char_params(owner_char);
+      const MslCharParams* victim_ch = msl_char_params(batch->state.char_id[v_idx]);
+      const int throw_index = (int)owner_act - (int)MSL_ACT_THROW_F;
+      if (common != NULL && owner_ch != NULL && victim_ch != NULL && throw_index >= 0 &&
+          throw_index < 8 &&
+          (owner_ch->weight_independent_throws_mask & (uint8_t)(1u << throw_index)) == 0u &&
+          victim_ch->weight > 0.0f && common->throw_anim_speed_weight_mul > 0.0f) {
+        const float rate = 1.0f / (victim_ch->weight * common->throw_anim_speed_weight_mul);
+        const int32_t owner_prev_fp_local =
+            batch->state.anim_frame_fp_q16_16[oidx] - batch->state.frame_speed_mul_fp_q16_16[oidx];
+        const int32_t n = (owner_prev_fp_local + rate_fp / 2) / rate_fp;
+        if (n > 0 && n <= 256) {
+          float src = 0.0f;
+          for (int32_t i = 0; i < n; i++) {
+            src += rate;
+          }
+          released_prev_af = src;
+        }
+      }
+    }
+  }
   const uint8_t released_prev =
-      move_tables_throw_release_hit_idx(owner_char, owner_act, owner_prev_af, NULL);
+      move_tables_throw_release_hit_idx(owner_char, owner_act, released_prev_af, NULL);
   const uint8_t released_cur =
       move_tables_throw_release_hit_idx(owner_char, owner_act, owner_af, &rel_hit_idx);
   if (released_cur && !released_prev) {

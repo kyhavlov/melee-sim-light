@@ -291,6 +291,43 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
   // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
+  // Kind-owned pre-action rows (hoisted from numeric case labels: the FX numeric ids are
+  // per-character, and non-owning chars' colliding rows previously fell to the same
+  // return 0u via in-case kind guards / the default arm).
+  switch (msl_motion_state_fx_special_kind(batch->state.char_id[d_idx], action_id)) {
+    case MSL_FX_KIND_SPECIAL_LW_END:
+      // Shine-end pre-action ownership from the extracted MotionState row identity.
+      return 1u;
+    case MSL_FX_KIND_SPECIAL_AIR_HI:
+      // Exact replay rows keep the HSD_Randf phase seed-owned. Free-running rollout must still use
+      // the current ProcessHit source owner before admitting this pre-action; visible
+      // SpecialAirHi shape plus an advanced RNG clock is not enough to prove the damage source.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      return 0u;
+    case MSL_FX_KIND_SPECIAL_HI_FALL: {
+      const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
+      const int num_players = (int)batch->config.num_players;
+      const int attacker = msl_damage_source_local_slot_from_port0(batch, (int)bi, num_players,
+                                                                   batch->state.last_hit_by[d_idx]);
+      if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
+        return 0u;
+      }
+      const size_t a_idx = bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker;
+      if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
+        return 0u;
+      }
+      const size_t hb_base = a_idx * (size_t)MSL_MAX_HITBOXES;
+      for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+        if (batch->state.hitbox_enable_edge[hb_base + (size_t)hb] != 0u) {
+          return 1u;
+        }
+      }
+      return 0u;
+    }
+    default:
+      break;
+  }
   switch (action_id) {
     case (uint16_t)MSL_ACT_DAMAGE_FALL:
     case (uint16_t)MSL_ACT_FALL:
@@ -306,12 +343,6 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
       // Widen only together with marth RNG-phase derivation work.
       return (uint8_t)(batch->state.char_id[d_idx] == (uint8_t)MSL_CHAR_ID_FOX ||
                        batch->state.char_id[d_idx] == (uint8_t)MSL_CHAR_ID_FALCO);
-    case (uint16_t)MSL_ACT_FX_SPECIAL_LW_END:
-      // Shine-end pre-action ownership from the extracted MotionState row identity
-      // (other characters' same-numbered specials stay kind 0).
-      return (
-          uint8_t)(msl_motion_state_fx_special_kind_fast(batch->state.char_id[d_idx], action_id) ==
-                   (uint8_t)MSL_FX_KIND_SPECIAL_LW_END);
     case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
       return 1u;
     case (uint16_t)MSL_ACT_LANDING_AIR_LW:
@@ -322,17 +353,6 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
       // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
-      return 0u;
-    case (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI:
-      if (msl_motion_state_fx_special_kind_fast(batch->state.char_id[d_idx], action_id) !=
-          (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI) {
-        return 0u;
-      }
-      // Exact replay rows keep the HSD_Randf phase seed-owned. Free-running rollout must still use
-      // the current ProcessHit source owner before admitting this pre-action; visible
-      // SpecialAirHi shape plus an advanced RNG clock is not enough to prove the damage source.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       return 0u;
     case (uint16_t)MSL_ACT_DAMAGE_FLY_N:
     case (uint16_t)MSL_ACT_DAMAGE_FLY_LW: {
@@ -371,30 +391,6 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
         }
       }
       return msl_damage_owner_replay_rollout_advanced_under_rng_owner(batch, d_idx);
-    }
-    case (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL: {
-      if (msl_motion_state_fx_special_kind_fast(batch->state.char_id[d_idx], action_id) !=
-          (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL) {
-        return 0u;
-      }
-      const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
-      const int num_players = (int)batch->config.num_players;
-      const int attacker = msl_damage_source_local_slot_from_port0(batch, (int)bi, num_players,
-                                                                   batch->state.last_hit_by[d_idx]);
-      if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
-        return 0u;
-      }
-      const size_t a_idx = bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker;
-      if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
-        return 0u;
-      }
-      const size_t hb_base = a_idx * (size_t)MSL_MAX_HITBOXES;
-      for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
-        if (batch->state.hitbox_enable_edge[hb_base + (size_t)hb] != 0u) {
-          return 1u;
-        }
-      }
-      return 0u;
     }
     case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP: {
       const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;

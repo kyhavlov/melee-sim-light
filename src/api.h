@@ -1701,8 +1701,8 @@ typedef struct MslSeed {
   // Decomp ownership:
   // - Item-vs-fighter BODY collision routes through it_8026FAC4 / it_8026FA2C and inserts fighter
   //   victims into the item's HitCapsule victims_1 list via lbColl_80008688.
-  // - The dump probe patch in tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch
-  //   confirms throw-laser xDA8 and victims_1 cooldown state on replay-real F14 rows.
+  // - refs/Ishiiruka branch engine-dump-v12-probes plus tools/dolphin/engine_dump_io.py confirm
+  //   throw-laser xDA8 and victims_1 cooldown state on replay-real F14 rows.
   //
   // Seed representation:
   // - port 0..3: one fighter victim to pre-latch into the item hitlist at reseed.

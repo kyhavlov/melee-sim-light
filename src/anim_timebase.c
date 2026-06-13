@@ -499,6 +499,19 @@ static inline void anim_timebase_apply_capture_loop(MslBatch* batch, size_t idx)
   if (!msl_action_is_capture_pulled_wait_damage_victim(batch->state.action_id[idx])) {
     return;
   }
+  // CaptureDamage* is EXCLUDED from the forced loop: ftCo_CaptureDamage*_Anim exits to
+  // CaptureWait* via !ftAnim_IsFramesRemaining, which requires the non-looping end clamp
+  // (cur_anim_frame parks at end_frame). A forced wrap erases the end crossing before the
+  // grab-flow exit check can observe it, so the victim never leaves the damage state by
+  // its own animation (previously masked by a non-source owner-CatchAttack-ended yank,
+  // which only co-terminated for fox/falco's 4-frame pummel hit offset).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_CaptureDamageHi_Anim,ftCo_CaptureDamageLw_Anim}
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_IsFramesRemaining
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_HI ||
+      batch->state.action_id[idx] == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW) {
+    return;
+  }
   const uint32_t anim_u32 = batch->state.animation_index[idx];
   if (anim_u32 > 0xFFFFu) {
     return;

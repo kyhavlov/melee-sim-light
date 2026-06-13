@@ -1618,9 +1618,13 @@ def test_derive_capture_grab_hidden_post_tracks_shared_owner_state() -> None:
         grab_mash_stick_threshold=0.5,
     )
 
-    assert grab_timer.tolist() == pytest.approx([76.0, 69.0, 68.0, 67.0])
+    # GrabMash for the step i -> i+1 reads fp-visible inputs that lag the serialized rows by
+    # one (v12 Dolphin probe windows: GAT 2482/5677, AGNG 3208, QGD 8257, CDO 12724, PRH
+    # 7602): the A edge serialized at row 1 fires GrabMash on the step 1 -> 2, so the mash
+    # damage and the x2344 arming land at row 2.
+    assert grab_timer.tolist() == pytest.approx([76.0, 75.0, 68.0, 67.0])
     assert counter.tolist() == pytest.approx([0.0, 1.0, 2.0, 3.0])
-    assert anim_timer.tolist() == pytest.approx([0.0, 10.0, 9.0, 8.0])
+    assert anim_timer.tolist() == pytest.approx([0.0, 0.0, 10.0, 9.0])
     assert jump_latch.tolist() == [0, 0, 0, 0]
     assert breakout_pending.tolist() == [0, 0, 0, 0]
 
