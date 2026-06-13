@@ -456,7 +456,7 @@ def test_upward_laser_stage_floor_crossing_does_not_preempt_article_delete(
     # mpCheckFloorRemap's downward-only branch; upward state1 throw-laser segments crossing through a
     # platform/floor line must not be converted to lifetime=1 before the later item/body/delete owner.
     # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Coll,it_8029C4D4}
-    # refs/melee/src/melee/it/it_266F.c::it_8026E9A4
+    # refs/melee/src/melee/it/itgroundcoll.c::it_8026E9A4
     # refs/melee/src/melee/mp/mplib.c::{mpCheckAllRemap,mpCheckFloorRemap}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)

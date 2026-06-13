@@ -1581,7 +1581,7 @@ def test_yoshi_shyguy_active_floor_contact_resets_anim_export_pec_1289() -> None
     # restarts the state-1 animation, zeroing exported x40_vel for this post-frame.
     # refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,
     #   itHeiho_UnkMotion1_Anim_inline}
-    # refs/melee/src/melee/it/it_266F.c::it_8026DA70
+    # refs/melee/src/melee/it/itgroundcoll.c::it_8026DA70
     out, ref = _step_one_row(dataset_path, 1289)
     assert int(out["items"][1]["exists"]) == 1
     assert int(out["items"][1]["type"]) == ITEM_KIND_HEIHO
@@ -1619,7 +1619,7 @@ def test_yoshi_shyguy_return_flight_floor_contact_reenters_state4_with_zero_expo
     # - The contact frame keeps the already-integrated item position and exports zero x40_vel;
     #   the next Anim callback owns the dynamic-bone delta refresh.
     # refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion4_Coll,it_802D9168}
-    # refs/melee/src/melee/it/it_266F.c::it_8026DA70
+    # refs/melee/src/melee/it/itgroundcoll.c::it_8026DA70
     out = _step_seed(seed)
     assert int(out["items"][slot]["exists"]) == 1
     assert int(out["items"][slot]["type"]) == ITEM_KIND_HEIHO
@@ -1727,7 +1727,7 @@ def test_yoshi_shyguy_fixed_ecb_floor_does_not_reset_when_already_below_floor_pe
     # floor entry just because the item continues moving laterally while below the floor plane.
     # refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,
     #   itHeiho_UnkMotion1_Anim}
-    # refs/melee/src/melee/it/it_266F.c::it_8026DA70
+    # refs/melee/src/melee/it/itgroundcoll.c::it_8026DA70
     # refs/melee/src/melee/mp/mplib.c::mpCheckFloorRemap
     for target_record, expected_vel_y in ((997, -0.6891632080078125), (998, -0.6946563720703125)):
         out, ref = _run_rollout_to_record(

@@ -76,7 +76,7 @@ def test_pokemon_laser_ignores_inactive_transformation_wall_lines() -> None:
     # this height crosses transformation segment 95 in the extracted graph and should not be deleted
     # by that invisible wall.
     # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Coll,it_8029C4D4}
-    # refs/melee/src/melee/it/it_266F.c::it_8026E9A4
+    # refs/melee/src/melee/it/itgroundcoll.c::it_8026E9A4
     # refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
     # data/stages/pokemon_stadium.json::segments[95]
     out = _step_seed(_seed_with_laser(x=-42.84, y=13.75, vel_x=-5.0, vel_y=0.0), steps=4)

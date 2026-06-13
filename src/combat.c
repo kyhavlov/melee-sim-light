@@ -33,6 +33,7 @@
 #include "item_common_params.h"
 #include "item_article_params.h"
 #include "laser_params.h"
+#include "lbcollision_constants.h"
 #include "motion_state_owners.h"
 #include "msl_math.h"
 #include "mtx34.h"
@@ -410,13 +411,6 @@ static inline uint8_t sphere_sphere_intersects(float ax, float ay, float az, flo
   const float dz = az - bz;
   const float rr = ar + br;
   return (dx * dx + dy * dy + dz * dz) <= (rr * rr);
-}
-
-static inline float combat_lbColl_804D7A38(void) {
-  // lbColl_8000805C BODY path forwards arg11 = lbColl_804D7A38 * hurt_owner_scale_y.
-  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
-  // refs/melee/src/melee/lb/lbcollision.c (lbColl_804D7A38 = 3)
-  return 3.0f;
 }
 
 static inline uint8_t combat_shine_start_damageair_entry_pose_bridge_applies(const MslBatch* batch,
@@ -1472,7 +1466,7 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_scaffold(
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
   float arg11 = 0.0f;
   if (defender_scale_y > 0.0f) {
-    arg11 = combat_lbColl_804D7A38() * defender_scale_y;
+    arg11 = msl_lbcoll_body_hurt_radius_mul() * defender_scale_y;
   }
   const float broad_r = hr + cr * arg11;
 
@@ -5715,7 +5709,7 @@ static inline uint8_t combat_attackairb_jump_tail_rejects_body_contact(
     // refs/melee/src/melee/ft/fighter.c::{Fighter_80068E64,Fighter_UpdateModelScale}
     // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
     // refs/melee/src/melee/ft/chara/ftFox/ftFox_AttackAir.c::{ftCo_8009DD94,ftCo_8009E318}
-    // refs/melee/src/melee/lb/lbjobj.c::lb_8000B1CC
+    // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     return 1u;
   }

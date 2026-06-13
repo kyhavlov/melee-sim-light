@@ -195,7 +195,7 @@ def test_laser_stage_wall_collision_sets_expiry_before_slot_lifecycle_shift() ->
     # - The preceding row is the negative boundary: same laser below the floor but not yet crossing
     #   a stage line must keep normal lifetime countdown.
     # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Coll,it_8029C4D4}
-    # refs/melee/src/melee/it/it_266F.c::it_8026E9A4
+    # refs/melee/src/melee/it/itgroundcoll.c::it_8026E9A4
     root = Path(__file__).resolve().parents[1]
     _skip_if_missing_laser_artifacts(root)
     dataset_path = (

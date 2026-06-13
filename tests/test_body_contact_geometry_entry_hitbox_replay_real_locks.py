@@ -267,7 +267,7 @@ def test_stm_jumpaerialf_tail_only_bair_rejects_false_body_and_keeps_real_hit() 
     # hurtcaps and must remain a real hit.
     # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
     # refs/melee/src/melee/ft/chara/ftFox/ftFox_AttackAir.c::{ftCo_8009DD94,ftCo_8009E318}
-    # refs/melee/src/melee/lb/lbjobj.c::lb_8000B1CC
+    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
     # data/hurtcaps/{fox,falco}.json cap12 -> FtPart 18

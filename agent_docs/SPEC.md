@@ -1148,7 +1148,7 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   position/velocity bridges. Fixed-ECB floor reset only admits source-shaped floor entry and avoids
   treating already-below-floor lateral motion as a fresh `it_8026DA70` reset
   (`src/stage_collision.c`, `src/items.c`;
-  refs/melee/src/melee/it/it_266F.c::it_8026DA70,
+  refs/melee/src/melee/it/itgroundcoll.c::it_8026DA70,
   refs/melee/src/melee/mp/mplib.c::mpCheckFloorRemap,
   refs/melee/src/melee/it/items/itheiho.c::itHeiho_UnkMotion1_Coll).
   Runtime also models the source no-live-Heiho stage
@@ -4014,7 +4014,7 @@ Fox/Falco special-owner split (2026-04-17):
       Section-6 and ledge/collision-env families remain closed
       (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
     Sources: `refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}`,
-    `refs/melee/src/melee/it/it_266F.c::it_8026E9A4`,
+    `refs/melee/src/melee/it/itgroundcoll.c::it_8026E9A4`,
     `refs/melee/src/melee/it/itcoll.c::it_80272460`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_Anim,ftCo_Dash_IASA}`.
   - Laser item phantom / tip-log BODY slice:

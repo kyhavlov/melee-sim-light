@@ -3161,7 +3161,7 @@ static inline uint8_t stage_line_is_active_for_item_collision(uint8_t active_run
   // Item projectile collision consumes the same active mpLib line set as fighters. The generated
   // MSLSTG01 field is still named `fighter_solid`, but for frozen Pokemon it is the runtime active
   // line mask after Slippi's Stadium transform suppression, not an item-specific material rule.
-  // refs/melee/src/melee/it/it_266F.c::it_8026E9A4
+  // refs/melee/src/melee/it/itgroundcoll.c::it_8026E9A4
   // refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
   // data/stages/bin/grps.bin::MSLSTG01 segments[*].fighter_solid
   return active_runtime_line ? 1u : 0u;
@@ -3192,7 +3192,7 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
   // geometry in the debug graph; those lines are not active runtime collision and must not delete
   // lasers as invisible terrain.
   // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Coll,it_8029C4D4}
-  // refs/melee/src/melee/it/it_266F.c::it_8026E9A4
+  // refs/melee/src/melee/it/itgroundcoll.c::it_8026E9A4
   // refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
   // data/stages/bin/grps.bin::MSLSTG01 segments[*].fighter_solid
   for (size_t si = 0; si < n; si++) {
@@ -3375,7 +3375,7 @@ uint8_t stage_collision_item_fixed_ecb_sweep_hits_floor(uint32_t stage_id, float
   // below the floor plane.
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_8004ACE4}
   // refs/melee/src/melee/mp/mplib.c::mpCheckFloorRemap
-  // refs/melee/src/melee/it/it_266F.c::it_8026DA70
+  // refs/melee/src/melee/it/itgroundcoll.c::it_8026DA70
   const float bottom_prev_cx = prev_center_x;
   const float bottom_prev_y = prev_center_y + ecb_bottom;
   const float bottom_cur_cx = center_x;
@@ -3403,7 +3403,7 @@ uint8_t stage_collision_item_fixed_ecb_sweep_hits_floor(uint32_t stage_id, float
     // shape. Horizontal ECB extents are wall/side-collision inputs; using them for floor entry
     // admits lateral below-floor grazes at Yoshi's sloped edge that vanilla ignores.
     // refs/melee/src/melee/mp/mplib.c::mpCheckFloorRemap
-    // refs/melee/src/melee/it/it_266F.c::it_8026DA70
+    // refs/melee/src/melee/it/itgroundcoll.c::it_8026DA70
     if (stage_floor_prev_point_can_enter_item_floor(seg, bottom_prev_cx, bottom_prev_y) != 0u &&
         stage_floor_segment_intersects_item(bottom_prev_cx, bottom_prev_y, bottom_cur_cx,
                                             bottom_cur_y, seg->x0, seg->y0, seg->x1, seg->y1)) {

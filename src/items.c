@@ -26,6 +26,7 @@
 #include "item_reflect.h"
 #include "trigger_input.h"
 #include "laser_params.h"
+#include "lbcollision_constants.h"
 #include "hurtcaps_tables.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
@@ -974,7 +975,7 @@ static uint8_t yoshi_shyguy_active_fixed_ecb_wall_contact(const MslYoshiShyguyPa
   // against the item CollData fixed ECB installed from Article ItemAttr.x40 by `it_80275DFC`.
   // The queried wall graph is the wall ahead of the current facing direction.
   // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,itHeiho_UnkMotion4_Coll}
-  // refs/melee/src/melee/it/it_266F.c::it_8026DA70
+  // refs/melee/src/melee/it/itgroundcoll.c::it_8026DA70
   // refs/melee/src/melee/it/it_2725.c::{it_80275DFC,it_80276308}
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_SetECBSource_Fixed
   return stage_collision_item_fixed_ecb_sweep_hits_wall(stage_id, wall_side, prev_pos_x, prev_pos_y,
@@ -998,7 +999,7 @@ static uint8_t yoshi_shyguy_active_fixed_ecb_floor_contact(const MslYoshiShyguyP
   // 4 re-enters return flight. `it_8026DA70` does not copy CollData.cur_pos to Item.pos, so this
   // helper only owns the boolean animation-reset branch.
   // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,itHeiho_UnkMotion4_Coll}
-  // refs/melee/src/melee/it/it_266F.c::it_8026DA70
+  // refs/melee/src/melee/it/itgroundcoll.c::it_8026DA70
   return stage_collision_item_fixed_ecb_sweep_hits_floor(stage_id, prev_pos_x, prev_pos_y, pos_x,
                                                          pos_y, ecb_left, ecb_right, ecb_bottom);
 }
@@ -1248,13 +1249,6 @@ static inline size_t idx_hitbox(int bi, int p, int hb_i) {
 
 // refs/melee/src/melee/lb/forward.h::HurtCapsuleState
 enum { MSL_HURTCAPS_DISABLED = 1u };
-
-static inline float item_lbColl_804D7A38_hurt_radius_mul(void) {
-  // lbColl_8000805C forwards `lbColl_804D7A38 * hurt_scl_y` as the hurt radius multiplier
-  // consumed by lbColl_80006E58 for hit-vs-hurt capsule BODY checks.
-  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
-  return 3.0f;
-}
 
 static inline uint8_t laser_grounded_body_uses_sweep(const MslBatch* batch, size_t d_idx,
                                                      float laser_age_frames) {
@@ -5261,7 +5255,7 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
   // Spawn point: model lb_8000B1CC(bone_joint, offset, out) with source joint id plus extracted
   // SSANIM01 pose matrices.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint
-  // refs/melee/src/melee/lb/lbunknown_001.c::lb_8000B1CC
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
   //
   // IMPORTANT (bone index domain):
   // - Decomp uses ftParts_GetBoneIndex(fp, FtPart_RThumbNb) to pick an index into fp->parts[].
@@ -8374,7 +8368,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
       if (!hit && laser_grounded_body_uses_lbcoll_hurt_radius(
                       batch, d_idx, laser_state, laser_age_frames, batch->state.item_type[ii])) {
-        const float body_hurt_radius_mul = item_lbColl_804D7A38_hurt_radius_mul();
+        const float body_hurt_radius_mul = msl_lbcoll_body_hurt_radius_mul();
         for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit;
              oi++) {
           if (!hitlist_allows_item_hitbox_fighter(batch, bi, it, (int)oi, def, def_iid)) {
@@ -8406,7 +8400,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       if (!hit && laser_airborne_damagefall_uses_lbcoll_hurt_radius(
                       batch, d_idx, o_idx, laser_state, laser_age_frames,
                       batch->state.item_type[ii], batch->state.item_attack_id[ii])) {
-        const float body_hurt_radius_mul = item_lbColl_804D7A38_hurt_radius_mul();
+        const float body_hurt_radius_mul = msl_lbcoll_body_hurt_radius_mul();
         for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit;
              oi++) {
           if (!hitlist_allows_item_hitbox_fighter(batch, bi, it, (int)oi, def, def_iid)) {
