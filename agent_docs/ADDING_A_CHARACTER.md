@@ -211,6 +211,50 @@ Methodology: locate -> witness -> owner (`make rollout-locate`,
   don't force char-specific fixes onto shared rows.
 - Keep fox/falco byte-stable throughout.
 
+## Phase 5.5 — Dolphin ground truth (when replay analysis ties)
+
+When two lane conventions or bridge polarities tie on every replay-visible
+observable (the capture x2344/x8 matrix and the x670 bridge both burned weeks
+this way), stop A/B-testing configurations and capture truth:
+
+1. **Hidden-lane engine dumps** (full JIT speed, minutes per window):
+   `tools.dolphin.forensic_row_dump --row <dataset>:<rec>:<p>` captures a
+   frame window around any dataset row. The v12 dump records the hidden
+   fighter lanes (`fp+0x670/0x674` input timers, `fp+0x2344/48/4C` capture
+   words, TransN position, `fp+0x1A50` GrabMash latches) plus per-frame
+   hitbox world centers, items, hitlists. Alignment that always holds:
+   dump row R = end-of-frame R-1 state + the input record for frame R;
+   dataset seed row F = dump row F+1. Validate a derivation by diffing the
+   seed lane against the dump lane over the whole window BEFORE changing
+   the engine — 50 exact rows is a proof, a matrix of suite totals is not.
+   The required Dolphin build is pinned in `tools/dolphin/ISHIIRUKA_REVISION`
+   (instrumentation lives as commits in `refs/Ishiiruka`, never as patch
+   files in this repo; commit there and bump the pin).
+2. **Interpreter event traces** (PC-hook probes: within-frame call order,
+   register-level gate inputs): **CURRENTLY BANNED — do not use.** The
+   interpreter-mode path runs playback at ~3fps and is being reworked
+   out-of-band. If an investigation genuinely needs instruction-level
+   evidence, document it as blocked and move on.
+
+Process rules learned the hard way (apply to ALL ports):
+
+- **Check refs/ucf before inventing bridges.** Playback Dolphin applies UCF
+  gecko CODE patches the decomp never shows. If a verified witness
+  contradicts the shipped instructions (disassembly + RAM constants both
+  check out), the answer is a gecko: the x670 "bridge-favored class" was
+  UCF 0.84's tumble component hooking the DamageFall IASA compare.
+- **Datasets must be regenerated after ANY seed-derivation change**
+  (`make preprocess` for every suite). Seed lanes are baked into .msl files;
+  a derivation fix that isn't re-preprocessed silently tests nothing.
+- **Baseline-stash attribution before repinning stale locks.** When
+  newly-runnable tests fail (e.g. after building local debug datasets from
+  `replays/debug/*.slp`), prove provenance before touching pins: stash the
+  working diff, rebuild, rerun the failures, and if needed rebuild one
+  dataset under baseline preprocessing. Repin only rows proven to now match
+  ref (or otherwise source-backed); xfail with a documented reason what
+  cannot be honestly repinned; never blindly re-anchor a "known divergence"
+  test to whatever the current build emits.
+
 ## Phase 6 — Live-path verification (gate: webplay clean + clip matrix exits 0)
 
 **The most important lesson of the port.** Replay validation is structurally
@@ -278,5 +322,12 @@ B-reverse, and airdodge-through-stage kills. You MUST:
   validated gates when scoping collision changes.
 - Stage geometry JSON is UNSCALED dat coords; world = json x `unit_scale`.
 - Counter/absorb intercepts: fail closed when geometry is missing.
+- A witness that contradicts the disassembly usually means a UCF gecko
+  (refs/ucf), not a hidden lane.
+- Seed-derivation changes require `make preprocess` on every suite before any
+  measurement means anything.
+- GrabMash-family callbacks read fp inputs one serialized row behind the
+  post-frame row they affect; anim-rate writes are post-advance (the engine's
+  pre-input callback phase models the deferral — do not add another).
 - After `make validate-all`, review `reports/validation/` diffs deliberately -
   restore only unintended regenerated reports, keep intended ones.
