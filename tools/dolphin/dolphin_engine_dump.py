@@ -4,8 +4,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +16,59 @@ from tools.dolphin.engine_dump_io import read_engine_dump
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+@dataclass(frozen=True)
+class CaptureResult:
+    returncode: int
+    out_bin: Path
+    stdout_log: Path
+    stderr_log: Path
+    elapsed_sec: float
+    frame_count: int | None
+    first_frame: int | None
+    last_frame: int | None
+    error: str | None = None
+
+
+def _set_ini_key(lines: list[str], section: str, required: dict[str, str]) -> list[str]:
+    out: list[str] = []
+    in_section = False
+    seen: set[str] = set()
+    header = f"[{section}]"
+    found = False
+
+    def append_missing() -> None:
+        for key, value in required.items():
+            if key not in seen:
+                out.append(f"{key} = {value}")
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if in_section:
+                append_missing()
+                seen.clear()
+            in_section = stripped == header
+            found = found or in_section
+            out.append(line)
+            continue
+        if in_section and "=" in line:
+            key = line.split("=", 1)[0].strip()
+            if key in required:
+                seen.add(key)
+                out.append(f"{key} = {required[key]}")
+                continue
+        out.append(line)
+    if in_section:
+        append_missing()
+    if not found:
+        if out and out[-1].strip():
+            out.append("")
+        out.append(header)
+        for key, value in required.items():
+            out.append(f"{key} = {value}")
+    return out
 
 
 def _write_dolphin_ini(user_dir: Path, *, force_interpreter: bool = False) -> None:
@@ -25,66 +80,17 @@ def _write_dolphin_ini(user_dir: Path, *, force_interpreter: bool = False) -> No
         lines = ini_path.read_text().splitlines()
     if not lines:
         lines = ["[Core]"]
-    if "[Core]" not in lines:
-        lines.append("[Core]")
-    out = []
-    in_core = False
-    seen = set()
-    for ln in lines:
-        if ln.strip().startswith("["):
-            if in_core:
-                required = [("GFXBackend", "Null")]
-                if force_interpreter:
-                    required.append(("CPUCore", "0"))
-                for k, v in required:
-                    if k not in seen:
-                        out.append(f"{k} = {v}")
-                in_core = False
-                seen.clear()
-            out.append(ln)
-            in_core = ln.strip() == "[Core]"
-            continue
-        if in_core and "=" in ln:
-            k = ln.split("=")[0].strip()
-            if k in ("GFXBackend", "CPUCore"):
-                seen.add(k)
-                if k == "GFXBackend":
-                    out.append("GFXBackend = Null")
-                elif force_interpreter:
-                    out.append("CPUCore = 0")
-                else:
-                    out.append(ln)
-                continue
-        out.append(ln)
-    if in_core:
-        if "GFXBackend" not in seen:
-            out.append("GFXBackend = Null")
-        if force_interpreter and "CPUCore" not in seen:
-            out.append("CPUCore = 0")
-    if "[DSP]" not in out:
-        out.append("[DSP]")
-        out.append("Backend = NullSound")
-    else:
-        dsp_out = []
-        in_dsp = False
-        dsp_seen = False
-        for ln in out:
-            if ln.strip().startswith("["):
-                if in_dsp and not dsp_seen:
-                    dsp_out.append("Backend = NullSound")
-                in_dsp = ln.strip() == "[DSP]"
-                dsp_out.append(ln)
-                continue
-            if in_dsp and "=" in ln:
-                k = ln.split("=")[0].strip()
-                if k == "Backend":
-                    dsp_seen = True
-                    dsp_out.append("Backend = NullSound")
-                    continue
-            dsp_out.append(ln)
-        if in_dsp and not dsp_seen:
-            dsp_out.append("Backend = NullSound")
-        out = dsp_out
+    out = _set_ini_key(
+        lines,
+        "Core",
+        {
+            "GFXBackend": "Null",
+            "CPUCore": "0" if force_interpreter else "1",
+            "EmulationSpeed": "0.000",
+            "DSPHLE": "True",
+        },
+    )
+    out = _set_ini_key(out, "DSP", {"Backend": "NullSound"})
     ini_path.write_text("\n".join(out) + "\n")
 
 
@@ -146,6 +152,34 @@ def _resolve_frame_window(
     return int(out_start), int(out_end)
 
 
+def _read_dump_status(path: Path, start_frame: int, end_frame: int) -> tuple[int, int, int, bool]:
+    d = read_engine_dump(path)
+    frames = [int(fr["frame_index"]) for fr in d.frames]
+    if not frames:
+        return 0, 0, 0, False
+    first_frame = min(frames)
+    last_frame = max(frames)
+    seen = set(frames)
+    complete = all(frame in seen for frame in range(int(start_frame), int(end_frame) + 1))
+    return len(frames), first_frame, last_frame, complete
+
+
+def _terminate_process_group(proc: subprocess.Popen[object]) -> None:
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        proc.wait(timeout=5.0)
+    except Exception:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+
 def capture_engine_dump(
     *,
     replay: str | Path,
@@ -155,26 +189,41 @@ def capture_engine_dump(
     out_bin: str | Path,
     start_frame: int | None = None,
     end_frame: int | None = None,
-    timeout: float = 120.0,
+    timeout: float = 600.0,
     should_resync: bool = True,
     collision_probe_path: str | Path | None = None,
+    collision_probe_frame_start: int | None = None,
+    collision_probe_frame_end: int | None = None,
+    damagefall_probe_path: str | Path | None = None,
+    damagefall_probe_frame_start: int | None = None,
+    damagefall_probe_frame_end: int | None = None,
     throw_laser_event_probe_path: str | Path | None = None,
     laser_shield_reflect_event_probe_path: str | Path | None = None,
-) -> tuple[int, Path]:
+) -> CaptureResult:
     replay = Path(replay)
     if not replay.exists():
         raise FileNotFoundError(replay)
     out_bin = Path(out_bin)
     if out_bin.exists():
         out_bin.unlink()
+    out_bin.parent.mkdir(parents=True, exist_ok=True)
+    stdout_log = out_bin.with_suffix(out_bin.suffix + ".stdout.log")
+    stderr_log = out_bin.with_suffix(out_bin.suffix + ".stderr.log")
+    for log_path in (stdout_log, stderr_log):
+        if log_path.exists():
+            log_path.unlink()
 
     user_dir = Path(user_dir)
     user_dir.mkdir(parents=True, exist_ok=True)
+    force_interpreter = (
+        collision_probe_path is not None
+        or damagefall_probe_path is not None
+        or throw_laser_event_probe_path is not None
+        or laser_shield_reflect_event_probe_path is not None
+    )
     _write_dolphin_ini(
         user_dir,
-        force_interpreter=collision_probe_path is not None
-        or throw_laser_event_probe_path is not None
-        or laser_shield_reflect_event_probe_path is not None,
+        force_interpreter=force_interpreter,
     )
 
     resolved_start, resolved_end = _resolve_frame_window(
@@ -206,6 +255,20 @@ def capture_engine_dump(
     env = os.environ.copy()
     if collision_probe_path is not None:
         env["MSL_COLLISION_PROBE_PATH"] = str(Path(collision_probe_path).resolve())
+        env["MSL_COLLISION_PROBE_FRAME_START"] = str(
+            resolved_start if collision_probe_frame_start is None else int(collision_probe_frame_start)
+        )
+        env["MSL_COLLISION_PROBE_FRAME_END"] = str(
+            resolved_end if collision_probe_frame_end is None else int(collision_probe_frame_end)
+        )
+    if damagefall_probe_path is not None:
+        env["MSL_DAMAGEFALL_PROBE_PATH"] = str(Path(damagefall_probe_path).resolve())
+        env["MSL_DAMAGEFALL_PROBE_FRAME_START"] = str(
+            resolved_start if damagefall_probe_frame_start is None else int(damagefall_probe_frame_start)
+        )
+        env["MSL_DAMAGEFALL_PROBE_FRAME_END"] = str(
+            resolved_end if damagefall_probe_frame_end is None else int(damagefall_probe_frame_end)
+        )
     if throw_laser_event_probe_path is not None:
         env["MSL_THROW_LASER_EVENT_PROBE_PATH"] = str(
             Path(throw_laser_event_probe_path).resolve()
@@ -214,40 +277,79 @@ def capture_engine_dump(
         env["MSL_LASER_SHIELD_REFLECT_EVENT_PROBE_PATH"] = str(
             Path(laser_shield_reflect_event_probe_path).resolve()
         )
-    proc = subprocess.Popen(proc_args, env=env)
-
     t0 = time.monotonic()
+    rc = 1
+    error: str | None = None
+    frame_count: int | None = None
+    first_frame: int | None = None
+    last_frame: int | None = None
     try:
-        while time.monotonic() - t0 < timeout:
-            proc_rc = proc.poll()
-            if out_bin.exists():
-                # The dump file may appear before it is complete. Treat a successful parse as the
-                # authoritative completion signal for the engine dump format we consume downstream.
-                try:
-                    read_engine_dump(out_bin)
+        stdout_log.parent.mkdir(parents=True, exist_ok=True)
+        with stdout_log.open("wb") as stdout_f, stderr_log.open("wb") as stderr_f:
+            proc = subprocess.Popen(
+                proc_args,
+                env=env,
+                stdout=stdout_f,
+                stderr=stderr_f,
+                start_new_session=True,
+            )
+            while time.monotonic() - t0 < timeout:
+                proc_rc = proc.poll()
+                if out_bin.exists() and out_bin.stat().st_size > 0:
+                    try:
+                        count, first, last, complete = _read_dump_status(
+                            out_bin, resolved_start, resolved_end
+                        )
+                        frame_count = count
+                        first_frame = first
+                        last_frame = last
+                        if complete:
+                            rc = 0
+                            break
+                    except Exception as exc:
+                        error = f"dump parse pending: {exc}"
+                        if proc_rc is not None:
+                            break
+                elif proc_rc is not None:
+                    rc = int(proc_rc or 1)
                     break
-                except Exception:
-                    if proc_rc is not None:
-                        break
-            elif proc_rc is not None:
-                break
-            time.sleep(0.5)
-    finally:
-        try:
+                time.sleep(0.25)
+            else:
+                error = f"timeout after {float(timeout):.1f}s"
             if proc.poll() is None:
-                proc.terminate()
-                proc.wait(timeout=5.0)
-        except Exception:
-            try:
-                proc.kill()
-            except Exception:
-                pass
+                _terminate_process_group(proc)
+            elif rc != 0:
+                rc = int(proc.returncode or 1)
+    except Exception as exc:
+        error = str(exc)
+        rc = 1
 
-    if not out_bin.exists():
-        return 1, out_bin
-    if out_bin.stat().st_size <= 0:
-        return 1, out_bin
-    return 0, out_bin
+    elapsed = time.monotonic() - t0
+    if rc == 0:
+        error = None
+    elif out_bin.exists() and out_bin.stat().st_size > 0 and frame_count is None:
+        try:
+            frame_count, first_frame, last_frame, _complete = _read_dump_status(
+                out_bin, resolved_start, resolved_end
+            )
+        except Exception as exc:
+            error = error or str(exc)
+    elif not out_bin.exists():
+        error = error or "dump file was not created"
+    elif out_bin.stat().st_size <= 0:
+        error = error or "dump file is empty"
+
+    return CaptureResult(
+        returncode=int(rc),
+        out_bin=out_bin,
+        stdout_log=stdout_log,
+        stderr_log=stderr_log,
+        elapsed_sec=float(elapsed),
+        frame_count=frame_count,
+        first_frame=first_frame,
+        last_frame=last_frame,
+        error=error,
+    )
 
 
 def main() -> int:
@@ -263,7 +365,7 @@ def main() -> int:
     ap.add_argument("--start-frame", type=int, default=None)
     ap.add_argument("--end-frame", type=int, default=None)
     ap.add_argument("--out-bin", required=True)
-    ap.add_argument("--timeout", type=float, default=120.0)
+    ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument(
         "--no-resync",
         action="store_true",
@@ -275,6 +377,16 @@ def main() -> int:
         default=None,
         help="optional JSONL path for pre-collision primitive probes; forces interpreter CPU core",
     )
+    ap.add_argument("--collision-probe-frame-start", type=int, default=None)
+    ap.add_argument("--collision-probe-frame-end", type=int, default=None)
+    ap.add_argument(
+        "--damagefall-probe",
+        type=Path,
+        default=None,
+        help="optional JSONL path for DamageFall IASA/Fall_Enter events; forces interpreter CPU core",
+    )
+    ap.add_argument("--damagefall-probe-frame-start", type=int, default=None)
+    ap.add_argument("--damagefall-probe-frame-end", type=int, default=None)
     ap.add_argument(
         "--throw-laser-event-probe",
         type=Path,
@@ -289,7 +401,7 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    rc, out_bin = capture_engine_dump(
+    result = capture_engine_dump(
         replay=args.replay,
         dolphin=args.dolphin,
         iso=args.iso,
@@ -300,14 +412,33 @@ def main() -> int:
         timeout=float(args.timeout),
         should_resync=not args.no_resync,
         collision_probe_path=args.collision_probe,
+        collision_probe_frame_start=args.collision_probe_frame_start,
+        collision_probe_frame_end=args.collision_probe_frame_end,
+        damagefall_probe_path=args.damagefall_probe,
+        damagefall_probe_frame_start=args.damagefall_probe_frame_start,
+        damagefall_probe_frame_end=args.damagefall_probe_frame_end,
         throw_laser_event_probe_path=args.throw_laser_event_probe,
         laser_shield_reflect_event_probe_path=args.laser_shield_reflect_event_probe,
     )
-    if rc != 0:
-        print(f"engine dump capture failed: {out_bin}")
+    if result.returncode != 0:
+        coverage = ""
+        if result.frame_count is not None:
+            coverage = (
+                f" frames={result.frame_count} first={result.first_frame} last={result.last_frame}"
+            )
+        print(
+            "engine dump capture failed: "
+            f"{result.out_bin} elapsed={result.elapsed_sec:.1f}s{coverage} "
+            f"stdout={result.stdout_log} stderr={result.stderr_log} error={result.error}"
+        )
     else:
-        print(f"wrote {out_bin.resolve()}")
-    return int(rc)
+        print(
+            f"wrote {result.out_bin.resolve()} "
+            f"frames={result.frame_count} elapsed={result.elapsed_sec:.1f}s"
+        )
+        print(f"stdout={result.stdout_log.resolve()}")
+        print(f"stderr={result.stderr_log.resolve()}")
+    return int(result.returncode)
 
 
 if __name__ == "__main__":

@@ -8,8 +8,8 @@ import numpy as np
 
 
 ENGINE_DUMP_MAGIC = b"MSIMDMP\0"
-ENGINE_DUMP_VERSION = 10
-ENGINE_DUMP_SUPPORTED_VERSIONS = (6, 7, 8, 9, 10)
+ENGINE_DUMP_VERSION = 12
+ENGINE_DUMP_SUPPORTED_VERSIONS = (6, 7, 8, 9, 10, 12)
 
 HEADER_DTYPE = np.dtype(
     [
@@ -20,7 +20,10 @@ HEADER_DTYPE = np.dtype(
         ("port_count", "u1"),
         ("stage_id", "<u2"),
         ("is_teams", "u1"),
-        ("_pad0", "V17"),
+        # v12+: dense dump slots map to these 1-based controller ports.
+        # Older dumps leave this zeroed and readers fall back to 1..port_count.
+        ("port_ids", "u1", (4,)),
+        ("_pad0", "V13"),
         ("frames_offset", "<u4"),
         ("inputs_offset", "<u4"),
         ("fighters_offset", "<u4"),
@@ -154,7 +157,24 @@ FIGHTER_DTYPE_V9 = np.dtype(
     align=False,
 )
 
-FIGHTER_DTYPE = FIGHTER_DTYPE_V9
+FIGHTER_DTYPE_V12 = np.dtype(
+    FIGHTER_DTYPE_V7.descr[:-1]
+    + [
+        ("_pad0", "V2"),
+        ("x670_timers_bits", "<u4"),
+        ("x674_timers_bits", "<u4"),
+        ("x2344_bits", "<u4"),
+        ("x2348_bits", "<u4"),
+        ("x234c_bits", "<u4"),
+        ("transn_x_bits", "<u4"),
+        ("transn_y_bits", "<u4"),
+        ("transn_z_bits", "<u4"),
+        ("x1a50_bits", "<u4"),
+    ],
+    align=False,
+)
+
+FIGHTER_DTYPE = FIGHTER_DTYPE_V12
 
 ITEM_DTYPE = np.dtype(
     [
@@ -324,9 +344,10 @@ def read_engine_dump(path: str | Path) -> EngineDump:
 
     frames = _read(FRAME_DTYPE, frame_count, int(header["frames_offset"]))
     inputs = _read(INPUT_DTYPE, frame_count * port_count, int(header["inputs_offset"]))
-    # v10 is a targeted item-hitlist/callback extension built on the v7 fighter record layout.
     fighter_dtype = (
-        FIGHTER_DTYPE_V7
+        FIGHTER_DTYPE_V12
+        if version == 12
+        else FIGHTER_DTYPE_V7
         if version == 10
         else FIGHTER_DTYPE_V9
         if version >= 9

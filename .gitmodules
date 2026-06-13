@@ -1,0 +1,4 @@
+[submodule "refs/Ishiiruka"]
+	path = refs/Ishiiruka
+	url = git@github.com:kyhavlov/Ishiiruka.git
+	branch = engine-dump-v12-probes

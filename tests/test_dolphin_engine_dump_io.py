@@ -6,11 +6,12 @@ import numpy as np
 import pytest
 
 from tools.dolphin import engine_dump_io as io
+from tools.dolphin.dolphin_engine_dump import _write_dolphin_ini
 
 
-def _build_dump(path: Path, *, version: int) -> Path:
+def _build_dump(path: Path, *, version: int, port_ids: tuple[int, ...] | None = None) -> Path:
     frame_count = 1
-    port_count = 2
+    port_count = len(port_ids) if port_ids is not None else 2
     total_items = 1 if version >= 10 else 0
 
     frames = np.zeros((frame_count,), dtype=io.FRAME_DTYPE)
@@ -18,7 +19,9 @@ def _build_dump(path: Path, *, version: int) -> Path:
 
     inputs = np.zeros((frame_count * port_count,), dtype=io.INPUT_DTYPE)
     fighter_dtype = (
-        io.FIGHTER_DTYPE_V7
+        io.FIGHTER_DTYPE_V12
+        if version == 12
+        else io.FIGHTER_DTYPE_V7
         if version == 10
         else io.FIGHTER_DTYPE_V9
         if version >= 9
@@ -27,6 +30,8 @@ def _build_dump(path: Path, *, version: int) -> Path:
         else io.FIGHTER_DTYPE_V7
     )
     fighters = np.zeros((frame_count * port_count,), dtype=fighter_dtype)
+    for slot in range(port_count):
+        fighters["action_state"][slot] = np.uint16(100 + slot)
     items = np.zeros((total_items,), dtype=io.ITEM_DTYPE)
     hitboxes = np.zeros((frame_count * port_count * 4,), dtype=io.HITBOX_DTYPE)
     hurtboxes = np.zeros((frame_count * port_count * 15,), dtype=io.HURTBOX_DTYPE)
@@ -42,7 +47,7 @@ def _build_dump(path: Path, *, version: int) -> Path:
         hitlists["victims1_cooldown"][0][0] = 12
         hitlists["victims2_ptr"][0][1] = 0x82000000
         hitlists["victims2_cooldown"][0][1] = 4
-    if version >= 8 and version != 10:
+    if version >= 8 and version not in (10, 12):
         fighters["gr_vel_bits"][0] = np.uint32(0x3f800000)
         if version >= 9:
             fighters["lightshield_amount_bits"][0] = np.uint32(0x3f000000)
@@ -69,6 +74,16 @@ def _build_dump(path: Path, *, version: int) -> Path:
         item_hitlists["victims1_cursor"][0] = 1
         item_hitlists["victims1_ptr"][0][0] = 0x81230000
         item_hitlists["victims1_cooldown"][0][0] = 16
+    if version == 12:
+        fighters["x670_timers_bits"][0] = np.uint32(0x01020304)
+        fighters["x674_timers_bits"][0] = np.uint32(0x05060708)
+        fighters["x2344_bits"][0] = np.uint32(0x3F800000)
+        fighters["x2348_bits"][0] = np.uint32(0x40000000)
+        fighters["x234c_bits"][0] = np.uint32(0x40400000)
+        fighters["transn_x_bits"][0] = np.uint32(0x40800000)
+        fighters["transn_y_bits"][0] = np.uint32(0x40A00000)
+        fighters["transn_z_bits"][0] = np.uint32(0x40C00000)
+        fighters["x1a50_bits"][0] = np.uint32(0x090A0B0C)
 
     frames_offset = io.HEADER_DTYPE.itemsize
     inputs_offset = frames_offset + frames.nbytes
@@ -97,6 +112,9 @@ def _build_dump(path: Path, *, version: int) -> Path:
     header["endian_tag"][0] = 0x01020304
     header["frame_count"][0] = frame_count
     header["port_count"][0] = port_count
+    if port_ids is not None:
+        for slot, port in enumerate(port_ids):
+            header["port_ids"][0][slot] = np.uint8(port)
     header["stage_id"][0] = 0x20
     header["is_teams"][0] = 0
     header["frames_offset"][0] = frames_offset
@@ -125,6 +143,23 @@ def _build_dump(path: Path, *, version: int) -> Path:
     return path
 
 
+def test_dolphin_ini_defaults_to_uncapped_jit_null_backends(tmp_path: Path) -> None:
+    _write_dolphin_ini(tmp_path, force_interpreter=False)
+    ini = (tmp_path / "Config" / "Dolphin.ini").read_text()
+    assert "GFXBackend = Null" in ini
+    assert "CPUCore = 1" in ini
+    assert "EmulationSpeed = 0.000" in ini
+    assert "DSPHLE = True" in ini
+    assert "Backend = NullSound" in ini
+
+
+def test_dolphin_ini_forces_interpreter_only_for_probe_hooks(tmp_path: Path) -> None:
+    _write_dolphin_ini(tmp_path, force_interpreter=True)
+    ini = (tmp_path / "Config" / "Dolphin.ini").read_text()
+    assert "CPUCore = 0" in ini
+    assert "EmulationSpeed = 0.000" in ini
+
+
 def test_read_engine_dump_v6_backward_compat(tmp_path: Path) -> None:
     dump_path = _build_dump(tmp_path / "v6.bin", version=6)
     d = io.read_engine_dump(dump_path)
@@ -147,6 +182,13 @@ def test_read_engine_dump_v7_hitlist_fields(tmp_path: Path) -> None:
     assert int(hb0["victims1_cooldown"][0]) == 12
     assert int(hb0["victims2_ptr"][1]) == 0x82000000
     assert int(hb0["victims2_cooldown"][1]) == 4
+
+
+def test_read_engine_dump_v12_port_ids(tmp_path: Path) -> None:
+    dump_path = _build_dump(tmp_path / "v12_ports.bin", version=12, port_ids=(1, 4))
+    d = io.read_engine_dump(dump_path)
+    assert int(d.header["port_count"]) == 2
+    assert [int(p) for p in d.header["port_ids"].tolist()[:2]] == [1, 4]
 
 
 def test_read_engine_dump_rejects_unknown_version(tmp_path: Path) -> None:
@@ -198,3 +240,19 @@ def test_read_engine_dump_v10_item_callback_and_hitlist_fields(tmp_path: Path) -
     assert int(hl0["victims1_cursor"]) == 1
     assert int(hl0["victims1_ptr"][0]) == 0x81230000
     assert int(hl0["victims1_cooldown"][0]) == 16
+
+
+def test_read_engine_dump_v12_hidden_fighter_lanes(tmp_path: Path) -> None:
+    dump_path = _build_dump(tmp_path / "v12.bin", version=12)
+    d = io.read_engine_dump(dump_path)
+    assert int(d.header["version"]) == 12
+    ft0 = d.fighters[0]
+    assert int(ft0["x670_timers_bits"]) == 0x01020304
+    assert int(ft0["x674_timers_bits"]) == 0x05060708
+    assert io.f32_from_bits(int(ft0["x2344_bits"])) == pytest.approx(1.0)
+    assert io.f32_from_bits(int(ft0["x2348_bits"])) == pytest.approx(2.0)
+    assert io.f32_from_bits(int(ft0["x234c_bits"])) == pytest.approx(3.0)
+    assert io.f32_from_bits(int(ft0["transn_x_bits"])) == pytest.approx(4.0)
+    assert io.f32_from_bits(int(ft0["transn_y_bits"])) == pytest.approx(5.0)
+    assert io.f32_from_bits(int(ft0["transn_z_bits"])) == pytest.approx(6.0)
+    assert int(ft0["x1a50_bits"]) == 0x090A0B0C

@@ -25,8 +25,8 @@ class Window:
         return int(self.start) <= int(frame_index) <= int(self.end)
 
 
-def _frame_hitboxes(d: object, frame_slot: int, port_count: int, port: int) -> list[dict[str, object]]:
-    base = (frame_slot * port_count + (port - 1)) * 4
+def _frame_hitboxes(d: object, frame_slot: int, port_count: int, slot: int) -> list[dict[str, object]]:
+    base = (frame_slot * port_count + slot) * 4
     rows: list[dict[str, object]] = []
     for hitbox_id in range(4):
         hb = d.hitboxes[base + hitbox_id]
@@ -63,8 +63,8 @@ def _frame_hitboxes(d: object, frame_slot: int, port_count: int, port: int) -> l
     return rows
 
 
-def _frame_hurtboxes(d: object, frame_slot: int, port_count: int, port: int) -> list[dict[str, object]]:
-    base = (frame_slot * port_count + (port - 1)) * 15
+def _frame_hurtboxes(d: object, frame_slot: int, port_count: int, slot: int) -> list[dict[str, object]]:
+    base = (frame_slot * port_count + slot) * 15
     rows: list[dict[str, object]] = []
     for hurtcap_id in range(15):
         hb = d.hurtboxes[base + hurtcap_id]
@@ -108,14 +108,19 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
     port_count = int(d.header["port_count"])
     stage_id = int(d.header["stage_id"])
     is_teams = int(d.header["is_teams"])
+    header_port_ids = [int(p) for p in d.header["port_ids"].tolist()]
+    port_ids = header_port_ids[:port_count]
+    if len(port_ids) != port_count or any(p <= 0 for p in port_ids):
+        port_ids = list(range(1, port_count + 1))
+    slot_by_port = {port: slot for slot, port in enumerate(port_ids)}
     rows: list[dict[str, object]] = []
 
     if not ports:
-        ports = list(range(1, port_count + 1))
+        ports = list(port_ids)
 
-    valid_ports = {p for p in ports if 1 <= p <= port_count}
+    valid_ports = {p for p in ports if p in slot_by_port}
     if len(valid_ports) != len(ports):
-        raise ValueError(f"requested ports={ports} outside port_count={port_count}")
+        raise ValueError(f"requested ports={ports} outside dump port_ids={port_ids}")
     ports = sorted(valid_ports)
 
     for frame_slot in range(frame_count):
@@ -193,7 +198,8 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
             frame_items.append(item_row)
 
         for port in ports:
-            idx = frame_slot * port_count + (port - 1)
+            slot = slot_by_port[port]
+            idx = frame_slot * port_count + slot
             inp = d.inputs[idx]
             fighter = d.fighters[idx]
             buttons = int(inp["buttons"])
@@ -296,8 +302,8 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
                 }
             )
             row = rows[-1]
-            row["hitboxes"] = _frame_hitboxes(d, frame_slot, port_count, int(port))
-            row["hurtboxes"] = _frame_hurtboxes(d, frame_slot, port_count, int(port))
+            row["hitboxes"] = _frame_hitboxes(d, frame_slot, port_count, slot)
+            row["hurtboxes"] = _frame_hurtboxes(d, frame_slot, port_count, slot)
             if "ecb_lock_timer" in fighter.dtype.names:
                 if "lightshield_amount_bits" in fighter.dtype.names:
                     row["lightshield_amount"] = f32_from_bits(int(fighter["lightshield_amount_bits"]))
@@ -309,6 +315,18 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
                 row["shield_attacker_gobj"] = int(fighter["shield_attacker_gobj"])
                 row["specialn_facing_dir"] = f32_from_bits(int(fighter["specialn_facing_dir_bits"]))
                 row["shield_hit_element"] = int(fighter["shield_hit_element"])
+            if "x670_timers_bits" in fighter.dtype.names:
+                row["x670_timers_bits"] = int(fighter["x670_timers_bits"])
+                row["x674_timers_bits"] = int(fighter["x674_timers_bits"])
+                row["x2344_bits"] = int(fighter["x2344_bits"])
+                row["x2348_bits"] = int(fighter["x2348_bits"])
+                row["x234c_bits"] = int(fighter["x234c_bits"])
+                row["transn"] = [
+                    f32_from_bits(int(fighter["transn_x_bits"])),
+                    f32_from_bits(int(fighter["transn_y_bits"])),
+                    f32_from_bits(int(fighter["transn_z_bits"])),
+                ]
+                row["x1a50_bits"] = int(fighter["x1a50_bits"])
 
     rows.sort(key=lambda r: (int(r["frame_index"]), int(r["port"])))
     return {
@@ -316,6 +334,7 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
         "frame_window": {"start": int(window.start), "end": int(window.end)},
         "frame_count": frame_count,
         "port_count": port_count,
+        "port_ids": port_ids,
         "rows": rows,
         "row_count": len(rows),
     }
@@ -326,7 +345,8 @@ def _summary_text(payload: dict[str, object]) -> str:
     lines = []
     lines.append("# engine_dump_rows")
     lines.append(
-        f"dump={payload['dump_path']} frame_window={payload['frame_window']['start']}..{payload['frame_window']['end']} rows={payload['row_count']}"
+        f"dump={payload['dump_path']} frame_window={payload['frame_window']['start']}..{payload['frame_window']['end']} "
+        f"ports={payload.get('port_ids', [])} rows={payload['row_count']}"
     )
     lines.append("")
     for r in rows:
@@ -359,6 +379,17 @@ def _summary_text(payload: dict[str, object]) -> str:
                 f" locked={r['coll_x130_locked']} x19a0={r['shield_damage_taken']}"
                 f" x19a4={r['shield_int_damage']} x19a8=0x{int(r['shield_attacker_gobj']):08x}"
                 f" x19ac={r['specialn_facing_dir']:.3f} x19b0={r['shield_hit_element']}"
+            )
+        if "x670_timers_bits" in r:
+            transn = r["transn"]
+            lines[-1] += (
+                f" x670=0x{int(r['x670_timers_bits']):08x}"
+                f" x674=0x{int(r['x674_timers_bits']):08x}"
+                f" x2344=0x{int(r['x2344_bits']):08x}"
+                f" x2348=0x{int(r['x2348_bits']):08x}"
+                f" x234c=0x{int(r['x234c_bits']):08x}"
+                f" transn=({transn[0]:.3f},{transn[1]:.3f},{transn[2]:.3f})"
+                f" x1a50=0x{int(r['x1a50_bits']):08x}"
             )
         if r["items"]:
             item_bits = []

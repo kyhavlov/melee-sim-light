@@ -17,6 +17,14 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+def _display_path(path: Path, root: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(root))
+    except ValueError:
+        return str(resolved)
+
+
 @dataclass(frozen=True)
 class RowSpec:
     dataset: str
@@ -60,11 +68,16 @@ def main() -> int:
     ap.add_argument("--iso", default=str(Path.cwd() / "SSBM.iso"))
     ap.add_argument("--window-before", type=int, default=3, help="frames before min(seed,ref)")
     ap.add_argument("--window-after", type=int, default=3, help="frames after max(seed,ref)")
-    ap.add_argument("--timeout", type=float, default=120.0)
+    ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument(
         "--collision-probe",
         action="store_true",
         help="also write interpreter pre-collision primitive JSONL beside the dump",
+    )
+    ap.add_argument(
+        "--damagefall-probe",
+        action="store_true",
+        help="also write interpreter DamageFall IASA/Fall_Enter JSONL beside the dump",
     )
     ap.add_argument(
         "--throw-laser-event-probe",
@@ -110,6 +123,7 @@ def main() -> int:
     stem = f"{dataset_path.stem}_rec{spec.record}_p{spec.p}_f{start_frame}_{end_frame}"
     dump_path = out_dir / f"{stem}.bin"
     collision_probe_path = out_dir / f"{stem}_collision_probe.jsonl" if args.collision_probe else None
+    damagefall_probe_path = out_dir / f"{stem}_damagefall_probe.jsonl" if args.damagefall_probe else None
     throw_laser_event_probe_path = (
         out_dir / f"{stem}_throw_laser_events.jsonl" if args.throw_laser_event_probe else None
     )
@@ -120,7 +134,7 @@ def main() -> int:
     )
     user_dir = out_dir / "dolphin_user"
     with replay_path_for_peppi(replay_path) as capture_replay_path:
-        rc, _ = capture_engine_dump(
+        result = capture_engine_dump(
             replay=capture_replay_path,
             dolphin=args.dolphin,
             iso=args.iso,
@@ -130,11 +144,26 @@ def main() -> int:
             end_frame=end_frame,
             timeout=float(args.timeout),
             collision_probe_path=collision_probe_path,
+            damagefall_probe_path=damagefall_probe_path,
             throw_laser_event_probe_path=throw_laser_event_probe_path,
             laser_shield_reflect_event_probe_path=laser_shield_reflect_event_probe_path,
         )
+    rc = int(result.returncode)
+    capture_summary = {
+        "returncode": rc,
+        "elapsed_sec": result.elapsed_sec,
+        "frame_count": result.frame_count,
+        "first_frame": result.first_frame,
+        "last_frame": result.last_frame,
+        "stdout_log": _display_path(result.stdout_log, root),
+        "stderr_log": _display_path(result.stderr_log, root),
+        "error": result.error,
+    }
     if rc != 0:
-        raise SystemExit(f"capture failed for replay={replay_path} frame_window={start_frame}..{end_frame}")
+        raise SystemExit(
+            f"capture failed for replay={replay_path} frame_window={start_frame}..{end_frame} "
+            f"details={capture_summary}"
+        )
 
     rows_dir = out_dir / "rows"
     json_path, txt_path = extract_to_dir(
@@ -146,24 +175,25 @@ def main() -> int:
     )
 
     summary = {
-        "row": {"dataset": str(dataset_path.relative_to(root)), "record": spec.record, "p": spec.p},
-        "replay": str(replay_path.relative_to(root)),
+        "row": {"dataset": _display_path(dataset_path, root), "record": spec.record, "p": spec.p},
+        "replay": _display_path(replay_path, root),
         "seed_frame": seed_frame,
         "ref_frame": ref_frame,
         "capture_window": {"start": start_frame, "end": end_frame},
-        "dump_bin": str(dump_path.relative_to(root)),
-        "rows_json": str(json_path.relative_to(root)),
-        "rows_txt": str(txt_path.relative_to(root)),
+        "capture": capture_summary,
+        "dump_bin": _display_path(dump_path, root),
+        "rows_json": _display_path(json_path, root),
+        "rows_txt": _display_path(txt_path, root),
     }
     if collision_probe_path is not None:
-        summary["collision_probe_jsonl"] = str(collision_probe_path.relative_to(root))
+        summary["collision_probe_jsonl"] = _display_path(collision_probe_path, root)
+    if damagefall_probe_path is not None:
+        summary["damagefall_probe_jsonl"] = _display_path(damagefall_probe_path, root)
     if throw_laser_event_probe_path is not None:
-        summary["throw_laser_event_probe_jsonl"] = str(
-            throw_laser_event_probe_path.relative_to(root)
-        )
+        summary["throw_laser_event_probe_jsonl"] = _display_path(throw_laser_event_probe_path, root)
     if laser_shield_reflect_event_probe_path is not None:
-        summary["laser_shield_reflect_event_probe_jsonl"] = str(
-            laser_shield_reflect_event_probe_path.relative_to(root)
+        summary["laser_shield_reflect_event_probe_jsonl"] = _display_path(
+            laser_shield_reflect_event_probe_path, root
         )
     summary_path = out_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")

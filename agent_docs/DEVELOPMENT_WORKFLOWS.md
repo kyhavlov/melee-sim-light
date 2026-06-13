@@ -219,6 +219,41 @@ uv run python -m tools.eval.locate_discrete_mismatches --help
 uv run python -m tools.eval.locate_rollout_desyncs --help
 ```
 
+## Dolphin Probes
+
+Use the active playback-only tooling under `tools/dolphin/`; do not use
+`tools/dolphin/legacy/` for new investigations. The normal entry point for a
+dataset witness is:
+
+```bash
+uv run python -m tools.dolphin.forensic_row_dump \
+  --row <dataset.msl>:<record>:<p> \
+  --dolphin refs/Ishiiruka/build_probe/Binaries/dolphin-emu-nogui \
+  --iso SSBM.iso
+```
+
+The wrapper writes an uncapped Dolphin config in a dedicated user directory,
+launches Dolphin detached from the terminal, and stores stdout/stderr logs
+beside the dump. Dump row `R` is end-of-frame `R-1` state plus frame `R` input;
+dataset seed row `F` corresponds to dump row `F+1`.
+
+Check probe latency with the fixed shallow/mid/deep/IPW smoke set:
+
+```bash
+uv run python -m tools.dolphin.probe_benchmark \
+  --dolphin refs/Ishiiruka/build_probe/Binaries/dolphin-emu-nogui \
+  --iso SSBM.iso
+```
+
+It prints elapsed time, first/last captured frame, row count, event count, and
+active port ids for each window.
+
+Interpreter-only probes are opt-in with flags such as `--collision-probe`,
+`--damagefall-probe`, `--throw-laser-event-probe`, and
+`--laser-shield-reflect-event-probe`. These flags install the matching
+`MSL_*_PROBE_PATH` environment variables and frame gates. Normal engine dumps
+stay on the JIT/null-backend path.
+
 Rank fixed-horizon rollout-disruptive desyncs:
 
 ```bash

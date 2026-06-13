@@ -6,6 +6,7 @@ _iso/
 # Heavy reference repos / binaries (keep locally; document setup)
 refs/**
 !refs/README.md
+!refs/Ishiiruka
 
 # Dolphin artifacts / user dirs
 .local_dolphin/
