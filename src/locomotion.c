@@ -6741,43 +6741,47 @@ void locomotion_update_pre(MslBatch* batch) {
           action_id = batch->state.action_id[idx];
         }
 
-        uint8_t damagefall_x670_timer_for_iasa = batch->state.tilt_timer_x[idx];
-        if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL) {
-          const float prev_stick_x = apply_deadzone(
-              stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
-          // DamageFall_IASA is reached from Fighter_procUpdate after the input-history proc, but
-          // teacher-forced seeds can begin with an already-held X stick whose current-row update
-          // has advanced x670 one tick past the value vanilla's callback observes in the local
-          // DamageFall handoff. Reconstruct that pre-increment value only for held-stick rows;
-          // fresh X-direction entries keep the current x670=0 edge from Fighter_Spaghetti.
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10,Fighter_procUpdate}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-          if (stick_x >= c->lstick_tilt_x_thresh) {
-            if (prev_stick_x >= c->lstick_tilt_x_thresh) {
-              if (damagefall_x670_timer_for_iasa > 0u && damagefall_x670_timer_for_iasa < 0xFEu) {
-                damagefall_x670_timer_for_iasa = (uint8_t)(damagefall_x670_timer_for_iasa - 1u);
-              }
-            }
-          } else if (stick_x <= -c->lstick_tilt_x_thresh) {
-            if (prev_stick_x <= -c->lstick_tilt_x_thresh) {
-              if (damagefall_x670_timer_for_iasa > 0u && damagefall_x670_timer_for_iasa < 0xFEu) {
-                damagefall_x670_timer_for_iasa = (uint8_t)(damagefall_x670_timer_for_iasa - 1u);
-              }
-            }
-          }
-        }
+        // DamageFall_IASA reads the post-Fighter_Spaghetti x670 with no rewind: the v11 Dolphin
+        // probe (MUG rec 2823 window, reports/triage/probe_v11_mug2823) shows vanilla x670
+        // resetting to 0 on the sub-fall-threshold cross frame, then incrementing to 1 on the
+        // mismatch frame with |stick| >= x210 -- and truth stays in DamageFall (1 is not < x214=1).
+        // The previous held-stick decrement bridge re-passed the gate one frame late and broke
+        // fresh-cross-then-hold rows.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10,Fighter_procUpdate}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+        const uint8_t damagefall_x670_timer_for_iasa = batch->state.tilt_timer_x[idx];
 
         if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL &&
-            msl_absf(stick_x) >= c->damagefall_fall_stick_x_threshold &&
-            damagefall_x670_timer_for_iasa < c->damagefall_fall_tilt_max_frames) {
+            msl_absf(stick_x) >= c->damagefall_fall_stick_x_threshold) {
           // DamageFall IASA stick-fall gate:
           // - after aerial IASA checks (special/item/aircatch/jump),
           // - if ABS(lstick.x) >= p_ftCommonData->x210 and x670_timer_lstick_tilt_x < x214,
           //   enter Fall.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
           // refs/melee/src/melee/ft/types.h (fp+0x670 timer, ftCommonData x210/x214)
-          enter_fall_keep_fastfall_ftco_fall_enter(batch, idx);
-          continue;
+          uint8_t stick_fall =
+              (damagefall_x670_timer_for_iasa < c->damagefall_fall_tilt_max_frames) ? 1u : 0u;
+          if (stick_fall == 0u && batch->config.ucf_enabled &&
+              damagefall_x670_timer_for_iasa == 1u) {
+            // UCF 0.84 tumble component: the gecko hooks the x670-vs-x214 compare inside
+            // ftCo_DamageFall_IASA and additionally allows the fall at x670 == 1 when the
+            // previous frame's processed stick was below the wiggle threshold (no buffering)
+            // and the raw pad delta is a UCF 1f x-smash. Interpreter trace witnesses: GAT 8021
+            // (raw 0 -> -97, falls), QGD 8825 (0 -> 100, falls), MUG 2823 (-14 -> -71 delta
+            // under 75, stays in DamageFall).
+            // refs/ucf/src/tumble/tumble.cpp
+            // refs/ucf/include/ucf/pad_buffer.h::check_ucf_xsmash
+            const float prev_stick_x = apply_deadzone(
+                stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
+            if (msl_absf(prev_stick_x) < c->damagefall_fall_stick_x_threshold &&
+                msl_ucf_check_xsmash(&batch->state, idx)) {
+              stick_fall = 1u;
+            }
+          }
+          if (stick_fall != 0u) {
+            enter_fall_keep_fastfall_ftco_fall_enter(batch, idx);
+            continue;
+          }
         }
       } else if (is_attack_air) {
         const uint8_t allow_interrupt =

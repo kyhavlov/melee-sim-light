@@ -87,7 +87,9 @@ def test_capturewait_post_loop_rate_publication_reseed_matches_ref(
     assert int(seed["action_frame"][p]) == 1
     assert int(seed["seed_prev_action_id"][p]) == int(seed["action_id"][p])
     assert int(seed["seed_prev_action_frame"][p]) == 0
-    assert float(seed["capture_wait_anim_rate_timer_f32"][p]) == pytest.approx(8.0)
+    # GrabMash-scheduled x2344 lane: the arming frame seeds the full x3B0 hold (v12 Dolphin
+    # probe, GAT rec 5677 / QGD rec 8257 windows).
+    assert float(seed["capture_wait_anim_rate_timer_f32"][p]) == pytest.approx(10.0)
     assert int(ref["action_frame"][p]) == expected_action_frame
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
@@ -114,7 +116,9 @@ def test_capturewait_post_loop_rate_publication_does_not_override_throw_handoff(
     ref = ds.samples[record]["ref_t1"]
     assert int(seed["action_id"][p]) == 227
     assert int(seed["action_frame"][p]) == 1
-    assert float(seed["capture_wait_anim_rate_timer_f32"][p]) == pytest.approx(8.0)
+    # This row's wait segment never armed under the GrabMash-scheduled lane; the throw handoff
+    # destination owner below is the lock's real subject.
+    assert float(seed["capture_wait_anim_rate_timer_f32"][p]) == pytest.approx(0.0)
     assert int(ref["action_id"][p]) == 241
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)

@@ -2987,27 +2987,15 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         if (seed->action_id[p] == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI ||
             seed->action_id[p] == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) {
           const MslCommonParams* c = msl_common_params();
-          const uint8_t capture_wait_post_loop_publication_row =
-              (c != NULL && seed->action_frame[p] == 1 &&
-               seed->seed_prev_action_id[p] == seed->action_id[p] &&
-               seed->seed_prev_action_frame[p] == 0 &&
-               seed->capture_wait_anim_rate_timer_f32[p] ==
-                   (c->capture_wait_anim_rate_hold_frames - c->capture_wait_anim_rate))
-                  ? 1u
-                  : 0u;
-          if (c != NULL &&
-              ((seed->action_frame[p] > 1 &&
-                seed->capture_wait_anim_rate_timer_f32[p] > c->capture_wait_anim_rate) ||
-               capture_wait_post_loop_publication_row) &&
-              seed->capture_wait_anim_rate_timer_f32[p] < c->capture_wait_anim_rate_hold_frames) {
+          if (c != NULL && seed->capture_wait_anim_rate_timer_f32[p] > 0.0f &&
+              seed->capture_wait_anim_rate_timer_f32[p] <= c->capture_wait_anim_rate_hold_frames) {
             // Teacher-forced CaptureWait AObj-rate reconstruction:
             // Slippi can expose the post-frame x2344 hold timer while frame_speed_mul is still the
-            // pre-callback visible value. Interior x2344 ticks are after ftAnim_SetAnimRate(x3B4)
-            // and before the endpoint tick can reset the AObj rate to 1.0f. Entry and first-steady
-            // rows still need the visible seed rate because their Anim callback ordering is owned by
-            // the CapturePulled/CaptureWait handoff rather than this reseed-only reconstruction. The
-            // one exception is the post-loop publication row where x2344 has advanced to x3B0-x3B4
-            // while Slippi still serializes the stale rate-1 AObj value.
+            // pre-callback visible value. With the wait-armed x2344 lane (v12 Dolphin probe, GAT
+            // rec 2482/5677 windows), any seeded wait row with a live timer is inside the rate-2.0
+            // window: arming rows seed at x3B0 (SetAnimRate(2.0) already ran during the seed
+            // frame), interior rows seed at the decremented count, and expiry resets the rate only
+            // after the timer reaches 0 on a mash-free callback (which seeds as 0).
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
             batch->state.frame_speed_mul_fp_q16_16[idx] =
                 msl_q16_16_from_f32(c->capture_wait_anim_rate);

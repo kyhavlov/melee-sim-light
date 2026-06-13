@@ -54,7 +54,7 @@ overall.float_norm_mae_p95: 0.00025707
 == datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl ==
 Records: 10165  Players/scored per record: 2  Total player-frames: 20330
 mismatch.action_id: 57 / 20330 (0.002804)
-mismatch.action_frame: 56 / 20330 (0.002755)
+mismatch.action_frame: 52 / 20330 (0.002558)
 mismatch.on_ground: 33 / 20330 (0.001623)
 mismatch.facing: 27 / 20330 (0.001328)
 mismatch.stocks: 0 / 20330 (0.000000)
@@ -91,15 +91,15 @@ err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 457 / 1229965
-overall.strict_discrete_mismatch: 548 / 1229965
+overall.discrete_mismatch: 453 / 1229965
+overall.strict_discrete_mismatch: 544 / 1229965
 overall.ignored_discrete_mismatch: 91
 overall.float_norm_mae_p95: 0.00090268
 
 == datasets/marth/replays/validation/marth/LoudDullGoat.msl ==
 Records: 5909  Players/scored per record: 2  Total player-frames: 11818
 mismatch.action_id: 14 / 11818 (0.001185)
-mismatch.action_frame: 14 / 11818 (0.001185)
+mismatch.action_frame: 12 / 11818 (0.001015)
 mismatch.on_ground: 8 / 11818 (0.000677)
 mismatch.facing: 20 / 11818 (0.001692)
 mismatch.stocks: 0 / 11818 (0.000000)
@@ -136,15 +136,15 @@ err.item_pos_x: mae=0.000197 p95=0.000000 max=0.750000
 err.item_pos_y: mae=0.000224 p95=0.000000 max=0.702896
 err.item_vel_x: mae=0.000377 p95=0.000000 max=0.750000
 err.item_vel_y: mae=0.000807 p95=0.000000 max=1.843083
-overall.discrete_mismatch: 167 / 714989
-overall.strict_discrete_mismatch: 206 / 714989
+overall.discrete_mismatch: 165 / 714989
+overall.strict_discrete_mismatch: 204 / 714989
 overall.ignored_discrete_mismatch: 39
 overall.float_norm_mae_p95: 0.00038788
 
 == datasets/marth/replays/validation/marth/MetallicUniqueGrouse.msl ==
 Records: 5385  Players/scored per record: 2  Total player-frames: 10770
-mismatch.action_id: 12 / 10770 (0.001114)
-mismatch.action_frame: 14 / 10770 (0.001300)
+mismatch.action_id: 11 / 10770 (0.001021)
+mismatch.action_frame: 11 / 10770 (0.001021)
 mismatch.on_ground: 6 / 10770 (0.000557)
 mismatch.facing: 9 / 10770 (0.000836)
 mismatch.stocks: 0 / 10770 (0.000000)
@@ -155,9 +155,9 @@ mismatch.hitstun: 6 / 10770 (0.000557)
 mismatch.l_cancel: 0 / 10770 (0.000000)
 mismatch.hurtbox_state: 2 / 10770 (0.000186)
 mismatch.ground_id: 0 / 10770 (0.000000)
-mismatch.animation_index: 12 / 10770 (0.001114)
+mismatch.animation_index: 11 / 10770 (0.001021)
 mismatch.instance_hit_by: 2 / 10770 (0.000186)
-mismatch.instance_id: 8 / 10770 (0.000743)
+mismatch.instance_id: 7 / 10770 (0.000650)
 mismatch.last_attack_landed: 2 / 10770 (0.000186)
 mismatch.combo_count: 2 / 10770 (0.000186)
 mismatch.last_hit_by: 6 / 10770 (0.000557)
@@ -181,15 +181,15 @@ err.item_pos_x: mae=0.000219 p95=0.000000 max=0.750000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000219 p95=0.000000 max=0.750000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 113 / 651585
-overall.strict_discrete_mismatch: 163 / 651585
+overall.discrete_mismatch: 107 / 651585
+overall.strict_discrete_mismatch: 157 / 651585
 overall.ignored_discrete_mismatch: 50
 overall.float_norm_mae_p95: 0.00033842
 
 == datasets/marth/replays/validation/marth/ParallelFamiliarZebra.msl ==
 Records: 8357  Players/scored per record: 2  Total player-frames: 16714
-mismatch.action_id: 22 / 16714 (0.001316)
-mismatch.action_frame: 25 / 16714 (0.001496)
+mismatch.action_id: 20 / 16714 (0.001197)
+mismatch.action_frame: 22 / 16714 (0.001316)
 mismatch.on_ground: 11 / 16714 (0.000658)
 mismatch.facing: 29 / 16714 (0.001735)
 mismatch.stocks: 0 / 16714 (0.000000)
@@ -200,9 +200,9 @@ mismatch.hitstun: 13 / 16714 (0.000778)
 mismatch.l_cancel: 4 / 16714 (0.000239)
 mismatch.hurtbox_state: 4 / 16714 (0.000239)
 mismatch.ground_id: 0 / 16714 (0.000000)
-mismatch.animation_index: 23 / 16714 (0.001376)
+mismatch.animation_index: 21 / 16714 (0.001256)
 mismatch.instance_hit_by: 8 / 16714 (0.000479)
-mismatch.instance_id: 11 / 16714 (0.000658)
+mismatch.instance_id: 9 / 16714 (0.000538)
 mismatch.last_attack_landed: 5 / 16714 (0.000299)
 mismatch.combo_count: 3 / 16714 (0.000179)
 mismatch.last_hit_by: 15 / 16714 (0.000897)
@@ -226,15 +226,15 @@ err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 250 / 1011197
-overall.strict_discrete_mismatch: 280 / 1011197
+overall.discrete_mismatch: 241 / 1011197
+overall.strict_discrete_mismatch: 271 / 1011197
 overall.ignored_discrete_mismatch: 30
 overall.float_norm_mae_p95: 0.00084069
 
 == datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl ==
 Records: 9184  Players/scored per record: 2  Total player-frames: 18368
 mismatch.action_id: 35 / 18368 (0.001905)
-mismatch.action_frame: 35 / 18368 (0.001905)
+mismatch.action_frame: 34 / 18368 (0.001851)
 mismatch.on_ground: 23 / 18368 (0.001252)
 mismatch.facing: 12 / 18368 (0.000653)
 mismatch.stocks: 0 / 18368 (0.000000)
@@ -271,15 +271,15 @@ err.item_pos_x: mae=0.097331 p95=0.000000 max=75.739227
 err.item_pos_y: mae=0.019296 p95=0.000000 max=14.899351
 err.item_vel_x: mae=0.006878 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.002362 p95=0.000000 max=3.052443
-overall.discrete_mismatch: 287 / 1111264
-overall.strict_discrete_mismatch: 344 / 1111264
+overall.discrete_mismatch: 286 / 1111264
+overall.strict_discrete_mismatch: 343 / 1111264
 overall.ignored_discrete_mismatch: 57
 overall.float_norm_mae_p95: 41.37422045
 
 == datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl ==
 Records: 11820  Players/scored per record: 2  Total player-frames: 23640
-mismatch.action_id: 31 / 23640 (0.001311)
-mismatch.action_frame: 22 / 23640 (0.000931)
+mismatch.action_id: 29 / 23640 (0.001227)
+mismatch.action_frame: 20 / 23640 (0.000846)
 mismatch.on_ground: 3 / 23640 (0.000127)
 mismatch.facing: 34 / 23640 (0.001438)
 mismatch.stocks: 0 / 23640 (0.000000)
@@ -290,9 +290,9 @@ mismatch.hitstun: 12 / 23640 (0.000508)
 mismatch.l_cancel: 0 / 23640 (0.000000)
 mismatch.hurtbox_state: 2 / 23640 (0.000085)
 mismatch.ground_id: 0 / 23640 (0.000000)
-mismatch.animation_index: 29 / 23640 (0.001227)
+mismatch.animation_index: 27 / 23640 (0.001142)
 mismatch.instance_hit_by: 12 / 23640 (0.000508)
-mismatch.instance_id: 23 / 23640 (0.000973)
+mismatch.instance_id: 21 / 23640 (0.000888)
 mismatch.last_attack_landed: 7 / 23640 (0.000296)
 mismatch.combo_count: 1 / 23640 (0.000042)
 mismatch.last_hit_by: 32 / 23640 (0.001354)
@@ -316,15 +316,15 @@ err.item_pos_x: mae=0.121841 p95=0.000000 max=64.256470
 err.item_pos_y: mae=0.041525 p95=0.000000 max=19.962841
 err.item_vel_x: mae=0.013563 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000007
-overall.discrete_mismatch: 332 / 1430220
-overall.strict_discrete_mismatch: 353 / 1430220
+overall.discrete_mismatch: 324 / 1430220
+overall.strict_discrete_mismatch: 345 / 1430220
 overall.ignored_discrete_mismatch: 21
 overall.float_norm_mae_p95: 0.00026723
 
 == datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl ==
 Records: 13272  Players/scored per record: 2  Total player-frames: 26544
-mismatch.action_id: 33 / 26544 (0.001243)
-mismatch.action_frame: 32 / 26544 (0.001206)
+mismatch.action_id: 31 / 26544 (0.001168)
+mismatch.action_frame: 26 / 26544 (0.000980)
 mismatch.on_ground: 11 / 26544 (0.000414)
 mismatch.facing: 20 / 26544 (0.000753)
 mismatch.stocks: 0 / 26544 (0.000000)
@@ -335,9 +335,9 @@ mismatch.hitstun: 4 / 26544 (0.000151)
 mismatch.l_cancel: 0 / 26544 (0.000000)
 mismatch.hurtbox_state: 2 / 26544 (0.000075)
 mismatch.ground_id: 4 / 26544 (0.000151)
-mismatch.animation_index: 33 / 26544 (0.001243)
+mismatch.animation_index: 31 / 26544 (0.001168)
 mismatch.instance_hit_by: 3 / 26544 (0.000113)
-mismatch.instance_id: 21 / 26544 (0.000791)
+mismatch.instance_id: 19 / 26544 (0.000716)
 mismatch.last_attack_landed: 2 / 26544 (0.000075)
 mismatch.combo_count: 3 / 26544 (0.000113)
 mismatch.last_hit_by: 13 / 26544 (0.000490)
@@ -361,13 +361,13 @@ err.item_pos_x: mae=0.007650 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000036
 err.item_vel_x: mae=0.000002 p95=0.000000 max=0.000195
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000033
-overall.discrete_mismatch: 240 / 1605912
-overall.strict_discrete_mismatch: 356 / 1605912
+overall.discrete_mismatch: 228 / 1605912
+overall.strict_discrete_mismatch: 344 / 1605912
 overall.ignored_discrete_mismatch: 116
 overall.float_norm_mae_p95: 0.00037589
 
 == suite summary ==
-overall.discrete_mismatch: 2011 / 8834694
-overall.strict_discrete_mismatch: 2448 / 8834694
+overall.discrete_mismatch: 1969 / 8834694
+overall.strict_discrete_mismatch: 2406 / 8834694
 overall.ignored_discrete_mismatch: 437
 overall.float_norm_mae_p95: 4.82541520

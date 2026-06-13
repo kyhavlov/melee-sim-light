@@ -501,11 +501,10 @@ static inline uint8_t capturewait_first_steady_entry_mash_latch(const MslBatch* 
   if (batch->state.capture_wait_anim_rate_timer[idx] != 0.0f) {
     return 0u;
   }
-  const uint16_t current_or_pressed =
-      (uint16_t)(batch->state.input_buttons[idx] | batch->state.input_buttons_pressed[idx]);
-  if ((current_or_pressed & (uint16_t)(MSL_BUTTON_X | MSL_BUTTON_Y)) != 0u) {
-    return 1u;
-  }
+  // The previous X/Y current_or_pressed reconstruction armed one frame early against the
+  // truth-aligned x2344 lane: a first-steady X/Y press reaches fp->input.x668 (and GrabMash)
+  // on the FOLLOWING frame (v12 Dolphin probe, AGNG rec 3208 window: Y at the af=1 seed row,
+  // GrabMash fires next frame, af still advances +1 on the seed step).
 
   const float stick_x =
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
@@ -533,6 +532,12 @@ static inline uint8_t capturewait_should_apply_first_steady_extra_tick(const Msl
                                                                        int owner_p, int victim_p,
                                                                        size_t oidx, size_t vidx) {
   if (batch == NULL || c == NULL || victim_p < 0) {
+    return 0u;
+  }
+  if (batch->state.capture_wait_anim_rate_timer[vidx] > 0.0f) {
+    // The truth-aligned x2344 lane (v12 Dolphin probe, QGD rec 8257 window) already encodes a
+    // first-steady arming: the seeded timer is live and the AObj-rate reconstruction advances
+    // the timeline at the boosted rate. Applying the legacy extra-tick on top double-counts.
     return 0u;
   }
   const uint16_t victim_action = batch->state.action_id[vidx];
@@ -739,6 +744,11 @@ static inline void capturewait_anim_callback_apply(MslBatch* batch, const MslCom
     return;
   }
 
+  // This callback runs in the engine's pre-input phase, AFTER the step's anim advance
+  // consumed the current frame_speed_mul -- matching the source, where ftAnim_SetAnimRate in
+  // the post-advance Anim callback first affects the NEXT frame's advance (v12 Dolphin probe,
+  // AGNG rec 3208 / QGD rollout 5366-5375 windows: the arming frame advances +1, af then
+  // steps +2).
   const float zero = 0.0f;
   float timer = batch->state.capture_wait_anim_rate_timer[vidx];
   if (timer != zero) {

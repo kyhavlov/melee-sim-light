@@ -502,13 +502,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:293
 == datasets/aggregate_recent/replays/validation/marth/MetallicUniqueGrouse.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 497
-rollout.streak_count: 32
-rollout.streak_len.median: 144
+rollout.streak_count: 31
+rollout.streak_len.median: 151
 rollout.streak_len.p90: 287
 rollout.streak_len.p95: 390
 rollout.streak_len.max: 497
-rollout.first_mismatch_total: 32
-rollout.first_mismatch_seeded_total: 14
+rollout.first_mismatch_total: 31
+rollout.first_mismatch_seeded_total: 13
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=10.71 rec=4823 p=1 seed/ref/out=-24.8992/-24.8992/-35.6092 actions=60/60/60 category=unclassified
@@ -523,14 +523,14 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 
 == datasets/aggregate_recent/replays/validation/marth/ParallelFamiliarZebra.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 736
-rollout.streak_count: 48
+rollout.best_len: 763
+rollout.streak_count: 46
 rollout.streak_len.median: 102
 rollout.streak_len.p90: 450
 rollout.streak_len.p95: 537
-rollout.streak_len.max: 736
-rollout.first_mismatch_total: 49
-rollout.first_mismatch_seeded_total: 28
+rollout.streak_len.max: 763
+rollout.first_mismatch_total: 47
+rollout.first_mismatch_seeded_total: 26
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=28.4 rec=5154 p=1 seed/ref/out=-32.7589/-34.2589/-5.85885 actions=358/358/358 category=unclassified
@@ -565,14 +565,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:623
 
 == datasets/aggregate_recent/replays/validation/marth/RipeWealthySeahorse.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 960
-rollout.streak_count: 47
-rollout.streak_len.median: 157
+rollout.best_len: 1046
+rollout.streak_count: 45
+rollout.streak_len.median: 168
 rollout.streak_len.p90: 637
-rollout.streak_len.p95: 710
-rollout.streak_len.max: 960
-rollout.first_mismatch_total: 49
-rollout.first_mismatch_seeded_total: 30
+rollout.streak_len.p95: 884
+rollout.streak_len.max: 1046
+rollout.first_mismatch_total: 47
+rollout.first_mismatch_seeded_total: 28
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=37.675 rec=924 p=0 seed/ref/out=25.1379/22.9379/60.6129 actions=29/29/29 category=unclassified
@@ -608,13 +608,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:136
 == datasets/aggregate_recent/replays/validation/marth/WellWornSmallGoshawk.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 796
-rollout.streak_count: 84
-rollout.streak_len.median: 101
+rollout.streak_count: 82
+rollout.streak_len.median: 103
 rollout.streak_len.p90: 368
 rollout.streak_len.p95: 433
 rollout.streak_len.max: 796
-rollout.first_mismatch_total: 100
-rollout.first_mismatch_seeded_total: 48
+rollout.first_mismatch_total: 98
+rollout.first_mismatch_seeded_total: 46
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=62.9009 rec=13167 p=0 seed/ref/out=30.4055/30.6624/-32.2385 actions=90/90/90 category=unclassified
@@ -756,14 +756,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:522
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == suite summary ==
-overall.rollout.streak_count: 557
-overall.rollout.streak_len.median: 157
-overall.rollout.streak_len.p90: 940
+overall.rollout.streak_count: 550
+overall.rollout.streak_len.median: 162
+overall.rollout.streak_len.p90: 948
 overall.rollout.streak_len.p95: 2542
 overall.rollout.streak_len.max: 12475
 overall.rollout.best_len.max: 12475
-overall.rollout.first_mismatch_total: 571
-overall.rollout.first_mismatch_seeded_total: 302
+overall.rollout.first_mismatch_total: 564
+overall.rollout.first_mismatch_seeded_total: 295
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=116.809 rec=7120 p=1 seed/ref/out=36.0399/34.1441/150.953 actions=7/7/7 category=unclassified

@@ -2261,9 +2261,17 @@ def derive_grab_mash_stick_sign_post(
     *,
     stick_x_unit: np.ndarray,
     stick_y_unit: np.ndarray,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    grab_owner_port_u8: np.ndarray,
     grab_mash_stick_threshold: float,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Derive post-frame ftCommon_GrabMash stick-sign latches (`x1A50` / `x1A51`)."""
+    """Derive post-frame ftCommon_GrabMash stick-sign latches (`x1A50` / `x1A51`).
+
+    The latches are GrabMash-scheduled: cleared at capture attach, updated only on frames
+    whose CaptureWait/CaptureDamage callback runs GrabMash, reading fp-visible stick values
+    that lag the serialized pre-frame rows by one.
+    """
     try:
         import msl_binding  # type: ignore
     except ImportError as exc:
@@ -2274,6 +2282,9 @@ def derive_grab_mash_stick_sign_post(
     return msl_binding.derive_grab_mash_stick_sign_post(
         np.ascontiguousarray(stick_x_unit, dtype=np.float32).reshape(-1),
         np.ascontiguousarray(stick_y_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        np.ascontiguousarray(grab_owner_port_u8, dtype=np.uint8).reshape(-1),
         float(grab_mash_stick_threshold),
     )
 

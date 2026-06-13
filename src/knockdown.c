@@ -16,6 +16,7 @@
 #include "common_params.h"
 #include "damage_terminal_owner.h"
 #include "guard_lifecycle.h"
+#include "input.h"
 #include "input_axis.h"
 #include "jump_input.h"
 #include "locomotion.h"
@@ -2280,10 +2281,25 @@ static inline uint8_t damagefall_iasa_try_stick_fall(MslBatch* batch, const MslC
     }
   }
 
-  if (msl_absf(stick_x) >= c->damagefall_fall_stick_x_threshold &&
-      x670_for_iasa < c->damagefall_fall_tilt_max_frames) {
-    enter_fall_from_damagefall_iasa(batch, idx);
-    return 1u;
+  if (msl_absf(stick_x) >= c->damagefall_fall_stick_x_threshold) {
+    if (x670_for_iasa < c->damagefall_fall_tilt_max_frames) {
+      enter_fall_from_damagefall_iasa(batch, idx);
+      return 1u;
+    }
+    // UCF 0.84 tumble component (same gecko-extended gate as the locomotion copy): at
+    // x670 == 1, allow the fall when the previous processed stick was below the wiggle
+    // threshold and the raw pad delta is a UCF 1f x-smash.
+    // refs/ucf/src/tumble/tumble.cpp
+    // refs/ucf/include/ucf/pad_buffer.h::check_ucf_xsmash
+    if (batch->config.ucf_enabled && x670_for_iasa == 1u) {
+      const float prev_stick_x = apply_deadzone(
+          stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
+      if (msl_absf(prev_stick_x) < c->damagefall_fall_stick_x_threshold &&
+          msl_ucf_check_xsmash(&batch->state, idx)) {
+        enter_fall_from_damagefall_iasa(batch, idx);
+        return 1u;
+      }
+    }
   }
   return 0u;
 }

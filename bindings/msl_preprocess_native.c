@@ -1410,22 +1410,49 @@ PyObject* msl_compute_tilt_timer_y_pre_post_with_fall_fast_py(PyObject* self, Py
   return Py_BuildValue("NNN", out_pre, out_post, out_fall);
 }
 
+static inline bool msl_py_capture_wait_action(uint16_t a);
+static inline bool msl_py_capture_damage_action(uint16_t a);
+static inline bool msl_py_capture_attach_action(uint16_t a);
+
+// True when ftCommon_GrabMash runs for the victim during frame F (post-row index f):
+// - the frame STARTS in CaptureWait or CaptureDamage (their Anim callbacks call GrabMash), or
+// - the wait state was entered early enough in F for its own Anim callback to run the same
+//   frame (observable as the entry row landing at action_frame == 1 instead of 0; v12 Dolphin
+//   probe, PRH rec 7602 window).
+static inline bool msl_py_grab_mash_runs_during(const uint16_t* a, const int16_t* af, npy_intp f) {
+  if (f <= 0) {
+    return false;
+  }
+  if (msl_py_capture_wait_action(a[f - 1]) || msl_py_capture_damage_action(a[f - 1])) {
+    return true;
+  }
+  return msl_py_capture_wait_action(a[f]) && !msl_py_capture_wait_action(a[f - 1]) && af[f] == 1;
+}
+
 PyObject* msl_derive_grab_mash_stick_sign_post_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* sx_obj = NULL;
   PyObject* sy_obj = NULL;
+  PyObject* action_obj = NULL;
+  PyObject* frame_obj = NULL;
+  PyObject* owner_obj = NULL;
   double threshold = 0.0;
-  if (!PyArg_ParseTuple(args, "OOd", &sx_obj, &sy_obj, &threshold)) {
+  if (!PyArg_ParseTuple(args, "OOOOOd", &sx_obj, &sy_obj, &action_obj, &frame_obj, &owner_obj,
+                        &threshold)) {
     return NULL;
   }
   PyArrayObject* sx = require_contiguous_array(sx_obj, NPY_FLOAT32, 1, "stick_x_unit");
   PyArrayObject* sy = require_contiguous_array(sy_obj, NPY_FLOAT32, 1, "stick_y_unit");
-  if (sx == NULL || sy == NULL) {
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* frame = require_contiguous_array(frame_obj, NPY_INT16, 1, "action_frame_i16");
+  PyArrayObject* owner = require_contiguous_array(owner_obj, NPY_UINT8, 1, "grab_owner_port_u8");
+  if (sx == NULL || sy == NULL || action == NULL || frame == NULL || owner == NULL) {
     return NULL;
   }
   const npy_intp n = PyArray_SIZE(sx);
-  if (PyArray_SIZE(sy) != n) {
-    PyErr_SetString(PyExc_ValueError, "stick_x_unit and stick_y_unit must match");
+  if (PyArray_SIZE(sy) != n || PyArray_SIZE(action) != n || PyArray_SIZE(frame) != n ||
+      PyArray_SIZE(owner) != n) {
+    PyErr_SetString(PyExc_ValueError, "grab mash sign inputs must all match");
     return NULL;
   }
   npy_intp dims[1] = {n};
@@ -1438,21 +1465,43 @@ PyObject* msl_derive_grab_mash_stick_sign_post_py(PyObject* self, PyObject* args
   }
   const float* sx_p = (const float*)PyArray_DATA(sx);
   const float* sy_p = (const float*)PyArray_DATA(sy);
+  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  const int16_t* af = (const int16_t*)PyArray_DATA(frame);
+  const uint8_t* own = (const uint8_t*)PyArray_DATA(owner);
   int8_t* out_x_p = (int8_t*)PyArray_DATA(out_x);
   int8_t* out_y_p = (int8_t*)PyArray_DATA(out_y);
   const float thresh = (float)threshold;
+  // x1A50/x1A51 mirror the source exactly:
+  // - cleared by ftCommon_InitGrab on a fresh capture attach,
+  // - updated ONLY while ftCommon_GrabMash runs (CaptureWait/CaptureDamage callbacks; see
+  //   msl_py_grab_mash_runs_during for the entry-frame case),
+  // - frozen everywhere else,
+  // - GrabMash reads fp->input.lstick, which lags the serialized pre-frame rows by one frame
+  //   (v12 Dolphin probe, CDO rec 12724 / QGD rec 8257 / AGNG rec 3208 windows).
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_InitGrab,ftCommon_GrabMash}
   int8_t latch_x = 0;
   int8_t latch_y = 0;
   for (npy_intp i = 0; i < n; i++) {
-    if (sx_p[i] < -thresh) {
-      latch_x = -1;
-    } else if (sx_p[i] > thresh) {
-      latch_x = 1;
+    const bool attached = msl_py_capture_attach_action(a[i]) && own[i] != 0xFFu;
+    const bool was_attached =
+        i > 0 && msl_py_capture_attach_action(a[i - 1]) && own[i - 1] != 0xFFu;
+    if (attached && !was_attached) {
+      latch_x = 0;
+      latch_y = 0;
     }
-    if (sy_p[i] < -thresh) {
-      latch_y = -1;
-    } else if (sy_p[i] > thresh) {
-      latch_y = 1;
+    if (i > 0 && msl_py_grab_mash_runs_during(a, af, i)) {
+      const float fx = sx_p[i - 1];
+      const float fy = sy_p[i - 1];
+      if (fx < -thresh) {
+        latch_x = -1;
+      } else if (fx > thresh) {
+        latch_x = 1;
+      }
+      if (fy < -thresh) {
+        latch_y = -1;
+      } else if (fy > thresh) {
+        latch_y = 1;
+      }
     }
     out_x_p[i] = latch_x;
     out_y_p[i] = latch_y;
@@ -3952,24 +4001,24 @@ PyObject* msl_derive_capture_grab_hidden_post_py(PyObject* self, PyObject* args)
       if (msl_py_capture_wait_or_damage_action(a[i])) {
         counter += 1.0f;
         timer -= (float)decrement;
-        const uint16_t pressed = b[i + 1];
+        // ftCommon_GrabMash for frame i+1 (the step i -> i+1) sees fp-visible inputs that lag
+        // the serialized pre-frame rows by one: button edges come from pressed[i], and the
+        // stick latch event is visible as the GrabMash-scheduled mx/my lanes moving between
+        // rows i and i+1 (see msl_derive_grab_mash_stick_sign_post_py; v12 Dolphin probe
+        // windows GAT 2482/5677, AGNG 3208, QGD 8257, CDO 12724, PRH 7602).
         bool mash_active =
-            (pressed & (0x0100u | 0x0200u | 0x0400u | 0x0800u | 0x0040u | 0x0020u)) != 0u;
-        int8_t next_x = mx[i];
-        int8_t next_y = my[i];
-        if (sx[i + 1] < -(float)stick_threshold) {
-          next_x = -1;
-        } else if (sx[i + 1] > (float)stick_threshold) {
-          next_x = 1;
-        }
-        if (sy[i + 1] < -(float)stick_threshold) {
-          next_y = -1;
-        } else if (sy[i + 1] > (float)stick_threshold) {
-          next_y = 1;
-        }
-        if (next_x != mx[i] || next_y != my[i]) mash_active = true;
+            (b[i] & (0x0100u | 0x0200u | 0x0400u | 0x0800u | 0x0040u | 0x0020u)) != 0u;
+        if (i + 1 < n && (mx[i + 1] != mx[i] || my[i + 1] != my[i])) mash_active = true;
         if (mash_active) timer -= (float)mash_damage;
-        if (timer > 0.0f) {
+        // The x2344 anim-rate window is a CaptureWait_Anim-only mechanism: fn_800DB8A4
+        // (CaptureDamage) writes the x8 mash latch and grab timer but never arms/decrements
+        // x2344. With the lagged inputs above, any frame that STARTS in CaptureWait runs the
+        // wait callback (Damage->Wait and Pulled->Wait first full frames both qualify); the
+        // entry-frame callback case (early Pulled->Wait entry, af lands at 1) is handled at
+        // the transition write below.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+        //   fn_800DB8A4,ftCo_CaptureWaitHi_Anim}
+        if (timer > 0.0f && msl_py_capture_wait_action(a[i])) {
           if (anim_timer != 0.0f) {
             anim_timer -= 1.0f;
             if (anim_timer <= 0.0f && !mash_active) anim_timer = 0.0f;
@@ -3992,6 +4041,25 @@ PyObject* msl_derive_capture_grab_hidden_post_py(PyObject* self, PyObject* args)
         next_jump = jump_latch ? 1u : 0u;
         if (msl_py_capture_wait_action(a[i]) && msl_py_capture_damage_action(a[i + 1])) {
           next_anim = 0.0f;
+        }
+        const bool family_matched_entry =
+            (a[i] == 0x00DFu && a[i + 1] == 0x00E0u) || (a[i] == 0x00E2u && a[i + 1] == 0x00E3u);
+        if (family_matched_entry && af[i + 1] == 1 && next_anim <= 0.0f) {
+          // Early Pulled->Wait entry: the wait state was installed before the victim's anim
+          // phase of the entry frame, so its callback (and GrabMash) ran the same frame --
+          // observable as the entry row landing at af == 1. Arm the window when that frame's
+          // lagged inputs carry a mash (v12 Dolphin probe, PRH rec 7602: X edge at the entry
+          // frame, x2344 = 10.0 and af = 1 at the entry row).
+          // Cross-family entries (CapturePulledHi -> CaptureWaitLw) arm vanilla's x2344 but
+          // the AObj rate stays 1.0 (TBK rec 5911 window: x2344 counts 10..5 with af stepping
+          // +1); the lane intentionally stays 0 there so the teacher-forced rate
+          // reconstruction does not boost those rows.
+          bool entry_mash =
+              (b[i] & (0x0100u | 0x0200u | 0x0400u | 0x0800u | 0x0040u | 0x0020u)) != 0u;
+          if (mx[i + 1] != mx[i] || my[i + 1] != my[i]) entry_mash = true;
+          if (entry_mash) {
+            next_anim = (float)hold_frames;
+          }
         }
       }
     }

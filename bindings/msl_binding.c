@@ -7192,7 +7192,8 @@ static PyMethodDef methods[] = {
      "derive_guard_reflect_origin_guardon(action, act_guard_reflect, act_guard_on, act_guard) -> "
      "uint8[:]"},
     {"derive_grab_mash_stick_sign_post", msl_derive_grab_mash_stick_sign_post_py, METH_VARARGS,
-     "derive_grab_mash_stick_sign_post(stick_x, stick_y, threshold) -> (x_sign, y_sign)"},
+     "derive_grab_mash_stick_sign_post(stick_x, stick_y, action_id, action_frame, grab_owner, "
+     "threshold) -> (x_sign, y_sign)"},
     {"derive_guard_release_lockout_and_lightshield",
      msl_derive_guard_release_lockout_and_lightshield_py, METH_VARARGS,
      "derive_guard_release_lockout_and_lightshield(action_id, shield_hp, hitlag, buttons_held, "
