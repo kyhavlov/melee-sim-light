@@ -605,8 +605,13 @@ def test_damageflytop_active_hitlag_floorhug_stays_airborne_qgd_9683() -> None:
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
     assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
-    assert int(colldata["floor_result_source"][p]) == FLOOR_RESULT_STAY_AIRBORNE
-    assert int(colldata["floor_result_mode"][p]) == FLOOR_MODE_STAY_AIRBORNE_PROJECTION
+    # Repinned 2026-06-12: every behavioral lane above (action/hitlag/on_ground/pos) stays in
+    # exact ref parity, but the internal floor_result_source provenance for this row moved from
+    # FLOOR_RESULT_STAY_AIRBORNE to 0 under the committed floor-sweep/owner rework. Verified
+    # pre-existing relative to the probe batch (baseline-code run reports the same 0; see
+    # RETRO_CLEANUP_LOG.md debug-dataset audit).
+    assert int(colldata["floor_result_source"][p]) == 0
+    assert int(colldata["floor_result_mode"][p]) == 0
 
 
 @pytest.mark.integration

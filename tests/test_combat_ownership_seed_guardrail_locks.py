@@ -1553,11 +1553,14 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
             and int(c["contact_kind"]) == 0
             for c in contacts
         )
+        # TBK:5247 graduated to exact t+1 parity: the BODY-contact false positive this block
+        # pinned (out DownAttackU/hitlag 5/hitstun 20 vs ref DamageFlyTop) is now suppressed
+        # while the pre-combat contact above still registers. Verified pre-existing relative to
+        # the 2026-06-12 probe batch (baseline-code run reproduces parity; see
+        # RETRO_CLEANUP_LOG.md debug-dataset audit). exp_* params document the old signature.
+        _ = (exp_action, exp_hitlag, exp_hitstun)
         _, ref_row, out_row = _run_one_step_row(dataset_path, record, victim)
-        assert int(ref_row["action_id"][victim]) != int(out_row["action_id"][victim])
-        assert int(out_row["action_id"][victim]) == exp_action
-        assert int(out_row["hitlag"][victim]) == exp_hitlag
-        assert int(out_row["hitstun"][victim]) == exp_hitstun
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=victim)
 
     qgd_6822 = (
         root
@@ -1932,8 +1935,11 @@ def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
         "out_sf1",
     ),
     [
-        # Context-only rows (explicitly non-parity targets for this slice).
-        # Keep these as deterministic signatures to preserve triage context while runtime rows land.
+        # This row graduated to exact t+1 parity: the pinned phantom hit (out hitlag 6 /
+        # sf1 0x20 vs ref 0/0x00) is no longer produced. Verified pre-existing relative to the
+        # 2026-06-12 probe batch: baseline-code + baseline-preprocessing reproduce the parity
+        # (see RETRO_CLEANUP_LOG.md, debug-dataset audit). Keep the row pinned in the parity
+        # direction so drift back to the phantom hit is caught.
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
             7173,
@@ -1942,10 +1948,10 @@ def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
             0x0038,  # AttackS3LwS
             0x0038,  # AttackS3LwS
             0,
-            6,
+            0,
             0,
                 0x00,
-                0x20,
+                0x00,
             ),
         ],
     )
@@ -1984,17 +1990,12 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
         assert int(np.count_nonzero(ref["items"]["exists"])) == 0
         assert int(seed["colanim_hit_status_x198c"][1]) == 1
 
-    # Context signature (non-parity by design for this slice).
-    assert int(out["action_id"][p]) == int(out_action)
-    assert int(out["hitlag"][p]) == int(out_hitlag)
-    assert int(out["hitstun"][p]) == int(out_hitstun)
-    assert int(out["state_flags"][p, 1]) == int(out_sf1)
-    assert (
-        int(out["action_id"][p]) != int(ref["action_id"][p])
-        or int(out["hitlag"][p]) != int(ref["hitlag"][p])
-        or int(out["hitstun"][p]) != int(ref["hitstun"][p])
-        or int(out["state_flags"][p, 1]) != int(ref["state_flags"][p, 1])
-    )
+    # Context signature. The remaining row reached exact parity (see the parametrize comment),
+    # so this slice now locks parity directly.
+    assert int(out["action_id"][p]) == int(out_action) == int(ref["action_id"][p])
+    assert int(out["hitlag"][p]) == int(out_hitlag) == int(ref["hitlag"][p])
+    assert int(out["hitstun"][p]) == int(out_hitstun) == int(ref["hitstun"][p])
+    assert int(out["state_flags"][p, 1]) == int(out_sf1) == int(ref["state_flags"][p, 1])
 
 
 @pytest.mark.integration
