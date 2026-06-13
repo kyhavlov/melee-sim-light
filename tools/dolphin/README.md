@@ -132,7 +132,45 @@ uv run python -m tools.dolphin.laser_shield_reflect_event_dump reports/triage/<p
 
 ## Controlled playback probes
 
-Use `patch_slp_preframe_window.py` when a modelplay symptom needs vanilla confirmation but exact state recreation is not available from Slippi post-frames alone. The script edits only 0x37 pre-frame payloads in a copied `.slp`; Dolphin then plays the replay normally. By default it refuses `--out == --slp`; use `--in-place` only when intentionally overwriting a disposable copy. Keep windows short and write all generated specs, patched replays, dumps, and rows under `reports/triage/`.
+Use `slp_scenario_probe.py` when a modelplay/webplay symptom needs vanilla confirmation but exact
+state recreation is not available from an existing replay alone. The tool authors Slippi `0x37`
+pre-frame fields in a copied replay, runs playback Dolphin, and extracts rows for named windows.
+This is not full hidden Melee memory injection: fields that Slippi playback consumes, including
+controller input and some pre-frame state fields, can affect the vanilla run; unexposed fighter,
+item, collision, RNG, and callback state still comes from vanilla simulation.
+
+```json
+{
+  "source_replay": "replays/validation/aggregate_recent/HungryImportantSnake.slpz",
+  "patches": [
+    {
+      "note": "hold left and alter pre-frame playback state for a short branch",
+      "start_frame": 376,
+      "end_frame": 420,
+      "player": 0,
+      "input": {"joystickX": -1.0, "joystickY": 0.0},
+      "pre_state": {"x": 0.0, "y": 30.0, "action": 14}
+    }
+  ],
+  "windows": [
+    {"name": "after_patch", "start_frame": 421, "end_frame": 425, "ports": [1]}
+  ]
+}
+```
+
+```bash
+uv run python -m tools.dolphin.slp_scenario_probe \
+  --scenario reports/triage/<probe>/scenario.json \
+  --dolphin refs/Ishiiruka/build_probe/Binaries/dolphin-emu-nogui \
+  --iso SSBM.iso \
+  --baseline
+```
+
+The lower-level `patch_slp_preframe_window.py` remains available when you only need to write a
+patched replay and run capture manually. It edits only `0x37` pre-frame payloads in a copied `.slp`;
+Dolphin then plays the replay normally. By default it refuses `--out == --slp`; use `--in-place`
+only when intentionally overwriting a disposable copy. Keep windows short and write all generated
+specs, patched replays, dumps, and rows under `reports/triage/`.
 
 ```bash
 uv run python -m tools.dolphin.patch_slp_preframe_window \
@@ -151,6 +189,7 @@ The rerun7 frame-2124 shield investigation used this workflow: neutral/toward sh
 - `engine_dump_io.py`: v6/v7/v8/v9/v10/v12 dump parser (schema + typed readers, including fighter/item hitlist provenance and v12 hidden fighter lanes).
 - `extract_engine_dump_rows.py`: deterministic JSON/txt extraction for frame windows (including item/fighter hitlist provenance lanes when available).
 - `forensic_row_dump.py`: dataset row => frame window => dump + extracted rows.
+- `slp_scenario_probe.py`: scenario JSON => patched replay => baseline/scenario dump rows.
 - `throw_laser_event_dump.py`: read/summarize throw-laser intra-frame event JSONL probes.
 - `laser_shield_reflect_event_dump.py`: read/summarize laser shield/reflect event JSONL probes.
 - `compare_hitlist_provenance.py`: frame-by-frame comparison of extracted hitlist provenance between two row captures.

@@ -248,6 +248,20 @@ uv run python -m tools.dolphin.probe_benchmark \
 It prints elapsed time, first/last captured frame, row count, event count, and
 active port ids for each window.
 
+For controlled vanilla experiments from authored Slippi pre-frame fields, use:
+
+```bash
+uv run python -m tools.dolphin.slp_scenario_probe \
+  --scenario reports/triage/<probe>/scenario.json \
+  --dolphin refs/Ishiiruka/build_probe/Binaries/dolphin-emu-nogui \
+  --iso SSBM.iso \
+  --baseline
+```
+
+This authors a copied replay's `0x37` pre-frame input/state fields, then runs
+the same fast playback dump path. It is useful for webplay/modelplay branch
+experiments, but it is not full hidden-state memory injection.
+
 Interpreter-only probes are opt-in with flags such as `--collision-probe`,
 `--damagefall-probe`, `--throw-laser-event-probe`, and
 `--laser-shield-reflect-event-probe`. These flags install the matching
