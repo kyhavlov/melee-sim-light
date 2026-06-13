@@ -4435,10 +4435,12 @@ static PyObject* msl_char_params_part_anchors_py(PyObject* self, PyObject* args)
     PyList_SET_ITEM(ecb, (Py_ssize_t)i, v);
   }
   PyObject* out = Py_BuildValue(
-      "{s:N,s:i,s:i,s:i,s:i}", "ecb_joints", ecb, "laser_spawn_joint_part_id",
+      "{s:N,s:i,s:i,s:i,s:i,s:i}", "ecb_joints", ecb, "laser_spawn_joint_part_id",
       (int)ch->laser_spawn_joint_part_id, "reflector_bone_part_id", (int)ch->reflector_bone_part_id,
       "camera_zoom_target_bone_part_id", (int)ch->camera_zoom_target_bone_part_id,
-      "grab_capture_anchor_part_id", (int)ch->grab_capture_anchor_part_id);
+      "grab_capture_anchor_part_id", (int)ch->grab_capture_anchor_part_id,
+      "throw_release_mpcoll_floor_publication_mask",
+      (int)ch->throw_release_mpcoll_floor_publication_mask);
   return out;
 }
 

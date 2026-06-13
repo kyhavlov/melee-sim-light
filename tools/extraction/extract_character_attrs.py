@@ -397,8 +397,24 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
 
     x44_abs = arc.ptr32(ftdata_abs + 0x44)
     wait_anim_abs = arc.ptr32(ftdata_abs + 0x24)
+    # Probe-backed gameplay overlay:
+    # ftCo_800DDDE4 always samples a selected capture/throw anchor, but the observed
+    # mpColl_800471F8 floor-publication subset is not equivalent to the anchor part id.
+    # Marth ThrowF and ThrowLw publish the floor-hit substep root before damage entry; Marth
+    # ThrowB and Fox/Falco controls do not. Keep the source-completion discriminator explicit so
+    # future characters with the same anchor id do not inherit this path accidentally.
+    # Bit order: ThrowF, ThrowB, ThrowHi, ThrowLw.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
+    # refs/Ishiiruka engine-dump-v12-probes ftCo_800DDDE4 probe:
+    #   IPW 1231..1233/10031, ParallelFamiliarZebra 1427..1429, FSP 9061..9067.
+    throw_release_mpcoll_floor_publication_mask = 0
+    if ftdata_symbol == "ftData_Marth":
+        throw_release_mpcoll_floor_publication_mask = (1 << 0) | (1 << 3)
+
     out = {
         "grab_capture_anchor_part_id": grab_capture_anchor_part_id,
+        "throw_release_mpcoll_floor_publication_mask": throw_release_mpcoll_floor_publication_mask,
         "walk_init_vel": f(0x00),
         "walk_accel": f(0x04),
         "walk_max_vel": f(0x08),
@@ -750,6 +766,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "pushbox_x",
         "pushbox_y",
         "grab_capture_anchor_part_id",
+        "throw_release_mpcoll_floor_publication_mask",
         "illusion_gravity_delay_start_frames",
         "illusion_air_friction_start",
         "illusion_fall_accel_start",

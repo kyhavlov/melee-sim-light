@@ -21,6 +21,7 @@ void mpcoll_ground_refresh_grounded_root_floor_index(MslBatch* batch, int batch_
 typedef struct MslMpcollFloorMaskResult {
   uint16_t ground_id;
   float corrected_pos_y;
+  float corrected_pos_x;
 } MslMpcollFloorMaskResult;
 
 // Narrow `mpColl_800477E0` floor-mask predicate for callbacks that need the floor result before
@@ -35,3 +36,12 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
 // floor-index/root projection lane rather than the ordinary bottom sweep approximation above.
 uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, size_t idx,
                                                       MslMpcollFloorMaskResult* out);
+
+// Throw-release `ftCo_800DDDE4` publication subset:
+// after x1A70 placement, source calls `mpColl_800471F8`, whose air-collision wrapper substeps from
+// CollData.last_pos to CollData.cur_pos and publishes the floor-hit substep root before damage
+// entry. This helper reconstructs that root-level floor publication; it does not run generic
+// per-frame map collision.
+uint8_t mpcoll_800471f8_throw_release_root_floor_probe(const MslBatch* batch, size_t idx,
+                                                       float source_last_x, float source_last_y,
+                                                       MslMpcollFloorMaskResult* out);

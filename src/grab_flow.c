@@ -226,7 +226,8 @@ static inline void maybe_enter_capture_wait_lw_grounded_handoff(MslBatch* batch,
       continue;
     }
 
-    MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx]};
+    MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx],
+                                             batch->state.pos_x[vidx]};
     if (!mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result)) {
       continue;
     }
@@ -277,7 +278,8 @@ static inline void maybe_run_capture_pulled_hi_immediate_floor_callback(
     return;
   }
 
-  MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx]};
+  MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx],
+                                           batch->state.pos_x[vidx]};
   uint8_t floor_mask = mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result);
   if (floor_mask == 0u && batch->state.ground_id[vidx] != 0xFFFFu &&
       batch->state.ecb_lock_timer[vidx] != 0u) {

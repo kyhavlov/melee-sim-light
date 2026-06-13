@@ -7091,6 +7091,38 @@ static uint8_t escapeair_locked_hard_floor_zero_bottom_root_projection(
   return 1u;
 }
 
+static uint8_t mpcoll_throw_release_root_floor_sweep_step(const MslBatch* batch, size_t idx, int bi,
+                                                          const MslStageFloorGraph* g,
+                                                          uint32_t stage_id, float prev_root_x,
+                                                          float prev_root_y, float cur_root_x,
+                                                          float cur_root_y, uint16_t skip_segment_i,
+                                                          MslMpcollFloorMaskResult* out) {
+  if (batch == NULL || g == NULL || g->lines == NULL || g->line_count == 0) {
+    return 0u;
+  }
+  const MslCommonParams* c = msl_common_params();
+  MslMpcollFloorSweepResult floor_sweep = {0};
+  if (!mpcoll_collect_bottom_sweep_floor_result(batch, idx, bi, g, stage_id, prev_root_x,
+                                                prev_root_y, cur_root_x, cur_root_y, skip_segment_i,
+                                                -1, -1, c, &floor_sweep)) {
+    return 0u;
+  }
+  int out_line_idx = floor_sweep.projected_line_idx;
+  if (out_line_idx < 0 || (size_t)out_line_idx >= g->line_count ||
+      floor_sweep.projected_y_corr < 0.0f ||
+      !floor_line_is_runtime_fighter_solid(g, stage_id, out_line_idx) ||
+      g->lines[(size_t)out_line_idx].is_platform) {
+    return 0u;
+  }
+
+  if (out != NULL) {
+    out->ground_id = g->lines[(size_t)out_line_idx].segment_i;
+    out->corrected_pos_y = cur_root_y + floor_sweep.projected_y_corr;
+    out->corrected_pos_x = cur_root_x;
+  }
+  return 1u;
+}
+
 uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
                                          MslMpcollFloorMaskResult* out) {
   if (batch == NULL) {
@@ -7133,6 +7165,7 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
       if (out != NULL) {
         out->ground_id = g->lines[(size_t)out_line_idx].segment_i;
         out->corrected_pos_y = batch->state.pos_y[idx] + floor_sweep.projected_y_corr;
+        out->corrected_pos_x = batch->state.pos_x[idx];
       }
       return 1u;
     }
@@ -7140,6 +7173,7 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
       out->ground_id = floor_sweep.hit_segment_id;
       out->corrected_pos_y =
           batch->state.pos_y[idx] + (floor_sweep.hit_y - cur_bot.y) + k_floor_y_bias;
+      out->corrected_pos_x = batch->state.pos_x[idx];
     }
     return 1u;
   }
@@ -7168,6 +7202,7 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
       if (out != NULL) {
         out->ground_id = g->lines[(size_t)best_line_idx].segment_i;
         out->corrected_pos_y = batch->state.pos_y[idx] + best_y_corr;
+        out->corrected_pos_x = batch->state.pos_x[idx];
       }
       return 1u;
     }
@@ -7227,6 +7262,7 @@ uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, siz
       if (out != NULL) {
         out->ground_id = g->lines[(size_t)out_line_idx].segment_i;
         out->corrected_pos_y = batch->state.pos_y[idx] + y_corr;
+        out->corrected_pos_x = batch->state.pos_x[idx];
       }
       return 1u;
     }
@@ -7254,8 +7290,66 @@ uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, siz
     if (out != NULL) {
       out->ground_id = g->lines[(size_t)best_line_idx].segment_i;
       out->corrected_pos_y = batch->state.pos_y[idx] + best_y_corr;
+      out->corrected_pos_x = batch->state.pos_x[idx];
     }
     return 1u;
+  }
+  return 0u;
+}
+
+uint8_t mpcoll_800471f8_throw_release_root_floor_probe(const MslBatch* batch, size_t idx,
+                                                       float source_last_x, float source_last_y,
+                                                       MslMpcollFloorMaskResult* out) {
+  if (batch == NULL || !isfinite(source_last_x) || !isfinite(source_last_y)) {
+    return 0u;
+  }
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL || g->lines == NULL || g->line_count == 0) {
+    return 0u;
+  }
+
+  // ftCo_800DDDE4 sets CollData.last_pos from the selected sample owner and CollData.cur_pos from
+  // the x1A70 release vector, then calls mpColl_800471F8. Source probe evidence across Marth
+  // ThrowF/CaptureCut rows shows the published root comes from mpColl_80043754's intermediate
+  // floor-hit substep, not from the raw x1A70 target.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754,mpColl_80046904}
+  const float target_x = batch->state.pos_x[idx];
+  const float target_y = batch->state.pos_y[idx];
+  if (!isfinite(target_x) || !isfinite(target_y)) {
+    return 0u;
+  }
+  const float dx = target_x - source_last_x;
+  const float dy = target_y - source_last_y;
+  float max_delta = fabsf(dx);
+  if (fabsf(dy) > max_delta) {
+    max_delta = fabsf(dy);
+  }
+  int steps = 1;
+  if (max_delta > k_mpcoll_substep_max_delta) {
+    steps = (int)(max_delta / k_mpcoll_substep_max_delta) + 1;
+  }
+  if (steps < 1) {
+    steps = 1;
+  }
+  const float step_x = dx / (float)steps;
+  const float step_y = dy / (float)steps;
+  const uint16_t skip_segment_i = platform_floor_skip_segment_id(batch, idx, stage_id);
+
+  float prev_root_x = source_last_x;
+  float prev_root_y = source_last_y;
+  for (int step = 0; step < steps; step++) {
+    const float cur_root_x = prev_root_x + step_x;
+    const float cur_root_y = prev_root_y + step_y;
+    if (mpcoll_throw_release_root_floor_sweep_step(batch, idx, bi, g, stage_id, prev_root_x,
+                                                   prev_root_y, cur_root_x, cur_root_y,
+                                                   skip_segment_i, out)) {
+      return 1u;
+    }
+    prev_root_x = cur_root_x;
+    prev_root_y = cur_root_y;
   }
   return 0u;
 }

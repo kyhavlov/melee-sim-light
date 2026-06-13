@@ -197,6 +197,7 @@ def capture_engine_dump(
     damagefall_probe_path: str | Path | None = None,
     damagefall_probe_frame_start: int | None = None,
     damagefall_probe_frame_end: int | None = None,
+    throw_release_probe_path: str | Path | None = None,
     throw_laser_event_probe_path: str | Path | None = None,
     laser_shield_reflect_event_probe_path: str | Path | None = None,
 ) -> CaptureResult:
@@ -218,6 +219,7 @@ def capture_engine_dump(
     force_interpreter = (
         collision_probe_path is not None
         or damagefall_probe_path is not None
+        or throw_release_probe_path is not None
         or throw_laser_event_probe_path is not None
         or laser_shield_reflect_event_probe_path is not None
     )
@@ -268,6 +270,10 @@ def capture_engine_dump(
         )
         env["MSL_DAMAGEFALL_PROBE_FRAME_END"] = str(
             resolved_end if damagefall_probe_frame_end is None else int(damagefall_probe_frame_end)
+        )
+    if throw_release_probe_path is not None:
+        env["MSL_THROW_RELEASE_PROBE_PATH"] = str(
+            Path(throw_release_probe_path).resolve()
         )
     if throw_laser_event_probe_path is not None:
         env["MSL_THROW_LASER_EVENT_PROBE_PATH"] = str(
@@ -388,6 +394,12 @@ def main() -> int:
     ap.add_argument("--damagefall-probe-frame-start", type=int, default=None)
     ap.add_argument("--damagefall-probe-frame-end", type=int, default=None)
     ap.add_argument(
+        "--throw-release-probe",
+        type=Path,
+        default=None,
+        help="optional JSONL path for ftCo_800DDDE4 throw-release position publication events; forces interpreter CPU core",
+    )
+    ap.add_argument(
         "--throw-laser-event-probe",
         type=Path,
         default=None,
@@ -417,6 +429,7 @@ def main() -> int:
         damagefall_probe_path=args.damagefall_probe,
         damagefall_probe_frame_start=args.damagefall_probe_frame_start,
         damagefall_probe_frame_end=args.damagefall_probe_frame_end,
+        throw_release_probe_path=args.throw_release_probe,
         throw_laser_event_probe_path=args.throw_laser_event_probe,
         laser_shield_reflect_event_probe_path=args.laser_shield_reflect_event_probe,
     )

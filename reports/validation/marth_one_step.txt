@@ -78,8 +78,8 @@ mismatch.item_state: 0 / 152475 (0.000000)
 mismatch.item_owner: 0 / 152475 (0.000000)
 mismatch.item_instance_id: 0 / 152475 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 91 / 20330 (0.004476)
-err.pos_x: mae=0.009760 p95=0.000001 max=7.867691
-err.pos_y: mae=0.014979 p95=0.000000 max=9.782003
+err.pos_x: mae=0.009043 p95=0.000001 max=7.867691
+err.pos_y: mae=0.012099 p95=0.000000 max=9.782003
 err.speed_air_x_self: mae=0.005937 p95=0.000000 max=5.261856
 err.speed_ground_x_self: mae=0.001706 p95=0.000000 max=2.466625
 err.speed_y_self: mae=0.004029 p95=0.000000 max=2.385000
@@ -94,7 +94,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
 overall.discrete_mismatch: 453 / 1229965
 overall.strict_discrete_mismatch: 544 / 1229965
 overall.ignored_discrete_mismatch: 91
-overall.float_norm_mae_p95: 0.00090268
+overall.float_norm_mae_p95: 0.00089732
 
 == datasets/marth/replays/validation/marth/LoudDullGoat.msl ==
 Records: 5909  Players/scored per record: 2  Total player-frames: 11818
@@ -168,8 +168,8 @@ mismatch.item_state: 0 / 80775 (0.000000)
 mismatch.item_owner: 0 / 80775 (0.000000)
 mismatch.item_instance_id: 0 / 80775 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 50 / 10770 (0.004643)
-err.pos_x: mae=0.008891 p95=0.000000 max=4.460800
-err.pos_y: mae=0.011053 p95=0.000000 max=16.568657
+err.pos_x: mae=0.007615 p95=0.000000 max=4.460800
+err.pos_y: mae=0.006660 p95=0.000000 max=16.568657
 err.speed_air_x_self: mae=0.003869 p95=0.000000 max=4.631064
 err.speed_ground_x_self: mae=0.000358 p95=0.000000 max=1.440000
 err.speed_y_self: mae=0.001891 p95=0.000000 max=2.316999
@@ -184,7 +184,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
 overall.discrete_mismatch: 107 / 651585
 overall.strict_discrete_mismatch: 157 / 651585
 overall.ignored_discrete_mismatch: 50
-overall.float_norm_mae_p95: 0.00033842
+overall.float_norm_mae_p95: 0.00033307
 
 == datasets/marth/replays/validation/marth/ParallelFamiliarZebra.msl ==
 Records: 8357  Players/scored per record: 2  Total player-frames: 16714
@@ -213,8 +213,8 @@ mismatch.item_state: 0 / 125355 (0.000000)
 mismatch.item_owner: 0 / 125355 (0.000000)
 mismatch.item_instance_id: 0 / 125355 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 30 / 16714 (0.001795)
-err.pos_x: mae=0.004513 p95=0.000000 max=5.383545
-err.pos_y: mae=0.007621 p95=0.000000 max=9.690438
+err.pos_x: mae=0.004079 p95=0.000000 max=5.383545
+err.pos_y: mae=0.004825 p95=0.000000 max=4.696407
 err.speed_air_x_self: mae=0.004510 p95=0.000000 max=2.814622
 err.speed_ground_x_self: mae=0.000716 p95=0.000000 max=2.337638
 err.speed_y_self: mae=0.003567 p95=0.000000 max=2.385000
@@ -229,7 +229,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
 overall.discrete_mismatch: 241 / 1011197
 overall.strict_discrete_mismatch: 271 / 1011197
 overall.ignored_discrete_mismatch: 30
-overall.float_norm_mae_p95: 0.00084069
+overall.float_norm_mae_p95: 0.00083678
 
 == datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl ==
 Records: 9184  Players/scored per record: 2  Total player-frames: 18368
@@ -258,8 +258,8 @@ mismatch.item_state: 1 / 137760 (0.000007)
 mismatch.item_owner: 2 / 137760 (0.000015)
 mismatch.item_instance_id: 2 / 137760 (0.000015)
 ignored_mismatch.state_flags[4]&0x80: 57 / 18368 (0.003103)
-err.pos_x: mae=0.001705 p95=0.000000 max=2.776993
-err.pos_y: mae=0.005143 p95=0.000000 max=17.017424
+err.pos_x: mae=0.001443 p95=0.000000 max=2.776993
+err.pos_y: mae=0.004345 p95=0.000000 max=17.017424
 err.speed_air_x_self: mae=0.001128 p95=0.000000 max=16.500000
 err.speed_ground_x_self: mae=0.002121 p95=0.000000 max=2.790000
 err.speed_y_self: mae=0.001156 p95=0.000000 max=2.852000
@@ -274,7 +274,7 @@ err.item_vel_y: mae=0.002362 p95=0.000000 max=3.052443
 overall.discrete_mismatch: 286 / 1111264
 overall.strict_discrete_mismatch: 343 / 1111264
 overall.ignored_discrete_mismatch: 57
-overall.float_norm_mae_p95: 41.37422045
+overall.float_norm_mae_p95: 41.37421916
 
 == datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl ==
 Records: 11820  Players/scored per record: 2  Total player-frames: 23640
@@ -348,8 +348,8 @@ mismatch.item_state: 0 / 199080 (0.000000)
 mismatch.item_owner: 0 / 199080 (0.000000)
 mismatch.item_instance_id: 0 / 199080 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 116 / 26544 (0.004370)
-err.pos_x: mae=0.008045 p95=0.000000 max=5.261864
-err.pos_y: mae=0.004378 p95=0.000000 max=13.233292
+err.pos_x: mae=0.007756 p95=0.000000 max=5.261864
+err.pos_y: mae=0.003602 p95=0.000000 max=13.233292
 err.speed_air_x_self: mae=0.003409 p95=0.000000 max=5.261856
 err.speed_ground_x_self: mae=0.000529 p95=0.000000 max=1.837786
 err.speed_y_self: mae=0.002378 p95=0.000000 max=3.680000
@@ -364,10 +364,10 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000033
 overall.discrete_mismatch: 228 / 1605912
 overall.strict_discrete_mismatch: 344 / 1605912
 overall.ignored_discrete_mismatch: 116
-overall.float_norm_mae_p95: 0.00037589
+overall.float_norm_mae_p95: 0.00037479
 
 == suite summary ==
 overall.discrete_mismatch: 1969 / 8834694
 overall.strict_discrete_mismatch: 2406 / 8834694
 overall.ignored_discrete_mismatch: 437
-overall.float_norm_mae_p95: 4.82541520
+overall.float_norm_mae_p95: 4.82541323

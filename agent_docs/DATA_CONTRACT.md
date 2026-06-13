@@ -950,6 +950,18 @@ Characters (Fox/Falco):
     Decomp: `ft_80081B38` calls `mpColl_SetECBSource_JObj(..., bones[temp_r29->unk*].joint, ...)`.
   - `firefox_bound_angle_degrees`: `ftFox_DatAttrs.x94_FOX_FIREFOX_BOUND_ANGLE`, consumed by
     `ftFx_SpecialAirHi_Coll` collision-facing / bound-angle checks.
+  - `throw_release_mpcoll_floor_publication_mask`: runtime-required character attr loaded by
+    `src/char_params.c` from `data/characters/<char>.json`.
+    - Bit order is common throw action order: bit 0 = ThrowF, bit 1 = ThrowB, bit 2 = ThrowHi,
+      bit 3 = ThrowLw.
+    - Current values: Fox/Falco `0`; Marth `ThrowF | ThrowLw` (`0b1001` / `9`).
+    - This is a probe-backed overlay for `ftCo_800DDDE4 -> mpColl_800471F8` release-local floor
+      publication, not an inference from `grab_capture_anchor_part_id`. The anchor part can explain
+      which JObj is sampled, but it is not the gameplay owner for whether the release publishes the
+      floor-hit substep root.
+    - Sources/proof: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4`,
+      `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}`, and the pushed
+      `refs/Ishiiruka` `engine-dump-v12-probes` throw-release probe.
 - `data/attack_id/move_id/fox.bin`, `data/attack_id/move_id/falco.bin` (MotionState tables; decomp-first, compact binary)
   - Purpose:
     - Drive fighter attack identity parity (`fp->x2068_attackID` / `fp->x206C_attack_instance`) from real

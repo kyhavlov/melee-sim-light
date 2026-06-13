@@ -87,10 +87,11 @@ def test_capturewait_post_loop_rate_publication_reseed_matches_ref(
     assert int(seed["action_frame"][p]) == 1
     assert int(seed["seed_prev_action_id"][p]) == int(seed["action_id"][p])
     assert int(seed["seed_prev_action_frame"][p]) == 0
-    # Current local validation artifacts carry the post-callback decremented x2344 hold here.
-    # The runtime uses this already-decremented value as AObj-rate proof; full x3B0 rows are
-    # handled as timer publication without automatic rate forcing.
-    assert float(seed["capture_wait_anim_rate_timer_f32"][p]) == pytest.approx(8.0)
+    # Regenerated validation artifacts carry the wait-armed x2344 hold at the full source value on
+    # the first post-loop row. `api.c` treats any positive in-window x2344 as AObj-rate proof; the
+    # transition lock below remains the source-owned assertion.
+    # bindings/msl_preprocess_native.c::msl_py_derive_capture_wait_lanes_from_series
+    assert float(seed["capture_wait_anim_rate_timer_f32"][p]) == pytest.approx(10.0)
     assert int(ref["action_frame"][p]) == expected_action_frame
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
@@ -117,9 +118,10 @@ def test_capturewait_post_loop_rate_publication_does_not_override_throw_handoff(
     ref = ds.samples[record]["ref_t1"]
     assert int(seed["action_id"][p]) == 227
     assert int(seed["action_frame"][p]) == 1
-    # The local artifact still publishes x2344 here, but the throw handoff destination owner below
-    # remains the lock's subject; the rate reconstruction must not disturb it.
-    assert float(seed["capture_wait_anim_rate_timer_f32"][p]) == pytest.approx(8.0)
+    # Cross-family throw handoff rows intentionally do not seed the x2344 AObj-rate bridge in the
+    # regenerated lane. The destination owner below remains the lock's subject.
+    # bindings/msl_preprocess_native.c::msl_py_derive_capture_wait_lanes_from_series
+    assert float(seed["capture_wait_anim_rate_timer_f32"][p]) == pytest.approx(0.0)
     assert int(ref["action_id"][p]) == 241
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)

@@ -127,6 +127,20 @@ Parse or summarize the JSONL with:
 uv run python -m tools.dolphin.throw_laser_event_dump reports/triage/<probe>/events.jsonl
 ```
 
+## Throw-release position publication probe
+
+Capture/throw victim handoff rows sometimes need the exact `ftCo_800DDDE4` intra-frame state before
+the normal post-frame engine dump. The pinned probe build includes an env-gated hook for that
+release boundary.
+
+Then pass `--throw-release-probe <path.jsonl>` through `dolphin_engine_dump.py`, or use
+`forensic_row_dump.py --throw-release-probe`. The wrapper sets `MSL_THROW_RELEASE_PROBE_PATH` and
+forces interpreter mode. The probe records JSONL for `ftCo_800DDDE4` entry, selected TransN2 and
+XRotN bone returns, the sampled TransN2 vector, the post-`x1A70` vector, the internal
+`mpColl_800471F8` load/clamp/air-collision/end phases, and function return. Each event includes the
+thrower/victim roles, selected sample/publish fighter, `x221B_b7`, `x2226_b2`, `x1A70`, `x2174`,
+CollData cur/prev/last/ECB, and root JObj translate.
+
 ## Laser shield/reflect intra-frame event probe
 
 The remaining `F15` item-owner rows are on the hidden same-frame shield/reflect branch through

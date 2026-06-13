@@ -348,12 +348,13 @@ def test_capturewait_mash_trigger_rows_and_blocker_control_are_replay_exact() ->
     assert int(out_blocker["action_id"][1, victim_p]) == int(blocker["ref_t1"]["action_id"][1, victim_p]) == 227
     assert int(out_blocker["action_frame"][1, victim_p]) == int(blocker["ref_t1"]["action_frame"][1, victim_p]) == 2
 
-    # This checkout's local gitignored AGNG artifact still carries a full x3B0 timer on the
-    # first-steady held-Y row. That is not a source-exact negative for the new regenerated lane;
-    # keep the lock to the adjacent no-mash row above and to the modeled B-mash family.
+    # Regenerated AGNG keeps this held-Y first-steady blocker at x2344 == 0: X/Y jump-latch
+    # ownership is not the CaptureWait AObj-rate bridge. Keep the lock to the adjacent no-mash row
+    # above and to the modeled B-mash family.
+    # bindings/msl_preprocess_native.c::msl_py_derive_capture_wait_lanes_from_series
     assert int(blocker[4]["seed_t"]["action_frame"][victim_p]) == 1
     assert int(blocker[4]["input_t"]["p"]["buttons"][victim_p]) == 0x0800  # held Y
-    assert int(blocker[4]["seed_t"]["capture_wait_anim_rate_timer_f32"][victim_p]) == 10
+    assert int(blocker[4]["seed_t"]["capture_wait_anim_rate_timer_f32"][victim_p]) == 0
     assert int(out_blocker["action_id"][5, victim_p]) == int(blocker["ref_t1"]["action_id"][5, victim_p]) == 227
     assert int(out_blocker["action_frame"][5, victim_p]) == int(blocker["ref_t1"]["action_frame"][5, victim_p]) == 4
 

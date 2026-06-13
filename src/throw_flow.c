@@ -11,9 +11,35 @@
 #include "ecb_tables.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
+#include "mpcoll_ground.h"
 #include "move_tables.h"
 
 #include <math.h>
+
+static inline uint8_t throw_release_mpcoll_floor_publication_bit(uint16_t action_id_u16) {
+  switch (action_id_u16) {
+    case (uint16_t)MSL_ACT_THROW_F:
+      return (uint8_t)(1u << 0);
+    case (uint16_t)MSL_ACT_THROW_B:
+      return (uint8_t)(1u << 1);
+    case (uint16_t)MSL_ACT_THROW_HI:
+      return (uint8_t)(1u << 2);
+    case (uint16_t)MSL_ACT_THROW_LW:
+      return (uint8_t)(1u << 3);
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t throw_release_publishes_mpcoll_floor(const MslCharParams* owner_ch,
+                                                           uint16_t action_id_u16) {
+  if (owner_ch == NULL) {
+    return 0u;
+  }
+  const uint8_t bit = throw_release_mpcoll_floor_publication_bit(action_id_u16);
+  return (bit != 0u && (owner_ch->throw_release_mpcoll_floor_publication_mask & bit) != 0u) ? 1u
+                                                                                            : 0u;
+}
 
 static inline uint8_t throw_flow_action_is_damage_family(uint16_t action_id_u16) {
   // Throw release enters the same common Damage* aftermath subset as regular ProcessHit:
@@ -399,6 +425,35 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
         batch->state.floor_sweep_seed_prev_valid[vidx] = 1u;
         batch->state.floor_sweep_prev_source_owned[vidx] = 1u;
         batch->state.floor_sweep_prev_runtime_owned[vidx] = 1u;
+      }
+
+      // Release-local mpColl publication:
+      // - ftCo_800DDDE4 writes CollData.last_pos from the selected sample owner's root + ECB
+      //   midpoint, writes CollData.cur_pos from the x1A70 release vector, then immediately calls
+      //   mpColl_800471F8 before ftCo_800DE7C0 applies release damage.
+      // - The same callback publication must happen in free-running rollout, not only as a
+      //   next-frame seed endpoint, otherwise the release hit integrates from the raw below-floor
+      //   x1A70 point and can falsely downbound on the following frame.
+      // Source/probe basis:
+      // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+      // - refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
+      // - Dolphin ftCo_800DDDE4 probe on Marth ThrowF/CaptureCut rows shows TransN2 remap, XRotN
+      //   part 2, x2226_b2 clear, and floor-level CollData.cur_pos/root before damage entry.
+      // - The character-data publication mask is intentionally explicit: Marth ThrowB shares the
+      //   anchor part but vanilla returns the raw target, and Fox/Falco controls do not publish.
+      const MslCharParams* release_owner_ch = msl_char_params_fast(owner_char);
+      MslMpcollFloorMaskResult release_floor = {0};
+      if (throw_release_publishes_mpcoll_floor(release_owner_ch, owner_act) &&
+          isfinite(source_release_last_pos_x) && isfinite(source_release_last_pos_y) &&
+          mpcoll_800471f8_throw_release_root_floor_probe(
+              batch, vidx, source_release_last_pos_x, source_release_last_pos_y, &release_floor)) {
+        batch->state.floor_sweep_prev_pos_x[vidx] = source_release_last_pos_x;
+        batch->state.floor_sweep_prev_pos_y[vidx] = source_release_last_pos_y;
+        batch->state.floor_sweep_prev_source_owned[vidx] = 1u;
+        batch->state.floor_sweep_prev_runtime_owned[vidx] = 1u;
+        batch->state.pos_x[vidx] = release_floor.corrected_pos_x;
+        batch->state.pos_y[vidx] = release_floor.corrected_pos_y;
+        batch->state.ground_id[vidx] = release_floor.ground_id;
       }
 
       // Detach immediately. If the throw hit is suppressed by hurt status, keep the victim in a

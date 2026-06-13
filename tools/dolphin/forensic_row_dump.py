@@ -80,6 +80,11 @@ def main() -> int:
         help="also write interpreter DamageFall IASA/Fall_Enter JSONL beside the dump",
     )
     ap.add_argument(
+        "--throw-release-probe",
+        action="store_true",
+        help="also write interpreter ftCo_800DDDE4 throw-release JSONL beside the dump",
+    )
+    ap.add_argument(
         "--throw-laser-event-probe",
         action="store_true",
         help="also write interpreter throw-laser item event JSONL beside the dump",
@@ -124,6 +129,9 @@ def main() -> int:
     dump_path = out_dir / f"{stem}.bin"
     collision_probe_path = out_dir / f"{stem}_collision_probe.jsonl" if args.collision_probe else None
     damagefall_probe_path = out_dir / f"{stem}_damagefall_probe.jsonl" if args.damagefall_probe else None
+    throw_release_probe_path = (
+        out_dir / f"{stem}_throw_release_probe.jsonl" if args.throw_release_probe else None
+    )
     throw_laser_event_probe_path = (
         out_dir / f"{stem}_throw_laser_events.jsonl" if args.throw_laser_event_probe else None
     )
@@ -145,6 +153,7 @@ def main() -> int:
             timeout=float(args.timeout),
             collision_probe_path=collision_probe_path,
             damagefall_probe_path=damagefall_probe_path,
+            throw_release_probe_path=throw_release_probe_path,
             throw_laser_event_probe_path=throw_laser_event_probe_path,
             laser_shield_reflect_event_probe_path=laser_shield_reflect_event_probe_path,
         )
@@ -189,6 +198,8 @@ def main() -> int:
         summary["collision_probe_jsonl"] = _display_path(collision_probe_path, root)
     if damagefall_probe_path is not None:
         summary["damagefall_probe_jsonl"] = _display_path(damagefall_probe_path, root)
+    if throw_release_probe_path is not None:
+        summary["throw_release_probe_jsonl"] = _display_path(throw_release_probe_path, root)
     if throw_laser_event_probe_path is not None:
         summary["throw_laser_event_probe_jsonl"] = _display_path(throw_laser_event_probe_path, root)
     if laser_shield_reflect_event_probe_path is not None:

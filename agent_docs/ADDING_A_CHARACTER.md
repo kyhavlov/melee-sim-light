@@ -132,6 +132,24 @@ Collect before writing any code:
    patterns when a test fails mysteriously.
 3. Re-run the replay numbers; common-action fixes should cut them sharply
    (Marth: one-step 1150 -> 684, rollout median 49 -> 75).
+4. **Throw/capture release publication audit**: do not stop after the throw
+   hitbox table works. `ftCo_800DDDE4` samples the selected throw-side TransN2
+   part, writes the victim's `x1A70` release vector, clears/restores XRotN
+   collision state, writes `CollData.last_pos`, and then calls
+   `mpColl_800471F8` before damage entry. New characters can remap the extracted
+   `grab_capture_anchor_part_id` (Marth: part 88; Fox/Falco controls publish
+   part 71/65), but the runtime owner is the explicit
+   `throw_release_mpcoll_floor_publication_mask`, not the anchor id. Only the
+   probed throw directions and admitted `mpColl_80043754` floor sweep should
+   publish the floor-hit substep root instead of the raw below-floor `x1A70`
+   point (Marth ThrowF/ThrowLw publish; Marth ThrowB and Fox/Falco controls do
+   not). Probe at least one forward throw/CaptureCut, one adjacent
+   throw-direction variant, and one non-new-char negative before assuming spacie
+   release placement generalizes. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4`,
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}`, and
+   the probe-backed character-data mask in
+   `data/characters/*::throw_release_mpcoll_floor_publication_mask`.
 
 ## Phase 4 — Specials, decomp-first (gate: per-special unit tests + full audit table)
 
@@ -233,10 +251,12 @@ this way), stop A/B-testing configurations and capture truth:
    files in this repo; commit and push the submodule branch, then update and
    commit the superproject gitlink.
 2. **Interpreter event traces** (PC-hook probes: within-frame call order,
-   register-level gate inputs): **CURRENTLY BANNED — do not use.** The
-   interpreter-mode path runs playback at ~3fps and is being reworked
-   out-of-band. If an investigation genuinely needs instruction-level
-   evidence, document it as blocked and move on.
+   register-level gate inputs): use only focused, env-gated probes committed in
+   `refs/Ishiiruka` and documented in `tools/dolphin/README.md`. Keep the hook
+   scoped to one source boundary, force interpreter mode through the wrapper,
+   and record the exact witness rows. The `ftCo_800DDDE4` throw-release probe is
+   the model: it captured the TransN2/XRotN selection and `mpColl_800471F8`
+   publication phases without changing normal Dolphin playback.
 
 Process rules learned the hard way (apply to ALL ports):
 

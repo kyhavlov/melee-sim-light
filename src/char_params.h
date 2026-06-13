@@ -163,7 +163,14 @@ typedef struct MslCharParams {
   //
   // Source of truth: ISO-extracted `data/characters/*.json` `grab_capture_anchor_part_id`.
   uint16_t grab_capture_anchor_part_id;
-  uint16_t _pad_u16_grab_0;
+  // Explicit overlay for the ftCo_800DDDE4 -> mpColl_800471F8 release-local floor publication
+  // subset. Bit order matches throw action order: ThrowF, ThrowB, ThrowHi, ThrowLw.
+  //
+  // This is probe-backed rather than inferred from the anchor part id: Marth ThrowF/ThrowLw publish
+  // the floor-hit substep root, Marth ThrowB and Fox/Falco controls do not.
+  // Source/probe: refs/Ishiiruka engine-dump-v12-probes ftCo_800DDDE4 probe on IPW/PFZ/FSP rows.
+  uint8_t throw_release_mpcoll_floor_publication_mask;
+  uint8_t _pad_u8_grab_0;
 
   // Fox/Falco side special (Illusion/Phantasm) start/end-state velocities + friction.
   //
