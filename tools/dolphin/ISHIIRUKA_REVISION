@@ -1,0 +1,6 @@
+# Pinned refs/Ishiiruka revision for the Dolphin forensic tooling.
+# All probe instrumentation (engine dump v12 lanes + interpreter event probes)
+# lives as commits in the Ishiiruka repo itself; there are no patch files to apply.
+# Setup: git -C refs/Ishiiruka checkout <commit> && cmake --build refs/Ishiiruka/build_probe --target dolphin-nogui
+branch=engine-dump-v12-probes
+commit=1888702def64cd8cfec1ddf5794f2a6f9f9d6f12
