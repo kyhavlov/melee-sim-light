@@ -281,6 +281,26 @@ static inline uint8_t hurtboxes_escapef_root_facing_owner(const MslBatch* batch,
   return 1u;
 }
 
+static inline uint8_t hurtboxes_attackair_script_facing_pose_lag_owner(const MslBatch* batch,
+                                                                       size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (action_id != (uint16_t)MSL_ACT_ATTACK_AIR_N && action_id != (uint16_t)MSL_ACT_ATTACK_AIR_F &&
+      action_id != (uint16_t)MSL_ACT_ATTACK_AIR_B && action_id != (uint16_t)MSL_ACT_ATTACK_AIR_HI &&
+      action_id != (uint16_t)MSL_ACT_ATTACK_AIR_LW) {
+    return 0u;
+  }
+  const uint32_t anim = batch->state.animation_index[idx];
+  if (anim == 0xFFFFFFFFu || anim > 0xFFFFu) {
+    return 0u;
+  }
+  return move_tables_attackair_throw_flags_b3_crossed_fp(
+      batch->state.char_id[idx], action_id, batch->state.anim_frame_fp_q16_16[idx],
+      batch->state.frame_speed_mul_fp_q16_16[idx]);
+}
+
 static inline uint8_t hurtboxes_damageflyroll_xrotn_angle_from_velocity(const MslBatch* batch,
                                                                         size_t idx,
                                                                         float* out_angle) {
@@ -1081,6 +1101,18 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
       }
       if (hurtboxes_escapef_root_facing_owner(batch, idx)) {
         facing_dir = (batch->state.facing_dir1[idx] < 0) ? -1.0f : 1.0f;
+      }
+      if (hurtboxes_attackair_script_facing_pose_lag_owner(batch, idx)) {
+        // AttackAir script-facing phase split:
+        // - ftAction_800718A4 publishes throw_flags_b3 from the command script.
+        // - ftCo_AttackAir_Anim consumes ftCheckThrowB3 and flips fp->facing_dir for scalar
+        //   consumers such as ledge-side checks.
+        // - BODY pose still consumes the root/JObj orientation from the already interpreted pose
+        //   for this collision pass; the scalar flip is not a same-frame matrix rewrite.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4
+        facing_dir = -facing_dir;
       }
       // Fallback policy: missing pose data for a specific capsule only drops that capsule, keeping
       // the rest usable under partial animation coverage.

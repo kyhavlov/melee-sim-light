@@ -6,6 +6,7 @@
 
 #include "anim_frame.h"
 #include "anim_pose.h"
+#include "anim_timebase.h"
 #include "action_ids.h"
 #include "anim_table.h"
 #include "char_params.h"
@@ -1195,8 +1196,8 @@ static inline void hitboxes_apply_live_transn_tail(uint8_t char_id, uint16_t msi
 static inline uint8_t hitboxes_event_world_capsule(const MslBatch* batch, size_t idx,
                                                    uint8_t char_id, uint16_t msid,
                                                    uint16_t pose_frame, const MslHitboxEvent* ev,
-                                                   float* out_x, float* out_y, float* out_z,
-                                                   float* out_r) {
+                                                   uint8_t pose_facing, float* out_x, float* out_y,
+                                                   float* out_z, float* out_r) {
   if (batch == NULL || ev == NULL || out_x == NULL || out_y == NULL || out_z == NULL ||
       out_r == NULL) {
     return 0u;
@@ -1211,7 +1212,7 @@ static inline uint8_t hitboxes_event_world_capsule(const MslBatch* batch, size_t
                                   ? chp->model_scaling
                                   : 1.0f;
   const float model_scale = scale_y * model_scaling;
-  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  const float facing_dir = pose_facing ? 1.0f : -1.0f;
   const float off[3] = {ev->x, ev->y, ev->z};
   float cx = 0.0f;
   float cy = 0.0f;
@@ -2145,6 +2146,22 @@ void hitboxes_refresh(MslBatch* batch) {
               : 0xFFFFu;
       const uint8_t attackair_post_clear_create_empty_hitcapsule_owner =
           move_tables_attackair_post_clear_create_hitbox_phase(char_id, action_id, anim_frame_f32);
+      uint8_t hitbox_pose_facing = batch->state.facing[idx] ? 1u : 0u;
+      if (move_tables_attackair_throw_flags_b3_crossed_fp(
+              char_id, action_id, batch->state.anim_frame_fp_q16_16[idx],
+              batch->state.frame_speed_mul_fp_q16_16[idx])) {
+        // AttackAir same-frame throw flag phase split:
+        // - ftAnim_8006EBA4 processes movescript create_hitbox/set_throw_flags commands.
+        // - ftCo_AttackAir_Anim then consumes ftCheckThrowB3 and flips fp->facing_dir.
+        // - The just-created HitCapsules keep the pre-consume root-facing matrix for current-frame
+        //   contact, while later collision/ledge consumers see the flipped scalar facing. This
+        //   mirrors the throw-flow owner_pose_facing_before_throw_flags pattern for
+        //   set_throw_flags flip/release crossings.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+        // refs/melee/src/melee/ft/ftaction.c::{ftAction_8007121C,ftAction_800718A4}
+        hitbox_pose_facing = (uint8_t)!hitbox_pose_facing;
+      }
 
       uint8_t has_no_damage_contact_victim = 0u;
       for (int victim = 0; victim < num_players; victim++) {
@@ -2565,7 +2582,8 @@ void hitboxes_refresh(MslBatch* batch) {
               float event_hz = batch->state.hitbox_z[dst_i];
               float event_hr = batch->state.hitbox_radius[dst_i];
               (void)hitboxes_event_world_capsule(batch, idx, char_id, msid, pose_frame, ev,
-                                                 &event_hx, &event_hy, &event_hz, &event_hr);
+                                                 hitbox_pose_facing, &event_hx, &event_hy,
+                                                 &event_hz, &event_hr);
               if (hitboxes_seed_bridge_create_edge_guard_admission_dense_applies(batch, bi, p,
                                                                                  new_g)) {
                 hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(batch, bi, p, (int)hb,
@@ -2793,7 +2811,7 @@ void hitboxes_refresh(MslBatch* batch) {
                                       ? chp->model_scaling
                                       : 1.0f;
       const float model_scale = scale_y * model_scaling;
-      const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+      const float facing_dir = hitbox_pose_facing ? 1.0f : -1.0f;
 
       uint8_t out_count = 0;
       for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {

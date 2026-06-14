@@ -146,6 +146,7 @@ SM_DAMAGE_AIR_2 = 174
 SM_DAMAGE_FLY_TOP = 180
 
 CHAR_FOX = 1
+CHAR_MARTH = 18
 CHAR_FALCO = 22
 STAGE_POKEMON = 3
 STAGE_FOD = 2
@@ -8831,3 +8832,123 @@ def _rollout_replay_to_record_from_seed(
         return out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
     finally:
         msl_binding.destroy(handle)
+
+
+def test_marth_attackairb_throw_flags_b3_flips_facing_at_script_pulse() -> None:
+    # Common AttackAir Anim owner: ftAction emits set_throw_flags(hit_idx=0) and
+    # ftCo_AttackAir_Anim consumes ftCheckThrowB3 to flip fp->facing_dir. Marth BAir has the pulse
+    # at frame 32; this is script-data-owned, not a Marth/ledge-row exception.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    # data/moves/marth.json moves["ftCo_SM_AttackAirB"].events set_throw_flags(hit_idx=0)
+    seed = _seed_base(STAGE_BATTLEFIELD, ACT_ATTACK_AIR_B, SM_ATTACK_AIR_B, 0.0, 18.0)
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_MARTH)
+    seed["action_frame"][0, p] = np.int16(31)
+    seed["seed_prev_action_frame"][0, p] = np.int16(31)
+    seed["anim_frame_f32"][0, p] = np.float32(31.0)
+    seed["facing"][0, p] = np.uint8(1)
+
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert float(out["action_frame"][p]) == pytest.approx(32.0)
+    assert int(out["facing"][p]) == 0
+
+
+def test_marth_attackairb_throw_flags_uses_script_timeline_not_action_frame() -> None:
+    # The throw-flag pulse belongs to the command-script/AObj timeline. Action age can diverge from
+    # anim frame under reseed/rate owners; the frame-32 BAir pulse must be crossed from
+    # anim_frame_fp - frame_speed, not prev_action_frame.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4
+    seed = _seed_base(STAGE_BATTLEFIELD, ACT_ATTACK_AIR_B, SM_ATTACK_AIR_B, 0.0, 18.0)
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_MARTH)
+    seed["action_frame"][0, p] = np.int16(40)
+    seed["seed_prev_action_frame"][0, p] = np.int16(40)
+    seed["anim_frame_f32"][0, p] = np.float32(31.5)
+    seed["frame_speed_mul_f32"][0, p] = np.float32(1.0)
+    seed["facing"][0, p] = np.uint8(1)
+
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert float(out["action_frame"][p]) == pytest.approx(32.0)
+    assert int(out["facing"][p]) == 0
+
+
+@pytest.mark.parametrize("char_id", [CHAR_FOX, CHAR_FALCO])
+def test_spacie_attackairb_without_throw_flags_b3_does_not_flip_facing(char_id: int) -> None:
+    # Adjacent non-Marth control: Fox/Falco BAir scripts do not emit set_throw_flags(hit_idx=0), so
+    # the common AttackAir Anim callback must not infer a frame-32 flip from action/frame alone.
+    seed = _seed_base(STAGE_BATTLEFIELD, ACT_ATTACK_AIR_B, SM_ATTACK_AIR_B, 0.0, 18.0)
+    p = 0
+    seed["char_id"][0, p] = np.uint8(char_id)
+    seed["action_frame"][0, p] = np.int16(31)
+    seed["seed_prev_action_frame"][0, p] = np.int16(31)
+    seed["anim_frame_f32"][0, p] = np.float32(31.0)
+    seed["facing"][0, p] = np.uint8(1)
+
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert float(out["action_frame"][p]) == pytest.approx(32.0)
+    assert int(out["facing"][p]) == 1
+
+
+@pytest.mark.integration
+def test_marth_attackairb_script_facing_allows_right_cliffcatch_vsa() -> None:
+    # Official Marth-suite witness: Marth BAir's frame-32 script-facing flip is required before
+    # the later Fall_Coll ledge check. Without the AttackAir Anim owner, the sim stays facing away
+    # from Battlefield's right ledge and never publishes Collide_RightLedgeGrab.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800443C4,mpColl_80047E14}
+    # refs/melee/src/melee/ft/ftcliffcommon.c::{ftCliffCommon_80081298,ftCliffCommon_80081370}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    start_record = 5072
+    record = 5278
+    p = 0
+    out = _rollout_replay_to_record(ds, start_record, record)
+    ref = ds.samples[record]["ref_t1"]
+
+    assert int(ds.samples[record]["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_CLIFF_CATCH
+    assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+
+
+@pytest.mark.integration
+def test_marth_attackairb_script_facing_still_respects_down_input_gate_vsa() -> None:
+    # Adjacent negative for the same catch window: the AttackAir script-facing flip may publish the
+    # right ledge-grab bit, but ftCliffCommon_80081298 still rejects ledge catch while holding down
+    # past the common drop threshold.
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[5278]
+    p = 0
+    seed = np.array(row["seed_t"], dtype=SEED_DTYPE).reshape((1,))
+    prev_input = np.array(row["prev_input_t"], dtype=INPUT_DTYPE).reshape((1,))
+    input_t = np.array(row["input_t"], dtype=INPUT_DTYPE).reshape((1,))
+    input_t["p"][0, p]["main_y"] = np.int8(-80)
+
+    import msl_binding
+
+    input_stride = int(msl_binding.sizes()["input"])
+    out = _step_once_rollout(
+        seed,
+        prev_input.view(np.uint8).reshape((1, input_stride)).copy(),
+        input_t.view(np.uint8).reshape((1, input_stride)).copy(),
+    )
+
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_CLIFF_CATCH
+    assert int(out["action_id"][p]) == ACT_FALL

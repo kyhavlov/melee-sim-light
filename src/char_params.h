@@ -170,7 +170,17 @@ typedef struct MslCharParams {
   // the floor-hit substep root, Marth ThrowB and Fox/Falco controls do not.
   // Source/probe: refs/Ishiiruka engine-dump-v12-probes ftCo_800DDDE4 probe on IPW/PFZ/FSP rows.
   uint8_t throw_release_mpcoll_floor_publication_mask;
-  uint8_t _pad_u8_grab_0;
+  uint8_t _pad_u8_grab_0[3];
+
+  // Explicit overlay for source callsites that enter common FallSpecial through
+  // ftCo_80096900 with xC=0. Bits are keyed by MslMsFxSpecialKind: 1u << fx_kind.
+  //
+  // This is a callsite owner, not a destination FallSpecial property. Marth SpecialHi/SpecialAirHi
+  // use ftMs_SpecialHi_80138884 -> ftCo_80096900(..., arg1=0, ...); Fox/Falco SpecialHi fall
+  // callsites pass arg1=1.
+  // Source: refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
+  // Source controls: refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c
+  uint32_t fallspecial_xc0_source_fx_kind_mask;
 
   // Fox/Falco side special (Illusion/Phantasm) start/end-state velocities + friction.
   //

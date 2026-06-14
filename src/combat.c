@@ -2386,6 +2386,22 @@ static inline float combat_root_facing_dir_for_body_hurtcap(const MslBatch* batc
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     facing_dir = (batch->state.facing_dir1[idx] < 0) ? -1.0f : 1.0f;
   }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if ((action_id == (uint16_t)MSL_ACT_ATTACK_AIR_N || action_id == (uint16_t)MSL_ACT_ATTACK_AIR_F ||
+       action_id == (uint16_t)MSL_ACT_ATTACK_AIR_B ||
+       action_id == (uint16_t)MSL_ACT_ATTACK_AIR_HI ||
+       action_id == (uint16_t)MSL_ACT_ATTACK_AIR_LW) &&
+      move_tables_attackair_throw_flags_b3_crossed_fp(
+          batch->state.char_id[idx], action_id, batch->state.anim_frame_fp_q16_16[idx],
+          batch->state.frame_speed_mul_fp_q16_16[idx])) {
+    // Same AttackAir script-facing BODY pose owner as hurtboxes.c. The scalar facing flip is live
+    // for gameplay-side checks after ftCo_AttackAir_Anim, but lbColl's BODY matrix for this pass
+    // still reflects the already-interpreted root orientation.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4
+    facing_dir = -facing_dir;
+  }
   return facing_dir;
 }
 

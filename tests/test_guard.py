@@ -21,6 +21,8 @@ BUTTON_B = 0x0200
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_TURN_RUN = 0x0013
+ACT_RUN = 0x0015
 ACT_FALL = 0x001D
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
@@ -36,6 +38,8 @@ ACT_ATTACK_HI4 = 0x003F
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
+SM_TURN_RUN = 11
+SM_RUN = 13
 SM_GUARD_ON = 37
 SM_GUARD = 38
 SM_GUARD_OFF = 39
@@ -44,6 +48,7 @@ SM_PASS = 209
 SM_KNEE_BEND = 11
 
 CHAR_FOX = 1
+CHAR_MARTH = 18
 STAGE_FD = 32
 STAGE_YOSHI = 8
 MAX_PLAYERS = 4
@@ -708,6 +713,89 @@ def test_guardoff_anim_end_wait_destination_guard_entry_and_precedence() -> None
     )
     out_attack_priority = _run_seed_one_step(seed, attack_shield)
     assert int(out_attack_priority["action_id"][0]) not in (ACT_GUARD_ON, ACT_GUARD_REFLECT)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [4943, 4944])
+def test_marth_suite_turnrun_iasa_does_not_admit_guard_entry_bsg_replay_real(record: int) -> None:
+    # TurnRun IASA is not a generic grounded locomotion callback. It only checks fn_800CAF78, so
+    # held or freshly pressed shield during TurnRun must not route through ftCo_80091A4C until a
+    # later source owner exits TurnRun to Run/Wait.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/marth/replays/validation/marth/BountifulScalyGuanaco.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    p = 1
+    seed, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    assert int(seed["action_id"][p]) == ACT_TURN_RUN
+    assert int(seed["seed_prev_action_id"][p]) == ACT_TURN_RUN
+    assert int(ref_row["action_id"][p]) == ACT_TURN_RUN
+    assert int(out_row["action_id"][p]) == ACT_TURN_RUN
+    assert int(out_row["animation_index"][p]) == int(ref_row["animation_index"][p]) == SM_TURN_RUN
+
+
+def test_marth_turnrun_iasa_does_not_admit_guard_entry_synthetic_control() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["char_id"][0, 0] = np.uint8(CHAR_MARTH)
+    seed["action_id"][0, 0] = np.uint16(ACT_TURN_RUN)
+    seed["animation_index"][0, 0] = np.uint32(SM_TURN_RUN)
+    seed["action_frame"][0, 0] = np.int16(5)
+    seed["anim_frame_f32"][0, 0] = np.float32(5.0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_TURN_RUN)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-0.8)
+    seed["speed_air_x_self"][0, 0] = np.float32(-0.8)
+    seed["facing"][0, 0] = np.uint8(0)
+
+    shield = _mk_input_bytes(1, input_stride)
+    shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+    shield_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    shield_view["p"]["l"][0, 0] = np.uint8(255)
+    shield_view["p"]["main_x"][0, 0] = np.int8(80)
+
+    # Character-specific control for the same common callback owner: Marth's TurnRun uses the
+    # common ftCo_TurnRun_IASA jump-only path and must not inherit Run/Wait guard admission.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_IASA
+    out_row = _run_seed_one_step(seed, shield)
+    assert int(out_row["action_id"][0]) == ACT_TURN_RUN
+    assert int(out_row["animation_index"][0]) == SM_TURN_RUN
+
+
+def test_run_iasa_still_admits_guard_entry_spacie_control() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["char_id"][0, 0] = np.uint8(CHAR_FOX)
+    seed["action_id"][0, 0] = np.uint16(ACT_RUN)
+    seed["animation_index"][0, 0] = np.uint32(SM_RUN)
+    seed["action_frame"][0, 0] = np.int16(5)
+    seed["anim_frame_f32"][0, 0] = np.float32(5.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(1.5)
+    seed["speed_air_x_self"][0, 0] = np.float32(1.5)
+
+    shield = _mk_input_bytes(1, input_stride)
+    shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+    shield_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    shield_view["p"]["l"][0, 0] = np.uint8(255)
+
+    # Run_IASA calls ftCo_80091A4C after attack/CatchDash checks, unlike TurnRun_IASA. This is the
+    # adjacent spacie control for the TurnRun exclusion above.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    out_row = _run_seed_one_step(seed, shield)
+    assert int(out_row["action_id"][0]) in (ACT_GUARD_ON, ACT_GUARD_REFLECT)
 
 
 @pytest.mark.integration

@@ -2225,13 +2225,23 @@ void physics_integrate(MslBatch* batch) {
                 // Decomp refs:
                 // - Gravity/terminal: refs/melee/src/melee/ft/ftcommon.c::ftCommon_Fall
                 // - Fastfall: refs/melee/src/melee/ft/ftcommon.c::ftCommon_FallFast (called via ft_80084DB0)
+                // - FallSpecial_Phys calls ftCommon_Fall with `ca->terminal_vel` when
+                //   mv.co.fallspecial.xC != 0, but with `ca->fast_fall_velocity` when xC == 0.
+                //   This is not the public fall_fast bit; xC==0 can publish the fastfall terminal
+                //   while `fall_fast` remains clear.
+                //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Phys
                 float next_vy = vy_self_pre;
                 if (allow_fastfall && batch->state.fall_fast[idx]) {
                   next_vy = -phys->fast_fall_velocity;
                 } else {
                   next_vy -= phys->grav;
-                  if (next_vy < -phys->terminal_vel) {
-                    next_vy = -phys->terminal_vel;
+                  float terminal = phys->terminal_vel;
+                  if (physics_action_is_fall_special_like(action_id) &&
+                      batch->state.fallspecial_xc[idx] == 0u) {
+                    terminal = phys->fast_fall_velocity;
+                  }
+                  if (next_vy < -terminal) {
+                    next_vy = -terminal;
                   }
                 }
                 batch->state.speed_y_self[idx] = next_vy;

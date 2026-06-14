@@ -411,10 +411,23 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     throw_release_mpcoll_floor_publication_mask = 0
     if ftdata_symbol == "ftData_Marth":
         throw_release_mpcoll_floor_publication_mask = (1 << 0) | (1 << 3)
+    # Source-callsite gameplay overlay:
+    # ftCo_80096900 stores arg1 into mv.co.fallspecial.xC. Marth Dolphin Slash calls it with
+    # arg1=0 from SpecialHi/SpecialAirHi, while Fox/Falco Firefox fall/end callsites pass arg1=1.
+    # Store the owner as MslMsFxSpecialKind bits so reseed code can ask for source-callsite
+    # ownership without a raw character-id branch.
+    # Bit domain: src/motion_state_owners.h::MslMsFxSpecialKind.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c
+    fallspecial_xc0_source_fx_kind_mask = 0
+    if ftdata_symbol == "ftData_Marth":
+        fallspecial_xc0_source_fx_kind_mask = (1 << 15) | (1 << 16)
 
     out = {
         "grab_capture_anchor_part_id": grab_capture_anchor_part_id,
         "throw_release_mpcoll_floor_publication_mask": throw_release_mpcoll_floor_publication_mask,
+        "fallspecial_xc0_source_fx_kind_mask": fallspecial_xc0_source_fx_kind_mask,
         "walk_init_vel": f(0x00),
         "walk_accel": f(0x04),
         "walk_max_vel": f(0x08),
@@ -767,6 +780,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "pushbox_y",
         "grab_capture_anchor_part_id",
         "throw_release_mpcoll_floor_publication_mask",
+        "fallspecial_xc0_source_fx_kind_mask",
         "illusion_gravity_delay_start_frames",
         "illusion_air_friction_start",
         "illusion_fall_accel_start",

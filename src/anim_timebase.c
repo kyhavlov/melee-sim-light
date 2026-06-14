@@ -436,6 +436,34 @@ static inline int32_t anim_timebase_non_low_throw_rate_snap_delta(const MslBatch
     return 0;
   }
   const uint16_t action = batch->state.action_id[idx];
+  if (msl_action_is_throw_owner(action) &&
+      batch->state.frame_speed_mul_fp_q16_16[idx] == batch->state.throw_anim_rate_fp_q16_16[idx]) {
+    const uint32_t anim_u32 = batch->state.animation_index[idx];
+    const float end_frame = (anim_u32 <= 0xFFFFu)
+                                ? msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim_u32)
+                                : 0.0f;
+    const int32_t end_fp = (end_frame > 0.0f) ? msl_q16_16_from_f32(end_frame) : 0;
+    if (end_fp > 0 && cur_fp < end_fp) {
+      const int32_t delta_to_end = end_fp - cur_fp;
+      const float prev_frame =
+          msl_f32_from_q16_16(cur_fp - batch->state.frame_speed_mul_fp_q16_16[idx]);
+      if (delta_to_end > 0 && delta_to_end <= 8 &&
+          move_tables_throw_release_hit_idx(batch->state.char_id[idx], action, prev_frame, NULL)) {
+        // Post-release thrower AObj end snap:
+        // ftCo_800DD398 installs a victim-weight throw rate on the thrower. ftCo_800DD724's
+        // release consume detaches the victim, but does not reset the thrower's AObj rate; the
+        // later ftAnim_IsFramesRemaining end check still observes that same source f32 timeline.
+        // Q16.16 repeated 4/3-rate accumulation can land a few LSB below the extracted end frame
+        // (Marth ThrowF at 31.999878) while source f32 has reached the clamp and exits through
+        // ftCommon_8007D92C. Keep the snap bounded to decoded post-release throw-owner states and
+        // the same representation tolerance used for existing throw command-frame snaps.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
+        //   ftCo_800DD398,ftCo_800DD724,ftCo_ThrowF_Anim}
+        // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+        return delta_to_end;
+      }
+    }
+  }
   if (action != (uint16_t)MSL_ACT_THROW_B && action != (uint16_t)MSL_ACT_THROW_HI) {
     return 0;
   }

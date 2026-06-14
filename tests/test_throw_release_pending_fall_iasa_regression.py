@@ -330,6 +330,61 @@ def test_marth_throwb_release_anchor_part_does_not_publish_floor_sweep_result() 
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "start_record", "pre_terminal_record", "terminal_record", "owner", "terminal_action"),
+    [
+        (
+            "datasets/marth/replays/validation/marth/StiffDraftyWalrus.msl",
+            9073,
+            9391,
+            9392,
+            0,
+            14,
+        ),
+        (
+            "datasets/marth/replays/validation/marth/FemaleWorthyAlpaca.msl",
+            4155,
+            4316,
+            4317,
+            1,
+            15,
+        ),
+    ],
+)
+def test_marth_throwf_post_release_source_rate_reaches_anim_end(
+    dataset_rel: str, start_record: int, pre_terminal_record: int, terminal_record: int,
+    owner: int, terminal_action: int
+) -> None:
+    # Post-release ThrowF terminal owner:
+    # - ftCo_800DD398 installs the victim-weight throw AObj rate.
+    # - ftCo_800DD724 release detaches the victim, but does not reset the thrower's AObj rate.
+    # - ftCo_ThrowF_Anim still exits through ftAnim_IsFramesRemaining on that source f32 rate.
+    # The Q16 runtime timebase can land a few LSB below the extracted end frame; the terminal snap
+    # is bounded to decoded post-release throw-owner states and must not pull the previous frame out
+    # of ThrowF.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
+    #   ftCo_800DD398,ftCo_800DD724,ftCo_ThrowF_Anim}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_marth_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    rows = _run_rollout_records(dataset_path, start_record, (pre_terminal_record, terminal_record))
+    out_pre, ref_pre = rows[pre_terminal_record]
+    assert int(ref_pre["action_id"][owner]) == 219
+    assert int(ref_pre["action_frame"][owner]) == 30
+    assert int(out_pre["action_id"][owner]) == int(ref_pre["action_id"][owner])
+    assert int(out_pre["action_frame"][owner]) == int(ref_pre["action_frame"][owner])
+
+    out_terminal, ref_terminal = rows[terminal_record]
+    assert int(ref_terminal["action_id"][owner]) == terminal_action
+    assert int(out_terminal["action_id"][owner]) == int(ref_terminal["action_id"][owner])
+    assert int(out_terminal["animation_index"][owner]) == int(ref_terminal["animation_index"][owner])
+    assert float(out_terminal["pos_x"][owner]) == pytest.approx(float(ref_terminal["pos_x"][owner]), abs=4e-5)
+
+
+@pytest.mark.integration
 def test_throwhi_pending_release_placeholder_does_not_run_fall_phys_before_damage() -> None:
     # Aggregate F03 release-placement lock:
     # - ftCo_800DD724 consumes ThrowHi release during the thrower's Anim callback.

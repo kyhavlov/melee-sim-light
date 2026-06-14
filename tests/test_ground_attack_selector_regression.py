@@ -11,25 +11,32 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 _BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_MARTH_BASE_REL = "datasets/marth/replays/validation/marth"
 _BUTTON_A = 0x0100
 
 _ACT_WAIT = 14
 _ACT_WALK_SLOW = 15
 _ACT_DASH = 20
+_ACT_LANDING = 42
 _ACT_ATTACK_DASH = 50
+_ACT_ATTACK_S3_HI = 51
 _ACT_ATTACK_S3 = 53
 _ACT_ATTACK_HI3 = 56
 _ACT_ATTACK_LW3 = 57
 _ACT_GUARD_ON = 178
 
 _SM_ATTACK_DASH = 52
+_SM_ATTACK_S3_HI = 53
+_SM_ATTACK_S3 = 55
 
 _REQUIRED_ARTIFACTS = (
     "data/common/ft_common_data.json",
     "data/moves/fox.json",
     "data/moves/falco.json",
+    "data/moves/marth.json",
     "data/anims/fox.tracks.bin",
     "data/anims/falco.tracks.bin",
+    "data/anims/marth.tracks.bin",
 )
 
 
@@ -214,6 +221,96 @@ def test_ground_attack_selector_regression(
     assert int(out["animation_index"][0, p]) == int(ref["animation_index"][p])
     if assert_action_frame:
         assert int(out["action_frame"][0, p]) == int(ref["action_frame"][p])
+
+
+@pytest.mark.integration
+def test_marth_attacks3_angle_falls_back_to_neutral_when_variant_anim_missing_sdw_7895() -> None:
+    # Marth exposes common AttackS3* MotionState rows, but only neutral AttackS3S has a source
+    # animation in SSANIMT1. Source `decideAngle` gates angled side-tilt branches on the requested
+    # motion pointer before changing state, so this Landing IASA row must fall through to neutral
+    # AttackS3S even though the current stick angle is above the high-side threshold.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::decideAngle
+    # data/anims/marth.tracks.bin::SSANIMT1
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = f"{_MARTH_BASE_REL}/StiffDraftyWalrus.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    assert _tracks_end_frame(root / "data/anims/marth.tracks.bin", _SM_ATTACK_S3_HI) == pytest.approx(
+        0.0
+    )
+    assert _tracks_end_frame(root / "data/anims/marth.tracks.bin", _SM_ATTACK_S3) > 0.0
+
+    ds = read_dataset(str(dataset_path))
+    record = 7895
+    p = 0
+    row = ds.samples[record : record + 1]
+    assert int(row["seed_t"]["action_id"][0, p]) == _ACT_LANDING
+    assert int(row["ref_t1"]["action_id"][0, p]) == _ACT_ATTACK_S3
+    assert _a_press_edge(row, p)
+
+    params = _load_common_params(root)
+    stick_x = _apply_deadzone(
+        _stick_i8_to_unit(int(row["input_t"]["p"][0, p]["main_x"])),
+        float(params["lstick_deadzone_x"]),
+    )
+    stick_y = _apply_deadzone(
+        _stick_i8_to_unit(int(row["input_t"]["p"][0, p]["main_y"])),
+        float(params["lstick_deadzone_y"]),
+    )
+    assert float(np.arctan2(stick_y, abs(stick_x))) > float(params["attack_s3_hi_angle_radians"])
+
+    out, _ = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, p]) == _ACT_ATTACK_S3
+    assert int(out["animation_index"][0, p]) == _SM_ATTACK_S3
+
+
+@pytest.mark.integration
+def test_spacie_attacks3_angle_still_uses_available_hi_variant() -> None:
+    # Adjacent data-backed negative: Fox/Falco have extracted SSANIMT1 tracks for the angled
+    # AttackS3 variants, so the source-motion availability gate must not collapse them to neutral.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    assert _tracks_end_frame(root / "data/anims/fox.tracks.bin", _SM_ATTACK_S3_HI) > 0.0
+
+    from tests.test_locomotion import (
+        ACT_TURN,
+        BUTTON_A,
+        INPUT_DTYPE,
+        SM_TURN,
+        _mk_input_bytes,
+        _seed_base,
+        _step_once,
+    )
+
+    import msl_binding
+
+    input_stride = int(msl_binding.sizes()["input"])
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_TURN)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_TURN)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["turn_frames_to_turn"][0, 0] = np.uint8(1)
+    seed["turn_has_turned"][0, 0] = np.uint8(0)
+    seed["tilt_timer_x"][0, 0] = np.uint8(10)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_x"][0, 0] = np.int8(-23)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-74)
+    cur_view["p"]["main_y"][0, 0] = np.int8(31)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == _ACT_ATTACK_S3_HI
+    assert int(out0["animation_index"][0]) == _SM_ATTACK_S3_HI
 
 
 @pytest.mark.integration

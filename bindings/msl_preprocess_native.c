@@ -10018,6 +10018,41 @@ PyObject* msl_derive_shield_contact_seed_bridge_py(PyObject* self, PyObject* arg
             break;
           }
         }
+        if (i + 1 < n && action_data[(i * width) + defender] == (uint16_t)act_guard_set_off &&
+            action_data[(i * width) + attacker] == (uint16_t)MSL_ACT_ATTACK_AIR_N &&
+            hitlag_data[(i * width) + attacker] == 0u &&
+            hitlag_data[(i * width) + defender] == 0u) {
+          const npy_intp release_j = i + 1;
+          const uint16_t attacker_action = action_data[(release_j * width) + attacker];
+          if (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_N &&
+              msl_py_lut_u8(guard, guard_n, action_data[(release_j * width) + defender]) != 0u &&
+              hitlag_data[(release_j * width) + attacker] == 0u &&
+              hitlag_data[(release_j * width) + defender] == 0u) {
+            int frame = (int)age_data[(release_j * width) + attacker];
+            if (frame < 0) frame = 0;
+            if (move_tables_attackair_same_group_payload_preserves_hitcapsule(
+                    char_data[(release_j * width) + attacker], attacker_action, (float)frame) !=
+                0u) {
+              const uint16_t cur_defender_iid = iid[(release_j * width) + defender];
+              for (npy_intp hb = 0; hb < hb_count; hb++) {
+                if (contact[MSL_CONTACT_IDX(release_j, attacker, hb, defender)] != 1u) {
+                  continue;
+                }
+                // GuardSetOff release can carry an accepted same-group AttackAirN HitCapsule
+                // victim list into the first Guard row even when replay no longer exposes hitlag.
+                // Keep this on the same MSLFTSC1 create lifetime and the replay-proven ShieldDesc
+                // contact marker; do not synthesize it for arbitrary Guard rows.
+                // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+                // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80078C70}
+                // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+                // data/scripts/<char>.bin (MSLFTSC1)::ftCo_SM_AttackAirN create_hitbox/clear_hitboxes
+                valid[MSL_VALID_IDX(release_j, attacker, hb)] = 1u;
+                cd[MSL_CD_IDX(release_j, attacker, hb, defender)] = 0xFFFFu;
+                iid_out[MSL_IID_IDX(release_j, attacker, hb, defender)] = cur_defender_iid;
+              }
+            }
+          }
+        }
         if (!has_proven) continue;
         if (hitlag_data[i * width + attacker] != 0u || hitlag_data[i * width + defender] != 0u) {
           continue;

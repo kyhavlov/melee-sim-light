@@ -141,6 +141,38 @@ static int json_get_u16_or_default(const char* json, const char* key, uint16_t d
   return json_get_u16(json, key, out);
 }
 
+static int json_get_u32(const char* json, const char* key, uint32_t* out) {
+  if (json == NULL || key == NULL || out == NULL) {
+    return -1;
+  }
+  char pat[128];
+  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
+  if (n <= 0 || (size_t)n >= sizeof(pat)) {
+    return -1;
+  }
+  const char* p = strstr(json, pat);
+  if (p == NULL) {
+    return -1;
+  }
+  p = strchr(p, ':');
+  if (p == NULL) {
+    return -1;
+  }
+  p++;
+  double v = 0.0;
+  if (json_parse_double(p, &v) == NULL) {
+    return -1;
+  }
+  if (v < 0.0) {
+    v = 0.0;
+  }
+  if (v > 4294967295.0) {
+    v = 4294967295.0;
+  }
+  *out = (uint32_t)(v + 0.5);
+  return 0;
+}
+
 static int json_get_i32(const char* json, const char* key, int32_t* out) {
   if (json == NULL || key == NULL || out == NULL) {
     return -1;
@@ -429,6 +461,15 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     alloc_free(buf);
     return -1;
   }
+  if (strstr(buf, "\"fallspecial_xc0_source_fx_kind_mask\"") == NULL) {
+    fprintf(stderr, "msl: missing required key \"fallspecial_xc0_source_fx_kind_mask\" in %s\n",
+            path);
+    fprintf(stderr,
+            "hint: regenerate character data with the current extractor/overlays so FallSpecial "
+            "xC callsite ownership is explicit.\n");
+    alloc_free(buf);
+    return -1;
+  }
 
   MslCharParams out = {0};
   float refl_off[3] = {0};
@@ -502,6 +543,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_u16(buf, "grab_capture_anchor_part_id", &out.grab_capture_anchor_part_id) != 0 ||
       json_get_u8_or_default(buf, "throw_release_mpcoll_floor_publication_mask", 0,
                              &out.throw_release_mpcoll_floor_publication_mask) != 0 ||
+      json_get_u32(buf, "fallspecial_xc0_source_fx_kind_mask",
+                   &out.fallspecial_xc0_source_fx_kind_mask) != 0 ||
       json_get_u8_or_default(buf, "illusion_gravity_delay_start_frames", 0,
                              &out.illusion_gravity_delay_start_frames) != 0 ||
       json_get_f32_or_default(buf, "illusion_air_friction_start", 0.0f,

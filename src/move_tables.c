@@ -469,6 +469,37 @@ uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackai
              : 0u;
 }
 
+uint8_t move_tables_attackair_throw_flags_b3_crossed(uint8_t char_id, uint16_t attackair_action_id,
+                                                     float prev_anim_frame_f32,
+                                                     float cur_anim_frame_f32) {
+  uint16_t msid = 0;
+  if (!attackair_msid_from_action(attackair_action_id, &msid)) {
+    return 0u;
+  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || cache->throw_flags_pulse_count[0] == 0u) {
+    return 0u;
+  }
+  for (uint8_t i = 0; i < cache->throw_flags_pulse_count[0]; i++) {
+    if (frame_crossed_u16(cache->throw_flags_pulses[0][i], prev_anim_frame_f32,
+                          cur_anim_frame_f32)) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+uint8_t move_tables_attackair_throw_flags_b3_crossed_fp(uint8_t char_id,
+                                                        uint16_t attackair_action_id,
+                                                        int32_t cur_anim_frame_fp_q16_16,
+                                                        int32_t frame_speed_mul_fp_q16_16) {
+  const int32_t prev_anim_frame_fp_q16_16 = cur_anim_frame_fp_q16_16 - frame_speed_mul_fp_q16_16;
+  const float prev_anim_frame_f32 = (float)prev_anim_frame_fp_q16_16 / 65536.0f;
+  const float cur_anim_frame_f32 = (float)cur_anim_frame_fp_q16_16 / 65536.0f;
+  return move_tables_attackair_throw_flags_b3_crossed(char_id, attackair_action_id,
+                                                      prev_anim_frame_f32, cur_anim_frame_f32);
+}
+
 uint8_t move_tables_attackair_hitbox_script_lifetime(uint8_t char_id, uint16_t attackair_action_id,
                                                      float cur_anim_frame_f32) {
   uint16_t msid = 0;

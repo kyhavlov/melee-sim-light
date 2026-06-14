@@ -1025,9 +1025,10 @@ Common constants:
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_800925A4}`.
   - Decomp refs: `refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}`
 
-Characters (Fox/Falco):
-- `_iso/PlFx.dat`, `_iso/PlFc.dat` (source)
-- `data/characters/fox.json`, `data/characters/falco.json` (movement/ecb/laser/reflector attrs; decomp-first)
+Characters (Fox/Falco/Marth):
+- `_iso/PlFx.dat`, `_iso/PlFc.dat`, `_iso/PlMs.dat` (source)
+- `data/characters/fox.json`, `data/characters/falco.json`, `data/characters/marth.json`
+  (movement/ecb/special attrs; decomp-first plus small audited overlays)
   - `rapid_jab_window`: `ftCo_DatAttrs.x98`, the per-character threshold compared against
     `fp+0x1A54` by the common rapid-jab gate.
     Decomp: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50`
@@ -1048,6 +1049,18 @@ Characters (Fox/Falco):
     - Sources/proof: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4`,
       `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}`, and the pushed
       `refs/Ishiiruka` `engine-dump-v12-probes` throw-release probe.
+  - `fallspecial_xc0_source_fx_kind_mask`: runtime-required character attr loaded by
+    `src/char_params.c` from `data/characters/<char>.json`.
+    - Bit domain is `MslMsFxSpecialKind`: set `1 << fx_kind` for source MotionState callsites that
+      enter common `FallSpecial` through `ftCo_80096900(..., arg1=0, ...)`.
+    - Current values: Fox/Falco `0`; Marth `SPECIAL_HI | SPECIAL_AIR_HI`
+      (`(1 << 15) | (1 << 16)` / `98304`).
+    - This is a source-callsite overlay for hidden `mv.co.fallspecial.xC`, not an inference from
+      destination `FallSpecial`, raw character id, or raw SpecialHi action ids.
+    - Sources/proof:
+      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900`,
+      `refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884`, and
+      Fox/Falco controls in `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c`.
 - `data/attack_id/move_id/fox.bin`, `data/attack_id/move_id/falco.bin` (MotionState tables; decomp-first, compact binary)
   - Purpose:
     - Drive fighter attack identity parity (`fp->x2068_attackID` / `fp->x206C_attack_instance`) from real

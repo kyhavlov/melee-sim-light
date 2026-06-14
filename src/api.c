@@ -278,6 +278,19 @@ static inline uint8_t reseed_action_is_attackair(uint16_t action) {
   return msl_motion_state_common_class_has_fast(action, MSL_MS_CLASS_ATTACK_AIR);
 }
 
+static inline uint8_t fallspecial_xc0_source_callsite_owner(uint8_t char_id,
+                                                            uint16_t source_action_id) {
+  const MslCharParams* ch = msl_char_params_fast(char_id);
+  if (ch == NULL || source_action_id == 0xFFFFu) {
+    return 0u;
+  }
+  const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, source_action_id);
+  if (fx_kind == (uint8_t)MSL_FX_KIND_NONE || fx_kind >= 32u) {
+    return 0u;
+  }
+  return ((ch->fallspecial_xc0_source_fx_kind_mask & (1u << fx_kind)) != 0u) ? 1u : 0u;
+}
+
 static inline uint8_t reseed_damage_allow_sdi_source_action(uint16_t action) {
   switch (action) {
     case MSL_ACT_DAMAGE_HI_1:
@@ -2572,23 +2585,29 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.special_cmd1[idx] = 1u;
       }
       // FallSpecial xC mode is not exposed by Slippi directly; derive it deterministically from
-      // seeded post-frame velocities when possible.
+      // seeded source-owned evidence when possible.
       //
       // Decomp: ftCo_80096900 stores `mv.co.fallspecial.xC = arg1`, and ftCo_FallSpecial_Phys applies
       // the mobility cap only on the xC==0 branch.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
       //
       // Derivation (best-effort, reseed-friendly):
+      // - The first FallSpecial row after a source callsite that passes arg1=0 carries a
+      //   seed_prev_action_id whose extracted fx kind is present in the character overlay.
       // - If we are in FallSpecial, fall_fast is 0, and vy is more negative than the character's
       //   normal terminal velocity, then we must be on the xC==0 branch (since that branch passes
       //   `fast_fall_velocity` as the terminal clamp while fall_fast remains 0).
       // Otherwise default to xC=1 (covers EscapeAir->FallSpecial path: arg1=1).
+      // data/characters/<char>.json::fallspecial_xc0_source_fx_kind_mask
       batch->state.fallspecial_xc[idx] = 1;
       {
         const uint16_t a = seed->action_id[p];
         if (a == (uint16_t)MSL_ACT_FALL_SPECIAL || a == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
             a == (uint16_t)MSL_ACT_FALL_SPECIAL_B) {
-          if (!batch->state.fall_fast[idx]) {
+          const uint16_t src = seed->seed_prev_action_id[p];
+          if (fallspecial_xc0_source_callsite_owner(seed->char_id[p], src)) {
+            batch->state.fallspecial_xc[idx] = 0;
+          } else if (!batch->state.fall_fast[idx]) {
             const MslCharParams* phys = msl_char_params_fast(seed->char_id[p]);
             if (phys != NULL) {
               if (seed->speed_y_self[p] < -phys->terminal_vel) {

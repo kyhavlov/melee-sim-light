@@ -36,6 +36,28 @@ uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_ac
 uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackair_action_id,
                                               float cur_anim_frame_f32);
 
+// Returns whether an AttackAir* script emitted set_throw_flags(hit_idx=0) this tick.
+//
+// Decomp:
+// - ftAction_800718A4 sets throw_flags_b3 for hit_idx=0.
+// - ftCo_AttackAir_Anim consumes ftCheckThrowB3 and flips fp->facing_dir.
+// refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+//
+// Source of truth: data/scripts/<char>.bin (MSLFTSC1)
+// moves["ftCo_SM_AttackAir*"]["events"] set_throw_flags(hit_idx=0).
+uint8_t move_tables_attackair_throw_flags_b3_crossed(uint8_t char_id, uint16_t attackair_action_id,
+                                                     float prev_anim_frame_f32,
+                                                     float cur_anim_frame_f32);
+
+// Same owner as move_tables_attackair_throw_flags_b3_crossed(), but derives the previous script
+// frame from the q16.16 AObj timeline. Use this in runtime paths; action_frame is a visible/public
+// age lane and can diverge from the command script under rate changes or reseed discontinuities.
+uint8_t move_tables_attackair_throw_flags_b3_crossed_fp(uint8_t char_id,
+                                                        uint16_t attackair_action_id,
+                                                        int32_t cur_anim_frame_fp_q16_16,
+                                                        int32_t frame_speed_mul_fp_q16_16);
+
 // Returns whether an AttackAir* script is between its first create_hitbox event and final
 // clear_hitboxes event. This is intentionally a script-lifetime owner, not an exact active-HitCapsule
 // predicate: source map callbacks observe the command-script/HitCapsule timeline around clear/create

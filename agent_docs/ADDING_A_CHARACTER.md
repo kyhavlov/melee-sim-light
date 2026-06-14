@@ -291,6 +291,24 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
    `refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_800835B0}`, and
    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}`.
+   **AttackAir script-facing is a data-backed script event, not an action-id
+   shortcut**: `ftCo_AttackAir_Anim` consumes `throw_flags_b3` through
+   `ftCheckThrowB3` and flips scalar facing when the decoded script pulse
+   fires. Audit `data/moves/<char>.json::MSLFTSC1` events for each aerial
+   instead of assuming BAir behavior from the common action id. Runtime checks
+   must cross the pulse on the command-script/AObj fixed-point timeline
+   (`anim_frame_fp - frame_speed_mul_fp -> anim_frame_fp`), not on
+   `prev_action_frame -> anim_frame_f32`: action age can diverge under
+   non-1.0 rates and teacher-forced reseeds. Also split the scalar-facing
+   consumers from pose consumers: ledge-side/action checks can use the
+   just-flipped scalar facing, while same-tick BODY/hitbox pose may still match
+   the already-interpreted pre-flip root/JObj orientation. Marth BAir exposed
+   this distinction; Fox/Falco BAir are adjacent negatives because their decoded
+   scripts do not publish the same pulse. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim`,
+   `refs/melee/src/melee/ft/inlines.h::ftCheckThrowB3`,
+   `refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4`, and
+   `data/moves/<char>.json::moves.ftCo_SM_AttackAirB.events`.
    **Multi-hit AttackAir late tails need the same floor-source audit**: after
    the final `clear_hitboxes` command, `cmd_var[0]` may still be active and the
    action can still enter `LandingAir*`, but FoD height-platform publication
@@ -325,6 +343,45 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast`,
    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
    `data/stages/bin/*.bin::MSLSTG01 floor graph links`.
+   **FallSpecial physics depends on `ftCo_80096900`'s hidden entry arguments**:
+   `mv.co.fallspecial.xC` is not implied by the destination action id. Fox/Falco
+   Firefox and Illusion end callsites pass `arg1=1`, while Marth Dolphin Slash
+   calls `ftCo_80096900(gobj, 0, 1, 0, x28, x2C)`. When xC is zero,
+   `ftCo_FallSpecial_Phys` uses `ca->fast_fall_velocity` as the terminal clamp
+   even if the public `fall_fast` bit is clear. New character ports must audit
+   each special's `ftCo_80096900` callsite arguments and encode xC=0 sources in
+   `data/characters/<char>.json::fallspecial_xc0_source_fx_kind_mask`, keyed by
+   `MslMsFxSpecialKind`. Seed reconstruction may also accept velocity proof
+   once the row has already crossed ordinary terminal, but it must not infer xC
+   from the common FallSpecial action, raw character id, or raw SpecialHi action
+   ids. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{ftCo_80096900,ftCo_FallSpecial_Phys}`,
+   `refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884`,
+   and `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c`.
+   **Thrower AObj rate can outlive victim attachment**: `ftCo_800DD398`
+   installs the victim-weight throw animation rate on both thrower and victim,
+   and `ftCo_800DD724` release/detach does not reset the thrower's rate. The
+   thrower's own `ftAnim_IsFramesRemaining` exit can therefore occur on a
+   detached/no-victim replay row that still needs the original throw AObj rate.
+   Do not reconstruct throw end timing only from current attachment pointers; use
+   source throw-rate provenance, decoded release-frame evidence, and extracted
+   non-looping animation end frames. Marth ThrowF exposed this at the post-release
+   terminal boundary, where repeated fixed-point 4/3-rate accumulation can sit a
+   few LSB below the source f32 clamp. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD398,ftCo_800DD724,ftCo_ThrowF_Anim}`,
+   `refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim`,
+   `data/characters/<char>.json::weight_independent_throws_mask`, and
+   `data/anims/<char>.tracks.bin`.
+   **MotionState rows are not proof that angled attack variants are available**:
+   common dispatchers such as `AttackS3::decideAngle` check the source
+   animation/subaction pointer before choosing an angled variant. A character can
+   have MotionState ids for `AttackS3Hi`/`AttackS3Lw` while the extracted
+   `SSANIMT1` end frame is zero, meaning vanilla falls back to the neutral
+   variant. When adding a character, audit ground-attack direction selectors
+   against extracted animation availability, not just MSLMSO01 MotionState
+   presence. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::decideAngle` and
+   `data/anims/<char>.tracks.bin`.
    **Common Fall static-platform carries need fastfall and current floor-owner
    proof**: `Fall_Coll -> ft_800831CC -> mpColl_80047E14` must first produce a
    callback-local platform floor hit before `mpColl_80044838_Floor` can publish
@@ -398,6 +455,17 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007B1B8}`,
    `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC`, and
    `data/shields/<char>.bin::MSLSHLD1`.
+   **Guard admission belongs to the specific IASA callback, not to all grounded
+   locomotion**: `Run`, `Dash`, `Wait`, `Walk`, `Turn`, and squat-family
+   callbacks can reach `ftCo_80091A4C`, but `ftCo_TurnRun_IASA` only checks
+   `fn_800CAF78` (jump). Do not include `TurnRun` in a broad grounded
+   shield-entry allow-list just because adjacent run states do. Add a Marth
+   `TurnRun` held-shield negative and a spacie `Run` positive so future
+   characters keep the callback boundary rather than inheriting guard entry
+   from an action-family proxy. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_IASA`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA`, and
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C`.
    **No-submotion shield item BODY needs an authoritative exact miss**:
    `ftColl_8007925C` routes item BODY through `lbColl_8000805C` after
    ShieldDesc/ReflectDesc miss. If a no-submotion Guard-family row has enough
@@ -480,6 +548,11 @@ Collect before writing any code:
    action/instance id as the seed proxy, rebind only from the source victim
    pointer proof and keep adjacent late-create negatives so this does not become
    a broad aerial-vs-Guard shield suppressor.
+   No-hitlag release rows need the same seed reconstruction before any
+   "proven current hitlag" guard: same MSLFTSC1 `AttackAirN` create lifetime,
+   replay ShieldDesc contact marker, and current defender iid are enough to
+   restore the source `HitCapsule` victim list for the first `Guard` row.
+   Marth exposed this at `RipeWealthySeahorse.msl:225:p0`.
    Damaging BODY hitlag tails have the same hidden-state shape. During hitlag,
    `Fighter_8006A360` skips the action script, so previous `x914` HitCapsules
    and their `victims_1` rings survive even if a one-step seed lacks explicit
