@@ -122,11 +122,14 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               assert(item_pending_reflect_owner_port[0] == MSL_ITEM_REFLECT_NO_PORT);
               assert(item_reflect_transfer_seed_port[0] == MSL_ITEM_REFLECT_NO_PORT);
               assert(item_shield_bounce_seed_valid[0] == 0u);
+              assert(msl_item_reflect_has_transfer_provenance(&batch, 0u) == 0u);
 
               msl_item_reflect_set_damage_mul(&batch, 0u, 0.5f);
+              assert(msl_item_reflect_has_transfer_provenance(&batch, 0u) == 1u);
               assert(item_stale_damage_valid[0] == 0u);
               assert(almost(item_stale_damage_mul[0], 1.0f));
               assert(almost(msl_item_reflect_damage_lane(&batch, 0u, 3.0f), 2.0f));
+              msl_item_reflect_clear_all_lanes(&batch, 0u);
 
               item_owner[0] = 0;
               item_instance_id[0] = 111u;
@@ -140,6 +143,7 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               assert(item_pending_reflect_instance_id[0] == 222u);
               assert(almost(item_direction[0], -1.0f));
               assert(almost(item_reflect_damage_mul[0], 0.5f));
+              assert(msl_item_reflect_has_transfer_provenance(&batch, 0u) == 1u);
 
               msl_item_reflect_apply_pending_laser_callback(&batch, 0u);
               assert(item_owner[0] == 1);
@@ -165,6 +169,7 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               assert(item_reflect_body_attack_id[0] == 55u);
               assert(item_reflect_body_attack_instance[0] == 222u);
               assert(item_reflect_body_damage_valid[0] == 0u);
+              assert(msl_item_reflect_has_transfer_provenance(&batch, 0u) == 1u);
 
               item_owner[0] = 0;
               item_vel_x[0] = 3.0f;
@@ -175,6 +180,7 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               assert(item_instance_id[0] == 333u);
               assert(almost(item_direction[0], -1.0f));
               assert(almost(item_reflect_damage_mul[0], 0.25f));
+              assert(msl_item_reflect_has_transfer_provenance(&batch, 0u) == 1u);
 
               item_reflect_transfer_seed_port[0] = 1u;
               item_reflect_transfer_seed_iid[0] = 333u;

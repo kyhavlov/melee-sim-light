@@ -10,13 +10,14 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 )
 
 
-def test_falco_laser_airborne_fall_body_uses_flattened_hurtcap_z() -> None:
-    # Replay-real lock for item BODY hurtcap-Z ownership:
-    # ftColl_8007925C routes item BODY through lbColl_8000805C, passing fp->cur_pos.z; lbColl
-    # rewrites hurtcap endpoint Z before the segment/capsule test. TBK:2901 is the narrow state0
-    # Falco-laser/Fall row that needs that source lane to apply the BODY hit and consume the shot.
+def test_falco_laser_airborne_fall_body_contact_stays_positive_without_broad_z_force() -> None:
+    # Replay-real positive for ordinary item BODY geometry:
+    # ftColl_8007925C routes item BODY through lbColl_8000805C. TBK:2901 is a state0
+    # Falco-laser/Fall row whose BODY hit remains source-owned by the item x58->x4C packet without
+    # inferring the optional ftCommon_8007F804 x34_scale.z matrix branch from visible Fall alone.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F804
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
@@ -45,9 +46,9 @@ def test_falco_laser_airborne_fall_body_uses_flattened_hurtcap_z() -> None:
         assert int(out["items"][slot][field]) == int(ref["items"][slot][field]), field
 
 
-def test_falco_laser_airborne_fall_z_lane_keeps_adjacent_no_hit_alive() -> None:
-    # Adjacent negative: one frame before the flattened-Z BODY hit, the laser must remain alive and
-    # Fall must continue. This protects against broad airborne/Fall or tolerance gates.
+def test_falco_laser_airborne_fall_body_keeps_adjacent_no_hit_alive() -> None:
+    # Adjacent negative: one frame before the BODY hit, the laser must remain alive and Fall must
+    # continue. This protects against broad airborne/Fall or tolerance gates.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
@@ -71,10 +72,44 @@ def test_falco_laser_airborne_fall_z_lane_keeps_adjacent_no_hit_alive() -> None:
     assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
 
 
+def test_marth_fall_high_cap_laser_near_miss_does_not_infer_x34_scale_z() -> None:
+    # Official-suite Marth negative for the optional ftCommon_8007F804 item BODY branch:
+    # VSA:2008 has a state0 Falco laser near Marth Fall cap2 (high bucket). Visible airborne Fall
+    # does not prove non-unit fp->x34_scale.z, so lbColl_8000805C must stay on the seed-visible
+    # hurtcap depth instead of flattening endpoints to cur_pos.z. Vanilla keeps Marth in Fall and
+    # keeps the laser alive.
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F804
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, 2008, 0)
+    p = 0
+    slot = 1
+
+    assert int(seed["char_id"][p]) == 18  # Marth
+    assert int(seed["action_id"][p]) == 29  # Fall
+    assert int(seed["on_ground"][p]) == 0
+    assert int(seed["hurtbox_state"][p]) == 0
+    assert int(seed["items"][slot]["type"]) == 55  # Falco laser
+    assert int(seed["items"][slot]["state"]) == 0
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 29
+    assert float(out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-6)
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 0
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
+    assert int(out["items"][slot]["exists"]) == int(ref["items"][slot]["exists"]) == 1
+
+
 def test_falco_laser_airborne_fall_z_lane_respects_same_attack_hitlist_carry() -> None:
-    # Negative for item victim-ring/callback timing: PPA:4124 has similar Fall/Falco-laser geometry,
-    # but the defender already carries the same owner attack id. Decomp item hitlists are updated via
-    # it_8026FAC4/lbColl_80008688, so the Z lane must not create a fresh BODY consume here.
+    # Negative for item victim-ring/callback timing: PPA:4124 has Fall/Falco-laser geometry, but the
+    # defender already carries the same owner attack id. Decomp item hitlists are updated via
+    # it_8026FAC4/lbColl_80008688, so source must not create a fresh BODY consume here.
     # refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C}
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
     root = Path(__file__).resolve().parents[1]
@@ -99,9 +134,10 @@ def test_falco_laser_airborne_fall_z_lane_respects_same_attack_hitlist_carry() -
 
 
 def test_sds_falco_laser_airborne_fall_exact_lbcoll_keeps_edge_no_hit_alive() -> None:
-    # SDS:148/149 is the same airborne Fall flattened-Z source owner as TBK, but the first frame is
-    # a live lbColl edge miss. The source path must use the exact x58->x4C HitCapsule matrix/local
-    # radius packet instead of a broad 2D swept approximation that consumes the shot one frame early.
+    # SDS:148/149 covers an airborne Fall state0 laser edge: the first frame is a live lbColl edge
+    # miss and the next frame is the BODY hit. The source path must use the exact x58->x4C
+    # HitCapsule packet instead of a broad 2D swept approximation that consumes the shot one frame
+    # early.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     root = Path(__file__).resolve().parents[1]

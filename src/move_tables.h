@@ -123,6 +123,17 @@ uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t gr
 int16_t move_tables_grounded_attack_first_create_hitbox_frame(uint8_t char_id,
                                                               uint16_t grounded_action_id);
 
+// Returns whether the selected grounded Attack* hitbox payload exists in the extracted command
+// script for that character/action. This is a table-backed source predicate for narrow combat
+// owners that need a concrete `create_hitbox` row rather than an action-id plus local payload
+// proxy.
+//
+// Source of truth: data/scripts/<char>.bin (MSLFTSC1)
+// moves["ftCo_SM_Attack*"]["events"] create_hitbox.
+uint8_t move_tables_grounded_attack_create_hitbox_payload_matches(
+    uint8_t char_id, uint16_t grounded_action_id, uint8_t hitbox_id, int hitcapsule_int_dmg,
+    uint16_t angle, uint16_t kbg, uint16_t bkb);
+
 // Returns whether grounded smash charge (opcode 56 -> ftCo_800DEE84) was crossed this frame.
 //
 // Decomp:

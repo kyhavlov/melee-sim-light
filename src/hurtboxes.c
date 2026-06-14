@@ -8,6 +8,7 @@
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
+#include "anim_timebase.h"
 #include "anim_table.h"
 #include "char_params.h"
 #include "common_params.h"
@@ -96,6 +97,22 @@ static inline uint16_t hurtboxes_timer_remaining_from_action_frame(uint16_t init
   return (uint16_t)rem;
 }
 
+static inline uint16_t hurtboxes_clamp_nonloop_last_collision_pose(uint8_t char_id, uint16_t msid,
+                                                                   uint16_t pose_frame) {
+  if (pose_frame == 0xFFFFu || msl_anim_is_looping(char_id, msid)) {
+    return pose_frame;
+  }
+  const float end_frame = msl_anim_end_frame(char_id, msid);
+  if (!(end_frame > 1.0f)) {
+    return pose_frame;
+  }
+  const uint16_t end_floor = msl_anim_frame_floor_u16(end_frame);
+  if (end_floor == 0u || pose_frame < end_floor) {
+    return pose_frame;
+  }
+  return (uint16_t)(end_floor - 1u);
+}
+
 static inline uint8_t hurtboxes_runtime_specialhi_pose_owner(uint8_t char_id, uint16_t action_id) {
   // Ownership from the extracted MotionState row identity (SpecialHi launch rows).
   const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
@@ -107,13 +124,61 @@ static inline uint8_t hurtboxes_float_aobj_pose_owner(uint16_t action_id) {
   return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_LANDING_AIR);
 }
 
+static inline uint8_t hurtboxes_run_entry_collision_pose_sample_frame(
+    const MslBatch* batch, size_t idx, const MslCharParams* ch, uint16_t action_id,
+    float anim_frame_f32, float* out_frame) {
+  if (batch == NULL || ch == NULL || out_frame == NULL ||
+      (action_id != (uint16_t)MSL_ACT_RUN && action_id != (uint16_t)MSL_ACT_RUN_DIRECT) ||
+      !(ch->run_animation_scaling > 0.0f)) {
+    return 0u;
+  }
+  if (isfinite(batch->state.ground_friction_mul[idx]) &&
+      batch->state.ground_friction_mul[idx] < 1.0f) {
+    return 0u;
+  }
+  if (batch->state.action_frame[idx] != 2) {
+    return 0u;
+  }
+  if (msl_anim_frame_floor_u16(anim_frame_f32) != 2u) {
+    return 0u;
+  }
+  const float facing_dir = (batch->state.facing_dir1[idx] < 0) ? -1.0f : 1.0f;
+  const float vel = batch->state.speed_ground_x_self[idx];
+  float source_rate = 0.0f;
+  if (vel * facing_dir > 0.0f) {
+    source_rate = fabsf(vel) / ch->run_animation_scaling;
+  }
+  if (!(source_rate >= 0.0f && source_rate < 1.0f)) {
+    return 0u;
+  }
+  const float source_frame = 1.0f + source_rate;
+  if (floorf(source_frame) >= floorf(anim_frame_f32)) {
+    return 0u;
+  }
+  // First post-entry Run collision-pose bridge:
+  // - ftCo_Run_Enter starts with anim_speed=1.
+  // - ftCo_Run_Anim then writes the source-selected rate for the following tick: ordinary floors
+  //   use fp->gr_vel; reduced-friction floors use hidden mv.co.run.x4.
+  // - On the first post-entry collision frame the sim-visible timebase can have consumed the entry
+  //   rate (1.0) before the replay seed lane has a same-Run row to reconstruct the callback rate.
+  //   BODY contact still consumes the source JObj pose before lbColl.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::{
+  //   ftCo_Run_Enter_Full,ftCo_Run_Anim}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  *out_frame = source_frame;
+  return 1u;
+}
+
 static inline float hurtboxes_pose_sample_frame(const MslBatch* batch, size_t idx, uint8_t char_id,
                                                 uint16_t msid, uint16_t action_id,
                                                 float anim_frame_f32, uint16_t pose_frame) {
-  (void)batch;
-  (void)idx;
-  (void)char_id;
   (void)msid;
+  const MslCharParams* ch = msl_char_params_fast(char_id);
+  float run_frame = 0.0f;
+  if (hurtboxes_run_entry_collision_pose_sample_frame(batch, idx, ch, action_id, anim_frame_f32,
+                                                      &run_frame)) {
+    return run_frame;
+  }
   return hurtboxes_float_aobj_pose_owner(action_id) ? anim_frame_f32 : (float)pose_frame;
 }
 
@@ -794,17 +859,24 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         //   the visible ground byte has already flipped away from grounded.
         //   This fixes replay-false high-hurtcap AttackDash misses without suppressing real
         //   grounded DownDamage contacts or trusting arbitrary stale non-platform ground ids.
+        // - The seed bridge may only advance to the last concrete non-looping AObj pose. DownBoundD
+        //   has end_frame=26 in extracted data; source collision can sample frame 25 before the
+        //   later DownStand transition, but not synthetic frame 26. Advancing past that terminal
+        //   pose admits a false Marth AttackAirLw BODY contact on the final DownBoundD frame.
         // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
         //   ftCo_DownBound_Anim,ftCo_DownBound_Coll
         // }
+        // refs/melee/src/melee/ft/ftanim.c::ftAnim_IsFramesRemaining
         // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
         // data/stages/bin/*.bin::MSLSTG01 segment.platform
         if (frame != 0xFFFFu) {
           frame = (uint16_t)(frame + 1u);
+          frame = hurtboxes_clamp_nonloop_last_collision_pose(char_id, msid, frame);
         }
         if (pose_frame != 0xFFFFu) {
           pose_frame = (uint16_t)(pose_frame + 1u);
+          pose_frame = hurtboxes_clamp_nonloop_last_collision_pose(char_id, pose_msid, pose_frame);
         }
       }
       if (hurtboxes_side_special_end_uses_pre_anim_collision_pose(char_id, action_id) &&

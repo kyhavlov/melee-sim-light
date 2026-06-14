@@ -7402,7 +7402,8 @@ static PyMethodDef methods[] = {
      "derive_illusion_seed_position_updates(item fields, fighter fields, illusion LUT) -> "
      "(mask,pos_x,pos_y)"},
     {"trim_stale_hitlist_seed_bridge", msl_trim_stale_hitlist_seed_bridge_py, METH_VARARGS,
-     "trim_stale_hitlist_seed_bridge(hitlist arrays, replay fields, constants) -> None"},
+     "trim_stale_hitlist_seed_bridge(hitlist arrays, replay fields, lfs allow lane, constants) -> "
+     "None"},
     {"derive_attacker_shield_ground_kb_vel", msl_derive_attacker_shield_ground_kb_vel_py,
      METH_VARARGS,
      "derive_attacker_shield_ground_kb_vel(replay fields, LUTs, constants) -> float32[:,4]"},

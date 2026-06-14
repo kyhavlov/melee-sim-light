@@ -872,6 +872,61 @@ def test_falco_throwhi_crossed_prev_frame18_emits_second_article(
 
 
 @pytest.mark.integration
+def test_falco_throwhi_crossed_prev_frame18_slow_step_waits_for_pending_frame20_rws() -> None:
+    # Adjacent negative for the crossed-prev frame-18 second-article owner:
+    # - RWS:2663 has one live state1 Falco ThrowHi laser and crossed-prev frame 18, matching the
+    #   broad shape of the PRH/HVG/TCH positives above.
+    # - The throw rate is slower than the 1.25x current-callback source step, so the frame-20
+    #   command is still pending rather than serialized in this row. The adjacent RWS:2664 seed
+    #   exposes `throw_command_pending_pulse_frame==20` and vanilla emits the next article there.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80073354
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[2663]["seed_t"]
+    next_seed = ds.samples[2664]["seed_t"]
+    thrower = 1
+    victim = 0
+    assert int(seed["char_id"][thrower]) == 22
+    assert int(seed["action_id"][thrower]) == 221
+    assert int(seed["throw_pulse_crossed_prev_frame"][thrower]) == 18
+    assert int(seed["throw_command_pending_pulse_frame"][thrower]) == 0
+    assert float(seed["frame_speed_mul_f32"][thrower]) < 1.25
+    assert int(seed["hitstun"][victim]) > 0
+    assert int(seed["instance_hit_by"][victim]) == int(seed["instance_id"][thrower])
+    assert int(next_seed["throw_command_pending_pulse_frame"][thrower]) == 20
+
+    seed_state1_count = sum(
+        1
+        for item in seed["items"]
+        if int(item["exists"]) != 0
+        and int(item["owner"]) == thrower
+        and int(item["type"]) == 55
+        and int(item["state"]) == 1
+    )
+    assert seed_state1_count == 1
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, 2663, thrower)
+    assert int(ref_row["items"][2]["exists"]) == 0
+    assert int(out_row["items"][2]["exists"]) == 0
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=2663, p=p)
+
+    _, ref_next, out_next = _run_one_step_row(dataset_path, 2664, thrower)
+    assert int(ref_next["items"][2]["exists"]) == 1
+    assert int(out_next["items"][2]["exists"]) == 1
+    for field in ("type", "state", "owner", "instance_id"):
+        assert int(out_next["items"][2][field]) == int(ref_next["items"][2][field])
+
+
+@pytest.mark.integration
 def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -> None:
     # Rollout-real lock for the same command owner as the one-step crossed-prev locks above:
     # - PEC:8136 starts with one live state1 Falco ThrowHi laser and the prior frame-18 pulse.

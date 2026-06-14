@@ -24,6 +24,42 @@ static inline uint8_t hitlist_specialhi_action(uint8_t char_id, uint16_t action_
              : 0u;
 }
 
+static inline uint8_t hitlist_common_damagefly_action(uint16_t action_id) {
+  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_DAMAGE_FLY);
+}
+
+static inline uint8_t hitlist_attackairn_post_contact_victim_provenance(uint16_t action_id,
+                                                                        uint16_t prev_action_id) {
+  if (msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_DAMAGE_COMMON) ||
+      msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_DAMAGE_FLY) ||
+      msl_motion_state_common_class_has_fast(prev_action_id, MSL_MS_CLASS_DAMAGE_COMMON) ||
+      msl_motion_state_common_class_has_fast(prev_action_id, MSL_MS_CLASS_DAMAGE_FLY)) {
+    return 1u;
+  }
+  switch (action_id) {
+    case MSL_ACT_DOWN_BOUND_U:
+    case MSL_ACT_DOWN_WAIT_U:
+    case MSL_ACT_DOWN_DAMAGE_U:
+    case MSL_ACT_DOWN_BOUND_D:
+    case MSL_ACT_DOWN_WAIT_D:
+    case MSL_ACT_DOWN_DAMAGE_D:
+      return 1u;
+    default:
+      break;
+  }
+  switch (prev_action_id) {
+    case MSL_ACT_DOWN_BOUND_U:
+    case MSL_ACT_DOWN_WAIT_U:
+    case MSL_ACT_DOWN_DAMAGE_U:
+    case MSL_ACT_DOWN_BOUND_D:
+    case MSL_ACT_DOWN_WAIT_D:
+    case MSL_ACT_DOWN_DAMAGE_D:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t hitlist_grounded_attack_runtime_clear_owns_empty_hitcapsule(
     const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
@@ -49,23 +85,44 @@ static inline uint8_t hitlist_attackair_create_phase_runtime_clear_owns_empty_hi
   if (!msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_ATTACK_AIR)) {
     return 0u;
   }
-  // AttackAir multi-hit clear/create bands:
+  // AttackAir create-edge clear/copy bands:
   // - ftAction_8007121C processes generated create_hitbox commands and runs ftColl_800768A0.
   // - It runs ftColl_800768A0 only when the target HitCapsule slot is disabled or changes hit_group;
-  //   for the common AttackAir scripts, the data-backed signal for that empty owner is a
-  //   clear_hitboxes -> create_hitbox transition. Same-slot create payloads without an intervening
-  //   clear update damage/offsets while preserving victims_1.
-  // - For later create bands that really are enable/group-change edges, an empty runtime-initialized
+  //   for the common AttackAir scripts, data-backed empty owners are the first create band after
+  //   motion entry and any clear_hitboxes -> create_hitbox transition. Same-slot create payloads
+  //   without an intervening clear update damage/offsets while preserving victims_1.
+  // - For create bands that really are enable/group-change edges, an empty runtime-initialized
   //   HitCapsule is source-owned and must not be lazily backfilled from previous same-source BODY
-  //   attribution. This preserves valid multi-hit re-hits such as Fox DAir after clear/create while
-  //   keeping Falco DAir's no-clear late payload on the existing victim latch.
-  // data/scripts/{fox,falco}.bin (MSLFTSC1 AttackAir create_hitbox phases)
+  //   attribution. This preserves valid first-window re-hits after same-action AttackAir re-entry
+  //   and multi-hit re-hits such as Fox DAir after clear/create while keeping Falco DAir's no-clear
+  //   late payload on the existing victim latch.
+  // data/scripts/{fox,falco,marth}.bin (MSLFTSC1 AttackAir create_hitbox phases)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
   // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_CopyHitCapsule}
+  const size_t bi = idx / (size_t)MSL_MAX_PLAYERS;
+  const uint8_t is_replay_rollout =
+      (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u) ? 1u
+                                                                                           : 0u;
+  const uint8_t exact_replay_reseed =
+      (is_replay_rollout && batch->replay_rollout_seed_frame_id != NULL &&
+       batch->state.frame_id[bi] == batch->replay_rollout_seed_frame_id[bi])
+          ? 1u
+          : 0u;
   const float anim_frame = batch->state.anim_frame_f32[idx];
-  return move_tables_attackair_post_clear_create_hitbox_phase(batch->state.char_id[idx], action_id,
-                                                              anim_frame);
+  const uint8_t first_band_runtime_clear =
+      (is_replay_rollout && !exact_replay_reseed &&
+       move_tables_attackair_first_hitbox_phase(batch->state.char_id[idx], action_id, anim_frame))
+          ? 1u
+          : 0u;
+  const uint8_t attackairn_post_clear_empty_owner =
+      (action_id == (uint16_t)MSL_ACT_ATTACK_AIR_N &&
+       move_tables_attackair_post_clear_create_hitbox_phase(batch->state.char_id[idx], action_id,
+                                                            anim_frame))
+          ? 1u
+          : 0u;
+  return (first_band_runtime_clear || attackairn_post_clear_empty_owner) ? 1u : 0u;
 }
 
 uint8_t hitlist_rollout_dense_seed_same_object_rebind_applies(const MslBatch* batch, int bi,
@@ -199,6 +256,14 @@ static uint8_t hitlist_insert_list(MslHitlistVictimEntry* victims, uint8_t* ring
     }
     // Fighter victim identity uses kind_slot (port) as the pointer proxy; id16 is managed by the
     // caller's boundary logic (rehit suppression should not clear on iid change unless respawning).
+    // When the same fighter pointer is registered again after ProcessHit, refresh the Slippi
+    // instance-id proxy and provenance marker so delayed BODY hitlist writeback carries the
+    // post-transition identity while preserving lbColl's pointer-presence semantics.
+    // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+    if (kind == (uint8_t)MSL_HITLIST_VICTIM_KIND_FIGHTER) {
+      victims[i].id16 = key->id16;
+      victims[i].id32 = key->id32;
+    }
     if (refresh_set) {
       victims[i].cd = cd_set;
     }
@@ -445,18 +510,65 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
       const uint8_t cd_set = (seed_cd == 0xFFFFu) ? 0u : (uint8_t)(seed_cd & 0xFFu);
       (void)hitlist_insert_victims1(hit, (int)MSL_LBCOLL_INSERT_FT_SHIELD, &key, cd_set);
     }
-    const uint8_t runtime_empty_source_clear =
+    const uint8_t raw_runtime_empty_source_clear =
         (uint8_t)(batch->state.fighter_hitlist_init_gen[hb_i] ==
                       batch->state.hitlist_reseed_gen[bi] &&
                   (hitlist_grounded_attack_runtime_clear_owns_empty_hitcapsule(batch, a_idx) ||
                    hitlist_attackair_create_phase_runtime_clear_owns_empty_hitcapsule(batch,
                                                                                       a_idx)));
+    const uint8_t attackairn_same_source_damagefly_tail =
+        (uint8_t)(same_source_body_attribution &&
+                  batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_N &&
+                  hitlist_common_damagefly_action(batch->state.action_id[v_idx]));
+    // AttackAirN post-clear create can prove an empty HitCapsule list for the first second-band
+    // contact, but after that contact lands the victim's DamageFly state plus same-source dense
+    // latch is source proof that the live HitCapsule.victims_1 list already contains the victim.
+    // Do not let the empty-owner seed bridge erase that hitlag/hitstun tail.
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_80008688}
+    const uint8_t runtime_empty_source_clear =
+        (uint8_t)(raw_runtime_empty_source_clear && !attackairn_same_source_damagefly_tail);
+    const uint8_t attackairn_same_source_post_contact_tail =
+        (uint8_t)(same_source_body_attribution &&
+                  batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_N &&
+                  msl_motion_state_has_motion_flag(batch->state.char_id[a_idx],
+                                                   batch->state.action_id[a_idx],
+                                                   MSL_MOTION_FLAG_SKIP_HIT) &&
+                  move_tables_attackair_post_clear_create_hitbox_phase(
+                      batch->state.char_id[a_idx], batch->state.action_id[a_idx],
+                      batch->state.anim_frame_f32[a_idx]) &&
+                  batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u &&
+                  batch->state.hitlag_pre_timer[v_idx] == 0u &&
+                  batch->state.frame_start_hitstun[v_idx] == 0u &&
+                  hitlist_attackairn_post_contact_victim_provenance(
+                      batch->state.action_id[v_idx], batch->state.prev_action_id[v_idx]) &&
+                  !hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                                     batch->state.action_id[v_idx]));
+    if (seed_cd == 0u && !batch->state.combat_hitlist_hb_valid[valid_i] &&
+        attackairn_same_source_post_contact_tail) {
+      // Post-hitlag NAir rehit-latch carry:
+      // A victim can leave DamageFly/downed damage states while Marth NAir's
+      // post-clear second band is still active. Hitlag/hitstun may no longer be visible, but
+      // lbColl_8000ACFC still suppresses by HitCapsule.victims_1 object identity until the script
+      // changes or clears the slot. `last_hit_by` + `instance_hit_by` prove the current AttackAirN
+      // instance owns the accepted BODY hit, and the damage/downed provenance gate prevents an
+      // older first-band hit from suppressing a legal second-band rehit after clear_hitboxes.
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+      MslHitlistVictimEntry key;
+      memset(&key, 0, sizeof(key));
+      key.id16 = victim_iid;
+      key.kind_slot = hitlist_fighter_key((uint8_t)victim);
+      (void)hitlist_insert_victims1(hit, (int)MSL_LBCOLL_INSERT_FT_SHIELD, &key, 0u);
+    }
     if (seed_cd == 0u && !batch->state.combat_hitlist_hb_valid[valid_i] &&
         (batch->state.fighter_hitlist_init_gen[hb_i] != batch->state.hitlist_reseed_gen[bi] ||
          !runtime_empty_source_clear) &&
         ((batch->state.hitlag_pre_timer[a_idx] != 0u &&
           batch->state.hitlag_pre_timer[v_idx] != 0u) ||
-         (batch->state.hitbox_enable_edge[hb_i] == 0u && batch->state.hitstun[v_idx] != 0u)) &&
+         (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
+          batch->state.hitbox_enable_edge[hb_i] == 0u && batch->state.hitstun[v_idx] != 0u)) &&
         batch->state.hitbox_prev_enabled[hb_i] != 0u &&
         batch->state.action_id[a_idx] == batch->state.seed_prev_action_id[a_idx] &&
         same_source_body_attribution) {
@@ -469,6 +581,9 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
       //   HitCapsule has not already been initialized by the relevant active script event path in
       //   this runtime generation, that attribution proves the current HitCapsule already contains
       //   the victim and must suppress the first post-decrement collision pass.
+      // - Visible hitstun without frame-start hitlag is not enough proof for AttackAirLw: DAir's
+      //   no-clear/same-group script phase has explicit dense-object seed helpers, and later
+      //   active contacts can legitimately hit again after prior hitlag has ended.
       // - Authoritative per-HitCapsule empty seed lanes and runtime-initialized clear/copy results
       //   are the source owner for exact rows; they prove this slot's victims_1 list is empty and
       //   must not be backfilled from BODY attribution alone. This covers same-action grounded

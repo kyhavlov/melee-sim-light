@@ -3317,6 +3317,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.item_misc1[ii] = item->misc1;
       batch->state.item_misc2[ii] = item->misc2;
       batch->state.item_misc3[ii] = item->misc3;
+      batch->state.item_reflect_body_owner_port[ii] = 0xFFu;
+      batch->state.item_reflect_body_attack_id[ii] = (uint16_t)MSL_FT_MOVE_ID_DEFAULT;
+      batch->state.item_reflect_body_attack_instance[ii] = 0u;
+      batch->state.item_reflect_body_damage_valid[ii] = 0u;
       batch->state.item_pending_reflect_owner_port[ii] = 0xFFu;
       batch->state.item_pending_reflect_instance_id[ii] = 0u;
       batch->state.item_reflect_transfer_seed_port[ii] = seed->item_reflect_transfer_port[it];

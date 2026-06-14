@@ -13,6 +13,17 @@ ACT_DAMAGE_FLY_TOP = 0x005A
 ACT_DOWN_BOUND_D = 0x00BF
 
 
+def _skip_if_marth_artifacts_missing(root: Path) -> None:
+    required = [
+        "data/common/ft_common_data.json",
+        "data/characters/marth.json",
+        "data/anims/marth.tracks.bin",
+    ]
+    missing = [rel for rel in required if not (root / rel).exists()]
+    if missing:
+        pytest.skip(f"missing local data artifacts: {', '.join(missing)}")
+
+
 def _skip_if_required_artifacts_missing(root: Path) -> None:
     required = [
         "data/common/ft_common_data.json",
@@ -31,6 +42,14 @@ def _dataset_path(root: Path) -> Path:
         "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "TreasuredBackKangaroo.msl"
     )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
+def _marth_dataset_path(root: Path) -> Path:
+    dataset_rel = "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
@@ -71,6 +90,32 @@ def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -
 
     out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
     return out, ref
+
+
+def _debug_selected_body_hit_count(dataset_path: Path, record: int, seed: np.ndarray) -> int:
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    binding, seed_stride, input_stride, _compare_stride = _binding_sizes()
+    seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        _raw, count = binding.debug_combat_select_body_hits(handle, 0, 64)
+        return int(count)
+    finally:
+        binding.destroy(handle)
 
 
 def _rollout_records(
@@ -170,3 +215,39 @@ def test_damageflyroll_x1994_rollout_carries_to_downbound_pose_bridge_tbk() -> N
         assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DOWN_BOUND_D, record
         assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 0, record
         assert float(out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_downbound_x1994_pose_bridge_clamps_terminal_pose_for_marth_vsa_651() -> None:
+    # Replay-real lock for the terminal side of the DownBound x1994 pose bridge:
+    # - VSA:651 is Marth DownBoundD action_frame=24 with x1994 still active.
+    # - The frame scheduler has already advanced the live AObj to frame 25 before combat refresh;
+    #   the x1994 seed bridge must not synthesize frame 26, past the extracted end_frame=26
+    #   non-looping pose. That synthetic terminal pose admits a false AttackAirLw BODY contact.
+    # - TBK:2402 above remains the adjacent positive proving the same bridge can still advance
+    #   an earlier DownBound seed to the real post-Anim whiffing pose.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
+    #   ftCo_DownBound_Anim,ftCo_DownBound_Coll
+    # }
+    # refs/melee/src/melee/ft/ftanim.c::ftAnim_IsFramesRemaining
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_marth_artifacts_missing(root)
+    dataset_path = _marth_dataset_path(root)
+    ds = read_dataset(str(dataset_path))
+
+    defender = 1
+    seed = ds.samples[651:652]["seed_t"].copy()
+    assert int(seed[0]["action_id"][defender]) == ACT_DOWN_BOUND_D
+    assert int(seed[0]["action_frame"][defender]) == 24
+    assert int(seed[0]["hurtbox_state"][defender]) == 0
+    assert int(seed[0]["colanim_hit_status_x198c"][defender]) == 1
+    assert int(seed[0]["colanim_timer_x1994"][defender]) > 0
+
+    assert _debug_selected_body_hit_count(dataset_path, 651, seed) == 0
+
+    out, ref = _step_one_row_with_seed(dataset_path, 651, seed)
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == ACT_DOWN_BOUND_D
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)

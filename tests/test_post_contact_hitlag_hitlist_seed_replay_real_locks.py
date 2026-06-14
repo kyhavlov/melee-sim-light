@@ -185,4 +185,6 @@ def test_attackhi4_post_contact_hitlag_bridge_requires_body_source_proof() -> No
     ]
     assert materialized_hitlists(instance_hit_by=None, hitstun=0, clear_cd=False) == [0, 0, 0, 0]
     assert victim_hitstun > 0
-    assert materialized_hitlists(instance_hit_by=None, hitstun=None, clear_cd=True) == [0, 0, 0, 0]
+    # The retained owner is post-contact source proof (`instance_hit_by` + active hitstun), not the
+    # legacy dense group lane. Clearing the dense cd seed alone must not erase the source bridge.
+    assert materialized_hitlists(instance_hit_by=None, hitstun=None, clear_cd=True) == [1, 1, 0, 0]

@@ -434,6 +434,68 @@ def test_guard_shielddesc_miss_without_victim_latch_can_fall_through_to_body() -
 
 
 @pytest.mark.integration
+def test_attackairn_guard_release_shield_hitcapsule_latch_suppresses_body_rws() -> None:
+    # Accepted shield contact -> Guard release HitCapsule victims_1 ownership:
+    # - The first AttackAirN shield hit registers the defender in each source HitCapsule list.
+    # - Same-group AttackAirN refreshes do not clear that victims_1 list.
+    # - Later Guard rows with replay-proven ShieldDesc misses still must check lbColl_8000ACFC
+    #   before BODY, so the hidden per-HitCapsule latch suppresses the BODY fallthrough.
+    # The seed lane rebinding below reflects simulator instance_id being only a proxy for vanilla's
+    # stable victim pointer through GuardSetOff -> Guard motion entries.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80078C70}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    attacker = 1
+    seed, ref, out = _run_one_step_row(dataset_path, 225, defender)
+
+    assert int(seed["char_id"][defender]) == 18  # Marth.
+    assert int(seed["char_id"][attacker]) == 22  # Falco.
+    assert int(seed["action_id"][attacker]) == 65  # AttackAirN.
+    assert int(seed["action_id"][defender]) == 179  # Guard after GuardSetOff release.
+    assert int(seed["seed_prev_action_id"][defender]) == 181  # GuardSetOff.
+    assert all(
+        int(seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 1
+        for hb in range(4)
+    )
+    assert all(int(seed["combat_hitlist_hb_valid"][attacker, hb]) == 1 for hb in range(4))
+    assert all(
+        int(seed["combat_hitlist_hb_cd"][attacker, hb, defender]) == 0xFFFF for hb in range(4)
+    )
+    assert all(
+        int(seed["combat_hitlist_hb_victim_iid"][attacker, hb, defender])
+        == int(seed["instance_id"][defender])
+        for hb in range(4)
+    )
+
+    assert int(ref["action_id"][defender]) == 179
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+    def clear_hitcapsule_latch(seed_t: np.ndarray) -> None:
+        seed_t["combat_hitlist_hb_valid"][0, attacker, :] = np.uint8(0)
+        seed_t["combat_hitlist_hb_cd"][0, attacker, :, defender] = np.uint16(0)
+        seed_t["combat_hitlist_hb_victim_iid"][0, attacker, :, defender] = np.uint16(0)
+        seed_t["combat_hitlist_cd"][0, attacker, :, defender] = np.uint16(0)
+        seed_t["combat_hitlist_victim_iid"][0, attacker, :, defender] = np.uint16(0)
+
+    _seed, _ref, out_without_latch = _run_one_step_row(
+        dataset_path, 225, defender, seed_mutator=clear_hitcapsule_latch
+    )
+    assert int(out_without_latch["action_id"][defender]) != int(ref["action_id"][defender])
+    assert int(out_without_latch["hitlag"][defender]) > 0
+    assert float(out_without_latch["percent"][defender]) > float(ref["percent"][defender])
+
+
+@pytest.mark.integration
 def test_guard_tilt_shielddesc_miss_uses_live_hurtcap_pose_cheery() -> None:
     # Guard tilt BODY pose owner:
     # - ftCo_80091E78 applies nonzero mv.co.guard.x4 angled Guard pose before ftColl_80078C70.
@@ -860,8 +922,11 @@ def test_late_attackairf_frozen_guard_shield_miss_clears_stale_dense_hitlist() -
     _seed, _ref, out_without_shield_miss = _run_one_step_row(
         dataset_path, record, defender, seed_mutator=clear_shield_miss_kind
     )
-    assert int(out_without_shield_miss["action_id"][defender]) == 179
-    assert int(out_without_shield_miss["hitlag"][defender]) == 0
+    # The shield-miss seed lane is not the owner of this BODY fallthrough. The source owner is the
+    # current concrete HitCapsule victim list after the Fair refresh, so removing stale
+    # ShieldDesc-miss provenance still allows the live BODY hit.
+    assert int(out_without_shield_miss["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out_without_shield_miss["hitlag"][defender]) == int(ref["hitlag"][defender])
 
 
 @pytest.mark.integration
@@ -2804,6 +2869,142 @@ def test_attackairb_guard_lower_bound_seed_keeps_hb0_when_inside_shield_radius_d
 
 
 @pytest.mark.integration
+def test_marth_guardon_terminal_no_submotion_shielddesc_uses_live_guardon_pose_qhp_2600() -> None:
+    # Official-suite positive for sustained no-submotion GuardOn ShieldDesc publication:
+    # - Slippi still serializes Marth GuardOn as animation_index/action_frame = -1 on these
+    #   snapshots, but source `ftCo_GuardOn_Anim` has republished the live ShieldDesc bone through
+    #   `ftCo_80091E78` before ftColl reaches fighter-vs-fighter shield collision.
+    # - The preceding rows carry seed-proven no-shield-contact, while the terminal row carries
+    #   seed-proven shield-contact for all active hitcapsule slots and vanilla enters GuardSetOff.
+    # - Free rollout must resolve this from extracted `data/shields/marth.bin::guard_on_xyz`, not
+    #   from the one-step-only `combat_shield_contact_hb_kind` seed bridge.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardOn_Anim,ftCo_800925A4,ftCo_80091E78}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    got = _run_rollout_records_replay_frame_rng(
+        dataset_path,
+        2594,
+        (2597, 2598, 2599, 2600),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    defender = 1
+    for record in (2597, 2598, 2599):
+        out, ref = got[record]
+        assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 178
+        assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+
+    out, ref = got[2600]
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert all(
+        int(samples["seed_t"][record]["combat_shield_contact_hb_kind"][0, hb, defender]) == 1
+        for record in (2597, 2598, 2599)
+        for hb in range(3)
+    )
+    assert all(
+        int(samples["seed_t"][2600]["combat_shield_contact_hb_kind"][0, hb, defender]) == 2
+        for hb in range(3)
+    )
+
+
+@pytest.mark.integration
+def test_marth_guardon_terminal_no_submotion_shielddesc_uses_live_guardon_pose_rws_4905() -> None:
+    # Same ShieldDesc owner from the opposite port/order and stage: terminal no-submotion Marth
+    # GuardOn enters GuardSetOff only on the row whose source shield-contact lane flips to true.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    got = _run_rollout_records_replay_frame_rng(
+        dataset_path,
+        4899,
+        (4901, 4902, 4903, 4904, 4905),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    defender = 0
+    for record in (4901, 4902, 4903, 4904):
+        out, ref = got[record]
+        assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 178
+        assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+
+    out, ref = got[4905]
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_spacie_guardon_terminal_no_submotion_live_pose_does_not_force_seeded_no_contact() -> None:
+    # Cross-character negative for the table-backed GuardOn ShieldDesc owner. Fox/Falco terminal
+    # no-submotion GuardOn rows with vanilla no-shield-contact provenance must remain GuardOn/Guard
+    # rather than inheriting Marth's terminal-contact outcome through the shared runtime path.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    cases = (
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "BlondHardHippopotamus.msl",
+            3520,
+            (3526, 3527),
+            0,
+        ),
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "PositiveRevolvingHyena.msl",
+            270,
+            (276, 277),
+            1,
+        ),
+    )
+
+    for dataset_path, start, records, defender in cases:
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_path}")
+        got = _run_rollout_records_replay_frame_rng(
+            dataset_path,
+            start,
+            records,
+            ucf_enabled=True,
+            ucf_cardinals_1_0_enabled=True,
+        )
+        ds = read_dataset(str(dataset_path))
+        samples = ds.samples
+        for record in records:
+            out, ref = got[record]
+            assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+            assert int(out["action_id"][defender]) in (178, 179)
+            assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+            assert all(
+                int(
+                    samples["seed_t"][record]["combat_shield_contact_hb_kind"][
+                        1 - defender, hb, defender
+                    ]
+                )
+                == 1
+                for hb in range(3)
+            )
+
+
+@pytest.mark.integration
 def test_attackairb_guardreflect_lower_bound_x19a4_uses_live_hitcapsule_damage_pte_3608() -> None:
     # Active GuardReflect powershield recoil consumes ftColl_80076CBC's x19A4 scalar from the
     # current HitCapsule.damage. PTE has all-slot shield seed provenance but a lower-bound
@@ -3001,6 +3202,44 @@ def test_guardsetoff_post_hitlag_asdi_keeps_agn_rollout_from_capture_cascade() -
     assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 9
     assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim]) == 48
     assert float(out["pos_x"][attacker]) == pytest.approx(float(ref["pos_x"][attacker]), abs=0.06)
+
+
+@pytest.mark.integration
+def test_marth_attackairf_shield_hit_uses_create_time_stale_damage_wws_5497() -> None:
+    # Source HitCapsule.damage is written by ftAction_8007121C -> ftColl_8007ABD0 after
+    # ft_80089228 applies the attacker's current stale table. Shield processing later consumes that
+    # frozen HitCapsule.damage for both x19A4 hitlag and x19A0 shield HP; it must not recompute from
+    # the live stale queue at the GuardSetOff contact.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007ABD0,ftColl_80076CBC}
+    # refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 1
+    defender = 0
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[5497]["seed_t"]
+    assert int(seed["action_id"][attacker]) == 66  # Marth AttackAirF
+    assert int(seed["combat_shield_hit_int_damage"][defender]) == 6
+    assert int(seed["combat_shield_damage_taken"][defender]) == 8
+    assert all(
+        int(seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 2
+        for hb in range(4)
+    )
+
+    ref, out = _run_rollout_window(
+        dataset_path, 5374, 5497, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 5
+    assert float(out["shield_hp"][defender]) == pytest.approx(
+        float(ref["shield_hp"][defender]), abs=1e-6
+    )
 
 
 @pytest.mark.integration

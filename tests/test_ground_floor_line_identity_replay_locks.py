@@ -10,6 +10,8 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 ACT_DASH = 20
+ACT_FALL = 29
+ACT_LANDING = 42
 STAGE_FD = 32
 
 
@@ -157,6 +159,44 @@ def test_whispy_wind_grounded_root_crossing_flat_seam_refreshes_floor_index(
     for field in ("action_id", "action_frame", "animation_index", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_fall_landing_entry_uses_mplib_signed_correction_order_qhp_532() -> None:
+    # Source-order floor publication lock for Fall_Coll -> Landing_Enter_Basic.
+    #
+    # mpLib_8004DD90_Floor returns a signed correction:
+    #   floor_y - callback_cur_y + 0.0001
+    # and the mpColl caller adds that correction back to coll->cur_pos.y before ft_80082B1C enters
+    # Landing. Rebuilding the entry root as `floor_y + 0.0001` loses the f32 cancellation residue
+    # on fast downward Dream Land contacts.
+    #
+    # This locks the entry publication only. QHP:533 remains a separate grounded follow-up
+    # correction owner and should not be treated as closed by this test.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_80082B1C}
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 532
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == 28  # Dream Land N64
+    assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "action_frame", "animation_index", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=0.0)
 
 
 @pytest.mark.integration

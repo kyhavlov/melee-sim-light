@@ -31,6 +31,7 @@ from tools.slippi.rollback import finalized_frame_indices
 from tools.slippi.slpz import replay_path_for_peppi
 from tools.slippi.motion_state_owners import read_mslmso01_v1
 from tools.extraction.known_data_artifacts import read_mslftsc1_v1
+from tools.slippi.suite_io import team_attack_on_from_start
 
 
 def manifest_registry_chars(data_root: Path) -> list[tuple[int, str]]:
@@ -80,7 +81,26 @@ def require_replay_chars_in_manifest(
             f"{sorted(manifest_ids)} - regenerate data with `make build_data` "
             "(registry-driven) or add the character to tools/extraction/char_registry.py first"
         )
-from tools.slippi.suite_io import team_attack_on_from_start
+
+
+def _load_u8_character_attr_lut(data_root: Path, key: str) -> np.ndarray:
+    """Load a per-character uint8 attr from data/characters/<char>.json.
+
+    Source owner: runtime-required character attrs are registry/manifest scoped. Keeping
+    preprocessing LUTs registry-backed prevents newly added characters from silently inheriting
+    zero-valued hidden lanes when the runtime already has extracted character data.
+    """
+
+    lut = np.zeros(256, dtype=np.uint8)
+    for char_id, name in manifest_registry_chars(data_root):
+        attrs = json.loads((data_root / "characters" / f"{name}.json").read_text())
+        if key not in attrs:
+            raise ValueError(f"missing required character attr {key!r} for {name}")
+        value = int(attrs[key])
+        if value < 0 or value > 0xFF:
+            raise ValueError(f"character attr {key!r} for {name} out of uint8 range: {value}")
+        lut[np.uint8(char_id)] = np.uint8(value)
+    return lut
 
 
 MSL_MS_CLASS_ATTACK_AIR = 1 << 0
@@ -4069,16 +4089,11 @@ def _main_impl(args) -> Dataset:
     button_mask_dpad_up = 0x0008  # HSD_PAD_DPADUP / refs/melee/src/common_structs.h
     button_mask_dpad_down = 0x0004  # HSD_PAD_DPADDOWN / refs/melee/src/common_structs.h
 
-    # Character id mapping follows Slippi post-frame `character` (GALE01):
-    # - Fox   = 1
-    # - Falco = 22
-    turn_frames_lut = np.zeros(256, dtype=np.uint8)
-    turn_frames_lut[np.uint8(1)] = np.uint8(
-        json.loads(Path("data/characters/fox.json").read_text())["turn_frames"]
-    )
-    turn_frames_lut[np.uint8(22)] = np.uint8(
-        json.loads(Path("data/characters/falco.json").read_text())["turn_frames"]
-    )
+    # Character id mapping follows Slippi post-frame `character` (GALE01).
+    # Source owner: ftCo_Turn_Enter_Basic copies the per-character
+    # frames_to_change_direction_on_standing_turn attr into mv.co.turn.frames_to_turn.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Basic
+    turn_frames_lut = _load_u8_character_attr_lut(data_root, "turn_frames")
     reflector_release_lag_lut = np.zeros(256, dtype=np.uint8)
     reflector_release_lag_lut[np.uint8(1)] = np.uint8(
         json.loads(Path("data/characters/fox.json").read_text())["reflector_release_lag_frames"]
@@ -4183,6 +4198,7 @@ def _main_impl(args) -> Dataset:
     post_turn_has_turned_u8 = np.zeros((n_frames, 4), dtype=np.uint8)
     post_combo_count_u8_all = np.zeros((n_frames, 4), dtype=np.uint8)
     post_last_attack_landed_u8_all = np.zeros((n_frames, 4), dtype=np.uint8)
+    post_landing_fallspecial_allow_interrupt = np.zeros((n_frames, 4), dtype=np.uint8)
     ports_struct = frames.field("ports")
     available_ports = set(f.name for f in ports_struct.type)
     for slot, port_name in enumerate(src_port_names):
@@ -5294,12 +5310,14 @@ def _main_impl(args) -> Dataset:
         samples["seed_t"]["cliff_option_stick_latch_x8"][:, slot] = cliff_option_stick_latch_x8[
             :-1
         ]
+        landing_fallspecial_allow_interrupt = _derive_landing_fallspecial_allow_interrupt_seed_lane(
+            action_id_u16=post_state,
+            char_id_u8=post_char,
+            origin_allow_by_char=char_fallspecial_origin_allow_interrupt,
+        )
+        post_landing_fallspecial_allow_interrupt[:, slot] = landing_fallspecial_allow_interrupt
         samples["seed_t"]["landing_fallspecial_allow_interrupt"][:, slot] = (
-            _derive_landing_fallspecial_allow_interrupt_seed_lane(
-                action_id_u16=post_state,
-                char_id_u8=post_char,
-                origin_allow_by_char=char_fallspecial_origin_allow_interrupt,
-            )[:-1]
+            landing_fallspecial_allow_interrupt[:-1]
         )
         samples["seed_t"]["lr_press_timer"][:, slot] = lr_press_timer[:-1]
 
@@ -6534,6 +6552,7 @@ def _main_impl(args) -> Dataset:
         np.ascontiguousarray(post_hitlag, dtype=np.uint16),
         np.ascontiguousarray(post_hitstun, dtype=np.uint16),
         np.ascontiguousarray(post_action_id, dtype=np.uint16),
+        np.ascontiguousarray(post_landing_fallspecial_allow_interrupt, dtype=np.uint8),
         int(num_players),
         int(act_attack_11),
         int(act_attack_lw4),

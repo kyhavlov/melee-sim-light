@@ -10,6 +10,17 @@ from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_a
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
+def _skip_if_marth_artifacts_missing(root: Path) -> None:
+    required = [
+        "data/common/ft_common_data.json",
+        "data/characters/marth.json",
+        "data/anims/marth.tracks.bin",
+    ]
+    missing = [rel for rel in required if not (root / rel).exists()]
+    if missing:
+        pytest.skip(f"missing local data artifacts: {', '.join(missing)}")
+
+
 @dataclass(frozen=True)
 class FreezeRehitCase:
     dataset_rel: str
@@ -92,6 +103,37 @@ def _run_rollout_window(dataset_path: Path, start: int, stop: int):
         binding.destroy(handle)
 
     return samples["ref_t1"][stop], out
+
+
+def _step_one_record(dataset_path: Path, record: int, seed_t: np.ndarray | None = None) -> tuple[np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record + 1, f"dataset too short for rollout lock: record={record}"
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    row = samples[record : record + 1]
+    seed = row["seed_t"] if seed_t is None else seed_t
+    seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return row["ref_t1"][0].copy(), out_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy()
 
 
 @pytest.mark.integration
@@ -244,6 +286,84 @@ def test_hitlag_frozen_create_frame_materializes_authoritative_hitlist_seed_on_r
         assert int(out[field][defender]) == int(ref[field][defender]), field
     assert float(out["pos_x"][defender]) == pytest.approx(float(ref["pos_x"][defender]), abs=2e-5)
     assert float(out["pos_y"][defender]) == pytest.approx(float(ref["pos_y"][defender]), abs=2e-5)
+
+
+@pytest.mark.integration
+def test_marth_hitlag_exit_uses_body_attribution_to_reconstruct_victims1() -> None:
+    # Replay-real hidden-state lock for damaging hitlag tails without an explicit hitlist seed:
+    # - MUG 2116 starts on the last hitlag tick of Marth Fair hitting Marth into DamageFlyLw.
+    # - Fighter_8006A360 froze ftAction_8007121C during hitlag, so the previous x58 hitcapsules
+    #   and their victims_1 rings survive until the first post-decrement collision pass.
+    # - The dataset has previous-capsule geometry but no dense/per-HitCapsule hitlist seed for
+    #   attacker p1 -> defender p0. Slippi BODY attribution (`instance_hit_by`/`last_hit_by`)
+    #   names the same attacker instance, which proves ftColl_80076ED8 already accepted that BODY
+    #   hit and inlineB0 inserted the victim into every active same-group HitCapsule.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,inlineB0}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_marth_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth/MetallicUniqueGrouse.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    attacker = 1
+    defender = 0
+    first_hit_record = 2110
+    hitlag_tail_record = 2116
+
+    seed = samples["seed_t"][hitlag_tail_record]
+    assert int(seed["action_id"][attacker]) == 65  # ftCo_MS_AttackAirF
+    assert int(seed["hitlag"][attacker]) > 0
+    assert int(seed["action_id"][defender]) == 89  # ftCo_MS_DamageFlyLw
+    assert int(seed["hitlag"][defender]) > 0
+    assert int(seed["hitstun"][defender]) > 0
+    assert int(seed["instance_hit_by"][defender]) == int(seed["instance_id"][attacker])
+    assert int(seed["last_hit_by"][defender]) == attacker
+    assert any(int(v) != 0 for v in seed["combat_hitbox_prev_valid"][attacker])
+    assert all(int(seed["combat_hitlist_cd"][attacker, g, defender]) == 0 for g in range(4))
+    assert all(int(seed["combat_hitlist_hb_valid"][attacker, hb]) == 0 for hb in range(4))
+
+    ref_first, out_first = _step_one_record(dataset_path, first_hit_record)
+    assert float(ref_first["percent"][defender]) > float(samples["seed_t"][first_hit_record]["percent"][defender])
+    assert int(out_first["hitlag"][defender]) == int(ref_first["hitlag"][defender])
+    assert float(out_first["percent"][defender]) == pytest.approx(float(ref_first["percent"][defender]))
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    row = samples[hitlag_tail_record : hitlag_tail_record + 1]
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        for hb in range(4):
+            assert int(binding.debug_hitlist_fighter_contains(handle, 0, attacker, hb, defender)) == 1
+        _, selected_count = binding.debug_combat_select_body_hits(handle, 0, 64)
+        assert int(selected_count) == 0
+    finally:
+        binding.destroy(handle)
+
+    ref_tail, out_tail = _step_one_record(dataset_path, hitlag_tail_record)
+    assert int(out_tail["action_id"][defender]) == int(ref_tail["action_id"][defender])
+    assert int(out_tail["hitlag"][defender]) == 0
+    assert int(out_tail["hitstun"][defender]) == 0
+    assert float(out_tail["percent"][defender]) == pytest.approx(float(ref_tail["percent"][defender]))
+
+    poisoned = samples[hitlag_tail_record : hitlag_tail_record + 1].copy()
+    poisoned["seed_t"]["instance_hit_by"][0, defender] = np.uint16(0)
+    poisoned["seed_t"]["last_hit_by"][0, defender] = np.uint8(0)
+    _, poisoned_out = _step_one_record(dataset_path, hitlag_tail_record, poisoned["seed_t"])
+    assert int(poisoned_out["hitlag"][defender]) > 0
+    assert float(poisoned_out["percent"][defender]) > float(ref_tail["percent"][defender])
 
 
 @pytest.mark.integration

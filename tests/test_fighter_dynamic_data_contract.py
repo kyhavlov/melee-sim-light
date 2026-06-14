@@ -379,7 +379,7 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
     assert fox["version"] == 8
-    assert fox["collision_msids"] == [17, 36, 58, 222, 242, 243]
+    assert fox["collision_msids"] == [17, 36, 44, 58, 222, 242, 243]
     assert fox["source_step_msids"] == []
     assert fox["cone_msids"] == [242]
     assert fox["catch_grabbable_msids"] == [52]
@@ -447,7 +447,7 @@ def test_extract_fighter_anims_emits_fox_falco_dynamic_contract(tmp_path: Path) 
     assert fox["version"] == 8
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["collision_msids"] == [17, 36, 58, 222, 242, 243]
+    assert fox["collision_msids"] == [17, 36, 44, 58, 222, 242, 243]
     assert fox["source_step_msids"] == []
     assert fox["cone_msids"] == [242]
     assert fox["catch_grabbable_msids"] == [52]
@@ -484,6 +484,7 @@ def test_catch_grabbable_owner_is_fox_tail_catch_only_and_not_body_collision() -
             "ftCo_SM_AttackDash": {"submotion_id": 52},
             "ftCo_SM_JumpB": {"submotion_id": 17},
             "ftCo_SM_AttackHi3": {"submotion_id": 58},
+            "ftCo_SM_EscapeAir": {"submotion_id": 44},
             "ftCo_SM_Catch": {"submotion_id": 242},
             "ftCo_SM_CatchDash": {"submotion_id": 243},
         }
@@ -495,6 +496,7 @@ def test_catch_grabbable_owner_is_fox_tail_catch_only_and_not_body_collision() -
 
     assert catch_msids == [52]
     assert 52 not in body_msids
+    assert 44 in body_msids
     assert _dynamic_catch_grabbable_owner_msids("falco", moves, fox_tail_dynamic_set) == []
     assert _dynamic_catch_grabbable_owner_msids(
         "fox", moves, [{"root_part": 99, "chain_count": 4, "entries": [], "colliders": []}]

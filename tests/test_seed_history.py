@@ -105,6 +105,111 @@ def test_derive_instance_id_counter_running_max_seed_bridge() -> None:
     assert got.tolist() == [1, 11, 12, 12, 13, 13, 1, 1]
 
 
+@pytest.mark.parametrize(
+    ("char_id", "action_frame", "should_carry"),
+    [
+        (22, 8, True),  # Falco AttackAirN same-group refresh: create frame 4 -> create frame 8.
+        (18, 15, False),  # Marth AttackAirN clears at frame 8 before the frame-15 create band.
+    ],
+)
+def test_shield_contact_seed_bridge_respects_attackairn_script_lifetime(
+    char_id: int, action_frame: int, should_carry: bool
+) -> None:
+    # The one-step bridge may seed a replay-proven shield victim into later same-group AttackAirN
+    # rows only when MSLFTSC1 says the HitCapsule lifetime was not cleared/recreated.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80078C70}
+    # data/scripts/{falco,marth}.bin::ftCo_SM_AttackAirN create_hitbox/clear_hitboxes
+    msl_binding = pytest.importorskip("msl_binding")
+
+    n = 4
+    players = 2
+    hb_count = 4
+    attacker = 0
+    defender = 1
+    act_attackairn = np.uint16(65)
+    act_guard = np.uint16(179)
+    act_guard_setoff = np.uint16(181)
+
+    shield_contact = np.zeros((n, players, hb_count, players), dtype=np.uint8)
+    hitlist_valid = np.zeros((n, players, hb_count), dtype=np.uint8)
+    hitlist_cd = np.zeros((n, players, hb_count, players), dtype=np.uint16)
+    hitlist_iid = np.zeros((n, players, hb_count, players), dtype=np.uint16)
+    action = np.zeros((n, players), dtype=np.uint16)
+    hitlag = np.zeros((n, players), dtype=np.uint16)
+    instance_id = np.zeros((n, players), dtype=np.uint16)
+    shield = np.full((n, players), 60.0, dtype=np.float32)
+    lightshield = np.zeros((n, players), dtype=np.float32)
+    animation_index = np.zeros((n, players), dtype=np.uint32)
+    state_age = np.zeros((n, players), dtype=np.int16)
+    char = np.zeros((n, players), dtype=np.uint8)
+    attack_id = np.zeros((n, players), dtype=np.uint16)
+    stale_queue = np.zeros((n, players), dtype=np.uint8)
+    stale_move_id = np.zeros((n, players, 10), dtype=np.uint16)
+    active_shield_hit_lut = np.zeros((256, 256, 64), dtype=np.uint16)
+    stale_weights = np.ones(10, dtype=np.float32)
+    guard_lut = np.zeros(65536, dtype=np.uint8)
+    attack_lut = np.zeros(65536, dtype=np.uint8)
+    same_frame_lut = np.zeros(65536, dtype=np.uint8)
+    same_frame_special_lut = np.zeros(65536, dtype=np.uint8)
+
+    action[:, attacker] = act_attackairn
+    action[:, defender] = act_guard
+    action[1, defender] = act_guard_setoff
+    hitlag[1, attacker] = 3
+    hitlag[1, defender] = 3
+    instance_id[:, defender] = np.array([10, 11, 12, 12], dtype=np.uint16)
+    char[:, attacker] = np.uint8(char_id)
+    state_age[2, attacker] = np.int16(action_frame)
+    shield_contact[0, attacker, :, defender] = np.uint8(2)
+    shield_contact[2, attacker, :, defender] = np.uint8(1)
+    guard_lut[int(act_guard)] = np.uint8(1)
+    guard_lut[int(act_guard_setoff)] = np.uint8(1)
+    attack_lut[int(act_attackairn)] = np.uint8(1)
+
+    msl_binding.derive_shield_contact_seed_bridge(
+        shield_contact,
+        hitlist_valid,
+        hitlist_cd,
+        hitlist_iid,
+        action,
+        hitlag,
+        instance_id,
+        shield,
+        lightshield,
+        animation_index,
+        state_age,
+        char,
+        attack_id,
+        stale_queue,
+        stale_move_id,
+        active_shield_hit_lut,
+        stale_weights,
+        guard_lut,
+        attack_lut,
+        same_frame_lut,
+        same_frame_special_lut,
+        players,
+        int(act_guard_setoff),
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+    )
+
+    expected_valid = 1 if should_carry else 0
+    expected_cd = 0xFFFF if should_carry else 0
+    expected_iid = int(instance_id[2, defender]) if should_carry else 0
+    assert int(hitlist_valid[2, attacker, 0]) == expected_valid
+    assert int(hitlist_cd[2, attacker, 0, defender]) == expected_cd
+    assert int(hitlist_iid[2, attacker, 0, defender]) == expected_iid
+
+
 def test_derive_ecb_lock_bottom_rel_y_preserves_desired_bottom_during_lock() -> None:
     # CollData_X130_Locked preserves desired_ecb.bottom instead of resampling EscapeAir's current
     # pose or forcing root-y. The native producer carries the last non-locked desired bottom through

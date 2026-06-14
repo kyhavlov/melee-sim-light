@@ -10,6 +10,7 @@ enum { MSL_LASER_MAX_HITBOX_OFFS_X = 16 };
 
 typedef struct MslLaserParams {
   uint8_t loaded;
+  uint8_t source_char_id;
 
   // Item kinds (Slippi `item.type` / GALE01 ItemKind).
   uint16_t shot_itkind;

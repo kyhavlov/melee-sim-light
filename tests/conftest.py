@@ -233,7 +233,7 @@ def _dyn_contract_ok(
 
 def _ensure_dyn_bins() -> None:
     expected = {
-        "fox": ({17, 36, 58, 222, 242, 243}, set(), {242}, {52}),
+        "fox": ({17, 36, 44, 58, 222, 242, 243}, set(), {242}, {52}),
         "falco": (set(), set(), set(), set()),
     }
     stale = False
@@ -265,25 +265,28 @@ def _ensure_dyn_bins() -> None:
             "missing/stale optional dynamic pose artifact(s), and cannot rebuild because _iso inputs "
             "are missing: "
             f"{missing_iso}. Dynamic-pose-specific tests should skip unless these artifacts are "
-            "available. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages "
-            "grnla,grnba,griz,grps,grst,grop --chars fox,falco`",
+            "available. Run: `uv run python -m tools.extraction.extract_fighter_anims --character "
+            "<fox|falco> --iso-dir _iso --data-dir data --out-dir data/anims`",
             RuntimeWarning,
         )
         return
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "tools.extraction.build_data",
-            "--iso-dir",
-            str(ROOT / "_iso"),
-            "--stages",
-            "grnla,grnba,griz,grps,grst,grop",
-            "--chars",
-            "fox,falco",
-        ],
-        check=True,
-    )
+    for ch in expected:
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "tools.extraction.extract_fighter_anims",
+                "--character",
+                ch,
+                "--iso-dir",
+                str(ROOT / "_iso"),
+                "--data-dir",
+                str(ROOT / "data"),
+                "--out-dir",
+                str(ROOT / "data" / "anims"),
+            ],
+            check=True,
+        )
     for ch, (want_collision, want_source_step, want_cone, want_catch_grabbable) in expected.items():
         path = ROOT / "data" / "anims" / f"{ch}.dyn.bin"
         if not _dyn_contract_ok(path, want_collision, want_source_step, want_cone,

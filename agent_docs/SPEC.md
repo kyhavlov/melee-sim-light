@@ -140,6 +140,17 @@ and decomp-motivated rather than arbitrary heuristics.
   Damage* entry, and prevents reciprocal hits from becoming unstaled post-damage attacks.
   Covered by the CNM Yoshi's Story simultaneous Shine/up-smash lock in
   `tests/test_combat_attack_id_snapshot_replay_real_locks.py`.
+- **HitCapsule.damage publication**: fighter move-script `create_hitbox` and
+  `set_hitbox_damage` commands publish collision damage through
+  `ftColl_8007ABD0`, which applies scale/smash-release modifiers and
+  `ft_80089228` staling before writing `HitCapsule.damage`. Shield contact
+  (`ftColl_80076CBC`) and BODY damage later consume that frozen capsule value;
+  they must not restale from the live stale queue at contact time. Runtime tracks
+  this with per-hitbox `hitbox_stale_damage_valid/mul` sourced from
+  `MSLFTSC1` create/set-damage events. Source anchors:
+  `refs/melee/src/melee/ft/ftaction.c::{ftAction_8007121C,ftAction_8007162C}`,
+  `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007ABD0`, and
+  `refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}`.
 - **Research note (2026-05-16, damage modifier/source shape)**: the decomp-faithful boundary is
   still the same producer/consumer split, not a generic post-hoc damage modifier pass. `ftColl`
   and item/throw producers populate pre-`Fighter_ProcessHit` accumulators (`x1838_percentTemp`,
@@ -290,6 +301,33 @@ sim-owned**:
     laser scaleZ endpoint lane and, without explicit hidden `ShieldBounced` seed provenance, takes
     the laser `HitShield` destroy path. Fresh Dash powershield `GuardReflect` remains on the
     ReflectDesc no-hit snapshot owner.
+  - Sustained no-submotion `GuardOn` snapshots can still use the live GuardOn ShieldDesc bone:
+    `ftCo_GuardOn_Anim -> ftCo_80091E78` republishes the shield joint while Slippi reports
+    `animation_index=-1` / `action_frame=-1`, and `ftColl_80078C70` tests that ShieldDesc before
+    BODY per HitCapsule. Runtime samples the extracted `MSLSHLD1::guard_on_xyz` current-pose
+    trajectory for this owner instead of falling through to steady Guard neutral placement.
+    Source anchors:
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800925A4,ftCo_80091E78}`,
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007B1B8}`,
+    `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC`, and
+    `data/shields/<char>.bin`.
+  - Steady no-submotion `Guard` item-shield contact uses the defender's live
+    `ShieldDesc` (`fp+0x221B_b0`) plus the projectile article's endpoint phase.
+    For Fox/Falco lasers, `itFoxlaser_UnkMotion1_Phys` snapshots the previous
+    item position and `it_8029C4D4` tests the previous-to-current endpoint
+    segment. Pure `fp+0x2218=0x04` carried rows remain a point sample only while
+    the previous endpoint is still in the sub-identity startup scale slice; once
+    that endpoint has matured, shield contact must test the real x58->x4C
+    segment even if the laser owner is no longer in SpecialN.
+    `fp+0x2218=0x44` is a separate B1-plus-reflect-behavior carried
+    live-article lane: it remains on the point sample when the owner starts the
+    frame outside the blaster loop, but still uses the full segment when the
+    owner starts the frame in SpecialNLoop even if it lands later that same
+    frame. B1-only `0x40` rows are also the full-segment live-article lane.
+    Source anchors:
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,itFoxlaser_UnkMotion1_Phys,it_8029C4D4}`,
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}`, and
+    `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm` (`fp+0x221B`).
   Remaining approximations:
   - We do not yet model the full `shield_hit.bone` + `shield_hit.offset` semantics used in collision (`ftColl_8007B1B8`; refs/melee/src/melee/ft/ftcoll.c:1370-1383).
   - We do not yet model full 3D rotation/TransN/root-motion for shield placement (see `agent_docs/SSANIM_AXIS_BASIS.md`).
@@ -490,6 +528,11 @@ Known teacher-forcing limitations (must be tracked and eventually removed, not t
 - Input-history tilt timers (`x670`/`x671`), TURN internals (`frames_to_turn`/`has_turned`), and KneeBend internals (`jump_input`/`is_short_hop`) are derived during preprocessing and are part of the seed schema.
 - Animation rate (`frame_speed_mul_f32`) is not exposed by Slippi post-frames. We seed it via a strictly-causal derivation during preprocessing; the C core currently models decomp-backed rate changes for Landing* actions (LandingAir* / LandingFallSpecial), including x67F L-cancel lag division from hitlag-latched LR edges, causal GuardSetOff entry shieldstun (`ftCo_80092F2C`) reconstruction, and the hitlag freeze gate. GuardSetOff last-hitlag rows that require the hidden `x19A4/lightshield_amount` owner exposed only after hitlag use the explicit non-causal `guard_setoff_exit_frame_speed_mul_f32` lane instead of weakening the `frame_speed_mul_f32` contract.
 - TURN seeding uses a causal derivation that does not look ahead to future facing flips; it includes a **deterministic assumption** that `ftCo_Turn_Anim_Inner` does **not** tick on the entry frame (matching the sim’s current update ordering: the Turn flip tick only runs if Turn was already active at frame start). Do **not** tune this assumption via one-step mismatch metrics; revisit it once richer entry-history seeding lands.
+- The Turn seed derivation reads `data/characters/<char>.json::turn_frames` for every registered
+  character. `ftCo_Turn_Enter_Basic` initializes `mv.co.turn.frames_to_turn` from that attr, and
+  `ftCo_Turn_Anim_Inner` decrements it before the facing flip. A zero value is not a safe default:
+  new-character datasets must be regenerated with the registry-backed LUT or ordinary first-steady
+  Turn rows can spuriously admit Dash through `ftCo_Turn_IASA`.
 - FallSpecial mode `mv.co.fallspecial.xC` is not present in Slippi post-frame data. We currently seed it with a **best-effort inference** from the reseeded state (default `xC=1`; set `xC=0` when `fall_fast==0` and reseeded `speed_y_self < -terminal_vel`). This is decomp-motivated (see `ftCo_FallSpecial_Phys` branch structure), but still an inference; do **not** tune it against one-step metrics.
 - FallSpecial is a common airborne locomotion state for physics/collision, but it does **not** own the generic JumpAerial IASA callback. Runtime must not allow double-jump entry from `FallSpecial/FallSpecialF/FallSpecialB`, even if `jumps_left` remains nonzero after EscapeAir/air-dodge handoff (`src/locomotion.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c, refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870).
 - Grabbed/thrown victim attachment offsets `grab_offset_{y,z}` map to `fp->x1A70.{y,z}`. For non-low `CaptureWait* -> ThrownF/B/Hi` entry, runtime now initializes the offsets from the victim's static `TransN - XRotN` pose analog before applying the thrown accessory anchor; decomp initializes `fp->x1A70` from bones and `ftCo_800DE508` applies it during `Thrown*` (`src/grab_attachment.c`, `src/grab_flow.c`; refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C, refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}). Reseed-inferred offsets remain the fallback outside the direct source-backed entry slice.
@@ -858,6 +901,17 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   (`src/mpcoll_ground.c`; refs/melee/src/melee/mp/mpcoll.c::{
   mpColl_80044628_Floor,mpColl_80044838_Floor,mpColl_80044948_Floor,mpColl_80046904,
   mpColl_8004A908_Floor}).
+- mpLib floor-root correction order (2026-06-14): landing-entry publication from
+  `Fall_Coll -> ft_800831CC -> ft_80082B1C -> Landing_Enter_Basic` must preserve the source f32
+  signed-correction order from `mpLib_8004DD90_Floor`. The source computes a correction from the
+  callback-local root/floor relationship and then adds that correction back to `CollData.cur_pos.y`;
+  collapsing this to `floor_y + 0.0001` loses entry-frame ULPs on fast downward hard-floor contacts.
+  QHP `532:p1` locks the Dream Land case where the entry root is `0.008900165557861328`, not the
+  algebraically collapsed `0.008899999782443047`. The following grounded correction row remains a
+  separate owner.
+  (`src/locomotion.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll,
+  refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_80082B1C},
+  refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor).
 - mpColl source phases (2026-05-22): `src/mpcoll_ground.c` now builds a callback-local
   `MslMpcollCollDataState` view containing previous/current root positions, previous/current/desired
   ECB points, floor index, floor skip, ECB lock state, env flags, callback floor scratch, and a
@@ -3145,6 +3199,18 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll`,
     `refs/melee/src/melee/ft/ft_081B.c::ft_800831CC`, and
     `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor,mpColl_80044838_Floor}`.
+  - Static soft-platform final publication has a separate stale-carry rejection for common Fall:
+    if a sustained non-fastfall `Fall_Coll` row starts and ends the callback below the same static
+    one-way platform carried in `CollData.floor.index`, that carried id is not enough source
+    authority to snap the root upward. `mpColl_80044628_Floor` must first accept a callback-local
+    platform floor hit before `mpColl_80044838_Floor` can publish the platform. True
+    above-to-platform crossings, different/no carried floor ids, and fastfall rows remain on the
+    ordinary bottom-sweep publication path. WWS `5727..5729` lock the non-fastfall Marth boundary;
+    DSG `200` locks the fastfall adjacent landing path. Sources:
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll`,
+    `refs/melee/src/melee/ft/ft_081B.c::ft_800831CC`,
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}`, and
+    `data/stages/bin/*.bin::MSLSTG01 platform flags`.
   - Terminal `DamageFly*` rows can enter `Fall` through `ftCo_DamageFly_IASA ->
     ftCo_DamageFall_IASA -> ftCo_Fall_Enter` before the same frame's map callback. The destination
     `Fall_Coll` still consumes the callback-local `CollData.floor.index` and floor-sweep root
@@ -4533,14 +4599,18 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC`,
     `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B62C`, and
     `data/common/ft_common_data.json`, `data/characters/{fox,falco}.json`.
-  - Airborne Fall Falco-laser BODY hurtcap-Z lane:
+  - Airborne Fall Falco-laser BODY and optional x34_scale.z lane:
     - `ftColl_8007925C` routes item BODY through `lbColl_8000805C`, passing
-      `ftCommon_8007F804(fp)` and `fp->cur_pos.z`; `lbColl_8000805C` rewrites both hurt capsule
-      endpoint Z values before the segment/capsule test. Runtime now mirrors that flattened-Z
-      source lane for state0 Falco lasers hitting vulnerable airborne `Fall` rows.
-    - The retained branch is guarded by the item victim-ring surface: if the defender already
-      carries the same owner attack id (`last_attack_landed == item_attack_id`), the row stays on
-      the existing keepalive path, matching `it_8026FAC4` / `lbColl_80008688` victim-list
+      `ftCommon_8007F804(fp)`, `item->scl`, `fp->x34_scale.y`, and `fp->cur_pos.z`. The Z rewrite
+      happens only when `ftCommon_8007F804(fp)` returns `fp->x44_mtx`, which requires non-unit
+      `fp->x34_scale.z`; visible airborne `Fall` is not proof of that hidden lane.
+    - Runtime keeps ordinary state0 Fox/Falco laser vs airborne `Fall` rows on the seed-visible
+      endpoint path unless a future seed lane/probe proves the non-unit x34_scale.z owner for item
+      BODY. This preserves TBK/SDS/PPA ordinary BODY/shallow-packet locks while rejecting the Marth
+      high-cap over-admission in `VictoriousSpitefulAlpaca.msl:2008`.
+    - The same-owner branch is still guarded by the item victim-ring surface: if the defender
+      already carries the same owner attack id (`last_attack_landed == item_attack_id`), the row
+      stays on the existing keepalive path, matching `it_8026FAC4` / `lbColl_80008688` victim-list
       ownership instead of creating a fresh BODY consume.
     - The shallow state0 hb1/Fall low-leg edge is an explicit source packet boundary: extracted
       `MSLLASR1` hb1 against `data/hurtcaps/{fox,falco}.json` cap11 (bone 7, low,
@@ -4549,9 +4619,11 @@ Fox/Falco special-owner split (2026-04-17):
       state0 hb2/hb3 low-leg packets remain BODY-eligible, and same-attack live-shot carry rows
       stay eligible through the victim-ring/source-attack gate above.
     - Replay-real locks: `TreasuredBackKangaroo.msl:2901` covers the positive BODY hit and laser
-      consume; adjacent `TBK:2900` stays alive; `ShadyDecimalStarling.msl:148/149` locks the hb1
-      shallow miss followed by the hb2 BODY consume; `PriceyPartialAlbatross.msl:4124` protects the
-      same-attack victim-ring negative; `PPA:4140` protects the same-attack hb1/cap11 positive.
+      consume without broad x34_scale.z inference; adjacent `TBK:2900` stays alive;
+      `VictoriousSpitefulAlpaca.msl:2008` protects the Marth high-cap no-hit boundary;
+      `ShadyDecimalStarling.msl:148/149` locks the hb1 shallow miss followed by the hb2 BODY
+      consume; `PriceyPartialAlbatross.msl:4124` protects the same-attack victim-ring negative;
+      `PPA:4140` protects the same-attack hb1/cap11 positive.
     - Reflected-laser callback latch: if a seed row exposes a Fox/Falco laser whose public facing
       and live velocity disagree, the missing source state is the pending reflected-angle/item
       callback from `itFoxLaser_Logic94_Reflected` / `itFoxlaser_UnkMotion1_Anim`. The replay seed
@@ -6193,6 +6265,17 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`
   - `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox`
   - `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox`
+- Marth adds a grounded Wait -> AttackLw3 selected-source DamageFlyRoll owner. When ftColl selects
+  the extracted Marth down-tilt hb0 payload (`damage=9`, `angle=30`, `kbg=40`, `bkb=40`) against a
+  grounded Wait victim, `ftCo_8008DCE0` first clears ground_or_air through its severe grounded
+  branch, then samples the airborne DamageFlyRoll gate. The owner is the captured pre-damage Wait
+  action plus selected DmgLog HitCapsule payload; the seed row can carry a Fall-looking submotion,
+  but the visible animation label is not the source discriminator. IPW `rec3983` locks the
+  positive and an attacker-motion mutation proves visible Wait alone does not admit the roll.
+  Source anchors:
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`
+  - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`
+  - `data/moves/marth.json::moves.ftCo_SM_AttackLw3.events.create_hitbox`
 - LandingAirLw frame 1..15 can also reach a one-consume `Fighter_8006CDA4` pre-gate phase before
   `ftCo_8008DCE0`'s DamageFlyRoll gate, but free-running rollout only admits that phase from a
   concrete current `ProcessHit` source: the selected DmgLog source names an active attacker
@@ -6433,7 +6516,7 @@ BODY collision-space residual split and rejected seed bridge:
   `data/anims/{fox,falco}.dyn.bin`, keeps runtime dynamic-node pose state in fixed-capacity
   per-player arrays, updates that state before hurtcap refresh, and lets hurtcap world endpoints
   sample a dynamic collision matrix before `lbColl_8000805C` runs. BODY admission still uses the
-  normal `ftColl_80078C70` -> `lbColl_8000805C` predicate. `SSDYNN01` v7 carries the audited
+  normal `ftColl_80078C70` -> `lbColl_8000805C` predicate. `SSDYNN01` v8 carries the audited
   dynamic-collision owner submotion index, reserved-empty source-step owner submotion index,
   cone-clamp owner submotion index, and `ftData.x2C->x8` collider rows, so C gameplay no
   longer gates this owner on raw Fox/JumpB/Catch/CatchDash/AttackHi3 msid branches. Runtime carries
@@ -6465,7 +6548,7 @@ BODY collision-space residual split and rejected seed bridge:
   is `O(action_frame)` on non-sequential reseed/pre-combat reconstruction only; normal sequential
   rollout carries the fixed dynamic state forward. No replay authority, record-id branch, cap/frame
   primitive injection, runtime overlay table, or broad permissive geometry sweep is used.
-- This partially models the Fox JumpB/LandingFallSpecial/Catch/CatchDash/AttackHi3 /
+- This partially models the Fox JumpB/LandingFallSpecial/EscapeAir/Catch/CatchDash/AttackHi3 /
   `SSDYNN01`
   dynamic-chain collision-pose sub-owner. The retained runtime is source-bounded for the supported
   segment/sphere surface, but full `lb_8001044C` ownership remains incomplete for non-source-step
@@ -6604,6 +6687,14 @@ BODY collision-space residual split and rejected seed bridge:
     the exact per-HitCapsule `victims_1` clear/copy provenance for this boundary. Delete it when
     the replay seed carries the needed per-HitCapsule provenance owner instead of relying on dense
     same-group materialization.
+  - AttackAir post-clear create bands are the opposite boundary: if a one-step or rollout seed has
+    only the legacy dense group lane and no authoritative `combat_hitlist_hb_valid` lane for the
+    current slot, runtime must not materialize the earlier band's victim into the newly-created
+    HitCapsule. Source `ftAction_8007121C -> ftColl_800768A0` owns the script clear/copy edge, and
+    the extracted AttackAir `clear_hitboxes` / later `create_hitbox` timeline is the runtime
+    discriminator. IPW `477` and WWS `12152 -> 12155` lock this for Marth `AttackAirN`: the stale
+    dense lane from the first NAir band must stay empty on the second band so the later hit can
+    connect, while adjacent first-band and seeded-hitlag-tail rows stay exact.
   - Open residual / package-boundary negative: AGN `5167 -> 5168` AttackAirN new-hit admission is
     not a replay-exact owner closure in this package. It remains a visible negative lock until
     per-hitbox/live HitCapsule provenance can replace the coarse dense group lane without a

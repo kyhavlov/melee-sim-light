@@ -333,6 +333,14 @@ void shields_refresh(MslBatch* batch) {
                  tv.guard_on_xyz != NULL && tv.guard_on_frame_count > 0u)
                     ? 1u
                     : 0u;
+            const uint8_t guard_on_no_submotion_sustained =
+                (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+                 batch->state.animation_index[idx] == UINT32_MAX &&
+                 batch->state.action_frame[idx] < 0 &&
+                 batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+                 tv.guard_on_xyz != NULL && tv.guard_on_frame_count > 0u)
+                    ? 1u
+                    : 0u;
             const uint16_t guard_reflect_prev_action = batch->state.seed_prev_action_id[idx];
             const uint8_t guard_reflect_locomotion_no_submotion_entry =
                 (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
@@ -380,6 +388,36 @@ void shields_refresh(MslBatch* batch) {
               dx = tv.guard_on_xyz[0];
               dy = tv.guard_on_xyz[1];
               dz = tv.guard_on_xyz[2];
+            } else if (guard_on_no_submotion_sustained) {
+              // Sustained no-submotion GuardOn snapshots expose action_frame=-1/anim=-1 while the
+              // live ShieldDesc bone has already been republished by the prior GuardOn_Anim
+              // callback. Collision samples that previously published JObj before the current
+              // frame's `ftCo_800925A4`/x10 decrement, so reconstruct the publication index from
+              // the post-frame countdown as x10 + 1 and sample the extracted GuardOn current-pose
+              // trajectory. This keeps free rollout on live ShieldDesc geometry instead of relying
+              // on the one-step-only `combat_shield_contact_hb_kind` seed bridge.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+              //   ftCo_GuardOn_Anim,ftCo_800925A4,ftCo_80091E78}
+              // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+              // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+              // data/shields/<char>.bin::guard_on_xyz (MSLSHLD1 v4)
+              uint16_t go_frame = (uint16_t)batch->state.guard_x10[idx] + 1u;
+              if (go_frame >= tv.guard_on_frame_count) {
+                go_frame = (uint16_t)(tv.guard_on_frame_count - 1u);
+              }
+              const size_t go_i = (size_t)go_frame * 3u;
+              dx = tv.guard_on_xyz[go_i + 0u];
+              dy = tv.guard_on_xyz[go_i + 1u];
+              dz = tv.guard_on_xyz[go_i + 2u];
+              if (mag > 0.0f) {
+                const size_t f_i = (size_t)f * 3u;
+                const float fx = tv.xyz[f_i + 0u];
+                const float fy = tv.xyz[f_i + 1u];
+                const float fz = tv.xyz[f_i + 2u];
+                dx += mag * (fx - dx);
+                dy += mag * (fy - dy);
+                dz += mag * (fz - dz);
+              }
             } else {
               const size_t n_i = steady_guard_no_tilt ? 0u : (size_t)neutral * 3u;
               const size_t f_i = (size_t)f * 3u;
@@ -398,15 +436,17 @@ void shields_refresh(MslBatch* batch) {
             const float model_scaling = (isfinite(ca->model_scaling) && ca->model_scaling > 0.0f)
                                             ? ca->model_scaling
                                             : 1.0f;
-            const float pose_scale = (steady_guard_no_tilt || guard_on_no_submotion_entry)
+            const float pose_scale = (steady_guard_no_tilt || guard_on_no_submotion_entry ||
+                                      guard_on_no_submotion_sustained)
                                          ? (scale_y * model_scaling)
                                          : scale_y;
 
             // Match the ShieldDesc bone policy above: the no-tilt steady-Guard lane uses the live
             // model-scaled ShieldDesc bone. The no-submotion GuardOn entry snapshot uses the same
-            // live model-scaled ShieldDesc bone from ftCo_800921DC/ftCo_80091E78(0); other guard
-            // actions retain the existing collision-subtree scaling policy until their separate
-            // pose owners are proved.
+            // live model-scaled ShieldDesc bone from ftCo_800921DC/ftCo_80091E78(0), and sustained
+            // no-submotion GuardOn samples the same ShieldDesc bone through the extracted current
+            // GuardOn pose trajectory; other guard actions retain the existing collision-subtree
+            // scaling policy until their separate pose owners are proved.
             //
             // Facing parity: same as hurtcaps_refresh() / in-engine root part rotY = (M_PI_2 * fp->facing_dir),
             // which mixes X/Z in world space.

@@ -546,16 +546,18 @@ def print_summary(
     deltas: Iterable[MetricDelta],
     *,
     top: int,
-    diagnostic_only: frozenset[MetricDelta] = frozenset(),
+    non_regression_markers: dict[MetricDelta, str] | None = None,
 ) -> int:
+    if non_regression_markers is None:
+        non_regression_markers = {}
     rows = sorted(deltas, key=_sort_key)
-    regressions = [d for d in rows if d.is_regression and d not in diagnostic_only]
+    regressions = [d for d in rows if d.is_regression and d not in non_regression_markers]
     suite_rows = [d for d in rows if d.section == "suite"]
 
     print("suite totals:")
     if suite_rows:
         for delta in suite_rows:
-            _print_delta(delta, marker="diagnostic" if delta in diagnostic_only else None)
+            _print_delta(delta, marker=non_regression_markers.get(delta))
     else:
         print("- no suite total changes")
 
@@ -571,19 +573,19 @@ def print_summary(
     else:
         print("- none")
 
-    replay_diagnostic = [
-        d for d in rows if d.section != "suite" and d.is_regression and d in diagnostic_only
+    replay_non_regressions = [
+        d for d in rows if d.section != "suite" and d.is_regression and d in non_regression_markers
     ]
-    if replay_diagnostic:
-        print("replay-level ignored-lane-only movements (diagnostic, not regressions):")
-        for delta in replay_diagnostic[: max(1, top)]:
-            _print_delta(delta, marker="diagnostic")
+    if replay_non_regressions:
+        print("replay-level non-regression movements:")
+        for delta in replay_non_regressions[: max(1, top)]:
+            _print_delta(delta, marker=non_regression_markers[delta])
 
     print("largest replay-level movements:")
     replay_rows = [d for d in rows if d.section != "suite"]
     if replay_rows:
         for delta in replay_rows[: max(1, top)]:
-            _print_delta(delta, marker="diagnostic" if delta in diagnostic_only else None)
+            _print_delta(delta, marker=non_regression_markers.get(delta))
     else:
         print("- none")
     return len(regressions)
@@ -597,13 +599,23 @@ def print_report(
 ) -> int:
     deltas = diff_report_sets(before, after)
     rows = sorted(deltas, key=_sort_key)
-    diagnostic_only = frozenset(
-        d
-        for d in rows
-        if d.is_regression and is_ignored_lane_only_strict_movement(before, after, d)
+    classification = classify_reds(before, after, rows)
+    non_regression_markers: dict[MetricDelta, str] = {}
+    for delta in rows:
+        if not delta.is_regression:
+            continue
+        if is_ignored_lane_only_strict_movement(before, after, delta):
+            non_regression_markers[delta] = "diagnostic"
+        elif _is_rollout_distribution_reshuffle_ok(before, after, delta):
+            non_regression_markers[delta] = "distribution-only"
+        elif _is_one_step_float_only_ok(before, after, delta):
+            non_regression_markers[delta] = "float-only"
+    for delta in classification.distribution_only:
+        non_regression_markers.setdefault(delta, "distribution-only")
+    regression_count = print_summary(
+        deltas, top=top, non_regression_markers=non_regression_markers
     )
-    regression_count = print_summary(deltas, top=top, diagnostic_only=diagnostic_only)
-    print_red_classification(classify_reds(before, after, rows), top=top)
+    print_red_classification(classification, top=top)
     return regression_count
 
 

@@ -21,6 +21,12 @@ ACT_DASH = 20
 # - previous seed action_id matches expected context action (entry context lock)
 _CASES: tuple[tuple[str, int, int, int], ...] = (
     (
+        "datasets/marth/replays/validation/marth/MetallicUniqueGrouse.msl",
+        3721,
+        1,
+        14,  # Wait -> basic Turn; Marth turn_frames must not seed as zero.
+    ),
+    (
         "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
         "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
         1414,
@@ -85,10 +91,13 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
         "data/common/ft_common_data.json",
         "data/characters/fox.json",
         "data/characters/falco.json",
+        "data/characters/marth.json",
         "data/anims/fox.tracks.bin",
         "data/anims/falco.tracks.bin",
+        "data/anims/marth.tracks.bin",
         "data/moves/fox.json",
         "data/moves/falco.json",
+        "data/moves/marth.json",
     ]
     missing = [rel for rel in required if not (root / rel).exists()]
     if missing:
@@ -121,6 +130,13 @@ def test_turn_iasa_no_spurious_dash_when_ref_stays_turn(
 
     assert int(row["seed_t"]["action_id"][0, player]) == ACT_TURN
     assert int(row["ref_t1"]["action_id"][0, player]) == ACT_TURN
+    if "marth/" in dataset_rel:
+        # Source: ftCo_Turn_Enter_Basic copies the per-character turn_frames attr into
+        # mv.co.turn.frames_to_turn. Marth must not fall through the old Fox/Falco-only
+        # preprocessing LUT and seed a zero countdown, which lets Turn_IASA latch Dash early.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Basic
+        assert int(row["seed_t"]["turn_frames_to_turn"][0, player]) > 0
+        assert int(row["seed_t"]["turn_x8"][0, player]) == 0
     assert int(row["seed_t"]["hitlag"][0, player]) == 0
     assert int(row["seed_t"]["hitstun"][0, player]) == 0
     assert int(row["ref_t1"]["hitlag"][0, player]) == 0

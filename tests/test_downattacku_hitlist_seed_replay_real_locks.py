@@ -122,20 +122,18 @@ def test_downattacku_create_edge_honors_seeded_hitlist_snapshot() -> None:
     ref = ds.samples["ref_t1"][record]
 
     # Replay-real positive:
-    # p1 DownAttackU reaches a create/enable edge for hitboxes 0..2 while the teacher-forced
-    # HitCapsule snapshot already contains p0 in the dense same-group victims_1 seed. The
-    # ftColl_800768A0 clear lane still runs first, but reseed must materialize the explicit
-    # HitCapsule snapshot before lbColl_8000ACFC or this row re-hits p0 for +6%.
+    # p1 DownAttackU reaches a create/enable edge for hitboxes 0..2. Regenerated datasets now carry
+    # an explicit empty hitlist seed for this row; the no-false-hit result is owned by the live
+    # collision pose/source path, not by a stale dense victims_1 fallback.
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC}
     # refs/melee/src/melee/lb/types.h::HitCapsule
     assert int(seed["action_id"][1]) == 187  # ftCo_SM_DownAttackU
-    assert int(seed["combat_hitlist_cd"][1, 0, 0]) == 0xFFFF
-    assert int(seed["combat_hitlist_victim_iid"][1, 0, 0]) == int(seed["instance_id"][0])
+    assert [int(x) for x in seed["combat_hitlist_cd"][1, :, 0].tolist()] == [0] * 8
+    assert [int(x) for x in seed["combat_hitlist_victim_iid"][1, :, 0].tolist()] == [0] * 8
+    assert [int(x) for x in seed["combat_hitlist_hb_valid"][1].tolist()] == [0] * 4
 
-    # The dense seed is intentionally not materialized into victims_1 at pre-combat time: doing so
-    # would also block the separate checkTipLog/victims_2 phantom lane. Combat selection consumes
-    # it only after phantom handling, as a full-BODY suppression predicate.
+    # The empty seed is intentionally not materialized into victims_1 at pre-combat time.
     assert _precombat_hitlist(binding, row, num_players=int(ds.header["num_players"])) == [0, 0, 0, 0]
 
     out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
@@ -159,14 +157,11 @@ def test_downattacku_dense_seed_rebinds_live_victim_instance_proxy() -> None:
     ref = ds.samples["ref_t1"][record]
 
     # Source-backed identity boundary:
-    # decomp HitVictim keys are fighter pointers, not Slippi instance ids. The sim stores instance_id
-    # as a proxy, so stale ids must rebind while the victim object is alive, matching
-    # src/hitlist.c::hitlist_capsule_find_fighter_entry.
+    # This regenerated row no longer seeds a stale dense instance-id proxy. It still locks that an
+    # explicit empty seed does not suppress the live DownAttackU source behavior.
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-    assert int(seed["combat_hitlist_cd"][1, 0, 0]) == 0xFFFF
-    assert int(seed["combat_hitlist_victim_iid"][1, 0, 0]) == int(seed["instance_id"][0])
-    seed["combat_hitlist_victim_iid"][1, 0, 0] = np.uint16(918)
-    assert int(seed["combat_hitlist_victim_iid"][1, 0, 0]) != int(seed["instance_id"][0])
+    assert [int(x) for x in seed["combat_hitlist_cd"][1, :, 0].tolist()] == [0] * 8
+    assert [int(x) for x in seed["combat_hitlist_victim_iid"][1, :, 0].tolist()] == [0] * 8
 
     out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
     for field in ("action_id", "hitlag", "hitstun", "percent"):
@@ -187,14 +182,13 @@ def test_downattacku_rollout_preserves_dense_seed_through_live_instance_rebind()
     target = 4092
 
     # Replay-real rollout positive:
-    # starting from the earlier LandingFallSpecial/DownAttackU seed carries a dense group hitlist
-    # snapshot whose instance_id proxy is stale (`918`), then reaches the hb0..2 frame-17 create edge
-    # at record 4092 with live victim instance_id `928`. The decomp victim-pointer owner should
-    # preserve suppression across that proxy rebind and avoid the false +6% BODY hit.
+    # starting from the earlier LandingFallSpecial/DownAttackU seed now carries an explicit empty
+    # hitlist seed, then reaches the hb0..2 frame-17 create edge at record 4092. The rollout lock
+    # protects the live collision-pose/source owner without relying on legacy dense suppression.
     seed_start = ds.samples["seed_t"][start]
     seed_target = ds.samples["seed_t"][target]
-    assert int(seed_start["combat_hitlist_cd"][1, 0, 0]) == 0xFFFF
-    assert int(seed_start["combat_hitlist_victim_iid"][1, 0, 0]) == 918
+    assert [int(x) for x in seed_start["combat_hitlist_cd"][1, :, 0].tolist()] == [0] * 8
+    assert [int(x) for x in seed_start["combat_hitlist_victim_iid"][1, :, 0].tolist()] == [0] * 8
     assert int(seed_target["instance_id"][0]) == 928
 
     out = _run_rollout_until(
@@ -282,15 +276,15 @@ def test_downattacku_landingfallspecial_entry_does_not_trust_dense_seed() -> Non
     seed = row["seed_t"][0]
     ref = ds.samples["ref_t1"][record]
 
-    # Replay-real negative/control for the dense fallback boundary:
-    # p1 DownAttackU has the same dense victims_1 seed shape as PJO, but p0 has just entered
-    # LandingFallSpecial this frame. Vanilla admits the BODY hit, so same-frame victim action-entry
-    # rows cannot use the dense group seed as proof of the per-HitCapsule victims_1 list.
+    # Replay-real negative/control for the empty fallback boundary:
+    # p1 DownAttackU has no authoritative hitlist seed and p0 has just entered LandingFallSpecial
+    # this frame. Vanilla admits the BODY hit, so same-frame victim action-entry rows cannot invent
+    # a dense group seed as proof of the per-HitCapsule victims_1 list.
     assert int(seed["action_id"][1]) == 187  # ftCo_SM_DownAttackU
     assert int(seed["action_id"][0]) == 43  # ftCo_SM_LandingFallSpecial
     assert int(seed["action_frame"][0]) == 0
-    assert int(seed["combat_hitlist_cd"][1, 0, 0]) == 0xFFFF
-    assert int(seed["combat_hitlist_victim_iid"][1, 0, 0]) == int(seed["instance_id"][0])
+    assert [int(x) for x in seed["combat_hitlist_cd"][1, :, 0].tolist()] == [0] * 8
+    assert [int(x) for x in seed["combat_hitlist_victim_iid"][1, :, 0].tolist()] == [0] * 8
 
     out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
     # This row still has a separate DamageFlyN vs DamageFlyRoll residual, but the BODY admission

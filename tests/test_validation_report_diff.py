@@ -295,6 +295,29 @@ def test_validation_report_diff_treats_improved_first_counts_as_clean_streak_res
     assert not classification.unclassified
 
 
+def test_validation_report_diff_prints_clean_streak_reshuffle_as_non_regression(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=29, first=29, seeded=7, median=90, p90=220),
+    )
+
+    main(["--before", str(before), "--after", str(after), "--fail-on-regression"])
+    out = capsys.readouterr().out
+    assert "replay-level regressions:\n- none" in out
+    assert "replay-level non-regression movements:" in out
+    assert "distribution-only" in out
+
+
 def test_validation_report_diff_treats_improved_first_counts_best_len_drop_as_clean_reshuffle(
     tmp_path: Path,
 ) -> None:

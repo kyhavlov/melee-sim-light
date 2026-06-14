@@ -1569,8 +1569,8 @@ def _dynamic_collision_owner_msids(
     """Return submotions whose BODY collision matrices consume fighter dynamics state.
 
     This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3`, `JumpB`,
-    `LandingFallSpecial`, `Catch`, `CatchDash`, and `CliffAttackQuick` are the audited RL1.0
-    dynamic-chain collision owners:
+    `LandingFallSpecial`, `EscapeAir`, `Catch`, `CatchDash`, and `CliffAttackQuick` are the
+    audited RL1.0 dynamic-chain collision owners:
     Dolphin
     pre-`ftColl_80078C70` primitive probes show live hurtcap endpoints on the x2C chain consume
     `ftData.x2C` / `lb_8001044C`, while the HIS:5029 AttackDash/AttackLw4 primitive probe selects a
@@ -1586,6 +1586,7 @@ def _dynamic_collision_owner_msids(
     # refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_Submotion
     common_submotion_id = {
         "ftCo_SM_LandingFallSpecial": 36,
+        "ftCo_SM_EscapeAir": 44,
         "ftCo_SM_CliffAttackQuick": 222,
     }
     out: list[int] = []
@@ -1593,6 +1594,7 @@ def _dynamic_collision_owner_msids(
         "ftCo_SM_JumpB",
         "ftCo_SM_LandingFallSpecial",
         "ftCo_SM_AttackHi3",
+        "ftCo_SM_EscapeAir",
         "ftCo_SM_Catch",
         "ftCo_SM_CatchDash",
         "ftCo_SM_CliffAttackQuick",

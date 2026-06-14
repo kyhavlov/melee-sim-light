@@ -539,9 +539,10 @@ def test_attackair_guard_reentry_shield_hitlist_rows_are_replay_exact(
     expect_hb_authoritative_empty: bool,
 ) -> None:
     # Shield re-entry HitCapsule provenance:
-    # - legacy dense fallback rows carry only group-level combat_hitlist_cd/victim_iid,
+    # - older datasets carried legacy dense group-level combat_hitlist_cd/victim_iid,
+    # - regenerated datasets may instead carry an explicit empty group seed,
     # - the replay-only authoritative-empty per-HitCapsule lane is used when t+1 proves the stale
-    #   dense fallback would suppress a live AttackAir shield hit,
+    #   fallback would suppress a live AttackAir shield hit,
     # - the t+1 proof is GuardSetOff + both-fighter hitlag; shield HP loss is not required because
     #   ftColl_80076CBC's powershield-active x221C_b2 branch skips normal shield-damage accumulation.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076808}
@@ -562,7 +563,13 @@ def test_attackair_guard_reentry_shield_hitlist_rows_are_replay_exact(
     assert int(seed_t["hitlag"][defender]) == 0
     assert int(seed_t["hitstun"][attacker]) == 0
     assert int(seed_t["hitstun"][defender]) == 0
-    assert int(seed_t["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
+    group_cd = int(seed_t["combat_hitlist_cd"][attacker, 0, defender])
+    group_victim = int(seed_t["combat_hitlist_victim_iid"][attacker, 0, defender])
+    assert group_cd in (0, 0xFFFF)
+    if group_cd == 0xFFFF:
+        assert group_victim == int(seed_t["instance_id"][defender])
+    else:
+        assert group_victim == 0
     hb_valid = [int(x) for x in seed_t["combat_hitlist_hb_valid"][attacker].tolist()]
     hb_cd = [int(x) for x in seed_t["combat_hitlist_hb_cd"][attacker, :, defender].tolist()]
     if expect_hb_authoritative_empty:

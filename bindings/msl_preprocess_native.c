@@ -6843,16 +6843,17 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
           if (shield_contact) {
             if (hb->damage > 0.0f && defender_hitlag_seen) {
               const uint16_t seeded = hb->rehit == 0u ? 0xFFFFu : (uint16_t)hb->rehit;
+              const uint16_t defender_iid = instance_id_p[di];
               for (int reg = 0; reg < MSL_MAX_HITBOXES; reg++) {
                 if (hitboxes[attacker][reg].valid &&
                     (hitboxes[attacker][reg].group & 0x7u) == hit_group) {
                   hitlist_hb_cd[attacker][reg][defender] = seeded;
-                  hitlist_hb_iid[attacker][reg][defender] = instance_id_p[di];
+                  hitlist_hb_iid[attacker][reg][defender] = defender_iid;
                   hitlist_hb_authoritative[attacker][reg] = 1u;
                 }
               }
               hitlist_cd[attacker][hit_group][defender] = seeded;
-              hitlist_iid[attacker][hit_group][defender] = instance_id_p[di];
+              hitlist_iid[attacker][hit_group][defender] = defender_iid;
               const uint16_t hl = msl_py_calc_hitlag_frames(common, msl_py_get_env_dmg(hb->damage));
               sim_hitlag[attacker] = hl;
               sim_hitlag[defender] = hl;
@@ -9117,6 +9118,7 @@ PyObject* msl_trim_stale_hitlist_seed_bridge_py(PyObject* self, PyObject* args) 
   PyObject* post_hitlag_obj = NULL;
   PyObject* post_hitstun_obj = NULL;
   PyObject* post_action_obj = NULL;
+  PyObject* landing_fallspecial_allow_obj = NULL;
   int num_players = 0;
   int act_attack_11 = 0;
   int act_attack_lw4 = 0;
@@ -9127,13 +9129,13 @@ PyObject* msl_trim_stale_hitlist_seed_bridge_py(PyObject* self, PyObject* args) 
   int act_guard_set_off = 0;
   int act_guard_reflect = 0;
   int act_guard_off = 0;
-  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOiiiiiiiiii", &hitlist_cd_obj, &hitlist_iid_obj,
-                        &hitlist_hb_valid_obj, &hitlist_hb_cd_obj, &hitlist_hb_iid_obj,
-                        &post_instance_id_obj, &post_instance_hit_by_obj, &post_last_hit_by_obj,
-                        &post_hitlag_obj, &post_hitstun_obj, &post_action_obj, &num_players,
-                        &act_attack_11, &act_attack_lw4, &act_damage_fly_top,
-                        &act_landing_fall_special, &act_guard_on, &act_guard, &act_guard_set_off,
-                        &act_guard_reflect, &act_guard_off)) {
+  if (!PyArg_ParseTuple(
+          args, "OOOOOOOOOOOOiiiiiiiiii", &hitlist_cd_obj, &hitlist_iid_obj, &hitlist_hb_valid_obj,
+          &hitlist_hb_cd_obj, &hitlist_hb_iid_obj, &post_instance_id_obj, &post_instance_hit_by_obj,
+          &post_last_hit_by_obj, &post_hitlag_obj, &post_hitstun_obj, &post_action_obj,
+          &landing_fallspecial_allow_obj, &num_players, &act_attack_11, &act_attack_lw4,
+          &act_damage_fly_top, &act_landing_fall_special, &act_guard_on, &act_guard,
+          &act_guard_set_off, &act_guard_reflect, &act_guard_off)) {
     return NULL;
   }
   PyArrayObject* hitlist_cd = require_contiguous_array(hitlist_cd_obj, NPY_UINT16, 4, "hitlist_cd");
@@ -9157,10 +9159,12 @@ PyObject* msl_trim_stale_hitlist_seed_bridge_py(PyObject* self, PyObject* args) 
       require_contiguous_array(post_hitstun_obj, NPY_UINT16, 2, "post_hitstun");
   PyArrayObject* post_action =
       require_contiguous_array(post_action_obj, NPY_UINT16, 2, "post_action");
+  PyArrayObject* landing_fallspecial_allow = require_contiguous_array(
+      landing_fallspecial_allow_obj, NPY_UINT8, 2, "landing_fallspecial_allow_interrupt");
   if (hitlist_cd == NULL || hitlist_iid == NULL || hitlist_hb_valid == NULL ||
       hitlist_hb_cd == NULL || hitlist_hb_iid == NULL || post_instance_id == NULL ||
       post_instance_hit_by == NULL || post_last_hit_by == NULL || post_hitlag == NULL ||
-      post_hitstun == NULL || post_action == NULL) {
+      post_hitstun == NULL || post_action == NULL || landing_fallspecial_allow == NULL) {
     return NULL;
   }
   if (PyArray_NDIM(hitlist_cd) != 4 || PyArray_NDIM(hitlist_iid) != 4 ||
@@ -9186,7 +9190,9 @@ PyObject* msl_trim_stale_hitlist_seed_bridge_py(PyObject* self, PyObject* args) 
       require_exact_2d_shape(post_last_hit_by, n, width, "post_last_hit_by") < 0 ||
       require_exact_2d_shape(post_hitlag, n, width, "post_hitlag") < 0 ||
       require_exact_2d_shape(post_hitstun, n, width, "post_hitstun") < 0 ||
-      require_exact_2d_shape(post_action, n, width, "post_action") < 0) {
+      require_exact_2d_shape(post_action, n, width, "post_action") < 0 ||
+      require_exact_2d_shape(landing_fallspecial_allow, n, width,
+                             "landing_fallspecial_allow_interrupt") < 0) {
     return NULL;
   }
   int players = num_players;
@@ -9205,6 +9211,7 @@ PyObject* msl_trim_stale_hitlist_seed_bridge_py(PyObject* self, PyObject* args) 
   const uint16_t* hitlag = (const uint16_t*)PyArray_DATA(post_hitlag);
   const uint16_t* hitstun = (const uint16_t*)PyArray_DATA(post_hitstun);
   const uint16_t* action = (const uint16_t*)PyArray_DATA(post_action);
+  const uint8_t* lfs_allow = (const uint8_t*)PyArray_DATA(landing_fallspecial_allow);
   for (npy_intp fi = 0; fi < n; fi++) {
     for (int attacker = 0; attacker < players; attacker++) {
       const uint16_t attacker_iid = inst[(fi * width) + attacker];
@@ -9227,18 +9234,28 @@ PyObject* msl_trim_stale_hitlist_seed_bridge_py(PyObject* self, PyObject* args) 
                           defender_action > (uint16_t)act_attack_lw4 &&
                           last_hit_by_owner >= (uint8_t)players && !owner_iid_matches_live;
         }
-        if (!owner_matches) continue;
         int hitlag_pre = (int)hitlag[def_idx];
         if (hitlag_pre > 0) hitlag_pre--;
         int hitstun_pre = (int)hitstun[def_idx];
         if (hitstun_pre > 0) hitstun_pre--;
+        const bool landing_fallspecial_neutral_trim =
+            hitlag_pre == 0 && hitstun_pre == 0 &&
+            defender_action == (uint16_t)act_landing_fall_special && lfs_allow[def_idx] == 0u;
+        if (!owner_matches && !landing_fallspecial_neutral_trim) continue;
         const bool guard_family = defender_action == (uint16_t)act_guard_on ||
                                   defender_action == (uint16_t)act_guard ||
                                   defender_action == (uint16_t)act_guard_set_off ||
                                   defender_action == (uint16_t)act_guard_reflect ||
                                   defender_action == (uint16_t)act_guard_off;
+        // LandingFallSpecial can only reach the common guard-input admission path when the hidden
+        // mv.co.landing.allow_interrupt bit is true. Treat non-interrupt LandingFallSpecial like a
+        // neutral non-guard stale-latch trim target rather than preserving dense victims_1 solely
+        // from the visible action id.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{ftCo_LandingFallSpecial_Enter,ftCo_Landing_IASA}
+        const bool landing_fallspecial_guard_admission =
+            defender_action == (uint16_t)act_landing_fall_special && lfs_allow[def_idx] != 0u;
         const bool neutral_non_guard = hitlag_pre == 0 && hitstun_pre == 0 && !guard_family &&
-                                       defender_action != (uint16_t)act_landing_fall_special;
+                                       !landing_fallspecial_guard_admission;
         const uint16_t attacker_action = action[(fi * width) + attacker];
         const bool damage_state_bridge = hitlag_pre == 0 &&
                                          defender_action == (uint16_t)act_damage_fly_top &&
@@ -9852,6 +9869,10 @@ PyObject* msl_derive_shield_contact_seed_bridge_py(PyObject* self, PyObject* arg
     PyErr_SetString(PyExc_ValueError, "shield contact history arrays are narrower than players");
     return NULL;
   }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed for shield contact seed bridge");
+    return NULL;
+  }
   npy_intp out_dims[2] = {n, 4};
   PyArrayObject* out_hit_damage = (PyArrayObject*)PyArray_ZEROS(2, out_dims, NPY_UINT8, 0);
   PyArrayObject* out_shield_taken = (PyArrayObject*)PyArray_ZEROS(2, out_dims, NPY_UINT8, 0);
@@ -10020,6 +10041,46 @@ PyObject* msl_derive_shield_contact_seed_bridge_py(PyObject* self, PyObject* arg
             valid[MSL_VALID_IDX(j, attacker, hb)] = 1u;
             cd[MSL_CD_IDX(j, attacker, hb, defender)] = 0xFFFFu;
             iid_out[MSL_IID_IDX(j, attacker, hb, defender)] = defender_iid;
+          }
+          j++;
+        }
+        if (attacker_action != (uint16_t)MSL_ACT_ATTACK_AIR_N) {
+          continue;
+        }
+        while (j < n && action_data[(j * width) + attacker] == attacker_action &&
+               msl_py_lut_u8(guard, guard_n, action_data[(j * width) + defender]) != 0u &&
+               hitlag_data[(j * width) + attacker] == 0u &&
+               hitlag_data[(j * width) + defender] == 0u) {
+          int frame = (int)age_data[(j * width) + attacker];
+          if (frame < 0) frame = 0;
+          if (move_tables_attackair_same_group_payload_preserves_hitcapsule(
+                  char_data[(j * width) + attacker], attacker_action, (float)frame) == 0u) {
+            break;
+          }
+          bool carried_any = false;
+          const uint16_t cur_defender_iid = iid[(j * width) + defender];
+          for (npy_intp hb = 0; hb < hb_count; hb++) {
+            if (contact[MSL_CONTACT_IDX(i, attacker, hb, defender)] != 2u ||
+                contact[MSL_CONTACT_IDX(j, attacker, hb, defender)] != 1u) {
+              continue;
+            }
+            // Same-group AttackAirN refresh preserves the source HitCapsule.victims_1 list only
+            // inside the same MSLFTSC1 create_hitbox lifetime. A later replay-proven ShieldDesc
+            // miss is not proof that the concrete HitCapsule victim list was empty, but a script
+            // clear/recreate is. Rebind the seed-lane iid to the current visible fighter instance
+            // because the simulator uses instance_id as a proxy for vanilla's stable victim
+            // pointer through GuardSetOff -> Guard motion entries.
+            // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80078C70}
+            // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+            // data/scripts/<char>.bin (MSLFTSC1)::ftCo_SM_AttackAirN create_hitbox/clear_hitboxes
+            valid[MSL_VALID_IDX(j, attacker, hb)] = 1u;
+            cd[MSL_CD_IDX(j, attacker, hb, defender)] = 0xFFFFu;
+            iid_out[MSL_IID_IDX(j, attacker, hb, defender)] = cur_defender_iid;
+            carried_any = true;
+          }
+          if (!carried_any) {
+            break;
           }
           j++;
         }

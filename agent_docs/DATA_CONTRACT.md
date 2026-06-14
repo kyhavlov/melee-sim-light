@@ -70,6 +70,19 @@ Source/generation:
   when the previous visible action is not Guard-family. In that case seed-history stamps the
   replay-proven per-HitCapsule lanes on the following frozen hitlag rows because
   `ftColl_80076CBC` has already admitted the shield branch and written `HitCapsule.victims_1`.
+- Damaging BODY hitlag-tail rows may have previous-capsule geometry and BODY attribution but no
+  dense/per-HitCapsule seed row when the offline pose pass cannot reconstruct the victim hurtcaps
+  at the accepted-hit boundary. Runtime may reconstruct the missing same-group `victims_1` entries
+  during teacher-forced reseed only when frame-start hitlag/hitstun and
+  `instance_hit_by`/`last_hit_by` name the current attacker instance/source. Authoritative
+  per-HitCapsule empty seeds still block this fallback.
+- Accepted AttackAirN shield hits can also seed later no-hitlag Guard-family rows when the same
+  AttackAirN source action remains active and the later rows are replay-proven ShieldDesc misses.
+  This is still a hidden `HitCapsule.victims_1` owner, not a broad shield suppressor: the bridge
+  carries only HitCapsules proven by the accepted shield hit and only while each later row has a
+  replay-visible ShieldDesc miss. Because runtime uses `instance_id` as a proxy for vanilla's
+  stable victim pointer, preprocessing rebinds the per-HitCapsule victim iid to the current
+  Guard-family instance when GuardSetOff releases into Guard.
 - Hitbox-vs-hitbox clank contact may be proven from `ftColl_8007699C`-shaped swept HitCapsule
   overlap plus replay-visible clank hitlag on the affected side. In that case seed-history stamps
   the same type-3 `victims_1` entries that `inlineA0`/`inlineA1` write through
@@ -894,6 +907,10 @@ Source/generation:
 - Runtime consumes it only during reseed and in `src/locomotion.c` LandingFallSpecial IASA; normal
   rollout transitions set/clear the same internal bit from their decomp-owned FallSpecial and
   LandingFallSpecial entry paths.
+- Hitlist seed trimming also consumes this lane. `LandingFallSpecial` is a guard-admission source
+  only when the hidden allow-interrupt bit is true; preserving dense HitCapsule victim latches from
+  the visible action id alone over-applies to EscapeAir/Marth-style non-interrupt landings and can
+  suppress real BODY hits.
 - Landing / LandingFallSpecial root-Y publication uses the same mpLib floor owner as ordinary floor
   projection: `mpLib_8004DD90_Floor` publishes the floor-contact y plus the engine's small floor
   bias once. Landing entry code must not add a second simulator-local bias on top of a current
@@ -902,8 +919,29 @@ Source/generation:
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099D70`.
 - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096D28`.
+- `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA`.
 - `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Anim`.
 - `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c`.
+
+## Replay Seed Contract: Turn Countdown
+
+The replay seed contains `turn_frames_to_turn`, `turn_has_turned`, and `turn_x8` for the common
+Turn action's `mv.co.turn` hidden state. `turn_frames_to_turn` is initialized from the runtime-
+required character attr `data/characters/<char>.json::turn_frames`.
+
+Source/generation:
+- `tools/slippi/make_dataset_from_slp.py` derives the Turn seed lanes from replay-prefix action
+  history and a registry-backed LUT loaded from every `data/characters/<char>.json` manifest entry.
+  The LUT must not be hardcoded to incumbent supported characters; a missing `turn_frames` key is a
+  data-contract error for any registered playable character.
+- Runtime consumes the lanes during replay reseed in `src/api.c`; free-running Turn entry writes the
+  same hidden state from loaded character params.
+- A zero `turn_frames_to_turn` has gameplay meaning, so stale datasets or Fox/Falco-only LUTs can
+  over-apply `ftCo_Turn_IASA` Dash admission to new characters. Regenerate datasets after changing
+  this derivation or adding a character.
+
+Decomp contract:
+- `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_Enter_Basic,ftCo_Turn_Anim_Inner,ftCo_Turn_IASA}`.
 
 ## Replay Seed Contract: Grounded Overlap Z-Depth
 
@@ -1720,15 +1758,18 @@ Supported runtime contract:
   with nodes `[17, 18, 19, 20]`; Falco has zero sets.
 - The collision-owner index is the only runtime predicate for dynamic matrix substitution. Current
   generated data marks Fox `ftCo_SM_JumpB` (`submotion_id=17`),
-  `ftCo_SM_LandingFallSpecial` (`submotion_id=36`), `ftCo_SM_AttackHi3`
-  (`submotion_id=58`), `ftCo_SM_Catch` (`submotion_id=242`), and
-  `ftCo_SM_CatchDash` (`submotion_id=243`) because
+  `ftCo_SM_LandingFallSpecial` (`submotion_id=36`), `ftCo_SM_EscapeAir`
+  (`submotion_id=44`), `ftCo_SM_AttackHi3` (`submotion_id=58`), `ftCo_SM_Catch`
+  (`submotion_id=242`), and `ftCo_SM_CatchDash` (`submotion_id=243`) because
   pre-`ftColl_80078C70` Dolphin primitive/engine probes and replay-real BODY locks show those
   hurtcap endpoints consume the live dynamic chain. `ftCo_SM_CatchDash` is backed by the SDS:299
   probe: vanilla's live part-18 tail endpoints stay below Falco's grounded Shine while the
   static/existing-lite chain admits a false BODY hit. `ftCo_SM_Catch` is backed by MGS:4921..4923:
   Falco DAir overlaps Fox's part-18 tail cap only after the dynamic-chain update and descriptor
-  cone clamp advance far enough on Catch frame 10. Fox `ftCo_SM_AttackDash` and
+  cone clamp advance far enough on Catch frame 10. `ftCo_SM_EscapeAir` is backed by WWS:2580
+  collision-probe evidence: vanilla `lbColl_8000805C` rejects Marth Fair hb0/hb1/hb2, then accepts
+  hb3 against Fox's live dynamic tail-chain hurtcap before `ftColl_80076ED8`. Fox
+  `ftCo_SM_AttackDash` and
   `ftCo_SM_DamageAir2` are intentionally not marked: current probes/validation show their live
   collision phase needs a fuller source-order dynamic/AObj owner before they can be retained as
   generated collision owners. C gameplay must not hardcode these msids; adding another dynamic

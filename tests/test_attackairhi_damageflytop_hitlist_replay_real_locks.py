@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,9 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 ACT_ATTACK_AIR_HI = 0x0044
+ACT_ATTACK_AIR_N = 0x0041
+ACT_LANDING_FALL_SPECIAL = 0x002B
+ACT_DAMAGE_N_2 = 0x0050
 ACT_DAMAGE_AIR_2 = 0x0055
 ACT_DAMAGE_FLY_TOP = 0x005A
 
@@ -19,6 +23,7 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
         "data/characters/fox.json",
         "data/characters/falco.json",
         "data/characters/marth.json",
+        "data/moves/marth.json",
         "data/anims/fox.tracks.bin",
         "data/anims/falco.tracks.bin",
         "data/anims/marth.tracks.bin",
@@ -45,6 +50,28 @@ def _marth_dataset_path(root: Path) -> Path:
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
     return dataset_path
+
+
+def _marth_ipw_dataset_path(root: Path) -> Path:
+    dataset_rel = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
+def _aggregate_hvg_dataset_path(root: Path) -> Path:
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
+def _create_hitbox_frames(root: Path, char_name: str, move_name: str) -> list[int]:
+    move_data = json.loads((root / "data" / "moves" / f"{char_name}.json").read_text())
+    events = move_data["moves"][move_name]["events"]
+    return sorted({int(ev["frame"]) for ev in events if ev.get("kind") == "create_hitbox"})
 
 
 def _step_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -> tuple[np.void, np.void]:
@@ -295,3 +322,93 @@ def test_attackairhi_single_band_create_edge_does_not_materialize_dense_latch_ww
     assert int(out["action_id"][attacker]) == int(ref["action_id"][attacker]) == ACT_ATTACK_AIR_HI
     assert int(out["action_frame"][attacker]) == int(ref["action_frame"][attacker]) == 5
     assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 6
+
+
+@pytest.mark.integration
+def test_attackairhi_noninterrupt_landingfallspecial_trims_stale_dense_latch_ipw_2452() -> None:
+    # Marth UpAir is a single-band AttackAirHi script, so a stale dense same-group victims_1 seed
+    # cannot be preserved as a later refresh/copy owner. The defender is in LandingFallSpecial, but
+    # ftCo_Landing_IASA reaches guard input only when mv.co.landing.allow_interrupt is true; this
+    # IPW seed carries false and must trim the stale dense latch so the BODY hit enters DamageFlyTop.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{ftCo_LandingFallSpecial_Enter,ftCo_Landing_IASA}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _marth_ipw_dataset_path(root)
+    ds = read_dataset(str(dataset_path))
+
+    assert _create_hitbox_frames(root, "marth", "ftCo_SM_AttackAirHi") == [5]
+
+    attacker = 1
+    victim = 0
+    record = 2452
+    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    seed_row = seed[0]
+    assert int(seed_row["char_id"][attacker]) == 18
+    assert int(seed_row["action_id"][attacker]) == ACT_ATTACK_AIR_HI
+    assert int(seed_row["action_frame"][attacker]) == 7
+    assert int(seed_row["action_id"][victim]) == ACT_LANDING_FALL_SPECIAL
+    assert int(seed_row["landing_fallspecial_allow_interrupt"][victim]) == 0
+    assert int(seed_row["on_ground"][victim]) == 1
+    assert int(seed_row["hitlag"][victim]) == 0
+    assert int(seed_row["hitstun"][victim]) == 0
+    # The regenerated dataset should already carry the source-owned trim: visible
+    # LandingFallSpecial is not enough to preserve the dense victim latch when the hidden
+    # allow-interrupt lane is false.
+    assert int(seed_row["combat_hitlist_cd"][attacker, 0, victim]) == 0
+    assert int(seed_row["combat_hitlist_victim_iid"][attacker, 0, victim]) == 0
+    assert [int(v) for v in seed_row["combat_hitlist_hb_valid"][attacker]] == [0, 0, 0, 0]
+
+    out, ref = _step_row_with_seed(dataset_path, record, seed)
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["action_frame"][victim]) == int(ref["action_frame"][victim]) == 1
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 6
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim]) == 33
+    assert int(out["instance_hit_by"][victim]) == int(ref["instance_hit_by"][victim]) == int(
+        seed_row["instance_id"][attacker]
+    )
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_attackairn_noninterrupt_landingfallspecial_trims_stale_dense_latch_hvg_386() -> None:
+    # Non-Marth control for the same hidden-lane owner. Falco's LandingFallSpecial visible action id
+    # is not enough to invent or preserve a HitCapsule latch: with allow_interrupt=false and BODY
+    # attribution naming an older source, vanilla admits the live AttackAirN BODY hit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{ftCo_LandingFallSpecial_Enter,ftCo_Landing_IASA}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _aggregate_hvg_dataset_path(root)
+    ds = read_dataset(str(dataset_path))
+
+    attacker = 1
+    victim = 0
+    record = 386
+    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    seed_row = seed[0]
+    assert int(seed_row["char_id"][attacker]) == 22
+    assert int(seed_row["action_id"][attacker]) == ACT_ATTACK_AIR_N
+    assert int(seed_row["action_frame"][attacker]) == 17
+    assert int(seed_row["action_id"][victim]) == ACT_LANDING_FALL_SPECIAL
+    assert int(seed_row["landing_fallspecial_allow_interrupt"][victim]) == 0
+    assert int(seed_row["hitlag"][victim]) == 0
+    assert int(seed_row["hitstun"][victim]) == 0
+    assert int(seed_row["instance_hit_by"][victim]) != int(seed_row["instance_id"][attacker])
+    assert [int(x) for x in seed_row["combat_hitlist_cd"][attacker, :, victim].tolist()] == [0] * 8
+    assert [int(x) for x in seed_row["combat_hitlist_victim_iid"][attacker, :, victim].tolist()] == [
+        0
+    ] * 8
+    assert [int(v) for v in seed_row["combat_hitlist_hb_valid"][attacker]] == [0, 0, 0, 0]
+
+    out, ref = _step_row_with_seed(dataset_path, record, seed)
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_DAMAGE_N_2
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 6
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim]) == 23
+    assert int(out["instance_hit_by"][victim]) == int(ref["instance_hit_by"][victim]) == int(
+        seed_row["instance_id"][attacker]
+    )
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]), abs=1e-6)

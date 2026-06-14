@@ -2741,6 +2741,60 @@ def test_fox_jumpb_dynamic_chain_does_not_broaden_body_admission_controls(
 
 
 @pytest.mark.integration
+def test_fox_escapeair_dynamic_tail_chain_selects_marth_fair_tip_wws_2580() -> None:
+    # Fox EscapeAir dynamic-chain BODY pose:
+    # - Dolphin lbColl_8000805C probes on WWS:2580 show Marth Fair hb0/hb1/hb2 all miss, then
+    #   hb3 enters ftColl_80076ED8 against Fox's live dynamic tail-chain hurtcap.
+    # - The source owner is the generated SSDYNN01 collision-msid predicate for Fox
+    #   ftCo_SM_EscapeAir (msid 44), not a Marth Fair or row-local hitbox preference.
+    # - Adjacent frames 2578/2579 remain no-hit, and the hitlag tail stays exact after the hb3
+    #   selection, proving this does not broaden EscapeAir BODY admission.
+    # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    # data/anims/fox.dyn.bin::SSDYNN01 collision_motion_state_ids(ftCo_SM_EscapeAir)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    for record in (2578, 2579):
+        seed, out, ref = _step_one_row(dataset_path, record)
+        defender = 0
+        attacker = 1
+        assert int(seed["action_id"][defender]) == 236  # EscapeAir.
+        assert int(seed["animation_index"][defender]) == 44
+        assert int(seed["action_id"][attacker]) == 66  # AttackAirF.
+        assert int(ref["action_id"][defender]) == 236
+        for field in ("action_id", "animation_index", "hitlag", "hitstun"):
+            assert int(out[field][defender]) == int(ref[field][defender]), f"record={record} field={field}"
+        assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)
+
+    seed, contacts = _collect_contact_debug_for_row(dataset_path, 2580)
+    defender = 0
+    attacker = 1
+    assert int(seed["action_id"][defender]) == 236
+    assert int(seed["animation_index"][defender]) == 44
+    assert int(seed["action_id"][attacker]) == 66
+    accepted = [
+        c
+        for c in contacts
+        if int(c["attacker"]) == attacker and int(c["defender"]) == defender and int(c["contact_kind"]) == 0
+    ]
+    assert accepted
+    assert {int(c["hitbox_id"]) for c in accepted} == {3}
+    assert all(float(c["hitbox_damage"]) == pytest.approx(13.0) for c in accepted)
+
+    for record in (2580, 2581, 2582):
+        _seed, out, ref = _step_one_row(dataset_path, record)
+        for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
+            assert int(out[field][defender]) == int(ref[field][defender]), f"record={record} field={field}"
+        assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("record", "expected_action", "expected_hitlag"),
     [
@@ -3419,3 +3473,48 @@ def test_guardon_frame_start_body_pose_does_not_broaden_adjacent_shield_rows(
     for field in ("action_id", "animation_index", "action_frame", "hitlag", "hitstun", "instance_hit_by"):
         assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
     assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_marth_run_source_velocity_branch_keeps_body_pose_on_ipw_5292_hit_frame() -> None:
+    # Source owner: ftCo_Run_Anim selects fp->gr_vel on ordinary floors and hidden mv.co.run.x4
+    # only while ft_GetGroundFrictionMultiplier(fp) < 1.0. IPW:5292 has normal friction, so the
+    # next ftAnim tick consumes the current gr_vel-derived rate; consuming the hidden source lane
+    # instead crosses the next integer pose boundary and misses a source lbColl_8000805C BODY hit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_Anim
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target_record = 5292
+    defender = 0
+    for rec in (target_record - 1, target_record, target_record + 1):
+        assert int(samples.shape[0]) > rec, f"dataset too short: record={rec}"
+
+    target_seed = samples[target_record]["seed_t"]
+    assert int(target_seed["action_id"][defender]) == 21  # Run
+    assert int(target_seed["animation_index"][defender]) == 13  # Run submotion
+    assert int(target_seed["action_frame"][defender]) == 1
+    assert int(target_seed["on_ground"][defender]) == 1
+    assert float(target_seed["ground_friction_mul"][defender]) == pytest.approx(1.0)
+    assert abs(float(target_seed["run_anim_source_vel_f32"][defender])) > abs(
+        float(target_seed["speed_ground_x_self"][defender])
+    )
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        seed, out, ref = _step_one_row(dataset_path, rec)
+        assert int(seed["action_id"][defender]) in (21, 90)
+        for field in ("action_id", "animation_index", "action_frame", "hitlag", "hitstun", "instance_id"):
+            assert int(out[field][defender]) == int(ref[field][defender]), (
+                f"record={rec} field={field}"
+            )
+        assert float(out["percent"][defender]) == pytest.approx(
+            float(ref["percent"][defender]), abs=1e-6
+        )

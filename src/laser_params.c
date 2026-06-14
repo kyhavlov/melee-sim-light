@@ -123,6 +123,7 @@ int laser_params_init(void) {
     // p[1] pad
     MslLaserParams rec = {0};
     rec.loaded = 1;
+    rec.source_char_id = char_id;
     rec.shot_itkind = read_u16_le(p + 2);
     rec.gun_itkind = read_u16_le(p + 4);
     rec.spawn_bone_part_id = read_u16_le(p + 6);

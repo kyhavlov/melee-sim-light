@@ -422,6 +422,66 @@ def _run_rollout_window_rows(
     return result
 
 
+def _run_rollout_window_rows_replay_frame_rng(
+    ds_path: Path,
+    *,
+    start_record: int,
+    window_records: tuple[int, ...],
+    ucf_enabled: bool | None = None,
+    ucf_cardinals_1_0_enabled: bool | None = None,
+) -> dict[int, tuple[np.void, np.void]]:
+    ds = read_dataset(str(ds_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > max(window_records), "dataset too short for rollout lock window"
+    assert start_record <= min(window_records), "rollout start must be <= window start"
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = (
+        np.frombuffer(samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, seed_stride)
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    init_kwargs = {"batch_size": 1, "num_players": int(ds.header["num_players"])}
+    if ucf_enabled is not None:
+        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
+    if ucf_cardinals_1_0_enabled is not None:
+        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
+    handle = binding.init(**init_kwargs)
+    window_out: dict[int, np.void] = {}
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for rec in range(start_record, max(window_records) + 1):
+            row = samples[rec : rec + 1]
+            frame_seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, seed_stride
+            )
+            prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            binding.step_input_replay_frame_rng(handle, frame_seed_bytes, prev_input_bytes, input_bytes)
+            if rec in window_records:
+                binding.write_compare(handle, out_compare_bytes)
+                window_out[rec] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+    finally:
+        binding.destroy(handle)
+
+    result: dict[int, tuple[np.void, np.void]] = {}
+    for rec in window_records:
+        ref_row = samples[rec : rec + 1]["ref_t1"][0]
+        result[rec] = (ref_row, window_out[rec])
+    return result
+
+
 def _run_pre_combat_debug_row(
     ds_path: Path, record: int, attacker: int, hb_id: int
 ) -> tuple[np.void, np.ndarray, np.ndarray, np.void]:
@@ -4785,6 +4845,142 @@ def test_attackairlw_early_stale_suppression_trim_rows_and_adjacent_controls_are
 
 
 @pytest.mark.integration
+def test_attackairlw_visible_hitstun_rollout_does_not_backfill_indefinite_hitlist_tbk() -> None:
+    # Rollout lock for src/hitlist.c same-source sustained HitCapsule carry:
+    # - Fighter_8006A360 hitlag freeze can preserve an already-populated victims_1 list while
+    #   animation/collision callbacks are skipped.
+    # - Once both fighters are out of hitlag, visible DamageFlyTop hitstun plus BODY attribution is not
+    #   sufficient to synthesize a new indefinite suppression latch; ftAction_8007121C/lbColl_80008A5C
+    #   own the live HitCapsule/cooldown state for later active DAir contacts.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_80008A5C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target = 1848
+    rows = (target - 1, target, target + 1)
+    p_attacker = 0
+    p_victim = 1
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    seed_t = samples["seed_t"][target]
+    ref_t1 = samples["ref_t1"][target]
+    assert int(seed_t["action_id"][p_attacker]) == 69  # AttackAirLw
+    assert int(seed_t["action_id"][p_victim]) == 76  # DamageFlyTop
+    assert int(seed_t["hitlag"][p_attacker]) == 0
+    assert int(seed_t["hitlag"][p_victim]) == 0
+    assert int(seed_t["hitstun"][p_victim]) > 0
+    assert int(seed_t["instance_hit_by"][p_victim]) == int(seed_t["instance_id"][p_attacker])
+    assert int(ref_t1["hitlag"][p_attacker]) > 0
+    assert int(ref_t1["hitlag"][p_victim]) > 0
+
+    rollout = _run_rollout_window_rows(dataset_path, start_record=0, window_records=rows)
+    for rec, (ref, out) in rollout.items():
+        for p in (0, 1):
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out,
+                ref_row=ref,
+                record=rec,
+                p=p,
+            )
+
+
+@pytest.mark.integration
+def test_attackairb_hitlag_frozen_hitcapsule_survives_replay_frame_rng_rollout_cdo() -> None:
+    # Rollout lock for source HitCapsule lifetime during active hitlag:
+    # - The first Fox BAir BODY hit registers victims_1 through ftColl_80076ED8/inlineB0.
+    # - While post-decrement hitlag keeps fp->x2219_b5 set, Fighter_8006A360 skips ftAnim_8006EBA4
+    #   and ftColl_800764DC, so the live x914 HitCapsule/victims_1 ring persists.
+    # - Replay-frame RNG playback may feed sparse seed lanes each frame, but those seed lanes must not
+    #   overwrite an already-live frozen HitCapsule ring and admit a same-window re-hit.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,inlineB0,ftColl_800764DC}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    start_record = 3335
+    first_hit = 3702
+    hitlag_tail = 3705
+    no_rehit = 3706
+    rows = (first_hit, hitlag_tail, no_rehit)
+    p_attacker = 0
+    p_victim = 1
+    for rec in (start_record, *rows):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    first_seed = samples["seed_t"][first_hit]
+    first_ref = samples["ref_t1"][first_hit]
+    assert int(first_seed["action_id"][p_attacker]) == 68  # AttackAirB
+    assert int(first_seed["hitlag"][p_attacker]) == 0
+    assert int(first_seed["hitlag"][p_victim]) == 0
+    assert int(first_ref["hitlag"][p_attacker]) > 0
+    assert int(first_ref["hitlag"][p_victim]) > 0
+    assert int(first_ref["instance_id"][p_victim]) == int(first_seed["instance_id"][p_victim]) + 1
+
+    tail_seed = samples["seed_t"][hitlag_tail]
+    tail_ref = samples["ref_t1"][hitlag_tail]
+    assert int(tail_seed["hitlag"][p_attacker]) > 0
+    assert int(tail_seed["hitlag"][p_victim]) > 0
+    assert int(tail_ref["hitlag"][p_attacker]) == 1
+    assert int(tail_ref["hitlag"][p_victim]) == 1
+
+    no_rehit_seed = samples["seed_t"][no_rehit]
+    no_rehit_ref = samples["ref_t1"][no_rehit]
+    assert int(no_rehit_seed["action_id"][p_attacker]) == 68  # AttackAirB
+    assert int(no_rehit_seed["action_id"][p_victim]) == 85  # DamageFlyN
+    assert int(no_rehit_seed["hitlag"][p_attacker]) == 1
+    assert int(no_rehit_seed["hitlag"][p_victim]) == 1
+    assert int(no_rehit_ref["hitlag"][p_attacker]) == 0
+    assert int(no_rehit_ref["hitlag"][p_victim]) == 0
+    assert math.isclose(
+        float(no_rehit_ref["percent"][p_victim]),
+        float(no_rehit_seed["percent"][p_victim]),
+        rel_tol=0.0,
+        abs_tol=1.0e-6,
+    )
+
+    rollout = _run_rollout_window_rows_replay_frame_rng(
+        dataset_path,
+        start_record=start_record,
+        window_records=rows,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    for rec, (ref, out) in rollout.items():
+        for p in (p_attacker, p_victim):
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out,
+                ref_row=ref,
+                record=rec,
+                p=p,
+            )
+        assert math.isclose(
+            float(out["percent"][p_victim]),
+            float(ref["percent"][p_victim]),
+            rel_tol=0.0,
+            abs_tol=1.0e-6,
+        ), f"record={rec} p={p_victim} field=percent expected={ref['percent'][p_victim]} got={out['percent'][p_victim]}"
+
+
+@pytest.mark.integration
 def test_attackairn_early_stale_suppression_trim_rows_and_adjacent_controls_are_replay_exact() -> None:
     # Lock family for src/hitboxes.c stale-suppression early AttackAirN window trim:
     # - HitCapsule seeded indefinite entries can stale-carry across reseeds.
@@ -4827,6 +5023,83 @@ def test_attackairn_early_stale_suppression_trim_rows_and_adjacent_controls_are_
             _assert_transition_identity_lock_fields_match_ref(
                 out_row=out,
                 ref_row=ref,
+                record=rec,
+                p=p,
+            )
+
+
+@pytest.mark.integration
+def test_marth_attackairn_post_clear_second_band_clears_dense_hitlist_ipw() -> None:
+    # Marth NAir has two same-group hitbox bands:
+    # - frame 6 low-damage band,
+    # - frame 8 clear_hitboxes,
+    # - frame 15 high-damage band.
+    # A one-step reseed in the second band can still carry the legacy dense hit_group seed from
+    # the first band while exposing no authoritative per-HitCapsule victims_1 lane. Source
+    # ftAction_8007121C has already run the clear/create commands, and ftColl_800768A0 clears the
+    # newly enabled HitCapsules when no same-group source HitCapsule is active, so the dense proxy
+    # must not suppress the real second-band BODY contact.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC}
+    # data/moves/marth.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    rows = (476, 477, 478)
+    p_attacker = 1
+    p_victim = 0
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = samples[477:478]
+    seed_t = target["seed_t"][0]
+    ref_t1 = target["ref_t1"][0]
+    assert int(seed_t["char_id"][p_attacker]) == 18  # Marth
+    assert int(seed_t["action_id"][p_attacker]) == 65  # AttackAirN
+    assert int(seed_t["animation_index"][p_attacker]) == 68  # ftCo_SM_AttackAirN
+    assert int(seed_t["action_frame"][p_attacker]) == 15
+    assert float(seed_t["anim_frame_f32"][p_attacker]) == 15.0
+    assert int(seed_t["combat_hitlist_cd"][p_attacker, 0, p_victim]) == 0xFFFF
+    assert int(seed_t["combat_hitlist_hb_valid"][p_attacker, 3]) == 0
+    assert int(seed_t["combat_hitlist_hb_cd"][p_attacker, 3, p_victim]) == 0
+    assert int(seed_t["hitstun"][p_victim]) > 0
+    assert int(seed_t["instance_hit_by"][p_victim]) == int(seed_t["instance_id"][p_attacker])
+    assert int(ref_t1["action_id"][p_victim]) == 88  # DamageFlyN
+    assert int(ref_t1["hitlag"][p_attacker]) == 6
+
+    seed_dbg, contacts, _shield_world, timing = _run_pre_combat_debug_row(
+        dataset_path, 477, p_attacker, 3
+    )
+    assert int(seed_dbg["combat_hitlist_cd"][p_attacker, 0, p_victim]) == 0xFFFF
+    assert int(timing["enabled_cur"]) == 1
+    assert int(timing["start_frame"]) == 15
+    assert int(timing["pose_frame"]) >= int(timing["start_frame"])
+    assert int(timing["pose_frame"]) < int(timing["end_frame"])
+    assert int(timing["cur_hit_group"]) == 0
+    body_hits = [
+        c
+        for c in contacts
+        if int(c["attacker"]) == p_attacker
+        and int(c["defender"]) == p_victim
+        and int(c["hitbox_id"]) == 3
+        and int(c["contact_kind"]) == 0
+    ]
+    assert body_hits, "expected Marth NAir second-band hb3 BODY candidate before combat"
+    assert float(body_hits[0]["hitbox_damage"]) == 10.0
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_victim)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out_row,
+                ref_row=ref_row,
                 record=rec,
                 p=p,
             )
@@ -5083,6 +5356,95 @@ def test_damageflyroll_rng_gate_transition_rows_and_adjacent_controls_are_replay
             record=rec,
             p=p_victim,
         )
+
+
+@pytest.mark.integration
+def test_marth_wait_attacklw3_selected_payload_admits_damageflyroll_ipw() -> None:
+    # Grounded Wait -> Marth AttackLw3 DamageFlyRoll owner:
+    # - ftColl selects Marth down-tilt hb0 (9 dmg, 30 deg, KBG 40, BKB 40) against the grounded
+    #   victim's BODY.
+    # - ftCo_8008DCE0 clears ground_or_air through its severe grounded branch, then samples the
+    #   airborne DamageFlyRoll gate.
+    # This lock keeps the owner on the selected extracted HitCapsule payload and captured
+    # pre-damage Wait action; visible Marth/Fall-like animation state is not enough.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    # data/moves/marth.json::moves.ftCo_SM_AttackLw3.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    target_record = 3983
+    p_victim = 0
+    p_attacker = 1
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in (target_record - 1, target_record, target_record + 1):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = samples[target_record : target_record + 1]
+    assert int(target["seed_t"]["action_id"][0, p_victim]) == 14  # ftCo_MS_Wait
+    assert int(target["seed_t"]["action_id"][0, p_attacker]) == 57  # ftCo_MS_AttackLw3
+    assert int(target["seed_t"]["animation_index"][0, p_attacker]) == 59  # ftCo_SM_AttackLw3
+    assert int(target["ref_t1"]["action_id"][0, p_victim]) == 91  # ftCo_MS_DamageFlyRoll
+
+    prev_trace_env = os.environ.get("MSL_RNG_TRACE_PATH")
+    try:
+        for rec in (target_record - 1, target_record, target_record + 1):
+            trace_path = root / f"reports/triage/rng_marth_wait_attacklw3_damageflyroll_{rec}.tsv"
+            os.environ["MSL_RNG_TRACE_PATH"] = str(trace_path)
+            _seed, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_victim)
+
+            site1_calls = 0
+            with trace_path.open("r", encoding="utf-8") as fh:
+                reader = csv.DictReader(fh, delimiter="\t")
+                for row in reader:
+                    if int(row["site_id"]) == 1:
+                        site1_calls += int(row["call_count"])
+            assert site1_calls == (1 if rec == target_record else 0)
+
+            for p in (p_victim, p_attacker):
+                _assert_transition_identity_lock_fields_match_ref(
+                    out_row=out_row,
+                    ref_row=ref_row,
+                    record=rec,
+                    p=p,
+                )
+    finally:
+        if prev_trace_env is None:
+            os.environ.pop("MSL_RNG_TRACE_PATH", None)
+        else:
+            os.environ["MSL_RNG_TRACE_PATH"] = prev_trace_env
+
+    def mutate_attacker_out_of_down_tilt(seed_t: np.ndarray) -> None:
+        seed_t["action_id"][0, p_attacker] = np.uint16(56)  # ftCo_MS_AttackS3
+        seed_t["animation_index"][0, p_attacker] = np.uint32(58)  # ftCo_SM_AttackS3
+
+    _seed, _ref, mutated_out = _run_one_step_row(
+        dataset_path,
+        target_record,
+        p_victim,
+        seed_mutator=mutate_attacker_out_of_down_tilt,
+    )
+    assert int(mutated_out["action_id"][p_victim]) != 91
+
+    def mutate_attacker_to_non_owner_char(seed_t: np.ndarray) -> None:
+        # Same visible action row, but the MSLFTSC1 create_hitbox table for Fox does not own
+        # Marth's down-tilt hb0 launcher payload. This locks the DamageFlyRoll gate to extracted
+        # script ownership rather than a generic AttackLw3/payload proxy.
+        assert int(seed_t["char_id"][0, p_attacker]) == 18  # Marth.
+        seed_t["char_id"][0, p_attacker] = np.uint8(1)  # Fox.
+
+    _seed, _ref, mutated_out = _run_one_step_row(
+        dataset_path,
+        target_record,
+        p_victim,
+        seed_mutator=mutate_attacker_to_non_owner_char,
+    )
+    assert int(mutated_out["action_id"][p_victim]) != 91
 
 
 @pytest.mark.integration

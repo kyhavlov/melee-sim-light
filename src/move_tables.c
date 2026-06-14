@@ -14,6 +14,7 @@ enum {
   MSL_MOVE_TABLE_MSID_CAP = 512,
   MSL_MOVE_TABLE_FRAME_CAP = 240,
   MSL_MOVE_TABLE_CMD_VAR_COUNT = 4,
+  MSL_MOVE_TABLE_HITBOX_CAP = 4,
   MSL_MOVE_TABLE_THROW_HITBOX_CAP = 4,
   MSL_MOVE_TABLE_PULSE_CAP = 16,
   MSL_MOVE_TABLE_SFX_PULSE_CAP = 16,
@@ -549,12 +550,52 @@ uint8_t move_tables_attackair_post_clear_create_hitbox_phase(uint8_t char_id,
 uint8_t move_tables_attackair_same_group_payload_preserves_hitcapsule(uint8_t char_id,
                                                                       uint16_t attackair_action_id,
                                                                       float cur_anim_frame_f32) {
-  return (move_tables_attackair_second_create_hitbox_phase(char_id, attackair_action_id,
-                                                           cur_anim_frame_f32) &&
-          !move_tables_attackair_post_clear_create_hitbox_phase(char_id, attackair_action_id,
-                                                                cur_anim_frame_f32))
-             ? 1u
-             : 0u;
+  uint16_t msid = 0;
+  if (!attackair_msid_from_action(attackair_action_id, &msid)) {
+    return 0u;
+  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || !frame_window_contains(cache->second_create_hitbox, cur_anim_frame_f32) ||
+      frame_window_contains(cache->post_clear_create_hitbox, cur_anim_frame_f32)) {
+    return 0u;
+  }
+  const int16_t second_frame = cache->second_create_hitbox.start_af;
+  if (second_frame < 0) {
+    return 0u;
+  }
+  uint8_t prior_group[MSL_MOVE_TABLE_HITBOX_CAP] = {0u};
+  uint8_t prior_loaded[MSL_MOVE_TABLE_HITBOX_CAP] = {0u};
+  uint8_t saw_second_create = 0u;
+  const MslScriptEventRange range = script_events_range(char_id, msid);
+  for (uint32_t i = 0; i < range.count; i++) {
+    const MslScriptEvent* ev = &range.events[i];
+    if (ev->frame > (uint16_t)second_frame) {
+      break;
+    }
+    if (ev->kind_id == (uint8_t)MSL_SCRIPT_EVENT_CLEAR_HITBOXES) {
+      for (uint8_t hb = 0; hb < (uint8_t)MSL_MOVE_TABLE_HITBOX_CAP; hb++) {
+        prior_loaded[hb] = 0u;
+      }
+      continue;
+    }
+    if (ev->kind_id != (uint8_t)MSL_SCRIPT_EVENT_CREATE_HITBOX) {
+      continue;
+    }
+    const MslScriptCreateHitboxPayload* hb = &ev->payload.create_hitbox;
+    if (hb->hitbox_id >= (uint8_t)MSL_MOVE_TABLE_HITBOX_CAP) {
+      return 0u;
+    }
+    if (ev->frame < (uint16_t)second_frame) {
+      prior_group[hb->hitbox_id] = hb->hit_group;
+      prior_loaded[hb->hitbox_id] = 1u;
+      continue;
+    }
+    saw_second_create = 1u;
+    if (prior_loaded[hb->hitbox_id] == 0u || prior_group[hb->hitbox_id] != hb->hit_group) {
+      return 0u;
+    }
+  }
+  return saw_second_create;
 }
 
 uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t grounded_action_id,
@@ -574,6 +615,31 @@ int16_t move_tables_grounded_attack_first_create_hitbox_frame(uint8_t char_id,
   const MslMoveTableCache* cache = move_cache_get(char_id, msid);
   return (cache != NULL && cache->first_create_hitbox.loaded) ? cache->first_create_hitbox.start_af
                                                               : -1;
+}
+
+uint8_t move_tables_grounded_attack_create_hitbox_payload_matches(
+    uint8_t char_id, uint16_t grounded_action_id, uint8_t hitbox_id, int hitcapsule_int_dmg,
+    uint16_t angle, uint16_t kbg, uint16_t bkb) {
+  uint16_t msid = 0;
+  if (!grounded_attack_msid_from_action(grounded_action_id, &msid)) {
+    return 0u;
+  }
+  const MslScriptEventRange range = script_events_range(char_id, msid);
+  for (uint32_t i = 0; i < range.count; i++) {
+    const MslScriptEvent* ev = &range.events[i];
+    if (ev->kind_id != (uint8_t)MSL_SCRIPT_EVENT_CREATE_HITBOX) {
+      continue;
+    }
+    const MslScriptCreateHitboxPayload* hb = &ev->payload.create_hitbox;
+    if (hb->hitbox_id != hitbox_id) {
+      continue;
+    }
+    const int dmg = (int)(hb->damage + (hb->damage >= 0.0f ? 0.5f : -0.5f));
+    if (dmg == hitcapsule_int_dmg && hb->angle == angle && hb->kbg == kbg && hb->bkb == bkb) {
+      return 1u;
+    }
+  }
+  return 0u;
 }
 
 static const MslMoveTableCache* grounded_smash_charge_cache(uint8_t char_id,

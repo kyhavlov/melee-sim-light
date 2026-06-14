@@ -94,6 +94,27 @@ static inline uint8_t msl_item_reflect_owner_valid(const MslBatch* batch, int ow
                                                                                            : 0u;
 }
 
+static inline uint8_t msl_item_reflect_has_transfer_provenance(const MslBatch* batch,
+                                                               size_t item_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.item_reflect_damage_mul[item_idx] != 1.0f) {
+    return 1u;
+  }
+  if (batch->state.item_pending_reflect_owner_port[item_idx] != (uint8_t)MSL_ITEM_REFLECT_NO_PORT) {
+    return 1u;
+  }
+  if (batch->state.item_reflect_body_owner_port[item_idx] != (uint8_t)MSL_ITEM_REFLECT_NO_PORT) {
+    return 1u;
+  }
+  const uint8_t seed_port = batch->state.item_reflect_transfer_seed_port[item_idx];
+  return (seed_port != (uint8_t)MSL_ITEM_REFLECT_NO_PORT &&
+          seed_port != (uint8_t)MSL_ITEM_REFLECT_KNOWN_NONE_PORT)
+             ? 1u
+             : 0u;
+}
+
 static inline void msl_item_reflect_commit_owner_snapshot(MslBatch* batch, size_t item_idx,
                                                           int reflector_port) {
   if (!msl_item_reflect_owner_valid(batch, reflector_port)) {

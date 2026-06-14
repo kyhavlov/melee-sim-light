@@ -75,6 +75,8 @@ class _Case:
 
 
 _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_MARTH_VALIDATION = "datasets/aggregate_recent/replays/validation/marth"
+_DOUBLES_VALIDATION = "datasets/doubles_recent/replays/validation/doubles_recent"
 
 
 @pytest.mark.integration
@@ -85,6 +87,8 @@ _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
         _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 2839, 0),
         _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 753, 1),
         _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 2101, 0),
+        _Case(f"{_MARTH_VALIDATION}/QuestionableHarmfulPanther.msl", 8304, 1),
+        _Case(f"{_DOUBLES_VALIDATION}/Game_20260509T152622.msl", 3229, 3),
     ],
 )
 def test_damageair_anim_end_does_not_spuriously_stay_in_damageair(case: _Case) -> None:
@@ -374,3 +378,83 @@ def test_grounded_damageair_anim_end_exits_to_wait(case: _Case, expected_seed_ac
         got = int(out[field][p])
         exp = int(row["ref_t1"][field][0, p])
         assert got == exp, f"field={field} expected={exp} got={got}"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record,expected_action,expected_grounded", [(924, 82, 0), (925, 42, 1)])
+def test_common_damage_terminal_fall_static_platform_handoff_pfz(
+    record: int, expected_action: int, expected_grounded: int
+) -> None:
+    binding = pytest.importorskip("msl_binding")
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    if not (root / "data/characters/marth.json").exists():
+        pytest.skip("missing local extracted artifact: data/characters/marth.json")
+    dataset_rel = f"{_MARTH_VALIDATION}/ParallelFamiliarZebra.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    p = 0
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    # Replay-real terminal common Damage -> Fall collision boundary:
+    # - rec924 is the adjacent pre-terminal DamageLw2 control and must stay airborne.
+    # - rec925 has Damage_Anim entering Fall before map collision, while ftCo_Fall_Enter preserves
+    #   the previous Damage submotion for this callback; Fall_Coll then admits the carried static
+    #   Battlefield platform through the normal one-way-platform stick gate and enters Landing.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_Coll}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047F40,mpColl_80044628_Floor,mpColl_80044838_Floor}
+    assert int(row["seed_t"]["action_id"][0, p]) == 82
+    assert int(row["seed_t"]["animation_index"][0, p]) == 172
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["seed_t"]["ground_id"][0, p]) == 2
+    assert int(row["input_t"]["p"][0, p]["main_y"]) > -72
+    assert int(row["ref_t1"]["action_id"][0, p]) == expected_action
+    assert int(row["ref_t1"]["on_ground"][0, p]) == expected_grounded
+
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+
+    for field in ("action_id", "animation_index", "on_ground", "ground_id", "jumps_left", "action_frame"):
+        got = int(out[field][p])
+        exp = int(row["ref_t1"][field][0, p])
+        assert got == exp, f"record={record} field={field} expected={exp} got={got}"
+
+    assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][0, p]), abs=1e-5)
+
+
+@pytest.mark.integration
+def test_common_damage_terminal_fall_static_platform_handoff_respects_pass_stick_pfz() -> None:
+    binding = pytest.importorskip("msl_binding")
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    if not (root / "data/characters/marth.json").exists():
+        pytest.skip("missing local extracted artifact: data/characters/marth.json")
+    dataset_rel = f"{_MARTH_VALIDATION}/ParallelFamiliarZebra.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 925
+    p = 0
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1].copy()
+
+    # Synthetic source-shaped negative: the same terminal Damage/Fall row must not land on the
+    # carried static platform when the source platform-pass stick gate rejects the floor.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor platform callback path
+    row["input_t"]["p"][0, p]["main_y"] = np.int8(-127)
+
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+
+    assert int(out["action_id"][p]) == 29
+    assert int(out["animation_index"][p]) == 20
+    assert int(out["on_ground"][p]) == 0
+    assert float(out["pos_y"][p]) < float(row["ref_t1"]["pos_y"][0, p])

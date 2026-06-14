@@ -1152,8 +1152,8 @@ static inline uint8_t landing_contact_is_ledge_floor(const MslBatch* batch, size
   return g->lines[(size_t)line_idx].is_ledge ? 1u : 0u;
 }
 
-static inline float landing_root_y_from_mpcoll_contact(const MslBatch* batch, size_t idx,
-                                                       size_t bi) {
+static inline float landing_root_y_from_mpcoll_contact(const MslBatch* batch, size_t idx, size_t bi,
+                                                       uint8_t preserve_fall_basic_dd90_order) {
   // Decomp owner:
   // - mpLib_8004DD90_Floor applies a +0.0001 root/floor bias to its returned correction.
   // - Some lite mpColl helper paths store the floor plane in `ground_contact_y`; direct DD90 paths
@@ -1238,6 +1238,22 @@ static inline float landing_root_y_from_mpcoll_contact(const MslBatch* batch, si
   if (fabsf(world.x1 - world.x0) > 0.0001f) {
     floor_y = world.y0 + ((world.y1 - world.y0) * (batch->state.pos_x[idx] - world.x0) /
                           (world.x1 - world.x0));
+  }
+  if (preserve_fall_basic_dd90_order != 0u && batch->state.coll_floor_result_source[idx] == 1u &&
+      batch->state.coll_floor_result_mode[idx] == 1u &&
+      isfinite(batch->state.coll_substep_cur_pos_y[idx])) {
+    // Source-order mpLib_8004DD90_Floor publication for Fall_Coll -> ft_80082B1C basic Landing:
+    // ft_80083090_inline adds the signed DD90 correction back to `coll->cur_pos.y`; it does not
+    // algebraically collapse the expression to `floor_y + 0.0001`. Keep this explicit caller gate
+    // so AttackAir/DamageAir landing owners with different callback-local publication contracts do
+    // not inherit the Fall-family f32 order from scratch-lane shape alone.
+    // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpCollEnd}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_80082B1C}
+    const float source_y = batch->state.coll_substep_cur_pos_y[idx];
+    const float y_corr = (floor_y - source_y) + k_mplib_floor_y_bias;
+    return source_y + y_corr;
   }
   if (!g->lines[(size_t)line_idx].is_platform &&
       !stage_collision_floor_line_has_platform_transform(stage_id, batch->state.ground_id[idx]) &&
@@ -3416,14 +3432,19 @@ static inline void run_anim_rate_ftCo_Run_Anim(MslBatch* batch, const MslCharPar
     return;
   }
   // Decomp Run anim-rate ownership:
-  // - ftCo_Run_Anim / ftCo_RunDirect_Anim call ftAnim_SetAnimRate(ABS(gr_vel) / run_animation_scaling).
+  // - ftCo_Run_Anim / ftCo_RunDirect_Anim choose hidden mv.co.run.x4 only while
+  //   ft_GetGroundFrictionMultiplier(fp) < 1.0; otherwise they use fp->gr_vel.
   // - This runs in Fighter_procUpdate motion callbacks after the frame's ftAnim tick, so it owns
   //   the *next* frame's advancement rate.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_Anim
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   // refs/melee/src/melee/ft/ftanim.c::ftAnim_SetAnimRate
-  const float vx = batch->state.speed_ground_x_self[idx];
+  float vx = batch->state.speed_ground_x_self[idx];
+  if (isfinite(batch->state.ground_friction_mul[idx]) &&
+      batch->state.ground_friction_mul[idx] < 1.0f) {
+    vx = batch->state.run_anim_source_vel[idx];
+  }
   const float rate = msl_absf(vx) / ch->run_animation_scaling;
   batch->state.run_anim_source_vel[idx] = vx;
   msl_anim_timebase_set_rate(batch, idx, rate);
@@ -4036,7 +4057,10 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
     apply_contact_y_owner = 0u;
   }
   if (apply_contact_y_owner) {
-    batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, bi);
+    const uint8_t preserve_fall_basic_dd90_order =
+        (source_act == (uint16_t)MSL_ACT_FALL && land_act == (uint16_t)MSL_ACT_LANDING) ? 1u : 0u;
+    batch->state.pos_y[idx] =
+        landing_root_y_from_mpcoll_contact(batch, idx, bi, preserve_fall_basic_dd90_order);
   }
 
   batch->state.fall_fast[idx] = 0;
@@ -7495,7 +7519,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // Source-order guard: some post-collision callback lanes can already be in Landing before this
           // locomotion transition resolver runs. Preserve floor-contact Y for the same decomp-owned
           // Jump/SpecialAirN collision families used by the landing owner helper above.
-          batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi);
+          batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
         }
 
         if (a == (uint16_t)MSL_ACT_SHIELD_BREAK_FLY || a == (uint16_t)MSL_ACT_SHIELD_BREAK_FALL) {
@@ -7624,7 +7648,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.jumps_left[idx] = ch->max_jumps;
           batch->state.fall_fast[idx] = 0u;
           batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
-          batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi);
+          batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
           continue;
         } else if (a == (uint16_t)MSL_ACT_ESCAPE_AIR) {
           // EscapeAir: EscapeAir_Coll -> ft_80082C74(..., ftCo_80099D70) -> ftCo_LandingFallSpecial_Enter(..., x344)
@@ -7666,7 +7690,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.speed_air_x_self[idx] = landing_self_vel_x;
           batch->state.jumps_left[idx] = ch->max_jumps;
           batch->state.fall_fast[idx] = 0u;
-          batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi);
+          batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
           msl_anim_timebase_enter_with_policy(batch, idx, 13.0f, 1.0f,
                                               MSL_ANIM_ENTER_TICK_IMMEDIATE);
           continue;
