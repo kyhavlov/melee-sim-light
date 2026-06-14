@@ -843,7 +843,7 @@ static inline uint8_t hitboxes_seed_reconstruct_attackairn_damageflytop_dense_ap
 
 static inline uint8_t hitboxes_seed_bridge_attackairhi_damageflytop_create_dense_applies(
     const MslBatch* batch, int bi, int attacker, uint8_t hit_group, float hitbox_damage,
-    uint16_t create_frame) {
+    uint16_t create_frame, uint16_t second_create_frame) {
   if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS ||
       hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
     return 0u;
@@ -878,7 +878,7 @@ static inline uint8_t hitboxes_seed_bridge_attackairhi_damageflytop_create_dense
         batch->state.last_hit_by[v_idx] != attacker_source_port0) {
       continue;
     }
-    if (create_frame == 0xFFFFu) {
+    if (create_frame == 0xFFFFu || second_create_frame == 0xFFFFu) {
       continue;
     }
     if (batch->state.combat_hitlist_cd[cd_i] != 0u &&
@@ -1998,6 +1998,12 @@ void hitboxes_refresh(MslBatch* batch) {
           second_create_frame[hb] = ev->frame;
         }
       }
+      const int16_t attackair_action_second_create_frame =
+          move_tables_attackair_second_create_hitbox_frame(char_id, action_id);
+      const uint16_t attackair_action_second_create_frame_u16 =
+          (attackair_action_second_create_frame >= 0)
+              ? (uint16_t)attackair_action_second_create_frame
+              : 0xFFFFu;
 
       uint8_t has_no_damage_contact_victim = 0u;
       for (int victim = 0; victim < num_players; victim++) {
@@ -2333,15 +2339,21 @@ void hitboxes_refresh(MslBatch* batch) {
                 hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, (int)hb, new_g);
               } else if (ev->frame == first_create_frame[hb] &&
                          hitboxes_seed_bridge_attackairhi_damageflytop_create_dense_applies(
-                             batch, bi, p, new_g, ev->damage, first_create_frame[hb])) {
-                // AttackAirHi create-frame same-source DamageFlyTop latch:
+                             batch, bi, p, new_g, ev->damage, first_create_frame[hb],
+                             attackair_action_second_create_frame_u16)) {
+                // AttackAirHi multi-band create-frame same-source DamageFlyTop latch:
                 // - This is the create-edge counterpart to the normal dense hitlist materialization
-                //   path. The hitbox was not active at pose_frame-1, so the generic active-snapshot
-                //   seed path cannot populate victims_1 before lbColl_8000ACFC.
+                //   path for AttackAirHi scripts with a later clear->create band. The hitbox was
+                //   not active at pose_frame-1, so the generic active-snapshot seed path cannot
+                //   populate victims_1 before lbColl_8000ACFC.
+                // - Single-band AttackAirHi scripts use the ordinary disabled->enabled
+                //   ftColl_800768A0 clear/copy owner; the legacy dense hit_group seed is too
+                //   coarse to override that first create edge. The gate is the extracted second
+                //   create_hitbox frame, not a character id.
                 // - A terminal same-source DamageFlyTop victim can still be present in vanilla's
-                //   HitCapsule victim list even though Slippi BODY attribution names the previous
-                //   same-port source instance. The following authoritative per-HitCapsule empty
-                //   seed owns the clear/admit boundary.
+                //   HitCapsule victim list for multi-band UAir even though Slippi BODY attribution
+                //   names the previous same-port source instance. The following authoritative
+                //   per-HitCapsule empty seed owns the clear/admit boundary.
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
                 // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
                 // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}

@@ -3276,6 +3276,10 @@ static inline uint8_t combat_attackairhi_create_edge_damageflytop_suppresses_ful
       batch->state.hitstun[d_idx] < 2u) {
     return 0u;
   }
+  if (move_tables_attackair_second_create_hitbox_frame(batch->state.char_id[a_idx],
+                                                       batch->state.action_id[a_idx]) < 0) {
+    return 0u;
+  }
   if (batch->state.instance_hit_by[d_idx] == 0u ||
       batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx]) {
     return 0u;
@@ -3299,10 +3303,12 @@ static inline uint8_t combat_attackairhi_create_edge_damageflytop_suppresses_ful
   }
   // AttackAirHi create-edge same-source DamageFlyTop latch:
   // ftAction_8007121C creates HitCapsules before ftColl_80078C70 checks BODY. During rollout, a
-  // terminal same-source DamageFlyTop victim can still be in the pre-create victims_1 owner while
-  // the newly-created HitCapsule has no current accepted hitlist entry. Suppress only this first
-  // create edge; the next frame's live HitCapsule list admits the hit.
-  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirHi.events.create_hitbox
+  // terminal same-source DamageFlyTop victim can still be in the pre-create victims_1 owner for
+  // multi-band UpAir scripts while the newly-created HitCapsule has no current accepted hitlist
+  // entry. Suppress only this first create edge for scripts with a later create_hitbox band; the
+  // next frame's live HitCapsule list admits the hit. Single-band UpAir scripts use the ordinary
+  // ftColl_800768A0 clear/copy owner and must not inherit this dense replay bridge.
+  // data/moves/{fox,falco,marth}.json::moves.ftCo_SM_AttackAirHi.events.create_hitbox
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
   // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8,ftColl_80078C70}

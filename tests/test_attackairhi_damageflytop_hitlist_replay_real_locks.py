@@ -18,8 +18,10 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
         "data/common/ft_common_data.json",
         "data/characters/fox.json",
         "data/characters/falco.json",
+        "data/characters/marth.json",
         "data/anims/fox.tracks.bin",
         "data/anims/falco.tracks.bin",
+        "data/anims/marth.tracks.bin",
     ]
     missing = [rel for rel in required if not (root / rel).exists()]
     if missing:
@@ -31,6 +33,14 @@ def _dataset_path(root: Path) -> Path:
         "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "TreasuredBackKangaroo.msl"
     )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
+def _marth_dataset_path(root: Path) -> Path:
+    dataset_rel = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
@@ -220,3 +230,68 @@ def test_attackairhi_rollout_create_edge_suppresses_then_releases_tbk_5247() -> 
     assert int(out_5248["action_id"][victim]) == int(ref_5248["action_id"][victim]) == ACT_DAMAGE_AIR_2
     assert int(out_5248["hitlag"][victim]) == int(ref_5248["hitlag"][victim]) == 5
     assert float(out_5248["percent"][victim]) == pytest.approx(float(ref_5248["percent"][victim]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_attackairhi_single_band_create_edge_does_not_materialize_dense_latch_wws_6168() -> None:
+    # Marth UpAir is a single-band AttackAirHi script: the extracted timeline has one
+    # create_hitbox band, then clear. On that first disabled->enabled edge, ftAction_8007121C
+    # calls ftColl_800768A0 and the owning source behavior is clear/copy from a same-group active
+    # HitCapsule, not materialization of the legacy dense replay group seed.
+    #
+    # WWS:6168 carries the same terminal DamageFlyTop dense group seed shape as the multi-band
+    # Falco positive above, but WWS:6169 publishes authoritative empty per-HitCapsule hitlists and
+    # vanilla admits Marth's UAir BODY hit. This is the adjacent negative for the extracted
+    # second-create-frame gate; it must remain data-backed and not become a character-id rule.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _marth_dataset_path(root)
+    ds = read_dataset(str(dataset_path))
+
+    attacker = 1
+    victim = 0
+    start_record = 6168
+    seed_6168 = ds.samples[start_record]["seed_t"]
+    seed_6169 = ds.samples[start_record + 1]["seed_t"]
+    assert int(seed_6168["char_id"][attacker]) == 18
+    assert int(seed_6168["action_id"][attacker]) == ACT_ATTACK_AIR_HI
+    assert int(seed_6168["action_frame"][attacker]) == 3
+    assert int(seed_6168["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
+    assert int(seed_6168["hitstun"][victim]) == 4
+    assert int(seed_6168["combat_hitlist_cd"][attacker, 0, victim]) == 0xFFFF
+    assert int(seed_6168["combat_hitlist_victim_iid"][attacker, 0, victim]) == int(
+        seed_6168["instance_id"][victim]
+    )
+    assert [int(v) for v in seed_6168["combat_hitlist_hb_valid"][attacker]] == [0, 0, 0, 0]
+
+    assert int(seed_6169["action_id"][attacker]) == ACT_ATTACK_AIR_HI
+    assert int(seed_6169["action_frame"][attacker]) == 4
+    assert int(seed_6169["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
+    assert int(seed_6169["combat_hitlist_cd"][attacker, 0, victim]) == 0xFFFF
+    assert [int(v) for v in seed_6169["combat_hitlist_hb_valid"][attacker]] == [1, 1, 1, 1]
+    assert [int(seed_6169["combat_hitlist_hb_cd"][attacker, hb, victim]) for hb in range(4)] == [
+        0,
+        0,
+        0,
+        0,
+    ]
+
+    rows = _run_rollout_records(dataset_path, start_record, (6169,))
+    out, ref = rows[6169]
+
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["action_frame"][victim]) == int(ref["action_frame"][victim]) == 1
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 6
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim]) == 50
+    assert int(out["instance_id"][victim]) == int(ref["instance_id"][victim]) == 1335
+    assert int(out["instance_hit_by"][victim]) == int(ref["instance_hit_by"][victim]) == int(
+        seed_6168["instance_id"][attacker]
+    )
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]), abs=1e-6)
+
+    assert int(out["action_id"][attacker]) == int(ref["action_id"][attacker]) == ACT_ATTACK_AIR_HI
+    assert int(out["action_frame"][attacker]) == int(ref["action_frame"][attacker]) == 5
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 6

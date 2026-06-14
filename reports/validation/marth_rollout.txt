@@ -35,12 +35,12 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 == datasets/marth/replays/validation/marth/LoudDullGoat.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1144
-rollout.streak_count: 22
-rollout.streak_len.median: 209
+rollout.streak_count: 20
+rollout.streak_len.median: 214
 rollout.streak_len.p90: 504
 rollout.streak_len.p95: 743
 rollout.streak_len.max: 1144
-rollout.first_mismatch_total: 21
+rollout.first_mismatch_total: 19
 rollout.first_mismatch_seeded_total: 9
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -120,12 +120,12 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:623
 == datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1048
-rollout.streak_count: 38
+rollout.streak_count: 37
 rollout.streak_len.median: 205
 rollout.streak_len.p90: 884
 rollout.streak_len.p95: 1047
 rollout.streak_len.max: 1048
-rollout.first_mismatch_total: 40
+rollout.first_mismatch_total: 39
 rollout.first_mismatch_seeded_total: 23
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -162,12 +162,12 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:136
 == datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1046
-rollout.streak_count: 71
-rollout.streak_len.median: 123
-rollout.streak_len.p90: 403
-rollout.streak_len.p95: 596
+rollout.streak_count: 65
+rollout.streak_len.median: 138
+rollout.streak_len.p90: 445
+rollout.streak_len.p95: 632
 rollout.streak_len.max: 1046
-rollout.first_mismatch_total: 71
+rollout.first_mismatch_total: 65
 rollout.first_mismatch_seeded_total: 19
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -182,13 +182,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1330
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 
 == suite summary ==
-overall.rollout.streak_count: 288
-overall.rollout.streak_len.median: 153
-overall.rollout.streak_len.p90: 596
-overall.rollout.streak_len.p95: 812
+overall.rollout.streak_count: 279
+overall.rollout.streak_len.median: 164
+overall.rollout.streak_len.p90: 608
+overall.rollout.streak_len.p95: 879
 overall.rollout.streak_len.max: 2069
 overall.rollout.best_len.max: 2069
-overall.rollout.first_mismatch_total: 286
+overall.rollout.first_mismatch_total: 277
 overall.rollout.first_mismatch_seeded_total: 114
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:

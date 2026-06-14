@@ -335,6 +335,21 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_ProcessHit_8006D1EC}`,
    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}`,
    and `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`.
+   **Dense hitlist seed bridges must follow script create/clear bands**:
+   if a replay seed only has the legacy dense group victim lane, do not
+   materialize that state into a newly-created HitCapsule just because a spacie
+   row needed it. First classify the move's extracted `create_hitbox` /
+   `clear_hitboxes` timeline from `data/moves/<char>.json` or `MSLFTSC1`.
+   Multi-band aerials with a later create band can have a bounded
+   create-edge carry owner; single-band aerials should use the ordinary
+   `ftAction_8007121C -> ftColl_800768A0` clear/copy rule unless
+   per-HitCapsule seed/probe evidence proves otherwise. The runtime gate should
+   read as a table-backed script-timeline predicate, not a character-id or
+   action-id-only proxy. Source anchors:
+   `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`,
+   `refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0`,
+   `refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC}`,
+   and `data/moves/<char>.json::moves.*.events`.
    **Squat platform-pass countdown is hidden state, not current-input truth**:
    `ftCo_80099F9C` arms `mv.co.squat.x0/x4` when down is held on a platform,
    but `ftCo_Squat_IASA_inline` later consumes the countdown without rechecking

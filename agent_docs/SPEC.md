@@ -6540,16 +6540,23 @@ BODY collision-space residual split and rejected seed bridge:
   `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`, and
   `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`.
 - AttackAirHi create-frame dense-latch preservation is also needed for terminal same-source
-  `DamageFlyTop` hitstun victims: when rollout starts before UpAir's first HitCapsule create edge,
-  the dense group seed can prove vanilla's `victims_1` already contains the live victim pointer even
-  though replay BODY attribution still names the previous same-port source instance. Runtime may
-  materialize that dense latch only for `AttackAirHi` create frames against same-source
-  `DamageFlyTop` victims whose current instance id matches the seed; the following
-  authoritative-empty per-HitCapsule seed owns the clear/admit boundary for the real next-frame hit.
-  `TBK:5247` protects the suppressing row and `TBK:5248` protects the admitted-hit row. Source
-  paths: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim`,
+  `DamageFlyTop` hitstun victims, but only for extracted multi-band UpAir scripts. When rollout
+  starts before a multi-band UpAir's first HitCapsule create edge, the dense group seed can prove
+  vanilla's `victims_1` already contains the live victim pointer even though replay BODY
+  attribution still names the previous same-port source instance. Runtime may materialize that
+  dense latch only for `AttackAirHi` create frames against same-source `DamageFlyTop` victims whose
+  current instance id matches the seed and whose script has a later distinct `create_hitbox` band;
+  the following authoritative-empty per-HitCapsule seed owns the clear/admit boundary for the real
+  next-frame hit. Single-band UpAir scripts, such as Marth's extracted
+  `ftCo_SM_AttackAirHi`, use the ordinary `ftAction_8007121C -> ftColl_800768A0` disabled->enabled
+  clear/copy owner and must not inherit this dense replay bridge. `TBK:5247` protects the
+  suppressing multi-band row, `TBK:5248` protects the admitted-hit row, and WWS `6168 -> 6169`
+  protects the single-band Marth negative. Source paths:
+  `data/moves/{fox,falco,marth}.json::moves.ftCo_SM_AttackAirHi.events`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim`,
+  `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`,
   `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`, and
-  `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}`.
+  `refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC,lbColl_80008A5C}`.
 - AttackAirLw no-clear same-slot payloads initialize hidden HitCapsule provenance from legacy dense
   seeds during reseed, and the live script payload path also materializes that provenance when the
   create payload is replayed. Falco DAir's late create payload can update damage/offset fields
