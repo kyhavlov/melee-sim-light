@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "action.h"
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
@@ -12,6 +13,7 @@
 #include "char_params.h"
 #include "char_registry.h"
 #include "common_params.h"
+#include "grab_flow.h"
 #include "ids.h"
 #include "locomotion.h"
 #include "move_tables.h"
@@ -49,6 +51,10 @@ static inline float ms_facing_dir(const MslBatch* batch, size_t idx) {
 
 static uint8_t ms_try_enter_air_b_special_from_fall_iasa(MslBatch* batch, const MslCommonParams* c,
                                                          const MslCharParams* ch, size_t idx);
+static uint8_t ms_try_run_grounded_wait_iasa_after_ft_8008A2BC(MslBatch* batch,
+                                                               const MslCommonParams* c,
+                                                               const MslCharParams* ch, size_t idx,
+                                                               uint16_t source_action);
 
 // ---------------------------------------------------------------------------
 // Entries (decomp: ftMs_Special*_Enter)
@@ -131,6 +137,7 @@ static void ms_enter_speciallw(MslBatch* batch, const MslCharParams* ch, size_t 
   ms_reset_cmds(batch, idx);
   batch->state.speciallw_countered_damage[idx] = 0u;
   batch->state.speciallw_counter_window[idx] = 0u;
+  batch->state.speciallw_counter_hitlag_floor_active[idx] = 0u;
   batch->state.specialn_facing_dir1[idx] =
       (batch->state.facing_dir1[idx] < 0) ? (int8_t)-1 : (int8_t)1;
   ms_enter(batch, idx,
@@ -212,9 +219,11 @@ static inline uint8_t ms_db_is_final_stage(uint16_t a) {
 static void ms_exit_to_wait_or_fall(MslBatch* batch, const MslCommonParams* c,
                                     const MslCharParams* ch, size_t idx) {
   if (batch->state.on_ground[idx]) {
+    const uint16_t source_action = batch->state.action_id[idx];
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
     msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    (void)ms_try_run_grounded_wait_iasa_after_ft_8008A2BC(batch, c, ch, idx, source_action);
   } else {
     // Source callback ordering:
     // - Marth aerial special Anim callbacks exit through ftCo_Fall_Enter when the move ends.
@@ -240,6 +249,22 @@ static void ms_enter_fall_special_from_specialhi(MslBatch* batch, const MslCharP
   batch->state.fallspecial_mobility_mul[idx] = ch->specialhi_freefall_mobility_mul;
 }
 
+static void ms_enter_specialn_release(MslBatch* batch, size_t idx, uint8_t grounded_family,
+                                      uint8_t full_charge) {
+  // Shield Breaker Loop releases through ftMs_SpecialN_80137354/801373B8, which select End0/End1
+  // from cmd_vars[0] and enter the release animation at frame 1. This helper is used both by the
+  // Loop Anim full-charge path and the Loop IASA B-release path.
+  // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c::{
+  //   ftMs_SpecialN_80137354,ftMs_SpecialN_801373B8}
+  batch->state.special_cmd0[idx] = full_charge ? 1u : 0u;
+  ms_enter(batch, idx,
+           grounded_family ? (full_charge ? (uint16_t)MSL_ACT_MS_SPECIAL_N_END1
+                                          : (uint16_t)MSL_ACT_MS_SPECIAL_N_END0)
+                           : (full_charge ? (uint16_t)MSL_ACT_MS_SPECIAL_AIR_N_END1
+                                          : (uint16_t)MSL_ACT_MS_SPECIAL_AIR_N_END0),
+           1.0f);
+}
+
 // ---------------------------------------------------------------------------
 // Per-action update (anim/IASA/transitions); runs in the action phase
 // ---------------------------------------------------------------------------
@@ -259,12 +284,20 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
     case MSL_ACT_MS_SPECIAL_N_START:
     case MSL_ACT_MS_SPECIAL_AIR_N_START:
       if (ms_anim_finished(cid, msid, frame)) {
+        const uint8_t grounded_family = (a == (uint16_t)MSL_ACT_MS_SPECIAL_N_START) ? 1u : 0u;
         // doStartAnim -> Loop at frame 0 (ftMs_SpecialN_80136E74/EAC).
         ms_enter(batch, idx,
-                 (a == (uint16_t)MSL_ACT_MS_SPECIAL_N_START)
-                     ? (uint16_t)MSL_ACT_MS_SPECIAL_N_LOOP
-                     : (uint16_t)MSL_ACT_MS_SPECIAL_AIR_N_LOOP,
+                 grounded_family ? (uint16_t)MSL_ACT_MS_SPECIAL_N_LOOP
+                                 : (uint16_t)MSL_ACT_MS_SPECIAL_AIR_N_LOOP,
                  0.0f);
+        // Fighter_procUpdate runs Anim before IASA. After Start_Anim changes into Loop, the
+        // destination Loop_IASA can consume a same-frame B release; Start_IASA itself is empty.
+        // This is a pure state-machine handoff, so do not increment mv.ms.specialn.cur_frame here.
+        // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c::{
+        //   ftMs_SpecialNStart_Anim,ftMs_SpecialNLoop_IASA}
+        if ((held & (uint16_t)MSL_BUTTON_B) == 0u) {
+          ms_enter_specialn_release(batch, idx, grounded_family, /*full_charge=*/0u);
+        }
       }
       break;
     case MSL_ACT_MS_SPECIAL_N_LOOP:
@@ -279,20 +312,12 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
       const int32_t max_frames = ch->specialn_charge_max_seconds * 30;
       if (max_frames > 0 && (int32_t)cf > max_frames) {
         // Full charge: cmd0=1 selects the End1 (shield-breaker) release anim.
-        batch->state.special_cmd0[idx] = 1u;
-        ms_enter(batch, idx,
-                 grounded_family ? (uint16_t)MSL_ACT_MS_SPECIAL_N_END1
-                                 : (uint16_t)MSL_ACT_MS_SPECIAL_AIR_N_END1,
-                 0.0f);
+        ms_enter_specialn_release(batch, idx, grounded_family, /*full_charge=*/1u);
         break;
       }
       // doLoopIasa: release on B let go -> End0 with charge-scaled damage.
       if ((held & (uint16_t)MSL_BUTTON_B) == 0u) {
-        batch->state.special_cmd0[idx] = 0u;
-        ms_enter(batch, idx,
-                 grounded_family ? (uint16_t)MSL_ACT_MS_SPECIAL_N_END0
-                                 : (uint16_t)MSL_ACT_MS_SPECIAL_AIR_N_END0,
-                 0.0f);
+        ms_enter_specialn_release(batch, idx, grounded_family, /*full_charge=*/0u);
       }
       break;
     }
@@ -389,11 +414,14 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
             move_tables_special_cmd_var_value_at_frame(cid, msid, 1u, frame);
         if (script_cmd1 && batch->state.speciallw_counter_window[idx] == 0u) {
           batch->state.speciallw_counter_window[idx] = 2u;  // armed
+          batch->state.speciallw_counter_hitlag_floor_active[idx] = 1u;
         } else if (!script_cmd1 && batch->state.speciallw_counter_window[idx] != 0u) {
           batch->state.speciallw_counter_window[idx] = 0u;
+          batch->state.speciallw_counter_hitlag_floor_active[idx] = 0u;
         }
         if (ms_anim_finished(cid, msid, frame)) {
           batch->state.speciallw_counter_window[idx] = 0u;
+          batch->state.speciallw_counter_hitlag_floor_active[idx] = 0u;
           ms_exit_to_wait_or_fall(batch, c, ch, idx);
         }
         break;
@@ -839,6 +867,106 @@ static uint8_t ms_b_entry_mask(const MslBatch* batch, size_t idx, uint16_t a, ui
   }
 }
 
+static uint8_t ms_try_enter_grounded_b_special_from_wait_iasa(MslBatch* batch,
+                                                              const MslCommonParams* c,
+                                                              const MslCharParams* ch, size_t idx) {
+  if (batch == NULL || c == NULL || ch == NULL || batch->state.on_ground[idx] == 0u ||
+      batch->state.hitlag[idx] != 0u || batch->state.hitstun[idx] != 0u) {
+    return 0u;
+  }
+  const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+  const uint8_t b_edge = ((pressed & (uint16_t)MSL_BUTTON_B) != 0u) ? 1u : 0u;
+  const uint8_t up_b_present = (batch->state.x686[idx] == 0u) ? 1u : 0u;
+  if (!b_edge && !up_b_present) {
+    return 0u;
+  }
+  const uint8_t mask = ms_b_entry_mask(batch, idx, (uint16_t)MSL_ACT_WAIT, 1u);
+  if (mask == 0u) {
+    return 0u;
+  }
+
+  const float sx =
+      ms_apply_deadzone(ms_stick_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float sy =
+      ms_apply_deadzone(ms_stick_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float ax = fabsf(sx);
+  // Wait_IASA grounded special order:
+  // SpecialS -> Attack100(up) -> D6824(neutral) -> D68C0(down).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_SpecialS_CheckInput
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100_CheckInput
+  if ((mask & MS_B_SIDE) != 0u && b_edge && ax >= c->special_stick_x_threshold_side) {
+    if ((sx > 0.0f) != (batch->state.facing[idx] != 0u)) {
+      batch->state.facing[idx] = (uint8_t)(sx > 0.0f);
+    }
+    ms_enter_specials(batch, ch, idx, 1u);
+    return 1u;
+  }
+  if ((mask & MS_B_UP) != 0u && up_b_present) {
+    ms_enter_specialhi(batch, ch, idx, 1u);
+    return 1u;
+  }
+  if ((mask & MS_B_NEUTRAL) != 0u && b_edge && ax < c->special_stick_x_threshold_side &&
+      sy < c->special_stick_y_threshold && sy > -c->special_stick_y_threshold) {
+    ms_enter_specialn(batch, ch, idx, 1u);
+    return 1u;
+  }
+  if ((mask & MS_B_DOWN) != 0u && b_edge && sy <= -c->special_stick_y_threshold) {
+    ms_enter_speciallw(batch, ch, idx, 1u);
+    return 1u;
+  }
+  return 0u;
+}
+
+static uint8_t ms_try_run_grounded_wait_iasa_after_ft_8008A2BC(MslBatch* batch,
+                                                               const MslCommonParams* c,
+                                                               const MslCharParams* ch, size_t idx,
+                                                               uint16_t source_action) {
+  if (batch == NULL || c == NULL || ch == NULL ||
+      batch->state.action_id[idx] != (uint16_t)MSL_ACT_WAIT || batch->state.on_ground[idx] == 0u) {
+    return 0u;
+  }
+
+  const uint16_t buttons = batch->state.input_buttons[idx];
+  const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+  const float stick_x =
+      ms_apply_deadzone(ms_stick_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float stick_y =
+      ms_apply_deadzone(ms_stick_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float facing_dir = ms_facing_dir(batch, idx);
+  const uint8_t tilt_timer_x = batch->state.tilt_timer_x[idx];
+  const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
+
+  // Grounded Marth special Anim callbacks call ft_8008A2BC, which enters Wait through
+  // ft_8008A348. The destination Wait_IASA then runs in the same Fighter_procUpdate pass; this
+  // source owner covers Shield Breaker End, Dancing Blade stages, and CounterHit grounded exits.
+  // Keep the tail ordered like ftCo_Wait_IASA instead of serializing a bare Wait for one frame.
+  // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Lw}.c
+  if (ms_try_enter_grounded_b_special_from_wait_iasa(batch, c, ch, idx)) {
+    return 1u;
+  }
+  if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+    return 1u;
+  }
+  if (locomotion_grounded_a_attack_try_enter_from_wait_iasa(batch, c, idx, buttons_pressed, stick_x,
+                                                            stick_y, tilt_timer_x, tilt_timer_y,
+                                                            facing_dir)) {
+    return 1u;
+  }
+  if (wait_iasa_try_enter_spotdodge_before_guard_hsd_lr(batch, c, idx)) {
+    return 1u;
+  }
+  guard_update_grounded(batch, c, idx, /*allow_entry=*/1u);
+  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_WAIT) {
+    return 1u;
+  }
+  return locomotion_wait_iasa_locomotion_subset_try_enter(
+      batch, c, ch, idx, buttons, buttons_pressed, stick_x, stick_y, tilt_timer_x, tilt_timer_y,
+      facing_dir, source_action);
+}
+
 static uint8_t ms_aerial_up_b_uses_presence_gate(uint16_t action_id) {
   switch (action_id) {
     // Airborne Damage/DamageFly doIasa calls ftCo_800D69C4 before jump IASA. This is not the
@@ -1060,10 +1188,22 @@ static uint16_t marth_special_ground_variant(uint16_t a) {
 }
 
 static void ms_swap_preserving_frame(MslBatch* batch, size_t idx, uint16_t next_action) {
+  const uint16_t prev_action = batch->state.action_id[idx];
   const float cur = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
   batch->state.action_id[idx] = next_action;
   batch->state.animation_index[idx] = (uint32_t)marth_special_submotion(next_action);
   msl_anim_timebase_enter(batch, idx, cur, 1.0f);
+  if (prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_LW ||
+      prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW ||
+      prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_LW_HIT ||
+      prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW_HIT) {
+    // Counter ground/air swap helpers recreate ftColl_8007B1B8 and x221B_b1 but do not restore
+    // shield_unk0/1, so the x60 hitlag floor is no longer live after the swap.
+    // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+    //   ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0,
+    //   ftMs_SpecialLw_80139080,ftMs_SpecialLw_801390E0}
+    batch->state.speciallw_counter_hitlag_floor_active[idx] = 0u;
+  }
   // ChangeMotionState without Ft_MF_Unk24 clears fp->x221C_u16_y; opcode-52 levels whose
   // source event is at or before the preserved entry frame stay cleared until the script
   // crosses its next event (state_flags.c consumer).

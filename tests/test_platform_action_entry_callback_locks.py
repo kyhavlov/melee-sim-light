@@ -3602,6 +3602,71 @@ def test_jump_attackair_platform_entry_does_not_use_fall_owner(
 
 
 @pytest.mark.integration
+def test_jumpaerial_attackair_entry_floor_requires_live_bottom_owner() -> None:
+    # Replay-real lock for the adjacent no-owner boundary to the source-completion
+    # JumpAerial -> AttackAir floor bottom-sweep owner:
+    # - WWS:679 enters AttackAirB from JumpAerial_IASA, but vanilla stays airborne because both
+    #   callback ECB-bottom endpoints are already below Yoshi's left platform; no current
+    #   `mpColl_80044628_Floor` bottom crossing exists for the entered AttackAir callback.
+    # - HIS:3623 is a nearby JumpAerial platform landing with no AttackAir entry; it must keep the
+    #   ordinary JumpAerial_Coll landing path.
+    #
+    # data/stages/bin/grst.bin::MSLSTG01 platform/fighter_solid metadata
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{
+    #   ftCo_JumpAerial_IASA,ftCo_JumpAerial_Coll}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_800835B0}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    wws_rel = "datasets/aggregate_recent/replays/validation/marth/WellWornSmallGoshawk.msl"
+    wws_path = root / wws_rel
+    if not wws_path.exists():
+        pytest.skip(f"missing local dataset: {wws_rel}")
+    wws = read_dataset(str(wws_path))
+    wws_record = 679
+    p = 0
+    wws_row = wws.samples[wws_record]
+    assert int(wws_row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(wws_row["ref_t1"]["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(wws_row["ref_t1"]["on_ground"][p]) == 0
+
+    out, dbg = _run_one_step_with_colldata(wws, wws_record)
+    ref = wws_row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert int(dbg["floor_probe_valid"][p]) == 0
+    assert int(dbg["floor_probe_raw_bottom_sweep_hit"][p]) == 0
+    assert int(dbg["floor_probe_projection_hit"][p]) == 0
+    assert int(dbg["floor_result_valid"][p]) == 0
+    source_prev_bottom_y = float(dbg["prev_bottom_rel_y"][p]) + float(
+        dbg["floor_sweep_prev_pos_y"][p]
+    )
+    source_current_bottom_y = float(dbg["prev_bottom_rel_y"][p]) + float(ref["pos_y"][p])
+    contact_y = float(dbg["floor_result_contact_y"][p])
+    assert source_prev_bottom_y < contact_y
+    assert source_current_bottom_y < contact_y
+
+    his_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    his_path = root / his_rel
+    if not his_path.exists():
+        pytest.skip(f"missing local dataset: {his_rel}")
+    his = read_dataset(str(his_path))
+    his_record = 3623
+    his_row = his.samples[his_record]
+    assert int(his_row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(his_row["ref_t1"]["action_id"][p]) == ACT_LANDING
+    assert int(his_row["ref_t1"]["on_ground"][p]) == 1
+
+    his_out, his_dbg = _run_one_step_with_colldata(his, his_record)
+    his_ref = his_row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(his_out[field][p]) == int(his_ref[field][p]), field
+    assert int(his_dbg["floor_result_valid"][p]) == 1
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("record", "p", "expected_action", "expected_on_ground", "expected_ground_id", "raw_stick_y"),
     [

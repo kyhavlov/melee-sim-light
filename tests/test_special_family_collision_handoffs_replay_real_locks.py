@@ -192,6 +192,37 @@ def test_specialairnloop_hidden_loop_latch_uses_same_action_restart_provenance_f
 
 
 @pytest.mark.integration
+def test_specialnloop_seed_latch_uses_raw_cmd0_window_not_tail_rws() -> None:
+    # Falco grounded Blaster Loop in a Marth-suite replay:
+    # RWS:10773 starts on the terminal Loop frame after a late B edge. The runtime helper keeps a
+    # short cmd0 latch-clear tail for live IASA convenience, but one-step replay reconstruction must
+    # use the raw MSLFTSC1 cmd_var[0] interval. After the source clear frame, a B edge does not prove
+    # mv.fx.SpecialN.isBlasterLoop was set before Loop_Anim reaches anim-end, so vanilla enters End.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    #   ftFx_SpecialNLoop_Anim,ftFx_SpecialNLoop_IASA}
+    # data/scripts/falco.bin (MSLFTSC1 msid 296 set_cmd_var idx=0 at frames 8..22).
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, ref, out = _run_one_step(dataset_path, 10773)
+    p = 1
+    assert int(seed["char_id"][p]) == 22  # Falco, not the Marth player in this replay.
+    assert int(seed["action_id"][p]) == 342  # ftFx_MS_SpecialNLoop / ftFc_MS_SpecialNLoop.
+    assert int(seed["animation_index"][p]) == 296
+    assert int(seed["action_frame"][p]) == 23
+    assert int(seed["x67D"][p]) == 0
+    assert int(seed["specialn_blaster_loop_requested"][p]) == 0
+
+    assert int(ref["action_id"][p]) == 343
+    assert int(ref["animation_index"][p]) == 297
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["action_frame"][p]) == int(ref["action_frame"][p])
+    assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("record,player", [(867, 1), (986, 0)])
 def test_specialhifall_landing_carries_self_velocity_to_ground_speed_selfplay_181413(
     record: int, player: int

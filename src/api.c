@@ -2094,6 +2094,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.prev_pos_y[idx] = seed->pos_y[p];
         batch->state.coll_stage_prev_pos_x[idx] = seed->pos_x[p];
         batch->state.coll_stage_prev_pos_y[idx] = seed->pos_y[p];
+        batch->state.coll_stage_prev_ground_id[idx] = seed->ground_id[p];
         batch->state.coll_substep_prev_pos_x[idx] = seed->pos_x[p];
         batch->state.coll_substep_prev_pos_y[idx] = seed->pos_y[p];
         batch->state.coll_last_pos_x[idx] = seed->pos_x[p];
@@ -2445,8 +2446,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       //
       // Seeded ownership model:
       // - `seed->fall_fast` is the internal fp->fall_fast lane (derived causally in preprocessing).
-      // - `seed->fall_fast_hitlag_exit_owner` marks immediate hitlag-exit rows for fastfall-capable
-      //   actions, where prio-0 hitlag decrement runs before non-hitlag callback ownership.
+      // - `seed->fall_fast_hitlag_exit_owner` marks immediate hitlag-exit rows only when the
+      //   source-shaped seed derivation proves the hidden fp->fall_fast lane after the prio-0
+      //   hitlag decrement. Frozen hitlag frames cannot create a new fastfall latch.
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
       //
@@ -3119,6 +3121,27 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.state_flags_2218_frame_start[idx] = seed->state_flags[p][0];
       batch->state.state_flags_221c_frame_start[idx] =
           seed->state_flags[p][MSL_STATE_FLAGS_221C_INDEX];
+      if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_MARTH &&
+          (seed->action_id[p] == (uint16_t)MSL_ACT_MS_SPECIAL_LW ||
+           seed->action_id[p] == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW) &&
+          (seed->state_flags[p][MSL_STATE_FLAGS_221B_INDEX] &
+           (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u) {
+        // Teacher-forced Counter descriptor reconstruction:
+        // Slippi exposes the live ftColl_8007B1B8 ShieldDesc as fp+0x221B_b0, but not the internal
+        // cmd1/window or shield_unk0 provenance lanes. Seed the descriptor as already armed so the
+        // next Anim callback does not treat a continuing descriptor as a fresh creation. The x60
+        // hitlag floor is an explicit replay-prefix lane: Anim-created descriptors write
+        // shield_unk0/1, while ground/air swap helpers recreate the descriptor without restoring
+        // those fields. Do not infer this from grounded/aerial state.
+        // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+        //   ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim,
+        //   ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x221B -> state_flags[2])
+        batch->state.speciallw_counter_window[idx] = 2u;
+        batch->state.speciallw_counter_hitlag_floor_active[idx] =
+            seed->speciallw_counter_hitlag_floor_active_u8[p] ? 1u : 0u;
+      }
 
       // Stale-move (staling) queue snapshot.
       uint8_t stale_qi = seed->stale_queue_index[p];
@@ -4963,6 +4986,7 @@ int msl_batch_debug_set_player_root(MslBatch* batch, int batch_index, int player
   batch->state.coll_stage_prev_pos_y[idx] = pos_y;
   batch->state.coll_stage_cur_pos_x[idx] = pos_x;
   batch->state.coll_stage_cur_pos_y[idx] = pos_y;
+  batch->state.coll_stage_prev_ground_id[idx] = batch->state.ground_id[idx];
   batch->state.coll_substep_prev_pos_x[idx] = pos_x;
   batch->state.coll_substep_prev_pos_y[idx] = pos_y;
   batch->state.coll_substep_cur_pos_x[idx] = pos_x;

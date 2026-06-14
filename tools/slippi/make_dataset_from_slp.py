@@ -1763,14 +1763,19 @@ def _load_throw_pulse_seed_tables(
 
 
 def _load_specialn_loop_cmd0_windows(*, data_root) -> dict[tuple[int, int], tuple[int, int]]:
-    """Load Fox/Falco SpecialN Loop cmd_var[0] windows from MSLFTSC1 script data.
+    """Load Fox/Falco SpecialN Loop raw cmd_var[0] windows from MSLFTSC1 script data.
 
-    Runtime uses move_tables_special_cmd0_active_at_frame(), which includes a small latch-clear
-    tail after cmd0 is set back to zero. Mirror that source window here for one-step replay seeding
-    of mv.fx.SpecialN.isBlasterLoop.
+    Runtime uses move_tables_special_cmd0_active_at_frame() for the live IASA latch check, but
+    that helper intentionally includes a small latch-clear tail. Replay seed reconstruction must
+    use the raw script interval only: a B edge after the source clear frame does not prove
+    `mv.fx.SpecialN.isBlasterLoop` was live when Loop_Anim reached anim-end.
+
+    Source: refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+      ftFx_SpecialNLoop_Anim,ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_Anim,
+      ftFx_SpecialAirNLoop_IASA}
+    Script data: data/scripts/{fox,falco}.bin (MSLFTSC1 set_cmd_var idx=0).
     """
 
-    tail_frames = 2  # src/move_tables.c::MSL_SPECIAL_CMD0_LATCH_CLEAR_TAIL_FRAMES
     windows: dict[tuple[int, int], tuple[int, int]] = {}
     for char_id, key in ((1, "fox"), (22, "falco")):
         table = read_mslftsc1_v1(data_root / "scripts" / f"{key}.bin")
@@ -1794,7 +1799,7 @@ def _load_specialn_loop_cmd0_windows(*, data_root) -> dict[tuple[int, int], tupl
                 elif value == 0 and on_frame >= 0 and off_frame < 0:
                     off_frame = int(ev.frame)
             if on_frame >= 0 and off_frame >= 0:
-                windows[(int(char_id), int(msid))] = (int(on_frame), int(off_frame) + tail_frames)
+                windows[(int(char_id), int(msid))] = (int(on_frame), int(off_frame))
     return windows
 
 
@@ -3735,6 +3740,52 @@ def _main_impl(args) -> Dataset:
         i = int(dmg)
         return i if i != 0 else 1
 
+    def _derive_marth_counter_hitlag_floor_active(
+        *,
+        char_id_u8: np.ndarray,
+        action_id_u16: np.ndarray,
+        state_flags_u8: np.ndarray,
+    ) -> np.ndarray:
+        # Marth Counter descriptor provenance:
+        # - ftMs_SpecialLw_Anim / ftMs_SpecialAirLw_Anim create the descriptor and write
+        #   shield_unk0/1 = MarsAttributes::x60.
+        # - ftMs_SpecialLw_80138D38 / 80138DD0 recreate the descriptor on ground/air swaps when
+        #   cmd_vars[1] is already armed, but do not restore shield_unk0/1.
+        # Slippi exposes descriptor liveness as fp+0x221B_b0 (state_flags[2] 0x80), so carry the
+        # x60 provenance through same-action active rows and clear it on visible 369<->371 swaps.
+        # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+        #   ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim,ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
+        act_counter_ground = np.uint16(369)
+        act_counter_air = np.uint16(371)
+        live = (
+            (char_id_u8 == np.uint8(18))
+            & ((action_id_u16 == act_counter_ground) | (action_id_u16 == act_counter_air))
+            & ((state_flags_u8[:, 2] & np.uint8(0x80)) != 0)
+        )
+        out = np.zeros(action_id_u16.shape[0], dtype=np.uint8)
+        active_floor = np.uint8(0)
+        prev_live = False
+        prev_action = np.uint16(0)
+        for i in range(action_id_u16.shape[0]):
+            if not bool(live[i]):
+                active_floor = np.uint8(0)
+                prev_live = False
+                prev_action = action_id_u16[i]
+                continue
+            action = action_id_u16[i]
+            swapped = prev_live and (
+                (prev_action == act_counter_ground and action == act_counter_air)
+                or (prev_action == act_counter_air and action == act_counter_ground)
+            )
+            if swapped:
+                active_floor = np.uint8(0)
+            elif not prev_live:
+                active_floor = np.uint8(1)
+            out[i] = active_floor
+            prev_live = True
+            prev_action = action
+        return out
+
     def _stale_multiplier_from_seed_queue(queue_index: int, queue_move_ids: np.ndarray, move_id: int) -> float:
         if move_id in (0xFFFF, 1):
             return 1.0
@@ -4670,6 +4721,13 @@ def _main_impl(args) -> Dataset:
 
         samples["seed_t"]["state_flags"][:, slot, :] = state_flags[:-1, :]
         samples["ref_t1"]["state_flags"][:, slot, :] = state_flags[1:, :]
+        samples["seed_t"]["speciallw_counter_hitlag_floor_active_u8"][:, slot] = (
+            _derive_marth_counter_hitlag_floor_active(
+                char_id_u8=post_char,
+                action_id_u16=post_state,
+                state_flags_u8=state_flags,
+            )[:-1]
+        )
 
         # -----------------------------
         # Multi-frame seeded internals:
@@ -5009,12 +5067,20 @@ def _main_impl(args) -> Dataset:
             override_post_value=0xFE,
             reset_post_mask=damage_tilt_timer_reset_post,
         )
+        # Fighter_8006A1BC decrements hitlag before Fighter_8006A360 can run the non-hitlag
+        # physics callback. `ftCommon_CheckFallFast` therefore cannot create a new fp->fall_fast
+        # latch while hitlag remains frozen above 1, but an already-latched fall_fast persists and
+        # the immediate hitlag-exit row may latch after the decrement.
+        # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+        # refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
+        fastfall_latch_callback_ok = fastfall_ok & (post_hitlag <= np.uint16(1))
         tilt_timer_y_pre, tilt_timer_y_post, fall_fast_post = compute_tilt_timer_y_pre_post_with_fall_fast(
             stick_y,
             tilt_thresh=lstick_tilt_y_thresh,
             jump_entry=jump_entry,
             pre_input_jump_entry=pre_input_jump_entry,
-            fastfall_ok=fastfall_ok,
+            fastfall_ok=fastfall_latch_callback_ok,
             speed_y_self_post=speed_y_self,
             on_ground_post=(post_on_ground != 0),
             fastfall_stick_threshold=fastfall_stick_threshold,
@@ -5058,7 +5124,9 @@ def _main_impl(args) -> Dataset:
         # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
         # refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
         samples["seed_t"]["fall_fast_hitlag_exit_owner"][:, slot] = (
-            (post_hitlag[:-1] == np.uint16(1)) & fastfall_ok[:-1]
+            (post_hitlag[:-1] == np.uint16(1))
+            & fastfall_ok[:-1]
+            & (fall_fast_post[:-1] != 0)
         ).astype(np.uint8)
         run_x0 = derive_run_x0(
             action_id=post_state,

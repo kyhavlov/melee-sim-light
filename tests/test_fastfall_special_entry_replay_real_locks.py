@@ -54,7 +54,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
     "case",
     [
         _FastfallLockCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
             target_record=3475,
             owner_port=0,
             seed_action=65,  # AttackAirN
@@ -66,7 +66,19 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             note="AttackAir post-hitlag fastfall bridge lock",
         ),
         _FastfallLockCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            target_record=483,
+            owner_port=1,
+            seed_action=65,  # AttackAirN
+            ref_action=65,  # AttackAirN
+            seed_state_flags_1=32,  # isHitlag only
+            ref_state_flags_1=0,  # no hidden fastfall after neutral-input hitlag exit
+            seed_hitlag=1,
+            seed_fall_fast_hitlag_exit_owner=0,
+            note="AttackAir neutral-input hitlag exit does not inherit hitlag-frozen fastfall",
+        ),
+        _FastfallLockCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
             target_record=3087,
             owner_port=0,
             seed_action=29,  # JumpF
@@ -78,7 +90,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             note="SpecialAirN entry fastfall clear lock",
         ),
         _FastfallLockCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
             target_record=8486,
             owner_port=0,
             seed_action=358,  # SpecialHiFall

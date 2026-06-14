@@ -678,12 +678,25 @@ static inline void enter_capture_jump_from_breakout(MslBatch* batch, const MslCo
   if (batch == NULL || c == NULL) {
     return;
   }
+  const uint16_t carried_ground_id = batch->state.ground_id[vidx];
   batch->state.on_ground[vidx] = 0u;
-  batch->state.ground_id[vidx] = 0xFFFFu;
+  // CaptureWait breakout enters CaptureJump through fn_800DC070. That helper calls
+  // ftCommon_8007D5D4, which flips ground_or_air to Air and clears gr_vel, but does not clear
+  // CollData.floor. Preserve the carried floor id for replay/API publication until the next
+  // CaptureJump_Coll owner updates collision state.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DC070
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  batch->state.ground_id[vidx] = carried_ground_id;
   batch->state.speed_ground_x_self[vidx] = 0.0f;
   batch->state.speed_air_x_self[vidx] =
       -(float)batch->state.facing_dir1[vidx] * c->capture_jump_escape_speed_x;
   batch->state.speed_y_self[vidx] = c->capture_jump_escape_speed_y;
+  {
+    const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[vidx]);
+    if (ch != NULL && ch->max_jumps > 0u) {
+      batch->state.jumps_left[vidx] = (uint8_t)(ch->max_jumps - 1u);
+    }
+  }
   batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_JUMP;
   batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_JUMP;
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
@@ -698,21 +711,24 @@ static inline void capturewait_resolve_anim_breakout_owner(MslBatch* batch,
   }
 
   // Source-order breakout owner:
-  // - CaptureWaitHi_Anim runs during the victim's prio-1 Anim callback before the grab owner's
-  //   later CatchWait/CatchAttack ownership can pummel or throw.
+  // - CaptureWaitHi_Anim runs during the victim's prio-1 Anim callback before the current-frame
+  //   input callback and before the grab owner's later CatchWait/CatchAttack ownership can pummel
+  //   or throw.
   // - When fp->grab_timer reaches zero, it immediately calls ftCo_800DA698(owner, false) and then
-  //   enters CaptureCut/CaptureJump on the victim.
+  //   enters CaptureCut/CaptureJump on the victim. The direct stick-up branch (`fn_800DC044`)
+  //   therefore reads the pre-input `fp->input.lstick`, while the X/Y latch (`fn_800DC014`) is a
+  //   later IASA owner and cannot convert an already pending Anim-owned breakout this frame.
   // - The simulator splits current-frame input application after the Anim phase, so the anim
-  //   callback records the source-owned pending transition and this resolver applies it before any
-  //   pummel/throw IASA or same-frame fn_800DC014 X/Y latch. This is a scheduler split, not a
-  //   replay-row bridge.
+  //   callback records the source-owned pending transition and this resolver applies it after
+  //   input_apply has restored both pre-input and current-input lanes, before any pummel/throw
+  //   IASA or same-frame fn_800DC014 X/Y latch. This is a scheduler split, not a replay-row bridge.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
   //   ftCo_CaptureWaitHi_Anim,ftCo_800DA698,fn_800DC070,ftCo_CatchWait_IASA}
   enter_catch_cut_from_capture_breakout(batch, c, oidx);
   clear_grab_linkage(batch, oidx, vidx);
-  if (batch->state.capture_wait_jump_latch[vidx] != 0u ||
-      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[vidx]), c->lstick_deadzone_y) >=
-          c->tap_jump_threshold) {
+  const float prev_main_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_y[vidx]), c->lstick_deadzone_y);
+  if (batch->state.capture_wait_jump_latch[vidx] != 0u || prev_main_y >= c->tap_jump_threshold) {
     enter_capture_jump_from_breakout(batch, c, vidx);
   } else {
     enter_capture_cut_from_breakout(batch, c, vidx);

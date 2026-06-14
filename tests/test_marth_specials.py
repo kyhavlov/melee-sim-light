@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 
 from test_char_common_action_coverage import _mk_inputs, _run, _seed_base  # noqa: E402
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset_window  # noqa: E402
+from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset_window  # noqa: E402
 
 B = 0x0200
 Y = 0x0800
@@ -60,8 +60,12 @@ ACT_COUNTER_AIR_HIT = 372
 ACT_FALL_SPECIAL = 0x0023
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_WAIT = 0x000E
+ACT_TURN = 0x0012
 ACT_JUMP_AERIAL_F = 0x001B
 ACT_FALL = 0x001D
+ACT_SQUAT = 0x0027
+ACT_GUARD_ON = 0x00B2
+ACT_GUARD_REFLECT = 0x00B6
 ACT_THROW_F = 0x00DB
 ACT_THROW_B = 0x00DC
 ACT_THROW_HI = 0x00DD
@@ -118,7 +122,7 @@ def _run_throw_pair(owner_char: str, victim_char_id: int, throw_action: int, fra
     return _run(_throw_pair_seed(owner_char, victim_char_id, throw_action, frame), [_mk_inputs()])[0]
 
 
-def _step_real_row(dataset: str, record: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _step_real_row(dataset: str, record: int, seed_mutator=None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     msl_binding = pytest.importorskip("msl_binding")
 
     dataset_path = ROOT / dataset
@@ -131,7 +135,10 @@ def _step_real_row(dataset: str, record: int) -> tuple[np.ndarray, np.ndarray, n
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    seed = np.frombuffer(row["seed_t"].tobytes(), dtype=np.uint8).reshape(1, seed_stride).copy()
+    seed_struct = np.array([row["seed_t"]], dtype=SEED_DTYPE)
+    if seed_mutator is not None:
+        seed_mutator(seed_struct)
+    seed = seed_struct.view(np.uint8).reshape(1, seed_stride).copy()
     prev = (
         np.frombuffer(row["prev_input_t"].tobytes(), dtype=np.uint8)
         .reshape(1, input_stride)
@@ -148,9 +155,83 @@ def _step_real_row(dataset: str, record: int) -> tuple[np.ndarray, np.ndarray, n
         msl_binding.destroy(handle)
     return (
         out_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy(),
-        row["seed_t"].copy(),
+        seed_struct[0].copy(),
         row["ref_t1"].copy(),
     )
+
+
+def _rollout_real_window(dataset: str, start: int, stop: int) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+    msl_binding = pytest.importorskip("msl_binding")
+
+    dataset_path = ROOT / dataset
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset}")
+
+    ds = read_dataset_window(str(dataset_path), start, stop + 1)
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+    got: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+    try:
+        seed = (
+            np.frombuffer(ds.samples[0]["seed_t"].tobytes(), dtype=np.uint8)
+            .reshape(1, seed_stride)
+            .copy()
+        )
+        msl_binding.reseed_seed_rollout(handle, seed)
+        for offset, row in enumerate(ds.samples):
+            rec = start + offset
+            prev = (
+                np.frombuffer(row["prev_input_t"].tobytes(), dtype=np.uint8)
+                .reshape(1, input_stride)
+                .copy()
+            )
+            inp = (
+                np.frombuffer(row["input_t"].tobytes(), dtype=np.uint8)
+                .reshape(1, input_stride)
+                .copy()
+            )
+            msl_binding.step_input(handle, prev, inp)
+            msl_binding.write_compare(handle, out_bytes)
+            got[rec] = (
+                out_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy(),
+                row["ref_t1"].copy(),
+            )
+    finally:
+        msl_binding.destroy(handle)
+    return got
+
+
+def _debug_precombat_body_select_count(dataset: str, record: int) -> int:
+    msl_binding = pytest.importorskip("msl_binding")
+
+    dataset_path = ROOT / dataset
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset}")
+
+    ds = read_dataset_window(str(dataset_path), record, record + 1)
+    row = ds.samples[0]
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    seed = np.frombuffer(row["seed_t"].tobytes(), dtype=np.uint8).reshape(1, seed_stride).copy()
+    prev = (
+        np.frombuffer(row["prev_input_t"].tobytes(), dtype=np.uint8)
+        .reshape(1, input_stride)
+        .copy()
+    )
+    inp = np.frombuffer(row["input_t"].tobytes(), dtype=np.uint8).reshape(1, input_stride).copy()
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        msl_binding.reseed_seed(handle, seed)
+        msl_binding.debug_step_input_pre_combat(handle, prev, inp)
+        _raw, count = msl_binding.debug_combat_select_body_hits(handle, 0, 64)
+        return int(count)
+    finally:
+        msl_binding.destroy(handle)
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +481,62 @@ def test_sb_air_family_states() -> None:
     assert ACT_FALL in acts, "air SB never exited to Fall"
 
 
+@pytest.mark.integration
+def test_sb_start_anim_end_runs_destination_loop_iasa_release_real_rows() -> None:
+    # Source owner:
+    # ftMs_SpecialNStart_Anim changes into Loop when the Start animation ends; the same
+    # Fighter_procUpdate then calls the destination Loop_IASA, where released B immediately enters
+    # End0 at start frame 1. Start_IASA itself is empty, so this is a destination-callback handoff
+    # rather than a Start-state release rule.
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c::{
+    #   ftMs_SpecialNStart_Anim,ftMs_SpecialAirNStart_Anim,ftMs_SpecialNLoop_IASA,
+    #   ftMs_SpecialAirNLoop_IASA,ftMs_SpecialN_80137354,ftMs_SpecialN_801373B8}
+    path = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    cases = (
+        (4449, 1, ACT_SB_AIR_START, ACT_SB_AIR_END0),
+        (5174, 1, ACT_SB_START, ACT_SB_END0),
+        # Grounded Start finishes, then the Coll floor-loss swap preserves the source frame on
+        # the aerial release variant.
+        (10061, 1, ACT_SB_START, ACT_SB_AIR_END0),
+    )
+    for rec, p, seed_act, ref_act in cases:
+        out, seed, ref = _step_real_row(path, rec)
+        assert int(seed["action_id"][p]) == seed_act
+        assert int(ref["action_id"][p]) == ref_act
+        assert int(ref["action_frame"][p]) == 1
+        assert int(out["action_id"][p]) == int(ref["action_id"][p])
+        assert int(out["action_frame"][p]) == int(ref["action_frame"][p])
+        assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
+
+
+def test_sb_start_anim_end_with_held_b_stays_in_loop() -> None:
+    # Adjacent negative: Start_Anim can enter Loop on the end frame, but Loop_IASA only releases
+    # when B is not held. Holding B keeps the charge loop and does not synthesize End0.
+    seed = _seed_base("marth")
+    seed["action_id"][0, 0] = np.uint16(ACT_SB_START)
+    seed["animation_index"][0, 0] = np.uint32(295)
+    seed["action_frame"][0, 0] = np.int16(11)
+    seed["anim_frame_f32"][0, 0] = np.float32(11.0)
+    outs = _run(seed, [_mk_inputs(buttons=B)])
+    assert int(outs[0]["action_id"][0]) == ACT_SB_LOOP
+    assert int(outs[0]["action_frame"][0]) == 0
+    assert int(outs[0]["action_id"][0]) != ACT_SB_END0
+
+
+def test_sb_loop_release_enters_end_at_source_frame_one() -> None:
+    # ftMs_SpecialN_80137354/801373B8 pass start_frame=1 to Fighter_ChangeMotionState for both
+    # normal release and full-charge release. Lock the uncharged Loop_IASA path without depending
+    # on replay-hidden mv.ms.specialn.cur_frame reconstruction.
+    seed = _seed_base("marth")
+    seed["action_id"][0, 0] = np.uint16(ACT_SB_LOOP)
+    seed["animation_index"][0, 0] = np.uint32(296)
+    seed["action_frame"][0, 0] = np.int16(7)
+    seed["anim_frame_f32"][0, 0] = np.float32(7.0)
+    outs = _run(seed, [_mk_inputs()])
+    assert int(outs[0]["action_id"][0]) == ACT_SB_END0
+    assert int(outs[0]["action_frame"][0]) == 1
+
+
 # ---------------------------------------------------------------------------
 # Dancing Blade
 # ---------------------------------------------------------------------------
@@ -512,6 +649,56 @@ def test_db_air_s1_anim_end_without_iasa_input_stays_fall() -> None:
     assert int(outs[0]["jumps_left"][0]) == 1
 
 
+@pytest.mark.integration
+def test_db_ground_anim_end_runs_destination_wait_iasa_real_rows() -> None:
+    # Source owner:
+    # Grounded Dancing Blade stages call ft_8008A2BC when their animation ends; the destination
+    # Wait_IASA then runs in the same Fighter_procUpdate and can immediately enter GuardOn, Squat,
+    # or Turn. This locks the callback handoff, not the individual replay rows.
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialS.c::{
+    #   ftMs_SpecialAirS1_Anim,ftMs_SpecialS2_Anim}
+    # refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    path_ldg = "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
+    path_wws = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    cases = [
+        (path_ldg, 742, 1, ACT_DB_S1, ACT_GUARD_ON),
+        (path_wws, 6566, 1, ACT_DB_S1, ACT_GUARD_ON),
+        (path_ldg, 2276, 1, ACT_DB_S1, ACT_SQUAT),
+        (path_wws, 12482, 1, ACT_DB_S2_LW, ACT_TURN),
+    ]
+    for path, record, p, seed_action, expected in cases:
+        out, seed, ref = _step_real_row(path, record)
+        assert int(seed["action_id"][p]) == seed_action
+        assert int(ref["action_id"][p]) == expected
+        assert int(out["action_id"][p]) == expected
+
+
+@pytest.mark.integration
+def test_shield_breaker_end_anim_end_runs_destination_wait_guard_reflect_real_row() -> None:
+    # Shield Breaker End uses the same grounded ft_8008A2BC callback owner as Dancing Blade:
+    # current-frame shield input can enter GuardReflect before the row serializes.
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c::ftMs_SpecialNEnd_Anim
+    path = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    out, seed, ref = _step_real_row(path, 5207)
+    p = 1
+    assert int(seed["action_id"][p]) == ACT_SB_END0
+    assert int(ref["action_id"][p]) == ACT_GUARD_REFLECT
+    assert int(out["action_id"][p]) == ACT_GUARD_REFLECT
+
+
+def test_db_ground_anim_end_without_wait_iasa_input_stays_wait() -> None:
+    # Adjacent negative: ft_8008A2BC provides the Wait_IASA opportunity, but with no current
+    # command input the grounded S1 end remains the ordinary Wait entry.
+    seed = _seed_base("marth")
+    seed["action_id"][0, 0] = np.uint16(ACT_DB_S1)
+    seed["animation_index"][0, 0] = np.uint32(303)
+    seed["action_frame"][0, 0] = np.int16(29)
+    seed["anim_frame_f32"][0, 0] = np.float32(29.0)
+    outs = _run(seed, [_mk_inputs()])
+    assert int(outs[0]["action_id"][0]) == ACT_WAIT
+
+
 def test_fox_action_358_overlap_does_not_inherit_marth_dancing_blade_jump_tail() -> None:
     # Numeric action 358 is Marth SpecialAirS1 but Fox/Falco SpecialHiFall. Keep the fix tied to
     # the Marth MotionState owner, not to raw action id 358.
@@ -551,27 +738,37 @@ def test_counter_shielddesc_state_flags_publish_on_script_open_real_rows() -> No
     #   ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim}
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
     path = "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
-    for rec in (3959, 3960, 3963):
+    for rec, floor_owner in ((3959, 0), (3960, 1), (3963, 1)):
         out, _seed, ref = _step_real_row(path, rec)
         p = 1
         assert int(ref["action_id"][p]) == ACT_COUNTER_AIR
         assert int(ref["state_flags"][p, 2]) == 0xC0
         assert int(out["state_flags"][p, 2]) == int(ref["state_flags"][p, 2])
+        assert int(_seed["speciallw_counter_hitlag_floor_active_u8"][p]) == floor_owner
 
 
 @pytest.mark.integration
 def test_counter_shielddesc_state_flags_carry_across_ground_air_swap_real_rows() -> None:
     # Counter's Coll callbacks recreate the descriptor after ground/air swaps when cmd var 1 has
     # reached the armed value, so the same x221B_b0|b1 publication survives SpecialAirLw -> SpecialLw.
+    # The x60 hitlag-floor provenance does not survive the same swap: the swap helpers recreate the
+    # descriptor but do not restore shield_unk0/1.
     # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
     #   ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
     path = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
-    for rec, act in ((846, ACT_COUNTER_AIR), (851, ACT_COUNTER), (858, ACT_COUNTER)):
+    for rec, act, floor_owner in (
+        (846, ACT_COUNTER_AIR, 0),
+        (850, ACT_COUNTER_AIR, 1),
+        (851, ACT_COUNTER, 1),
+        (852, ACT_COUNTER, 0),
+        (858, ACT_COUNTER, 0),
+    ):
         out, _seed, ref = _step_real_row(path, rec)
         p = 1
         assert int(ref["action_id"][p]) == act
         assert int(ref["state_flags"][p, 2]) == 0xC0
         assert int(out["state_flags"][p, 2]) == int(ref["state_flags"][p, 2])
+        assert int(_seed["speciallw_counter_hitlag_floor_active_u8"][p]) == floor_owner
 
 
 @pytest.mark.integration
@@ -584,10 +781,78 @@ def test_counter_shielddesc_state_flags_clear_b0_on_hit_transition_real_row() ->
     out, _seed, ref = _step_real_row(path, 3964)
     p = 1
     assert int(ref["action_id"][p]) == ACT_COUNTER_AIR_HIT
+    assert int(_seed["speciallw_counter_hitlag_floor_active_u8"][p]) == 1
     assert int(ref["state_flags"][p, 2]) == 0x40
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 11
     assert int(out["state_flags"][p, 2]) == int(ref["state_flags"][p, 2])
+
+
+@pytest.mark.integration
+def test_counter_descriptor_hitbox_contact_does_not_require_body_overlap_real_row() -> None:
+    # WWS:860 has Marth's Counter descriptor live and a Fox Drill hitbox in range. The BODY
+    # selector has no hurtcap overlap at pre-combat, but source `ftColl_8007B1B8` owns an
+    # AbsorbDesc/ShieldDesc check against the active HitCapsule and immediately enters
+    # SpecialLwHit with hitlag on both fighters.
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+    #   ftMs_SpecialLw_Anim,ftMs_SpecialLw_80139140}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80078C70}
+    path = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    assert _debug_precombat_body_select_count(path, 860) == 0
+    out, seed, ref = _step_real_row(path, 860)
+    p = 1
+    attacker = 0
+    assert int(seed["action_id"][p]) == ACT_COUNTER
+    assert int(seed["state_flags"][p, 2]) == 0xC0
+    assert int(seed["speciallw_counter_hitlag_floor_active_u8"][p]) == 0
+    assert int(ref["action_id"][p]) == ACT_COUNTER_HIT
+    assert int(ref["hitlag"][p]) == 6
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["action_frame"][p]) == int(ref["action_frame"][p])
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+    assert int(out["state_flags"][p, 2]) == int(ref["state_flags"][p, 2])
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker])
+
+
+@pytest.mark.integration
+def test_counter_grounded_uninterrupted_seed_floor_owner_applies_x60_real_row() -> None:
+    # Same grounded descriptor/contact shape as WWS:860, but with the explicit seed provenance set
+    # to the source case where the grounded descriptor was Anim-created rather than swap-recreated.
+    # This locks the reseed lane that Slippi does not expose directly: grounded/aerial state is not
+    # the owner, shield_unk0/1 provenance is.
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+    #   ftMs_SpecialLw_Anim,ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
+    path = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    p = 1
+
+    def force_anim_created_descriptor(seed_t: np.ndarray) -> None:
+        seed_t["speciallw_counter_hitlag_floor_active_u8"][0, p] = np.uint8(1)
+
+    out, seed, ref = _step_real_row(path, 860, seed_mutator=force_anim_created_descriptor)
+    floor = int(_attrs()["speciallw_counter_shield_strength"])
+    assert int(seed["action_id"][p]) == ACT_COUNTER
+    assert int(seed["on_ground"][p]) == 1
+    assert int(seed["speciallw_counter_hitlag_floor_active_u8"][p]) == 1
+    assert int(ref["hitlag"][p]) == 6  # The real row is the swapped negative.
+    assert int(out["action_id"][p]) == ACT_COUNTER_HIT
+    assert int(out["hitlag"][p]) == floor
+
+
+@pytest.mark.integration
+def test_counter_hit_registers_post_transition_identity_for_lingering_contact_wws() -> None:
+    # WWS:860 is Fox Drill into Marth Counter. Counter entry bumps Marth's action instance id;
+    # the accepted HitCapsule victim ring must be registered against that post-transition identity,
+    # matching normal BODY damage paths. Registering the pre-transition id lets the lingering same
+    # hit_group contact re-enter on the next frozen rows.
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    path = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    p = 1
+    got = _rollout_real_window(path, 860, 862)
+    for rec in (860, 861, 862):
+        out, ref = got[rec]
+        assert int(out["action_id"][p]) == int(ref["action_id"][p])
+        assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+        assert int(out["instance_id"][p]) == int(ref["instance_id"][p])
 
 
 def test_counter_shielddesc_state_flags_do_not_leak_to_fox_action_overlap() -> None:
@@ -890,15 +1155,18 @@ def test_counter_projectile_whiffs_after_window() -> None:
     assert any(float(r["percent"][0]) > 0.0 for r in rows), "laser never connected at all"
 
 
-def test_counter_hitlag_floor_from_shield_strength() -> None:
-    # AbsorbDesc shield strength (x60 = 11) floors counter hitlag on BOTH fighters:
-    # a weak jab (CalcHitlag ~4f) frozen for 11 frames on the counter contact.
-    # refs/melee/src/melee/ft/fighter.c (x1964 hitlag floor), ftcoll.c shield_unk0 tail
+def test_counter_anim_created_descriptor_applies_x60_hitlag_floor() -> None:
+    # Counter descriptors created by the Anim callback own shield_unk0/1 and apply the
+    # MarsAttributes x60 hitlag floor. Swap-recreated descriptors are covered separately by the
+    # WWS:860 real row, where vanilla publishes 6f instead of x60=11.
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::ftMs_SpecialLw_Anim
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_8007B1B8}
     rows = _counter_combat_run(press_offset=4)
     hl0 = max(int(r["hitlag"][0]) for r in rows)
     hl1 = max(int(r["hitlag"][1]) for r in rows)
     a = _attrs()
     floor = int(a["speciallw_counter_shield_strength"])
+    assert ACT_COUNTER_HIT in [int(r["action_id"][0]) for r in rows]
     assert hl0 >= floor, f"marth counter hitlag {hl0} below x60 floor {floor}"
     assert hl1 >= floor, f"attacker counter hitlag {hl1} below x60 floor {floor}"
 

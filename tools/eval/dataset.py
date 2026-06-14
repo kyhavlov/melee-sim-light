@@ -467,6 +467,11 @@ SEED_DTYPE = np.dtype(
         # One-step replay seeds set this only for same-action Loop -> Loop restarts; live runtime
         # owns ordinary cmd_vars[0] + B-edge production.
         ("specialn_blaster_loop_requested", _arr("u1", MAX_PLAYERS)),
+        # Marth Counter descriptor x60 hitlag-floor provenance.
+        # Anim-created descriptors own shield_unk0/1; ground/air swap-recreated descriptors do not.
+        # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+        #   ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim,ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
+        ("speciallw_counter_hitlag_floor_active_u8", _arr("u1", MAX_PLAYERS)),
         ("attack_id", _arr("<u2", MAX_PLAYERS)),
         ("attack_instance", _arr("<u2", MAX_PLAYERS)),
         ("last_attack_landed", _arr("u1", MAX_PLAYERS)),

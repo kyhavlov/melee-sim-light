@@ -115,7 +115,10 @@ Collect before writing any code:
 5. Build the **replay action inventory**: which action ids appear, which
    specials are present/missing. This scopes what the replay can and cannot
    verify (everything missing must be verified by decomp-anchored unit tests
-   and live play instead).
+   and live play instead). Treat the suite label as provenance, not ownership:
+   a new-character replay can still expose an opponent, item, stage, or common
+   bug. Always identify the actor `char_id`, MotionState callback, and seed lane
+   before assigning a cluster to the new character.
 
 ## Phase 3 — Common-action coverage (gate: coverage suite green for the char)
 
@@ -143,6 +146,26 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::fn_800C9CEC`, and
    `data/moves/<char>.json::moves.ftCo_SM_RunBrake.events`.
+   Keep replay seed reconstruction on raw source-script windows unless the
+   hidden source lane itself proves a post-clear latch. Runtime helpers may
+   include convenience tails for live callback carry, but copying those tails
+   into preprocessing can synthesize stale hidden state. Marth-suite
+   `RipeWealthySeahorse` exposed this on Falco `SpecialNLoop`: the live helper
+   `move_tables_special_cmd0_active_at_frame()` has a latch-clear tail, while
+   the replay seed for `mv.fx.SpecialN.isBlasterLoop` must use the raw MSLFTSC1
+   `cmd_var[0]` interval from `ftFx_SpecialNLoop_IASA`.
+   Do not create hidden seed latches while source callbacks are suspended by
+   hitlag. `Fighter_8006A1BC` decrements hitlag before `Fighter_8006A360`
+   resumes non-hitlag callback/physics ownership, so `ftCommon_CheckFallFast`
+   cannot set `fp->fall_fast` on frozen `hitlag > 1` frames. A fastfall latch
+   may persist if it was already true, and the immediate `hitlag == 1` exit row
+   can latch after the decrement. Add a held-down hitlag-exit positive and a
+   neutral-input hitlag-exit negative when a new character's attacks expose
+   hitlag-frozen aerial rows; Marth exposed the negative at
+   `InternalPowerlessWallaby.msl:483:p1`. Source anchors:
+   `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}`,
+   `refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0`, and
+   `refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast`.
    **Common collision owners can be stage-shape-sensitive**: fresh
    `KneeBend -> Jump -> EscapeAir` reaches `EscapeAir_Coll` in the same
    callback, but floor publication is not simply "same floor id still present."
@@ -201,6 +224,23 @@ Collect before writing any code:
    `data/motion_state/owners/<char>.bin::MSLMSO01 submotion_id`,
    `data/moves/<char>.json::moves.ftCo_SM_AttackAirF.events`, and
    `data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)`.
+   **Same-frame JumpAerial -> AttackAir landings consume the pre-entry
+   callback ECB**: `JumpAerial_IASA` can enter `AttackAir*` before
+   `Fighter_procMap`, but the floor packet may still have been produced by the
+   JumpAerial collision callback's `CollData` lifetime. When auditing a new
+   character's aerial ECBs, compare both the destination `AttackAir` pose and
+   the pre-entry JumpAerial callback ECB before deciding whether a platform
+   bottom-sweep should publish `LandingAir*` or stay airborne in the entered
+   aerial. Add a no-hit positive where both JumpAerial callback bottoms are
+   below the floor, and an adjacent landing control where the JumpAerial
+   callback ECB crosses even if the destination aerial ECB is already below.
+   Marth-suite WWS exposed the no-hit boundary at
+   `WellWornSmallGoshawk.msl:679:p0`; `LawfulInsistentMeerkat.msl:4967:p0`
+   remains the legitimate source-ECB landing control. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{ftCo_JumpAerial_IASA,ftCo_JumpAerial_Coll}`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
+   `refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_800835B0}`, and
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}`.
    **Multi-hit AttackAir late tails need the same floor-source audit**: after
    the final `clear_hitboxes` command, `cmd_var[0]` may still be active and the
    action can still enter `LandingAir*`, but FoD height-platform publication
@@ -255,6 +295,27 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`,
    `refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C`, and the
    Dolphin collision probe for VSA:4317.
+   **Continuing no-submotion GuardOn BODY pose can override stale previous-action
+   hurtcaps when the live tilt/x10 owner is active**: after the entry frame,
+   `ftCo_GuardOn_Anim` keeps incrementing `mv.co.guard.x0`, `ftCo_800925A4`
+   ticks `x10`, and `ftCo_80091E78` blends the live GuardOn JObj chain toward
+   the selected Guard tilt target before fighter collision. Slippi may still
+   publish `animation_index=-1` / `action_frame=-1`, and a reseed can carry
+   nonempty previous-action BODY hurtcaps. Do not treat those stale hurtcaps as
+   source-owned just because `hurtcap_count != 0` when continuing GuardOn has
+   nonzero `x10` and `mv.co.guard.x4`; rebuild from the extracted
+   GuardOn/Guard source pose and `mv.co.guard` lanes. Existing no-submotion
+   Guard/GuardDamage rows and explicit debug-authored BODY geometry remain
+   authoritative unless their hurtcap list is absent. Add a no-early-hit
+   positive and an adjacent same-family hit negative so the fix is a pose owner,
+   not a broad shield suppressor. Marth exposed this at
+   `WellWornSmallGoshawk.msl:8444..8445:p1` (`EscapeN -> GuardOn` under Fox
+   NAir). Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,ftCo_GuardOn_Anim,ftCo_800925A4,ftCo_80091E78}`,
+   `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`,
+   `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`,
+   `refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C`, and
+   `data/shields/<char>.bin` / `data/hurtcaps/<char>.json`.
    **SkipHit aerial victim lists can carry through GuardOn -> Guard**:
    multi-hit aerials with `Ft_MF_SkipHit` can preserve HitCapsule `x914`
    victim rings across active windows while the defender transitions from
@@ -492,6 +553,26 @@ cover most of it.
    `SpecialHiFall`). Source anchors:
    `refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialS.c::ftMs_SpecialAirS1_Anim`
    and `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_IASA_Inner}`.
+   The same audit applies when an Anim callback enters another char-special
+   MotionState, not only a common action. Marth Shield Breaker `Start_Anim`
+   enters `Loop`, and later in the same `Fighter_procUpdate` the destination
+   `Loop_IASA` can observe released B and enter `End0`; `Start_IASA` is empty,
+   so modeling this as a Start-state release is the wrong owner. Lock both the
+   released-B positive and the held-B negative, and preserve source entry frames
+   from helper callbacks (`ftMs_SpecialN_80137354/801373B8` enter End0/End1 at
+   frame 1). Source anchors:
+   `refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c::{ftMs_SpecialNStart_Anim,ftMs_SpecialAirNStart_Anim,ftMs_SpecialNLoop_IASA,ftMs_SpecialAirNLoop_IASA,ftMs_SpecialN_80137354,ftMs_SpecialN_801373B8}`.
+   Grounded `ft_8008A2BC` exits also need the destination `Wait_IASA` tail, not
+   a serialized one-frame `Wait`: Marth grounded Dancing Blade S1/S2 and Shield
+   Breaker End exposed held-shield `GuardOn`, down-stick `Squat`, side-stick
+   `Turn`, and shield-edge `GuardReflect` on the same source frame as the
+   special's terminal Anim callback. Audit the full source order for these exits
+   (`specials -> catch -> grounded attacks -> spotdodge-before-guard -> guard ->
+   jump/dash/squat/turn/walk`) and lock a no-input negative so the bridge does
+   not invent commands. Source anchors:
+   `refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA`, and
+   `refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Lw}.c`.
 7. **Per-special mechanics** found for Marth that generalize:
    - charge specials: charge-damage hitbox override (SB), charge persistence;
    - launch specials: TransN-driven launch + special landing lag (DS 34f);
@@ -501,19 +582,25 @@ cover most of it.
      posed bottom-X tables (over-fit; breaks flip-pose apex catches);
    - cliffcatch cmd sequencing: cmd1 arms in the Phys descent branch (vanilla
      two-pass Coll), teacher-forced cmd1/cmd2 reseed derivation;
-   - counter/absorb specials: combat intercept (`combat.c`), descriptor-sphere
-     geometry bone-posed and FAIL-CLOSED (no body-admission fallback), real
-     projectile geometry threaded through ALL `combat_apply_item_hit` callers
-     (8 of them; geometry-less callers fail closed), shield-strength hitlag
-     floor (x60/x1964), and post-frame `state_flags[2]` publication from the
-     descriptor lifecycle. Marth Counter proved this is not the same owner as
-     the combat window: `ftColl_8007B1B8` publishes `x221B_b0` (Slippi
-     `0x80`), `ftMs_SpecialLw_Anim` immediately sets `x221B_b1` (`0x40`), and
-     the CounterHit `Fighter_ChangeMotionState` reset clears `b0` while the
-     post-frame row can still expose `b1` (`0xC0 -> 0x40`). Drive this from the
-     post-action script command/descriptor state, not from a raw action id or a
-     generic shield flag. Add activation-edge, ground/air-swap carry,
-     hit-transition clear, and same-numeric-action non-character negative locks.
+  - counter/absorb specials: combat intercept (`combat.c`), descriptor-sphere
+    geometry bone-posed and FAIL-CLOSED (no body-admission fallback), real
+    projectile geometry threaded through ALL `combat_apply_item_hit` callers
+    (8 of them; geometry-less callers fail closed), and post-frame
+    `state_flags[2]` publication from the descriptor lifecycle. Marth Counter
+    proved this is not the same owner as the combat window:
+    `ftColl_8007B1B8` publishes `x221B_b0` (Slippi `0x80`),
+    `ftMs_SpecialLw_Anim` immediately sets `x221B_b1` (`0x40`), and the
+    CounterHit `Fighter_ChangeMotionState` reset clears `b0` while the
+    post-frame row can still expose `b1` (`0xC0 -> 0x40`). Audit descriptor
+    provenance separately from descriptor geometry: Anim-created Counter
+    descriptors write `shield_unk0/1 = MarsAttributes::x60` and can apply the
+    x60 hitlag floor, but the ground/air swap helpers recreate the descriptor
+    without restoring those lanes. If replay rows can start after a swap, seed
+    this provenance as an explicit hidden lane; current grounded/aerial state and
+    current action id are not sufficient once a swapped grounded Counter has
+    continued for more than one frame. Add activation-edge, ground/air-swap
+    carry, hit-transition clear, lingering same-group contact, and
+    same-numeric-action non-character negative locks.
      Source anchors:
      `refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c`,
      `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8`,

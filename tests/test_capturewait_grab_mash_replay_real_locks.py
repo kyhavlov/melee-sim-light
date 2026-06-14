@@ -119,12 +119,13 @@ def test_capturewait_breakout_owner_path_uses_timer_gate_or_explicit_pending_sig
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
     #   ftCo_CaptureWaitHi_Anim,ftCo_800DA698,ftCo_CaptureCut_Enter}
     # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_CatchWait_IASA
-    seed = np.zeros((7,), dtype=SEED_DTYPE)
+    seed = np.zeros((8,), dtype=SEED_DTYPE)
     seed["stage_id"] = np.uint32(32)
     seed["num_players"] = np.uint8(2)
     seed["char_id"][:, :2] = np.uint8([1, 2])
     seed["stocks"][:, :2] = np.uint8([4, 4])
     seed["on_ground"][:, :2] = np.uint8([1, 1])
+    seed["ground_id"][:, :2] = np.uint16([4, 4])
     seed["facing"][:, :2] = np.uint8([1, 1])
     seed["jumps_left"][:, :2] = np.uint8([2, 2])
 
@@ -156,9 +157,10 @@ def test_capturewait_breakout_owner_path_uses_timer_gate_or_explicit_pending_sig
 
     binding = pytest.importorskip("msl_binding")
     input_stride = int(binding.sizes()["input"])
-    prev_input = np.zeros((7, input_stride), dtype=np.uint8)
-    cur_input = np.zeros((7, input_stride), dtype=np.uint8)
-    cur_view = cur_input.view(INPUT_DTYPE).reshape((7,))
+    prev_input = np.zeros((8, input_stride), dtype=np.uint8)
+    cur_input = np.zeros((8, input_stride), dtype=np.uint8)
+    prev_view = prev_input.view(INPUT_DTYPE).reshape((8,))
+    cur_view = cur_input.view(INPUT_DTYPE).reshape((8,))
 
     # Case 0: breakout pending with no jump input resolves to CatchCut/CaptureCut.
     # Case 1: breakout pending with a pre-existing jump latch resolves to CatchCut/CaptureJump.
@@ -173,8 +175,12 @@ def test_capturewait_breakout_owner_path_uses_timer_gate_or_explicit_pending_sig
     # Anim-owned breakout resolves before that IASA callback, so it cannot convert this frame to
     # CaptureJump.
     cur_view["p"]["buttons"][5, victim_p] = np.uint16(0x0400)
-    # Case 6: direct stick-up fn_800DC044 is read by the Anim breakout owner itself.
-    cur_view["p"]["main_y"][6, victim_p] = np.int8(80)
+    # Case 6: direct stick-up fn_800DC044 is read by the Anim breakout owner itself before the
+    # current input callback, so the pre-input stick lane controls the branch.
+    prev_view["p"]["main_y"][6, victim_p] = np.int8(80)
+    # Case 7: a current-only up-stick belongs to the later input/IASA phase and must not convert an
+    # already pending Anim-owned breakout to CaptureJump.
+    cur_view["p"]["main_y"][7, victim_p] = np.int8(80)
 
     out = _step(seed, prev_input, cur_input, num_players=2)
     assert int(out["action_id"][0, owner_p]) == 218  # CatchCut
@@ -191,6 +197,49 @@ def test_capturewait_breakout_owner_path_uses_timer_gate_or_explicit_pending_sig
     assert int(out["action_id"][5, victim_p]) == 229  # CaptureCut
     assert int(out["action_id"][6, owner_p]) == 218  # CatchCut
     assert int(out["action_id"][6, victim_p]) == 230  # CaptureJump
+    assert int(out["on_ground"][6, victim_p]) == 0
+    assert int(out["ground_id"][6, victim_p]) == 4
+    assert int(out["action_id"][7, owner_p]) == 218  # CatchCut
+    assert int(out["action_id"][7, victim_p]) == 229  # CaptureCut
+
+
+@pytest.mark.integration
+def test_capturewait_breakout_uses_pre_input_stick_and_carries_floor_wss() -> None:
+    # Replay-real lock for the deferred CaptureWait breakout scheduler split:
+    # - The source branch is in CaptureWait*_Anim, before Fighter_procUpdate input handling, so the
+    #   direct stick-up check (`fn_800DC044`) reads pre-input `fp->input.lstick`.
+    # - `fn_800DC070` calls ftCommon_8007D5D4, which flips ground_or_air to Air for CaptureJump but
+    #   does not clear the carried CollData floor id.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CaptureWaitHi_Anim,fn_800DC044,fn_800DC070}
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    ds = read_dataset(str(ds_path))
+    for record, seed_action in ((5162, 227), (5303, 224)):
+        row = ds.samples[record]
+        seed, ref, out = _run_one_step_row(ds_path, record, 0)
+        assert int(seed["action_id"][0]) == seed_action
+        assert int(seed["capture_breakout_pending_u8"][0]) == 1
+        assert int(seed["capture_wait_jump_latch_u8"][0]) == 0
+        if record == 5162:
+            assert int(row["prev_input_t"]["p"]["main_y"][0]) > int(row["input_t"]["p"]["main_y"][0])
+        assert int(ref["action_id"][0]) == 230  # CaptureJump
+        assert int(out["action_id"][0]) == int(ref["action_id"][0])
+        assert int(out["animation_index"][0]) == int(ref["animation_index"][0])
+        assert int(out["action_frame"][0]) == int(ref["action_frame"][0])
+        assert int(out["on_ground"][0]) == int(ref["on_ground"][0]) == 0
+        assert int(out["ground_id"][0]) == int(ref["ground_id"][0])
+        assert int(out["jumps_left"][0]) == int(ref["jumps_left"][0])
+        np.testing.assert_allclose(float(out["pos_x"][0]), float(ref["pos_x"][0]), atol=1e-6)
+        np.testing.assert_allclose(float(out["pos_y"][0]), float(ref["pos_y"][0]), atol=1e-6)
+        np.testing.assert_allclose(
+            float(out["speed_air_x_self"][0]), float(ref["speed_air_x_self"][0]), atol=1e-6
+        )
+        np.testing.assert_allclose(float(out["speed_y_self"][0]), float(ref["speed_y_self"][0]), atol=1e-6)
 
 
 def test_grab_breakout_cut_actions_end_through_common_source_paths() -> None:

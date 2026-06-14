@@ -1192,7 +1192,8 @@ typedef struct MslSeed {
   //
   // Seed representation:
   // - 1: on this seed row, the next step is the immediate hitlag-exit lane for a fastfall-capable
-  //   action, so reseed should keep internal fp->fall_fast ownership from the seeded history lane.
+  //   action and the derived hidden fp->fall_fast lane is source-owned after the exit callback
+  //   gate. Hitlag-frozen rows with hitlag > 1 cannot create a new latch.
   // - 0: use the raw Slippi fp+0x221A isFastFalling snapshot bit as authoritative reseed source.
   uint8_t fall_fast_hitlag_exit_owner[MSL_MAX_PLAYERS];
   // Run IASA lockout countdown (seeded; decomp-shaped).
@@ -1471,6 +1472,20 @@ typedef struct MslSeed {
   //   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,
   //   ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA}
   uint8_t specialn_blaster_loop_requested[MSL_MAX_PLAYERS];
+  // Marth Counter descriptor hitlag-floor provenance (`shield_unk0/1 = MarsAttributes::x60`).
+  //
+  // Decomp owner:
+  // - ftMs_SpecialLw_Anim / ftMs_SpecialAirLw_Anim create the descriptor and write shield_unk0/1.
+  // - ftMs_SpecialLw_80138D38 / 80138DD0 recreate the descriptor on ground/air swaps without
+  //   restoring shield_unk0/1.
+  //
+  // Seed representation:
+  // - 1: the replay-prefix descriptor is still the Anim-created descriptor and owns the x60
+  //   hitlag floor.
+  // - 0: no live descriptor or a swap-recreated descriptor; use ordinary CalcHitlag.
+  // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+  //   ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim,ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
+  uint8_t speciallw_counter_hitlag_floor_active_u8[MSL_MAX_PLAYERS];
   // Staling "attack id" (GALE01): fp->x2068_attackID.
   // Slippi post-frames do not expose fp->x2068 directly; preprocessing derives it causally from
   // replay history (see tools/slippi/staling_history.py).

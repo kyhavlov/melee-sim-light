@@ -462,6 +462,7 @@ static inline void cache_collision_stage_prev_pos(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.coll_stage_prev_pos_x[idx] = batch->state.pos_x[idx];
       batch->state.coll_stage_prev_pos_y[idx] = batch->state.pos_y[idx];
+      batch->state.coll_stage_prev_ground_id[idx] = batch->state.ground_id[idx];
     }
   }
 }

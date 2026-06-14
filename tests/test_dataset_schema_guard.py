@@ -77,6 +77,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "motion_entry_instance_id_override_u16" in SEED_DTYPE.fields
     # Item spawn-id global counter (`it_804D6D10` -> item->x1C).
     assert "item_spawn_id_counter" in SEED_DTYPE.fields
+    # Marth Counter descriptor x60 hitlag-floor provenance (`shield_unk0/1`).
+    assert "speciallw_counter_hitlag_floor_active_u8" in SEED_DTYPE.fields
     # Raw Slippi/controller source-owner domain for replay-facing last_hit_by parity.
     assert "source_port0" in SEED_DTYPE.fields
     # Hidden FallSpecial -> LandingFallSpecial interrupt carry bit.

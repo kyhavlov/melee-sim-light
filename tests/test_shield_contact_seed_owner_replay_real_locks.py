@@ -710,10 +710,11 @@ def test_attackairf_dense_hitlist_rollout_suppresses_guardon_reentry_hvg() -> No
     # - The rollout seed carries only the coarse dense victims_1 map for p0; by the time p0 enters
     #   GuardOn at HVG:7970, the visible instance_id proxy has advanced but the decomp victim
     #   pointer is still the same fighter object.
-    # - Runtime must materialize that hidden HitCapsule latch at the create edge so
-    #   lbColl_8000ACFC suppresses the otherwise false contact. Later shield/body ownership fixes
-    #   can change whether the unlatched control manifests as GuardSetOff or direct damage; the
-    #   boundary is that clearing the latch must no longer preserve the replay GuardOn state.
+    # - Runtime must preserve the source GuardOn state. Earlier revisions used a clear-dense
+    #   mutation as a residual witness for the hidden latch, but the source GuardOn BODY pose owner
+    #   can also prevent the false contact after that owner is closed. The durable lock is the
+    #   replay-real GuardOn result; dense-latch mutation boundaries stay covered by the direct
+    #   one-step tests below where BODY geometry still reaches the victim.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     root = Path(__file__).resolve().parents[1]
@@ -742,16 +743,6 @@ def test_attackairf_dense_hitlist_rollout_suppresses_guardon_reentry_hvg() -> No
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
     assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 0
     assert int(out["instance_id"][defender]) == int(ref["instance_id"][defender])
-
-    def clear_dense(seed_t: np.ndarray) -> None:
-        seed_t["combat_hitlist_cd"][0, attacker, :, defender] = np.uint16(0)
-        seed_t["combat_hitlist_victim_iid"][0, attacker, :, defender] = np.uint16(0)
-
-    _ref, out_without_latch = _run_rollout_window_with_seed_mutator(
-        dataset_path, start, target, clear_dense
-    )
-    assert int(out_without_latch["action_id"][defender]) != int(ref["action_id"][defender])
-    assert int(out_without_latch["hitlag"][defender]) > 0 or int(out_without_latch["hitlag"][attacker]) > 0
 
 
 @pytest.mark.integration
@@ -2024,6 +2015,61 @@ def test_same_step_landing_guardon_does_not_overextend_shielddesc_iat_attackairn
     assert int(out_hit["action_id"][defender]) == 87
     assert int(out_hit["hitlag"][defender]) == int(ref_hit["hitlag"][defender]) == 6
     assert int(out_hit["hitlag"][attacker]) == int(ref_hit["hitlag"][attacker]) == 6
+
+
+@pytest.mark.integration
+def test_marth_guardon_no_submotion_body_pose_replaces_stale_escape_hurtcaps_wws() -> None:
+    # GuardOn no-submotion BODY pose owner:
+    # - WWS starts before Marth's EscapeN -> GuardOn entry. Slippi's no-submotion GuardOn snapshot
+    #   can still carry stale previous-action hurtcaps, but source ftCo_800924C0 enters GuardOn
+    #   with Ft_MF_SkipAnim, runs ftAnim_8006EBA4, and GuardOn_Anim/ftCo_80091E78 continue moving
+    #   the live JObj pose before ftColl_80078C70 consumes BODY.
+    # - 8444 is the positive no-early-BODY lock: Fox Nair stays in shield-drain GuardOn instead of
+    #   hitting stale EscapeN hurtcaps.
+    # - 8445 is the adjacent negative: the same Nair/GuardOn family must still admit the real BODY
+    #   hit once the source pose reaches it, so this is not a broad AttackAirN/GuardOn suppressor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_800924C0,ftCo_GuardOn_Anim,ftCo_80091E78}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/marth/WellWornSmallGoshawk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][8444]
+    assert int(seed["action_id"][attacker]) == 65  # AttackAirN.
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert int(seed["action_frame"][defender]) < 0
+    assert int(seed["animation_index"][defender]) == 0xFFFFFFFF
+    assert int(seed["seed_prev_action_id"][defender]) == 178
+    assert int(seed["guard_x10"][defender]) != 0
+    assert float(seed["guard_tilt_x4"][defender]) > 0.0
+
+    ref_guard, out_guard = _run_rollout_window(dataset_path, 8435, 8444)
+    assert int(ref_guard["action_id"][defender]) == 178
+    assert int(out_guard["action_id"][defender]) == 178
+    assert int(out_guard["hitlag"][defender]) == int(ref_guard["hitlag"][defender]) == 0
+    assert int(out_guard["hitstun"][defender]) == int(ref_guard["hitstun"][defender]) == 0
+    assert float(out_guard["shield_hp"][defender]) == pytest.approx(
+        float(ref_guard["shield_hp"][defender])
+    )
+    assert int(out_guard["hitlag"][attacker]) == int(ref_guard["hitlag"][attacker]) == 0
+
+    ref_hit, out_hit = _run_rollout_window(dataset_path, 8435, 8445)
+    assert int(ref_hit["action_id"][defender]) == 80  # DamageN3.
+    assert int(out_hit["action_id"][defender]) == 80
+    assert int(out_hit["hitlag"][defender]) == int(ref_hit["hitlag"][defender]) == 5
+    assert int(out_hit["hitstun"][defender]) == int(ref_hit["hitstun"][defender]) == 28
+    assert int(out_hit["hitlag"][attacker]) == int(ref_hit["hitlag"][attacker]) == 5
+    assert float(out_hit["percent"][defender]) == pytest.approx(float(ref_hit["percent"][defender]))
+    assert float(out_hit["shield_hp"][defender]) == pytest.approx(float(ref_hit["shield_hp"][defender]))
 
 
 @pytest.mark.integration

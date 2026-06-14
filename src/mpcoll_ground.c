@@ -11929,9 +11929,13 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // entered AttackAir pose lowers the callback-local bottom, `mpColl_80044628_Floor` can
           // accept a soft platform even while public self_vel.y is still positive. This is the
           // static-platform counterpart to the existing JumpAerial action-entry ECB consumer: it
-          // requires the hidden CollData ECB lane, no active CollData_X130 lock, and a real
-          // source-admitted platform sweep, not an action-row landing shortcut.
+          // requires the hidden CollData ECB lane, no active CollData_X130 lock, and a generated
+          // stage-line owner that is currently source-admitted. Non-fighter-solid stage-object
+          // support lines such as Yoshi Shy Guys are not ordinary platforms unless the explicit
+          // stage-item support lane says the object is live.
           //
+          // data/stages/bin/*.bin::MSLSTG01 fighter_solid/stage_object_support_kind
+          // data/stage_items/yoshi_shyguy.json
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
           // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
@@ -11942,7 +11946,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
           if (mpcoll_collect_bottom_sweep_hit(
                   batch, idx, bi, g, stage_id, prev_x, source_prev_bottom_y, x, cur_bottom_y,
                   skip_platform_segment_i, -1, -1, c, &entry_platform_sweep) &&
-              entry_platform_sweep.hit_is_platform &&
+              entry_platform_sweep.hit_is_platform && entry_platform_sweep.hit_line_idx >= 0 &&
+              (floor_line_is_runtime_fighter_solid(g, stage_id,
+                                                   entry_platform_sweep.hit_line_idx) ||
+               carried_floor_line_is_live_yoshi_shyguy_support(
+                   batch, bi, g, stage_id, entry_platform_sweep.hit_line_idx)) &&
               !entry_platform_sweep.hit_has_platform_transform) {
             batch->state.pos_y[idx] = entry_platform_sweep.hit_y + k_floor_y_bias;
             on_ground = 1u;
@@ -12856,6 +12864,33 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 prev_action_id == (uint16_t)MSL_ACT_FALL_AERIAL))
                   ? 1u
                   : 0u;
+          const uint8_t suppress_attackair_jumpaerial_stage_object_support_land =
+              // JumpAerial_IASA can enter AttackAir before Fighter_procMap, but generated
+              // non-fighter-solid stage-object support lines are not ordinary soft platforms for
+              // the entered AttackAir callback. Source floor publication still needs a current
+              // `mpColl_80044628_Floor` producer for a fighter-solid line, or an explicit live
+              // support owner such as Yoshi's Shy Guy item lane. Do not let the generic raw
+              // floor-sweep/projection fallback turn inactive support geometry into LandingAir*.
+              //
+              // data/stages/bin/*.bin::MSLSTG01 fighter_solid/stage_object_support_kind
+              // data/stage_items/yoshi_shyguy.json
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+              // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+              (is_attackair_action(action_id) && batch->state.action_frame[idx] <= 2 &&
+               hit_line_idx >= 0 &&
+               (prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
+                batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
+               !floor_line_is_runtime_fighter_solid(g, stage_id, hit_line_idx) &&
+               stage_collision_floor_line_stage_object_support_kind(
+                   stage_id, g->lines[(size_t)hit_line_idx].segment_i) !=
+                   (uint8_t)MSL_STAGE_OBJECT_SUPPORT_NONE &&
+               !carried_floor_line_is_live_yoshi_shyguy_support(batch, bi, g, stage_id,
+                                                                hit_line_idx))
+                  ? 1u
+                  : 0u;
           const uint8_t suppress_escapeair_entry_locked_platform_land =
               // EscapeAir_Coll uses CollData's locked ECB snapshot through the early entry window.
               // When that snapshot carries a prior platform floor.index, mpColl can observe a
@@ -13318,6 +13353,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
               suppress_damageflyroll_shallow_land || suppress_damageair_attackair_entry_land ||
               suppress_damageflyroll_hitlag_exit_floor_land ||
               suppress_locomotion_attackair_entry_platform_land ||
+              suppress_attackair_jumpaerial_stage_object_support_land ||
               suppress_escapeair_entry_locked_platform_land ||
               suppress_downheld_transformed_platform_land ||
               suppress_damage_transformed_platform_ecb_only_land ||

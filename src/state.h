@@ -248,6 +248,7 @@ typedef struct MslStateSoA {
   float* coll_stage_prev_pos_y;
   float* coll_stage_cur_pos_x;
   float* coll_stage_cur_pos_y;
+  uint16_t* coll_stage_prev_ground_id;
   float* speed_air_x_self;
   float* speed_ground_x_self;
   float* speed_y_self;
@@ -842,6 +843,12 @@ typedef struct MslStateSoA {
   uint8_t* specials_air_used;
   float* fallspecial_mobility_mul;
   uint8_t* speciallw_counter_window;
+  // Marth Counter descriptor hitlag floor provenance: Anim creation writes MarsAttributes::x60 to
+  // shield_unk0/1, but ground/air swap descriptor recreation only calls ftColl_8007B1B8 and sets
+  // x221B_b1. Keep this as hidden source state rather than deriving from action id or descriptor bit.
+  // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{ftMs_SpecialLw_Anim,
+  // ftMs_SpecialAirLw_Anim,ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
+  uint8_t* speciallw_counter_hitlag_floor_active;
   // Frame-preserving motion transitions without Ft_MF_Unk24 clear fp->x221C_u16_y; opcode-52
   // events at frames <= this floor are suppressed until the next crossing (0 = no floor).
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState

@@ -1495,8 +1495,9 @@ static inline uint16_t attackair_action_from_stick(const MslCommonParams* c, flo
                                         : (uint16_t)MSL_ACT_ATTACK_AIR_B;
 }
 
-uint8_t locomotion_attackair_try_enter_from_air_iasa(MslBatch* batch, const MslCommonParams* c,
-                                                     size_t idx) {
+static inline uint8_t locomotion_attackair_iasa_target(const MslBatch* batch,
+                                                       const MslCommonParams* c, size_t idx,
+                                                       uint16_t* act_out, uint32_t* smid_out) {
   // Common airborne AttackAir IASA owner:
   // - ftCo_AttackAir_CheckInput consumes A-pressed or c-stick edge and enters AttackAir directly
   //   via Fighter_ChangeMotionState(..., Ft_MF_KeepFastFall, ...), preserving airborne momentum.
@@ -1552,7 +1553,22 @@ uint8_t locomotion_attackair_try_enter_from_air_iasa(MslBatch* batch, const MslC
   if (smid == 0xFFFFFFFFu) {
     return 0;
   }
+  if (act_out != NULL) {
+    *act_out = act;
+  }
+  if (smid_out != NULL) {
+    *smid_out = smid;
+  }
+  return 1;
+}
 
+uint8_t locomotion_attackair_try_enter_from_air_iasa(MslBatch* batch, const MslCommonParams* c,
+                                                     size_t idx) {
+  uint16_t act = 0;
+  uint32_t smid = 0;
+  if (!locomotion_attackair_iasa_target(batch, c, idx, &act, &smid)) {
+    return 0;
+  }
   batch->state.action_id[idx] = act;
   batch->state.animation_index[idx] = smid;
   // ftCo_AttackAir_EnterFromMsid clears fp->allow_interrupt before Fighter_ChangeMotionState.
@@ -7471,7 +7487,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
         continue;
       }
 
-      if (!was_ground && now_ground) {
+      if ((!was_ground || batch->state.frame_start_on_ground[idx] == 0u) && now_ground) {
         if (a == (uint16_t)MSL_ACT_LANDING &&
             landing_contact_y_owner_matches_source(
                 batch->state.char_id[idx], a, batch->state.action_frame[idx],
@@ -7485,6 +7501,81 @@ void locomotion_update_post_collision(MslBatch* batch) {
         if (a == (uint16_t)MSL_ACT_SHIELD_BREAK_FLY || a == (uint16_t)MSL_ACT_SHIELD_BREAK_FALL) {
           enter_shieldbreak_down_from_floor_contact(batch, ch, idx, a);
           continue;
+        }
+
+        {
+          const float floor_bias = 0.0001f;
+          const uint8_t floor_result_bottom_sweep =
+              // MSL_MPCOLL_FLOOR_MODE_BOTTOM_SWEEP; the enum is private to mpcoll_ground.c.
+              (batch->state.coll_floor_result_mode[idx] == 1u) ? 1u : 0u;
+          const uint16_t floor_segment = batch->state.ground_id[idx];
+          const uint8_t jumpaerial_source =
+              (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+               batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
+               batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+               batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
+                  ? 1u
+                  : 0u;
+          const uint8_t delayed_attackair_pending =
+              (jumpaerial_source && !action_is_attackair(a) &&
+               (batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u &&
+               locomotion_attackair_iasa_target(batch, c, idx, NULL, NULL))
+                  ? 1u
+                  : 0u;
+          const float source_prev_root_y = isfinite(batch->state.floor_sweep_prev_pos_y[idx])
+                                               ? batch->state.floor_sweep_prev_pos_y[idx]
+                                               : batch->state.coll_substep_prev_pos_y[idx];
+          const float prev_bottom_y =
+              source_prev_root_y + batch->state.coll_prev_ecb_bottom_rel_y[idx];
+          const float source_current_bottom_rel_y =
+              // Same-frame JumpAerial -> AttackAir entries are a callback-order handoff. The
+              // floor packet was produced by the JumpAerial collision callback before the delayed
+              // AttackAir entry, so the live bottom-hit test must use the pre-entry callback ECB
+              // for both previous and current roots. Using the destination AttackAir current ECB
+              // wrongly turns legitimate source-ECB platform landings into no-hit rows.
+              batch->state.coll_prev_ecb_bottom_rel_y[idx];
+          const float cur_bottom_y =
+              batch->state.coll_substep_cur_pos_y[idx] + source_current_bottom_rel_y;
+          const uint8_t delayed_attackair_no_platform_bottom_crossing =
+              // Source-order bridge for delayed common aerial IASA:
+              // `JumpAerial_IASA` can enter AttackAir before `Fighter_procMap`; source then runs
+              // `AttackAir_Coll -> ft_80082C74 -> mpColl_800471F8`. If this simulator already
+              // published a JumpAerial platform floor before the delayed AttackAir IASA, and both
+              // frame-start previous ECB bottom and pre-entry callback current ECB bottom are below
+              // that floor, `mpColl_80044628_Floor` did not have a bottom hit for either owner.
+              // Restore the collision-stage root and carried floor id instead of converting the
+              // stale floor packet into LandingAir*. Rows whose JumpAerial callback ECB crosses
+              // the floor remain landing-owned even if the destination AttackAir pose would be
+              // below it.
+              //
+              // data/stages/bin/*.bin::MSLSTG01 platform/fighter_solid metadata
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{
+              //   ftCo_JumpAerial_IASA,ftCo_JumpAerial_Coll}
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+              // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_800835B0}
+              // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800471F8,
+              //   mpColl_80047E14,mpColl_80044628_Floor}
+              (!was_ground && now_ground && (action_is_attackair(a) || delayed_attackair_pending) &&
+               jumpaerial_source && floor_result_bottom_sweep && floor_segment != 0xFFFFu &&
+               isfinite(prev_bottom_y) && isfinite(cur_bottom_y) &&
+               prev_bottom_y < (batch->state.ground_contact_y[idx] - floor_bias) &&
+               cur_bottom_y < (batch->state.ground_contact_y[idx] - floor_bias))
+                  ? 1u
+                  : 0u;
+          if (delayed_attackair_no_platform_bottom_crossing) {
+            if (delayed_attackair_pending && !action_is_attackair(batch->state.action_id[idx])) {
+              (void)locomotion_attackair_try_enter_from_air_iasa(batch, c, idx);
+            }
+            batch->state.on_ground[idx] = 0u;
+            batch->state.ground_id[idx] = batch->state.coll_stage_prev_ground_id[idx];
+            batch->state.pos_x[idx] = batch->state.coll_substep_cur_pos_x[idx];
+            batch->state.pos_y[idx] = batch->state.coll_substep_cur_pos_y[idx];
+            batch->state.coll_floor_result_valid[idx] = 0u;
+            batch->state.coll_floor_result_source[idx] = 0u;
+            batch->state.coll_floor_result_mode[idx] = 0u;
+            batch->state.coll_floor_result_segment_id[idx] = 0xFFFFu;
+            continue;
+          }
         }
 
         // Grounding transition: enter landing actions for supported airborne motion states.
