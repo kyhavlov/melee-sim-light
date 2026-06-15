@@ -423,11 +423,25 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     fallspecial_xc0_source_fx_kind_mask = 0
     if ftdata_symbol == "ftData_Marth":
         fallspecial_xc0_source_fx_kind_mask = (1 << 15) | (1 << 16)
+    # Probe-backed seed/provenance overlay:
+    # Slippi does not expose CollData ECB bottom. Marth FallAerial shallow landing witnesses need
+    # the seed CollData bottom reconstructed from the CommonFall directional blend hidden lane,
+    # but aggregate Fox/Falco controls reject promoting that to a shared free-running mpColl rule.
+    # Keep this as an explicit character/action seed mask until a direct mpColl probe proves a
+    # wider live-callback owner.
+    # Bit order: Fall, FallAerial, FallSpecial.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::{
+    #   ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+    common_fall_blended_ecb_seed_mask = 0
+    if ftdata_symbol == "ftData_Marth":
+        common_fall_blended_ecb_seed_mask = 1 << 1
 
     out = {
         "grab_capture_anchor_part_id": grab_capture_anchor_part_id,
         "throw_release_mpcoll_floor_publication_mask": throw_release_mpcoll_floor_publication_mask,
         "fallspecial_xc0_source_fx_kind_mask": fallspecial_xc0_source_fx_kind_mask,
+        "common_fall_blended_ecb_seed_mask": common_fall_blended_ecb_seed_mask,
         "walk_init_vel": f(0x00),
         "walk_accel": f(0x04),
         "walk_max_vel": f(0x08),
@@ -781,6 +795,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "grab_capture_anchor_part_id",
         "throw_release_mpcoll_floor_publication_mask",
         "fallspecial_xc0_source_fx_kind_mask",
+        "common_fall_blended_ecb_seed_mask",
         "illusion_gravity_delay_start_frames",
         "illusion_air_friction_start",
         "illusion_fall_accel_start",

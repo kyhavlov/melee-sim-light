@@ -11,6 +11,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset, read_dataset_window
 ACT_WAIT = 14
 ACT_TURN_RUN = 19
 ACT_RUN_BRAKE = 23
+ACT_GUARD_ON = 178
 SM_TURN_RUN = 11
 SM_RUN_BRAKE = 14
 
@@ -192,3 +193,34 @@ def test_runbrake_anim_end_wait_iasa_turns_same_frame() -> None:
     assert float(out["speed_ground_x_self"][p]) == pytest.approx(
         float(ref["speed_ground_x_self"][p]), abs=1e-6
     )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [3621, 5165])
+def test_marth_runbrake_anim_end_wait_iasa_guardon_same_frame(record: int) -> None:
+    # Replay-real positive for the same RunBrake_Anim -> Wait -> Wait_IASA owner as the Turn lock
+    # above. Wait_IASA checks `ftCo_80091A4C` before Jump/Dash/Squat/Turn/Walk, so a held trigger on
+    # the RunBrake terminal frame enters no-submotion GuardOn instead of exposing a settled Wait.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
+    # refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/marth/replays/validation/marth/BreakableMundaneElephant.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+    p = 1
+    assert int(seed["action_id"][p]) == ACT_RUN_BRAKE
+    assert int(seed["action_frame"][p]) == 25
+    assert int(ref["action_id"][p]) == ACT_GUARD_ON
+    assert int(ref["animation_index"][p]) == 0xFFFFFFFF
+
+    out = _one_step_out_compare(ds=ds, row=row)[0]
+    for field in ("action_id", "action_frame", "animation_index", "on_ground"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert [int(x) for x in out["state_flags"][p]] == [int(x) for x in ref["state_flags"][p]]

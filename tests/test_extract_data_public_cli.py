@@ -42,7 +42,7 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     out_dir = tmp_path / "data"
     missing_decomp = tmp_path / "missing_decomp"
     iso_dir.mkdir()
-    for name in ("PlCo.dat", "ItCo.dat", "PlFx.dat", "PlFc.dat", "GrNLa.dat"):
+    for name in ("PlCo.dat", "ItCo.dat", "PlFx.dat", "PlFc.dat", "PlMs.dat", "GrNLa.dat"):
         (iso_dir / name).write_bytes(b"fake")
 
     commands: list[list[str]] = []
@@ -61,7 +61,7 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
             "--stages",
             "grnla",
             "--chars",
-            "fox,falco",
+            "fox,falco,marth",
             "--melee-decomp",
             str(missing_decomp),
         ]
@@ -69,6 +69,9 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
 
     assert (out_dir / "staling/move_id/fox.bin").exists()
     assert (out_dir / "attack_id/move_id/falco.bin").exists()
+    assert (out_dir / "staling/move_id/marth.bin").exists()
+    assert (out_dir / "attack_id/move_id/marth.bin").exists()
+    assert (out_dir / "motion_state/owners/marth.bin").exists()
     assert (out_dir / "motion_state/owners/callback_symbols.json").exists()
     manifest = out_dir / "manifest.json"
     assert manifest.exists()
@@ -81,7 +84,7 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     import json as _json
     import struct as _struct
 
-    for ch in ("fox", "falco"):
+    for ch in ("fox", "falco", "marth"):
         b = (out_dir / "motion_state" / "owners" / f"{ch}.bin").read_bytes()
         assert b[:8] == b"MSLMSO01"
         assert _struct.unpack_from("<I", b, 8)[0] == FORMAT_VERSION, (

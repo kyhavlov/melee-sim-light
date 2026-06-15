@@ -68,6 +68,54 @@ static inline void reseed_ecb_rel_points_sample(MslEcbWorldPoints* out, uint8_t 
   msl_ecb_world_points_sample(out, char_id, anim, frame, facing_dir, 0.0f, 0.0f, force_zero);
 }
 
+static inline uint8_t reseed_common_fall_blended_ecb_seed_bit(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_FALL:
+    case MSL_ACT_FALL_F:
+    case MSL_ACT_FALL_B:
+      return 1u << 0;
+    case MSL_ACT_FALL_AERIAL:
+    case MSL_ACT_FALL_AERIAL_F:
+    case MSL_ACT_FALL_AERIAL_B:
+      return 1u << 1;
+    case MSL_ACT_FALL_SPECIAL:
+    case MSL_ACT_FALL_SPECIAL_F:
+    case MSL_ACT_FALL_SPECIAL_B:
+      return 1u << 2;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t reseed_common_fall_blended_ecb_seed_owner(const MslBatch* batch, size_t idx,
+                                                                uint16_t action_id) {
+  if (batch == NULL || batch->state.common_fall_blend_x4[idx] == 0.0f) {
+    return 0u;
+  }
+  const uint8_t bit = reseed_common_fall_blended_ecb_seed_bit(action_id);
+  if (bit == 0u) {
+    return 0u;
+  }
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+  return (ch != NULL && (ch->common_fall_blended_ecb_seed_mask & bit) != 0u) ? 1u : 0u;
+}
+
+static inline float reseed_common_fall_blended_ecb_bottom_rel_y(const MslBatch* batch, size_t idx,
+                                                                uint8_t char_id,
+                                                                uint32_t neutral_msid,
+                                                                uint16_t frame_u16) {
+  const uint16_t target_msid = batch->state.common_fall_blend_msid[idx];
+  float x4 = batch->state.common_fall_blend_x4[idx];
+  if (x4 < 0.0f) {
+    x4 = 0.0f;
+  } else if (x4 > 1.0f) {
+    x4 = 1.0f;
+  }
+  const float neutral = msl_ecb_bottom_rel_y(char_id, neutral_msid, (int)frame_u16);
+  const float target = msl_ecb_bottom_rel_y(char_id, target_msid, (int)frame_u16);
+  return neutral + (target - neutral) * x4;
+}
+
 static inline uint8_t reseed_throwhi_deferred_mid_pulse_rate_source_step(int32_t rate_q16_16) {
   // Source step owner for the 4/3 ThrowHi frame-20 deferred cursor lane. Keep this as a
   // quantized equality against the decomp-owned throw rate, not a broad "greater than 1.25"
@@ -2568,10 +2616,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.fallspecial_landing_lag[idx] = landing_lag;
       }
       // Marth special cmd-var reconstruction (Slippi does not expose fp->cmd_vars):
-      // Dolphin Slash phase lanes are derivable from the seed row alone. cmd_vars[0] is the
-      // script launch pulse (frame 6); descending (vy < 0) after the launch implies the Phys
-      // launch phase ended (cmd2) and at least one descending Coll pass armed cmd1, so a
-      // teacher-forced row mid-descent can cliffcatch exactly like the live rollout.
+      // Dolphin Slash phase lanes are source-owned hidden state. cmd_vars[0] is the script launch
+      // pulse (frame 6). Descending after launch implies the Phys launch phase ended (cmd2) and
+      // replay-seeded rows are past the first descending collision callback that arms cmd1. This
+      // one-step seed reconstruction initializes the hidden source state without changing
+      // free-running semantics.
+      //
       // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::{ftMs_SpecialHi_Phys,
       //   ftMs_SpecialHi_Coll}
       if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_MARTH &&
@@ -2956,6 +3006,31 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
             &prev_ecb, batch->state.char_id[idx], batch->state.animation_index[idx],
             seed->anim_frame_f32[p], facing_dir, seed->seed_prev_action_id[p],
             seed->seed_prev_action_frame[p], 0u);
+        const uint8_t common_fall_blended_ecb_seed =
+            (!force_locked_bottom &&
+             reseed_common_fall_blended_ecb_seed_owner(batch, idx, seed->action_id[p]))
+                ? 1u
+                : 0u;
+        if (common_fall_blended_ecb_seed) {
+          // Teacher-forced CollData ECB seed bridge:
+          // Slippi does not expose CollData.current/desired ECB. For data-marked Fall-family
+          // rows, initialize only the hidden bottom lane from the already reconstructed
+          // mv.co.{fall,fallaerial,fallspecial}.x4/smid blend. This is consumed for one
+          // callback and then cleared by mpcoll_ground_apply; free-running collision must still
+          // publish its own CollData state.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::{
+          //   ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+          // data/characters/<char>.json::common_fall_blended_ecb_seed_mask
+          const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(seed->anim_frame_f32[p]);
+          const float blended_bottom = reseed_common_fall_blended_ecb_bottom_rel_y(
+              batch, idx, batch->state.char_id[idx], batch->state.animation_index[idx], frame);
+          desired_ecb.bottom_rel_y = blended_bottom;
+          desired_ecb.bottom_y = blended_bottom;
+          prev_ecb.bottom_rel_y = blended_bottom;
+          prev_ecb.bottom_y = blended_bottom;
+        }
         reseed_store_colldata_ecb_desired(batch, idx, &desired_ecb);
         batch->state.coll_desired_ecb_bottom_locked_owner[idx] = seed_locked_bottom_valid;
         reseed_store_colldata_ecb_current(batch, idx, &prev_ecb);
@@ -2968,6 +3043,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
                                                                ? seed->ecb_lock_bottom_rel_y_f32[p]
                                                                : prev_ecb.bottom_rel_y;
         batch->state.coll_effective_bottom_rel_prev_valid[idx] = 1u;
+        batch->state.coll_common_fall_blended_ecb_seed_valid[idx] = common_fall_blended_ecb_seed;
         batch->state.coll_squeeze_restore_ecb_valid[idx] = 0u;
         batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_ecb_bottom_valid[idx] = 1u;

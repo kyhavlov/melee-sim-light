@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import json
 from argparse import Namespace
 from pathlib import Path
 
@@ -23,6 +24,7 @@ ACT_LANDING_FALL_SPECIAL = 43
 ACT_FX_SPECIAL_AIR_LW_START = 365
 ACT_FX_SPECIAL_AIR_LW_LOOP = 366
 ACT_FALL_SPECIAL = 35
+ACT_FALL_AERIAL = 32
 ACT_WAIT = 14
 ACT_JUMP_AERIAL_F = 27
 ACT_JUMP_AERIAL_B = 28
@@ -32,15 +34,17 @@ ACT_PASS = 244
 ACT_FX_SPECIAL_AIR_N_START = 344
 ACT_JUMP_F = 25
 ACT_ATTACK_AIR_N = 65
-ACT_ATTACK_AIR_LW = 65
 ACT_ATTACK_AIR_F = 66
 ACT_ATTACK_AIR_B = 67
 ACT_ATTACK_AIR_HI = 68
+ACT_ATTACK_AIR_LW = 69
+ACT_ATTACK_AIR_LW_TRUE = ACT_ATTACK_AIR_LW
 ACT_DAMAGE_AIR_2 = 85
 ACT_LANDING_AIR_N = 70
-ACT_LANDING_AIR_LW = 70
 ACT_LANDING_AIR_B = 72
 ACT_LANDING_AIR_HI = 73
+ACT_LANDING_AIR_LW = 74
+ACT_LANDING_AIR_LW_TRUE = ACT_LANDING_AIR_LW
 ACT_LANDING = 42
 ACT_GUARD_ON = 178
 ACT_GUARD = 179
@@ -57,12 +61,16 @@ SM_JUMP_AERIAL_F = 18
 SM_WAIT1_0 = 2
 SM_ATTACK_AIR_F = 69
 SM_LANDING = 35
+SM_FALL_AERIAL = 23
 SM_FX_SPECIAL_AIR_N_START = 298
 CHAR_FOX = 1
+CHAR_FALCO = 22
+CHAR_MARTH = 18
 STAGE_FD = 32
 STAGE_FOD = 2
 ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_HARD_FLOOR = 3
 MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY = 1 << 11
+MPCOLL_REJECT_MISSFOOT_ECB_LOCK_FIRST_FLOOR = 1 << 37
 
 
 def _run_one_step(ds, record: int, *, seed_mutator=None, input_mutator=None) -> np.void:
@@ -95,6 +103,26 @@ def _run_one_step(ds, record: int, *, seed_mutator=None, input_mutator=None) -> 
         )
         binding.write_compare(handle, out_bytes)
         return out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+    finally:
+        binding.destroy(handle)
+
+
+def _debug_commonfall_seed_state(ds, record: int, player: int) -> tuple[float, int]:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+
+    row = ds.samples[record : record + 1].copy()
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    try:
+        binding.reseed_seed(handle, row["seed_t"].view("u1").reshape(1, seed_stride).copy())
+        x4, msid = binding.debug_common_fall_blend_state(handle, 0, player)
+        return float(x4), int(msid)
     finally:
         binding.destroy(handle)
 
@@ -423,7 +451,8 @@ def test_locked_escapeair_platform_start_lifetime_enters_landing_fall_special(
 
     ds = read_dataset(str(dataset_path))
     row = ds.samples[record]
-    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
     assert int(row["ref_t1"]["animation_index"][p]) == SM_LANDING_FALL_SPECIAL
     assert int(row["ref_t1"]["on_ground"][p]) == 1
@@ -467,7 +496,8 @@ def test_locked_escapeair_deep_cliff_floor_handoff_lands() -> None:
     record = 1097
     p = 1
     row = ds.samples[record]
-    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
     assert int(row["ref_t1"]["on_ground"][p]) == 1
@@ -713,7 +743,8 @@ def test_escapeair_locked_loaded_ecb_bottom_sweep_lands_on_static_platform(
 
     ds = read_dataset(str(dataset_path))
     row = ds.samples[record]
-    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
     assert int(row["seed_t"]["ecb_lock_timer"][p]) != 0
     assert float(row["seed_t"]["ecb_lock_bottom_rel_y_f32"][p]) > 0.0
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
@@ -941,11 +972,11 @@ def test_attackair_transformed_platform_floor_skip_clears_after_first_root_cross
     target_record = 2013
     p = 1
     row = ds.samples[target_record]
-    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_LW
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_N
     assert int(row["seed_t"]["fall_fast"][p]) == 1
     assert int(row["seed_t"]["ground_id"][p]) != 0xFFFF
     assert int(row["seed_t"]["floor_skip_segment_id_u16"][p]) == 0xFFFF
-    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_AIR_LW
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_AIR_N
     assert int(row["ref_t1"]["on_ground"][p]) == 1
 
     out = _run_rollout_to_record(ds, start_record, target_record)
@@ -953,6 +984,59 @@ def test_attackair_transformed_platform_floor_skip_clears_after_first_root_cross
     for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("start_record", "target_record", "p", "action_id"),
+    [
+        (1638, 1640, 0, ACT_ATTACK_AIR_HI),
+        (1688, 1692, 0, ACT_ATTACK_AIR_N),
+        (1602, 1604, 1, ACT_ATTACK_AIR_LW_TRUE),
+    ],
+)
+def test_attackair_transformed_platform_rollout_publishes_floor_skip_lifetime_pte(
+    start_record: int, target_record: int, p: int, action_id: int
+) -> None:
+    # Rollout-real positive for PTE's FoD AttackAir transformed-platform floor-skip lifetime.
+    # The source owner is AttackAir_Coll -> ft_80082C74 -> mpColl_800471F8: while callback-visible
+    # stick is below p_ftCommonData->x25C and no current floor-source bit has accepted the FoD
+    # height platform, the root-crossing pass publishes the platform as CollData.floor_skip. Live
+    # grIzumi scheduler velocity proves the platform pose only; it does not bypass the one-way
+    # platform rejection. The released LandingAirN control below and MGS 2013 clear-after-crossing
+    # rollout lock guard the adjacent normal landing handoffs.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpUpdateFloorSkip}
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[target_record]
+    assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
+    assert int(row["seed_t"]["action_id"][p]) == action_id
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == action_id
+    assert int(row["seed_t"]["floor_skip_segment_id_u16"][p]) == 1
+    assert int(row["seed_t"]["floor_skip_segment_valid_u8"][p]) == 1
+    assert int(row["ref_t1"]["action_id"][p]) == action_id
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out, colldata = _run_rollout_to_record_with_colldata(ds, start_record, target_record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert int(colldata["floor_skip_valid"][p]) == 1
+    assert int(colldata["floor_skip_segment_id"][p]) == 1
 
 
 @pytest.mark.integration
@@ -1068,7 +1152,7 @@ def test_fall_stale_static_platform_first_hard_floor_contact_stays_airborne_sds(
 @pytest.mark.parametrize(
     ("record", "p", "seed_action", "ref_action"),
     [
-        (7843, 0, ACT_ATTACK_AIR_N, ACT_LANDING_AIR_LW),
+        (7843, 0, ACT_ATTACK_AIR_N, ACT_LANDING_AIR_N),
     ],
 )
 def test_attackair_transformed_platform_released_pass_final_handoff_lands(
@@ -1147,6 +1231,271 @@ def test_attackair_transformed_platform_downheld_final_handoff_stays_airborne() 
     assert float(out["speed_ground_x_self"][p]) == pytest.approx(
         float(ref["speed_ground_x_self"][p]), abs=2e-4
     )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "expected_char", "expected_source_bits"),
+    [
+        (
+            "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            9718,
+            1,
+            CHAR_MARTH,
+            (0x02, 0x00),
+        ),
+        (
+            "datasets/marth/replays/validation/marth/VigorousRelievedLlama.msl",
+            3110,
+            0,
+            CHAR_MARTH,
+            (0x00, 0x00),
+        ),
+        (
+            "datasets/marth/replays/validation/marth/FemaleWorthyAlpaca.msl",
+            3738,
+            0,
+            CHAR_FOX,
+            (0x00, 0x02),
+        ),
+    ],
+)
+def test_attackairn_fod_height_platform_requires_current_source_to_land(
+    dataset_rel: str, record: int, p: int, expected_char: int, expected_source_bits: tuple[int, int]
+) -> None:
+    # AttackAirN_Coll can only publish LandingAirN from a FoD height platform after the callback
+    # has current mpColl/grIzumi authority for that platform. Sparse restored heights and carried
+    # ground-contact provenance reconstruct line geometry, but are not source floor producers for
+    # the common AttackAir final publication path.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    # data/motion_state/owners/<char>.bin::MSLMSO01 submotion_id
+    # data/scripts/<char>.bin::MSLFTSC1 set_cmd_var/create_hitbox/clear_hitboxes events
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
+    assert int(row["seed_t"]["char_id"][p]) == expected_char
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_N
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ATTACK_AIR_N
+    assert tuple(int(v) for v in row["seed_t"]["stage_fod_platform_height_source_u8"]) == expected_source_bits
+    assert not any(int(v) & 0x04 for v in row["seed_t"]["stage_fod_platform_height_source_u8"])
+    assert binding.move_tables_debug_query(
+        "attackair_cmd0",
+        int(row["seed_t"]["char_id"][p]),
+        ACT_ATTACK_AIR_N,
+        float(row["seed_t"]["anim_frame_f32"][p]),
+        0.0,
+    )
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ATTACK_AIR_N
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action", "ref_action", "source_platform_i"),
+    [
+        (
+            "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            488,
+            1,
+            ACT_ATTACK_AIR_N,
+            ACT_LANDING_AIR_N,
+            1,
+        ),
+        (
+            "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            3095,
+            1,
+            ACT_ATTACK_AIR_N,
+            ACT_LANDING_AIR_N,
+            0,
+        ),
+    ],
+)
+def test_attackairn_fod_same_step_height_platform_source_lands(
+    dataset_rel: str, record: int, p: int, seed_action: int, ref_action: int, source_platform_i: int
+) -> None:
+    # Adjacent positive control: same-step grIzumi contact is current platform authority, so the
+    # same generated AttackAirN common collision callback may publish LandingAirN.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
+    assert int(row["seed_t"]["action_id"][p]) == seed_action
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][source_platform_i]) & 0x04
+    assert int(row["ref_t1"]["action_id"][p]) == ref_action
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action", "ref_action", "source_platform_i", "source_bit"),
+    [
+        (
+            "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            9574,
+            1,
+            ACT_ATTACK_AIR_F,
+            71,
+            1,
+            0x02,
+        ),
+        (
+            "datasets/marth/replays/validation/marth/VigorousRelievedLlama.msl",
+            8578,
+            1,
+            69,
+            74,
+            0,
+            0x02,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.msl",
+            739,
+            0,
+            ACT_ATTACK_AIR_F,
+            71,
+            1,
+            0x01,
+        ),
+    ],
+)
+def test_non_nair_attackair_fod_height_platform_source_controls_still_land(
+    dataset_rel: str,
+    record: int,
+    p: int,
+    seed_action: int,
+    ref_action: int,
+    source_platform_i: int,
+    source_bit: int,
+) -> None:
+    # Negative controls for the Nair-only source owner above: single-create Fair and DAir's
+    # callback-local live-floor owner keep their existing LandingAir publication paths.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
+    assert int(row["seed_t"]["action_id"][p]) == seed_action
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][source_platform_i]) & source_bit
+    assert int(row["ref_t1"]["action_id"][p]) == ref_action
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+def _callback_first_create_frame_from_moves_json(char_key: str, move_key: str) -> int:
+    moves_path = Path(__file__).resolve().parents[1] / "data/moves" / f"{char_key}.json"
+    data = json.loads(moves_path.read_text())
+    events = data["moves"][move_key]["events"]
+    first_create = min(int(ev["frame"]) for ev in events if ev["kind"] == "create_hitbox")
+    # Extracted script frames are command frames; the collision callback observes the post-Anim
+    # action-frame coordinate one tick earlier.
+    return first_create - 1
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [8576, 8577])
+def test_attackairlw_fod_height_platform_pre_first_create_stays_airborne(record: int) -> None:
+    # Falco DAir's common AttackAir_Coll path cannot publish a FoD height-platform landing before
+    # the extracted first create_hitbox callback edge. The seed has a reconstructed platform line,
+    # but source has not reached the script-authored DAir platform publication owner yet.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    # data/moves/falco.json::moves.ftCo_SM_AttackAirLw.events
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/marth/replays/validation/marth/VigorousRelievedLlama.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    first_create_frame = _callback_first_create_frame_from_moves_json("falco", "ftCo_SM_AttackAirLw")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    p = 1
+    assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
+    assert int(row["seed_t"]["char_id"][p]) == CHAR_FALCO
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_LW_TRUE
+    assert int(row["seed_t"]["action_frame"][p]) < first_create_frame
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0]) & 0x02
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ATTACK_AIR_LW_TRUE
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_attackairlw_fod_height_platform_first_create_lands() -> None:
+    # Adjacent positive: at the extracted first create_hitbox callback edge, Falco DAir has reached
+    # the source script owner and may publish LandingAirLw through the accepted FoD platform floor.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/marth/replays/validation/marth/VigorousRelievedLlama.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    first_create_frame = _callback_first_create_frame_from_moves_json("falco", "ftCo_SM_AttackAirLw")
+    ds = read_dataset(str(dataset_path))
+    record = 8578
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
+    assert int(row["seed_t"]["char_id"][p]) == CHAR_FALCO
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_LW_TRUE
+    assert int(row["seed_t"]["action_frame"][p]) == first_create_frame
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0]) & 0x02
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_AIR_LW_TRUE
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
 
 
 @pytest.mark.integration
@@ -1957,6 +2306,8 @@ def test_marth_jumpaerial_escapeair_no_lock_flat_ledge_bottom_sweep_lands() -> N
         ("InternalPowerlessWallaby.msl", 4210, 0, 7),
         ("ParallelFamiliarZebra.msl", 7821, 0, 5),
         ("QuestionableHarmfulPanther.msl", 4388, 1, 5),
+        ("WellWornSmallGoshawk.msl", 1605, 1, 3),
+        ("WellWornSmallGoshawk.msl", 12063, 1, 3),
     ]
 
     for replay, record, p, expected_ground_id in cases:
@@ -1965,7 +2316,8 @@ def test_marth_jumpaerial_escapeair_no_lock_flat_ledge_bottom_sweep_lands() -> N
             pytest.skip(f"missing local dataset: {dataset_path}")
         ds = read_dataset(str(dataset_path))
         row = ds.samples[record]
-        assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
+        assert int(row["seed_t"]["action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
+        assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
         assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
         assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
         assert int(row["ref_t1"]["ground_id"][p]) == expected_ground_id
@@ -1977,6 +2329,96 @@ def test_marth_jumpaerial_escapeair_no_lock_flat_ledge_bottom_sweep_lands() -> N
         assert int(dbg["floor_result_mode"][p]) == 1  # MSL_MPCOLL_FLOOR_MODE_BOTTOM_SWEEP.
         assert int(dbg["floor_result_segment_id"][p]) == expected_ground_id
         assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_jumpaerial_escapeair_fresh_static_platform_side_owner_lands_qhp() -> None:
+    # Fresh JumpAerial -> EscapeAir can publish a static soft-platform floor through the entered
+    # EscapeAir ECB side/root owner even when the ECB bottom point does not sweep downward across
+    # the platform. This is same-callback entry ownership; sustained no-lock EscapeAir rows below
+    # stay airborne until a bottom-sweep producer is live.
+    #
+    # data/motion_state/owners/*.bin::MSLMSO01 PHASE4_ESCAPE_AIR_COLL
+    # data/stages/bin/grop.bin::MSLSTG01 Dream Land top platform
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 5432
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["ground_id"][p]) == 2
+
+    out, dbg = _run_one_step_with_colldata(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert int(dbg["floor_result_mode"][p]) == 2  # MSL_MPCOLL_FLOOR_MODE_ROOT_PROJECTION.
+    assert int(dbg["floor_result_segment_id"][p]) == 2
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.msl",
+            2986,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.msl",
+            11156,
+            0,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.msl",
+            11157,
+            0,
+        ),
+        ("datasets/marth/replays/validation/marth/VigorousRelievedLlama.msl", 9073, 0),
+    ],
+)
+def test_escapeair_static_platform_side_owner_requires_fresh_jumpaerial_entry(
+    dataset_rel: str, record: int, p: int
+) -> None:
+    # Adjacent negatives for the QHP owner: sustained no-lock EscapeAir over static/moving
+    # platforms is not admitted by the fresh-entry side/root publication path.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
+    assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), (dataset_rel, record, field)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
 
 
 @pytest.mark.integration
@@ -4729,6 +5171,94 @@ def test_fod_fall_coll_current_down_input_keeps_transformed_platform_pass() -> N
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("dataset_name", "record", "p", "expected_ground"),
+    [
+        ("ExtraLargeScaryHornet.msl", 4180, 1, 34),
+        ("WingedGorgeousPanther.msl", 2804, 1, 34),
+    ],
+)
+def test_marth_fallaerial_commonfall_blended_ecb_delays_shallow_stadium_landing(
+    dataset_name: str, record: int, p: int, expected_ground: int
+) -> None:
+    # FallAerial_Coll routes through ft_800831CC -> mpColl_80047E14 with the same platform-pass
+    # callback as Fall/FallSpecial. Its Anim callback also runs ftCo_Fall_Anim_Inner and blends
+    # TransN descendants through ftAnim_8006FE9C before the map callback. Shallow Stadium contacts
+    # therefore sample the blended FallAerial/FallAerialB ECB envelope, not the neutral
+    # FallAerial table alone; the blended current bottom is still above the floor/platform here,
+    # so vanilla remains airborne for one more callback.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::{
+    #   ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+    #   ftCo_Fall_Anim_Inner,ftCo_800CC988}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth" / dataset_name
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["char_id"][p]) == 18
+    assert int(row["seed_t"]["action_id"][p]) == ACT_FALL_AERIAL
+    assert int(row["seed_t"]["animation_index"][p]) == SM_FALL_AERIAL
+    x4, msid = _debug_commonfall_seed_state(ds, record, p)
+    assert x4 > 0.0
+    assert msid == 25
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_FALL_AERIAL
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert int(out["ground_id"][p]) == expected_ground
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "p", "expected_ground"),
+    [
+        ("ExtraLargeScaryHornet.msl", 4181, 1, 34),
+        ("WingedGorgeousPanther.msl", 2805, 1, 35),
+        ("DraftyHealthyHare.msl", 6555, 0, 3),
+    ],
+)
+def test_marth_fallaerial_commonfall_blended_ecb_still_lands_deeper_contacts(
+    dataset_name: str, record: int, p: int, expected_ground: int
+) -> None:
+    # Adjacent positive boundary for the blended ECB owner above: once the same FallAerial callback
+    # reaches a deeper floor/platform crossing, source mpColl_80044628_Floor owns the landing.
+    # This keeps the blended-ECB repair from becoming a generic FallAerial landing delay.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/marth/replays/validation/marth" / dataset_name
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_FALL_AERIAL
+    x4, msid = _debug_commonfall_seed_state(ds, record, p)
+    assert x4 > 0.0
+    assert msid in (24, 25)
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["ground_id"][p]) == expected_ground
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("dataset_name", "record", "p", "platform_i", "seed_action", "ref_action", "named_height"),
     [
         ("ElatedWearyTermite.msl", 2523, 0, 1, ACT_ATTACK_AIR_B, ACT_LANDING_AIR_B, 25.0),
@@ -5079,9 +5609,9 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner(
     assert int(released["seed_t"]["action_id"][0]) == ACT_ATTACK_AIR_N
     assert int(released["seed_t"]["floor_skip_segment_id_u16"][0]) == 0xFFFF
     assert int(released["seed_t"]["floor_skip_segment_valid_u8"][0]) == 0
-    assert int(released["ref_t1"]["action_id"][0]) == ACT_LANDING_AIR_LW
+    assert int(released["ref_t1"]["action_id"][0]) == ACT_LANDING_AIR_N
     released_out = _run_one_step(ds, 7843)
-    assert int(released_out["action_id"][0]) == ACT_LANDING_AIR_LW
+    assert int(released_out["action_id"][0]) == ACT_LANDING_AIR_N
     assert int(released_out["on_ground"][0]) == 1
     assert float(released_out["pos_y"][0]) == pytest.approx(
         float(released["ref_t1"]["pos_y"][0]), abs=2e-4
@@ -5205,3 +5735,92 @@ def test_yoshi_guard_player_nudge_floor_loss_enters_missfoot_cnm_1086() -> None:
         assert int(out[field][p]) == int(ref[field][p]), field
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        ("datasets/marth/replays/validation/marth/FemaleFarOffSalmon.msl", 11615, 0),
+        ("datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl", 2540, 1),
+        ("datasets/marth/replays/validation/marth/DraftyHealthyHare.msl", 10438, 1),
+    ],
+    ids=["marth_locked_missfoot", "falco_locked_missfoot", "fox_locked_missfoot"],
+)
+def test_locked_missfoot_first_floor_contact_stays_airborne(
+    dataset_rel: str, record: int, p: int
+) -> None:
+    # Fresh MissFoot floor-loss source owner:
+    # ftCo_8009F39C enters MissFoot through ftCommon_8007D5D4, which sets fp->ecb_lock and
+    # CollData_X130_Locked. The first serialized MissFoot_Coll has already advanced to
+    # action_frame=1 before ft_80082F28 -> ft_CheckGroundAndLedge -> mpColl_800473CC, but vanilla
+    # keeps this shallow same-floor contact airborne instead of entering Wait/Landing.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::{ftCo_8009F39C,ftCo_MissFoot_Coll}
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+    # refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800473CC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+
+    seed = row["seed_t"]
+    ref = row["ref_t1"]
+    assert int(seed["action_id"][p]) == ACT_MISS_FOOT
+    assert int(seed["action_frame"][p]) == 0
+    assert int(seed["seed_prev_action_id"][p]) != ACT_MISS_FOOT
+    assert int(seed["ecb_lock_timer"][p]) >= 9
+    assert int(ref["action_id"][p]) == ACT_MISS_FOOT
+    assert int(ref["on_ground"][p]) == 0
+    assert int(ref["action_frame"][p]) == 1
+
+    out, dbg = _run_one_step_with_colldata(ds, record)
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), (record, field)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert int(dbg["floor_result_valid"][p]) == 0
+    assert (
+        int(dbg["floor_probe_reject_bits"][p])
+        & MPCOLL_REJECT_MISSFOOT_ECB_LOCK_FIRST_FLOOR
+    )
+
+
+@pytest.mark.integration
+def test_no_lock_missfoot_late_floor_contact_lands_feh_3266() -> None:
+    # Adjacent negative: once the CollData_X130 lock episode is gone and MissFoot is sustained,
+    # the same ft_CheckGroundAndLedge/mpColl_800473CC floor callback can publish the normal Landing.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    record = 3266
+    p = 1
+    row = ds.samples[record]
+    seed = row["seed_t"]
+    ref = row["ref_t1"]
+
+    assert int(seed["action_id"][p]) == ACT_MISS_FOOT
+    assert int(seed["seed_prev_action_id"][p]) == ACT_MISS_FOOT
+    assert int(seed["ecb_lock_timer"][p]) == 0
+    assert int(ref["action_id"][p]) == ACT_LANDING
+    assert int(ref["on_ground"][p]) == 1
+
+    out, dbg = _run_one_step_with_colldata(ds, record)
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+    assert int(dbg["floor_result_valid"][p]) == 1
+    assert (
+        int(dbg["floor_probe_reject_bits"][p])
+        & MPCOLL_REJECT_MISSFOOT_ECB_LOCK_FIRST_FLOOR
+    ) == 0

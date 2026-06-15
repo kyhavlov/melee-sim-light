@@ -181,6 +181,59 @@ def _run_case(c: _Case) -> None:
             ref_action_id=0x00B6,
             seed_guard_reflect_timer_x14=2,
         ),
+        # 0x2218 (state_flags[0]) GuardReflect ReflectDesc bits.
+        #
+        # ftColl_CreateReflectHit sets both fp->reflecting (0x10) and x2218_b5 from
+        # ReflectDesc.x20_behavior (0x04). Common GuardReflect passes behavior=1 through
+        # ftCo_8009370C, so new GuardReflect entries must publish 0x14, not only 0x10.
+        _Case(
+            dataset_rel="datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl",
+            record=4209,
+            p=0,
+            byte=0,
+            seed_byte=0x00,
+            ref_byte=0x14,
+            note="GuardReflect entry publishes ReflectDesc reflecting+behavior bits",
+            seed_action_id=0x00B2,
+            ref_action_id=0x00B6,
+        ),
+        _Case(
+            dataset_rel="datasets/marth/replays/validation/marth/BreakableMundaneElephant.msl",
+            record=171,
+            p=1,
+            byte=0,
+            seed_byte=0x00,
+            ref_byte=0x14,
+            note="GuardReflect entry from ShieldDesc contact publishes ReflectDesc behavior bit",
+            seed_action_id=0x0028,
+            ref_action_id=0x00B6,
+        ),
+        # Adjacent exits: GuardReflect->GuardSetOff clears fp->reflecting through
+        # Fighter_ChangeMotionState but keeps the ReflectDesc behavior bit carried in x2218_b5.
+        _Case(
+            dataset_rel="datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            record=1012,
+            p=0,
+            byte=0,
+            seed_byte=0x04,
+            ref_byte=0x04,
+            note="GuardReflect->GuardSetOff keeps behavior bit without reflecting",
+            seed_action_id=0x00B6,
+            ref_action_id=0x00B5,
+            seed_guard_reflect_timer_x14=0,
+        ),
+        _Case(
+            dataset_rel="datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl",
+            record=4755,
+            p=0,
+            byte=0,
+            seed_byte=0x14,
+            ref_byte=0x04,
+            note="active GuardReflect shield hit clears reflecting but preserves behavior",
+            seed_action_id=0x00B6,
+            ref_action_id=0x00B5,
+            seed_guard_reflect_timer_x14=2,
+        ),
         _Case(
             dataset_rel=(
                 "datasets/fox_falco_fd_ucf084_recent/replays/debug/"

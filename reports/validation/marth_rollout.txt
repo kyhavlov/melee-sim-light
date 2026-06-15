@@ -13,13 +13,13 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 == datasets/marth/replays/validation/marth/BountifulScalyGuanaco.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1355
-rollout.streak_count: 17
+rollout.streak_count: 16
 rollout.streak_len.median: 282
 rollout.streak_len.p90: 1150
 rollout.streak_len.p95: 1355
 rollout.streak_len.max: 1355
-rollout.first_mismatch_total: 16
-rollout.first_mismatch_seeded_total: 12
+rollout.first_mismatch_total: 15
+rollout.first_mismatch_seeded_total: 11
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=35.175 rec=1544 p=0 seed/ref/out=-18.8392/-18.8711/16.3038 actions=368/368/368 category=unclassified
@@ -33,14 +33,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:467
 
 == datasets/marth/replays/validation/marth/BreakableMundaneElephant.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1937
-rollout.streak_count: 22
-rollout.streak_len.median: 173
-rollout.streak_len.p90: 1273
-rollout.streak_len.p95: 1284
-rollout.streak_len.max: 1937
-rollout.first_mismatch_total: 21
-rollout.first_mismatch_seeded_total: 12
+rollout.best_len: 2262
+rollout.streak_count: 19
+rollout.streak_len.median: 202
+rollout.streak_len.p90: 1937
+rollout.streak_len.p95: 2262
+rollout.streak_len.max: 2262
+rollout.first_mismatch_total: 18
+rollout.first_mismatch_seeded_total: 9
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=24.2001 rec=9570 p=1 seed/ref/out=31.7997/32.3553/56.5554 actions=15/15/15 category=unclassified
@@ -56,13 +56,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == datasets/marth/replays/validation/marth/BriefAdoredOyster.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1408
-rollout.streak_count: 29
-rollout.streak_len.median: 116
-rollout.streak_len.p90: 755
+rollout.streak_count: 26
+rollout.streak_len.median: 126
+rollout.streak_len.p90: 774
 rollout.streak_len.p95: 847
 rollout.streak_len.max: 1408
-rollout.first_mismatch_total: 29
-rollout.first_mismatch_seeded_total: 13
+rollout.first_mismatch_total: 26
+rollout.first_mismatch_seeded_total: 9
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=32.1998 rec=3888 p=1 seed/ref/out=27.4264/26.8264/59.0262 actions=358/358/358 category=unclassified
@@ -77,13 +77,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:156
 == datasets/marth/replays/validation/marth/ColossalYellowishBison.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 841
-rollout.streak_count: 43
-rollout.streak_len.median: 192
-rollout.streak_len.p90: 557
-rollout.streak_len.p95: 702
+rollout.streak_count: 39
+rollout.streak_len.median: 211
+rollout.streak_len.p90: 600
+rollout.streak_len.p95: 808
 rollout.streak_len.max: 841
-rollout.first_mismatch_total: 42
-rollout.first_mismatch_seeded_total: 22
+rollout.first_mismatch_total: 38
+rollout.first_mismatch_seeded_total: 18
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=34.48 rec=2687 p=1 seed/ref/out=-90.5372/-92.9491/-58.4691 actions=35/35/35 category=unclassified
@@ -92,20 +92,20 @@ rollout.float_top_errors:
 rollout.float_top_downstream:
   1. pos_y max_err=34.48 rec=2700 p=1 seed/ref/out=-122.946/-125.446/-90.966 actions=35/0/35 category=downstream_discrete_mismatch
   2. percent max_err=20 rec=8643 p=1 seed/ref/out=142.17/142.17/162.17 actions=43/43/88 category=downstream_discrete_mismatch
-  3. shield_hp max_err=8.00021 rec=1092 p=0 seed/ref/out=54.3253/46.1783/54.1785 actions=178/181/178 category=downstream_discrete_mismatch
+  3. shield_hp max_err=8.0016 rec=1092 p=0 seed/ref/out=54.3253/46.1783/54.1799 actions=178/181/178 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1286
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == datasets/marth/replays/validation/marth/DraftyHealthyHare.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1962
-rollout.streak_count: 21
+rollout.streak_count: 20
 rollout.streak_len.median: 377
 rollout.streak_len.p90: 764
 rollout.streak_len.p95: 1042
 rollout.streak_len.max: 1962
-rollout.first_mismatch_total: 21
-rollout.first_mismatch_seeded_total: 9
+rollout.first_mismatch_total: 20
+rollout.first_mismatch_seeded_total: 8
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=53.2395 rec=6496 p=0 seed/ref/out=28.3643/28.6304/81.8699 actions=28/28/28 category=unclassified
@@ -119,14 +119,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:129
 
 == datasets/marth/replays/validation/marth/ExtraLargeScaryHornet.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1490
-rollout.streak_count: 25
-rollout.streak_len.median: 378
-rollout.streak_len.p90: 1140
-rollout.streak_len.p95: 1268
-rollout.streak_len.max: 1490
-rollout.first_mismatch_total: 25
-rollout.first_mismatch_seeded_total: 12
+rollout.best_len: 1494
+rollout.streak_count: 19
+rollout.streak_len.median: 438
+rollout.streak_len.p90: 1490
+rollout.streak_len.p95: 1494
+rollout.streak_len.max: 1494
+rollout.first_mismatch_total: 18
+rollout.first_mismatch_seeded_total: 5
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=159.875 rec=5010 p=1 seed/ref/out=-7.05318/-5.65008/-165.525 actions=7/7/7 category=unclassified
@@ -142,16 +142,16 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 == datasets/marth/replays/validation/marth/FemaleFarOffSalmon.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1346
-rollout.streak_count: 34
+rollout.streak_count: 32
 rollout.streak_len.median: 215
 rollout.streak_len.p90: 827
 rollout.streak_len.p95: 1039
 rollout.streak_len.max: 1346
-rollout.first_mismatch_total: 33
-rollout.first_mismatch_seeded_total: 14
+rollout.first_mismatch_total: 31
+rollout.first_mismatch_seeded_total: 12
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_x max_err=10.0121 rec=11698 p=1 seed/ref/out=-82.2344/-82.0594/-72.0473 actions=35/0/0 category=unclassified
+  1. pos_x max_err=10.087 rec=11698 p=1 seed/ref/out=-82.2344/-82.0594/-71.9724 actions=35/0/0 category=unclassified
   2. pos_y max_err=3.93 rec=3117 p=0 seed/ref/out=8.47011/8.05611/4.12611 actions=27/27/27 category=unclassified
   3. speed_ground_x_self max_err=1.56 rec=7788 p=0 seed/ref/out=1.72/0/1.56 actions=360/365/365 category=unclassified
 rollout.float_top_downstream:
@@ -163,18 +163,18 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:231
 == datasets/marth/replays/validation/marth/FemaleWorthyAlpaca.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 995
-rollout.streak_count: 39
-rollout.streak_len.median: 154
-rollout.streak_len.p90: 376
+rollout.streak_count: 37
+rollout.streak_len.median: 178
+rollout.streak_len.p90: 384
 rollout.streak_len.p95: 595
 rollout.streak_len.max: 995
-rollout.first_mismatch_total: 44
-rollout.first_mismatch_seeded_total: 28
+rollout.first_mismatch_total: 39
+rollout.first_mismatch_seeded_total: 23
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=11.3508 rec=3330 p=1 seed/ref/out=54.1063/54.0113/42.6605 actions=35/0/0 category=unclassified
-  2. percent max_err=1.74 rec=1386 p=1 seed/ref/out=47.7/47.7/49.44 actions=90/90/90 category=unclassified
-  3. speed_y_self max_err=0.391927 rec=7282 p=0 seed/ref/out=0/-0/-0.391927 actions=20/20/20 category=unclassified
+  2. pos_y max_err=2.66344 rec=7325 p=0 seed/ref/out=-2.72957/-3.41957/-0.756125 actions=29/29/29 category=unclassified
+  3. percent max_err=1.74 rec=1386 p=1 seed/ref/out=47.7/47.7/49.44 actions=90/90/90 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=13 rec=5798 p=0 seed/ref/out=20.79/33.79/20.79 actions=43/88/43 category=downstream_discrete_mismatch
   2. pos_y max_err=8.8436 rec=4638 p=1 seed/ref/out=-10.4769/-20.0414/-11.1978 actions=368/252/368 category=downstream_discrete_mismatch
@@ -185,13 +185,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 == datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 2020
-rollout.streak_count: 46
-rollout.streak_len.median: 84
+rollout.streak_count: 43
+rollout.streak_len.median: 94
 rollout.streak_len.p90: 586
-rollout.streak_len.p95: 637
+rollout.streak_len.p95: 690
 rollout.streak_len.max: 2020
-rollout.first_mismatch_total: 45
-rollout.first_mismatch_seeded_total: 24
+rollout.first_mismatch_total: 42
+rollout.first_mismatch_seeded_total: 20
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=43.0663 rec=4485 p=1 seed/ref/out=100.244/101.357/58.2903 actions=89/89/89 category=unclassified
@@ -213,29 +213,29 @@ rollout.streak_len.p90: 743
 rollout.streak_len.p95: 1144
 rollout.streak_len.max: 1144
 rollout.first_mismatch_total: 18
-rollout.first_mismatch_seeded_total: 9
+rollout.first_mismatch_seeded_total: 8
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_x max_err=19.479 rec=2271 p=1 seed/ref/out=35.2872/35.2872/15.8082 actions=349/349/349 category=unclassified
+  1. pos_x max_err=20.7778 rec=2327 p=1 seed/ref/out=3.28419/1.94654/-18.8313 actions=57/57/57 category=unclassified
   2. pos_y max_err=2.96433 rec=4758 p=1 seed/ref/out=66.2614/63.8247/60.8604 actions=35/35/35 category=unclassified
   3. speed_air_x_self max_err=1.479 rec=2247 p=1 seed/ref/out=-1.62/-0.021/-1.5 actions=20/349/349 category=unclassified
 rollout.float_top_downstream:
-  1. percent max_err=13 rec=5270 p=0 seed/ref/out=0/0/13 actions=263/263/86 category=downstream_discrete_mismatch
-  2. pos_y max_err=6.9809 rec=4380 p=0 seed/ref/out=-8.13882/-2.93347/-9.91437 actions=236/43/236 category=downstream_discrete_mismatch
-  3. shield_hp max_err=4.21743 rec=1148 p=1 seed/ref/out=59.37/59.28/55.0626 actions=178/179/181 category=downstream_discrete_mismatch
+  1. pos_x max_err=20.7778 rec=2332 p=1 seed/ref/out=-2.80406/-3.84171/-24.6195 actions=57/57/57 category=downstream_discrete_mismatch
+  2. percent max_err=13 rec=5270 p=0 seed/ref/out=0/0/13 actions=263/263/86 category=downstream_discrete_mismatch
+  3. pos_y max_err=6.9809 rec=4380 p=0 seed/ref/out=-8.13882/-2.93347/-9.91437 actions=236/43/236 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:293
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == datasets/marth/replays/validation/marth/MetallicUniqueGrouse.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 850
-rollout.streak_count: 21
+rollout.best_len: 1079
+rollout.streak_count: 19
 rollout.streak_len.median: 162
-rollout.streak_len.p90: 571
-rollout.streak_len.p95: 686
-rollout.streak_len.max: 850
-rollout.first_mismatch_total: 21
-rollout.first_mismatch_seeded_total: 10
+rollout.streak_len.p90: 850
+rollout.streak_len.p95: 1079
+rollout.streak_len.max: 1079
+rollout.first_mismatch_total: 19
+rollout.first_mismatch_seeded_total: 8
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=10.71 rec=4823 p=1 seed/ref/out=-24.8992/-24.8992/-35.6092 actions=60/60/60 category=unclassified
@@ -251,13 +251,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == datasets/marth/replays/validation/marth/ParallelFamiliarZebra.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1330
-rollout.streak_count: 23
-rollout.streak_len.median: 197
-rollout.streak_len.p90: 706
+rollout.streak_count: 21
+rollout.streak_len.median: 263
+rollout.streak_len.p90: 965
 rollout.streak_len.p95: 1212
 rollout.streak_len.max: 1330
-rollout.first_mismatch_total: 22
-rollout.first_mismatch_seeded_total: 10
+rollout.first_mismatch_total: 20
+rollout.first_mismatch_seeded_total: 8
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=28.4 rec=5200 p=1 seed/ref/out=-0.640767/-2.25669/26.1434 actions=35/35/35 category=unclassified
@@ -272,12 +272,12 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:143
 == datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 2274
-rollout.streak_count: 23
-rollout.streak_len.median: 149
+rollout.streak_count: 22
+rollout.streak_len.median: 140
 rollout.streak_len.p90: 953
-rollout.streak_len.p95: 965
+rollout.streak_len.p95: 1119
 rollout.streak_len.max: 2274
-rollout.first_mismatch_total: 23
+rollout.first_mismatch_total: 22
 rollout.first_mismatch_seeded_total: 10
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -292,14 +292,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:622
 
 == datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1709
-rollout.streak_count: 29
+rollout.best_len: 1984
+rollout.streak_count: 27
 rollout.streak_len.median: 259
 rollout.streak_len.p90: 1047
 rollout.streak_len.p95: 1048
-rollout.streak_len.max: 1709
-rollout.first_mismatch_total: 29
-rollout.first_mismatch_seeded_total: 17
+rollout.streak_len.max: 1984
+rollout.first_mismatch_total: 27
+rollout.first_mismatch_seeded_total: 15
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=37.675 rec=924 p=0 seed/ref/out=25.1379/22.9379/60.6129 actions=29/29/29 category=unclassified
@@ -335,14 +335,14 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1603
-rollout.streak_count: 18
+rollout.best_len: 1787
+rollout.streak_count: 16
 rollout.streak_len.median: 462
-rollout.streak_len.p90: 911
-rollout.streak_len.p95: 1603
-rollout.streak_len.max: 1603
-rollout.first_mismatch_total: 17
-rollout.first_mismatch_seeded_total: 5
+rollout.streak_len.p90: 1603
+rollout.streak_len.p95: 1787
+rollout.streak_len.max: 1787
+rollout.first_mismatch_total: 15
+rollout.first_mismatch_seeded_total: 3
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=12.8251 rec=6078 p=0 seed/ref/out=-71.4131/-71.0931/-58.268 actions=35/35/35 category=unclassified
@@ -356,14 +356,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:138
 
 == datasets/marth/replays/validation/marth/VigorousRelievedLlama.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1474
-rollout.streak_count: 36
-rollout.streak_len.median: 206
-rollout.streak_len.p90: 503
-rollout.streak_len.p95: 800
-rollout.streak_len.max: 1474
-rollout.first_mismatch_total: 41
-rollout.first_mismatch_seeded_total: 27
+rollout.best_len: 1733
+rollout.streak_count: 32
+rollout.streak_len.median: 252
+rollout.streak_len.p90: 524
+rollout.streak_len.p95: 809
+rollout.streak_len.max: 1733
+rollout.first_mismatch_total: 34
+rollout.first_mismatch_seeded_total: 20
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=22.7706 rec=5748 p=1 seed/ref/out=5.7136/5.71378/-17.0568 actions=60/60/60 category=unclassified
@@ -373,18 +373,18 @@ rollout.float_top_downstream:
   1. pos_x max_err=22.7706 rec=5757 p=1 seed/ref/out=10.3285/11.8669/-10.9037 actions=60/60/60 category=downstream_discrete_mismatch
   2. pos_y max_err=18.1493 rec=3622 p=0 seed/ref/out=25.7635/42.7501/24.6008 actions=91/201/91 category=downstream_discrete_mismatch
   3. percent max_err=17 rec=5757 p=0 seed/ref/out=127.96/144.96/127.96 actions=65/91/65 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:675
-rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:674
+rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1046
-rollout.streak_count: 59
-rollout.streak_len.median: 150
+rollout.streak_count: 57
+rollout.streak_len.median: 164
 rollout.streak_len.p90: 632
 rollout.streak_len.p95: 796
 rollout.streak_len.max: 1046
-rollout.first_mismatch_total: 58
+rollout.first_mismatch_total: 56
 rollout.first_mismatch_seeded_total: 17
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -401,13 +401,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 == datasets/marth/replays/validation/marth/WingedGorgeousPanther.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1600
-rollout.streak_count: 34
+rollout.streak_count: 32
 rollout.streak_len.median: 177
 rollout.streak_len.p90: 688
-rollout.streak_len.p95: 1308
+rollout.streak_len.p95: 1551
 rollout.streak_len.max: 1600
-rollout.first_mismatch_total: 36
-rollout.first_mismatch_seeded_total: 20
+rollout.first_mismatch_total: 34
+rollout.first_mismatch_seeded_total: 17
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=23.24 rec=367 p=0 seed/ref/out=-41.6429/-41.6429/-64.8829 actions=229/229/229 category=unclassified
@@ -417,18 +417,18 @@ rollout.float_top_downstream:
   1. pos_x max_err=24.24 rec=368 p=0 seed/ref/out=-41.6429/-41.6429/-65.8829 actions=229/229/229 category=downstream_discrete_mismatch
   2. percent max_err=13.8 rec=2015 p=1 seed/ref/out=101.72/115.52/101.72 actions=91/89/200 category=downstream_discrete_mismatch
   3. shield_hp max_err=9.1 rec=5380 p=1 seed/ref/out=58.88/49.5/58.6 actions=178/181/79 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1486
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1494
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == suite summary ==
-overall.rollout.streak_count: 563
-overall.rollout.streak_len.median: 205
-overall.rollout.streak_len.p90: 770
-overall.rollout.streak_len.p95: 1042
+overall.rollout.streak_count: 521
+overall.rollout.streak_len.median: 215
+overall.rollout.streak_len.p90: 809
+overall.rollout.streak_len.p95: 1119
 overall.rollout.streak_len.max: 2274
 overall.rollout.best_len.max: 2274
-overall.rollout.first_mismatch_total: 566
-overall.rollout.first_mismatch_seeded_total: 279
+overall.rollout.first_mismatch_total: 517
+overall.rollout.first_mismatch_seeded_total: 229
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=159.875 rec=5010 p=1 seed/ref/out=-7.05318/-5.65008/-165.525 actions=7/7/7 category=unclassified
@@ -438,5 +438,5 @@ overall.rollout.float_top_downstream:
   1. pos_x max_err=63.4703 rec=13168 p=0 seed/ref/out=30.6624/30.845/-32.6253 actions=90/88/90 category=downstream_discrete_mismatch
   2. pos_y max_err=40.3771 rec=1545 p=0 seed/ref/out=-18.8711/-24.1652/16.2119 actions=368/252/368 category=downstream_discrete_mismatch
   3. percent max_err=20 rec=8643 p=1 seed/ref/out=142.17/142.17/162.17 actions=43/43/88 category=downstream_discrete_mismatch
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:12163
-overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:22
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:12170
+overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:21

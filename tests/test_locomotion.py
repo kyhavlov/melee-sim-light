@@ -2429,14 +2429,16 @@ def test_ucf_dashback_turn_frame2_enters_dash_and_sets_x670_to_fe() -> None:
     seed["anim_frame_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_TURN)
     seed["turn_frames_to_turn"][0, 0] = np.uint8(0)
-    seed["turn_has_turned"][0, 0] = np.uint8(1)
-    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["turn_has_turned"][0, 0] = np.uint8(0)
+    seed["facing"][0, 0] = np.uint8(0)  # left; UCF hook publishes the right-facing dashback.
 
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)
     prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
     cur_view = inp.view(INPUT_DTYPE).reshape((1,))
-    # Fresh right flick so x670_pre < 2 for the UCF dashback hold-time gate.
+    # Fresh right flick so x670_pre < 2 for the UCF dashback hold-time gate. The UCF gecko hook
+    # runs at Interrupt_AS_Turn+0x4C on the temporary facing write while Turn has not yet published
+    # has_turned; this seed models that source phase instead of a post-turn replay-visible state.
     prev_view["p"]["main_x"][0, 0] = np.int8(0)
     cur_view["p"]["main_x"][0, 0] = np.int8(80)
 

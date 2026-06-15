@@ -27,6 +27,18 @@ _CASES: tuple[tuple[str, int, int, int], ...] = (
         14,  # Wait -> basic Turn; Marth turn_frames must not seed as zero.
     ),
     (
+        "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl",
+        8048,
+        1,
+        43,  # LandingAirF -> basic Turn; same-direction flick must not UCF-dash.
+    ),
+    (
+        "datasets/marth/replays/validation/marth/ColossalYellowishBison.msl",
+        986,
+        1,
+        233,  # DamageFlyN -> basic Turn; same-direction flick must not UCF-dash.
+    ),
+    (
         "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
         "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
         1414,
@@ -172,5 +184,57 @@ def test_turn_iasa_no_spurious_dash_when_ref_stays_turn(
         assert out_action == ref_action, f"{dataset_rel} rec={record} p={player}"
         assert out_action != ACT_DASH, f"{dataset_rel} rec={record} p={player}"
         assert out_anim == ref_anim, f"{dataset_rel} rec={record} p={player}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_marth_basic_turn_ucf_dashback_uses_temporary_facing_after_positive() -> None:
+    # UCF dashback hooks `Interrupt_AS_Turn+0x4C`, the temporary-facing store inside
+    # `ftCo_Turn_IASA`. The x-smash test is against `mv.co.turn.facing_after`, not absolute stick
+    # magnitude. IPW:2413 is an opposite-facing Marth basic-Turn positive; RWS/CYB above are
+    # same-direction negatives.
+    # refs/ucf/src/dashback/dashback.cpp
+    # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Turn.s
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    binding = pytest.importorskip("msl_binding")
+    ds, _samples, row = _row_or_skip(
+        root, "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl", 2413
+    )
+    p = 0
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_TURN
+    assert int(row["ref_t1"]["action_id"][0, p]) == ACT_DASH
+    assert int(row["seed_t"]["turn_has_turned"][0, p]) == 0
+    assert int(row["seed_t"]["turn_frames_to_turn"][0, p]) > 0
+    assert int(row["seed_t"]["turn_x8"][0, p]) == 0
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride).copy()
+        prev_input_bytes = (
+            np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+            .reshape(1, input_stride)
+            .copy()
+        )
+        input_bytes = (
+            np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8)
+            .reshape(1, input_stride)
+            .copy()
+        )
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+        assert int(out["action_id"][p]) == ACT_DASH
+        assert int(out["animation_index"][p]) == int(row["ref_t1"]["animation_index"][0, p])
     finally:
         binding.destroy(handle)

@@ -179,6 +179,108 @@ def test_ottotto_crouch_iasa_past_endpoint_enters_fall_feh_8688() -> None:
 
 
 @pytest.mark.integration
+def test_ottotto_crouch_iasa_entry_frame_nudge_enters_fall_wws_8411() -> None:
+    # Ottotto -> Squat same-proc floor loss on the first Ottotto callback frame:
+    # Fighter_procUpdate applies the frame-start xF8 overlap nudge before Squat_Coll's
+    # ft_80083F88 -> ft_80082708 floor check. On this Dream Land platform row, the unnudged root is still
+    # exactly at the facing endpoint, but the source nudge crosses it and the callback-visible root
+    # Y remains the just-published Ottotto entry root rather than the raw endpoint Y.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{ftCo_800D5FB0,ftCo_Squat_Coll}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 8411
+    p = 0
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+    assert int(seed["action_id"][p]) == 245  # ftCo_MS_Ottotto
+    assert int(seed["action_frame"][p]) == 0
+    assert int(row["input_t"]["p"]["main_y"][0, p]) < -64
+    assert int(ref["action_id"][p]) == 29  # ftCo_MS_Fall
+    assert int(ref["on_ground"][p]) == 0
+    assert float(ref["pos_x"][p]) < float(seed["pos_x"][p])
+    assert float(ref["pos_y"][p]) == pytest.approx(float(seed["pos_y"][p]), abs=2e-6)
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    for field in (
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "on_ground",
+        "pos_x",
+        "pos_y",
+        "speed_y_self",
+    ):
+        got = out_row[field][p]
+        want = ref_row[field][p]
+        if field.startswith("pos_") or field.startswith("speed_"):
+            assert float(got) == pytest.approx(float(want), abs=2e-6), field
+        else:
+            assert int(got) == int(want), field
+
+
+@pytest.mark.integration
+def test_ottotto_crouch_iasa_carried_floor_sweep_stays_squat_wws_2145() -> None:
+    # Adjacent negative for the WWS Ottotto entry-frame owner. This row has the same down-input
+    # Ottotto -> Squat IASA transition, but the replay seed carries a non-current
+    # floor_sweep_prev_pos.x from the prior source collision step. The same-proc Squat_Coll path
+    # must not recompute and reapply a fresh xF8 nudge here; vanilla publishes Squat for this
+    # callback, then the following Squat callback can lose the floor from the current-root sweep.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{ftCo_800D5FB0,ftCo_Squat_Coll}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 2145
+    p = 0
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+    assert int(seed["action_id"][p]) == 245  # ftCo_MS_Ottotto
+    assert int(seed["action_frame"][p]) == 0
+    assert int(row["input_t"]["p"]["main_y"][0, p]) < -64
+    assert int(ref["action_id"][p]) == 39  # ftCo_MS_Squat
+    assert int(ref["on_ground"][p]) == 1
+    assert float(seed["floor_sweep_prev_pos_x_f32"][p]) != pytest.approx(
+        float(seed["pos_x"][p]), abs=1e-5
+    )
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    for field in (
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "on_ground",
+        "pos_x",
+        "pos_y",
+    ):
+        got = out_row[field][p]
+        want = ref_row[field][p]
+        if field.startswith("pos_"):
+            assert float(got) == pytest.approx(float(want), abs=2e-6), field
+        else:
+            assert int(got) == int(want), field
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "player", "expected_action"),
     [

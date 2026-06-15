@@ -313,17 +313,36 @@ Collect before writing any code:
    the final `clear_hitboxes` command, `cmd_var[0]` may still be active and the
    action can still enter `LandingAir*`, but FoD height-platform publication
    still needs current/same-step/live platform authority or a callback-local
-   bottom/projection floor producer. Do not treat the cmd_var tail as proof that
-   a reconstructed platform line may publish a landing. Add a no-current-source
-   positive after the final clear, plus current-source negatives on both side
-   platforms. Marth exposed this at
-   `InternalPowerlessWallaby.msl:{1037,1038}:p1`; current-source landing
-   controls are `InternalPowerlessWallaby.msl:{488,3095}:p1`. Source anchors:
+   bottom/projection floor producer. Do not treat the cmd_var tail, sparse
+   platform height, or `GROUND_CONTACT`-only source bit as proof that a
+   reconstructed platform line may publish a landing. Add a no-current-source
+   positive after the final clear, a no-current-source active-script positive,
+   and current-source negatives on both side platforms. Marth exposed this at
+   `InternalPowerlessWallaby.msl:{1037,1038,9718}:p1` and
+   `VigorousRelievedLlama.msl:3110:p0`; current-source landing controls are
+   `InternalPowerlessWallaby.msl:{488,3095}:p1`. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
    `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`,
    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
    `data/motion_state/owners/<char>.bin::MSLMSO01 submotion_id`,
    `data/moves/<char>.json::moves.ftCo_SM_AttackAir*.events`, and
+   `data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)`.
+   **AttackAirLw first-create publication is a script-timeline
+   boundary**: DAir-style platform publication should be audited against the
+   decoded first `create_hitbox` command, in the callback-visible action-frame
+   coordinate, before trusting FoD height-platform contacts. A reconstructed
+   platform line before that script edge is not enough to publish
+   `LandingAirLw`; the adjacent first-create row must still land. Add
+   pre-first-create airborne positives and first-create landing controls from
+   the official suite, and keep the boundary data-driven from
+   `data/moves/<char>.json::moves.ftCo_SM_AttackAirLw.events` rather than a
+   character/action hardcode. Falco DAir in the Marth suite exposed this at
+   `VigorousRelievedLlama.msl:{8576,8577,8578}:p1`. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
+   `refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4`,
+   `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`,
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
+   `data/moves/<char>.json::moves.ftCo_SM_AttackAirLw.events`, and
    `data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)`.
    **FallSpecial connected hard-floor publication consumes frame-start fastfall
    provenance**: `FallSpecial_Coll -> ft_80083090 -> mpColl_80047E14` can
@@ -613,6 +632,38 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA_inline`,
    and `data/common/ft_common_data.json::{floor_skip_frames,pass_tilt_max_frames,pass_stick_threshold}`.
+   **Ottotto -> Squat floor loss is a floor-sweep provenance audit, not an
+   Ottotto row exception**: `ftCo_Ottotto_IASA` can enter `Squat` from down
+   input and the same fighter proc can then run `Squat_Coll`. If the current
+   `floor_sweep_prev_pos` starts at the callback-visible root, `Squat_Coll`
+   may consume the frame-start `xF8_playerNudgeVel` overlap displacement before
+   checking the facing floor endpoint. If the seed already carries a different
+   floor-sweep start, that previous collision/nudge packet has already been
+   consumed and the port must not synthesize a second fresh nudge. Add a
+   same-proc floor-loss positive, a carried-sweep Squat negative, and the
+   following-Squat floor-loss control when a new character's pushbox or stage
+   position reaches ledges differently. Marth-suite WWS exposed this at
+   `WellWornSmallGoshawk.msl:{2145,2146,8411}:p0`.
+   Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{ftCo_800D5FB0,ftCo_Squat_Coll}`,
+   `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`, and
+   `refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}`.
+   **MissFoot first-callback floor contacts are ECB-lock sensitive**:
+   `ftCo_8009F39C` enters MissFoot through `ftCommon_8007D5D4`, setting
+   `CollData_X130_Locked` / `ecb_lock` before the next `MissFoot_Coll`.
+   That first callback may see a shallow same-floor contact through
+   `ft_80082F28 -> ft_CheckGroundAndLedge -> mpColl_800473CC`, but vanilla can
+   keep the fighter airborne instead of serializing `Wait`/`Landing`. Lock a
+   first-callback positive under active ECB lock and a sustained/no-lock
+   MissFoot negative that still lands normally; do this for the new character
+   and at least one non-owner control so the rule does not become a char-id
+   proxy. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::{ftCo_8009F39C,ftCo_MissFoot_Coll}`,
+   `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4`,
+   `refs/melee/src/melee/ft/fighter.c::Fighter_procMap`,
+   `refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge`, and
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800473CC}`.
    **Captured-victim escape states need their own Phys/Coll sweep**:
    `CaptureJump` is not just a visual continuation of `CaptureCut`. Its Phys
    callback applies `ftCommon_Fall` gravity plus `ftCommon_8007D268` air drift
@@ -664,7 +715,19 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4`,
    `refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Thrown.s::ftCo_800DE7C0`,
    and `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`.
-6. **CapturePulled/Wait/Damage attachment pose audit**: grounded catch-connect
+6. **Low-throw damage-state argument audit**: low throws do not merely override
+   the knockback angle to vertical. `ftCo_800DD724` calls
+   `ftCo_800DE7C0(victim, thrower, fp->motion_id == ThrowLw)`, and the thrown
+   helper passes a non-`-1` damage-state argument to `ftCo_8008DCE0`. That
+   argument first promotes the damage severity to the tumble/fly path, then
+   forces the final damage motion to `DamageFlyTop`. If a new character's
+   low-throw release rows match percent, hitstun, and vertical velocity but stay
+   in `DamageAir*`, audit this arg lane rather than fitting the visible angle.
+   Add low-throw positives and forward/back/up throw negatives. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE7C0,calcKnockbackAngle}`,
+   and `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`.
+7. **CapturePulled/Wait/Damage attachment pose audit**: grounded catch-connect
    entry (`fn_800DAADC`) and steady victim Phys (`fn_800DAD18`) are different
    source phases. Grounded entry installs CapturePulledLw and publishes only the
    immediate collision callback; the next steady CapturePulled/Wait/Damage Phys
@@ -678,7 +741,7 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAADC,fn_800DAD18}`,
    `refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim`, and
    `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`.
-7. **Offensive hitbox TransN pose audit**: sword/limb hitboxes are published
+8. **Offensive hitbox TransN pose audit**: sword/limb hitboxes are published
    from the live JObj matrix via `lb_8000B1CC`, not just the stripped SSANIM01
    joint matrix. If the animation's `data/anims/<char>.tracks.bin`
    `uses_root_motion` bit (`fp->x594_b0`) is clear, active hitboxes under
@@ -706,7 +769,7 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`,
    `refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C`, and
    `data/anims/fox.dyn.bin`.
-8. **HitCapsule damage publication audit**: do not recompute stale damage at
+9. **HitCapsule damage publication audit**: do not recompute stale damage at
    shield/BODY contact time. Source `create_hitbox` and `set_hitbox_damage`
    commands call `ftColl_8007ABD0`, which applies scale/smash-release damage
    and `ft_80089228` staling before writing `HitCapsule.damage`; later
@@ -721,7 +784,7 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007ABD0,ftColl_80076CBC}`,
    `refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}`, and
    `data/scripts/<char>.bin::MSLFTSC1`.
-9. **DamageFlyRoll selected-source audit**: for high-KB grounded entries, do
+10. **DamageFlyRoll selected-source audit**: for high-KB grounded entries, do
    not trust visible animation labels or character id as the gate owner.
    Source `ftCo_8008DCE0` can clear `ground_or_air` inside the severe grounded
    branch and then sample the airborne DamageFlyRoll RNG gate. Classify these
@@ -735,7 +798,7 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`, and
    `data/moves/<char>.json::moves.<AttackLw3-like submotion>.events`.
-10. **Catch/CatchDash collision-skeleton scale audit**: do not assume the
+11. **Catch/CatchDash collision-skeleton scale audit**: do not assume the
    spacie catch-scale correction applies uniformly to a new character's grab
    scripts. Audit `data/moves/<char>.json::{ftCo_SM_Catch,ftCo_SM_CatchDash}`
    `create_hitbox` bone ids and lock standing-Catch positives/negatives
@@ -751,7 +814,7 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`,
    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_8007AD18}`,
    and `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC`.
-9. **CommonFall/FallAerial/FallSpecial hidden pose blend audit**: new-character
+12. **CommonFall/FallAerial/FallSpecial hidden pose blend audit**: new-character
    contact bugs can be caused by the opponent's common-state live pose, not the
    new character's hitboxes. `ftCo_Fall_Anim_Inner` maintains hidden
    `mv.co.fall*.x4` from air-drift ratio and stores the selected FallF/FallB
@@ -769,6 +832,14 @@ Collect before writing any code:
    `data/characters/<char>.json::air_drift_max`; do not bake Fox/Falco drift
    caps, common-data thresholds, lerp factors, or Fall-family submotion ids into
    the test as duplicated literals.
+   If a Fall-family surface row still disagrees after the BODY pose is correct,
+   separate hidden CollData ECB seed reconstruction from live `mpColl` behavior.
+   Slippi does not serialize CollData current/desired ECB; a new character may
+   need an explicit `data/characters/<char>.json::common_fall_blended_ecb_seed_mask`
+   only when source/probe evidence shows reseeded Fall/FallAerial/FallSpecial
+   rows consume the blended bottom lane. Do not promote that to a shared
+   free-running collision rule without aggregate controls or a direct
+   `mpColl_LoadECB_inline` / `mpCollInterpolateECB` probe.
    Marth UAir exposed the strong positive on `LoudDullGoat.msl:4539:p0`;
    aggregate Falco rows `DistinctCaringCobra.msl:5573:p1` and
    `ImpassionedAlarmedTarsier.msl:6428:p1` exposed the tight no-hit and
@@ -781,7 +852,7 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::ftCo_FallAerial_Anim`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Anim`,
    and `data/common/ft_common_data.json::{common_fall_blend_air_drift_threshold,common_fall_blend_lerp}`.
-10. **Grounded Damage -> Wait_IASA ordering audit**: terminal grounded
+13. **Grounded Damage -> Wait_IASA ordering audit**: terminal grounded
     DamageHi/N/Lw delegates to the full `ftCo_Wait_IASA` ordering once
     `x221C_b6` clears. Catch input is before grounded A-attacks, so raw Z
     synthesis (`held_inputs` LR plus `input.x668` A) must enter Catch instead

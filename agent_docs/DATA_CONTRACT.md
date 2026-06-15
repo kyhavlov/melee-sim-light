@@ -1061,6 +1061,19 @@ Characters (Fox/Falco/Marth):
       `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900`,
       `refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884`, and
       Fox/Falco controls in `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c`.
+  - `common_fall_blended_ecb_seed_mask`: runtime-required character attr loaded by
+    `src/char_params.c` from `data/characters/<char>.json`.
+    - Bit order is common Fall-family action order: bit 0 = Fall, bit 1 = FallAerial,
+      bit 2 = FallSpecial.
+    - Current values: Fox/Falco `0`; Marth `FallAerial` (`0b010` / `2`).
+    - This is a seed/provenance overlay for reconstructing hidden CollData ECB bottom from the
+      CommonFall directional blend lane. It initializes a one-callback collision seed lane and is
+      not a free-running `mpColl` gameplay branch.
+    - Sources/proof:
+      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner`,
+      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::{
+      ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}`, and aggregate Fox/Falco controls rejecting a
+      shared live-callback publication rule.
 - `data/attack_id/move_id/fox.bin`, `data/attack_id/move_id/falco.bin` (MotionState tables; decomp-first, compact binary)
   - Purpose:
     - Drive fighter attack identity parity (`fp->x2068_attackID` / `fp->x206C_attack_instance`) from real

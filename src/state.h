@@ -161,6 +161,7 @@ typedef struct MslStateSoA {
   uint8_t* coll_squeeze_restore_ecb_valid;
   uint8_t* coll_desired_ecb_bottom_valid;
   uint8_t* coll_desired_ecb_bottom_locked_owner;
+  uint8_t* coll_common_fall_blended_ecb_seed_valid;
   // Current CollData ECB is a frozen active-hitlag Damage envelope rather than the replay-visible
   // Damage pose. Runtime writes this on live Damage entry; replay reseed initializes it from
   // MslSeed::damage_hitlag_ecb_*.

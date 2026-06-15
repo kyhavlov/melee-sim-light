@@ -160,6 +160,73 @@ def test_fallspecial_connected_hard_floor_root_projection_rejects_frame_start_fa
     assert int(out["ground_id"][player]) == 1
 
 
+@pytest.mark.parametrize("rec", [2061, 2062])
+def test_fallspecial_alternate_endpoint_root_projection_stays_airborne_esh(rec: int) -> None:
+    # Frozen Stadium has generated alternate floor endpoint links for raw transform-map adjacency.
+    # FallSpecial_Coll may project along ordinary connected hard floors (see IPW:1240), but an
+    # alternate endpoint link is not source authority for the connected root-projection helper when
+    # mpColl_80044628_Floor did not publish a bottom sweep. These rows carry Stadium main floor 34
+    # while the callback root is over same-height ledge strip 51; vanilla stays airborne until the
+    # later source floor publication frame below.
+    #
+    # data/stages/bin/grps.bin::MSLSTG01 alternate_floor_endpoint_links, floor 34/51
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
+    #   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor,
+    #   mpColl_80044838_Floor}
+    import msl_binding
+
+    path = "datasets/marth/replays/validation/marth/ExtraLargeScaryHornet.msl"
+    player = 0
+    stage_main = msl_binding.stage_floor_segment(3, 34)
+    stage_ledge = msl_binding.stage_floor_segment(3, 51)
+    assert int(stage_main["has_prev_link"]) == 1
+    assert int(stage_ledge["has_next_link"]) == 1
+    assert int(stage_ledge["is_ledge"]) == 1
+
+    ds = read_dataset(path)
+    seed = ds.samples["seed_t"][rec]
+    ref = ds.samples["ref_t1"][rec]
+    assert int(seed["stage_id"]) == 3
+    assert int(seed["action_id"][player]) == 0x0023
+    assert int(seed["ground_id"][player]) == 34
+    assert int(seed["fall_fast"][player]) == 0
+    assert int(ref["action_id"][player]) == 0x0023
+    assert int(ref["on_ground"][player]) == 0
+    assert int(ref["ground_id"][player]) == 34
+
+    out = _step_record(path, rec)
+
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 0x0023
+    assert int(out["on_ground"][player]) == 0
+    assert int(out["ground_id"][player]) == 34
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1.0e-6)
+
+
+def test_fallspecial_alternate_endpoint_lands_after_source_floor_publication_esh() -> None:
+    # Adjacent positive: the alternate-endpoint guard above is not a blanket Stadium/FallSpecial
+    # delay. Once the following callback reaches source floor publication, LandingFallSpecial still
+    # publishes from ledge strip 51.
+    path = "datasets/marth/replays/validation/marth/ExtraLargeScaryHornet.msl"
+    rec = 2063
+    player = 0
+    ds = read_dataset(path)
+    seed = ds.samples["seed_t"][rec]
+    ref = ds.samples["ref_t1"][rec]
+    assert int(seed["stage_id"]) == 3
+    assert int(seed["action_id"][player]) == 0x0023
+    assert int(seed["ground_id"][player]) == 34
+    assert int(ref["action_id"][player]) == 0x002B
+    assert int(ref["ground_id"][player]) == 51
+
+    out = _step_record(path, rec)
+
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 0x002B
+    assert int(out["on_ground"][player]) == 1
+    assert int(out["ground_id"][player]) == 51
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1.0e-6)
+
+
 def test_fallspecial_current_ecb_owner_does_not_land_first_sustained_frame_pec() -> None:
     # PEC:6952 is the first sustained FallSpecial callback after entry. Its current ECB bottom is
     # near the Yoshi floor, but vanilla keeps FallSpecial airborne for this frame and lands on the

@@ -604,7 +604,8 @@ def test_damageflyroll_live_jobj_terminal_floor_turnover_window(
 ) -> None:
     # DamageFlyRoll_Coll consumes ft_80081DD4 after ftCo_DamageFlyRoll_Phys has applied
     # ft_80084EEC and doFlyRoll's live XRotN JObj pose. GAT 11167 is the terminal-downward Falco
-    # turnover row; the Fox controls protect the rejected broad carried-floor projection.
+    # turnover row; the Fox and Marth controls protect the rejected broad carried-floor projection
+    # and the regular-ECB fallback projection for non-terminal DamageFlyRoll.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
     #   ftCo_DamageFlyRoll_Phys,doFlyRoll,ftCo_DamageFlyRoll_Coll}
     # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4

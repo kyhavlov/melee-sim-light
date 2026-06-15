@@ -887,11 +887,15 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
       }
       if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT) {
-        // GuardReflect reflecting-owner lane:
+        // GuardReflect ReflectDesc owner lanes:
         // - ftColl_CreateReflectHit sets fp->reflecting = true on GuardReflect admission.
+        // - It also writes fp->x2218_b5 from ReflectDesc.x20_behavior; common GuardReflect passes
+        //   behavior=1 through ftCo_8009370C.
         // - ftCo_80093BC0 clears fp->reflecting when the x14 reflect window expires.
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_8009370C,ftCo_80093BC0}
+        f2218 |= (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR;
         if (batch->state.guard_reflect_timer_x14[idx] != 0u) {
           f2218 |= (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
         } else {

@@ -993,6 +993,22 @@ none are retained as validation safety.
 | Reject bit | `MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED`, `MSL_MPCOLL_REJECT_FALLSPECIAL_PLATFORM_NO_SOURCE_BOTTOM`, `MSL_MPCOLL_REJECT_FALL_SAME_FLOOR_EARLY`, `MSL_MPCOLL_REJECT_FALL_SHALLOW_TERMINAL_HARD_FLOOR`, `MSL_MPCOLL_REJECT_FALL_STALE_PLATFORM_FIRST_HARD_FLOOR`, `MSL_MPCOLL_REJECT_FALL_STATIC_PLATFORM_FROM_BELOW`, `MSL_MPCOLL_REJECT_FALL_TRANSFORMED_PLATFORM_FASTFALL` |
 | Suppression | `suppress_fall_ledge_floor_first_root_crossing`, `suppress_fall_same_floor_early_final_land`, `suppress_fall_shallow_terminal_hard_floor_land`, `suppress_fall_stale_platform_first_hard_floor_land`, `suppress_fall_static_platform_from_below_land`, `suppress_fall_transformed_platform_fastfall_land`, `suppress_fallspecial_b_transformed_platform_skip`, `suppress_fallspecial_entry_af3_land`, `suppress_fallspecial_first_sustained_current_ecb_land`, `suppress_fallspecial_platform_final_without_source_bottom`, `suppress_fallspecial_platform_first_root_crossing`, `suppress_fallspecial_same_floor_early_root_crossing`, `suppress_projected_fallspecial_first_sustained_land` |
 
+#### Phase 5 Owner Accounting: MissFoot
+
+- Owner family: MissFoot.
+- Source function(s): `ftCo_8009F39C`, `ftCo_MissFoot_Coll`, `ftCommon_8007D5D4`,
+  `ft_CheckGroundAndLedge`, `mpColl_800473CC`.
+- Why retained after Phases 1-4: Fresh MissFoot entered from a grounded floor-loss slip carries
+  the source `CollData_X130_Locked` / ECB-lock episode into its first collision callback. That
+  first shallow same-floor contact remains airborne even though sustained no-lock MissFoot uses the
+  ordinary landing path.
+- Test/proof: `tests/test_platform_action_entry_callback_locks.py`.
+
+| Kind | Exact guard name(s) |
+| --- | --- |
+| Reject bit | `MSL_MPCOLL_REJECT_MISSFOOT_ECB_LOCK_FIRST_FLOOR` |
+| Suppression | `suppress_missfoot_ecb_lock_first_floor_land` |
+
 #### Phase 5 Owner Accounting: JumpAerial / Common Air
 
 - Owner family: JumpAerial / common air.

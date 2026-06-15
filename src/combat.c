@@ -11301,6 +11301,7 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, p->angle, defender_on_ground, kb_applied);
   float damage_state_angle_rad = kb_angle_rad;
+  uint8_t low_throw_damage_state_arg_owner = 0u;
   {
     uint16_t throw_action = batch->state.action_id[a_idx];
     if (throw_action != (uint16_t)MSL_ACT_THROW_F && throw_action != (uint16_t)MSL_ACT_THROW_B &&
@@ -11315,6 +11316,7 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
       //   low-throw damage-entry angle for action-state selection.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4,ftCo_800DE7C0}
       damage_state_angle_rad = 0.5f * MSL_PI_F;
+      low_throw_damage_state_arg_owner = 1u;
     }
   }
 
@@ -11396,6 +11398,17 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   ev.apply_throw_release_di = 1u;
   ev.hurt_height = hurt_height;
   ev.damage_state_raw_angle = p->angle;
+  if (low_throw_damage_state_arg_owner != 0u) {
+    // Low-throw release damage-state argument:
+    // `ftCo_800DE7C0(victim, thrower, fp->motion_id == ThrowLw)` passes arg1=90 for ThrowLw.
+    // `ftCo_8008DCE0` first promotes any non--1 arg1 to var_r28=3 (tumble/fly severity), then
+    // forces the final motion id to arg1. Keeping only the 90-degree angle leaves low-percent
+    // ThrownLw release rows in DamageAir3 instead of source-owned DamageFlyTop.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE7C0,calcKnockbackAngle}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    ev.force_tumble_severity = 1u;
+  }
   ev.instance_hit_by = batch->state.instance_id[a_idx];
   ev.last_hit_by = combat_source_port0_for_attacker(batch, a_idx, attacker);
   ev.source_write = MSL_PROCESS_HIT_SOURCE_WRITE_DIRECT;

@@ -182,6 +182,12 @@ typedef struct MslCharParams {
   // Source controls: refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c
   uint32_t fallspecial_xc0_source_fx_kind_mask;
 
+  // Seed-only CommonFall CollData ECB reconstruction mask.
+  // Bit order: Fall, FallAerial, FallSpecial. This is a replay seed/provenance overlay for
+  // hidden CollData ECB bottom state, not a free-running mpColl branch.
+  uint8_t common_fall_blended_ecb_seed_mask;
+  uint8_t _pad_u8_common_fall_ecb_seed[3];
+
   // Fox/Falco side special (Illusion/Phantasm) start/end-state velocities + friction.
   //
   // Source of truth: ISO-extracted `data/characters/*.json` keys:

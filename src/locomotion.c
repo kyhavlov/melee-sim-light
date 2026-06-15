@@ -5983,29 +5983,24 @@ void locomotion_update_pre(MslBatch* batch) {
               // - The motion state's "input_cb" (IASA) is invoked afterward, in the same proc.
               //   refs/melee/src/melee/ft/fighter.c:2117-2119
               // So `tilt_timer_x` here corresponds to the post-input-update x670 value.
-              if (batch->config.ucf_enabled) {
+              if (batch->config.ucf_enabled && !batch->state.turn_has_turned[idx]) {
                 const float af = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-                if (af == 2.0f && msl_absf(stick_x) >= c->dash_flick_abs && tilt_timer_x < 2u &&
-                    msl_ucf_check_xsmash(&batch->state, idx)) {
-                  const uint8_t face = (stick_x >= 0.0f) ? 1u : 0u;
+                const float ucf_new_direction = -facing_dir;
+                if (af == 2.0f && (stick_x * ucf_new_direction) >= c->dash_flick_abs &&
+                    tilt_timer_x < 2u && msl_ucf_check_xsmash(&batch->state, idx)) {
+                  const uint8_t face = (ucf_new_direction >= 0.0f) ? 1u : 0u;
                   batch->state.facing[idx] = face;
-                  facing_dir = face ? 1.0f : -1.0f;
-                  batch->state.turn_has_turned[idx] = 0;
+                  facing_dir = ucf_new_direction;
+                  // UCF hook runs at `Interrupt_AS_Turn+0x4C`, replacing the temporary
+                  // `fp->facing_dir = -fp->facing_dir` store. It publishes Turn's hidden
+                  // `has_turned/just_turned` flags and then falls through to the vanilla
+                  // `fn_800C9C2C` + `just_turned && x8` Dash gate below.
+                  // refs/ucf/src/dashback/dashback.cpp
+                  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Turn.s
+                  batch->state.turn_has_turned[idx] = 1;
                   batch->state.turn_frames_to_turn[idx] = 0;
                   batch->state.turn_x8[idx] = 0;
-                  batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
-                  batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
-                  // Decomp: Turn->Dash uses ftCo_Dash_Enter(gobj, 0), so mv.co.dash.x4 = 0.
-                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
-                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
-                  batch->state.dash_x4[idx] = 0u;
-                  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
-                  msl_anim_timebase_tick_once(batch, idx);
-                  // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
-                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
-                  batch->state.tilt_timer_x[idx] = 0xFEu;
-                  action_id = (uint16_t)MSL_ACT_DASH;
+                  turn_just_turned = 1u;
                 }
               }
 
@@ -6662,18 +6657,22 @@ void locomotion_update_pre(MslBatch* batch) {
             if (anim_finished(batch->state.char_id[idx], (uint16_t)anim,
                               batch->state.anim_frame_f32[idx])) {
               // RunBrake_Anim resolves through ft_8008A2BC when the motion has no frames remaining.
-              // The destination Wait input callback can then run in the same fighter proc; use the
-              // existing Wait_IASA locomotion tail instead of a squat-only bridge so Turn/Walk/Dash
-              // ownership stays in source order.
+              // The destination Wait input callback can then run in the same fighter proc; run the
+              // Wait-owned guard gate before the existing locomotion tail so GuardOn keeps source
+              // priority over Jump/Dash/Squat/Turn/Walk.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
               // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-              (void)wait_iasa_locomotion_subset_try_enter(
-                  batch, c, ch, idx, buttons, buttons_pressed, stick_x, stick_y, tilt_timer_x,
-                  tilt_timer_y, facing_dir, action_id_start);
+              guard_update_grounded(batch, c, idx, 1u);
+              if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT) {
+                (void)wait_iasa_locomotion_subset_try_enter(
+                    batch, c, ch, idx, buttons, buttons_pressed, stick_x, stick_y, tilt_timer_x,
+                    tilt_timer_y, facing_dir, action_id_start);
+              }
             }
           }
         }
@@ -7466,9 +7465,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
       if (was_ground && now_ground && a == (uint16_t)MSL_ACT_SQUAT &&
           (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO ||
            batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
-          batch->state.action_frame[idx] <= 1 &&
-          ottotto_position_past_facing_edge(batch, bi, batch->state.ground_id[idx],
-                                            batch->state.facing[idx], batch->state.pos_x[idx])) {
+          batch->state.action_frame[idx] <= 1) {
         // Ottotto crouch IASA at the facing endpoint:
         // - Fighter_8006A360 computes the common xF8 player-overlap displacement while the
         //   frame-start action is still Ottotto/OttottoWait.
@@ -7476,20 +7473,47 @@ void locomotion_update_post_collision(MslBatch* batch) {
         //   ftCo_800D5FB0 -> ftCo_Squat_Enter.
         // - The same proc then runs Squat_Coll, which calls ft_80083F88 -> ft_80082708 and lets
         //   mpColl_8004B108 consume the already-displaced root against the facing floor endpoint.
-        // Keep this to the first destination Squat frame and a generated floor endpoint overrun;
-        // ordinary center-stage Ottotto crouch rows stay grounded.
+        // Keep this to the first destination Squat frame and a generated floor endpoint overrun
+        // after the source xF8 nudge; ordinary center-stage Ottotto crouch rows stay grounded.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{ftCo_800D5FB0,ftCo_Squat_Coll}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (xF8_playerNudgeVel add)
         // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
-        float ottotto_x = 0.0f;
-        float ottotto_y = 0.0f;
-        if (ottotto_edge_point_for_facing(batch, bi, batch->state.ground_id[idx],
-                                          batch->state.facing[idx], &ottotto_x, &ottotto_y)) {
-          batch->state.pos_y[idx] = ottotto_y;
+        const float nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
+        const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
+        const uint8_t source_sweep_starts_at_root =
+            (!isfinite(batch->state.floor_sweep_prev_pos_x[idx]) ||
+             msl_absf(batch->state.floor_sweep_prev_pos_x[idx] - batch->state.pos_x[idx]) <=
+                 1.0e-5f)
+                ? 1u
+                : 0u;
+        const float source_x = (source_sweep_starts_at_root && nudge_x * facing_sign > 0.0f)
+                                   ? (batch->state.pos_x[idx] + nudge_x)
+                                   : batch->state.pos_x[idx];
+        if (ottotto_position_past_facing_edge(batch, bi, batch->state.ground_id[idx],
+                                              batch->state.facing[idx], source_x)) {
+          float ottotto_x = 0.0f;
+          float ottotto_y = 0.0f;
+          if (ottotto_edge_point_for_facing(batch, bi, batch->state.ground_id[idx],
+                                            batch->state.facing[idx], &ottotto_x, &ottotto_y)) {
+            const float callback_root_y = batch->state.pos_y[idx];
+            batch->state.pos_y[idx] = ottotto_y;
+            if (batch->state.prev_action_frame[idx] <= 0) {
+              // On the first Ottotto callback frame, ft_80084280/Ottotto entry has just published
+              // the callback-visible edge root. The same-proc Squat floor-loss handoff preserves
+              // that root Y while consuming the source xF8 nudge for X. Later steady Ottotto
+              // crouch rows use the raw checked endpoint from Squat_Coll.
+              // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_8009A410
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Coll
+              batch->state.pos_y[idx] = callback_root_y;
+            }
+          }
+          batch->state.pos_x[idx] = source_x;
+          enter_fall_from_grounded_floor_loss(batch, ch, idx);
+          continue;
         }
-        enter_fall_from_grounded_floor_loss(batch, ch, idx);
-        continue;
       }
 
       if (was_ground && now_ground &&

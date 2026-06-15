@@ -470,6 +470,15 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     alloc_free(buf);
     return -1;
   }
+  if (strstr(buf, "\"common_fall_blended_ecb_seed_mask\"") == NULL) {
+    fprintf(stderr, "msl: missing required key \"common_fall_blended_ecb_seed_mask\" in %s\n",
+            path);
+    fprintf(stderr,
+            "hint: regenerate character data with the current extractor/overlays so CommonFall "
+            "CollData ECB seed ownership is explicit.\n");
+    alloc_free(buf);
+    return -1;
+  }
 
   MslCharParams out = {0};
   float refl_off[3] = {0};
@@ -545,6 +554,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
                              &out.throw_release_mpcoll_floor_publication_mask) != 0 ||
       json_get_u32(buf, "fallspecial_xc0_source_fx_kind_mask",
                    &out.fallspecial_xc0_source_fx_kind_mask) != 0 ||
+      json_get_u8_or_default(buf, "common_fall_blended_ecb_seed_mask", 0,
+                             &out.common_fall_blended_ecb_seed_mask) != 0 ||
       json_get_u8_or_default(buf, "illusion_gravity_delay_start_frames", 0,
                              &out.illusion_gravity_delay_start_frames) != 0 ||
       json_get_f32_or_default(buf, "illusion_air_friction_start", 0.0f,
