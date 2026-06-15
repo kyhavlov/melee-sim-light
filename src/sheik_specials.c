@@ -17,6 +17,7 @@
 #include "mpcoll_floor_skip.h"
 #include "mpcoll_wall_ceil.h"
 #include "msl_math.h"
+#include "move_tables.h"
 #include "trigger_input.h"
 
 static inline float sk_stick_unit(int8_t v) { return (float)v * (1.0f / 80.0f); }
@@ -535,6 +536,14 @@ static void sk_update_specialhi(MslBatch* batch, const MslCharParams* ch, size_t
       }
       break;
     case MSL_ACT_SK_SPECIAL_AIR_HI:
+      // Vanish end script sets cmd_vars[0] at frame 9. ftSk_SpecialAirHi_Phys uses that source
+      // bit to switch from travel-velocity damping to common FallBasic gravity. Slippi does not
+      // serialize cmd_vars, so one-step reseeds and free-running rows refresh this lane from the
+      // extracted MSLFTSC1 script timeline.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Phys
+      // data/scripts/sheik.bin::MSLFTSC1 specials_by_msid[312] set_cmd_var(idx=0,value=1)
+      batch->state.special_cmd0[idx] = move_tables_special_cmd_var_value_at_frame(
+          batch->state.char_id[idx], sk_submotion(a), 0u, batch->state.anim_frame_f32[idx]);
       if (sk_anim_finished(batch, idx, a)) {
         sk_enter_fallspecial(batch, ch, idx, ch->sheik_vanish_landing_lag_frames,
                              ch->sheik_vanish_fallspecial_mobility_mul);
@@ -779,6 +788,13 @@ uint8_t sheik_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
       sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START,
                batch->state.anim_frame_f32[idx], 1.0f);
       return 1u;
+    case MSL_ACT_SK_SPECIAL_S:
+      // ftSk_SpecialS_Coll calls ft_800827A0; on floor loss it enters grounded retract
+      // (`ftSk_SpecialS_80111DF8`) rather than swapping to active aerial Chain.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+      //   ftSk_SpecialS_Coll,ftSk_SpecialS_80111DF8}
+      sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_S_END, 0.0f, 1.0f);
+      return 1u;
     case MSL_ACT_SK_SPECIAL_S_END:
       sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END, batch->state.anim_frame_f32[idx],
                1.0f);
@@ -829,6 +845,13 @@ uint8_t sheik_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {
     case MSL_ACT_SK_SPECIAL_AIR_S_START:
       sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_S_START, batch->state.anim_frame_f32[idx],
                1.0f);
+      return 1u;
+    case MSL_ACT_SK_SPECIAL_AIR_S:
+      // ftSk_SpecialAirS_Coll calls ft_80081D0C; accepted floor contact enters aerial retract
+      // (`ftSk_SpecialS_80111EB4`) rather than the grounded active Chain state.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+      //   ftSk_SpecialAirS_Coll,ftSk_SpecialS_80111EB4}
+      sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END, 0.0f, 1.0f);
       return 1u;
     case MSL_ACT_SK_SPECIAL_AIR_S_END:
       sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_S_END, batch->state.anim_frame_f32[idx],

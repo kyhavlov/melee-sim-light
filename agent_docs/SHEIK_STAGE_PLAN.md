@@ -320,6 +320,10 @@ Objectives:
   - specials seen/missing;
   - item/article interactions;
   - stages and platform/ledge exposure.
+- Include the local targeted `sheik_demo_game` webplay fixture in the official
+  Sheik training/eval suite. It is a specials diagnostic replay for Needles,
+  Chain, Vanish, and common movement/combat interactions during those specials;
+  it is not held-out telemetry and it does not cover Down-B/transform.
 - Build held-out Sheik telemetry set as read-only measurement.
 - Define suite admission rules before downloading/adding replays: human-vs-human, singles unless explicitly testing doubles viability, supported legal stages, UCF settings, frozen Stadium, no CPU/controller contamination, no unsupported characters, and no unsupported Zelda episodes beyond the Stage 0 policy.
 - Keep training/eval and held-out replay filenames disjoint. Held-out rows must never become direct lock targets or implementation selectors; they are only aggregate telemetry after a clean retained stage.
@@ -352,6 +356,9 @@ Validation gates:
 - `uv run python -m tools.slippi.preprocess_suite --suite <sheik_suite> --datasets-dir datasets --workers <n>`
 - `make validate-marth` or equivalent existing controls remain clean if adding a new suite target is not ready.
 - Sheik one-step and rollout locator generation commands documented in worklog.
+- `sheik_demo_game` preprocessing/eval/locator output and action inventory
+  documented in the worklog, including any live-path-only webplay failures that
+  replay reseed eval does not expose.
 - Held-out metric command documented, with output written under `reports/triage/newchar_sheik/heldout_*`.
 - Parity target recorded in `reports/triage/newchar_sheik/worklog.md` before gameplay burn-down begins.
 - Replay-selection audit output saved under `reports/triage/newchar_sheik/replay_selection_audit.*`.
@@ -374,6 +381,9 @@ Objectives:
   - Side-B Chain: article/extension/hitbox/callback ownership;
   - Up-B Vanish: startup, intangible/visibility/hitbox, movement, landing/fall/death transitions;
   - Down-B Transform: Sheik <-> Zelda behavior according to Stage 0 policy.
+- Use `sheik_demo_game` as an official diagnostic entry point for specials
+  exposed in real play. Retained fixes still need source/data/probe ownership
+  and adjacent controls; do not key behavior on the demo replay or its rows.
 - Implement minimal Zelda transform support only within approved policy.
 - Add focused source-shaped positives/negatives for each special family, including adjacent cancel/landing/death cases.
 
@@ -529,6 +539,16 @@ Objectives:
 - Bring Sheik official suite into the Stage 3 recorded parity target against current supported characters.
 - Report held-out Sheik metrics without tuning to held-out rows.
 - Ensure data package and no-decomp source artifacts are complete for Sheik and any approved minimal Zelda support.
+- Ensure webplay packaging includes every public Sheik viewer surface:
+  `tools/viewer/live/schema.js` dropdown entry, any main.js defaults/wiring, and
+  `tools/viewer/assets/character_zips.tsv` with `sheik.zip` checksum/URL, plus
+  `tools/viewer/live/build_wasm.sh` `viewer_chars` so the WASM build preflights
+  Sheik data. The guards are
+  `tests/test_live_viewer_schema.py::test_live_viewer_supported_characters_have_packaged_animation_zips`
+  and
+  `tests/test_live_viewer_schema.py::test_live_viewer_supported_characters_are_required_by_wasm_build`;
+  Sheik previously appeared in the dropdown while the local build omitted the
+  renderer zip, leaving the page stuck loading.
 - Update docs with durable process lessons:
   - `agent_docs/ADDING_A_CHARACTER.md`
   - `agent_docs/DATA_CONTRACT.md`
@@ -553,6 +573,13 @@ Final gates:
 - `make test`
 - Sheik official one-step/rollout validation
 - `make validate-all`
+- `make viewer-build` or an equivalent focused viewer asset/schema check after
+  Sheik is exposed in the live-viewer dropdown.
+  `tools/viewer/live/schema.js::SUPPORTED_CHARACTERS`,
+  `tools/viewer/assets/character_zips.tsv`, and
+  `tools/viewer/live/build_wasm.sh` `viewer_chars` must stay in lockstep so
+  selecting Sheik cannot hang on a missing animation zip or missing WASM data
+  preflight.
 - `uv run python -m tools.eval.validation_report_diff --before <pre-sheik-baseline> --after reports/validation --top 220`
 - held-out measurement summary under `reports/triage/newchar_sheik/`
 - no-decomp packaged build test for all registry chars

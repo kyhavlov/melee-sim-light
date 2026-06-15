@@ -32,6 +32,7 @@ B = 0x0200
 ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
 ACT_JUMP_F = 0x0019
+ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_GUARD_ON = 0x00B2
 ACT_FX_SPECIAL_N_START = 0x0155
 ACT_SK_SPECIAL_N_START = 341
@@ -43,7 +44,11 @@ ACT_SK_SPECIAL_N_CANCEL = 343
 ACT_SK_SPECIAL_AIR_N_CANCEL = 347
 ACT_SK_SPECIAL_AIR_N_END = 348
 ACT_SK_SPECIAL_S_START = 349
+ACT_SK_SPECIAL_S = 350
+ACT_SK_SPECIAL_S_END = 351
 ACT_SK_SPECIAL_AIR_S_START = 352
+ACT_SK_SPECIAL_AIR_S = 353
+ACT_SK_SPECIAL_AIR_S_END = 354
 ACT_SK_SPECIAL_HI_START_0 = 355
 ACT_SK_SPECIAL_HI_START_1 = 356
 ACT_SK_SPECIAL_HI = 357
@@ -352,6 +357,78 @@ def test_sheik_vanish_air_collision_callbacks_can_cliffcatch_replay_real_lock(
     #   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialAirHi_Coll}
     samples = _sheik_validation_samples(dataset_rel)
     assert int(samples[record]["seed_t"]["action_id"][0]) == seed_action
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_CLIFF_CATCH
+
+    out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == ACT_CLIFF_CATCH
+
+
+@pytest.mark.integration
+def test_sheik_chain_air_start_floor_contact_swaps_to_ground_start_demo_lock() -> None:
+    # ftSk_SpecialAirSStart_Coll calls ft_80081D0C. On accepted floor contact, source enters
+    # grounded Chain Start at the preserved animation frame through ftSk_SpecialS_801114E4.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialAirSStart_Coll,ftSk_SpecialS_801114E4}
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    record = 254
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_S_START
+
+    out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_S_START
+
+
+def test_sheik_chain_air_start_no_floor_contact_stays_air_start_negative() -> None:
+    seed = _seed_base("sheik", grounded=False, pos_y=80.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_AIR_S_START)
+    seed["animation_index"][0, 0] = np.uint32(304)
+    seed["anim_frame_f32"][0, 0] = np.float32(5.0)
+
+    out = _run(seed, [_mk_inputs(buttons=B)])[0]
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "expected_ground"),
+    [
+        ("datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl", 2940, 4),
+        ("datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl", 6243, 5),
+        ("datasets/sheik/replays/validation/sheik/MixedAllQuetzal.msl", 8569, 4),
+    ],
+)
+def test_sheik_vanish_air_end_script_cmd0_bottom_floor_landing_replay_real_lock(
+    dataset_rel: str, record: int, expected_ground: int
+) -> None:
+    # Vanish end script cmd_vars[0] is live after frame 9, so ftSk_SpecialAirHi_Phys applies
+    # FallBasic gravity before collision. The collision callback then calls ft_CheckGroundAndLedge
+    # -> mpColl_800473CC; source probes show mpColl_80044628_Floor accepts the JObj ECB bottom
+    # crossing and mpColl_80044838_Floor(ignore_bottom=true) snaps to LandingFallSpecial.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Coll
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Phys
+    # refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_80044628_Floor,
+    #   mpColl_80044838_Floor}
+    samples = _sheik_validation_samples(dataset_rel)
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(samples[record]["ref_t1"]["on_ground"][0]) == 1
+    assert int(samples[record]["ref_t1"]["ground_id"][0]) == expected_ground
+
+    out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == expected_ground
+    assert np.isclose(float(out["pos_y"][0]), float(samples[record]["ref_t1"]["pos_y"][0]), atol=1.0e-4)
+
+
+@pytest.mark.integration
+def test_sheik_vanish_air_end_floor_landing_does_not_steal_cliffcatch_negative() -> None:
+    # Adjacent negative: the same SpecialAirHi callback family must keep ledge contacts on
+    # ftCliffCommon_80081298 instead of converting every root crossing into hard-floor landing.
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+    record = 7655
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_CLIFF_CATCH
 
     out = _run_sample_row(samples, record)

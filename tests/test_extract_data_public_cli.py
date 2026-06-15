@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from melee_sim import extract_data
 from tools.extraction import build_data
+from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso01_v1
 
 
 def test_extract_data_does_not_require_decomp_before_iso_extract(tmp_path, monkeypatch):
@@ -111,6 +112,21 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
         (out_dir / "motion_state" / "owners" / "callback_symbols.json").read_text(encoding="utf-8")
     )
     assert int(symbols["version"]) == MOTION_STATE_OWNER_VERSION
+    callback_names = read_callback_manifest(out_dir / "motion_state" / "owners" / "callback_symbols.json")
+
+    def cb_name(ch: str, action_id: int, lane: str) -> str:
+        owners = read_mslmso01_v1(out_dir / "motion_state" / "owners" / f"{ch}.bin")
+        cb_id = int(getattr(owners, f"{lane}_cb_id")[action_id])
+        return callback_names[cb_id]
+
+    # The callback manifest and every copied source-artifact bin share one generated namespace.
+    # Header checks alone miss stale old-character bins decoded under a newly regenerated manifest
+    # (for example old Fox/Falco/Marth id 975 becoming ftSk_* after adding Sheik). Spot-check
+    # high-id character-special callbacks from each packaged char.
+    assert cb_name("fox", 0x0163, "anim") == "ftFx_SpecialHi_Anim"
+    assert cb_name("falco", 0x0163, "coll") == "ftFx_SpecialHi_Coll"
+    assert cb_name("marth", 0x015D, "coll") == "ftMs_SpecialAirS1_Coll"
+    assert cb_name("sheik", 0x0168, "coll") == "ftSk_SpecialAirHi_Coll"
     assert not any(cmd[0] == "tools.extraction.extract_staling_move_id" for cmd in commands)
     assert not any(cmd[0] == "tools.extraction.extract_attack_id_move_id" for cmd in commands)
     assert not any(cmd[0] == "tools.extraction.extract_motion_state_owners" for cmd in commands)

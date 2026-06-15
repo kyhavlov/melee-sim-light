@@ -60,6 +60,7 @@ FOX = Path("data/motion_state/owners/fox.bin")
 FALCO = Path("data/motion_state/owners/falco.bin")
 MANIFEST = Path("data/motion_state/owners/callback_symbols.json")
 MARTH = Path("data/motion_state/owners/marth.bin")
+SHEIK = Path("data/motion_state/owners/sheik.bin")
 
 
 def _data_manifest_chars() -> list[str]:
@@ -694,6 +695,79 @@ def test_motion_state_owner_phase3_common_owner_classes_exclude_later_families()
         assert not both_have2(action_id, CLASS2_COMMON_AIRBORNE_COLL)
 
 
+@pytest.mark.integration
+def test_sheik_vanish_motion_state_callbacks_publish_source_collision_owners() -> None:
+    sheik = read_mslmso01_v1(SHEIK)
+    symbols = read_callback_manifest(MANIFEST)
+
+    def cb_name(action_id: int, lane: str) -> str:
+        cb_id = getattr(sheik, f"{lane}_cb_id")[action_id]
+        return symbols[int(cb_id)]
+
+    def has(action_id: int, bit: int) -> bool:
+        return bool(int(sheik.class_bits[action_id]) & bit)
+
+    # Sheik Vanish aerial start/travel/end callbacks call ft_CheckGroundAndLedge and can publish
+    # LandingFallSpecial or CliffCatch from their collision callbacks. Keep this generated from the
+    # decomp MotionState callback table rather than a local action-id list in runtime collision.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+    #   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialAirHi_Coll}
+    for action_id, coll_cb in (
+        (0x0166, "ftSk_SpecialAirHiStart_0_Coll"),
+        (0x0167, "ftSk_SpecialAirHiStart_1_Coll"),
+        (0x0168, "ftSk_SpecialAirHi_Coll"),
+    ):
+        assert cb_name(action_id, "coll") == coll_cb
+        assert has(action_id, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)
+        assert int(sheik.fx_special_kind[action_id]) == 0
+
+    # The grounded Vanish end callback calls ft_800827A0 before converting to the aerial fall
+    # state; the start callbacks use ft_80082708 and must not inherit this edge-snap owner.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+    #   ftSk_SpecialHiStart_0_Coll,ftSk_SpecialHiStart_1_Coll,ftSk_SpecialHi_Coll}
+    assert cb_name(0x0165, "coll") == "ftSk_SpecialHi_Coll"
+    assert has(0x0165, CLASS_FT800827A0_EDGE_SNAP_COLL)
+    assert not has(0x0163, CLASS_FT800827A0_EDGE_SNAP_COLL)
+    assert not has(0x0164, CLASS_FT800827A0_EDGE_SNAP_COLL)
+
+
+@pytest.mark.integration
+def test_sheik_chain_motion_state_callbacks_publish_source_collision_owners() -> None:
+    sheik = read_mslmso01_v1(SHEIK)
+    symbols = read_callback_manifest(MANIFEST)
+
+    def cb_name(action_id: int, lane: str) -> str:
+        cb_id = getattr(sheik, f"{lane}_cb_id")[action_id]
+        return symbols[int(cb_id)]
+
+    def has(action_id: int, bit: int) -> bool:
+        return bool(int(sheik.class_bits[action_id]) & bit)
+
+    # Sheik Chain aerial Start/Active/End callbacks call ft_80081D0C directly. Ground contact is
+    # therefore the generated CheckGroundOnly owner, not the common-air platform-pass owner.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialAirSStart_Coll,ftSk_SpecialAirS_Coll,ftSk_SpecialAirSEnd_Coll}
+    for action_id, coll_cb in (
+        (0x0160, "ftSk_SpecialAirSStart_Coll"),
+        (0x0161, "ftSk_SpecialAirS_Coll"),
+        (0x0162, "ftSk_SpecialAirSEnd_Coll"),
+    ):
+        assert cb_name(action_id, "coll") == coll_cb
+        assert has(action_id, CLASS_FT80081D0C_AIR_COLL)
+        assert not has(action_id, CLASS_FT80083090_PLATFORM_PASS_COLL)
+
+    # Grounded Chain Start/Active/End callbacks call ft_800827A0 before their source handoff.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialSStart_Coll,ftSk_SpecialS_Coll,ftSk_SpecialSEnd_Coll}
+    for action_id, coll_cb in (
+        (0x015D, "ftSk_SpecialSStart_Coll"),
+        (0x015E, "ftSk_SpecialS_Coll"),
+        (0x015F, "ftSk_SpecialSEnd_Coll"),
+    ):
+        assert cb_name(action_id, "coll") == coll_cb
+        assert has(action_id, CLASS_FT800827A0_EDGE_SNAP_COLL)
+
+
 def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actions() -> None:
     fox = read_mslmso01_v1(FOX)
     falco = read_mslmso01_v1(FALCO)
@@ -924,11 +998,12 @@ def test_fx_special_kind_matches_anim_callback_symbols() -> None:
     # fx_special_kind (v18) is generated 1:1 from each row's ANIM callback symbol; the
     # is_spacie/MSL_ACT_FX_* predicate migration consumes it. Exhaustive parity: every
     # action's kind equals the extractor table's mapping for its anim callback, fox and
-    # falco agree (clone shares the ftFx machines), and marth carries kind 0 everywhere
-    # (its same-numbered actions have ftMs callbacks).
+    # falco agree (clone shares the ftFx machines), and non-Fox specials carry kind 0 everywhere
+    # (their same-numbered actions have character-local callbacks).
     fox = read_mslmso01_v1(FOX)
     falco = read_mslmso01_v1(FALCO)
     marth = read_mslmso01_v1(MARTH)
+    sheik = read_mslmso01_v1(SHEIK)
     symbols = read_callback_manifest(MANIFEST)
 
     for label, table in (("fox", fox), ("falco", falco)):
@@ -939,6 +1014,7 @@ def test_fx_special_kind_matches_anim_callback_symbols() -> None:
 
     assert list(fox.fx_special_kind) == list(falco.fx_special_kind)
     assert not any(int(k) for k in marth.fx_special_kind), "marth must carry no fx kinds"
+    assert not any(int(k) for k in sheik.fx_special_kind), "sheik must carry no fx kinds"
     # The kind value space is dense 1..N with no gaps (C enum parity).
     assert sorted(FX_SPECIAL_KIND_VALUES.values()) == list(range(1, len(FX_SPECIAL_KIND_VALUES) + 1))
 

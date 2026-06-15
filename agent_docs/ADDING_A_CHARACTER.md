@@ -1020,6 +1020,14 @@ cover most of it.
    action swap. Sheik Vanish is the practical trap: the travel action enters at
    frame 35 with anim rate 0 while keeping the start submotion, so an
    action-offset assumption publishes the wrong pose/ECB.
+   Special families also need per-state collision callback audits, not one
+   blanket "same move swaps ground/air" rule. Sheik Chain proved that
+   Start/Active/End use source-distinct callbacks: aerial Start/Active/End call
+   `ft_80081D0C`, grounded Start/Active/End call `ft_800827A0`, aerial Start
+   floor contact swaps to grounded Start, but aerial Active floor contact enters
+   aerial retract and grounded Active floor loss enters grounded retract. Put the
+   callback classes in `MSLMSO01` and lock active-vs-start boundaries so future
+   characters do not inherit a plausible but wrong generic special swap helper.
 6. **Anim-end common-state handoffs**: if a char-special Anim callback exits
    through `ftCo_Fall_Enter`, `ftCo_80096900`, `ft_8008A2BC`, or another
    common-state entry, audit whether the destination state's IASA can run in the
@@ -1180,9 +1188,16 @@ B-reverse, and airdodge-through-stage kills. You MUST:
 
 1. **Webplay viewer** (`make viewer`): add the character —
    `tools/viewer/assets/character_zips.tsv` (zip + sha + slippilab URL),
-   `tools/viewer/live/schema.js`, main.js character wiring. Then actually play:
-   every special, ground and air, at ledges, on slopes, vs shield. Capture
-   anything weird with the viewer's msltrace recording.
+   `tools/viewer/live/schema.js`, `tools/viewer/live/build_wasm.sh`
+   `viewer_chars`, and main.js character wiring. Keep
+   `tests/test_live_viewer_schema.py::test_live_viewer_supported_characters_have_packaged_animation_zips`
+   and `test_live_viewer_supported_characters_are_required_by_wasm_build`
+   green so a dropdown entry cannot ship without the Slippi renderer zip or
+   without its simulator data in the WASM build preflight. Sheik exposed this
+   as an infinite loading screen when `sheik.zip` was missing from the
+   manifest. Then actually play: every special, ground and air, at ledges, on
+   slopes, vs shield. Capture anything weird with the viewer's msltrace
+   recording.
 2. **Trace-replay debugging**: a captured `.msltrace.json` (sparse-delta-v1)
    replays natively — seed from the trace's own row near the failure and feed
    its recorded inputs (reproduces to ~0.04 units when synthetic repro guesses

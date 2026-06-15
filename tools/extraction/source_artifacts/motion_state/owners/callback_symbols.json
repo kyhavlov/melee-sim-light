@@ -3983,18 +3983,402 @@
     },
     {
       "id": 975,
-      "symbol": "ftpickupitem_Anim"
+      "symbol": "ftSk_SpecialAirHiStart_0_Anim"
     },
     {
       "id": 976,
-      "symbol": "ftpickupitem_Coll"
+      "symbol": "ftSk_SpecialAirHiStart_0_Coll"
     },
     {
       "id": 977,
-      "symbol": "ftpickupitem_IASA"
+      "symbol": "ftSk_SpecialAirHiStart_0_IASA"
     },
     {
       "id": 978,
+      "symbol": "ftSk_SpecialAirHiStart_0_Phys"
+    },
+    {
+      "id": 979,
+      "symbol": "ftSk_SpecialAirHiStart_1_Anim"
+    },
+    {
+      "id": 980,
+      "symbol": "ftSk_SpecialAirHiStart_1_Coll"
+    },
+    {
+      "id": 981,
+      "symbol": "ftSk_SpecialAirHiStart_1_IASA"
+    },
+    {
+      "id": 982,
+      "symbol": "ftSk_SpecialAirHiStart_1_Phys"
+    },
+    {
+      "id": 983,
+      "symbol": "ftSk_SpecialAirHi_Anim"
+    },
+    {
+      "id": 984,
+      "symbol": "ftSk_SpecialAirHi_Coll"
+    },
+    {
+      "id": 985,
+      "symbol": "ftSk_SpecialAirHi_IASA"
+    },
+    {
+      "id": 986,
+      "symbol": "ftSk_SpecialAirHi_Phys"
+    },
+    {
+      "id": 987,
+      "symbol": "ftSk_SpecialAirLw2_Anim"
+    },
+    {
+      "id": 988,
+      "symbol": "ftSk_SpecialAirLw2_Coll"
+    },
+    {
+      "id": 989,
+      "symbol": "ftSk_SpecialAirLw2_IASA"
+    },
+    {
+      "id": 990,
+      "symbol": "ftSk_SpecialAirLw2_Phys"
+    },
+    {
+      "id": 991,
+      "symbol": "ftSk_SpecialAirLw_Anim"
+    },
+    {
+      "id": 992,
+      "symbol": "ftSk_SpecialAirLw_Coll"
+    },
+    {
+      "id": 993,
+      "symbol": "ftSk_SpecialAirLw_IASA"
+    },
+    {
+      "id": 994,
+      "symbol": "ftSk_SpecialAirLw_Phys"
+    },
+    {
+      "id": 995,
+      "symbol": "ftSk_SpecialAirNCancel_Anim"
+    },
+    {
+      "id": 996,
+      "symbol": "ftSk_SpecialAirNCancel_Coll"
+    },
+    {
+      "id": 997,
+      "symbol": "ftSk_SpecialAirNCancel_IASA"
+    },
+    {
+      "id": 998,
+      "symbol": "ftSk_SpecialAirNCancel_Phys"
+    },
+    {
+      "id": 999,
+      "symbol": "ftSk_SpecialAirNEnd_Anim"
+    },
+    {
+      "id": 1000,
+      "symbol": "ftSk_SpecialAirNEnd_Coll"
+    },
+    {
+      "id": 1001,
+      "symbol": "ftSk_SpecialAirNEnd_IASA"
+    },
+    {
+      "id": 1002,
+      "symbol": "ftSk_SpecialAirNEnd_Phys"
+    },
+    {
+      "id": 1003,
+      "symbol": "ftSk_SpecialAirNLoop_Anim"
+    },
+    {
+      "id": 1004,
+      "symbol": "ftSk_SpecialAirNLoop_Coll"
+    },
+    {
+      "id": 1005,
+      "symbol": "ftSk_SpecialAirNLoop_IASA"
+    },
+    {
+      "id": 1006,
+      "symbol": "ftSk_SpecialAirNLoop_Phys"
+    },
+    {
+      "id": 1007,
+      "symbol": "ftSk_SpecialAirNStart_Anim"
+    },
+    {
+      "id": 1008,
+      "symbol": "ftSk_SpecialAirNStart_Coll"
+    },
+    {
+      "id": 1009,
+      "symbol": "ftSk_SpecialAirNStart_IASA"
+    },
+    {
+      "id": 1010,
+      "symbol": "ftSk_SpecialAirNStart_Phys"
+    },
+    {
+      "id": 1011,
+      "symbol": "ftSk_SpecialAirSEnd_Anim"
+    },
+    {
+      "id": 1012,
+      "symbol": "ftSk_SpecialAirSEnd_Coll"
+    },
+    {
+      "id": 1013,
+      "symbol": "ftSk_SpecialAirSEnd_IASA"
+    },
+    {
+      "id": 1014,
+      "symbol": "ftSk_SpecialAirSEnd_Phys"
+    },
+    {
+      "id": 1015,
+      "symbol": "ftSk_SpecialAirSStart_Anim"
+    },
+    {
+      "id": 1016,
+      "symbol": "ftSk_SpecialAirSStart_Coll"
+    },
+    {
+      "id": 1017,
+      "symbol": "ftSk_SpecialAirSStart_IASA"
+    },
+    {
+      "id": 1018,
+      "symbol": "ftSk_SpecialAirSStart_Phys"
+    },
+    {
+      "id": 1019,
+      "symbol": "ftSk_SpecialAirS_Anim"
+    },
+    {
+      "id": 1020,
+      "symbol": "ftSk_SpecialAirS_Coll"
+    },
+    {
+      "id": 1021,
+      "symbol": "ftSk_SpecialAirS_IASA"
+    },
+    {
+      "id": 1022,
+      "symbol": "ftSk_SpecialAirS_Phys"
+    },
+    {
+      "id": 1023,
+      "symbol": "ftSk_SpecialHiStart_0_Anim"
+    },
+    {
+      "id": 1024,
+      "symbol": "ftSk_SpecialHiStart_0_Coll"
+    },
+    {
+      "id": 1025,
+      "symbol": "ftSk_SpecialHiStart_0_IASA"
+    },
+    {
+      "id": 1026,
+      "symbol": "ftSk_SpecialHiStart_0_Phys"
+    },
+    {
+      "id": 1027,
+      "symbol": "ftSk_SpecialHiStart_1_Anim"
+    },
+    {
+      "id": 1028,
+      "symbol": "ftSk_SpecialHiStart_1_Coll"
+    },
+    {
+      "id": 1029,
+      "symbol": "ftSk_SpecialHiStart_1_IASA"
+    },
+    {
+      "id": 1030,
+      "symbol": "ftSk_SpecialHiStart_1_Phys"
+    },
+    {
+      "id": 1031,
+      "symbol": "ftSk_SpecialHi_Anim"
+    },
+    {
+      "id": 1032,
+      "symbol": "ftSk_SpecialHi_Coll"
+    },
+    {
+      "id": 1033,
+      "symbol": "ftSk_SpecialHi_IASA"
+    },
+    {
+      "id": 1034,
+      "symbol": "ftSk_SpecialHi_Phys"
+    },
+    {
+      "id": 1035,
+      "symbol": "ftSk_SpecialLw2_Anim"
+    },
+    {
+      "id": 1036,
+      "symbol": "ftSk_SpecialLw2_Coll"
+    },
+    {
+      "id": 1037,
+      "symbol": "ftSk_SpecialLw2_IASA"
+    },
+    {
+      "id": 1038,
+      "symbol": "ftSk_SpecialLw2_Phys"
+    },
+    {
+      "id": 1039,
+      "symbol": "ftSk_SpecialLw_Anim"
+    },
+    {
+      "id": 1040,
+      "symbol": "ftSk_SpecialLw_Coll"
+    },
+    {
+      "id": 1041,
+      "symbol": "ftSk_SpecialLw_IASA"
+    },
+    {
+      "id": 1042,
+      "symbol": "ftSk_SpecialLw_Phys"
+    },
+    {
+      "id": 1043,
+      "symbol": "ftSk_SpecialNCancel_Anim"
+    },
+    {
+      "id": 1044,
+      "symbol": "ftSk_SpecialNCancel_Coll"
+    },
+    {
+      "id": 1045,
+      "symbol": "ftSk_SpecialNCancel_IASA"
+    },
+    {
+      "id": 1046,
+      "symbol": "ftSk_SpecialNCancel_Phys"
+    },
+    {
+      "id": 1047,
+      "symbol": "ftSk_SpecialNEnd_Anim"
+    },
+    {
+      "id": 1048,
+      "symbol": "ftSk_SpecialNEnd_Coll"
+    },
+    {
+      "id": 1049,
+      "symbol": "ftSk_SpecialNEnd_IASA"
+    },
+    {
+      "id": 1050,
+      "symbol": "ftSk_SpecialNEnd_Phys"
+    },
+    {
+      "id": 1051,
+      "symbol": "ftSk_SpecialNLoop_Anim"
+    },
+    {
+      "id": 1052,
+      "symbol": "ftSk_SpecialNLoop_Coll"
+    },
+    {
+      "id": 1053,
+      "symbol": "ftSk_SpecialNLoop_IASA"
+    },
+    {
+      "id": 1054,
+      "symbol": "ftSk_SpecialNLoop_Phys"
+    },
+    {
+      "id": 1055,
+      "symbol": "ftSk_SpecialNStart_Anim"
+    },
+    {
+      "id": 1056,
+      "symbol": "ftSk_SpecialNStart_Coll"
+    },
+    {
+      "id": 1057,
+      "symbol": "ftSk_SpecialNStart_IASA"
+    },
+    {
+      "id": 1058,
+      "symbol": "ftSk_SpecialNStart_Phys"
+    },
+    {
+      "id": 1059,
+      "symbol": "ftSk_SpecialSEnd_Anim"
+    },
+    {
+      "id": 1060,
+      "symbol": "ftSk_SpecialSEnd_Coll"
+    },
+    {
+      "id": 1061,
+      "symbol": "ftSk_SpecialSEnd_IASA"
+    },
+    {
+      "id": 1062,
+      "symbol": "ftSk_SpecialSEnd_Phys"
+    },
+    {
+      "id": 1063,
+      "symbol": "ftSk_SpecialSStart_Anim"
+    },
+    {
+      "id": 1064,
+      "symbol": "ftSk_SpecialSStart_Coll"
+    },
+    {
+      "id": 1065,
+      "symbol": "ftSk_SpecialSStart_IASA"
+    },
+    {
+      "id": 1066,
+      "symbol": "ftSk_SpecialSStart_Phys"
+    },
+    {
+      "id": 1067,
+      "symbol": "ftSk_SpecialS_Anim"
+    },
+    {
+      "id": 1068,
+      "symbol": "ftSk_SpecialS_Coll"
+    },
+    {
+      "id": 1069,
+      "symbol": "ftSk_SpecialS_IASA"
+    },
+    {
+      "id": 1070,
+      "symbol": "ftSk_SpecialS_Phys"
+    },
+    {
+      "id": 1071,
+      "symbol": "ftpickupitem_Anim"
+    },
+    {
+      "id": 1072,
+      "symbol": "ftpickupitem_Coll"
+    },
+    {
+      "id": 1073,
+      "symbol": "ftpickupitem_IASA"
+    },
+    {
+      "id": 1074,
       "symbol": "ftpickupitem_Phys"
     }
   ],

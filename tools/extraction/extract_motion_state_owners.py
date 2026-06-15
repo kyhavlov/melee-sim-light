@@ -313,11 +313,18 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_KinokoSmallEnd_Coll",
         "ftCo_KinokoGiantStart_Coll",
         "ftCo_KinokoGiantEnd_Coll",
+        "ftSk_SpecialAirSStart_Coll",
+        "ftSk_SpecialAirS_Coll",
+        "ftSk_SpecialAirSEnd_Coll",
     }:
         # These common Fox/Falco collision callbacks delegate through `ft_80082C74`, whose
         # `ft_80081D0C` helper loads the normal airborne ECB and runs `mpColl_800471F8`. That
         # source owner uses the full airborne wall/floor/ceiling collision callback without the
         # common-air walljump post-consumers.
+        # Sheik Chain aerial Start/Active/End call `ft_80081D0C` directly before their source
+        # state handoff.
+        # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+        #   ftSk_SpecialAirSStart_Coll,ftSk_SpecialAirS_Coll,ftSk_SpecialAirSEnd_Coll}
         bits |= CLASS_FT80081D0C_AIR_COLL
     if coll_cb in {
         "ftCo_Jump_Coll",
@@ -343,15 +350,21 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftFx_SpecialHiHoldAir_Coll",
         "ftFx_SpecialAirHi_Coll",
         "ftFx_SpecialHiFall_Coll",
+        "ftSk_SpecialAirHiStart_0_Coll",
+        "ftSk_SpecialAirHiStart_1_Coll",
+        "ftSk_SpecialAirHi_Coll",
         "ftCo_MissFoot_Coll",
         "ftCo_Pass_Coll",
     }:
-        # Fox/Falco aerial Side-B/SpecialHi{HoldAir,AirHi,Fall} and common MissFoot/Pass
-        # collision callbacks call ft_CheckGroundAndLedge directly (MissFoot/Pass through
-        # ft_80082F28), which snapshots CollData and runs the airborne mpColl
-        # floor/wall/ceiling owner without the held-down common-air platform rejection path.
+        # Fox/Falco aerial Side-B/SpecialHi{HoldAir,AirHi,Fall}, Sheik Vanish aerial
+        # Start0/Start1/End, and common MissFoot/Pass collision callbacks call
+        # ft_CheckGroundAndLedge directly (MissFoot/Pass through ft_80082F28), which snapshots
+        # CollData and runs the airborne mpColl floor/wall/ceiling owner without the held-down
+        # common-air platform rejection path.
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
         #   ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
+        # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+        #   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialAirHi_Coll}
         bits |= CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
     if coll_cb == "ftCo_Landing_Coll":
         bits |= CLASS_LANDING_COLL
@@ -485,18 +498,27 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
     if coll_cb == "ftCo_EscapeAir_Coll":
         bits |= CLASS_ESCAPE_AIR_COLL
     if coll_cb in {
-        # Marth grounded special collision callbacks that call ft_800827A0 (StopAtLedge) on the
-        # grounded branch. The Dancing Blade stage callbacks are shared by ground and air
-        # variants and branch on ground_or_air internally; the grounded branch is 827A0.
+        # Character-special collision callbacks that call ft_800827A0 (StopAtLedge) on the
+        # grounded branch. The Marth Dancing Blade stage callbacks are shared by ground and air
+        # variants and branch on ground_or_air internally; the grounded branch is 827A0. Sheik
+        # grounded Vanish end calls the same owner before entering the air fall state.
         # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialS.c::{
         #   ftMs_SpecialAirS1_Coll,ftMs_SpecialS3_Coll (and the S2/S4 pairs)}
         # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::ftMs_SpecialLw_Coll
+        # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialHi_Coll
         "ftMs_SpecialAirS1_Coll",
         "ftMs_SpecialS2_Coll",
         "ftMs_SpecialS3_Coll",
         "ftMs_SpecialS4_Coll",
         "ftMs_SpecialLw_Coll",
+        "ftSk_SpecialHi_Coll",
+        "ftSk_SpecialSStart_Coll",
+        "ftSk_SpecialS_Coll",
+        "ftSk_SpecialSEnd_Coll",
     }:
+        # Sheik Chain grounded Start/Active/End all call `ft_800827A0` before their source handoff.
+        # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+        #   ftSk_SpecialSStart_Coll,ftSk_SpecialS_Coll,ftSk_SpecialSEnd_Coll}
         bits |= CLASS_FT800827A0_EDGE_SNAP_COLL
     if coll_cb in {
         # Marth aerial special collision callbacks that call ft_80081D0C

@@ -74,11 +74,18 @@ static inline uint8_t mpcoll_non_air_common_damage_submotion(uint32_t smid) {
 }
 
 static inline uint8_t mpcoll_ground_specialhi_uses_jobj_ecb(uint8_t char_id, uint16_t action_id) {
-  // Ownership from the extracted MotionState row identity (SpecialHi launch rows).
-  // Source owner: SpecialAirHi_Coll routes through ft_CheckGroundAndLedge, whose mpColl path
-  // consumes the live JObj/CollData ECB rather than a public root-only floor probe.
+  const MslCharParams* chp = msl_char_params_fast(char_id);
+  if (chp == NULL || !(chp->firefox_bound_angle_degrees > 0.0f)) {
+    return 0u;
+  }
+  // Ownership from FireFox/FireBird's extracted special-hi bound-angle data. Those launch rows
+  // rotate XRotN and branch through ftFox_SpecialHi_IsBound before their floor collision result.
+  // Sheik/Zelda Vanish end uses a different source owner: ftSk/ftZd_SpecialAirHi_Coll calls
+  // ft_CheckGroundAndLedge directly and enters LandingFallSpecial on any accepted floor/ledge.
+  // Do not apply the FireFox JObj/bound-angle ECB owner to generic SpecialAirHi rows.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
   //   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_RotateModel}
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Coll
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_800473CC}
   const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
   return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI ||
@@ -1100,6 +1107,26 @@ static inline uint8_t mpcoll_common_fall_blended_ecb_points(MslEcbWorldPoints* o
                                                                   pos_x, pos_y, 0u) == 0);
 }
 
+static inline uint8_t mpcoll_vanish_jobj_ecb_points(MslEcbWorldPoints* out, const MslBatch* batch,
+                                                    size_t idx, uint8_t char_id, uint16_t msid,
+                                                    uint16_t frame_u16, float facing_dir,
+                                                    float pos_x, float pos_y) {
+  if (out == NULL || batch == NULL) {
+    return 0u;
+  }
+  // Source `mpColl_LoadECB_inline` routes the fighter's CollData JObj ECB source through
+  // `mpColl_LoadECB_JObj` before `ft_CheckGroundAndLedge -> mpColl_800473CC` floor checks. Vanish
+  // does not use FireFox/FireBird's XRotN bound-angle rotation, so sample the generic collision
+  // JObj pose rather than the SpecialHi rotated-JObj helper.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80081B38,ft_CheckGroundAndLedge}
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Coll
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_LoadECB_inline,
+  //   mpColl_800473CC}
+  return (uint8_t)(msl_ecb_world_points_sample_collision_pose_f32(out, batch, idx, char_id, msid,
+                                                                  (float)frame_u16, facing_dir,
+                                                                  pos_x, pos_y, 0u) == 0);
+}
+
 static inline void mpcoll_bottom_world_point_from_rel(MslEcbBottomWorldPoint* out, float pos_x,
                                                       float pos_y, float rel_y,
                                                       uint16_t frame_u16) {
@@ -1595,6 +1622,32 @@ static inline uint8_t mpcoll_ft_check_ground_ledge_uses_no_ledge_path(const MslB
 static inline uint8_t mpcoll_source_phases_has(MslMpcollSourcePhases phases,
                                                MslMpcollSourcePhase phase) {
   return (uint8_t)((phases & (MslMpcollSourcePhases)phase) != 0u);
+}
+
+static inline uint8_t mpcoll_vanish_ft_check_jobj_ecb_owner(uint8_t char_id, uint16_t action_id,
+                                                            MslMpcollSourcePhases source_phases) {
+  const MslCharParams* chp = msl_char_params_fast(char_id);
+  if (chp == NULL || !(chp->sheik_vanish_landing_lag_frames > 0.0f)) {
+    return 0u;
+  }
+  if (!mpcoll_source_phases_has(source_phases, MSL_MPCOLL_PHASE_AIR_473CC) ||
+      msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL) ==
+          0u ||
+      msl_motion_state_fx_special_kind(char_id, action_id) != (uint8_t)MSL_FX_KIND_NONE) {
+    return 0u;
+  }
+  // Vanish end/start Coll callbacks call `ft_CheckGroundAndLedge`, which snapshots the
+  // callback-local root into CollData and uses `mpColl_800473CC` when ledgeCooldown/x2224_b2 are
+  // clear. With a fixed ECB whose bottom is above the root, source `mpColl_80044838_Floor` uses the
+  // live JObj ECB before floor checks. This is a Vanish-special source owner (ftSeak/ftZelda
+  // attributes), not the Fox/Falco SpecialHi JObj/XRotN owner and not a generic character-id rule.
+  // data/characters/{sheik,zelda}.json::sheik_vanish_landing_lag_frames
+  // data/motion_state/owners/{sheik,zelda}.bin::MSLMSO01 FT_CHECK_GROUND_LEDGE_AIR_COLL
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+  //   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialAirHi_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_800473CC}
+  return 1u;
 }
 
 static inline void mpcoll_floor_reject_add_escapeair_final_owners(
@@ -8662,9 +8715,13 @@ void mpcoll_ground_apply(MslBatch* batch) {
       }
       uint8_t have_cur_specialhi_ecb = 0u;
       uint8_t have_prev_specialhi_ecb = 0u;
+      uint8_t have_cur_vanish_ecb = 0u;
+      uint8_t have_prev_vanish_ecb = 0u;
       uint8_t have_cur_damageflyroll_ecb = 0u;
       uint8_t have_prev_damageflyroll_ecb = 0u;
       uint8_t specialhi_jobj_ecb_active = mpcoll_ground_specialhi_uses_jobj_ecb(char_id, action_id);
+      uint8_t vanish_jobj_ecb_active =
+          mpcoll_vanish_ft_check_jobj_ecb_owner(char_id, action_id, source_phases);
       uint8_t damageflyroll_jobj_ecb_active =
           (mpcoll_ground_damageflyroll_uses_jobj_ecb(action_id) &&
            batch->state.speed_y_self[idx] <= -(3.0f * k_ecb_vertical_unit))
@@ -8696,6 +8753,34 @@ void mpcoll_ground_apply(MslBatch* batch) {
           prev_bot.y = specialhi_prev_ecb.bottom_y;
           prev_bot.rel_y = specialhi_prev_ecb.bottom_rel_y;
           prev_bot.frame_u16 = specialhi_prev_ecb.frame_u16;
+        }
+      }
+      if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero && vanish_jobj_ecb_active) {
+        MslEcbWorldPoints vanish_cur_ecb = cur_ecb_points;
+        MslEcbWorldPoints vanish_prev_ecb = prev_ecb_points;
+        have_cur_vanish_ecb =
+            mpcoll_vanish_jobj_ecb_points(&vanish_cur_ecb, batch, idx, char_id, (uint16_t)anim,
+                                          ecb_frame, facing_dir_for_ecb, x, y);
+        have_prev_vanish_ecb =
+            mpcoll_vanish_jobj_ecb_points(&vanish_prev_ecb, batch, idx, char_id, (uint16_t)anim,
+                                          ecb_frame_prev, facing_dir_for_ecb, prev_x, prev_y);
+        if (have_cur_vanish_ecb) {
+          cur_ecb_points = vanish_cur_ecb;
+          cur_bottom_x = vanish_cur_ecb.bottom_x;
+          cur_bottom_y = vanish_cur_ecb.bottom_y;
+          cur_bot.x = vanish_cur_ecb.bottom_x;
+          cur_bot.y = vanish_cur_ecb.bottom_y;
+          cur_bot.rel_y = vanish_cur_ecb.bottom_rel_y;
+          cur_bot.frame_u16 = vanish_cur_ecb.frame_u16;
+        }
+        if (have_prev_vanish_ecb) {
+          prev_ecb_points = vanish_prev_ecb;
+          prev_bottom_x = vanish_prev_ecb.bottom_x;
+          prev_bottom_y = vanish_prev_ecb.bottom_y;
+          prev_bot.x = vanish_prev_ecb.bottom_x;
+          prev_bot.y = vanish_prev_ecb.bottom_y;
+          prev_bot.rel_y = vanish_prev_ecb.bottom_rel_y;
+          prev_bot.frame_u16 = vanish_prev_ecb.frame_u16;
         }
       }
       if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero && damageflyroll_jobj_ecb_active) {
@@ -8749,11 +8834,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
         }
       }
       if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero &&
-          (specialhi_jobj_ecb_active || damageflyroll_jobj_ecb_active)) {
+          (specialhi_jobj_ecb_active || vanish_jobj_ecb_active || damageflyroll_jobj_ecb_active)) {
         if (have_cur_specialhi_ecb) {
           current_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_JOBJ;
         }
         if (have_prev_specialhi_ecb) {
+          previous_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_JOBJ;
+        }
+        if (have_cur_vanish_ecb) {
+          current_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_JOBJ;
+        }
+        if (have_prev_vanish_ecb) {
           previous_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_JOBJ;
         }
         if (have_cur_damageflyroll_ecb) {
