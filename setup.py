@@ -100,6 +100,7 @@ ext = Extension(
         "src/anim_pose.c",
         "src/anim_timebase.c",
         "src/ecb_tables.c",
+        "src/ecb_pose.c",
         "src/shield_tilt_table.c",
         "src/laser_params.c",
         "src/item_common_params.c",

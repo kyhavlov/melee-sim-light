@@ -16,6 +16,7 @@
 #include "coll_env_flags.h"
 #include "common_params.h"
 #include "damage_terminal_owner.h"
+#include "ecb_pose.h"
 #include "escapeair_collision_owner.h"
 #include "match_flow.h"
 #include "mpcoll_ecb_points.h"
@@ -1086,24 +1087,17 @@ static inline float mpcoll_action_pose_ecb_bottom_rel_y(uint8_t char_id, uint16_
   return msl_ecb_bottom_rel_y(char_id, smid, (int)frame);
 }
 
-static inline float mpcoll_common_fall_blended_bottom_rel_y(const MslBatch* batch, size_t idx,
-                                                            uint8_t char_id, uint16_t neutral_msid,
-                                                            uint16_t frame_u16) {
-  if (batch == NULL) {
-    return msl_ecb_bottom_rel_y(char_id, neutral_msid, (int)frame_u16);
+static inline uint8_t mpcoll_common_fall_blended_ecb_points(MslEcbWorldPoints* out,
+                                                            const MslBatch* batch, size_t idx,
+                                                            uint8_t char_id, uint16_t msid,
+                                                            uint16_t frame_u16, float facing_dir,
+                                                            float pos_x, float pos_y) {
+  if (out == NULL || batch == NULL) {
+    return 0u;
   }
-  float x4 = batch->state.common_fall_blend_x4[idx];
-  if (x4 < 0.0f) {
-    x4 = 0.0f;
-  } else if (x4 > 1.0f) {
-    x4 = 1.0f;
-  }
-  const uint16_t target_msid = (batch->state.common_fall_blend_msid[idx] != 0u)
-                                   ? batch->state.common_fall_blend_msid[idx]
-                                   : neutral_msid;
-  const float neutral = msl_ecb_bottom_rel_y(char_id, neutral_msid, (int)frame_u16);
-  const float target = msl_ecb_bottom_rel_y(char_id, target_msid, (int)frame_u16);
-  return neutral + ((target - neutral) * x4);
+  return (uint8_t)(msl_ecb_world_points_sample_collision_pose_f32(out, batch, idx, char_id, msid,
+                                                                  (float)frame_u16, facing_dir,
+                                                                  pos_x, pos_y, 0u) == 0);
 }
 
 static inline void mpcoll_bottom_world_point_from_rel(MslEcbBottomWorldPoint* out, float pos_x,
@@ -8568,11 +8562,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const float state_cur_ecb_rel = (have_state_cur_ecb && !state_cur_ecb_stale_zero)
                                           ? state_cur_ecb_points.bottom_rel_y
                                           : pre_entry_prev_ecb_rel;
+      MslEcbWorldPoints common_fall_blended_current_ecb_points = {0};
+      const uint8_t have_common_fall_blended_current_ecb =
+          (common_fall_blended_seed_ecb_consumer &&
+           mpcoll_common_fall_blended_ecb_points(&common_fall_blended_current_ecb_points, batch,
+                                                 idx, char_id, common_fall_neutral_msid,
+                                                 ecb_frame_cur, facing_dir_for_ecb, x, y))
+              ? 1u
+              : 0u;
       const float common_fall_blended_current_ecb_rel =
-          common_fall_blended_seed_ecb_consumer
-              ? mpcoll_common_fall_blended_bottom_rel_y(batch, idx, char_id,
-                                                        common_fall_neutral_msid, ecb_frame_cur)
-              : 0.0f;
+          have_common_fall_blended_current_ecb ? common_fall_blended_current_ecb_points.bottom_rel_y
+                                               : desired_ecb_rel;
       const float hidden_current_ecb_rel = active_damage_hitlag_ecb_consumer ? state_cur_ecb_rel
                                            : common_fall_blended_seed_ecb_consumer
                                                ? common_fall_blended_current_ecb_rel
@@ -8621,10 +8621,15 @@ void mpcoll_ground_apply(MslBatch* batch) {
           //   ftCo_Fall_Anim_Inner,ftCo_Fall_Coll}
           // refs/melee/src/melee/mp/mpcoll.c::{
           //   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor}
-          cur_ecb_points.bottom_rel_y = common_fall_blended_current_ecb_rel;
-          cur_ecb_points.bottom_y = y + common_fall_blended_current_ecb_rel;
-          desired_ecb_points.bottom_rel_y = common_fall_blended_current_ecb_rel;
-          desired_ecb_points.bottom_y = y + common_fall_blended_current_ecb_rel;
+          if (have_common_fall_blended_current_ecb) {
+            cur_ecb_points = common_fall_blended_current_ecb_points;
+            desired_ecb_points = common_fall_blended_current_ecb_points;
+          } else {
+            cur_ecb_points.bottom_rel_y = common_fall_blended_current_ecb_rel;
+            cur_ecb_points.bottom_y = y + common_fall_blended_current_ecb_rel;
+            desired_ecb_points.bottom_rel_y = common_fall_blended_current_ecb_rel;
+            desired_ecb_points.bottom_y = y + common_fall_blended_current_ecb_rel;
+          }
         }
         if (active_damage_hitlag_ecb_consumer) {
           // During active Damage hitlag, the replay-visible Damage action can advance while source

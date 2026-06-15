@@ -30,6 +30,7 @@
 #include "move_tables.h"
 #include "match_flow.h"
 #include "ecb_tables.h"
+#include "ecb_pose.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "msl_math.h"
@@ -100,20 +101,16 @@ static inline uint8_t reseed_common_fall_blended_ecb_seed_owner(const MslBatch* 
   return (ch != NULL && (ch->common_fall_blended_ecb_seed_mask & bit) != 0u) ? 1u : 0u;
 }
 
-static inline float reseed_common_fall_blended_ecb_bottom_rel_y(const MslBatch* batch, size_t idx,
-                                                                uint8_t char_id,
-                                                                uint32_t neutral_msid,
-                                                                uint16_t frame_u16) {
-  const uint16_t target_msid = batch->state.common_fall_blend_msid[idx];
-  float x4 = batch->state.common_fall_blend_x4[idx];
-  if (x4 < 0.0f) {
-    x4 = 0.0f;
-  } else if (x4 > 1.0f) {
-    x4 = 1.0f;
+static inline uint8_t reseed_common_fall_blended_ecb_points(MslEcbWorldPoints* out,
+                                                            const MslBatch* batch, size_t idx,
+                                                            uint8_t char_id, uint16_t msid,
+                                                            float anim_frame, float facing_dir) {
+  if (out == NULL || batch == NULL) {
+    return 0u;
   }
-  const float neutral = msl_ecb_bottom_rel_y(char_id, neutral_msid, (int)frame_u16);
-  const float target = msl_ecb_bottom_rel_y(char_id, target_msid, (int)frame_u16);
-  return neutral + (target - neutral) * x4;
+  return (uint8_t)(msl_ecb_world_points_sample_collision_pose_f32(out, batch, idx, char_id, msid,
+                                                                  anim_frame, facing_dir, 0.0f,
+                                                                  0.0f, 0u) == 0);
 }
 
 static inline uint8_t reseed_throwhi_deferred_mid_pulse_rate_source_step(int32_t rate_q16_16) {
@@ -3041,13 +3038,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           //   ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}
           // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
           // data/characters/<char>.json::common_fall_blended_ecb_seed_mask
-          const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(seed->anim_frame_f32[p]);
-          const float blended_bottom = reseed_common_fall_blended_ecb_bottom_rel_y(
-              batch, idx, batch->state.char_id[idx], batch->state.animation_index[idx], frame);
-          desired_ecb.bottom_rel_y = blended_bottom;
-          desired_ecb.bottom_y = blended_bottom;
-          prev_ecb.bottom_rel_y = blended_bottom;
-          prev_ecb.bottom_y = blended_bottom;
+          MslEcbWorldPoints blended_ecb = {0};
+          if (reseed_common_fall_blended_ecb_points(&blended_ecb, batch, idx,
+                                                    batch->state.char_id[idx],
+                                                    (uint16_t)batch->state.animation_index[idx],
+                                                    seed->anim_frame_f32[p], facing_dir)) {
+            desired_ecb = blended_ecb;
+            prev_ecb = blended_ecb;
+          }
         }
         reseed_store_colldata_ecb_desired(batch, idx, &desired_ecb);
         batch->state.coll_desired_ecb_bottom_locked_owner[idx] = seed_locked_bottom_valid;

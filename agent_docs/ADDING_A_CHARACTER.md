@@ -921,12 +921,17 @@ Collect before writing any code:
    Slippi does not serialize CollData current/desired ECB; a new character may
    need an explicit `data/characters/<char>.json::common_fall_blended_ecb_seed_mask`
    only when source/probe evidence shows reseeded Fall/FallAerial/FallSpecial
-   rows consume the blended bottom lane. Sheik exposed this for ordinary
+   rows consume the hidden CommonFall ECB packet. Reconstruct that packet from
+   the same live collision-pose JObj matrices used by `mpColl_LoadECB_JObj`;
+   do not linearly interpolate extracted fixed ECB extents as a shortcut.
+   Sheik exposed this for ordinary
    `Fall`: a bounded `mpColl_80047E14` / `mpColl_80044628_Floor` probe showed
    vanilla accepting/rejecting the same floor sweep from CommonFall-blended ECB
-   bottoms, not from the raw neutral Fall table. Do not promote that to a
-   shared free-running collision rule without aggregate controls or a direct
-   `mpColl_LoadECB_inline` / `mpCollInterpolateECB` probe.
+   bottoms, not from the raw neutral Fall table, and the Battlefield hard-floor
+   boundary (`ToughOutlyingChicken.msl:3812/3813`) proved the scalar extent blend
+   was still too low. Do not promote that to a shared free-running collision
+   rule without aggregate controls or a direct `mpColl_LoadECB_inline` /
+   `mpCollInterpolateECB` probe.
    Marth UAir exposed the strong positive on `LoudDullGoat.msl:4539:p0`;
    aggregate Falco rows `DistinctCaringCobra.msl:5573:p1` and
    `ImpassionedAlarmedTarsier.msl:6428:p1` exposed the tight no-hit and

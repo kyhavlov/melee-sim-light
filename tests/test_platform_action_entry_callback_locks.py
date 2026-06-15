@@ -129,6 +129,29 @@ def _debug_commonfall_seed_state(ds, record: int, player: int) -> tuple[float, i
         binding.destroy(handle)
 
 
+def _debug_colldata_after_reseed(ds, record: int):
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    colldata_stride = int(sizes["colldata_ecb"])
+    colldata_dtype = _colldata_ecb_dtype()
+
+    row = ds.samples[record : record + 1].copy()
+    out_bytes = np.empty((1, colldata_stride), dtype=np.uint8)
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    try:
+        binding.reseed_seed(handle, row["seed_t"].view("u1").reshape(1, seed_stride).copy())
+        binding.debug_write_colldata_ecb(handle, out_bytes)
+        return out_bytes.view(colldata_dtype).reshape((1,))[0].copy()
+    finally:
+        binding.destroy(handle)
+
+
 def _rollout_first_mismatch_through(ds, target_record: int):
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -5339,6 +5362,8 @@ def test_marth_fallaerial_commonfall_blended_ecb_still_lands_deeper_contacts(
         ("StiffLustrousZebra.msl", 1619, 0, ACT_FALL, 22),
         ("StiffLustrousZebra.msl", 1620, 0, ACT_LANDING, 22),
         ("StiffLustrousZebra.msl", 3696, 0, ACT_FALL, 22),
+        ("ToughOutlyingChicken.msl", 3812, 0, ACT_FALL, 22),
+        ("ToughOutlyingChicken.msl", 3813, 0, ACT_LANDING, 22),
     ],
 )
 def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
@@ -5355,13 +5380,16 @@ def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
     # - StiffLustrousZebra:3696 is a fastfall Fall/B row where current-speed reconstruction
     #   over-blends x4 and false-publishes Landing; the explicit replay-prefix x4 seed stays
     #   airborne like source.
+    # - ToughOutlyingChicken:3812/3813 cover the hard-floor boundary where the source JObj ECB
+    #   packet from selected FallB + ftAnim_8006FE9C stays above Battlefield floor for one callback,
+    #   then lands once the same sweep crosses deeply enough.
     #
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
     #   ftCo_Fall_Anim_Inner,ftCo_Fall_Coll}
     # refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
     # Probe logs:
-    # reports/triage/newchar_sheik/fall_floor_probe_{rural_523_p0,stiff_1619_p0}
+    # reports/triage/newchar_sheik/fall_floor_probe_{rural_523_p0,stiff_1619_p0,tough_3812_p0}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / "datasets/sheik/replays/validation/sheik" / dataset_name
@@ -5380,6 +5408,32 @@ def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
     assert x4 == pytest.approx(float(row["seed_t"]["common_fall_blend_x4_f32"][p]), abs=1e-7)
     assert msid == int(row["seed_t"]["common_fall_blend_msid_u16"][p])
     assert int(row["ref_t1"]["action_id"][p]) == expected_action
+
+    colldata = _debug_colldata_after_reseed(ds, record)
+    char_data = json.loads((root / "data/characters/sheik.json").read_text())
+    ecb_side_offset = float(char_data["ecb_side_y_offset"])
+    for prefix in ("current", "desired"):
+        bottom = float(colldata[f"{prefix}_bottom_rel_y"][p])
+        top = float(colldata[f"{prefix}_top_rel_y"][p])
+        left = float(colldata[f"{prefix}_left_rel_x"][p])
+        right = float(colldata[f"{prefix}_right_rel_x"][p])
+        side = float(colldata[f"{prefix}_side_rel_y"][p])
+        assert bottom >= 0.0
+        assert left <= -2.0
+        assert right >= 2.0
+        assert side == pytest.approx(ecb_side_offset + 0.5 * (bottom + top), abs=1e-5)
+    if dataset_name in {"RuralReasonableRat.msl", "ToughOutlyingChicken.msl"} or (
+        dataset_name == "StiffLustrousZebra.msl" and record == 1619
+    ):
+        # These rows exercise mpColl_LoadECB_JObj's narrow-span recenter branch. The raw
+        # collision-pose JObj envelope is asymmetric; source recenters it before the final side
+        # clamps, so the hidden packet must be symmetric around the root.
+        assert float(colldata["desired_left_rel_x"][p]) == pytest.approx(
+            -float(colldata["desired_right_rel_x"][p]), abs=1e-5
+        )
+        assert float(colldata["current_left_rel_x"][p]) == pytest.approx(
+            -float(colldata["current_right_rel_x"][p]), abs=1e-5
+        )
 
     out = _run_one_step(ds, record)
     ref = row["ref_t1"]
