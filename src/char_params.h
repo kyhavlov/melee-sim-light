@@ -383,6 +383,39 @@ typedef struct MslCharParams {
   float speciallw_counter_desc_offset_y;
   float speciallw_counter_desc_offset_z;
   float speciallw_counter_desc_size;
+  // Sheik special attributes (ftSeakAttributes ext block). Zero for characters without the
+  // seak_special ext-attr layout.
+  // Source: ISO-extracted data/characters/sheik.json sheik_* keys
+  // refs/melee/src/melee/ft/chara/ftSeak/types.h::ftSeakAttributes
+  float sheik_needle_ground_spawn_x_offset;
+  float sheik_needle_ground_spawn_y_offset;
+  float sheik_needle_air_spawn_x_offset;
+  float sheik_needle_air_spawn_y_offset;
+  float sheik_needle_air_end_fallspecial_lag_frames;
+  float sheik_chain_release_min_frames;
+  float sheik_chain_extension_frames;
+  float sheik_chain_spawn_frame;
+  float sheik_chain_start_end_frame;
+  float sheik_chain_retract_frame;
+  float sheik_chain_destroy_frame;
+  float sheik_vanish_air_entry_vel_y;
+  float sheik_vanish_start_air_gravity;
+  float sheik_vanish_start_air_terminal_vel;
+  int32_t sheik_vanish_travel_frames;
+  float sheik_vanish_ground_contact_min_frames;
+  float sheik_vanish_stick_mag_min;
+  float sheik_vanish_travel_speed_stick_mul;
+  float sheik_vanish_travel_speed_base;
+  float sheik_vanish_air_end_drift_mul;
+  int32_t sheik_vanish_wall_bounce_degrees;
+  float sheik_vanish_end_vel_mul;
+  float sheik_vanish_fallspecial_mobility_mul;
+  float sheik_vanish_landing_lag_frames;
+  float sheik_transform_vel_x_divisor;
+  float sheik_transform_vel_y_divisor;
+  float sheik_transform_air_gravity;
+  float sheik_transform_air_terminal_vel;
+  float sheik_transform_finish_start_frame;
 } MslCharParams;
 
 int char_params_init(void);

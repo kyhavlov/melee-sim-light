@@ -90,6 +90,16 @@ uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch, const MslCom
 uint8_t wait_iasa_try_enter_spotdodge_before_guard_hsd_lr(MslBatch* batch, const MslCommonParams* c,
                                                           size_t idx);
 
+// Destination-Wait callback bridge:
+// For Anim callbacks that call ft_8008A2BC / ft_8008A348 and can then run Wait_IASA in the same
+// Fighter proc, attempt the Wait_IASA spotdodge/guard subchain. This intentionally stops before
+// post-guard Wait options such as jump/dash/walk.
+// Sources:
+// - refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+// - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+// - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+uint8_t wait_iasa_try_guard_after_callback(MslBatch* batch, const MslCommonParams* c, size_t idx);
+
 // Per-frame grounded escape update (friction + anim-end return-to-Wait).
 void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch,
                             size_t idx);

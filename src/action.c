@@ -1,6 +1,7 @@
 #include "action.h"
 #include "shields.h"
 #include "marth_specials.h"
+#include "sheik_specials.h"
 
 #include "ids.h"
 
@@ -890,6 +891,53 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
       batch->state.lightshield_amount[idx] = 0.0f;
     }
   }
+}
+
+uint8_t wait_iasa_try_guard_after_callback(MslBatch* batch, const MslCommonParams* c, size_t idx) {
+  if (batch == NULL || c == NULL || batch->state.shield_hp[idx] <= 0.0f) {
+    return 0u;
+  }
+  // Decomp callback bridge:
+  // - Several Anim callbacks enter grounded Wait via ft_8008A2BC / ft_8008A348.
+  // - The destination Wait_IASA can then run in the same Fighter proc. Preserve the command order
+  //   up to guard: pre-guard attack/special/catch commands block this helper, spotdodge comes
+  //   before ftCo_80091A4C, and guard/powershield consumes only the source HSD_PAD_LR lane.
+  // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0}
+  const uint16_t buttons = batch->state.input_buttons[idx];
+  const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+  const uint16_t pre_guard_buttons = (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_Z);
+  if ((pressed & pre_guard_buttons) != 0u) {
+    return 0u;
+  }
+  const float cstick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_c_x[idx]), c->lstick_deadzone_x);
+  const float cstick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
+  if (cstick_x != 0.0f || cstick_y != 0.0f) {
+    return 0u;
+  }
+  if (wait_iasa_try_enter_spotdodge_before_guard_hsd_lr(batch, c, idx)) {
+    return 1u;
+  }
+
+  enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
+  if ((pressed & (uint16_t)LR) != 0u &&
+      batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {
+    enter_guard_reflect_from_locomotion(batch, c, idx);
+    return 1u;
+  }
+
+  const float trig =
+      msl_trigger_unit_from_input(buttons, batch->state.input_l[idx], batch->state.input_r[idx]);
+  const uint8_t shield_held_inputs =
+      (((buttons & (uint16_t)LR) != 0u) || trig > c->trigger_deadzone) ? 1u : 0u;
+  if (shield_held_inputs) {
+    enter_guard_on(batch, c, idx, 1u);
+    return 1u;
+  }
+  return 0u;
 }
 
 static inline void enter_guard_hold(MslBatch* batch, size_t idx) {
@@ -2239,6 +2287,7 @@ void action_update(MslBatch* batch) {
   shine_update_pre_physics(batch);
   blaster_update_pre_physics(batch);
   marth_specials_update_pre_physics(batch);
+  sheik_specials_update_pre_physics(batch);
   // Shield recharge is owned by Fighter_ProcessHit_8006D1EC under the `!fp->x221A_b7` gate, not
   // by locomotion. Run it after the frame's state-entry callbacks so the gate observes the current
   // state (for example SpecialLwStart after a shine entry), and do not suppress it during hitlag.

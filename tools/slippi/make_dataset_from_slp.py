@@ -3753,6 +3753,8 @@ def _main_impl(args) -> Dataset:
     char_rebound_anim_numerator_frames: dict[int, float] = {}
     char_walljump_setup_x_delta_threshold: dict[int, float] = {}
     char_active_shield_hit_int_damage: dict[int, dict[int, dict[int, int]]] = {}
+    sheik_char_id: int | None = None
+    sheik_vanish_travel_frames = 0
 
     def _get_env_dmg_local(dmg: float) -> int:
         if float(dmg) == 0.0:
@@ -3806,6 +3808,54 @@ def _main_impl(args) -> Dataset:
             prev_action = action
         return out
 
+    def _derive_sheik_vanish_travel_timer(
+        *,
+        char_id_u8: np.ndarray,
+        action_id_u16: np.ndarray,
+        sheik_internal_id: int | None,
+        travel_frames: int,
+    ) -> np.ndarray:
+        # Sheik Vanish hidden travel timer:
+        # - ftSk_SpecialHi_80113838 / 80113A30 enter Special(Air)HiStart_1 at anim frame 35,
+        #   freeze anim rate, and seed mv.sk.specialhi.x0 from ftSeakAttributes::x38.
+        # - ftSk_Special{Air}HiStart_1_Anim decrements x0 once per travel-frame Anim callback and
+        #   exits when x0 reaches zero.
+        # Replay-visible anim/action frames stay at 35, so one-step reseed needs this lane.
+        # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+        #   ftSk_SpecialHi_80113838,ftSk_SpecialHi_80113A30,
+        #   ftSk_SpecialHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Anim}
+        char_arr = np.asarray(char_id_u8, dtype=np.uint8)
+        action_arr = np.asarray(action_id_u16, dtype=np.uint16)
+        if char_arr.ndim == 2:
+            out_2d = np.zeros(action_arr.shape, dtype=np.uint8)
+            for slot in range(action_arr.shape[1]):
+                out_2d[:, slot] = _derive_sheik_vanish_travel_timer(
+                    char_id_u8=char_arr[:, slot],
+                    action_id_u16=action_arr[:, slot],
+                    sheik_internal_id=sheik_internal_id,
+                    travel_frames=travel_frames,
+                )
+            return out_2d
+        out = np.zeros(action_arr.shape[0], dtype=np.uint8)
+        if sheik_internal_id is None or travel_frames <= 0:
+            return out
+        travel = (
+            (char_arr == np.uint8(sheik_internal_id))
+            & (
+                (action_arr == np.uint16(356))
+                | (action_arr == np.uint16(359))
+            )
+        )
+        idx = np.flatnonzero(travel)
+        if idx.size == 0:
+            return out
+        split_at = np.flatnonzero(np.diff(idx) != 1) + 1
+        for seg in np.split(idx, split_at):
+            remaining = int(travel_frames) - np.arange(seg.size, dtype=np.int16)
+            remaining = np.clip(remaining, 1, 255).astype(np.uint8)
+            out[seg] = remaining
+        return out
+
     def _stale_multiplier_from_seed_queue(queue_index: int, queue_move_ids: np.ndarray, move_id: int) -> float:
         if move_id in (0xFFFF, 1):
             return 1.0
@@ -3832,6 +3882,9 @@ def _main_impl(args) -> Dataset:
     manifest_chars = manifest_registry_chars(data_root)
     for cid, key in manifest_chars:
         attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
+        if key == "sheik":
+            sheik_char_id = int(cid)
+            sheik_vanish_travel_frames = int(attrs.get("sheik_vanish_travel_frames", 0))
         move_file = json.loads((data_root / "moves" / f"{key}.json").read_text())
         move_data = move_file["moves"]
         special_move_data = move_file.get("specials_by_msid", {})
@@ -6298,6 +6351,12 @@ def _main_impl(args) -> Dataset:
     #   ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA,ftFx_SpecialN_OnChangeAction}
     samples["seed_t"]["specialn_blaster_loop_requested"][:, :] = (
         (specialn_blaster_loop_latch_owner | specialn_cmd0_edge_latch_owner).astype(np.uint8)
+    )
+    samples["seed_t"]["sheik_vanish_travel_timer_u8"][:, :] = _derive_sheik_vanish_travel_timer(
+        char_id_u8=samples["seed_t"]["char_id"],
+        action_id_u16=samples["seed_t"]["action_id"],
+        sheik_internal_id=sheik_char_id,
+        travel_frames=sheik_vanish_travel_frames,
     )
 
     samples["seed_t"]["match_flow_pending_rebirth_char_id"][:, :] = _derive_match_flow_pending_rebirth_char_id(

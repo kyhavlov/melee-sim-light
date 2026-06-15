@@ -302,6 +302,39 @@ MARS_SWORD_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
 ]
 
 
+SEAK_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
+    ("sheik_needle_ground_spawn_x_offset", 0x00, "f32"),
+    ("sheik_needle_ground_spawn_y_offset", 0x04, "f32"),
+    ("sheik_needle_air_spawn_x_offset", 0x08, "f32"),
+    ("sheik_needle_air_spawn_y_offset", 0x0C, "f32"),
+    ("sheik_needle_air_end_fallspecial_lag_frames", 0x10, "f32"),
+    ("sheik_chain_release_min_frames", 0x14, "f32"),
+    ("sheik_chain_extension_frames", 0x18, "f32"),
+    ("sheik_chain_spawn_frame", 0x1C, "f32"),
+    ("sheik_chain_start_end_frame", 0x20, "f32"),
+    ("sheik_chain_retract_frame", 0x24, "f32"),
+    ("sheik_chain_destroy_frame", 0x28, "f32"),
+    ("sheik_vanish_air_entry_vel_y", 0x2C, "f32"),
+    ("sheik_vanish_start_air_gravity", 0x30, "f32"),
+    ("sheik_vanish_start_air_terminal_vel", 0x34, "f32"),
+    ("sheik_vanish_travel_frames", 0x38, "i32"),
+    ("sheik_vanish_ground_contact_min_frames", 0x3C, "f32"),
+    ("sheik_vanish_stick_mag_min", 0x40, "f32"),
+    ("sheik_vanish_travel_speed_stick_mul", 0x44, "f32"),
+    ("sheik_vanish_travel_speed_base", 0x48, "f32"),
+    ("sheik_vanish_air_end_drift_mul", 0x4C, "f32"),
+    ("sheik_vanish_wall_bounce_degrees", 0x50, "i32"),
+    ("sheik_vanish_end_vel_mul", 0x54, "f32"),
+    ("sheik_vanish_fallspecial_mobility_mul", 0x58, "f32"),
+    ("sheik_vanish_landing_lag_frames", 0x5C, "f32"),
+    ("sheik_transform_vel_x_divisor", 0x60, "f32"),
+    ("sheik_transform_vel_y_divisor", 0x64, "f32"),
+    ("sheik_transform_air_gravity", 0x68, "f32"),
+    ("sheik_transform_air_terminal_vel", 0x6C, "f32"),
+    ("sheik_transform_finish_start_frame", 0x70, "f32"),
+]
+
+
 def _extract_mars_sword_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
     """Extract MarsAttributes (ftData.x4 ext block) for Marth-style sword characters.
 
@@ -341,6 +374,31 @@ def _extract_mars_sword_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
                 float(_f32_be(buf, ext_abs + off + 4)),
                 float(_f32_be(buf, ext_abs + off + 8)),
             ]
+        else:  # pragma: no cover - layout table typo
+            raise ValueError(f"unknown layout kind {kind!r} for {key}")
+    return out
+
+
+def _extract_seak_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
+    """Extract Sheik's ftData.x4 ftSeakAttributes block.
+
+    Names follow the source consumers instead of using generic `special*` keys because the x4 ext
+    block layout is character-specific:
+    - refs/melee/src/melee/ft/chara/ftSeak/types.h::ftSeakAttributes
+    - refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c (Needles x0..x10)
+    - refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c (Chain x14..x28)
+    - refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c (Vanish self_vel_y/x30..x5C)
+    - refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c (Transform x60..x70)
+    """
+    out: dict = {}
+    ext_abs = arc.ptr32(ftdata_abs + 0x04)
+    if ext_abs == arc.data_base:
+        return out
+    for key, off, kind in SEAK_SPECIAL_ATTRS_LAYOUT:
+        if kind == "i32":
+            out[key] = int(_i32_be(buf, ext_abs + off))
+        elif kind == "f32":
+            out[key] = float(_f32_be(buf, ext_abs + off))
         else:  # pragma: no cover - layout table typo
             raise ValueError(f"unknown layout kind {kind!r} for {key}")
     return out
@@ -572,6 +630,8 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out["damage_post_hitlag_sfx_high_num"] = 2
     if ext_attr_layout == "mars_sword":
         out.update(_extract_mars_sword_attrs(buf, arc, ftdata_abs=ftdata_abs))
+    elif ext_attr_layout == "seak_special":
+        out.update(_extract_seak_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
     if extract_fox_blaster:
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
@@ -901,9 +961,9 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         elif k in existing:
             out[k] = existing[k]
     # Per-character special-attribute families (ext-attr layouts) use mechanic-position
-    # prefixes; carry every extracted special* key after the ordered common block.
+    # prefixes; carry every extracted special* / sheik_* key after the ordered common block.
     for k in sorted(extracted):
-        if k.startswith("special") and k not in out:
+        if (k.startswith("special") or k.startswith("sheik_")) and k not in out:
             out[k] = extracted[k]
     for k, v in existing.items():
         if k in drop_keys:
@@ -935,10 +995,11 @@ def main() -> None:
     # - "spacie": ftFox_DatAttrs (blaster/illusion/firefox/reflector) - covered by the
     #   extract_fox_blaster flag path.
     # - "mars_sword": MarsAttributes (refs/melee/.../ftMars/types.h) - Marth (and Roy clone).
+    # - "seak_special": ftSeakAttributes (refs/melee/.../ftSeak/types.h) - Sheik.
     mapping = {
         "fox": ("PlFx.dat", "ftDataFox", True, None),
         "falco": ("PlFc.dat", "ftDataFalco", True, None),
-        "sheik": ("PlSk.dat", "ftDataSeak", False, None),
+        "sheik": ("PlSk.dat", "ftDataSeak", False, "seak_special"),
         "peach": ("PlPe.dat", "ftDataPeach", False, None),
         "marth": ("PlMs.dat", "ftDataMars", False, "mars_sword"),
         "puff": ("PlPr.dat", "ftDataPurin", False, None),

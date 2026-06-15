@@ -1472,6 +1472,21 @@ typedef struct MslSeed {
   //   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,
   //   ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA}
   uint8_t specialn_blaster_loop_requested[MSL_MAX_PLAYERS];
+  // Sheik Vanish travel hidden timer (`mv.sk.specialhi.x0`).
+  //
+  // Decomp owner:
+  // - ftSk_SpecialHi_80113A30 / 80113838 enter Special(Air)HiStart_1, freeze animation at frame
+  //   35, and seed x0 from ftSeakAttributes::x38.
+  // - ftSk_Special{Air}HiStart_1_Anim decrements x0 and exits only when it reaches zero.
+  //
+  // Seed representation:
+  // - 0: no seeded travel timer or non-Sheik/non-Vanish action.
+  // - N>0: remaining source travel frames for one-step reseed inside SpecialHiStart_1 /
+  //   SpecialAirHiStart_1.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+  //   ftSk_SpecialHi_80113838,ftSk_SpecialHi_80113A30,
+  //   ftSk_SpecialHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Anim}
+  uint8_t sheik_vanish_travel_timer_u8[MSL_MAX_PLAYERS];
   // Marth Counter descriptor hitlag-floor provenance (`shield_unk0/1 = MarsAttributes::x60`).
   //
   // Decomp owner:

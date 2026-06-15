@@ -10341,6 +10341,25 @@ static inline void combat_body_damage_log_materialize_damageflyroll_zero_consume
   }
 }
 
+static inline uint8_t combat_attached_throw_body_hit_suppresses_victim_hitlag(
+    const MslBatch* batch, const MslCombatBodyDamageLogEntry* e) {
+  if (batch == NULL || e == NULL || e->attached_grabbed_victim == 0u ||
+      !msl_action_is_throw_owner(e->attacker_motion_id)) {
+    return 0u;
+  }
+  if (e->hitbox_kbg != 0u || e->hitbox_bkb != 0u) {
+    return 0u;
+  }
+  float release_af = 0.0f;
+  if (move_tables_throw_release_frame(batch->state.char_id[e->a_idx], e->attacker_motion_id,
+                                      &release_af) == 0u) {
+    return 0u;
+  }
+  const float attacker_anim_frame =
+      msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[e->a_idx]);
+  return attacker_anim_frame < release_af ? 1u : 0u;
+}
+
 static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
                                                 MslCombatBodyDamageScratch* scratch) {
   if (batch == NULL || scratch == NULL || scratch->count == 0u) {
@@ -10367,12 +10386,24 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   MslCombatDamageApplyClass body_damage_class =
       e->attached_grabbed_victim ? MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED : MSL_COMBAT_DAMAGE_FULL;
   if (body_damage_class == MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED) {
-    if (d_hl_increased) {
+    const uint8_t pre_release_throw_body_hit =
+        combat_attached_throw_body_hit_suppresses_victim_hitlag(batch, e);
+    if (d_hl_increased && pre_release_throw_body_hit == 0u) {
       batch->state.hitlag[d_idx] = d_hl;
       combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
       combat_state_flags_set_x221a_b3(batch, d_idx);
       combat_state_flags_set_x221c_b0(batch, d_idx);
     }
+    // Throw-state BODY hitboxes can strike the still-attached Thrown* victim before
+    // set_throw_flags(0) releases them. For zero-direct-kb pre-release throw BODY pulses, source
+    // keeps the victim attachment state and publishes damage/bookkeeping without starting victim
+    // hitlag; direct-kb pre-release throw hitboxes keep the normal attached victim hitlag path.
+    // The thrower-side hitlag/bookkeeping was already registered by ftColl_8007891C when the damage
+    // log was recorded above.
+    // data/scripts/<char>.bin (MSLFTSC1 set_throw_flags/create_hitbox for Throw*)
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE508,ftCo_ThrownLw_Phys,ftCo_ThrownLw_Coll}
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007891C}
     batch->state.instance_hit_by[d_idx] = e->attacker_instance_id;
     const uint16_t defender_iid_post = batch->state.instance_id[d_idx];
     combat_body_damage_log_register_accepted_hitlists(batch, bi, scratch, defender_iid_post);

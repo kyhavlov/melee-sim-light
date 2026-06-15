@@ -771,6 +771,64 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   out.speciallw_counter_desc_offset_x = ctr_off[0];
   out.speciallw_counter_desc_offset_y = ctr_off[1];
   out.speciallw_counter_desc_offset_z = ctr_off[2];
+  // Sheik ftSeakAttributes special attrs. These are runtime-required for Sheik itself because
+  // Vanish/Needle/Chain/Transform state machines consume them directly; stale Sheik data must fail
+  // loudly instead of booting with zeroed special mechanics. Non-Sheik characters keep zero
+  // defaults because their ftData.x4 ext-attr layouts are unrelated.
+  // refs/melee/src/melee/ft/chara/ftSeak/types.h::ftSeakAttributes
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
+  const uint8_t require_sheik_special_attrs = (uint8_t)(char_id == (uint8_t)MSL_CHAR_ID_SHEIK);
+#define MSL_GET_SHEIK_F32(key, field)                                 \
+  (require_sheik_special_attrs ? json_get_f32(buf, (key), &out.field) \
+                               : json_get_f32_or_default(buf, (key), 0.0f, &out.field))
+#define MSL_GET_SHEIK_I32(key, field)                                 \
+  (require_sheik_special_attrs ? json_get_i32(buf, (key), &out.field) \
+                               : json_get_i32_or_default(buf, (key), 0, &out.field))
+  if (MSL_GET_SHEIK_F32("sheik_needle_ground_spawn_x_offset", sheik_needle_ground_spawn_x_offset) !=
+          0 ||
+      MSL_GET_SHEIK_F32("sheik_needle_ground_spawn_y_offset", sheik_needle_ground_spawn_y_offset) !=
+          0 ||
+      MSL_GET_SHEIK_F32("sheik_needle_air_spawn_x_offset", sheik_needle_air_spawn_x_offset) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_needle_air_spawn_y_offset", sheik_needle_air_spawn_y_offset) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_needle_air_end_fallspecial_lag_frames",
+                        sheik_needle_air_end_fallspecial_lag_frames) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_chain_release_min_frames", sheik_chain_release_min_frames) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_chain_extension_frames", sheik_chain_extension_frames) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_chain_spawn_frame", sheik_chain_spawn_frame) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_chain_start_end_frame", sheik_chain_start_end_frame) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_chain_retract_frame", sheik_chain_retract_frame) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_chain_destroy_frame", sheik_chain_destroy_frame) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_vanish_air_entry_vel_y", sheik_vanish_air_entry_vel_y) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_vanish_start_air_gravity", sheik_vanish_start_air_gravity) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_vanish_start_air_terminal_vel",
+                        sheik_vanish_start_air_terminal_vel) != 0 ||
+      MSL_GET_SHEIK_I32("sheik_vanish_travel_frames", sheik_vanish_travel_frames) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_vanish_ground_contact_min_frames",
+                        sheik_vanish_ground_contact_min_frames) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_vanish_stick_mag_min", sheik_vanish_stick_mag_min) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_vanish_travel_speed_stick_mul",
+                        sheik_vanish_travel_speed_stick_mul) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_vanish_travel_speed_base", sheik_vanish_travel_speed_base) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_vanish_air_end_drift_mul", sheik_vanish_air_end_drift_mul) != 0 ||
+      MSL_GET_SHEIK_I32("sheik_vanish_wall_bounce_degrees", sheik_vanish_wall_bounce_degrees) !=
+          0 ||
+      MSL_GET_SHEIK_F32("sheik_vanish_end_vel_mul", sheik_vanish_end_vel_mul) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_vanish_fallspecial_mobility_mul",
+                        sheik_vanish_fallspecial_mobility_mul) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_vanish_landing_lag_frames", sheik_vanish_landing_lag_frames) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_transform_vel_x_divisor", sheik_transform_vel_x_divisor) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_transform_vel_y_divisor", sheik_transform_vel_y_divisor) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_transform_air_gravity", sheik_transform_air_gravity) != 0 ||
+      MSL_GET_SHEIK_F32("sheik_transform_air_terminal_vel", sheik_transform_air_terminal_vel) !=
+          0 ||
+      MSL_GET_SHEIK_F32("sheik_transform_finish_start_frame", sheik_transform_finish_start_frame) !=
+          0) {
+    fprintf(stderr, "msl: char params Sheik special attr parse failed in %s\n", path);
+    alloc_free(buf);
+    return -1;
+  }
+#undef MSL_GET_SHEIK_F32
+#undef MSL_GET_SHEIK_I32
   out.reflector_offset_x = refl_off[0];
   out.reflector_offset_y = refl_off[1];
   out.reflector_offset_z = refl_off[2];

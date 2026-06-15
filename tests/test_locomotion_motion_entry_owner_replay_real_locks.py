@@ -791,48 +791,48 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
     # Aggregate population moves with the current canonical aggregate .msl set and seed schema. This
     # is a direct seed-lane fixture census over cached datasets, not runtime output;
     # validation_report_diff must stay clean when this guard is refreshed for schema/data updates.
-    assert aggregate_turn == 98
-    assert aggregate_locomotion_motion == 1443
-    assert aggregate_specialn == 147
-    assert aggregate_match_flow == 536
-    assert aggregate_guard_collision == 1541
-    assert aggregate_hidden_order == 9169
+    assert aggregate_turn == 117
+    assert aggregate_locomotion_motion == 1871
+    assert aggregate_specialn == 157
+    assert aggregate_match_flow == 688
+    assert aggregate_guard_collision == 1940
+    assert aggregate_hidden_order == 11387
     assert aggregate_attacklw3_runtime == 0
     assert aggregate_hidden_order_families == {
-        "attack": 570,
-        "cliff": 481,
-        "damage": 840,
-        "fox_falco_special": 841,
-        "grab_capture": 1367,
-        "jump_landing": 2968,
-        "locomotion": 1965,
-        "other": 137,
+        "attack": 720,
+        "cliff": 657,
+        "damage": 953,
+        "fox_falco_special": 906,
+        "grab_capture": 2000,
+        "jump_landing": 3580,
+        "locomotion": 2406,
+        "other": 165,
     }
     assert dict(aggregate_hidden_order_ref_actions.most_common(25)) == {
-        43: 1142,
-        39: 746,
-        18: 572,
-        360: 506,
-        20: 484,
-        25: 386,
-        42: 354,
-        90: 276,
-        213: 258,
-        216: 257,
-        227: 250,
-        15: 248,
-        14: 238,
-        24: 237,
-        88: 194,
-        241: 193,
-        221: 193,
-        226: 181,
-        365: 161,
-        27: 159,
-        16: 132,
-        69: 122,
-        65: 119,
-        344: 107,
-        67: 106,
+        43: 1395,
+        39: 895,
+        18: 709,
+        20: 551,
+        360: 538,
+        25: 462,
+        42: 415,
+        216: 366,
+        227: 355,
+        15: 349,
+        213: 339,
+        14: 294,
+        90: 292,
+        226: 275,
+        24: 274,
+        241: 269,
+        221: 269,
+        88: 210,
+        27: 184,
+        365: 166,
+        16: 164,
+        69: 144,
+        65: 140,
+        67: 121,
+        344: 118,
     }
     assert aggregate_turn_transitions == {(18, 24)}

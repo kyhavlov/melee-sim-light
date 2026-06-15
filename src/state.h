@@ -837,6 +837,13 @@ typedef struct MslStateSoA {
   uint8_t* specialn_blaster_loop_requested;
   uint16_t* specialn_charge_frames;
   uint16_t* speciallw_countered_damage;
+  // Sheik special hidden state. Needle count and the generic latch are live runtime lanes in this
+  // slice; the Vanish travel timer is seed-reconstructed by sheik_vanish_travel_timer_u8 because
+  // Special(Air)HiStart_1 freezes its animation at frame 35.
+  // refs/melee/src/melee/ft/chara/ftSeak/types.h::ftSeak_FighterVars/ftSeak_MotionVars
+  uint8_t* sheik_needle_count;   // fv.sk.x0, clamped 0..6
+  uint8_t* sheik_special_timer;  // mv.sk.special{n,s,hi}.x0 compact timer
+  uint8_t* sheik_special_latch;  // release / per-action latch
   // fp->lstick_angle for special launch tilt (Dolphin Slash); ftMars_FighterVars.x222C
   // air-side-special freshness; FallSpecial mobility/lag overrides from ftCo_80096900 args
   // (0 = use defaults); Counter intercept window (script cmd1; 2 = armed descriptor).

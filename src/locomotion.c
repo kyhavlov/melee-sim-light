@@ -37,6 +37,7 @@
 #include "shine.h"
 #include "special_msids.h"
 #include "specialhi_pose.h"
+#include "sheik_specials.h"
 #include "stage_collision.h"
 #include "trigger_input.h"
 #include "throw_flow.h"
@@ -7281,6 +7282,9 @@ void locomotion_update_post_collision(MslBatch* batch) {
                           (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI)) {
         specialhi_apply_collision_facing_dir(batch, ch, idx);
       }
+      if (!now_ground && sheik_special_try_vanish_travel_wallceil_end(batch, idx)) {
+        continue;
+      }
       if (!now_ground && ft_check_ground_and_ledge_collision_contact(batch, idx)) {
         if (ms != NULL && (msl_motion_state_fx_special_kind(batch->state.char_id[idx], a) ==
                            (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_START)) {
@@ -7548,6 +7552,14 @@ void locomotion_update_post_collision(MslBatch* batch) {
         batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
         continue;
       }
+      if (was_ground && !now_ground && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+          sheik_special_try_ground_to_air_swap(batch, idx)) {
+        // Sheik grounded special floor loss swaps to source air variants at preserved animation
+        // frame, matching the ftSk Coll callbacks' ftCommon_8007D5D4 bundle.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
+        batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+        continue;
+      }
 
       if (was_ground && !now_ground && action_is_catch_start_floor_loss(a)) {
         // Catch/CatchDash collision callbacks are grounded owners. On floor loss they call the
@@ -7708,6 +7720,16 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // Marth air special ground contact swaps to the grounded variant at the preserved
           // animation frame (ftCommon_8007D7FC grounding bundle below).
           // refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Lw}.c (Air*_Coll handlers)
+          batch->state.jumps_left[idx] = ch->max_jumps;
+          batch->state.fall_fast[idx] = 0u;
+          batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+          batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+          continue;
+        } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+                   sheik_special_try_air_to_ground_swap(batch, idx)) {
+          // Sheik aerial special ground contact swaps to grounded variants or enters
+          // Landing/LandingFallSpecial from the source Coll callback.
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
           batch->state.jumps_left[idx] = ch->max_jumps;
           batch->state.fall_fast[idx] = 0u;
           batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];

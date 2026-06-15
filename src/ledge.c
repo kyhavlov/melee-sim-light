@@ -20,6 +20,7 @@
 #include "jump_input.h"
 #include "locomotion.h"
 #include "match_flow.h"
+#include "sheik_specials.h"
 #include "stage_collision.h"
 
 static inline uint8_t is_cliff_hold_action(uint16_t a) {
@@ -107,6 +108,21 @@ static inline uint8_t is_airborne_action_with_cliffcatch_check(uint8_t char_id, 
     return (uint8_t)((a == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
                       a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) &&
                      speed_y_self < 0.0f && special_cmd1 != 0u);
+  }
+  // Sheik Vanish's three airborne collision callbacks all call ft_CheckGroundAndLedge and then
+  // ftCliffCommon_80081298 on the airborne path. The 341..364 action-id range is per-character,
+  // so keep this char gate before the shared spacie special-kind lookup below.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+  //   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialAirHi_Coll}
+  if (char_id == (uint8_t)MSL_CHAR_ID_SHEIK) {
+    switch (a) {
+      case MSL_ACT_SK_SPECIAL_AIR_HI_START_0:
+      case MSL_ACT_SK_SPECIAL_AIR_HI_START_1:
+      case MSL_ACT_SK_SPECIAL_AIR_HI:
+        return 1;
+      default:
+        break;
+    }
   }
   switch (a) {
     // Pass / platform drop collision uses the MissFoot-style common-air wrapper, which runs

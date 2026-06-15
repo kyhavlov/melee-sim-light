@@ -731,7 +731,20 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE7C0,calcKnockbackAngle}`,
    and `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`.
-7. **CapturePulled/Wait/Damage attachment pose audit**: grounded catch-connect
+7. **Pre-release throw BODY hitbox audit**: throw scripts can carry ordinary
+   `create_hitbox` capsules before `set_throw_flags(0)` releases the victim.
+   While the defender is still attached in `Thrown*`, source can publish damage
+   plus thrower-side hitlag/bookkeeping without starting victim hitlag or
+   entering Damage*. Do not treat these capsules as `set_throw_hitbox` release
+   damage, and do not route attached-victim throw BODY contacts through the
+   ordinary non-attached BODY victim-hitlag owner. Add an attached-victim
+   positive and a non-attached negative around the same BODY overlap. Source
+   anchors: `data/moves/<char>.json::moves.ftCo_SM_Throw*` `create_hitbox`
+   versus `set_throw_hitbox` / `set_throw_flags`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE508,ftCo_Thrown*_Phys,ftCo_Thrown*_Coll}`,
+   and `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007891C}`.
+8. **CapturePulled/Wait/Damage attachment pose audit**: grounded catch-connect
    entry (`fn_800DAADC`) and steady victim Phys (`fn_800DAD18`) are different
    source phases. Grounded entry installs CapturePulledLw and publishes only the
    immediate collision callback; the next steady CapturePulled/Wait/Damage Phys
@@ -745,7 +758,7 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAADC,fn_800DAD18}`,
    `refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim`, and
    `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`.
-8. **Offensive hitbox TransN pose audit**: sword/limb hitboxes are published
+9. **Offensive hitbox TransN pose audit**: sword/limb hitboxes are published
    from the live JObj matrix via `lb_8000B1CC`, not just the stripped SSANIM01
    joint matrix. If the animation's `data/anims/<char>.tracks.bin`
    `uses_root_motion` bit (`fp->x594_b0`) is clear, active hitboxes under
@@ -876,6 +889,10 @@ cover most of it.
 1. **State machines**: `src/<char>_specials.c/.h` — enter/phys/coll/IASA per
    special, driven by the extracted ext-attrs. Wire dispatch in
    `fighter_callbacks.c` / `action.c`.
+   Character-specific ext-attr layouts must be promoted in the extractor before
+   runtime code lands. Sheik uses `ftSeak/types.h::ftSeakAttributes`, exported
+   as `data/characters/sheik.json::sheik_*`; do not copy constants from replay
+   rows or infer them from another character's attr struct.
 2. **THE ACTION-ID COLLISION AUDIT** (the single biggest source of bugs):
    char-range action ids overlap across characters (341+ means different moves
    per char). Before Marth, ~60 runtime sites keyed on `MSL_ACT_FX_*` were
@@ -904,6 +921,11 @@ cover most of it.
    - Aerial up-B input buffer (x68B lane) — currently a locked test + source
      TODO; check whether the new char's timing exposes it.
    - GuardOff x1C window.
+   - Ground-jump IASA is part of the aerial special surface. `ftCo_Jump_IASA`
+     calls `ftCo_SpecialAir_CheckInput` before item throw, EscapeAir,
+     AttackAir, and JumpAerial checks, so a fresh B edge during JumpF/JumpB can
+     enter `SpecialAir*` directly. Do not whitelist only Fall/FallAerial and
+     JumpAerial when adding a new character's aerial special dispatcher.
 4. **Grounded phys owners**: ground specials use ft_80084F3C/ft_80084FA8
    (friction + anim-root-motion exchange) — wire for all the char's ground
    specials or they'll slide/stick wrongly.
@@ -918,6 +940,11 @@ cover most of it.
    can cross the boundary mid-move (walk-off, landing, Stadium transform).
    Test air->ground AND ground->air per family; document the ones with no
    reachable seed surface.
+   Special action ids do not imply submotion ids by offset. Use the generated
+   MotionState action->submotion table (`MSLMSO01`) for every special entry and
+   action swap. Sheik Vanish is the practical trap: the travel action enters at
+   frame 35 with anim rate 0 while keeping the start submotion, so an
+   action-offset assumption publishes the wrong pose/ECB.
 6. **Anim-end common-state handoffs**: if a char-special Anim callback exits
    through `ftCo_Fall_Enter`, `ftCo_80096900`, `ft_8008A2BC`, or another
    common-state entry, audit whether the destination state's IASA can run in the
@@ -989,6 +1016,11 @@ cover most of it.
    velocities, transition gates, full-chain dispatch tests (e.g. down-B during
    run). Marth ended at ~130 char tests. Every reviewer pass found real bugs;
    write the negative tests too (e.g. "no special from jab IASA").
+   Persistent per-character special state is its own seed/provenance audit.
+   Sheik Needles use `fv.sk.x0` for stored needle count; timers/latches live in
+   move-vars. If one-step replay reconstruction needs those lanes, add explicit
+   seed fields and native preprocessing derivation before claiming replay
+   exactness.
 9. **GATE**: all specials tests green; fox/falco validate-all "no suite total
    changes" (byte-stable) after every retained change.
 
