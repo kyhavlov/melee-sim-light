@@ -1107,6 +1107,13 @@ cover most of it.
    boundary separately: source may create a held article in an Anim callback or
    a thrown article from an accessory callback before ordinary item simulation
    advances it.
+   Common Landing IASA is also a character-special dispatch site, not only a
+   locomotion/attack callback. `ftCo_Landing_IASA` gates on normal landing lag,
+   then checks grounded specials before grounded attacks and guard, while
+   `LandingAir*` IASA is empty. When adding a character's B-special resolver,
+   wire a source-ordered Landing-family entry path with early-lag and
+   LandingAir negatives; do not rely on a late generic Wait/Fall special update
+   pass to catch Landing rows after attack/guard has already run.
    Special-spawned articles need their own source-owner audit beyond the
    fighter MotionState code. For Sheik, thrown Needle correctness required
    MSLITAR1 article extraction from `ftSk_Init_OnLoad` / `itseakneedlethrown.c`

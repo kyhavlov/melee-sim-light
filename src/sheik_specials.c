@@ -110,6 +110,18 @@ static uint8_t sk_action_allows_ground_special(const MslBatch* batch, size_t idx
       return 1u;
     case MSL_ACT_KNEE_BEND:
       return (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_KNEE_BEND) ? 1u : 0u;
+    case MSL_ACT_LANDING:
+    case MSL_ACT_LANDING_FALL_SPECIAL: {
+      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+      if (ch == NULL || batch->state.anim_frame_f32[idx] < (float)ch->landing_lag_frames) {
+        return 0u;
+      }
+      if (a == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL &&
+          batch->state.landing_fallspecial_allow_interrupt[idx] == 0u) {
+        return 0u;
+      }
+      return 1u;
+    }
     default:
       return 0u;
   }
@@ -377,6 +389,28 @@ static uint8_t sk_try_enter_b_special(MslBatch* batch, const MslCommonParams* c,
   }
   sk_enter_specialn(batch, idx, 0u);
   return 1u;
+}
+
+uint8_t sheik_special_try_landing_iasa(MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
+      batch->state.on_ground[idx] == 0u) {
+    return 0u;
+  }
+  const uint16_t a = batch->state.action_id[idx];
+  if (a != (uint16_t)MSL_ACT_LANDING && a != (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
+    return 0u;
+  }
+  const MslCommonParams* c = msl_common_params();
+  const MslCharParams* ch = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (c == NULL || ch == NULL || batch->state.anim_frame_f32[idx] < (float)ch->landing_lag_frames) {
+    return 0u;
+  }
+  // Decomp: ftCo_Landing_IASA checks the landing lag and allow-interrupt gates, then runs
+  // SpecialS, Attack100, SpecialN, and SpecialLw before grounded attack and guard checks.
+  // LandingAir IASA is empty, so this helper is intentionally limited to Landing-family actions.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
+  return sk_try_enter_b_special(batch, c, ch, idx, 1u);
 }
 
 static void sk_update_specialn_loop_iasa(MslBatch* batch, const MslCommonParams* c, size_t idx,

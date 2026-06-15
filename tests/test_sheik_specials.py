@@ -27,12 +27,15 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset  # noqa: E402
 
 pytest.importorskip("msl_binding")
 
+A = 0x0100
 B = 0x0200
 
 ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
 ACT_JUMP_F = 0x0019
+ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
+ACT_LANDING_AIR_N = 0x0046
 ACT_GUARD_ON = 0x00B2
 ACT_FX_SPECIAL_N_START = 0x0155
 ACT_SK_SPECIAL_N_START = 341
@@ -58,6 +61,9 @@ ACT_SK_SPECIAL_AIR_HI = 360
 ACT_SK_SPECIAL_LW = 361
 ACT_SK_SPECIAL_AIR_LW = 363
 ACT_CLIFF_CATCH = 252
+
+SM_LANDING = 35
+SM_LANDING_AIR_N = 73
 
 ITEM_SHEIK_NEEDLE_THROWN = 79
 ITEM_SHEIK_NEEDLE_HELD = 80
@@ -221,6 +227,73 @@ def test_sheik_grounded_b_special_dispatch_order_is_source_ordered() -> None:
     for name, axes, expected in cases:
         out = _run(_seed_base("sheik"), [_mk_inputs(**axes)])[0]
         assert int(out["action_id"][0]) == expected, name
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("replay", "record"),
+    [
+        ("datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl", 84),
+        ("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl", 3979),
+    ],
+)
+def test_sheik_landing_iasa_neutral_b_enters_needle_start_replay_real(
+    replay: str, record: int
+) -> None:
+    # ftCo_Landing_IASA checks Sheik grounded specials after the normal landing-lag gate and
+    # before grounded attacks/guard. These official rows are normal Landing, not LandingAir.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+    samples = _sheik_validation_samples(replay)
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][0]) == ACT_LANDING
+    assert int(seed["char_id"][0]) == 7
+    assert int(samples[record]["input_t"]["p"]["buttons"][0]) & B
+    assert int(ref["action_id"][0]) == ACT_SK_SPECIAL_N_START
+
+    out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_N_START
+
+
+def test_sheik_landing_iasa_b_special_order_precedes_grounded_attack() -> None:
+    # Source order: Landing special checks precede grounded attacks, so B+A on the first actionable
+    # Landing frame still enters Sheik neutral special rather than Attack11.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+    lag = int(_attrs()["landing_lag_frames"])
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
+    seed["animation_index"][0, 0] = np.uint32(SM_LANDING)
+    seed["action_frame"][0, 0] = np.int16(lag)
+    seed["anim_frame_f32"][0, 0] = np.float32(float(lag))
+
+    out = _run_seed_one_step(seed, _mk_inputs(), _mk_inputs(buttons=A | B))
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_N_START
+
+
+def test_sheik_landing_iasa_b_special_respects_lag_and_landingair_boundaries() -> None:
+    # Adjacent negatives: pre-lag Landing is not interruptible, and LandingAir IASA is empty.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+    #   ftCo_Landing_IASA,ftCo_LandingAir_IASA}
+    lag = int(_attrs()["landing_lag_frames"])
+
+    early = _seed_base("sheik")
+    early["action_id"][0, 0] = np.uint16(ACT_LANDING)
+    early["animation_index"][0, 0] = np.uint32(SM_LANDING)
+    # The simulator advances animation before IASA, so seed two frames before the source landing
+    # lag to remain below the gate when the Landing callback runs.
+    pre_lag_seed_frame = max(0, lag - 2)
+    early["action_frame"][0, 0] = np.int16(pre_lag_seed_frame)
+    early["anim_frame_f32"][0, 0] = np.float32(float(pre_lag_seed_frame))
+    early_out = _run_seed_one_step(early, _mk_inputs(), _mk_inputs(buttons=B))
+    assert int(early_out["action_id"][0]) == ACT_LANDING
+
+    landing_air = _seed_base("sheik")
+    landing_air["action_id"][0, 0] = np.uint16(ACT_LANDING_AIR_N)
+    landing_air["animation_index"][0, 0] = np.uint32(SM_LANDING_AIR_N)
+    landing_air["action_frame"][0, 0] = np.int16(lag + 10)
+    landing_air["anim_frame_f32"][0, 0] = np.float32(float(lag + 10))
+    landing_air_out = _run_seed_one_step(landing_air, _mk_inputs(), _mk_inputs(buttons=B))
+    assert int(landing_air_out["action_id"][0]) == ACT_LANDING_AIR_N
 
 
 def test_sheik_air_b_special_dispatch_order_and_entry_velocity_are_source_owned() -> None:

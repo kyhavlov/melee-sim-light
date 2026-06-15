@@ -384,6 +384,10 @@ Objectives:
 - Use `sheik_demo_game` as an official diagnostic entry point for specials
   exposed in real play. Retained fixes still need source/data/probe ownership
   and adjacent controls; do not key behavior on the demo replay or its rows.
+- Treat remaining demo Needle RNG/source-clock or thrown-Needle bounce/contact
+  mismatches as item/accessory callback probe tasks before retaining runtime
+  behavior. The demo may identify the callback window; source/probe evidence
+  must still own implementation.
 - Implement minimal Zelda transform support only within approved policy.
 - Add focused source-shaped positives/negatives for each special family, including adjacent cancel/landing/death cases.
 

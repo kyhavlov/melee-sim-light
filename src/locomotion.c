@@ -5771,6 +5771,9 @@ void locomotion_update_pre(MslBatch* batch) {
                 : 0u;
         if (landing_iasa_owner &&
             batch->state.anim_frame_f32[idx] >= (float)ch->landing_lag_frames) {
+          if (sheik_special_try_landing_iasa(batch, idx)) {
+            continue;
+          }
           // Landing IASA includes grounded attack checks before Jump/Dash/Turn/Walk.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
           // Landing IASA attack admission:
