@@ -4888,6 +4888,17 @@ void combat_apply_deal_hitlag_raw_damage(MslBatch* batch, size_t idx, int damage
   }
 }
 
+void combat_apply_min_hitlag_frames(MslBatch* batch, size_t idx, uint16_t hitlag_frames) {
+  if (batch == NULL || hitlag_frames == 0u) {
+    return;
+  }
+  if (!combat_received_kb_hitlag_owns_over_deal_hitlag(batch, idx) &&
+      hitlag_frames > batch->state.hitlag[idx]) {
+    batch->state.hitlag[idx] = hitlag_frames;
+    combat_state_flags_set_is_hitlag(batch, idx, hitlag_frames);
+  }
+}
+
 static inline int combat_get_env_dmg(float dmg) {
   // Decomp (GALE01): "getEnvDmg" pattern used by collision when turning a hitbox's float damage into
   // the integer damage used for shield interactions and hitlag inputs.

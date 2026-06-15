@@ -28,9 +28,11 @@ Collect before writing any code:
   turnips...)? Set `has_articles` for the source fact, but do not route the
   character through an existing article exporter unless that exporter knows the
   character's article contract. For example, `exports_item_article_constants`
-  is only for the current Fox/Falco MSLITAR1 laser/illusion table; Sheik has
-  articles, but Needle/Chain/Vanish article contracts are separate special
-  work (Phase 4).
+  means the character's article contract is implemented in MSLITAR1. Fox/Falco
+  export laser/illusion constants; Sheik exports thrown-Needle item kinds,
+  lifetimes, Article hurtbox geometry, and hitbox damage. Do not enable it for
+  a character until the extractor, runtime loader, no-decomp/package path, and
+  focused article locks exist.
 - **Specials inventory**: list every special action state from the decomp
   (`ftCo`-range ids are shared; char ranges start at 341+) with ground/air
   variants, charge states, followups. Marth: SpecialN ShieldBreaker
@@ -1021,6 +1023,13 @@ cover most of it.
    move-vars. If one-step replay reconstruction needs those lanes, add explicit
    seed fields and native preprocessing derivation before claiming replay
    exactness.
+   Special-spawned articles need their own source-owner audit beyond the
+   fighter MotionState code. For Sheik, thrown Needle correctness required
+   MSLITAR1 article extraction from `ftSk_Init_OnLoad` / `itseakneedlethrown.c`
+   / `it_8027163C`, plus runtime item hurtbox contact, DmgReceived callback,
+   item hitlag, and fighter hitlist locks. Do not treat "the special enters and
+   spawns an item" as complete unless the article's collision/callback lifecycle
+   is also data-backed and covered by positive/negative controls.
 9. **GATE**: all specials tests green; fox/falco validate-all "no suite total
    changes" (byte-stable) after every retained change.
 

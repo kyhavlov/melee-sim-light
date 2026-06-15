@@ -12,16 +12,23 @@ import pytest
 from melee_sim.hsd_archive import parse_hsd_archive
 from tools.extraction.extract_fighter_parts import ANCHOR_IDS
 from tools.extraction.extract_fighter_script_timeline import EVENT_IDS, RUNTIME_OWNER_EVENT_KINDS
-from tools.extraction.extract_item_articles import FIELD_SPECS, UNIT_DEGREES, UNIT_FRAMES, UNIT_ITEM_KIND, UNIT_PART_ID
+from tools.extraction.extract_item_articles import (
+    FIELD_SPECS,
+    SHEIK_NEEDLE_FIELD_NAMES,
+    UNIT_DEGREES,
+    UNIT_FRAMES,
+    UNIT_ITEM_KIND,
+    UNIT_PART_ID,
+)
 from tools.slippi.item_article_data import (
-    SIM_CHAR_TO_GALE01_FIGHTER_KIND,
+    SIM_CHAR_TO_SLIPPI_EXTERNAL_ID,
     item_article_kind_set,
     item_article_values_by_sim_char,
 )
 from tools.slippi.known_data_artifacts import (
     DREAM_WHISPY_MAGIC,
     DREAM_WHISPY_VERSION,
-    ITEM_ARTICLE_CHAR_DOMAIN_GALE01_FIGHTER_KIND,
+    ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID,
     ITEM_ARTICLE_MAGIC,
     ITEM_ARTICLE_VALUE_F32,
     ITEM_ARTICLE_VALUE_U16,
@@ -622,14 +629,17 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
     assert "laser_lifetime_frames" in fields
     assert "illusion_item_state0_damage" in fields
     assert "shield_bounce_extra_degrees" in fields
-    assert manifest["char_domain"]["name"] == "GALE01 internal FighterKind enum"
+    assert "needle_throw_itkind" in fields
+    assert "needle_hurtbox_scale" in fields
+    assert "needle_hitbox_damage" in fields
+    assert manifest["char_domain"]["name"] == "Slippi/CSS external character id"
 
     def rec(char_id: int, field_name: str):
         field_id = FIELD_SPECS[field_name].field_id
         matches = [r for r in table.records if r.char_id == char_id and r.field_id == field_id]
         assert len(matches) == 1
         out = matches[0]
-        assert out.char_domain == ITEM_ARTICLE_CHAR_DOMAIN_GALE01_FIGHTER_KIND
+        assert out.char_domain == ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID
         return out
 
     fox_laser_kind = rec(2, "blaster_shot_itkind")
@@ -638,6 +648,35 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
     assert fox_laser_kind.u32_value == 54
     falco_laser_kind = rec(20, "blaster_shot_itkind")
     assert falco_laser_kind.u32_value == 55
+    sheik_needle_kind = rec(19, "needle_throw_itkind")
+    assert sheik_needle_kind.value_type == ITEM_ARTICLE_VALUE_U16
+    assert sheik_needle_kind.unit_id == UNIT_ITEM_KIND
+    assert sheik_needle_kind.u32_value == 79
+    sheik_expected = {
+        "needle_throw_itkind": 79,
+        "needle_held_itkind": 80,
+        "needle_lifetime_frames": 30,
+        "needle_bounce_lifetime_frames": 120,
+        "needle_launch_speed": 4.0,
+        "needle_hurtbox_count": 1,
+        "needle_hurtbox_bone_id": 1,
+        "needle_hurtbox_a_offset_x": 0.0,
+        "needle_hurtbox_a_offset_y": 0.0,
+        "needle_hurtbox_a_offset_z": 0.0,
+        "needle_hurtbox_b_offset_x": 0.0,
+        "needle_hurtbox_b_offset_y": 0.0,
+        "needle_hurtbox_b_offset_z": 0.0,
+        "needle_hurtbox_scale": 1.0,
+        "needle_hitbox_damage": 3.0,
+    }
+    assert set(SHEIK_NEEDLE_FIELD_NAMES) == set(sheik_expected)
+    for field_name, expected in sheik_expected.items():
+        needle_rec = rec(19, field_name)
+        if FIELD_SPECS[field_name].value_type == ITEM_ARTICLE_VALUE_F32:
+            assert needle_rec.value_type == ITEM_ARTICLE_VALUE_F32
+            assert needle_rec.f32_value == pytest.approx(float(expected))
+        else:
+            assert needle_rec.u32_value == int(expected)
     fox_illusion_kind = rec(2, "side_special_illusion_itkind")
     assert fox_illusion_kind.value_type == ITEM_ARTICLE_VALUE_U16
     assert fox_illusion_kind.unit_id == UNIT_ITEM_KIND
@@ -670,7 +709,7 @@ def test_item_article_tooling_accessors_map_to_sim_char_domain() -> None:
     # Registry-derived: every supported character maps internal -> external id.
     from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS
 
-    assert SIM_CHAR_TO_GALE01_FIGHTER_KIND == {
+    assert SIM_CHAR_TO_SLIPPI_EXTERNAL_ID == {
         info.internal_id: info.external_id for info in _REGISTRY_CHARS.values()
     }
     assert item_article_kind_set(Path("data"), "blaster_shot_itkind") == (54, 55)
@@ -678,6 +717,44 @@ def test_item_article_tooling_accessors_map_to_sim_char_domain() -> None:
     by_char = item_article_values_by_sim_char(Path("data"), "laser_lifetime_frames")
     assert by_char[1] == 35
     assert by_char[22] == 100
+
+
+def test_item_article_exporter_rejects_partial_sheik_needle_attrs(tmp_path: Path) -> None:
+    attrs_dir = tmp_path / "chars"
+    attrs_dir.mkdir()
+    sheik = {
+        "needle_throw_itkind": 79,
+        "needle_held_itkind": 80,
+        "needle_lifetime_frames": 30,
+        "needle_bounce_lifetime_frames": 120,
+        "needle_launch_speed": 4.0,
+        "needle_hurtbox_count": 1,
+        "needle_hurtbox_bone_id": 1,
+        "needle_hurtbox_b_offset": [0.0, 0.0, 0.0],
+        "needle_hurtbox_scale": 1.0,
+        "needle_hitbox_damage": 3.0,
+    }
+    (attrs_dir / "sheik.json").write_text(json.dumps(sheik), encoding="utf-8")
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.extraction.extract_item_articles",
+            "--attrs-dir",
+            str(attrs_dir),
+            "--item-common",
+            "data/items/item_common.json",
+            "--out",
+            str(tmp_path / "articles.bin"),
+            "--chars",
+            "sheik",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    assert proc.returncode != 0
+    assert "needle_hurtbox_a_offset" in proc.stderr
 
 
 @pytest.mark.integration

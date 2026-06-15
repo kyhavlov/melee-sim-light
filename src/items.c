@@ -3480,11 +3480,319 @@ uint8_t items_row_has_fighter_collision_demand(const MslBatch* batch, int bi) {
       continue;
     }
     const uint16_t type = batch->state.item_type[ii];
-    if (laser_params_for_item_type(type) != NULL || item_type_is_spacie_illusion(type) != 0u) {
+    if (laser_params_for_item_type(type) != NULL || item_type_is_spacie_illusion(type) != 0u ||
+        item_article_params_for_sheik_needle_throw_item_type(type) != NULL) {
       return 1u;
     }
   }
   return 0u;
+}
+
+static inline uint8_t sheik_needle_item_ground_or_air(uint8_t state) {
+  // Stuck Needle state 2 is fixed to the ground/wall collision line; thrown/dropped/bounce states
+  // remain airborne for ftColl hitcapsule target gates.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   itSeakneedlethrown_UnkMotion0_Coll,itSeakneedlethrown_UnkMotion2_Coll}
+  return (state == 2u) ? 1u : 0u;
+}
+
+static inline uint8_t sheik_needle_state_accepts_fighter_hitcapsule(uint8_t state) {
+  // Thrown Needle keeps its Article hurtbox installed for normal live states. The lite sim does not
+  // model state 3's transient reset/physics-only path yet, so admit the serialized states observed
+  // on source callbacks: thrown, dropped, stuck, and bounce.
+  // refs/melee/src/melee/it/itcoll.c::it_8027163C
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_803F6F50
+  return (uint8_t)(state == 0u || state == 1u || state == 2u || state == 4u);
+}
+
+static inline uint8_t sheik_needle_hitbox_targets_item_ground_state(uint16_t flags,
+                                                                    uint8_t item_ga) {
+  if (item_ga != 0u) {
+    return (flags & (uint16_t)MSL_HITBOX_FLAG_HIT_GROUNDED) != 0u ? 1u : 0u;
+  }
+  return (flags & (uint16_t)MSL_HITBOX_FLAG_HIT_AERIAL) != 0u ? 1u : 0u;
+}
+
+static inline float sheik_needle_hitbox_damage(const MslBatch* batch, size_t hb_i) {
+  if (batch == NULL) {
+    return 0.0f;
+  }
+  // Fighter HitCapsule -> item hurtbox copies the source HitCapsule damage integer directly into
+  // fighter->dmg.x1914 and item->xCA0. MSL's BODY lane may have already materialized stale-scaled
+  // damage in `hitbox_damage`; when the frozen stale multiplier is present, invert it to recover
+  // the authored HitCapsule integer that `it_802703E8` reads.
+  // refs/melee/src/melee/it/itcoll.c::it_802703E8
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076808
+  float damage = batch->state.hitbox_damage[hb_i];
+  if (batch->state.hitbox_stale_damage_valid[hb_i] != 0u &&
+      batch->state.hitbox_stale_damage_mul[hb_i] > 0.0f) {
+    damage /= batch->state.hitbox_stale_damage_mul[hb_i];
+  }
+  return damage;
+}
+
+static inline float sheik_needle_state1_4_gravity_from_visible_vel(float vel_y) {
+  static const float gravity[8] = {-0.1f, -0.12f, -0.14f, -0.18f, -0.2f, -0.22f, -0.24f, -0.26f};
+  float best_g = gravity[0];
+  float best_resid = 1000000.0f;
+  for (int gi = 0; gi < 8; gi++) {
+    const float g = gravity[gi];
+    const float q = vel_y / g;
+    const float rounded = floorf(q + 0.5f);
+    const float resid = fabsf(q - rounded);
+    if (resid < best_resid) {
+      best_resid = resid;
+      best_g = g;
+    }
+  }
+  return best_g;
+}
+
+static inline void sheik_needle_motion_timer_step(MslBatch* batch, size_t ii) {
+  if (batch->state.item_timer[ii] > 0.0f) {
+    batch->state.item_timer[ii] -= 1.0f;
+  }
+  const uint8_t state = batch->state.item_state[ii];
+  if (state == 0u) {
+    batch->state.item_pos_x[ii] += batch->state.item_vel_x[ii];
+    batch->state.item_pos_y[ii] += batch->state.item_vel_y[ii];
+    return;
+  }
+  if (state == 1u || state == 4u) {
+    // Dropped/bounced Needle stores random gravity/min-y hidden lanes in
+    // `itemVar.seakneedlethrown`. Slippi does not expose them, but the visible y velocity is an
+    // exact multiple of the selected source gravity table during supported in-suite rows. Rebuild
+    // that hidden source lane from current velocity, then run the same Phys+generic movement step.
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    //   itSeakNeedleThrown_SetupDrop,itSeakNeedleThrown_SetupBounce,
+    //   itSeakneedlethrown_UnkMotion1_Phys,itSeakneedlethrown_UnkMotion4_Phys}
+    // refs/melee/src/melee/it/item.c::{Item_80269528,Item_802697D4}
+    const float g = sheik_needle_state1_4_gravity_from_visible_vel(batch->state.item_vel_y[ii]);
+    batch->state.item_vel_y[ii] += g;
+    batch->state.item_pos_x[ii] += batch->state.item_vel_x[ii];
+    batch->state.item_pos_y[ii] += batch->state.item_vel_y[ii];
+  }
+}
+
+static inline void sheik_needle_apply_item_hitlag(MslBatch* batch, size_t ii, int damage_i) {
+  const MslItemCommonParams* item_common = msl_item_common_params();
+  const float item_hitlag =
+      (item_common != NULL)
+          ? (item_common->item_hitlag_base + item_common->item_hitlag_damage_mul * (float)damage_i)
+          : 0.0f;
+  if (item_hitlag > 0.0f) {
+    const uint8_t frames = (uint8_t)item_hitlag;
+    if (frames > 1u) {
+      batch->state.item_hitlag[ii] = (uint8_t)(frames - 1u);
+    }
+  }
+}
+
+static inline uint8_t sheik_needle_item_common_hitlag_frames(int damage_i) {
+  const MslItemCommonParams* item_common = msl_item_common_params();
+  if (item_common == NULL || damage_i <= 0) {
+    return 0u;
+  }
+  const float item_hitlag =
+      item_common->item_hitlag_base + item_common->item_hitlag_damage_mul * (float)damage_i;
+  return (item_hitlag > 0.0f) ? (uint8_t)item_hitlag : 0u;
+}
+
+static inline void sheik_needle_apply_damage_callback(MslBatch* batch, int bi, size_t ii,
+                                                      const MslItemArticleParams* params,
+                                                      int damage_i) {
+  uint16_t total = batch->state.item_damage[ii];
+  if (damage_i > 0) {
+    total = (total <= (uint16_t)(999u - (uint16_t)damage_i))
+                ? (uint16_t)(total + (uint16_t)damage_i)
+                : 999u;
+  }
+  batch->state.item_damage[ii] = total;
+
+  // it_2725_Logic109_DmgReceived destroys the Needle unless HSD_Randi(3)==0, in which case it
+  // enters bounce state 4, sets lifeTimer from attr->x4, samples the visible y velocity, and then
+  // consumes the hidden SetupBounce rotation/xvel/yvel/gravity samples.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   it_2725_Logic109_DmgReceived,itSeakNeedleThrown_SetupBounce}
+  // refs/melee/src/melee/it/item.c::{OnTakeDamageThink,Item_8026A294}
+  if (combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_KEEP3,
+                                    3) != 0) {
+    item_slot_clear(batch, ii);
+    return;
+  }
+
+  static const float bounce_y_vel[8] = {2.0f, 2.1f, 2.2f, 2.3f, 2.4f, 2.5f, 2.6f, 2.7f};
+  const int y_idx = combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_VEL_Y8, 8);
+  batch->state.item_state[ii] = 4u;
+  batch->state.item_timer[ii] =
+      (params != NULL) ? (float)params->needle_bounce_lifetime_frames : 0.0f;
+  batch->state.item_vel_x[ii] = 0.0f;
+  batch->state.item_vel_y[ii] = bounce_y_vel[y_idx & 7];
+  (void)combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_ROT_SIGN2, 2);
+  (void)combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_ROT_RATE8, 8);
+  (void)combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_XVEL_SIGN2, 2);
+  (void)combat_rng_consume_randi_site(batch, bi,
+                                      MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_XVEL8, 8);
+  (void)combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_YVEL_MIN8, 8);
+  (void)combat_rng_consume_randi_site(batch, bi,
+                                      MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_GRAVITY8, 8);
+  sheik_needle_apply_item_hitlag(batch, ii, damage_i);
+}
+
+static uint8_t sheik_needle_try_fighter_hitbox_damage(MslBatch* batch, int bi, int item_slot,
+                                                      const MslItemArticleParams* params) {
+  if (batch == NULL || params == NULL || params->needle_hurtbox_count == 0u) {
+    return 0u;
+  }
+  const size_t ii = msl_idx_item(bi, item_slot);
+  if (batch->state.item_exists[ii] == 0u ||
+      batch->state.item_type[ii] != params->needle_throw_itkind ||
+      !sheik_needle_state_accepts_fighter_hitcapsule(batch->state.item_state[ii])) {
+    return 0u;
+  }
+  const int owner = (int)batch->state.item_owner[ii];
+  const uint8_t item_ga = sheik_needle_item_ground_or_air(batch->state.item_state[ii]);
+  const float ax = batch->state.item_pos_x[ii] + params->needle_hurtbox_a_offset[0];
+  const float ay = batch->state.item_pos_y[ii] + params->needle_hurtbox_a_offset[1];
+  const float az = params->needle_hurtbox_a_offset[2];
+  const float bx = batch->state.item_pos_x[ii] + params->needle_hurtbox_b_offset[0];
+  const float by = batch->state.item_pos_y[ii] + params->needle_hurtbox_b_offset[1];
+  const float bz = params->needle_hurtbox_b_offset[2];
+  const float hurt_r = params->needle_hurtbox_scale;
+  for (int p = 0; p < (int)batch->config.num_players; p++) {
+    if (p == owner) {
+      continue;
+    }
+    const size_t p_idx = msl_idx_player(bi, p);
+    for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+      const size_t hb_i = idx_hitbox(bi, p, hb);
+      if (batch->state.hitbox_enabled[hb_i] == 0u) {
+        continue;
+      }
+      const uint16_t flags = batch->state.hitbox_flags[hb_i];
+      if ((flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
+          !sheik_needle_hitbox_targets_item_ground_state(flags, item_ga)) {
+        continue;
+      }
+      if (batch->state.hitbox_element[hb_i] == (uint8_t)MSL_HIT_ELEMENT_CATCH ||
+          batch->state.hitbox_element[hb_i] == (uint8_t)MSL_HIT_ELEMENT_INERT ||
+          !(batch->state.hitbox_damage[hb_i] > 0.0f)) {
+        continue;
+      }
+      const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+      const uint8_t rehit_frames = hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+      if (!hitlist_allows_fighter_item(batch, bi, p, hb, item_slot,
+                                       batch->state.item_spawn_id[ii])) {
+        continue;
+      }
+      const float hx1 = batch->state.hitbox_x[hb_i];
+      const float hy1 = batch->state.hitbox_y[hb_i];
+      const float hz1 = batch->state.hitbox_z[hb_i];
+      const float hx0 =
+          batch->state.hitbox_prev_enabled[hb_i] ? batch->state.hitbox_prev_x[hb_i] : hx1;
+      const float hy0 =
+          batch->state.hitbox_prev_enabled[hb_i] ? batch->state.hitbox_prev_y[hb_i] : hy1;
+      const float hz0 =
+          batch->state.hitbox_prev_enabled[hb_i] ? batch->state.hitbox_prev_z[hb_i] : hz1;
+      const float rr = batch->state.hitbox_radius[hb_i] + hurt_r;
+      const float d2 =
+          item_segment_segment_dist2(hx0, hy0, hz0, hx1, hy1, hz1, ax, ay, az, bx, by, bz);
+      if (d2 > rr * rr) {
+        continue;
+      }
+
+      const float hit_damage = sheik_needle_hitbox_damage(batch, hb_i);
+      float source_damage = ceilf(hit_damage);
+      if (source_damage < params->needle_hitbox_damage) {
+        source_damage = params->needle_hitbox_damage;
+      }
+      const int damage_i = (int)ceilf(source_damage);
+      if (damage_i <= 0) {
+        return 0u;
+      }
+      // Fighter HitCapsule -> item hurtbox path:
+      // - `it_802703E8` gates x42_b7 item interaction, item ground/air flags, and victims_1.
+      // - The accepted hit writes fighter->dmg.x1914, item->xCA0/xCA4, and the item hitlist.
+      // - `Item_8026A294` then runs Needle DmgReceived and item hitlag from xCA8.
+      // refs/melee/src/melee/it/itcoll.c::{it_802703E8,it_8026F9AC_outline}
+      // refs/melee/src/melee/it/item.c::{OnTakeDamageThink,Item_8026A294}
+      // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgReceived
+      combat_apply_deal_hitlag_raw_damage(batch, p_idx, damage_i);
+      if (batch->state.item_state[ii] == 4u) {
+        // Bounced Needle still owns active item HitCapsule clank/contact. The fighter side sees
+        // item-common hitlag for Needle hitbox damage in that subcase, not only the fighter
+        // action's deal-hitlag formula.
+        // refs/melee/src/melee/it/itcoll.c::{it_802706D0,it_80270E30}
+        // refs/melee/src/melee/it/item.c::{OnClankThink,checkHitLag}
+        const uint8_t item_hl =
+            sheik_needle_item_common_hitlag_frames((int)ceilf(params->needle_hitbox_damage));
+        combat_apply_min_hitlag_frames(batch, p_idx, (uint16_t)item_hl);
+      }
+      hitlist_register_fighter_group_item(batch, bi, p, hit_group, item_slot,
+                                          batch->state.item_spawn_id[ii],
+                                          (int)MSL_LBCOLL_INSERT_FT_BODY, rehit_frames);
+      sheik_needle_apply_damage_callback(batch, bi, ii, params, damage_i);
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
+  if (batch == NULL) {
+    return;
+  }
+  if (batch->replay_reseed_frame_active == NULL || batch->replay_reseed_frame_active[bi] == 0u) {
+    return;
+  }
+  uint8_t needs_sort = 0u;
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] == 0u) {
+      continue;
+    }
+    const MslItemArticleParams* params =
+        item_article_params_for_sheik_needle_throw_item_type(batch->state.item_type[ii]);
+    if (params == NULL) {
+      continue;
+    }
+    if (batch->replay_reseed_frame_active != NULL && batch->replay_reseed_frame_active[bi] != 0u &&
+        batch->state.item_state[ii] == 4u && batch->state.item_damage[ii] != 0u) {
+      uint8_t fighter_hitlag_active = 0u;
+      for (int p = 0; p < (int)batch->config.num_players; p++) {
+        if (batch->state.hitlag[msl_idx_player(bi, p)] != 0u) {
+          fighter_hitlag_active = 1u;
+          break;
+        }
+      }
+      if (fighter_hitlag_active != 0u) {
+        // Slippi does not expose Item.xCBC_hitlagFrames. A replay reseed of a Needle that just
+        // bounced from DmgReceived can carry state4/damage/timer while the victim deal-hitlag is
+        // still active; source Item_802697D4 freezes item anim/phys/lifetime until item hitlag
+        // drains. Full free-running Needle state collision stays outside this reseed slice until
+        // the stage-hit and hidden SetupBounce RNG lanes are modeled.
+        // refs/melee/src/melee/it/item.c::{checkHitLag,Item_802697D4}
+        // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgReceived
+        continue;
+      }
+    }
+    if (batch->state.item_hitlag[ii] > 0u) {
+      batch->state.item_hitlag[ii]--;
+      continue;
+    }
+    sheik_needle_motion_timer_step(batch, ii);
+    if (sheik_needle_try_fighter_hitbox_damage(batch, bi, it, params) != 0u) {
+      needs_sort = 1u;
+    }
+  }
+  if (needs_sort != 0u) {
+    items_sort(batch, bi);
+  }
 }
 
 static inline uint8_t illusion_item_hit_params_from_state(const MslCharParams* chp,
@@ -9502,6 +9810,9 @@ void items_update_collision_phase(MslBatch* batch) {
 
       // Motion + collision/hit apply for Illusion/Phantasm ghost items.
       illusion_items_update_and_collide(batch, bi);
+
+      // Fighter HitCapsule -> Sheik thrown-Needle item hurtbox damage/callback.
+      sheik_needles_update_and_collide(batch, bi);
 
       // Motion + collision/hit apply for existing lasers.
       lasers_update_and_collide(batch, bi);

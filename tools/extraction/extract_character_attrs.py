@@ -231,6 +231,68 @@ def _extract_fox_falco_illusion_item(pl_buf: bytes, arc, *, ftdata_abs: int) -> 
     return {}
 
 
+def _extract_seak_needle_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
+    """Extract Sheik thrown-Needle article data from ftData.x48_items[0].
+
+    Decomp anchors:
+    - refs/melee/src/melee/ft/chara/ftSeak/ftSk_Init.c::ftSk_Init_OnLoad
+    - refs/melee/src/melee/it/items/itseakneedlethrown.c
+    - refs/melee/src/melee/it/types.h::{Article,ItHurtBoneList,ItHurtBoneDesc}
+    """
+    items_abs = arc.ptr32(ftdata_abs + 0x48)
+    if items_abs == arc.data_base:
+        return {}
+    article_abs = arc.ptr32(items_abs + 0x00)
+    if article_abs == arc.data_base:
+        return {}
+    special_abs = arc.ptr32(article_abs + 0x04)
+    hurt_abs = arc.ptr32(article_abs + 0x08)
+    states_abs = arc.ptr32(article_abs + 0x0C)
+    if special_abs == arc.data_base or hurt_abs == arc.data_base:
+        return {}
+
+    out: dict = {
+        # ItemKind values are source-owned constants from ftSk_Init_OnLoad's it_8026B3F8 calls.
+        "needle_throw_itkind": 79,
+        "needle_held_itkind": 80,
+        "needle_lifetime_frames": int(max(0, round(float(_f32_be(pl_buf, special_abs + 0x00))))),
+        "needle_bounce_lifetime_frames": int(
+            max(0, round(float(_f32_be(pl_buf, special_abs + 0x04))))
+        ),
+        "needle_launch_speed": float(_f32_be(pl_buf, special_abs + 0x08)),
+    }
+
+    hurt_count = int(_i32_be(pl_buf, hurt_abs + 0x00))
+    desc_abs = arc.ptr32(hurt_abs + 0x04)
+    out["needle_hurtbox_count"] = int(max(0, min(2, hurt_count)))
+    if hurt_count > 0 and desc_abs != arc.data_base:
+        # ItHurtBoneDesc stride: s32 bone_id, Vec3 a, Vec3 b, f32 scale.
+        out["needle_hurtbox_bone_id"] = int(_i32_be(pl_buf, desc_abs + 0x00))
+        out["needle_hurtbox_a_offset"] = [
+            float(_f32_be(pl_buf, desc_abs + 0x04)),
+            float(_f32_be(pl_buf, desc_abs + 0x08)),
+            float(_f32_be(pl_buf, desc_abs + 0x0C)),
+        ]
+        out["needle_hurtbox_b_offset"] = [
+            float(_f32_be(pl_buf, desc_abs + 0x10)),
+            float(_f32_be(pl_buf, desc_abs + 0x14)),
+            float(_f32_be(pl_buf, desc_abs + 0x18)),
+        ]
+        out["needle_hurtbox_scale"] = float(_f32_be(pl_buf, desc_abs + 0x1C))
+    if states_abs != arc.data_base:
+        script_abs = arc.ptr32(states_abs + 0x0C)
+        if script_abs != arc.data_base:
+            events = _parse_subaction_events(arc, script_abs, max_frames=8, max_steps_per_frame=500)
+            for ev in events:
+                if ev.kind != "create_hitbox":
+                    continue
+                hb = ev.data.get("hitbox")
+                if isinstance(hb, dict):
+                    out["needle_hitbox_damage"] = float(hb.get("damage", 0.0))
+                    break
+    return out
+
+
 def _extract_wait_anim_choices(buf: bytes, wait_abs: int) -> dict:
     """Extract ftData.x24 WaitStruct roulette entries for Wait animation variants.
 
@@ -632,6 +694,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out.update(_extract_mars_sword_attrs(buf, arc, ftdata_abs=ftdata_abs))
     elif ext_attr_layout == "seak_special":
         out.update(_extract_seak_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
+        out.update(_extract_seak_needle_article(buf, arc, ftdata_abs=ftdata_abs))
     if extract_fox_blaster:
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
@@ -928,6 +991,17 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "laser_kbg",
         "laser_wsk",
         "laser_bkb",
+        "needle_throw_itkind",
+        "needle_held_itkind",
+        "needle_lifetime_frames",
+        "needle_bounce_lifetime_frames",
+        "needle_launch_speed",
+        "needle_hurtbox_count",
+        "needle_hurtbox_bone_id",
+        "needle_hurtbox_a_offset",
+        "needle_hurtbox_b_offset",
+        "needle_hurtbox_scale",
+        "needle_hitbox_damage",
         "laser_shield_damage",
         "landing_lag_frames",
         "landing_airn_lag_frames",

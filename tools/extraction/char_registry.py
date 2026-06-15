@@ -89,7 +89,7 @@ CHARS: dict[str, CharInfo] = {
         submotion_dir="ftSeak",
         submotion_prefix="ftSk_SM_",
         has_articles=True,
-        exports_item_article_constants=False,
+        exports_item_article_constants=True,
     ),
 }
 

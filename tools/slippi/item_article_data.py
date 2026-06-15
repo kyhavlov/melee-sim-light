@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.slippi.known_data_artifacts import (
-    ITEM_ARTICLE_CHAR_DOMAIN_GALE01_FIGHTER_KIND,
+    ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID,
     ITEM_ARTICLE_VALUE_F32,
     ITEM_ARTICLE_VALUE_U16,
     ITEM_ARTICLE_VALUE_U32,
@@ -14,15 +14,15 @@ from tools.slippi.known_data_artifacts import (
 )
 
 
-# Bridge between simulator internal ids (GALE01 FighterKind: Fox=1, Falco=22, ...) and the
-# Slippi/CSS external `character` ids (Fox=2, Falco=20, ...), registry-derived so every
+# Bridge between simulator internal ids (Fox=1, Falco=22, ...) and the Slippi/CSS external
+# `character` ids (Fox=2, Falco=20, ...), registry-derived so every
 # supported character is covered (the old hardcoded {1: 2, 22: 20} silently dropped others).
 from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS
 
-SIM_CHAR_TO_GALE01_FIGHTER_KIND = {
+SIM_CHAR_TO_SLIPPI_EXTERNAL_ID = {
     info.internal_id: info.external_id for info in _REGISTRY_CHARS.values()
 }
-GALE01_FIGHTER_KIND_TO_SIM_CHAR = {v: k for k, v in SIM_CHAR_TO_GALE01_FIGHTER_KIND.items()}
+SLIPPI_EXTERNAL_ID_TO_SIM_CHAR = {v: k for k, v in SIM_CHAR_TO_SLIPPI_EXTERNAL_ID.items()}
 
 
 @lru_cache(maxsize=None)
@@ -34,9 +34,9 @@ def _load_values(data_dir_str: str) -> dict[tuple[int, str], int | float]:
     field_by_id = {int(row["id"]): str(row["name"]) for row in manifest.get("fields", [])}
     out: dict[tuple[int, str], int | float] = {}
     for rec in table.records:
-        if rec.char_domain != ITEM_ARTICLE_CHAR_DOMAIN_GALE01_FIGHTER_KIND:
+        if rec.char_domain != ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID:
             raise ValueError(f"unsupported MSLITAR1 character domain: {rec.char_domain}")
-        sim_char_id = GALE01_FIGHTER_KIND_TO_SIM_CHAR.get(int(rec.char_id))
+        sim_char_id = SLIPPI_EXTERNAL_ID_TO_SIM_CHAR.get(int(rec.char_id))
         if sim_char_id is None:
             continue
         field_name = field_by_id.get(int(rec.field_id))

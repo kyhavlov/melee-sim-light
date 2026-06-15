@@ -8,7 +8,7 @@ from pathlib import Path
 from dataclasses import dataclass
 
 from tools.extraction.known_data_artifacts import (
-    ITEM_ARTICLE_CHAR_DOMAIN_GALE01_FIGHTER_KIND,
+    ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID,
     ITEM_ARTICLE_MAGIC,
     ITEM_ARTICLE_VALUE_F32,
     ITEM_ARTICLE_VALUE_U16,
@@ -19,9 +19,6 @@ from tools.extraction.known_data_artifacts import (
 
 from tools.extraction.char_registry import CHARS
 
-# The current MSLITAR1 table only exports the Fox/Falco laser/illusion constants it knows how
-# to name. Characters such as Sheik have source articles, but their Needle/Chain/Vanish article
-# contracts are separate Stage-4 work and must not be routed through this Fox/Falco table.
 CHAR_IDS = {name: info.external_id for name, info in CHARS.items() if info.exports_item_article_constants}
 ILLUSION_ITEM_KINDS = {
     # refs/melee/src/melee/it/forward.h::ItemKind
@@ -37,6 +34,9 @@ UNIT_FRAMES = 3
 UNIT_DAMAGE = 4
 UNIT_SIZE = 5
 UNIT_DEGREES = 6
+UNIT_VELOCITY = 7
+UNIT_COUNT = 8
+UNIT_BONE_ID = 9
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,26 @@ FIELD_SPECS = {
     "illusion_item_state1_damage": FieldSpec(10, ITEM_ARTICLE_VALUE_F32, UNIT_DAMAGE),
     "shield_bounce_extra_degrees": FieldSpec(11, ITEM_ARTICLE_VALUE_F32, UNIT_DEGREES),
     "side_special_illusion_itkind": FieldSpec(12, ITEM_ARTICLE_VALUE_U16, UNIT_ITEM_KIND),
+    "needle_throw_itkind": FieldSpec(13, ITEM_ARTICLE_VALUE_U16, UNIT_ITEM_KIND),
+    "needle_held_itkind": FieldSpec(14, ITEM_ARTICLE_VALUE_U16, UNIT_ITEM_KIND),
+    "needle_lifetime_frames": FieldSpec(15, ITEM_ARTICLE_VALUE_U32, UNIT_FRAMES),
+    "needle_bounce_lifetime_frames": FieldSpec(16, ITEM_ARTICLE_VALUE_U32, UNIT_FRAMES),
+    "needle_launch_speed": FieldSpec(17, ITEM_ARTICLE_VALUE_F32, UNIT_VELOCITY),
+    "needle_hurtbox_count": FieldSpec(18, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "needle_hurtbox_bone_id": FieldSpec(19, ITEM_ARTICLE_VALUE_U16, UNIT_BONE_ID),
+    "needle_hurtbox_a_offset_x": FieldSpec(20, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "needle_hurtbox_a_offset_y": FieldSpec(21, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "needle_hurtbox_a_offset_z": FieldSpec(22, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "needle_hurtbox_b_offset_x": FieldSpec(23, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "needle_hurtbox_b_offset_y": FieldSpec(24, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "needle_hurtbox_b_offset_z": FieldSpec(25, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "needle_hurtbox_scale": FieldSpec(26, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "needle_hitbox_damage": FieldSpec(27, ITEM_ARTICLE_VALUE_F32, UNIT_DAMAGE),
 }
+
+SHEIK_NEEDLE_FIELD_NAMES = tuple(
+    name for name in FIELD_SPECS if name.startswith("needle_")
+)
 
 
 def _f32(v: float) -> float:
@@ -78,7 +97,7 @@ def _pack_record(char_id: int, spec: FieldSpec, value: float) -> bytes:
     return struct.pack(
         "<HBBHHIfII",
         int(char_id) & 0xFFFF,
-        ITEM_ARTICLE_CHAR_DOMAIN_GALE01_FIGHTER_KIND,
+        ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID,
         int(spec.value_type) & 0xFF,
         int(spec.field_id) & 0xFFFF,
         int(spec.unit_id) & 0xFFFF,
@@ -95,12 +114,43 @@ def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple
         if ch not in CHAR_IDS:
             continue
         attrs = json.loads((attrs_dir / f"{ch}.json").read_text(encoding="utf-8"))
+        if ch == "sheik":
+            missing = [
+                key
+                for key in SHEIK_NEEDLE_FIELD_NAMES
+                if key not in attrs
+                and not key.startswith("needle_hurtbox_a_offset_")
+                and not key.startswith("needle_hurtbox_b_offset_")
+            ]
+            for vec_key in ("needle_hurtbox_a_offset", "needle_hurtbox_b_offset"):
+                vals = attrs.get(vec_key)
+                if not isinstance(vals, list) or len(vals) < 3:
+                    missing.append(vec_key)
+            if missing:
+                raise ValueError(
+                    "Sheik exports MSLITAR1 Needle article fields but "
+                    f"{attrs_dir / f'{ch}.json'} is missing: {', '.join(sorted(missing))}"
+                )
         char_id = CHAR_IDS[ch]
         for key, spec in FIELD_SPECS.items():
             if key == "shield_bounce_extra_degrees":
                 continue
             if key == "side_special_illusion_itkind":
+                if ch not in ILLUSION_ITEM_KINDS:
+                    continue
                 out.append((char_id, spec, float(ILLUSION_ITEM_KINDS[ch])))
+                continue
+            if key.startswith("needle_hurtbox_a_offset_"):
+                vals = attrs.get("needle_hurtbox_a_offset")
+                comp = "xyz".index(key[-1])
+                if isinstance(vals, list) and len(vals) > comp:
+                    out.append((char_id, spec, float(vals[comp])))
+                continue
+            if key.startswith("needle_hurtbox_b_offset_"):
+                vals = attrs.get("needle_hurtbox_b_offset")
+                comp = "xyz".index(key[-1])
+                if isinstance(vals, list) and len(vals) > comp:
+                    out.append((char_id, spec, float(vals[comp])))
                 continue
             if key in attrs:
                 out.append((char_id, spec, float(attrs[key])))
@@ -114,12 +164,12 @@ def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Pack known Fox/Falco item/article owner constants as MSLITAR1.")
+    ap = argparse.ArgumentParser(description="Pack known fighter item/article owner constants as MSLITAR1.")
     ap.add_argument("--attrs-dir", type=Path, default=Path("data/characters"))
     ap.add_argument("--item-common", type=Path, default=Path("data/items/item_common.json"))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--manifest", type=Path, default=None)
-    ap.add_argument("--chars", type=str, default="fox,falco")
+    ap.add_argument("--chars", type=str, default="fox,falco,sheik")
     args = ap.parse_args()
 
     chars = [c.strip() for c in args.chars.split(",") if c.strip()]
@@ -136,9 +186,9 @@ def main() -> None:
             "magic": ITEM_ARTICLE_MAGIC.decode("ascii"),
             "version": ITEM_ARTICLE_VERSION,
             "char_domain": {
-                "id": ITEM_ARTICLE_CHAR_DOMAIN_GALE01_FIGHTER_KIND,
-                "name": "GALE01 internal FighterKind enum",
-                "note": "This is not Slippi/sim external character id domain.",
+                "id": ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID,
+                "name": "Slippi/CSS external character id",
+                "note": "This is not the runtime MslSeed internal character id domain.",
             },
             "units": [
                 {"id": UNIT_ITEM_KIND, "name": "item_kind"},
@@ -147,6 +197,9 @@ def main() -> None:
                 {"id": UNIT_DAMAGE, "name": "damage"},
                 {"id": UNIT_SIZE, "name": "size"},
                 {"id": UNIT_DEGREES, "name": "degrees"},
+                {"id": UNIT_VELOCITY, "name": "velocity"},
+                {"id": UNIT_COUNT, "name": "count"},
+                {"id": UNIT_BONE_ID, "name": "bone_id"},
             ],
             "value_types": [
                 {"id": ITEM_ARTICLE_VALUE_U16, "name": "u16"},

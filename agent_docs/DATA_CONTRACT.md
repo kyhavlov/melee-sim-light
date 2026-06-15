@@ -1507,13 +1507,15 @@ Characters (Fox/Falco/Marth/Sheik):
     - anchor records: `anchor_kind`, `part_id`, `aux`
   - This artifact is generated/ignored data. Stale/non-v1 tables must be rejected by tooling readers;
     regenerate through `tools.extraction.build_data`.
-- `data/items/articles/fox_falco.bin` (known common/Fox/Falco item article fields; `MSLITAR1` compact binary)
+- `data/items/articles/fox_falco.bin` (known fighter item/article fields; `MSLITAR1` compact binary)
   - Purpose:
-    - Collect stable, named item/article constants for Fox/Falco blaster, laser, illusion/phantasm,
-      item-common item-damage facing, and item-common shield bounce data.
+    - Collect stable, named item/article constants for Fox/Falco blaster, laser,
+      illusion/phantasm, Sheik thrown Needle, item-common item-damage facing, and item-common
+      shield bounce data.
     - This is a known-field table only; it does not classify item behavior from replay observations.
+    - The file name is a legacy path; the table is no longer limited to Fox/Falco records.
   - Sources:
-    - `data/characters/{fox,falco}.json`
+    - `data/characters/{fox,falco,sheik}.json`
     - `data/items/item_common.json`
     - `refs/melee/src/melee/it/types.h`
     - `refs/melee/src/melee/it/forward.h::ItemKind`
@@ -1521,17 +1523,22 @@ Characters (Fox/Falco/Marth/Sheik):
     - `refs/melee/src/melee/it/item.c::Item_80269DC8`
     - `refs/melee/src/melee/it/items/itfoxblaster.c`
     - `refs/melee/src/melee/it/items/itfoxillusion.c`
+    - `refs/melee/src/melee/it/items/itseakneedlethrown.c`
     - `refs/melee/src/melee/ft/chara/ft{Fox,Falco}/ftF{c,x}_Init.c` item-list registration
-  - Character id domain: GALE01 internal `FighterKind` enum (`Fox=2`, `Falco=20`), not the
-    Slippi/sim external character id domain.
-  - Binary layout: `MSLITAR1` v2
+    - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_Init.c::ftSk_Init_OnLoad` item-list registration
+    - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
+  - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
+    the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
+  - Binary layout: `MSLITAR1` v3
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 2`
+    - `u32 version = 3`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
     - `data/items/articles/manifest.json` maps generated field IDs, value types, units, and
       character domain to names for review/tooling.
+    - v3 adds Sheik Needle item kinds, lifetimes, launch speed, Article hurtbox bone/endpoints,
+      hurtbox scale, and state-0 hitbox damage.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:

@@ -4485,15 +4485,35 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
     PyErr_SetString(PyExc_ValueError, "unknown char_id");
     return NULL;
   }
+  PyObject* a_offsets =
+      Py_BuildValue("[f,f,f]", (double)p->needle_hurtbox_a_offset[0],
+                    (double)p->needle_hurtbox_a_offset[1], (double)p->needle_hurtbox_a_offset[2]);
+  if (a_offsets == NULL) {
+    return NULL;
+  }
+  PyObject* b_offsets =
+      Py_BuildValue("[f,f,f]", (double)p->needle_hurtbox_b_offset[0],
+                    (double)p->needle_hurtbox_b_offset[1], (double)p->needle_hurtbox_b_offset[2]);
+  if (b_offsets == NULL) {
+    Py_DECREF(a_offsets);
+    return NULL;
+  }
   return Py_BuildValue(
-      "{s:i,s:i,s:i,s:i,s:i,s:f,s:f,s:f,s:f,s:f}", "blaster_shot_itkind",
-      (int)p->blaster_shot_itkind, "blaster_gun_itkind", (int)p->blaster_gun_itkind,
-      "laser_spawn_joint_part_id", (int)p->laser_spawn_joint_part_id, "laser_lifetime_frames",
-      (int)p->laser_lifetime_frames, "side_special_illusion_itkind",
+      "{s:i,s:i,s:i,s:i,s:i,s:f,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:f,s:i,s:i,s:N,s:N,s:f,s:f}",
+      "blaster_shot_itkind", (int)p->blaster_shot_itkind, "blaster_gun_itkind",
+      (int)p->blaster_gun_itkind, "laser_spawn_joint_part_id", (int)p->laser_spawn_joint_part_id,
+      "laser_lifetime_frames", (int)p->laser_lifetime_frames, "side_special_illusion_itkind",
       (int)p->side_special_illusion_itkind, "laser_damage", (double)p->laser_damage, "laser_size",
       (double)p->laser_size, "illusion_item_state0_damage", (double)p->illusion_item_state0_damage,
       "illusion_item_state1_damage", (double)p->illusion_item_state1_damage,
-      "shield_bounce_extra_degrees", (double)p->shield_bounce_extra_degrees);
+      "shield_bounce_extra_degrees", (double)p->shield_bounce_extra_degrees, "needle_throw_itkind",
+      (int)p->needle_throw_itkind, "needle_held_itkind", (int)p->needle_held_itkind,
+      "needle_lifetime_frames", (int)p->needle_lifetime_frames, "needle_bounce_lifetime_frames",
+      (int)p->needle_bounce_lifetime_frames, "needle_launch_speed", (double)p->needle_launch_speed,
+      "needle_hurtbox_count", (int)p->needle_hurtbox_count, "needle_hurtbox_bone_id",
+      (int)p->needle_hurtbox_bone_id, "needle_hurtbox_a_offset", a_offsets,
+      "needle_hurtbox_b_offset", b_offsets, "needle_hurtbox_scale", (double)p->needle_hurtbox_scale,
+      "needle_hitbox_damage", (double)p->needle_hitbox_damage);
 }
 
 static PyObject* msl_stage_floor_segment_py(PyObject* self, PyObject* args) {
