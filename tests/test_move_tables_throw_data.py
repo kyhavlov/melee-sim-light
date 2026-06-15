@@ -8,6 +8,8 @@ import pytest
 
 CHAR_FOX = 1
 CHAR_FALCO = 22
+CHAR_SHEIK = 7
+CHAR_MARTH = 18
 
 # GALE01 action ids: src/action_ids.h
 ACT_THROW_F = 0x00DB
@@ -95,6 +97,30 @@ def _load_throw_projectile_pulses(move_path: Path, move_key: str) -> list[int]:
     )
     assert frames
     return frames
+
+
+def _load_create_before_release(move_path: Path, move_key: str) -> bool:
+    data = json.loads(move_path.read_text())
+    events = data["moves"][move_key]["events"]
+    release_frames = [
+        int(ev["frame"])
+        for ev in events
+        if ev.get("kind") == "set_throw_flags" and int(ev["data"]["hit_idx"]) == 0
+    ]
+    assert release_frames
+    release_frame = min(release_frames)
+    create_frames = [int(ev["frame"]) for ev in events if ev.get("kind") == "create_hitbox"]
+    return bool(create_frames and min(create_frames) < release_frame)
+
+
+def _move_path_for_char(root: Path, char_id: int) -> Path:
+    names = {
+        CHAR_FOX: "fox.json",
+        CHAR_FALCO: "falco.json",
+        CHAR_SHEIK: "sheik.json",
+        CHAR_MARTH: "marth.json",
+    }
+    return root / "data" / "moves" / names[char_id]
 
 
 def _find_release_frame(msl_binding, char_id: int, throw_action_id: int) -> tuple[int, int]:
@@ -268,3 +294,28 @@ def test_move_tables_throw_projectile_pulses_match_json(
         assert got == expected, (
             f"{move_key} prev={prev} cur={cur} expected spawn={expected}, got={got}"
         )
+
+
+@pytest.mark.parametrize(
+    "char_id,throw_action_id,move_key",
+    [
+        (CHAR_SHEIK, ACT_THROW_LW, "ftCo_SM_ThrowLw"),
+        (CHAR_FOX, ACT_THROW_LW, "ftCo_SM_ThrowLw"),
+        (CHAR_FALCO, ACT_THROW_LW, "ftCo_SM_ThrowLw"),
+        (CHAR_MARTH, ACT_THROW_LW, "ftCo_SM_ThrowLw"),
+    ],
+)
+def test_move_tables_throw_release_after_create_hitbox_matches_json(
+    char_id: int, throw_action_id: int, move_key: str
+) -> None:
+    import msl_binding
+
+    root = Path(__file__).resolve().parents[1]
+    move_path = _move_path_for_char(root, char_id)
+    if not move_path.exists():
+        pytest.skip(f"missing local data/moves/{move_path.name} (gitignored)")
+
+    expected = 1 if _load_create_before_release(move_path, move_key) else 0
+    got = int(msl_binding.move_tables_throw_release_after_create_hitbox(char_id, throw_action_id))
+    assert got == expected
+    assert got == (1 if char_id == CHAR_SHEIK else 0)

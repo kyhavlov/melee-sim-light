@@ -6701,6 +6701,23 @@ static PyObject* msl_move_tables_throw_hitbox_params_py(PyObject* self, PyObject
                        (unsigned int)p.sfx_kind, (unsigned int)p.sfx_severity);
 }
 
+static PyObject* msl_move_tables_throw_release_after_create_hitbox_py(PyObject* self,
+                                                                      PyObject* args) {
+  (void)self;
+  int char_id = 0;
+  int throw_action_id = 0;
+  if (!PyArg_ParseTuple(args, "ii", &char_id, &throw_action_id)) {
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
+    return NULL;
+  }
+  const uint8_t has =
+      move_tables_throw_release_after_create_hitbox((uint8_t)char_id, (uint16_t)throw_action_id);
+  return PyLong_FromLong((long)has);
+}
+
 static PyObject* msl_move_tables_throw_cmd1_active_py(PyObject* self, PyObject* args) {
   (void)self;
   int char_id = 0;
@@ -7496,6 +7513,9 @@ static PyMethodDef methods[] = {
     {"move_tables_throw_hitbox_params", msl_move_tables_throw_hitbox_params_py, METH_VARARGS,
      "move_tables_throw_hitbox_params(char_id, throw_action_id, hit_idx) -> "
      "(damage, angle, kbg, wsk, bkb, element, sfx_kind, sfx_severity) or None"},
+    {"move_tables_throw_release_after_create_hitbox",
+     msl_move_tables_throw_release_after_create_hitbox_py, METH_VARARGS,
+     "move_tables_throw_release_after_create_hitbox(char_id, throw_action_id) -> 0/1"},
     {"move_tables_throw_cmd1_active", msl_move_tables_throw_cmd1_active_py, METH_VARARGS,
      "move_tables_throw_cmd1_active(char_id, throw_action_id, cur_anim_frame) -> 0/1"},
     {"move_tables_throw_should_spawn_projectile", msl_move_tables_throw_should_spawn_projectile_py,

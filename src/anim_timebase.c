@@ -1147,14 +1147,42 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
       if (a == (uint16_t)MSL_ACT_THROW_LW) {
+        const int32_t throw_rate_fp = batch->state.throw_anim_rate_fp_q16_16[idx];
+        const uint8_t victim_p = batch->state.attached_victim_port[idx];
+        const uint8_t has_attached_victim =
+            (victim_p != 0xFFu && (int)victim_p < num_players && (int)victim_p != p) ? 1u : 0u;
+        const uint8_t fighter_hit_then_release =
+            (has_attached_victim != 0u &&
+             move_tables_throw_release_after_create_hitbox(batch->state.char_id[idx], a) != 0u)
+                ? 1u
+                : 0u;
         if (batch->state.hitlag_pre_timer[idx] != 0u &&
             batch->state.hitlag_started_frame[idx] == 0u) {
-          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-        } else if (batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
-          const int32_t throw_rate_fp = batch->state.throw_anim_rate_fp_q16_16[idx];
+          // Fighter-hit ThrowLw scripts can enter attacker-side hitlag before the later
+          // set_throw_flags(hit_idx=0) release command. On hitlag exit, Fighter_8006A1BC clears
+          // x2219_b5 before Fighter_8006A360 advances the AObj, so the shared throw anim-speed
+          // resumes immediately and the later release flag can be reached.
+          //
+          // This is data-backed by MSLFTSC1 create_hitbox before set_throw_flags, rather than a
+          // Sheik id branch. Projectile-pulse ThrowLw scripts stay on the existing zero-rate
+          // cursor path below.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}
+          // data/scripts/<char>.bin (MSLFTSC1) create_hitbox / set_throw_flags
           if (throw_rate_fp > 0) {
-            const uint8_t victim_p = batch->state.attached_victim_port[idx];
-            if (victim_p != 0xFFu && (int)victim_p < num_players && (int)victim_p != p) {
+            if (fighter_hit_then_release != 0u) {
+              batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
+            } else {
+              batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+            }
+          } else {
+            batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+          }
+        } else if (batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
+          if (throw_rate_fp > 0) {
+            if (fighter_hit_then_release != 0u) {
+              batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
+            } else if (has_attached_victim != 0u) {
               const size_t vidx = msl_idx_player(bi, (int)victim_p);
               if (msl_action_is_grabbed_victim(batch->state.action_id[vidx]) &&
                   batch->state.hitlag_pre_timer[vidx] != 0u && batch->state.hitlag[vidx] == 0u) {

@@ -426,6 +426,15 @@ uint8_t move_tables_throw_release_hit_idx(uint8_t char_id, uint16_t throw_action
 uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_id, uint8_t hit_idx,
                                         MslThrowHitboxParams* out);
 
+// Returns whether a throw script creates ordinary fighter HitCapsules before its release
+// set_throw_flags(hit_idx=0) command. This distinguishes Sheik-style low throws, where the
+// thrower enters hitlag on a script create_hitbox then resumes toward a later release flag, from
+// projectile-pulse ThrowLw scripts whose post-hitlag cursor is owned by the projectile command
+// path.
+//
+// Source of truth: data/scripts/<char>.bin (MSLFTSC1) create_hitbox and set_throw_flags events.
+uint8_t move_tables_throw_release_after_create_hitbox(uint8_t char_id, uint16_t throw_action_id);
+
 // Returns whether a throw should flip the thrower's facing this frame.
 //
 // Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_flags(hit_idx=1),

@@ -1062,6 +1062,18 @@ uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_i
   return 1u;
 }
 
+uint8_t move_tables_throw_release_after_create_hitbox(uint8_t char_id, uint16_t throw_action_id) {
+  uint16_t msid = 0;
+  if (!throw_msid_from_action(throw_action_id, &msid)) {
+    return 0u;
+  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || !cache->first_create_hitbox.loaded || !cache->throw_flags_hit[0].loaded) {
+    return 0u;
+  }
+  return (cache->first_create_hitbox.start_af < cache->throw_flags_hit[0].start_af) ? 1u : 0u;
+}
+
 uint8_t move_tables_throw_should_flip_facing(uint8_t char_id, uint16_t throw_action_id,
                                              float prev_anim_frame_f32, float cur_anim_frame_f32) {
   uint16_t msid = 0;

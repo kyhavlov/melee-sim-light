@@ -2,17 +2,57 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 ACT_THROW_LW = 222
 ACT_THROWN_LW = 242
+ACT_DAMAGE_FLY_TOP = 90
+
+
+def _field_bytes(samples, record: int, field: str, stride: int) -> np.ndarray:
+    off = int(samples.dtype.fields[field][1])
+    raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
+    return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+
+
+def _rollout_to(dataset_path: Path, start_record: int, target_record: int) -> tuple[np.void, np.void]:
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, _field_bytes(samples, start_record, "seed_t", seed_stride))
+        for record in range(start_record, target_record + 1):
+            binding.step_input_replay_frame_rng(
+                handle,
+                _field_bytes(samples, record, "seed_t", seed_stride),
+                _field_bytes(samples, record, "prev_input_t", input_stride),
+                _field_bytes(samples, record, "input_t", input_stride),
+            )
+        binding.write_compare(handle, out_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return out_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy(), samples[target_record]["ref_t1"]
 
 
 @pytest.mark.integration
@@ -98,3 +138,53 @@ def test_direct_kb_pre_release_throw_body_hit_keeps_attached_victim_hitlag() -> 
 
     _seed, ref, out = _run_one_step_row(dataset_path, record, victim)
     assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim])
+
+
+@pytest.mark.integration
+def test_sheik_throwlw_body_hitlag_resumes_thrower_anim_before_release_rollout() -> None:
+    # Sheik ThrowLw has an ordinary create_hitbox at frame 31 and a later
+    # set_throw_flags(hit_idx=0) release at frame 36. The thrower enters attacker-side hitlag on the
+    # BODY hit while the victim remains attached; after hitlag, source resumes Fighter_8006A360 AObj
+    # advancement so ftCo_ThrowLw_Anim can reach the release command. This rollout boundary protects
+    # the hidden frame-speed continuation rather than the visible one-step damage row.
+    #
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}
+    # data/scripts/sheik.bin (MSLFTSC1) ftCo_SM_ThrowLw create_hitbox / set_throw_flags
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    start_record = 2950
+    thrower = 0
+    victim = 1
+    out, ref = _rollout_to(dataset_path, start_record, 3168)
+    assert int(ref["action_id"][thrower]) == ACT_THROW_LW
+    assert int(out["action_id"][thrower]) == ACT_THROW_LW
+    assert float(out["action_frame"][thrower]) == pytest.approx(float(ref["action_frame"][thrower]))
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim])
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]))
+
+
+@pytest.mark.integration
+def test_sheik_throwlw_body_hitlag_does_not_release_before_script_flag_rollout() -> None:
+    # Adjacent negative: the same source-owned continuation must not release the victim before the
+    # script reaches set_throw_flags(hit_idx=0). RuralReasonableRat rec3167 is one frame before the
+    # release boundary and vanilla still keeps the victim in ThrownLw.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    start_record = 2950
+    thrower = 0
+    victim = 1
+    out, ref = _rollout_to(dataset_path, start_record, 3167)
+    assert int(out["action_id"][thrower]) == int(ref["action_id"][thrower]) == ACT_THROW_LW
+    assert float(out["action_frame"][thrower]) == pytest.approx(float(ref["action_frame"][thrower]))
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_THROWN_LW
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim]) == 0

@@ -414,6 +414,19 @@ Collect before writing any code:
    `refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim`,
    `data/characters/<char>.json::weight_independent_throws_mask`, and
    `data/anims/<char>.tracks.bin`.
+   **Low throws can hit with fighter HitCapsules before the release flag**:
+   do not assume ThrowLw timing follows the Fox/Falco projectile-pulse pattern.
+   Sheik Down Throw creates ordinary fighter hitboxes at frame 31, enters
+   attacker-side hitlag, then reaches `set_throw_flags(hit_idx=0)` at frame 36.
+   `Fighter_8006A1BC` clears hitlag ownership before `Fighter_8006A360` advances
+   the thrower AObj again, while the victim is still attached and not visibly in
+   hitlag. New characters need a decoded-script audit for
+   `create_hitbox`-before-release throws and adjacent controls proving the throw
+   does not release before the script flag. Source anchors:
+   `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}`,
+   and `data/scripts/<char>.bin` (`MSLFTSC1 create_hitbox` /
+   `set_throw_flags`).
    **MotionState rows are not proof that angled attack variants are available**:
    common dispatchers such as `AttackS3::decideAngle` check the source
    animation/subaction pointer before choosing an angled variant. A character can
