@@ -4912,10 +4912,17 @@ void locomotion_update_pre(MslBatch* batch) {
               // AttackDash IASA pre-gate (ftCo_800D8AE0):
               // - if (held_inputs & HSD_PAD_LR and mv.co.attackdash.x0>0) => enter CatchDash via
               //   ftCo_800D8C54.
+              // TODO(source-completion): ftCo_AttackDash.c::doEnter clears x0 and
+              // ftCo_AttackDash_SetMv0 is a separate source writer. Keep the live gate on the
+              // digital held-input lane; analog trigger boost-grab requires the same SetMv0
+              // callback-timing owner first. Replay seed reconstruction below covers
+              // source-published x0 rows.
               // - else decrement x0 when x0>0.
+              // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10 (Z maps to LR|A)
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
               // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_800D8AE0,ftCo_800D8C54}
-              if ((buttons & ((uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R)) != 0u &&
+              if ((buttons & ((uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R |
+                              (uint16_t)MSL_BUTTON_Z)) != 0u &&
                   batch->state.attackdash_x0[idx] > 0) {
                 grab_flow_enter_catchdash_from_attackdash_pregate(batch, idx);
                 action_id = batch->state.action_id[idx];

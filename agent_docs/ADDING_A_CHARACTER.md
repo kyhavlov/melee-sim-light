@@ -152,6 +152,23 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::fn_800C9CEC`, and
    `data/moves/<char>.json::moves.ftCo_SM_RunBrake.events`.
+   **Short motion-var lanes may need source reconstruction even when Slippi has
+   a `misc_as` field**: do not assume an exposed-but-zero `fp+0x2340` value is
+   authoritative for every MotionState overlay. Sheik exposed this through
+   `AttackDash -> CatchDash`: `ftCo_AttackDash_SetMv0` writes
+   `p_ftCommonData->x68` into `mv.co.attackdash.x0`, and `ftCo_800D8AE0`
+   consumes that countdown on held L/R, including the source `HSD_PAD_LR` macro
+   produced by raw Z input. Public rows serialized zero for that short lane, so
+   preprocessing reconstructs the countdown from extracted common data and
+   visible AttackDash age. Keep this as a seed-only hidden-state reconstruction;
+   runtime still owns the live SetMv0 write and normal consume/decrement path.
+   Source also maps analog trigger pressure into `HSD_PAD_LR`, but that live
+   path should not be widened until the separate SetMv0 callback timing is
+   modeled directly. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_SetMv0`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8AE0`,
+   `refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10`, and
+   `data/common/ft_common_data.json::attackdash_x0_init_frames`.
    **Hidden-lane preprocessing LUTs must be registry-backed, not incumbent-char
    backed**: when a seed lane depends on a per-character extracted attr, build
    the preprocessing LUT from the manifest / `data/characters/<char>.json` for

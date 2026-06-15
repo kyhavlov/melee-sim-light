@@ -232,6 +232,9 @@ SEED_DTYPE = np.dtype(
         ("source_clear_terminal_phase", _arr("u1", MAX_PLAYERS)),
         # fp+0x2340 AttackDash lane (targeted seed ownership):
         # - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
+        # - Preprocessing preserves nonzero misc_as, but reconstructs zero public rows from
+        #   p_ftCommonData->x68 and AttackDash action age because this short lane is often not
+        #   serialized by Slippi.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
         # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
         # Slippi source lane: SendGamePostFrame emits fp+0x2340 as `misc_as`.

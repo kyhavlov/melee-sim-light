@@ -14,6 +14,7 @@ from tools.eval.dataset import read_dataset
 
 @dataclass(frozen=True)
 class _Case:
+    dataset_rel: str
     negative_record: int
     target_record: int
     p: int
@@ -24,6 +25,10 @@ class _Case:
 
 _CASES = (
     _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        ),
         negative_record=2279,
         target_record=2281,
         p=1,
@@ -32,12 +37,34 @@ _CASES = (
         note="QGD AttackDash jump-button family",
     ),
     _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        ),
         negative_record=2700,
         target_record=2702,
         p=1,
         ref_action_id=56,
         ref_animation_index=58,
         note="QGD AttackDash A-button family",
+    ),
+    _Case(
+        dataset_rel="datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl",
+        negative_record=363,
+        target_record=364,
+        p=0,
+        ref_action_id=214,
+        ref_animation_index=243,
+        note="Sheik AttackDash x2340 boost-grab R-press seed lane",
+    ),
+    _Case(
+        dataset_rel="datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl",
+        negative_record=510,
+        target_record=511,
+        p=0,
+        ref_action_id=214,
+        ref_animation_index=243,
+        note="Sheik AttackDash x2340 boost-grab Z-press seed lane",
     ),
 )
 
@@ -55,10 +82,7 @@ def test_attackdash_wait_iasa_button_edges_qgd_replay_real_lock(case: _Case) -> 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
-    )
+    dataset_rel = case.dataset_rel
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")

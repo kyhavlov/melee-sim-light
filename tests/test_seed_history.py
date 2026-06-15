@@ -41,6 +41,7 @@ from tools.slippi.seed_history import (
     derive_turn_internals,
 )
 from tools.slippi.make_dataset_from_slp import derive_illusion_ghost_pos01, derive_illusion_ghost_pos012
+from tools.slippi.make_dataset_from_slp import _derive_attackdash_x0_seed_lane
 from tools.slippi.make_dataset_from_slp import _derive_mpcoll_wall_seed_lanes
 from tools.slippi.make_dataset_from_slp import _derive_passivewall_timer
 from tools.slippi.make_dataset_from_slp import _derive_grounded_overlap_hidden_pos_z
@@ -3148,6 +3149,46 @@ def test_fighter_button_timers_preserve_pre_hitlag_lr_debounce_for_floor_tech() 
 
     assert [int(v) for v in x680] == [0x30, 0, 1, 2, 3, 4]
     assert [int(v) for v in x684] == [0x2F, 0x30, 0x30, 0x30, 0x30, 0x30]
+
+
+def test_attackdash_x0_seed_lane_reconstructs_entry_countdown_when_misc_as_is_zero() -> None:
+    act_attack_dash = np.uint16(0x0032)
+    act_dash = np.uint16(0x0014)
+    action_id = np.array(
+        [act_dash, act_attack_dash, act_attack_dash, act_attack_dash, act_attack_dash],
+        dtype=np.uint16,
+    )
+    action_frame = np.array([5, 1, 2, 3, 4], dtype=np.int16)
+    misc_as = np.zeros(action_id.shape[0], dtype=np.float32)
+
+    out = _derive_attackdash_x0_seed_lane(
+        action_id_u16=action_id,
+        action_frame_i16=action_frame,
+        misc_as_f32=misc_as,
+        act_attack_dash=int(act_attack_dash),
+        attackdash_x0_init_frames=3,
+    )
+
+    # ftCo_AttackDash.c::doEnter clears x0, then ftCo_AttackDash_SetMv0 writes
+    # p_ftCommonData->x68. Public Slippi misc_as can be zero for this short lane, so preprocessing
+    # reconstructs the source-published countdown from action age.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::doEnter
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_SetMv0
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8AE0
+    assert out.tolist() == [0, 3, 2, 1, 0]
+
+
+def test_attackdash_x0_seed_lane_preserves_nonzero_misc_as_source_value() -> None:
+    act_attack_dash = np.uint16(0x0032)
+    out = _derive_attackdash_x0_seed_lane(
+        action_id_u16=np.array([act_attack_dash, act_attack_dash], dtype=np.uint16),
+        action_frame_i16=np.array([1, 4], dtype=np.int16),
+        misc_as_f32=np.array([2.0, 5.0], dtype=np.float32),
+        act_attack_dash=int(act_attack_dash),
+        attackdash_x0_init_frames=3,
+    )
+
+    assert out.tolist() == [2, 5]
 
 
 def test_jump_to_jump_aerial_entry_clears_fall_fast_and_overrides_x671() -> None:

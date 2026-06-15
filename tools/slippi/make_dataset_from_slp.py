@@ -1544,6 +1544,62 @@ def _derive_passivewall_timer(*, action_id_u16: np.ndarray, action_frame_i16: np
     )
 
 
+def _derive_attackdash_x0_seed_lane(
+    *,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    misc_as_f32: np.ndarray,
+    act_attack_dash: int,
+    attackdash_x0_init_frames: int,
+) -> np.ndarray:
+    """
+    Derive `fp->mv.co.attackdash.x0` for teacher-forced AttackDash reseeds.
+
+    Source owner:
+    - `ftCo_AttackDash.c::doEnter` clears `mv.co.attackdash.x0`.
+    - `ftCo_AttackDash_SetMv0` seeds `mv.co.attackdash.x0` from `p_ftCommonData->x68`.
+    - `ftCo_800D8AE0` consumes/decrements that countdown at the start of AttackDash IASA and
+      enters CatchDash while L/R is held and x0 is nonzero.
+
+    Slippi exposes fp+0x2340 as `misc_as`, but current public rows often serialize zero for this
+    short AttackDash motion-var lane. Reconstruct the entry countdown from extracted common data
+    and replay-visible AttackDash age, while preserving a nonzero exposed misc_as value if present.
+    This initializes real hidden source state for one-step reseed only. Free-running runtime still
+    needs the live `ftCo_AttackDash_SetMv0` callback timing before analog-only boost-grab can be
+    admitted safely.
+
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::doEnter
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_SetMv0
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8AE0
+    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    data/common/ft_common_data.json::attackdash_x0_init_frames
+    """
+    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    misc_as = np.asarray(misc_as_f32, dtype=np.float32).reshape(-1)
+    out = np.zeros(action_id.shape[0], dtype=np.int16)
+
+    attackdash_mask = action_id == np.uint16(act_attack_dash)
+    if not np.any(attackdash_mask):
+        return out
+
+    out[attackdash_mask] = np.clip(
+        misc_as[attackdash_mask].astype(np.int32),
+        np.iinfo(np.int16).min,
+        np.iinfo(np.int16).max,
+    ).astype(np.int16)
+
+    init = int(attackdash_x0_init_frames)
+    if init <= 0:
+        return out
+    ages = action_frame.astype(np.int32)
+    reconstructed = init - np.maximum(ages - 1, 0)
+    reconstructed = np.clip(reconstructed, 0, init).astype(np.int16)
+    reconstruct_mask = attackdash_mask & (out == 0) & (reconstructed > 0)
+    out[reconstruct_mask] = reconstructed[reconstruct_mask]
+    return out
+
+
 def _derive_walljump_phase_seed_lanes(
     *,
     action_id_u16: np.ndarray,
@@ -4393,19 +4449,13 @@ def _main_impl(args) -> Dataset:
         samples["seed_t"]["fighter_8006cda4_pre_gate_consume_count"][:, slot] = 0
         samples["seed_t"]["source_clear_grounded_damage_clear_phase"][:, slot] = 0
         samples["seed_t"]["source_clear_terminal_phase"][:, slot] = 0
-        # fp+0x2340 AttackDash lane (decomp-backed targeted ownership seed):
-        # - mv.co.attackdash.x0 is consumed by ftCo_800D8AE0 during AttackDash IASA.
-        # - Slippi emits fp+0x2340 as `misc_as`; AttackDash treats this lane as signed int.
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
-        # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
-        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-        post_attackdash_x0 = np.zeros(n_frames, dtype=np.int16)
-        attackdash_mask = post_state == np.uint16(act_attack_dash)
-        post_attackdash_x0[attackdash_mask] = np.clip(
-            post_misc_as[attackdash_mask].astype(np.int32),
-            np.iinfo(np.int16).min,
-            np.iinfo(np.int16).max,
-        ).astype(np.int16)
+        post_attackdash_x0 = _derive_attackdash_x0_seed_lane(
+            action_id_u16=post_state,
+            action_frame_i16=post_state_age,
+            misc_as_f32=post_misc_as,
+            act_attack_dash=act_attack_dash,
+            attackdash_x0_init_frames=int(common["attackdash_x0_init_frames"]),
+        )
         samples["seed_t"]["attackdash_x0"][:, slot] = post_attackdash_x0[:-1]
         # fp+0x2340 Attack1 lane (decomp-backed targeted ownership seed):
         # - mv.co.attack1.x0 is latched intent consumed by checkAttack12/checkAttack13.

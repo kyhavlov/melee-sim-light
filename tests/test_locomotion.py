@@ -832,6 +832,37 @@ def test_attackdash_x2340_trigger_window_enters_catchdash_without_new_a_edge() -
     assert int(out0["animation_index"][0]) == SM_CATCH_DASH
 
 
+def test_attackdash_x2340_zero_does_not_enter_catchdash_on_held_a_plus_trigger() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_DASH)
+    seed["action_frame"][0, 0] = np.int16(2)
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_DASH)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["attackdash_x0"][0, 0] = np.int16(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Adjacent negative for the AttackDash x2340 boost-grab seed lane:
+    # held A plus fresh R only reaches ftCo_800D8AE0's CatchDash path while the source countdown is
+    # nonzero. Do not replace that hidden source state with a raw button-shape shortcut.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8AE0
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A | BUTTON_R)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) != ACT_CATCH_DASH
+    assert int(out0["animation_index"][0]) != SM_CATCH_DASH
+
+
 def test_attackdash_iasa_a_button_enters_attackhi3() -> None:
     import msl_binding
 
