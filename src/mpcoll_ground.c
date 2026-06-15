@@ -1086,6 +1086,26 @@ static inline float mpcoll_action_pose_ecb_bottom_rel_y(uint8_t char_id, uint16_
   return msl_ecb_bottom_rel_y(char_id, smid, (int)frame);
 }
 
+static inline float mpcoll_common_fall_blended_bottom_rel_y(const MslBatch* batch, size_t idx,
+                                                            uint8_t char_id, uint16_t neutral_msid,
+                                                            uint16_t frame_u16) {
+  if (batch == NULL) {
+    return msl_ecb_bottom_rel_y(char_id, neutral_msid, (int)frame_u16);
+  }
+  float x4 = batch->state.common_fall_blend_x4[idx];
+  if (x4 < 0.0f) {
+    x4 = 0.0f;
+  } else if (x4 > 1.0f) {
+    x4 = 1.0f;
+  }
+  const uint16_t target_msid = (batch->state.common_fall_blend_msid[idx] != 0u)
+                                   ? batch->state.common_fall_blend_msid[idx]
+                                   : neutral_msid;
+  const float neutral = msl_ecb_bottom_rel_y(char_id, neutral_msid, (int)frame_u16);
+  const float target = msl_ecb_bottom_rel_y(char_id, target_msid, (int)frame_u16);
+  return neutral + ((target - neutral) * x4);
+}
+
 static inline void mpcoll_bottom_world_point_from_rel(MslEcbBottomWorldPoint* out, float pos_x,
                                                       float pos_y, float rel_y,
                                                       uint16_t frame_u16) {
@@ -8548,9 +8568,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const float state_cur_ecb_rel = (have_state_cur_ecb && !state_cur_ecb_stale_zero)
                                           ? state_cur_ecb_points.bottom_rel_y
                                           : pre_entry_prev_ecb_rel;
+      const float common_fall_blended_current_ecb_rel =
+          common_fall_blended_seed_ecb_consumer
+              ? mpcoll_common_fall_blended_bottom_rel_y(batch, idx, char_id,
+                                                        common_fall_neutral_msid, ecb_frame_cur)
+              : 0.0f;
       const float hidden_current_ecb_rel = active_damage_hitlag_ecb_consumer ? state_cur_ecb_rel
                                            : common_fall_blended_seed_ecb_consumer
-                                               ? state_desired_ecb_points.bottom_rel_y
+                                               ? common_fall_blended_current_ecb_rel
                                                : desired_ecb_rel;
       const float prev_ecb_rel =
           (use_hidden_ecb_lifetime && !lock_bottom_to_zero) ? state_cur_ecb_rel : pose_prev_ecb_rel;
@@ -8585,6 +8610,22 @@ void mpcoll_ground_apply(MslBatch* batch) {
       MslEcbWorldPoints prev_ecb_points = {0};
       if (use_hidden_ecb_lifetime && have_state_cur_ecb) {
         prev_ecb_points = state_cur_ecb_points;
+        if (common_fall_blended_seed_ecb_consumer) {
+          // Source CommonFall collision order:
+          // mpCollInterpolateECB first promotes the previous callback's blended current ECB into
+          // prev_ecb, then ftCo_Fall_Anim_Inner's selected submotion/blend publishes the current
+          // ECB consumed by mpColl_80044628_Floor. Reseeded one-step rows only receive a hidden
+          // seed for the previous callback's CollData; current must follow the live post-Anim
+          // CommonFall blend, not the raw neutral Fall/FallAerial/FallSpecial pose.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+          //   ftCo_Fall_Anim_Inner,ftCo_Fall_Coll}
+          // refs/melee/src/melee/mp/mpcoll.c::{
+          //   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor}
+          cur_ecb_points.bottom_rel_y = common_fall_blended_current_ecb_rel;
+          cur_ecb_points.bottom_y = y + common_fall_blended_current_ecb_rel;
+          desired_ecb_points.bottom_rel_y = common_fall_blended_current_ecb_rel;
+          desired_ecb_points.bottom_y = y + common_fall_blended_current_ecb_rel;
+        }
         if (active_damage_hitlag_ecb_consumer) {
           // During active Damage hitlag, the replay-visible Damage action can advance while source
           // CollData still carries the pre-hit JObj collision envelope. Use that hidden envelope for

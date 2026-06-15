@@ -80,6 +80,11 @@ def main() -> int:
         help="also write interpreter DamageFall IASA/Fall_Enter JSONL beside the dump",
     )
     ap.add_argument(
+        "--fall-floor-probe",
+        action="store_true",
+        help="also write interpreter Fall/FallSpecial mpColl floor publication JSONL beside the dump",
+    )
+    ap.add_argument(
         "--throw-release-probe",
         action="store_true",
         help="also write interpreter ftCo_800DDDE4 throw-release JSONL beside the dump",
@@ -129,6 +134,7 @@ def main() -> int:
     dump_path = out_dir / f"{stem}.bin"
     collision_probe_path = out_dir / f"{stem}_collision_probe.jsonl" if args.collision_probe else None
     damagefall_probe_path = out_dir / f"{stem}_damagefall_probe.jsonl" if args.damagefall_probe else None
+    fall_floor_probe_path = out_dir / f"{stem}_fall_floor_probe.jsonl" if args.fall_floor_probe else None
     throw_release_probe_path = (
         out_dir / f"{stem}_throw_release_probe.jsonl" if args.throw_release_probe else None
     )
@@ -155,6 +161,7 @@ def main() -> int:
             probe_interpreter_frame_end=max(seed_frame, ref_frame),
             collision_probe_path=collision_probe_path,
             damagefall_probe_path=damagefall_probe_path,
+            fall_floor_probe_path=fall_floor_probe_path,
             throw_release_probe_path=throw_release_probe_path,
             throw_laser_event_probe_path=throw_laser_event_probe_path,
             laser_shield_reflect_event_probe_path=laser_shield_reflect_event_probe_path,
@@ -200,6 +207,8 @@ def main() -> int:
         summary["collision_probe_jsonl"] = _display_path(collision_probe_path, root)
     if damagefall_probe_path is not None:
         summary["damagefall_probe_jsonl"] = _display_path(damagefall_probe_path, root)
+    if fall_floor_probe_path is not None:
+        summary["fall_floor_probe_jsonl"] = _display_path(fall_floor_probe_path, root)
     if throw_release_probe_path is not None:
         summary["throw_release_probe_jsonl"] = _display_path(throw_release_probe_path, root)
     if throw_laser_event_probe_path is not None:

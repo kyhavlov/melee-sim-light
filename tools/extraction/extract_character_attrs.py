@@ -547,11 +547,11 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     if ftdata_symbol == "ftDataMars":
         fallspecial_xc0_source_fx_kind_mask = (1 << 15) | (1 << 16)
     # Probe-backed seed/provenance overlay:
-    # Slippi does not expose CollData ECB bottom. Marth FallAerial shallow landing witnesses need
-    # the seed CollData bottom reconstructed from the CommonFall directional blend hidden lane,
-    # but aggregate Fox/Falco controls reject promoting that to a shared free-running mpColl rule.
-    # Keep this as an explicit character/action seed mask until a direct mpColl probe proves a
-    # wider live-callback owner.
+    # Slippi does not expose CollData ECB bottom. Marth FallAerial shallow landing witnesses and
+    # Sheik Fall shallow platform/floor witnesses need the seed CollData bottom reconstructed from
+    # the CommonFall directional blend hidden lane, but aggregate Fox/Falco controls reject
+    # promoting that to a shared free-running mpColl rule. Keep this as an explicit
+    # character/action seed mask until a direct mpColl probe proves a wider live-callback owner.
     # Bit order: Fall, FallAerial, FallSpecial.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::{
     #   ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}
@@ -559,6 +559,8 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     common_fall_blended_ecb_seed_mask = 0
     if ftdata_symbol == "ftDataMars":
         common_fall_blended_ecb_seed_mask = 1 << 1
+    if ftdata_symbol == "ftDataSeak":
+        common_fall_blended_ecb_seed_mask = 1 << 0
 
     out = {
         "grab_capture_anchor_part_id": grab_capture_anchor_part_id,

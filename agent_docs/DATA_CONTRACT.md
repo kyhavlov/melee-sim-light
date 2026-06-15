@@ -1137,15 +1137,17 @@ Characters (Fox/Falco/Marth/Sheik):
     `src/char_params.c` from `data/characters/<char>.json`.
     - Bit order is common Fall-family action order: bit 0 = Fall, bit 1 = FallAerial,
       bit 2 = FallSpecial.
-    - Current values: Fox/Falco `0`; Marth `FallAerial` (`0b010` / `2`).
+    - Current values: Fox/Falco `0`; Marth `FallAerial` (`0b010` / `2`);
+      Sheik `Fall` (`0b001` / `1`).
     - This is a seed/provenance overlay for reconstructing hidden CollData ECB bottom from the
       CommonFall directional blend lane. It initializes a one-callback collision seed lane and is
       not a free-running `mpColl` gameplay branch.
     - Sources/proof:
       `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner`,
       `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::{
-      ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}`, and aggregate Fox/Falco controls rejecting a
-      shared live-callback publication rule.
+      ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}`, the pushed Ishiiruka
+      `mpColl_80047E14` / `mpColl_80044628_Floor` Fall-floor probe, and aggregate Fox/Falco
+      controls rejecting a shared live-callback publication rule.
   - `sheik_*` special attrs: runtime-required Sheik character attrs loaded by
     `src/char_params.c` from `data/characters/sheik.json`.
     - Extracted by `tools/extraction/extract_character_attrs.py` using the `seak_special` layout

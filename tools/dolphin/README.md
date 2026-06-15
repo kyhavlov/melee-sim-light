@@ -102,6 +102,15 @@ This probe is how the UCF 0.84 tumble component (`x670 == 1` wiggle with a UCF 1
 identified. Budget interpreter probes around the requested target frames, not the surrounding JIT
 dump context.
 
+## Fall floor publication probe
+
+Records entry/return for `mpColl_80047E14`, `mpColl_80044628_Floor`, and
+`mpColl_80044838_Floor`, including CollData position, floor index, ECB, floor skip, env flags,
+return value, and the owning fighter where available. Use `forensic_row_dump.py
+--fall-floor-probe` or `dolphin_engine_dump.py --fall-floor-probe <path.jsonl>`. Keep the
+interpreter window to the exact witness frame; this probe is for mpColl source-boundary evidence,
+not broad replay tracing.
+
 ## Collision primitive probe
 
 Some BODY-contact investigations need primitives at the pre-`ftColl_80076ED8` phase, before the

@@ -59,6 +59,7 @@ SM_ESCAPE_AIR = 44
 SM_LANDING_FALL_SPECIAL = 36
 SM_JUMP_AERIAL_F = 18
 SM_WAIT1_0 = 2
+SM_FALL = 20
 SM_ATTACK_AIR_F = 69
 SM_LANDING = 35
 SM_FALL_AERIAL = 23
@@ -66,6 +67,7 @@ SM_FX_SPECIAL_AIR_N_START = 298
 CHAR_FOX = 1
 CHAR_FALCO = 22
 CHAR_MARTH = 18
+CHAR_SHEIK = 7
 STAGE_FD = 32
 STAGE_FOD = 2
 ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_HARD_FLOOR = 3
@@ -5249,6 +5251,56 @@ def test_marth_fallaerial_commonfall_blended_ecb_still_lands_deeper_contacts(
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
     assert int(row["ref_t1"]["on_ground"][p]) == 1
     assert int(row["ref_t1"]["ground_id"][p]) == expected_ground
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "p", "expected_action", "expected_msid"),
+    [
+        ("RuralReasonableRat.msl", 523, 0, ACT_LANDING, 21),
+        ("StiffLustrousZebra.msl", 1619, 0, ACT_FALL, 22),
+        ("StiffLustrousZebra.msl", 1620, 0, ACT_LANDING, 22),
+    ],
+)
+def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
+    dataset_name: str, record: int, p: int, expected_action: int, expected_msid: int
+) -> None:
+    # Sheik ordinary Fall uses the same ftCo_Fall_Anim_Inner directional submotion blend as Marth
+    # FallAerial above. A focused Dolphin probe on these witness rows captured
+    # ftCo_Fall_Coll -> ft_800831CC -> mpColl_80047E14 and showed vanilla's
+    # mpColl_80044628_Floor accept/reject split follows the CommonFall-blended CollData ECB
+    # bottom, not the raw neutral Fall table:
+    # - RuralReasonableRat:523 lowers the Fall/F bottom enough to land.
+    # - StiffLustrousZebra:1619 raises the Fall/B bottom and stays airborne.
+    # - StiffLustrousZebra:1620 is the adjacent deeper Fall/B contact that lands next frame.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+    #   ftCo_Fall_Anim_Inner,ftCo_Fall_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
+    # Probe logs:
+    # reports/triage/newchar_sheik/fall_floor_probe_{rural_523_p0,stiff_1619_p0}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik" / dataset_name
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["char_id"][p]) == CHAR_SHEIK
+    assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(row["seed_t"]["animation_index"][p]) == SM_FALL
+    x4, msid = _debug_commonfall_seed_state(ds, record, p)
+    assert x4 > 0.0
+    assert msid == expected_msid
+    assert int(row["ref_t1"]["action_id"][p]) == expected_action
 
     out = _run_one_step(ds, record)
     ref = row["ref_t1"]

@@ -594,7 +594,7 @@ def test_character_overlay_masks_survive_fresh_extraction() -> None:
         "fox": (1, 0, 0, 0),
         "falco": (22, 0, 0, 0),
         "marth": (18, (1 << 0) | (1 << 3), (1 << 15) | (1 << 16), 1 << 1),
-        "sheik": (7, 1 << 3, 0, 0),
+        "sheik": (7, 1 << 3, 0, 1 << 0),
     }
     for char_name, (sim_char, throw_mask, fallspecial_mask, commonfall_mask) in cases.items():
         attrs = json.loads(Path(f"data/characters/{char_name}.json").read_text(encoding="utf-8"))
@@ -607,7 +607,7 @@ def test_character_overlay_masks_survive_fresh_extraction() -> None:
 
 
 @pytest.mark.integration
-def test_sheik_throw_release_mask_survives_fresh_character_attr_extraction(tmp_path: Path) -> None:
+def test_sheik_overlay_masks_survive_fresh_character_attr_extraction(tmp_path: Path) -> None:
     required = [Path("_iso/PlCo.dat"), Path("_iso/PlSk.dat")]
     missing = [p for p in required if not p.exists()]
     if missing:
@@ -633,6 +633,7 @@ def test_sheik_throw_release_mask_survives_fresh_character_attr_extraction(tmp_p
     )
     attrs = json.loads((out_dir / "sheik.json").read_text(encoding="utf-8"))
     assert int(attrs["throw_release_mpcoll_floor_publication_mask"]) == (1 << 3)
+    assert int(attrs["common_fall_blended_ecb_seed_mask"]) == (1 << 0)
 
 
 @pytest.mark.integration

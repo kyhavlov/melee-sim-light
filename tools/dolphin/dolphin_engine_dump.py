@@ -200,6 +200,9 @@ def capture_engine_dump(
     damagefall_probe_path: str | Path | None = None,
     damagefall_probe_frame_start: int | None = None,
     damagefall_probe_frame_end: int | None = None,
+    fall_floor_probe_path: str | Path | None = None,
+    fall_floor_probe_frame_start: int | None = None,
+    fall_floor_probe_frame_end: int | None = None,
     probe_interpreter_frame_start: int | None = None,
     probe_interpreter_frame_end: int | None = None,
     throw_release_probe_path: str | Path | None = None,
@@ -290,6 +293,11 @@ def capture_engine_dump(
         damagefall_probe_frame_start,
         damagefall_probe_frame_end,
     )
+    add_probe_window(
+        fall_floor_probe_path,
+        fall_floor_probe_frame_start,
+        fall_floor_probe_frame_end,
+    )
     add_probe_window(throw_release_probe_path)
     add_probe_window(throw_laser_event_probe_path)
     add_probe_window(laser_shield_reflect_event_probe_path)
@@ -324,6 +332,14 @@ def capture_engine_dump(
         )
         env["MSL_DAMAGEFALL_PROBE_FRAME_END"] = str(
             resolved_end if damagefall_probe_frame_end is None else int(damagefall_probe_frame_end)
+        )
+    if fall_floor_probe_path is not None:
+        env["MSL_FALL_FLOOR_PROBE_PATH"] = str(Path(fall_floor_probe_path).resolve())
+        env["MSL_FALL_FLOOR_PROBE_FRAME_START"] = str(
+            resolved_start if fall_floor_probe_frame_start is None else int(fall_floor_probe_frame_start)
+        )
+        env["MSL_FALL_FLOOR_PROBE_FRAME_END"] = str(
+            resolved_end if fall_floor_probe_frame_end is None else int(fall_floor_probe_frame_end)
         )
     if throw_release_probe_path is not None:
         env["MSL_THROW_RELEASE_PROBE_PATH"] = str(
@@ -448,6 +464,14 @@ def main() -> int:
     ap.add_argument("--damagefall-probe-frame-start", type=int, default=None)
     ap.add_argument("--damagefall-probe-frame-end", type=int, default=None)
     ap.add_argument(
+        "--fall-floor-probe",
+        type=Path,
+        default=None,
+        help="optional JSONL path for Fall/FallSpecial mpColl floor publication events; uses a bounded interpreter CPU window",
+    )
+    ap.add_argument("--fall-floor-probe-frame-start", type=int, default=None)
+    ap.add_argument("--fall-floor-probe-frame-end", type=int, default=None)
+    ap.add_argument(
         "--probe-interpreter-frame-start",
         type=int,
         default=None,
@@ -495,6 +519,9 @@ def main() -> int:
         damagefall_probe_path=args.damagefall_probe,
         damagefall_probe_frame_start=args.damagefall_probe_frame_start,
         damagefall_probe_frame_end=args.damagefall_probe_frame_end,
+        fall_floor_probe_path=args.fall_floor_probe,
+        fall_floor_probe_frame_start=args.fall_floor_probe_frame_start,
+        fall_floor_probe_frame_end=args.fall_floor_probe_frame_end,
         probe_interpreter_frame_start=args.probe_interpreter_frame_start,
         probe_interpreter_frame_end=args.probe_interpreter_frame_end,
         throw_release_probe_path=args.throw_release_probe,
