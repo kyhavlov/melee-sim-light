@@ -728,8 +728,8 @@ Collect before writing any code:
    `throw_release_mpcoll_floor_publication_mask`, not the anchor id. Only the
    probed throw directions and admitted `mpColl_80043754` floor sweep should
    publish the floor-hit substep root instead of the raw below-floor `x1A70`
-   point (Marth ThrowF/ThrowLw publish; Marth ThrowB and Fox/Falco controls do
-   not). Probe at least one forward throw/CaptureCut, one adjacent
+   point (Marth ThrowF/ThrowLw and Sheik ThrowLw publish; Marth ThrowB and
+   Fox/Falco controls do not). Probe at least one forward throw/CaptureCut, one adjacent
    throw-direction variant, and one non-new-char negative before assuming spacie
    release placement generalizes. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4`,

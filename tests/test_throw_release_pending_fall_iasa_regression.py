@@ -193,18 +193,21 @@ def _run_rollout_records(
 @pytest.mark.integration
 def test_throw_release_mpcoll_floor_publication_mask_is_explicit_data() -> None:
     # The release-local mpColl floor publication owner is not "anchor part 88" as a runtime rule.
-    # The data mask is an explicit probe-backed semantic: Marth ThrowF/ThrowLw publish, while
-    # Fox/Falco controls and Marth ThrowB do not.
+    # The data mask is an explicit probe-backed semantic: Marth ThrowF/ThrowLw and Sheik ThrowLw
+    # publish, while Fox/Falco controls and Marth ThrowB do not.
     # Bit order: ThrowF, ThrowB, ThrowHi, ThrowLw.
     binding = pytest.importorskip("msl_binding")
     fox = binding.char_params_part_anchors(1)
+    sheik = binding.char_params_part_anchors(7)
     marth = binding.char_params_part_anchors(18)
     falco = binding.char_params_part_anchors(22)
 
     assert int(fox["grab_capture_anchor_part_id"]) == 71
+    assert int(sheik["grab_capture_anchor_part_id"]) == 56
     assert int(falco["grab_capture_anchor_part_id"]) == 65
     assert int(marth["grab_capture_anchor_part_id"]) == 88
     assert int(fox["throw_release_mpcoll_floor_publication_mask"]) == 0
+    assert int(sheik["throw_release_mpcoll_floor_publication_mask"]) == (1 << 3)
     assert int(falco["throw_release_mpcoll_floor_publication_mask"]) == 0
     assert int(marth["throw_release_mpcoll_floor_publication_mask"]) == ((1 << 0) | (1 << 3))
 

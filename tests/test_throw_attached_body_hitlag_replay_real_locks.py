@@ -15,6 +15,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 ACT_THROW_LW = 222
 ACT_THROWN_LW = 242
 ACT_DAMAGE_FLY_TOP = 90
+ACT_DOWN_BOUND_U = 183
 
 
 def _field_bytes(samples, record: int, field: str, stride: int) -> np.ndarray:
@@ -167,6 +168,34 @@ def test_sheik_throwlw_body_hitlag_resumes_thrower_anim_before_release_rollout()
     assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
     assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim])
     assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]))
+    assert float(out["pos_y"][victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_sheik_throwlw_release_floor_publication_prevents_false_downbound_rollout() -> None:
+    # ftCo_800DDDE4 publishes Sheik ThrowLw's release-local mpColl floor correction before
+    # ftCo_800DE7C0 damage entry. RuralReasonableRat rec3168 would otherwise enter DamageFlyTop
+    # from the raw below-floor x1A70 root and false-DownBound on rec3169.
+    #
+    # Probe evidence: reports/triage/newchar_sheik/dolphin_throw_release_rural_reasonable_rat_3168_p1
+    # shows ftCo_800DDDE4 selected TransN2 bone 56 / XRotN bone 2, x2226_b2=1 at entry, and
+    # mpColl_800471F8 returned victim CollData.cur_pos.y = 0.000100 before damage entry.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    start_record = 2950
+    victim = 1
+    out, ref = _rollout_to(dataset_path, start_record, 3169)
+    assert int(ref["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["action_id"][victim]) != ACT_DOWN_BOUND_U
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim])
+    assert float(out["pos_y"][victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=3e-4)
 
 
 @pytest.mark.integration

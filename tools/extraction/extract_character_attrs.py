@@ -520,17 +520,20 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     # Probe-backed gameplay overlay:
     # ftCo_800DDDE4 always samples a selected capture/throw anchor, but the observed
     # mpColl_800471F8 floor-publication subset is not equivalent to the anchor part id.
-    # Marth ThrowF and ThrowLw publish the floor-hit substep root before damage entry; Marth
-    # ThrowB and Fox/Falco controls do not. Keep the source-completion discriminator explicit so
-    # future characters with the same anchor id do not inherit this path accidentally.
+    # Marth ThrowF/ThrowLw and Sheik ThrowLw publish the floor-hit substep root before damage
+    # entry; Marth ThrowB and Fox/Falco controls do not. Keep the source-completion discriminator
+    # explicit so future characters with the same anchor id do not inherit this path accidentally.
     # Bit order: ThrowF, ThrowB, ThrowHi, ThrowLw.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
     # refs/Ishiiruka engine-dump-v12-probes ftCo_800DDDE4 probe:
-    #   IPW 1231..1233/10031, ParallelFamiliarZebra 1427..1429, FSP 9061..9067.
+    #   IPW 1231..1233/10031, ParallelFamiliarZebra 1427..1429, FSP 9061..9067,
+    #   RuralReasonableRat 3168.
     throw_release_mpcoll_floor_publication_mask = 0
     if ftdata_symbol == "ftDataMars":
         throw_release_mpcoll_floor_publication_mask = (1 << 0) | (1 << 3)
+    if ftdata_symbol == "ftDataSeak":
+        throw_release_mpcoll_floor_publication_mask = 1 << 3
     # Source-callsite gameplay overlay:
     # ftCo_80096900 stores arg1 into mv.co.fallspecial.xC. Marth Dolphin Slash calls it with
     # arg1=0 from SpecialHi/SpecialAirHi, while Fox/Falco Firefox fall/end callsites pass arg1=1.
