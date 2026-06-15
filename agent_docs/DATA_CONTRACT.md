@@ -929,14 +929,24 @@ Runtime consumption:
 - `src/api.c` seeds `MslState::sheik_needle_count` and the Needle-owned `sheik_special_timer`.
 - `src/sheik_specials.c` owns free-running count/timer transitions for the fighter MotionState.
 - `src/items.c` publishes held and thrown Needle articles from the fighter special callbacks.
+- On Needle End shoot frames with positive `sheik_needle_count_u8`, preprocessing also stores the
+  simulated callback frame's Slippi random_seed in `seed_t.frame_pre_random_seed`. `shootNeedles`
+  consumes `HSD_Randi(9)` in accessory/item phase after `ftSk_SpecialNEnd_Anim` arms
+  `mv.sk.specialn.x4`, while the visible replay seed row still describes the previous post-frame
+  fighter/item state. This is a probe-backed hidden HSD stream reconstruction for replay reseeds,
+  not a free-running gameplay override.
 
 Cache/regeneration:
 - These lanes expand `MslSeed` and `tools/eval/dataset.py::SEED_DTYPE`. Cache version 24 is the
   first valid cache generation for Sheik datasets that include Needle count/timer lanes; older
   `.msl` files must be regenerated before Sheik one-step/rollout validation is trusted.
+- Cache version 25 is the first valid cache generation for Needle End shoot-frame
+  `seed_t.frame_pre_random_seed` reconstruction; older same-record-size `.msl` files have stale
+  Y-jitter RNG semantics.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{doEnter,ftSk_SpecialNLoop_Anim,doIasa,ftSk_SpecialNEnd_Anim,shootNeedles}`.
+- `refs/slippi-ssbm-asm/Recording/SendFrameStart.s` for the frame-start random_seed publication.
 
 ## Replay Seed Contract: CommonFall Blend State
 

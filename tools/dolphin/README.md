@@ -195,6 +195,28 @@ Parse or summarize the JSONL with:
 uv run python -m tools.dolphin.laser_shield_reflect_event_dump reports/triage/<probe>/events.jsonl
 ```
 
+## Sheik Needle intra-frame event probe
+
+Sheik Needle rows can depend on hidden accessory/item callback timing and RNG calls that are not
+recoverable from the public post-frame seed alone. The pinned probe build includes an env-gated hook
+for focused Needle spawn, setup, RNG, and thrown-item ground-contact events.
+
+Pass `--sheik-needle-probe <path.jsonl>` through `dolphin_engine_dump.py`, or use
+`forensic_row_dump.py --sheik-needle-probe`. The wrapper sets `MSL_SHEIK_NEEDLE_PROBE_PATH` and a
+bounded interpreter CPU window. Keep that window to the exact target frame or two; this probe logs
+every `HSD_Randi` call made by Sheik Needle owners in the window, so long spans are both slow and
+noisy. The probe records JSONL events for:
+
+- `ftSk_SpecialN.c::shootNeedles`
+- `it_802AFD8C` / `it_802AFEA8`
+- `itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Coll`
+- `it_8026EA20`, `mpLib_80054ED8`, and `Item_80268E5C` when called from Needle owners
+- `HSD_Randi` from Needle spawn/contact/bounce callsites
+
+Each event includes the frame, PC/LR, RNG seed before/after, random max/return where applicable,
+fighter Needle hidden fields (`fv.sk.x0`, held item, `specialn.x0/x4/x8`), and thrown Needle
+state/position/velocity/previous sweep position/line id/bounce parameters.
+
 ## Controlled playback probes
 
 Use `slp_scenario_probe.py` when a modelplay/webplay symptom needs vanilla confirmation but exact

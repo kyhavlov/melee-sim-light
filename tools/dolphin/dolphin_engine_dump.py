@@ -208,6 +208,7 @@ def capture_engine_dump(
     throw_release_probe_path: str | Path | None = None,
     throw_laser_event_probe_path: str | Path | None = None,
     laser_shield_reflect_event_probe_path: str | Path | None = None,
+    sheik_needle_probe_path: str | Path | None = None,
 ) -> CaptureResult:
     replay = Path(replay)
     if not replay.exists():
@@ -301,6 +302,7 @@ def capture_engine_dump(
     add_probe_window(throw_release_probe_path)
     add_probe_window(throw_laser_event_probe_path)
     add_probe_window(laser_shield_reflect_event_probe_path)
+    add_probe_window(sheik_needle_probe_path)
     if probe_windows:
         interpreter_start = min(start for start, _end in probe_windows)
         interpreter_end = max(end for _start, end in probe_windows)
@@ -353,6 +355,12 @@ def capture_engine_dump(
         env["MSL_LASER_SHIELD_REFLECT_EVENT_PROBE_PATH"] = str(
             Path(laser_shield_reflect_event_probe_path).resolve()
         )
+    if sheik_needle_probe_path is not None:
+        env["MSL_SHEIK_NEEDLE_PROBE_PATH"] = str(
+            Path(sheik_needle_probe_path).resolve()
+        )
+        env["MSL_SHEIK_NEEDLE_PROBE_FRAME_START"] = str(resolved_start)
+        env["MSL_SHEIK_NEEDLE_PROBE_FRAME_END"] = str(resolved_end)
     t0 = time.monotonic()
     rc = 1
     error: str | None = None
@@ -501,6 +509,12 @@ def main() -> int:
         default=None,
         help="optional JSONL path for laser shield/reflect branch events; uses a bounded interpreter CPU window",
     )
+    ap.add_argument(
+        "--sheik-needle-probe",
+        type=Path,
+        default=None,
+        help="optional JSONL path for Sheik Needle spawn/RNG/collision events; uses a bounded interpreter CPU window",
+    )
     args = ap.parse_args()
 
     result = capture_engine_dump(
@@ -527,6 +541,7 @@ def main() -> int:
         throw_release_probe_path=args.throw_release_probe,
         throw_laser_event_probe_path=args.throw_laser_event_probe,
         laser_shield_reflect_event_probe_path=args.laser_shield_reflect_event_probe,
+        sheik_needle_probe_path=args.sheik_needle_probe,
     )
     if result.returncode != 0:
         coverage = ""

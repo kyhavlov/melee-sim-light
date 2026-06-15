@@ -6493,6 +6493,28 @@ def _main_impl(args) -> Dataset:
         action_frame_i16=samples["seed_t"]["action_frame"],
         sheik_internal_id=sheik_char_id,
     )
+    if sheik_char_id >= 0:
+        sheik_needle_shoot_rng_owner_by_player = (
+            (samples["seed_t"]["char_id"] == np.uint8(sheik_char_id))
+            & np.isin(samples["seed_t"]["action_id"], np.array([344, 348], dtype=np.uint16))
+            & np.isin(
+                samples["seed_t"]["action_frame"], np.array([2, 5, 8, 11, 14, 17], dtype=np.int16)
+            )
+            & (samples["seed_t"]["sheik_needle_count_u8"] != 0)
+        )
+        sheik_needle_shoot_rng_owner = np.any(sheik_needle_shoot_rng_owner_by_player, axis=1)
+        # Sheik End's `ftSk_SpecialNEnd_Anim` arms mv.sk.specialn.x4 in the fighter Anim
+        # callback, then accessory4_cb `shootNeedles` consumes HSD_Randi(9) in the same simulated
+        # frame's item/accessory phase. The replay seed row still carries visible post(i-1)
+        # fighter/item state, so store the callback frame's Slippi random_seed as the hidden HSD
+        # stream for these source-owned rows.
+        # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+        # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+        #   ftSk_SpecialNEnd_Anim,shootNeedles}
+        if np.any(sheik_needle_shoot_rng_owner):
+            samples["seed_t"]["frame_pre_random_seed"][sheik_needle_shoot_rng_owner] = (
+                frame_pre_random_seed[1:][sheik_needle_shoot_rng_owner]
+            )
 
     samples["seed_t"]["match_flow_pending_rebirth_char_id"][:, :] = _derive_match_flow_pending_rebirth_char_id(
         post_action_id_u16=post_action_id_u16,

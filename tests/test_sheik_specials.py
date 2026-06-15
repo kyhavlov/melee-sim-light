@@ -101,7 +101,13 @@ def test_sheik_special_attrs_are_required_for_runtime_load(tmp_path: Path) -> No
     assert "msl_batch_create failed" in combined
 
 
-def _run_sample_row(samples: np.ndarray, record: int, *, mutate_input_y: int | None = None) -> np.void:
+def _run_sample_row(
+    samples: np.ndarray,
+    record: int,
+    *,
+    mutate_input_y: int | None = None,
+    replay_frame_rng: bool = False,
+) -> np.void:
     import msl_binding
 
     row = samples[record : record + 1].copy()
@@ -121,7 +127,10 @@ def _run_sample_row(samples: np.ndarray, record: int, *, mutate_input_y: int | N
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:
         msl_binding.reseed_seed(handle, seed_bytes)
-        msl_binding.step_input(handle, prev_input_bytes, input_bytes)
+        if replay_frame_rng:
+            msl_binding.step_input_replay_frame_rng(handle, seed_bytes, prev_input_bytes, input_bytes)
+        else:
+            msl_binding.step_input(handle, prev_input_bytes, input_bytes)
         msl_binding.write_compare(handle, out_bytes)
         return out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
     finally:
@@ -724,6 +733,52 @@ def test_sheik_demo_needle_end_anim_first_latch_spawns_thrown_article_replay_rea
     assert float(out["items"]["pos_x"][0]) == pytest.approx(float(ref["items"]["pos_x"][0]))
     assert float(out["items"]["pos_y"][0]) == pytest.approx(float(ref["items"]["pos_y"][0]))
     assert float(out["items"]["vel_x"][0]) == pytest.approx(float(ref["items"]["vel_x"][0]))
+
+
+@pytest.mark.integration
+def test_sheik_demo_needle_shoot_uses_replay_frame_rng_at_accessory_phase() -> None:
+    # The second Needle's vertical jitter is owned by shootNeedles in the destination frame's
+    # accessory/item phase, after ftSk_SpecialNEnd_Anim arms mv.sk.specialn.x4. Dolphin
+    # MSL_SHEIK_NEEDLE_PROBE traces on this row show HSD_Randi(9) enters at shootNeedles with
+    # ref_t1.frame_pre_random_seed, not the seed_t post-frame stream.
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{ftSk_SpecialNEnd_Anim,shootNeedles}
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    record = 121
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_N_END
+    assert int(seed["sheik_needle_count_u8"][0]) == 1
+    assert int(seed["sheik_needle_specialn_timer_u8"][0]) == 5
+    assert int(ref["items"]["exists"][1]) == 1
+    assert int(ref["items"]["type"][1]) == ITEM_SHEIK_NEEDLE_THROWN
+
+    out = _run_sample_row(samples, record, replay_frame_rng=True)
+    assert int(out["items"]["exists"][1]) == 1
+    assert int(out["items"]["type"][1]) == ITEM_SHEIK_NEEDLE_THROWN
+    assert int(out["items"]["spawn_id"][1]) == int(ref["items"]["spawn_id"][1])
+    assert float(out["items"]["pos_y"][1]) == pytest.approx(float(ref["items"]["pos_y"][1]))
+    assert float(out["items"]["vel_x"][1]) == pytest.approx(float(ref["items"]["vel_x"][1]))
+
+
+@pytest.mark.integration
+def test_sheik_demo_needle_shoot_plain_step_does_not_pull_replay_frame_rng_negative() -> None:
+    # Adjacent seed-owner negative: if the replay hidden stream reconstruction is absent, normal
+    # step_input must not synthesize a future replay seed. It consumes the seed snapshot's current
+    # HSD stream, which is exactly why preprocessing promotes this source-owned row.
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/sheik_demo_game.msl"
+    ).copy()
+    record = 121
+    samples[record]["seed_t"]["frame_pre_random_seed"] = samples[record - 1]["ref_t1"][
+        "frame_pre_random_seed"
+    ]
+    ref = samples[record]["ref_t1"]
+    out = _run_sample_row(samples, record)
+    assert int(out["items"]["exists"][1]) == 1
+    assert int(out["items"]["type"][1]) == ITEM_SHEIK_NEEDLE_THROWN
+    assert float(out["items"]["pos_y"][1]) != pytest.approx(float(ref["items"]["pos_y"][1]))
 
 
 def test_sheik_needle_start_without_hidden_count_does_not_spawn_held_article_negative() -> None:

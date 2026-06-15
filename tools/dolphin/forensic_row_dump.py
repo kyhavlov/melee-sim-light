@@ -100,6 +100,11 @@ def main() -> int:
         help="also write interpreter laser shield/reflect event JSONL beside the dump",
     )
     ap.add_argument(
+        "--sheik-needle-probe",
+        action="store_true",
+        help="also write interpreter Sheik Needle spawn/RNG/collision JSONL beside the dump",
+    )
+    ap.add_argument(
         "--out-dir",
         type=Path,
         default=Path("reports/triage") / f"{_timestamp()}_dolphin_forensic_row",
@@ -146,6 +151,9 @@ def main() -> int:
         if args.laser_shield_reflect_event_probe
         else None
     )
+    sheik_needle_probe_path = (
+        out_dir / f"{stem}_sheik_needle_probe.jsonl" if args.sheik_needle_probe else None
+    )
     user_dir = out_dir / "dolphin_user"
     with replay_path_for_peppi(replay_path) as capture_replay_path:
         result = capture_engine_dump(
@@ -165,6 +173,7 @@ def main() -> int:
             throw_release_probe_path=throw_release_probe_path,
             throw_laser_event_probe_path=throw_laser_event_probe_path,
             laser_shield_reflect_event_probe_path=laser_shield_reflect_event_probe_path,
+            sheik_needle_probe_path=sheik_needle_probe_path,
         )
     rc = int(result.returncode)
     capture_summary = {
@@ -217,6 +226,8 @@ def main() -> int:
         summary["laser_shield_reflect_event_probe_jsonl"] = _display_path(
             laser_shield_reflect_event_probe_path, root
         )
+    if sheik_needle_probe_path is not None:
+        summary["sheik_needle_probe_jsonl"] = _display_path(sheik_needle_probe_path, root)
     summary_path = out_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

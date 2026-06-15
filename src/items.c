@@ -1831,6 +1831,15 @@ static void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int 
   static const float needle_y_pos_scale[9] = {
       -1.0f, -0.75f, -0.5f, -0.25f, 0.0f, 0.25f, 0.5f, 0.75f, 1.0f,
   };
+  // `shootNeedles` is the accessory4_cb/item-phase owner for mv.sk.specialn.x4, after
+  // ftSk_SpecialNEnd_Anim arms the latch in the fighter Anim callback. Replay one-step rows
+  // expose this as a destination-frame HSD RNG consumer: install the replay frame-start stream
+  // immediately before shootNeedles' y-jitter HSD_Randi(9) site, without changing normal
+  // free-running step_input semantics.
+  // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::shootNeedles
+  // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+  combat_rng_use_next_replay_frame_seed_if_unconsumed(batch, bi);
   const int rand_idx =
       combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_SHOOT_YPOS9, 9);
   const uint8_t air = (uint8_t)(batch->state.on_ground[o_idx] == 0u);
