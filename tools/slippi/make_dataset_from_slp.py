@@ -103,6 +103,45 @@ def _load_u8_character_attr_lut(data_root: Path, key: str) -> np.ndarray:
     return lut
 
 
+def _load_f32_character_attr_lut(data_root: Path, key: str) -> np.ndarray:
+    """Load a per-character float attr from data/characters/<char>.json."""
+
+    lut = np.zeros(256, dtype=np.float32)
+    for char_id, name in manifest_registry_chars(data_root):
+        attrs = json.loads((data_root / "characters" / f"{name}.json").read_text())
+        if key not in attrs:
+            raise ValueError(f"missing required character attr {key!r} for {name}")
+        lut[np.uint8(char_id)] = np.float32(float(attrs[key]))
+    return lut
+
+
+def _derive_common_fall_blend_seed(
+    *,
+    char_id_u8: np.ndarray,
+    action_id_u16: np.ndarray,
+    speed_air_x_self_f32: np.ndarray,
+    facing_dir_f32: np.ndarray,
+    air_drift_max_by_char: np.ndarray,
+    threshold: float,
+    lerp: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Derive prefix-causal mv.co.{fall,fallaerial,fallspecial}.x4/smid seed lanes."""
+
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_common_fall_blend_seed is required; run `make build`") from exc
+    return msl_binding.derive_common_fall_blend_seed(
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(speed_air_x_self_f32, dtype=np.float32),
+        np.ascontiguousarray(facing_dir_f32, dtype=np.float32),
+        np.ascontiguousarray(air_drift_max_by_char, dtype=np.float32),
+        float(threshold),
+        float(lerp),
+    )
+
+
 MSL_MS_CLASS_ATTACK_AIR = 1 << 0
 
 # Keep preprocessing geometry constants named with the same source owners as the runtime mpcoll
@@ -3783,8 +3822,11 @@ def _main_impl(args) -> Dataset:
     lcancel_window_frames = int(common["lcancel_window_frames"])
     lcancel_lag_div = float(common["lcancel_lag_div"])
     landing_fall_special_lag_frames = float(common["landing_fall_special_lag_frames"])
+    common_fall_blend_threshold = float(common["common_fall_blend_air_drift_threshold"])
+    common_fall_blend_lerp = float(common["common_fall_blend_lerp"])
 
     data_root = Path("data")
+    air_drift_max_by_char = _load_f32_character_attr_lut(data_root, "air_drift_max")
     laser_item_types = item_article_kind_set(data_root, "blaster_shot_itkind")
     laser_kind_by_char = item_article_values_by_sim_char(data_root, "blaster_shot_itkind")
     throw_laser_hitbox_masks = {
@@ -4680,6 +4722,18 @@ def _main_impl(args) -> Dataset:
         # fp->facing_dir1 seeded lane (signed).
         facing_dir1_post = _derive_facing_dir1_sign(facing_u8=post_dir, action_id_u16=post_state)
         samples["seed_t"]["facing_dir1"][:, slot] = facing_dir1_post[:-1]
+        common_fall_valid, common_fall_x4, common_fall_msid = _derive_common_fall_blend_seed(
+            char_id_u8=post_char,
+            action_id_u16=post_state,
+            speed_air_x_self_f32=speed_air_x_self,
+            facing_dir_f32=facing_dir1_post.astype(np.float32),
+            air_drift_max_by_char=air_drift_max_by_char,
+            threshold=common_fall_blend_threshold,
+            lerp=common_fall_blend_lerp,
+        )
+        samples["seed_t"]["common_fall_blend_valid_u8"][:, slot] = common_fall_valid[:-1]
+        samples["seed_t"]["common_fall_blend_x4_f32"][:, slot] = common_fall_x4[:-1]
+        samples["seed_t"]["common_fall_blend_msid_u16"][:, slot] = common_fall_msid[:-1]
         # Ground friction multiplier lane used by grounded-KB decay.
         # Decomp source is ft_GetGroundFrictionMultiplier(fp); Slippi currently exposes no direct
         # post-frame lane for this value in-suite, so seed explicit default identity.

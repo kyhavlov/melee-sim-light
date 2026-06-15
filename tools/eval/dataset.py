@@ -474,6 +474,11 @@ SEED_DTYPE = np.dtype(
         # SpecialHiStart_1 / SpecialAirHiStart_1 freeze animation rate at frame 35, so the
         # replay-visible action frame cannot reconstruct remaining travel frames by itself.
         ("sheik_vanish_travel_timer_u8", _arr("u1", MAX_PLAYERS)),
+        # Hidden CommonFall/FallAerial/FallSpecial blend state (`mv.co.*.x4` + selected submotion).
+        # Derived prefix-causally from replay-visible drift history; used only at reseed.
+        ("common_fall_blend_valid_u8", _arr("u1", MAX_PLAYERS)),
+        ("common_fall_blend_x4_f32", _arr("<f4", MAX_PLAYERS)),
+        ("common_fall_blend_msid_u16", _arr("<u2", MAX_PLAYERS)),
         # Marth Counter descriptor x60 hitlag-floor provenance.
         # Anim-created descriptors own shield_unk0/1; ground/air swap-recreated descriptors do not.
         # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{

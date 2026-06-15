@@ -2427,6 +2427,24 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // consume the same Fall/F/B blended pose without adding replay-row gameplay logic.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
       anim_timebase_seed_common_fall_blend(batch, idx, seed->action_frame[p]);
+      const uint8_t common_fall_blend_seed_bit =
+          reseed_common_fall_blended_ecb_seed_bit(seed->action_id[p]);
+      const MslCharParams* common_fall_blend_seed_ch =
+          msl_char_params_fast(batch->state.char_id[idx]);
+      if (seed->common_fall_blend_valid_u8[p] != 0u && common_fall_blend_seed_bit != 0u &&
+          common_fall_blend_seed_ch != NULL &&
+          (common_fall_blend_seed_ch->common_fall_blended_ecb_seed_mask &
+           common_fall_blend_seed_bit) != 0u) {
+        // Prefix-causal hidden seed lane for mv.co.{fall,fallaerial,fallspecial}.x4/smid.
+        // The fallback above uses only one visible row's current velocity; preprocessing carries
+        // the real recurrence through replay history for data-marked teacher-forced reseeds whose
+        // hidden blended ECB owner is source/probe-backed. Free-running runtime still advances x4
+        // from live velocity in anim_timebase_common_fall_blend_tick.
+        // data/characters/<char>.json::common_fall_blended_ecb_seed_mask
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+        batch->state.common_fall_blend_x4[idx] = seed->common_fall_blend_x4_f32[p];
+        batch->state.common_fall_blend_msid[idx] = seed->common_fall_blend_msid_u16[p];
+      }
       // Narrow GuardSetOff hidden-rate override:
       // frame_speed_mul_f32 above remains strictly causal. For GuardSetOff last-hitlag rows,
       // Slippi exposes the ftCo_80092F2C x19A4/lightshield-owned rate only after hitlag exits, so

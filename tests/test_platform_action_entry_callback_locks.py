@@ -5266,6 +5266,7 @@ def test_marth_fallaerial_commonfall_blended_ecb_still_lands_deeper_contacts(
         ("RuralReasonableRat.msl", 523, 0, ACT_LANDING, 21),
         ("StiffLustrousZebra.msl", 1619, 0, ACT_FALL, 22),
         ("StiffLustrousZebra.msl", 1620, 0, ACT_LANDING, 22),
+        ("StiffLustrousZebra.msl", 3696, 0, ACT_FALL, 22),
     ],
 )
 def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
@@ -5279,6 +5280,9 @@ def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
     # - RuralReasonableRat:523 lowers the Fall/F bottom enough to land.
     # - StiffLustrousZebra:1619 raises the Fall/B bottom and stays airborne.
     # - StiffLustrousZebra:1620 is the adjacent deeper Fall/B contact that lands next frame.
+    # - StiffLustrousZebra:3696 is a fastfall Fall/B row where current-speed reconstruction
+    #   over-blends x4 and false-publishes Landing; the explicit replay-prefix x4 seed stays
+    #   airborne like source.
     #
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
     #   ftCo_Fall_Anim_Inner,ftCo_Fall_Coll}
@@ -5297,9 +5301,12 @@ def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
     assert int(row["seed_t"]["char_id"][p]) == CHAR_SHEIK
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["animation_index"][p]) == SM_FALL
+    assert int(row["seed_t"]["common_fall_blend_valid_u8"][p]) == 1
     x4, msid = _debug_commonfall_seed_state(ds, record, p)
     assert x4 > 0.0
     assert msid == expected_msid
+    assert x4 == pytest.approx(float(row["seed_t"]["common_fall_blend_x4_f32"][p]), abs=1e-7)
+    assert msid == int(row["seed_t"]["common_fall_blend_msid_u16"][p])
     assert int(row["ref_t1"]["action_id"][p]) == expected_action
 
     out = _run_one_step(ds, record)

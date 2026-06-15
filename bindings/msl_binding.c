@@ -7409,6 +7409,9 @@ static PyMethodDef methods[] = {
      "float32[:]"},
     {"derive_facing_dir1_sign", msl_derive_facing_dir1_sign_py, METH_VARARGS,
      "derive_facing_dir1_sign(facing, action) -> int8[:]"},
+    {"derive_common_fall_blend_seed", msl_derive_common_fall_blend_seed_py, METH_VARARGS,
+     "derive_common_fall_blend_seed(char, action, speed_air_x_self, facing_dir, air_drift_max, "
+     "threshold, lerp) -> (valid,x4,msid)"},
     {"derive_specialhi_rotate_model_seed_lane", msl_derive_specialhi_rotate_model_seed_lane_py,
      METH_VARARGS, "derive_specialhi_rotate_model_seed_lane(...) -> (angle, valid)"},
     {"derive_throw_pulse_seed_lanes", msl_derive_throw_pulse_seed_lanes_py, METH_VARARGS,

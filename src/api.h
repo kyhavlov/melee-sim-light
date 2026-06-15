@@ -1487,6 +1487,23 @@ typedef struct MslSeed {
   //   ftSk_SpecialHi_80113838,ftSk_SpecialHi_80113A30,
   //   ftSk_SpecialHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Anim}
   uint8_t sheik_vanish_travel_timer_u8[MSL_MAX_PLAYERS];
+  // Hidden CommonFall/FallAerial/FallSpecial blend state (`mv.co.*.x4` + selected submotion).
+  //
+  // Decomp owner:
+  // - ftCo_Fall_Anim_Inner advances x4 toward the current drift target and stores the selected
+  //   Fall/F/B submotion id before the collision callback samples CollData ECB/JObjs.
+  //
+  // Seed representation:
+  // - valid=1: x4_f32/msid_u16 are the replay-prefix hidden values for this seed frame.
+  // - valid=0: fallback to deterministic action-frame reconstruction for older/debug seeds.
+  // Runtime consumes this lane only for data-marked CommonFall blended-ECB seed owners; free-run
+  // still advances this hidden state from live velocity. This lane fixes teacher-forced reseed
+  // rows whose drift history is not reconstructable from one visible row.
+  // data/characters/<char>.json::common_fall_blended_ecb_seed_mask
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+  uint8_t common_fall_blend_valid_u8[MSL_MAX_PLAYERS];
+  float common_fall_blend_x4_f32[MSL_MAX_PLAYERS];
+  uint16_t common_fall_blend_msid_u16[MSL_MAX_PLAYERS];
   // Marth Counter descriptor hitlag-floor provenance (`shield_unk0/1 = MarsAttributes::x60`).
   //
   // Decomp owner:

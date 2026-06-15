@@ -4932,6 +4932,123 @@ PyObject* msl_derive_facing_dir1_sign_py(PyObject* self, PyObject* args) {
   return (PyObject*)out;
 }
 
+PyObject* msl_derive_common_fall_blend_seed_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* char_obj = NULL;
+  PyObject* action_obj = NULL;
+  PyObject* speed_obj = NULL;
+  PyObject* facing_obj = NULL;
+  PyObject* air_drift_max_obj = NULL;
+  double threshold_arg = 0.0;
+  double lerp_arg = 0.0;
+  if (!PyArg_ParseTuple(args, "OOOOOdd", &char_obj, &action_obj, &speed_obj, &facing_obj,
+                        &air_drift_max_obj, &threshold_arg, &lerp_arg)) {
+    return NULL;
+  }
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* speed =
+      require_contiguous_array(speed_obj, NPY_FLOAT32, 1, "speed_air_x_self_f32");
+  PyArrayObject* facing = require_contiguous_array(facing_obj, NPY_FLOAT32, 1, "facing_dir_f32");
+  PyArrayObject* air_max_lut =
+      require_contiguous_array(air_drift_max_obj, NPY_FLOAT32, 1, "air_drift_max_by_char");
+  if (chr == NULL || action == NULL || speed == NULL || facing == NULL || air_max_lut == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(action);
+  if (PyArray_SIZE(chr) != n || PyArray_SIZE(speed) != n || PyArray_SIZE(facing) != n) {
+    PyErr_SetString(PyExc_ValueError,
+                    "common-fall blend seed inputs must have matching one-dimensional length");
+    return NULL;
+  }
+  if (PyArray_SIZE(air_max_lut) < 256) {
+    PyErr_SetString(PyExc_ValueError, "air_drift_max_by_char must have at least 256 entries");
+    return NULL;
+  }
+
+  npy_intp dims[1] = {n};
+  PyArrayObject* out_valid = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  PyArrayObject* out_x4 = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
+  PyArrayObject* out_msid = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT16, 0);
+  if (out_valid == NULL || out_x4 == NULL || out_msid == NULL) {
+    Py_XDECREF(out_valid);
+    Py_XDECREF(out_x4);
+    Py_XDECREF(out_msid);
+    return NULL;
+  }
+
+  const uint8_t* ch = (const uint8_t*)PyArray_DATA(chr);
+  const uint16_t* act = (const uint16_t*)PyArray_DATA(action);
+  const float* sx = (const float*)PyArray_DATA(speed);
+  const float* fd = (const float*)PyArray_DATA(facing);
+  const float* air_max = (const float*)PyArray_DATA(air_max_lut);
+  uint8_t* ov = (uint8_t*)PyArray_DATA(out_valid);
+  float* ox = (float*)PyArray_DATA(out_x4);
+  uint16_t* om = (uint16_t*)PyArray_DATA(out_msid);
+
+  float x4 = 0.0f;
+  uint16_t stored_msid = 0u;
+  uint8_t prev_common = 0u;
+  uint16_t prev_action = 0xFFFFu;
+  uint8_t prev_char = 0xFFu;
+  const float threshold = (float)threshold_arg;
+  const float lerp = (float)lerp_arg;
+
+  for (npy_intp i = 0; i < n; i++) {
+    uint16_t neutral = 0u;
+    uint16_t forwards = 0u;
+    uint16_t backwards = 0u;
+    if (!msl_action_common_fall_blend_msids(act[i], &neutral, &forwards, &backwards)) {
+      x4 = 0.0f;
+      stored_msid = 0u;
+      prev_common = 0u;
+      prev_action = act[i];
+      prev_char = ch[i];
+      continue;
+    }
+    if (prev_common == 0u || act[i] != prev_action || ch[i] != prev_char) {
+      x4 = 0.0f;
+      stored_msid = neutral;
+    }
+
+    uint16_t target_msid = neutral;
+    float target = 0.0f;
+    const float max = air_max[ch[i]];
+    if (isfinite(max) && max > 0.0f) {
+      float frac = sx[i] / max;
+      if (frac > 1.0f) {
+        frac = 1.0f;
+      } else if (frac < -1.0f) {
+        frac = -1.0f;
+      }
+      const float abs_frac = fabsf(frac);
+      if (abs_frac > threshold && threshold < 1.0f) {
+        target = (abs_frac - threshold) / (1.0f - threshold);
+        const float facing_dir = fd[i] < 0.0f ? -1.0f : 1.0f;
+        target_msid = (frac * facing_dir > 0.0f) ? forwards : backwards;
+      }
+    }
+
+    x4 += lerp * (target - x4);
+    if (x4 < 0.0f) {
+      x4 = 0.0f;
+    } else if (x4 > 1.0f) {
+      x4 = 1.0f;
+    }
+    if (x4 != 0.0f && target_msid != stored_msid) {
+      stored_msid = target_msid;
+    }
+    ov[i] = 1u;
+    ox[i] = x4;
+    om[i] = stored_msid;
+    prev_common = 1u;
+    prev_action = act[i];
+    prev_char = ch[i];
+  }
+
+  return Py_BuildValue("NNN", out_valid, out_x4, out_msid);
+}
+
 PyObject* msl_derive_camera_target_world_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* char_obj = NULL;

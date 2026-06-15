@@ -867,13 +867,17 @@ Collect before writing any code:
    contact bugs can be caused by the opponent's common-state live pose, not the
    new character's hitboxes. `ftCo_Fall_Anim_Inner` maintains hidden
    `mv.co.fall*.x4` from air-drift ratio and stores the selected FallF/FallB
-   family `smid` before collision. The publication path is local-SRT, not final
+   family `smid` before collision. Because this scalar is history-owned, a
+   one-step replay seed cannot infer it from only the current row's drift or
+   action age; preprocessing must carry the prefix recurrence explicitly when
+   Fall-family collision or BODY pose depends on the hidden blend. The
+   publication path is local-SRT, not final
    matrix interpolation: `ftCo_800CC988` calls `ftAnim_8006FE9C` starting at
    `FtPart_TransN`, so `TopN` and other pre-TransN ancestors stay on the active
    selected submotion while TransN descendants are blended through
-   `lb_8000C490`. Slippi does not serialize `x4`; one-step reseed must
-   reconstruct it from visible action age, and free-running runtime must carry
-   the hidden entry-frame recurrence because a visible post-frame
+   `lb_8000C490`. Slippi does not serialize `x4`; one-step reseed must seed it
+   from replay prefix history, and free-running runtime must carry the hidden
+   entry-frame recurrence because a visible post-frame
    `action_frame==0` Fall-family row has already passed the source Anim owner.
    Locks for this owner should assert the hidden `x4/smid` lane directly before
    BODY/contact selection and compute expected values from
