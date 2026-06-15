@@ -56,8 +56,8 @@ Before starting each stage, write the preflight result into `reports/triage/newc
 
 Stage commit policy:
 
-- Stage 0 must record whether the user has authorized automatic commits after persistent-reviewer approval.
-- If automatic stage commits are authorized, the worker may commit a stage after the persistent reviewer approves and all stage gates pass.
+- Stage 0 decision: automatic stage commits are authorized after persistent-reviewer approval and all stage gates pass.
+- The worker may commit a stage after the persistent reviewer approves and all stage gates pass.
 - If automatic stage commits are not authorized, leave the stage uncommitted after reviewer approval and ask the user before committing.
 - Never commit with unresolved reviewer findings, missing untracked package files, dirty submodule state, or failing gates.
 
@@ -115,10 +115,11 @@ Reviewer CLI handoff:
 
 ## Sheik/Zelda Transform Policy
 
-Policy for this pass, subject to user/reviewer confirmation before Stage 1 implementation:
+Resolved Stage 0 policy for this pass:
 
 - Sheik is the in-scope supported character and must be implemented as close to vanilla as practical from decomp/source data.
 - Zelda is not a full supported character in this pass.
+- Zelda stays a private transform-support subset by default. Do not add Zelda as a public registry/default character unless runtime or preprocessing proves that a public character id/data path is required.
 - Minimal Zelda support is in scope only where needed for vanilla Sheik behavior:
   - extract/load enough Zelda registry/data to avoid pipeline holes if Sheik's Down-B, Zelda Down-B, or match-start transform references Zelda state;
   - implement enough Down-B transform plumbing to swap Sheik <-> Zelda in source-shaped state;
@@ -130,7 +131,7 @@ Policy for this pass, subject to user/reviewer confirmation before Stage 1 imple
 Open questions to resolve:
 
 - Does match-start Sheik selection in the target replay/data path require modeling Zelda -> Sheik transform, or does Slippi/engine seed directly as Sheik for selected Sheik?
-- Should Zelda be added to the public registry now as a partial/future character, or should extractors load only a private transform-support subset? Prefer the private subset unless runtime/preprocessing needs a public character id.
+- If a later stage proves a public Zelda registry/default path is required, what exact additional public loadability/unsupported-action behavior should be exposed?
 - If Zelda enters a non-transform action during a Sheik replay, should preprocessing reject that replay, runtime enter unsupported terminal behavior, or continue with minimal common-action data?
 - What exact behavior is acceptable for Zelda's Down-B to Sheik during this pass?
 
@@ -184,7 +185,7 @@ Reviewer checkpoint:
 
 Commit rule:
 
-- Commit only if the user asks to commit the planning contract; otherwise leave uncommitted for reviewer edits.
+- Commit after persistent-reviewer approval and passing Stage 0 gates, because automatic stage commits are authorized for this branch.
 
 ## Stage 1 - Registry, Data Pipeline, And No-Decomp Packaging
 
