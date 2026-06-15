@@ -164,6 +164,32 @@ def _derive_sheik_needle_seed_lanes(
     )
 
 
+def _derive_sheik_chain_seed_lanes(
+    *,
+    char_id_u8: np.ndarray,
+    action_id_u16: np.ndarray,
+    buttons_u16: np.ndarray,
+    sheik_internal_id: int | None,
+    b_mask: int,
+    release_min_frames: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive prefix-causal Sheik Chain `mv.sk.specials.x0/x4` seed lanes."""
+
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_sheik_chain_seed_lanes is required; run `make build`") from exc
+    sheik_id = -1 if sheik_internal_id is None else int(sheik_internal_id)
+    return msl_binding.derive_sheik_chain_seed_lanes(
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(buttons_u16, dtype=np.uint16),
+        sheik_id,
+        int(b_mask),
+        int(release_min_frames),
+    )
+
+
 MSL_MS_CLASS_ATTACK_AIR = 1 << 0
 
 # Keep preprocessing geometry constants named with the same source owners as the runtime mpcoll
@@ -3875,6 +3901,7 @@ def _main_impl(args) -> Dataset:
     char_active_shield_hit_int_damage: dict[int, dict[int, dict[int, int]]] = {}
     sheik_char_id: int | None = None
     sheik_vanish_travel_frames = 0
+    sheik_chain_release_min_frames = 0
 
     def _get_env_dmg_local(dmg: float) -> int:
         if float(dmg) == 0.0:
@@ -4005,6 +4032,7 @@ def _main_impl(args) -> Dataset:
         if key == "sheik":
             sheik_char_id = int(cid)
             sheik_vanish_travel_frames = int(attrs.get("sheik_vanish_travel_frames", 0))
+            sheik_chain_release_min_frames = int(attrs.get("sheik_chain_release_min_frames", 0))
         move_file = json.loads((data_root / "moves" / f"{key}.json").read_text())
         move_data = move_file["moves"]
         special_move_data = move_file.get("specials_by_msid", {})
@@ -6492,6 +6520,17 @@ def _main_impl(args) -> Dataset:
         action_id_u16=samples["seed_t"]["action_id"],
         action_frame_i16=samples["seed_t"]["action_frame"],
         sheik_internal_id=sheik_char_id,
+    )
+    (
+        samples["seed_t"]["sheik_chain_x0_u8"][:, :],
+        samples["seed_t"]["sheik_chain_release_latch_u8"][:, :],
+    ) = _derive_sheik_chain_seed_lanes(
+        char_id_u8=samples["seed_t"]["char_id"],
+        action_id_u16=samples["seed_t"]["action_id"],
+        buttons_u16=samples["input_t"]["p"]["buttons"],
+        sheik_internal_id=sheik_char_id,
+        b_mask=button_mask_b,
+        release_min_frames=sheik_chain_release_min_frames,
     )
     if sheik_char_id >= 0:
         sheik_needle_shoot_rng_owner_by_player = (

@@ -473,6 +473,84 @@ def test_sheik_chain_air_start_no_floor_contact_stays_air_start_negative() -> No
     assert int(out["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
 
 
+def test_sheik_chain_seed_lanes_use_source_x0_and_iasa_latch_order() -> None:
+    import msl_binding
+
+    char = np.full((40, 1), 7, dtype=np.uint8)
+    action = np.full((40, 1), ACT_SK_SPECIAL_S_START, dtype=np.uint16)
+    buttons = np.full((40, 1), B, dtype=np.uint16)
+    x0, latch = msl_binding.derive_sheik_chain_seed_lanes(char, action, buttons, 7, B, 10)
+    assert int(x0[0, 0]) == 0
+    assert int(x0[32, 0]) == 32
+    assert int(latch[32, 0]) == 0
+
+    # Start ground/air swaps preserve mv.sk.specials.x0 through transition_flags.
+    action[20:26, 0] = ACT_SK_SPECIAL_AIR_S_START
+    x0, _ = msl_binding.derive_sheik_chain_seed_lanes(char, action, buttons, 7, B, 10)
+    assert int(x0[19, 0]) == 19
+    assert int(x0[20, 0]) == 20
+    assert int(x0[25, 0]) == 25
+    assert int(x0[26, 0]) == 26
+
+    # Active Chain release latch is IASA-owned after Anim. A current-frame B release seeds x4 only
+    # on the following row.
+    action[:, 0] = ACT_SK_SPECIAL_S
+    buttons[:, 0] = B
+    buttons[11:, 0] = 0
+    x0, latch = msl_binding.derive_sheik_chain_seed_lanes(char, action, buttons, 7, B, 10)
+    assert int(x0[10, 0]) == 10
+    assert int(latch[11, 0]) == 0
+    assert int(latch[12, 0]) == 1
+
+
+@pytest.mark.integration
+def test_sheik_chain_start_hidden_x0_enters_active_demo_lock() -> None:
+    # Chain Start's visible animation frame is held at 25, but
+    # ftSk_SpecialS_CheckInitChain keeps incrementing mv.sk.specials.x0 and enters active Chain
+    # when x0 > ftSeakAttributes::x20.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialS_CheckInitChain,ftSk_SpecialSStart_Anim}
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+
+    before = 258
+    assert int(samples[before]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_S_START
+    assert int(samples[before]["seed_t"]["sheik_chain_x0_u8"][0]) == 31
+    assert int(samples[before]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_S_START
+    before_out = _run_sample_row(samples, before)
+    assert int(before_out["action_id"][0]) == ACT_SK_SPECIAL_S_START
+
+    record = 259
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_S_START
+    assert int(samples[record]["seed_t"]["sheik_chain_x0_u8"][0]) == 32
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_S
+    out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_S
+
+
+@pytest.mark.integration
+def test_sheik_chain_active_release_latch_exits_one_frame_after_b_release_demo_lock() -> None:
+    # Active Chain checks the existing release latch in Anim, then IASA sets x4 from the current
+    # B-held state. Therefore the B release at row 465 is not consumed until row 466.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialS_Anim,ftSk_SpecialS_IASA}
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+
+    release_frame = 465
+    assert int(samples[release_frame]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_S
+    assert (int(samples[release_frame]["input_t"]["p"]["buttons"][0]) & B) == 0
+    assert int(samples[release_frame]["seed_t"]["sheik_chain_release_latch_u8"][0]) == 0
+    assert int(samples[release_frame]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_S
+    release_out = _run_sample_row(samples, release_frame)
+    assert int(release_out["action_id"][0]) == ACT_SK_SPECIAL_S
+
+    record = 466
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_S
+    assert int(samples[record]["seed_t"]["sheik_chain_release_latch_u8"][0]) == 1
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_S_END
+    out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_S_END
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "expected_ground"),

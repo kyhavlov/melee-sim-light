@@ -1503,6 +1503,24 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c
   uint8_t sheik_needle_count_u8[MSL_MAX_PLAYERS];
   uint8_t sheik_needle_specialn_timer_u8[MSL_MAX_PLAYERS];
+  // Sheik Chain hidden state (`mv.sk.specials.x0`, `mv.sk.specials.x4`).
+  //
+  // Decomp owner:
+  // - ftSk_SpecialS_CheckInitChain increments x0 while Start holds the visible animation at the
+  //   terminal frame, spawns/extends the Chain article, and enters active Chain only when
+  //   x0 > ftSeakAttributes::x20.
+  // - ftSk_SpecialS_Anim / ftSk_SpecialAirS_Anim increment x0 in active Chain and only enter End
+  //   when x0 > ftSeakAttributes::x14 and x4 was set by the previous IASA callback after B
+  //   release.
+  //
+  // Seed representation:
+  // - x0_u8 is the saturated source x0 value before this seed frame's Anim callback.
+  // - release_latch_u8 is source x4 before this seed frame's active Chain Anim callback.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+  //   ftSk_SpecialS_CheckInitChain,ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim,
+  //   ftSk_SpecialS_IASA,ftSk_SpecialAirS_IASA}
+  uint8_t sheik_chain_x0_u8[MSL_MAX_PLAYERS];
+  uint8_t sheik_chain_release_latch_u8[MSL_MAX_PLAYERS];
   // Hidden CommonFall/FallAerial/FallSpecial blend state (`mv.co.*.x4` + selected submotion).
   //
   // Decomp owner:

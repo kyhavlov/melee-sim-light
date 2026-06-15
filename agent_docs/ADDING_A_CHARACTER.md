@@ -187,6 +187,15 @@ Collect before writing any code:
    `move_tables_special_cmd0_active_at_frame()` has a latch-clear tail, while
    the replay seed for `mv.fx.SpecialN.isBlasterLoop` must use the raw MSLFTSC1
    `cmd_var[0]` interval from `ftFx_SpecialNLoop_IASA`.
+   **Visible animation frame is not a hidden special timer**: special callbacks
+   may hold or freeze the public animation frame while a private `mv.*.x0`
+   timer keeps advancing. Treat these as seed-lane candidates when replay
+   reseed can start inside the held segment. Sheik Chain exposed this through
+   `ftSk_SpecialS_CheckInitChain`: Start holds visible frame 25 while
+   `mv.sk.specials.x0` reaches `ftSeakAttributes::x20`, and active Chain
+   consumes a release latch set by the previous IASA callback, not the current
+   Anim callback. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{ftSk_SpecialS_CheckInitChain,ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim,ftSk_SpecialS_IASA,ftSk_SpecialAirS_IASA}`.
    **Run entry collision pose can diverge from replay seed timebase**:
    `ftCo_Run_Anim` writes the next animation rate from hidden `mv.co.run.x4`
    only on reduced-friction floors; ordinary floors use `fp->gr_vel`. One-step

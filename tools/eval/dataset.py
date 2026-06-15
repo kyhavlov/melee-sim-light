@@ -478,6 +478,11 @@ SEED_DTYPE = np.dtype(
         # (`mv.sk.specialn.x0`), derived prefix-causally from replay-visible action history.
         ("sheik_needle_count_u8", _arr("u1", MAX_PLAYERS)),
         ("sheik_needle_specialn_timer_u8", _arr("u1", MAX_PLAYERS)),
+        # Hidden Sheik Chain x0 timer and release latch (`mv.sk.specials.x0/x4`).
+        # Chain Start and Active can hold visible animation frames while x0 keeps ticking, so
+        # replay-visible action_frame cannot reconstruct this at one-step reseed boundaries.
+        ("sheik_chain_x0_u8", _arr("u1", MAX_PLAYERS)),
+        ("sheik_chain_release_latch_u8", _arr("u1", MAX_PLAYERS)),
         # Hidden CommonFall/FallAerial/FallSpecial blend state (`mv.co.*.x4` + selected submotion).
         # Derived prefix-causally from replay-visible drift history; used only at reseed.
         ("common_fall_blend_valid_u8", _arr("u1", MAX_PLAYERS)),

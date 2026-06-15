@@ -33,6 +33,7 @@
 #include "ecb_pose.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
+#include "sheik_specials.h"
 #include "msl_math.h"
 #include "hitboxes.h"
 #include "hurtcaps_tables.h"
@@ -1509,6 +1510,15 @@ static inline uint8_t msl_seed_has_pre_matchflow_rng_prefix(const MslSeed* seed,
     }
   }
   return 0u;
+}
+
+static inline uint8_t msl_seed_action_is_sheik_chain(uint16_t action_id) {
+  return action_id == (uint16_t)MSL_ACT_SK_SPECIAL_S_START ||
+         action_id == (uint16_t)MSL_ACT_SK_SPECIAL_S ||
+         action_id == (uint16_t)MSL_ACT_SK_SPECIAL_S_END ||
+         action_id == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START ||
+         action_id == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S ||
+         action_id == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END;
 }
 
 static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const MslSeed* seed,
@@ -3118,12 +3128,22 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // - Needle fv.sk.x0 / mv.sk.specialn.x0 are seeded prefix-causally because End's
       //   accessory4 shootNeedles callback publishes articles from hidden stored count and shoot
       //   timer, not from action id alone.
-      // refs/melee/src/melee/ft/chara/ftSeak/{types.h,ftSk_SpecialHi.c,ftSk_SpecialN.c}
+      // - Chain mv.sk.specials.x0/x4 are seeded prefix-causally because Start and Active can hold
+      //   visible animation frames while x0 keeps ticking, and active release is owned by the
+      //   previous IASA callback's B-release latch.
+      // refs/melee/src/melee/ft/chara/ftSeak/{types.h,ftSk_SpecialHi.c,ftSk_SpecialN.c,
+      //   ftSk_SpecialS.c}
       batch->state.sheik_needle_count[idx] = seed->sheik_needle_count_u8[p];
-      batch->state.sheik_special_timer[idx] = seed->sheik_needle_specialn_timer_u8[p] != 0u
-                                                  ? seed->sheik_needle_specialn_timer_u8[p]
-                                                  : seed->sheik_vanish_travel_timer_u8[p];
-      batch->state.sheik_special_latch[idx] = 0u;
+      if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+          msl_seed_action_is_sheik_chain(seed->action_id[p])) {
+        batch->state.sheik_special_timer[idx] = seed->sheik_chain_x0_u8[p];
+        batch->state.sheik_special_latch[idx] = seed->sheik_chain_release_latch_u8[p] ? 1u : 0u;
+      } else {
+        batch->state.sheik_special_timer[idx] = seed->sheik_needle_specialn_timer_u8[p] != 0u
+                                                    ? seed->sheik_needle_specialn_timer_u8[p]
+                                                    : seed->sheik_vanish_travel_timer_u8[p];
+        batch->state.sheik_special_latch[idx] = 0u;
+      }
       {
         batch->state.capture_grab_timer[idx] = seed->capture_grab_timer_f32[p];
         batch->state.capture_wait_counter[idx] = seed->capture_wait_counter_f32[p];

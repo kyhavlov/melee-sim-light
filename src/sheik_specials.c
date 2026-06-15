@@ -39,6 +39,10 @@ static uint8_t sk_anim_finished(const MslBatch* batch, size_t idx, uint16_t acti
                                                                                               : 0u;
 }
 
+static uint8_t sk_timer_saturating_inc(uint8_t x) {
+  return x == UINT8_MAX ? UINT8_MAX : (uint8_t)(x + 1u);
+}
+
 static void sk_enter(MslBatch* batch, size_t idx, uint16_t action_id, float start_frame,
                      float anim_rate) {
   batch->state.action_id[idx] = action_id;
@@ -495,7 +499,10 @@ static void sk_update_specials(MslBatch* batch, const MslCharParams* ch, size_t 
   switch (a) {
     case MSL_ACT_SK_SPECIAL_S_START:
     case MSL_ACT_SK_SPECIAL_AIR_S_START: {
-      const uint8_t t = (uint8_t)(batch->state.sheik_special_timer[idx] + 1u);
+      // Source `mv.sk.specials.x0` is an int; the lite runtime stores only the threshold-relevant
+      // byte, so saturate instead of wrapping during long held Chain sequences.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
+      const uint8_t t = sk_timer_saturating_inc(batch->state.sheik_special_timer[idx]);
       batch->state.sheik_special_timer[idx] = t;
       if ((float)t > ch->sheik_chain_start_end_frame) {
         sk_enter(batch, idx,
@@ -507,10 +514,11 @@ static void sk_update_specials(MslBatch* batch, const MslCharParams* ch, size_t 
     } break;
     case MSL_ACT_SK_SPECIAL_S:
     case MSL_ACT_SK_SPECIAL_AIR_S: {
-      if ((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_B) == 0u) {
-        batch->state.sheik_special_latch[idx] = 1u;
-      }
-      const uint8_t t = (uint8_t)(batch->state.sheik_special_timer[idx] + 1u);
+      // Source `mv.sk.specials.x0` continues past the release threshold while B is held. Preserve
+      // the threshold state in the compact runtime lane without uint8 wraparound.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+      //   ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim}
+      const uint8_t t = sk_timer_saturating_inc(batch->state.sheik_special_timer[idx]);
       batch->state.sheik_special_timer[idx] = t;
       if ((float)t > ch->sheik_chain_release_min_frames &&
           batch->state.sheik_special_latch[idx] != 0u) {
@@ -520,6 +528,12 @@ static void sk_update_specials(MslBatch* batch, const MslCharParams* ch, size_t 
                  0.0f, 1.0f);
         batch->state.sheik_special_timer[idx] = 0u;
         batch->state.sheik_special_latch[idx] = 0u;
+      } else if ((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_B) == 0u) {
+        // ftSk_SpecialS_IASA writes x4 after the Anim callback has already tested it, so a current
+        // B release is consumed by the next active Chain frame, not the current one.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+        //   ftSk_SpecialS_Anim,ftSk_SpecialS_IASA,ftSk_SpecialAirS_Anim,ftSk_SpecialAirS_IASA}
+        batch->state.sheik_special_latch[idx] = 1u;
       }
     } break;
     case MSL_ACT_SK_SPECIAL_S_END:

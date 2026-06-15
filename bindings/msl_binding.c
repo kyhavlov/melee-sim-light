@@ -7421,6 +7421,9 @@ static PyMethodDef methods[] = {
      "threshold, lerp) -> (valid,x4,msid)"},
     {"derive_sheik_needle_seed_lanes", msl_derive_sheik_needle_seed_lanes_py, METH_VARARGS,
      "derive_sheik_needle_seed_lanes(char, action, action_frame, sheik_id) -> (count,timer)"},
+    {"derive_sheik_chain_seed_lanes", msl_derive_sheik_chain_seed_lanes_py, METH_VARARGS,
+     "derive_sheik_chain_seed_lanes(char, action, buttons, sheik_id, b_mask, release_min) -> "
+     "(x0,latch)"},
     {"derive_specialhi_rotate_model_seed_lane", msl_derive_specialhi_rotate_model_seed_lane_py,
      METH_VARARGS, "derive_specialhi_rotate_model_seed_lane(...) -> (angle, valid)"},
     {"derive_throw_pulse_seed_lanes", msl_derive_throw_pulse_seed_lanes_py, METH_VARARGS,

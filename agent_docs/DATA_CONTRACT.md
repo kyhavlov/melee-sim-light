@@ -948,6 +948,54 @@ Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{doEnter,ftSk_SpecialNLoop_Anim,doIasa,ftSk_SpecialNEnd_Anim,shootNeedles}`.
 - `refs/slippi-ssbm-asm/Recording/SendFrameStart.s` for the frame-start random_seed publication.
 
+## Replay Seed Contract: Sheik Chain x0 And Release Latch
+
+The replay seed contains:
+- `sheik_chain_x0_u8[player]`
+- `sheik_chain_release_latch_u8[player]`
+
+These lanes carry Sheik Side-B Chain hidden state needed to reproduce replay reseeds inside Chain
+Start and active Chain.
+
+Owner:
+- `mv.sk.specials.x0` is the Chain callback timer. `ftSk_SpecialS_CheckInitChain` increments it
+  during `SpecialSStart` / `SpecialAirSStart`, spawns the Chain article at
+  `ftSeakAttributes::x1C`, extends it at `x1C + 1`, and enters active Chain only when
+  `x0 > ftSeakAttributes::x20`.
+- `ftSk_SpecialS_Anim` / `ftSk_SpecialAirS_Anim` continue incrementing x0 during active Chain.
+  The active action enters End only when `x0 > ftSeakAttributes::x14` and the release latch
+  `mv.sk.specials.x4` was already set.
+- `ftSk_SpecialS_IASA` / `ftSk_SpecialAirS_IASA` set x4 after the active Anim callback when B is
+  not held, so a current-frame B release is consumed by the next active Chain Anim callback.
+- Visible `action_frame` and `anim_frame_f32` are not sufficient: Chain Start can hold its visible
+  animation at the terminal frame while x0 keeps ticking, and active Chain can hold its visible
+  frame while waiting for B release.
+
+Derivation:
+- Generated natively by `msl_binding.derive_sheik_chain_seed_lanes` from replay-prefix `char_id`,
+  `action_id`, and current-frame held buttons.
+- The B mask is `src/buttons.h::MSL_BUTTON_B`.
+- The release threshold is loaded from
+  `data/characters/sheik.json::sheik_chain_release_min_frames`, extracted from
+  `ftSeakAttributes::x14`.
+- Non-Sheik rows and non-Chain actions seed zero. Ground/air swaps within Start or End preserve
+  the prefix timer; Start -> active and active -> End reset x0 per source transition helpers.
+
+Runtime consumption:
+- `src/api.c` seeds `MslState::sheik_special_timer` and `sheik_special_latch` only for Sheik Chain
+  actions.
+- `src/sheik_specials.c` owns free-running Chain x0/latch production from the source
+  MotionState callbacks. The compact runtime x0 saturates rather than wrapping because source x0 is
+  an integer and only threshold comparisons are needed in the lite runtime.
+
+Cache/regeneration:
+- These lanes expand `MslSeed` and `tools/eval/dataset.py::SEED_DTYPE`. Cache version 26 is the
+  first valid cache generation for Sheik datasets that include Chain x0/latch lanes; older `.msl`
+  files must be regenerated before Sheik one-step/rollout validation is trusted.
+
+Decomp contract:
+- `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{ftSk_SpecialS_CheckInitChain,ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim,ftSk_SpecialS_IASA,ftSk_SpecialAirS_IASA,ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_80111DF8,ftSk_SpecialS_80111EB4}`.
+
 ## Replay Seed Contract: CommonFall Blend State
 
 The replay seed contains:

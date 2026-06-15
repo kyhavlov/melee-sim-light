@@ -5168,6 +5168,128 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
   return Py_BuildValue("NN", out_count, out_timer);
 }
 
+static inline uint8_t msl_py_action_is_sheik_chain_start(uint16_t action) {
+  return action == 349u || action == 352u;
+}
+
+static inline uint8_t msl_py_action_is_sheik_chain_active(uint16_t action) {
+  return action == 350u || action == 353u;
+}
+
+static inline uint8_t msl_py_action_is_sheik_chain_end(uint16_t action) {
+  return action == 351u || action == 354u;
+}
+
+static inline uint8_t msl_py_action_is_sheik_chain_family(uint16_t action) {
+  return msl_py_action_is_sheik_chain_start(action) ||
+         msl_py_action_is_sheik_chain_active(action) || msl_py_action_is_sheik_chain_end(action);
+}
+
+static inline uint8_t msl_py_saturating_inc_u8(uint8_t x) {
+  return x == UINT8_MAX ? UINT8_MAX : (uint8_t)(x + 1u);
+}
+
+PyObject* msl_derive_sheik_chain_seed_lanes_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* char_obj = NULL;
+  PyObject* action_obj = NULL;
+  PyObject* buttons_obj = NULL;
+  int sheik_internal_id = -1;
+  unsigned int b_mask_in = 0u;
+  int release_min_frames = 0;
+  if (!PyArg_ParseTuple(args, "OOOiIi", &char_obj, &action_obj, &buttons_obj, &sheik_internal_id,
+                        &b_mask_in, &release_min_frames)) {
+    return NULL;
+  }
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 2, "char_id_u8");
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 2, "action_id_u16");
+  PyArrayObject* buttons = require_contiguous_array(buttons_obj, NPY_UINT16, 2, "buttons_u16");
+  if (chr == NULL || action == NULL || buttons == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(chr, 0);
+  const npy_intp width = PyArray_DIM(chr, 1);
+  if (require_exact_2d_shape(action, n, width, "action_id_u16") < 0 ||
+      require_exact_2d_shape(buttons, n, width, "buttons_u16") < 0) {
+    return NULL;
+  }
+
+  PyArrayObject* out_x0 = (PyArrayObject*)PyArray_ZEROS(2, PyArray_DIMS(chr), NPY_UINT8, 0);
+  PyArrayObject* out_latch = (PyArrayObject*)PyArray_ZEROS(2, PyArray_DIMS(chr), NPY_UINT8, 0);
+  if (out_x0 == NULL || out_latch == NULL) {
+    Py_XDECREF(out_x0);
+    Py_XDECREF(out_latch);
+    return NULL;
+  }
+  if (sheik_internal_id < 0 || sheik_internal_id > 255) {
+    return Py_BuildValue("NN", out_x0, out_latch);
+  }
+
+  const uint8_t* ch = (const uint8_t*)PyArray_DATA(chr);
+  const uint16_t* act = (const uint16_t*)PyArray_DATA(action);
+  const uint16_t* held_buttons = (const uint16_t*)PyArray_DATA(buttons);
+  uint8_t* x0_out = (uint8_t*)PyArray_DATA(out_x0);
+  uint8_t* latch_out = (uint8_t*)PyArray_DATA(out_latch);
+  const uint8_t sheik_id = (uint8_t)sheik_internal_id;
+  const uint16_t b_mask = (uint16_t)b_mask_in;
+  const uint8_t release_min =
+      release_min_frames <= 0
+          ? 0u
+          : (release_min_frames > 255 ? UINT8_MAX : (uint8_t)release_min_frames);
+
+  for (npy_intp p = 0; p < width; p++) {
+    uint8_t x0 = 0u;
+    uint8_t latch = 0u;
+    uint16_t prev_action = 0u;
+    for (npy_intp i = 0; i < n; i++) {
+      const npy_intp idx = (i * width) + p;
+      const uint16_t action_i = act[idx];
+      const uint8_t chain_i = ch[idx] == sheik_id && msl_py_action_is_sheik_chain_family(action_i);
+      if (!chain_i) {
+        x0 = 0u;
+        latch = 0u;
+        prev_action = action_i;
+        continue;
+      }
+
+      if (msl_py_action_is_sheik_chain_start(action_i)) {
+        if (!msl_py_action_is_sheik_chain_start(prev_action)) {
+          x0 = 0u;
+        }
+        latch = 0u;
+      } else if (msl_py_action_is_sheik_chain_active(action_i)) {
+        if (!msl_py_action_is_sheik_chain_active(prev_action)) {
+          x0 = 0u;
+          latch = 0u;
+        }
+      } else if (!msl_py_action_is_sheik_chain_end(prev_action)) {
+        x0 = 0u;
+        latch = 0u;
+      }
+
+      x0_out[idx] = x0;
+      latch_out[idx] = latch;
+
+      if (msl_py_action_is_sheik_chain_start(action_i)) {
+        x0 = msl_py_saturating_inc_u8(x0);
+      } else if (msl_py_action_is_sheik_chain_active(action_i)) {
+        const uint8_t next_x0 = msl_py_saturating_inc_u8(x0);
+        const uint8_t exits = (uint8_t)(next_x0 > release_min && latch != 0u);
+        x0 = next_x0;
+        if (!exits && (held_buttons[idx] & b_mask) == 0u) {
+          latch = 1u;
+        }
+      } else {
+        x0 = msl_py_saturating_inc_u8(x0);
+        latch = 0u;
+      }
+      prev_action = action_i;
+    }
+  }
+
+  return Py_BuildValue("NN", out_x0, out_latch);
+}
+
 PyObject* msl_derive_camera_target_world_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* char_obj = NULL;
