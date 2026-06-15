@@ -1,7 +1,7 @@
 """Character-parameterized common-action coverage suite.
 
 This is the reusable porting checklist: every test runs for each registry character selected
-below (fox + marth this check-in; see _COVERAGE_EXCLUDE) and derives
+below (fox + marth + sheik during the Sheik port; see _COVERAGE_EXCLUDE) and derives
 its expectations from that character's extracted data (data/characters/<ch>.json, moves,
 scripts, anim tracks) plus shared ftCommonData constants - never from hardcoded per-character
 literals. A new character port is "common-action complete" when this file passes for it.
@@ -11,7 +11,7 @@ Buckets (mirrors reports/marth_port/COVERAGE.md):
   5. damage/knockdown/tech  6. ledge/cliff  7. collision substrate
 
 Decomp anchors are cited per test. Fox rows validate the harness against the long-validated
-character; Marth rows validate the port.
+character; Marth and Sheik rows validate the current new-character ports.
 """
 
 from __future__ import annotations
@@ -28,8 +28,8 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 ROOT = Path(__file__).resolve().parents[1]
 
 # Coverage characters derive from the central registry so the checklist follows new ports
-# automatically. Falco is excluded for now purely to keep the matrix fox-vs-marth focused
-# (fox already validates the harness for the spacie data shape); drop the filter to widen.
+# automatically. Falco is excluded for now purely to keep the matrix focused on one spacie
+# control plus active new-character ports; drop the filter to widen.
 from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS
 
 _COVERAGE_EXCLUDE = {"falco"}
@@ -150,6 +150,14 @@ def _run(seed: np.ndarray, frames: list[np.ndarray]) -> list[np.ndarray]:
 
 
 CHAR_PARAMS = pytest.mark.parametrize("char_name", sorted(CHARS))
+
+
+def test_common_action_matrix_includes_sheik_port_and_controls() -> None:
+    assert "fox" in CHARS
+    assert "marth" in CHARS
+    assert "sheik" in CHARS
+    assert "falco" not in CHARS
+    assert CHARS["sheik"] == _REGISTRY_CHARS["sheik"].internal_id
 
 
 # ---------------------------------------------------------------------------
