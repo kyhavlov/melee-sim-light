@@ -294,6 +294,21 @@ Collect before writing any code:
    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
    `refs/melee/src/melee/mp/mplib.c::{mpCheckFloorRemap,mpLineIntersectionH}`,
    and `data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=static_y)`.
+   **No-lock EscapeAir height-platform crossings are not bounded by raw root
+   speed**: after `CollData_X130_Locked` clears, `EscapeAir_Coll` still samples
+   the callback-local ECB bottom segment against the live transformed platform
+   line. A visible floor-to-current-bottom gap larger than `speed_y_self` can be
+   source-valid on FoD height platforms because platform motion and ECB
+   interpolation both participate in the callback interval. Keep the raw
+   vertical-speed overstep guard for static/ordinary soft-platform controls, but
+   do not apply it to generated `MSLSTG01 platform_transforms(kind=height)` lines
+   without direct CollData/probe evidence. Sheik exposed this with sustained
+   `EscapeAir -> LandingFallSpecial` FoD rows; adjacent static/ordinary
+   no-contact controls must remain airborne. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
+   `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`,
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}`,
+   and `data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)`.
    **AttackAir floor publication is script-shape and stage-source sensitive**:
    `AttackAir_Coll -> ft_80082C74 -> mpColl_800471F8` may publish
    `LandingAir*` only after the callback has a source-owned

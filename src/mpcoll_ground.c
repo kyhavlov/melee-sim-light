@@ -12310,6 +12310,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 continue;
               }
               if (!escapeair_no_lock_jumpaerial_entry &&
+                  !stage_collision_floor_line_has_height_platform_transform(
+                      stage_id, g->lines[li].segment_i) &&
                   (iy - cur_pose_bottom_y) >
                       (fabsf(batch->state.speed_y_self[idx]) + k_floor_y_bias)) {
                 // mpColl_80044628_Floor observes a platform only when the callback-local ECB

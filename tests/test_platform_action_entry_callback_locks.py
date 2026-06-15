@@ -3101,7 +3101,7 @@ def test_locked_escapeair_deep_platform_crossing_lands(
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("dataset_rel", "record", "p", "expected_ground_id"),
+    ("dataset_rel", "record", "p", "expected_ground_id", "pos_y_tol"),
     [
         (
             "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
@@ -3109,6 +3109,7 @@ def test_locked_escapeair_deep_platform_crossing_lands(
             9345,
             0,
             35,
+            1e-6,
         ),
         (
             "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
@@ -3116,16 +3117,21 @@ def test_locked_escapeair_deep_platform_crossing_lands(
             4325,
             0,
             2,
+            1e-6,
         ),
+        ("datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl", 3358, 0, 1, 2e-4),
+        ("datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl", 6683, 0, 1, 2e-4),
+        ("datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl", 7880, 0, 1, 2e-4),
     ],
 )
 def test_no_lock_sustained_escapeair_platform_contact_lands(
-    dataset_rel: str, record: int, p: int, expected_ground_id: int
+    dataset_rel: str, record: int, p: int, expected_ground_id: int, pos_y_tol: float
 ) -> None:
     # Once CollData_X130_Locked has cleared, sustained EscapeAir floor contact is the ordinary
     # ft_80082C74/mpColl_800471F8 owner. Do not keep the old no-lock vertical-frame bridge airborne:
-    # the source callback consumes static soft-platform crossings into LandingFallSpecial, including
-    # FoD's static top platform after the explicit current-EscapeAir ECB bottom sweep crosses it.
+    # the source callback consumes static/transformed soft-platform crossings into
+    # LandingFallSpecial, including FoD platform rows where the callback-local ECB bottom segment
+    # crosses the live platform but the floor-to-current-bottom gap is larger than raw vertical speed.
     #
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
@@ -3149,7 +3155,11 @@ def test_no_lock_sustained_escapeair_platform_contact_lands(
     ref = row["ref_t1"]
     for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
-    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    if pos_y_tol > 1e-6:
+        # FoD height-platform rows still carry a small root-snap residual after the source-owned
+        # LandingFallSpecial decision. Keep older static/ordinary controls exact.
+        assert "SnarlingHelplessBeaver.msl" in dataset_rel
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=pos_y_tol)
 
 
 @pytest.mark.integration
