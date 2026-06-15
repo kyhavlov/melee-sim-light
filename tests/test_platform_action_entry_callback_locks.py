@@ -1971,12 +1971,15 @@ def test_no_lock_escapeair_static_platform_overstep_stays_airborne_feh() -> None
 @pytest.mark.integration
 def test_no_lock_escapeair_ignores_fod_static_y_platform_transform_pte() -> None:
     # FoD's center platform is a generated `static_y` platform transform, not an ordinary static
-    # soft platform. Sustained no-lock EscapeAir should not borrow the static-platform sweep owner
-    # and snap upward to line 2 when the carried CollData floor is a different transformed platform.
+    # soft platform. Source `mpColl_80044628_Floor` still tests the callback-local CollData
+    # prev/current bottom interval through `mpCheckFloorRemap`; this Fox control stays airborne
+    # because the probed previous bottom is already below line 2, so `mpLineIntersectionH` rejects.
     #
     # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=static_y,line_id=2)
+    # reports/triage/newchar_sheik/fall_floor_probe_pte_422_p0/
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044628_Floor}
+    # refs/melee/src/melee/mp/mplib.c::{mpCheckFloorRemap,mpLineIntersectionH}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
@@ -1996,6 +1999,65 @@ def test_no_lock_escapeair_ignores_fod_static_y_platform_transform_pte() -> None
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record"),
+    [
+        ("datasets/sheik/replays/validation/sheik/ConstantStiffOtter.msl", 119),
+        ("datasets/sheik/replays/validation/sheik/ConstantStiffOtter.msl", 254),
+        ("datasets/sheik/replays/validation/sheik/ConstantStiffOtter.msl", 318),
+        ("datasets/sheik/replays/validation/sheik/ConstantStiffOtter.msl", 644),
+        ("datasets/sheik/replays/validation/sheik/ConstantStiffOtter.msl", 706),
+        ("datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl", 704),
+    ],
+)
+def test_sheik_escapeair_fod_static_y_remap_bottom_sweep_lands(
+    dataset_rel: str, record: int
+) -> None:
+    # Positive controls for FoD static-y transformed-platform remap. Vanilla accepts these Sheik
+    # no-lock EscapeAir rows through `mpColl_80044628_Floor`: the callback-local CollData previous
+    # bottom is above the generated center platform and the current bottom is below it, so
+    # `mpCheckFloorRemap`/`mpLineIntersectionH` publishes line 2 and `mpColl_80044838_Floor` snaps
+    # LandingFallSpecial to y=42.7501. The row set includes sustained EscapeAir and
+    # JumpAerial-entered EscapeAir callbacks; both share the same source floor-sweep owner. This is
+    # generated stage-transform + CollData endpoint ownership, not a Sheik/action exception.
+    #
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=static_y,line_id=2)
+    # reports/triage/newchar_sheik/fall_floor_probe_cso_318_p0/
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+    # refs/melee/src/melee/mp/mplib.c::{mpCheckFloorRemap,mpLineIntersectionH}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["char_id"][p]) == CHAR_SHEIK
+    assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) in (
+        ACT_ESCAPE_AIR,
+        ACT_JUMP_AERIAL_F,
+        ACT_JUMP_AERIAL_B,
+    )
+    assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["animation_index"][p]) == SM_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["ground_id"][p]) == 2
 
     out = _run_one_step(ds, record)
     ref = row["ref_t1"]

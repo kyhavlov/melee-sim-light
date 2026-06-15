@@ -12336,6 +12336,58 @@ void mpcoll_ground_apply(MslBatch* batch) {
               }
             }
           }
+          if (!found_static_platform && carried_floor_is_transformed != 0u) {
+            for (size_t li = 0; li < g->line_count; li++) {
+              const MslStageFloorLine* line = &g->lines[li];
+              const uint8_t line_is_static_y_transform =
+                  stage_collision_floor_line_has_static_y_platform_transform(stage_id,
+                                                                             line->segment_i);
+              if (!line->is_platform || line_is_static_y_transform == 0u ||
+                  !floor_line_admitted_by_source_callback(batch, idx, g, stage_id, (int)li, 0xFFFFu,
+                                                          c)) {
+                continue;
+              }
+              const MslStageFloorLine world = floor_line_world_for_env(batch, bi, g, (int)li);
+              float ix = 0.0f;
+              float iy = 0.0f;
+              if (!floor_intersect_horiz(world.x0, world.y0, world.x1, prev_bottom_x, prev_bottom_y,
+                                         cur_bottom_x, cur_bottom_y, &ix, &iy)) {
+                continue;
+              }
+              if (!(y < (iy - k_floor_y_bias) &&
+                    (y + cur_ecb_points.side_rel_y) >= (iy - k_floor_y_bias))) {
+                continue;
+              }
+              // FoD static-y transformed-platform remap:
+              // `mpColl_800471F8` calls `mpColl_80044628_Floor`; on transformed FoD joints the
+              // first pass is `mpCheckFloorRemap`, whose source vertex remap can accept the
+              // generated static-y center platform even while CollData.floor still carries a
+              // side height-platform segment. Keep this to the probed source-owned bottom sweep:
+              // transformed carried floor, generated static-y platform metadata, callback-local
+              // CollData prev/current bottom interval crossing the floor, and current EscapeAir ECB
+              // side/root spanning the floor. CSO:318 accepts at `mpColl_80044628_Floor`; PTE:422
+              // rejects because the probed previous bottom is already below the static-y floor.
+              //
+              // data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=static_y)
+              // reports/triage/newchar_sheik/fall_floor_probe_{cso_318,pte_422}_p0/
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+              // refs/melee/src/melee/mp/mpcoll.c::{
+              //   mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+              // refs/melee/src/melee/mp/mplib.c::{mpCheckFloorRemap,mpLineIntersectionH}
+              const float dx = ix - prev_bottom_x;
+              const float dy = iy - prev_bottom_y;
+              const float dist2 = dx * dx + dy * dy;
+              if (!found_static_platform || dist2 < best_static_platform_dist2 ||
+                  (dist2 == best_static_platform_dist2 &&
+                   line->segment_i < g->lines[(size_t)best_static_platform_line_idx].segment_i)) {
+                found_static_platform = 1u;
+                best_static_platform_line_idx = (int)li;
+                best_static_platform_dist2 = dist2;
+                best_static_platform_ix = ix;
+                best_static_platform_iy = iy;
+              }
+            }
+          }
           if (found_static_platform && best_static_platform_line_idx >= 0) {
             batch->state.pos_y[idx] = best_static_platform_iy + k_floor_y_bias;
             on_ground = 1;

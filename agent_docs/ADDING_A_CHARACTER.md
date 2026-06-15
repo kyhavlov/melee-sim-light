@@ -278,6 +278,22 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`,
    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}`,
    and `data/stages/bin/*.bin::MSLSTG01 fighter_solid/is_ledge/floor graph links`.
+   **FoD static-y platform remaps need callback-local CollData endpoints**:
+   the center platform is generated as `MSLSTG01 platform_transforms(kind=static_y)`,
+   but source still admits it through `mpCheckFloorRemap` using
+   `CollData.prev_pos + prev_ecb.bottom` and `CollData.cur_pos + ecb.bottom`.
+   Do not resample the previous bottom from the visible action pose when a new
+   character exposes a transformed-platform airdodge/landing row; probe or seed
+   the actual CollData previous/current ECB interval. Add a positive where the
+   previous bottom is above and current bottom below the static-y floor, plus a
+   spacie/adjacent negative where both endpoints are already below. Sheik
+   exposed this with FoD `EscapeAir -> LandingFallSpecial` rows; the control was
+   a Fox FoD row where `mpColl_80044628_Floor` returned false before floor
+   publication. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
+   `refs/melee/src/melee/mp/mplib.c::{mpCheckFloorRemap,mpLineIntersectionH}`,
+   and `data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=static_y)`.
    **AttackAir floor publication is script-shape and stage-source sensitive**:
    `AttackAir_Coll -> ft_80082C74 -> mpColl_800471F8` may publish
    `LandingAir*` only after the callback has a source-owned
