@@ -1,0 +1,224 @@
+{
+  "name": "sheik",
+  "notes": "Official Sheik training/eval suite from SlippiLab. Human singles, supported legal stages, UCF enabled, frozen Pokemon Stadium only, supported characters only, and no Zelda transform episodes under the Stage 0 policy.",
+  "replays": [
+    {
+      "characters": {
+        "1": "Sheik",
+        "4": "Fox"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/validation/sheik/RuralReasonableRat.slpz",
+      "stage_id": 31
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "2": "Marth"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/validation/sheik/StiffLustrousZebra.slpz",
+      "stage_id": 31
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "3": "Falco"
+      },
+      "ports": [
+        1,
+        3
+      ],
+      "replay": "replays/validation/sheik/TenseSameHummingbird.slpz",
+      "stage_id": 31
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "3": "Fox"
+      },
+      "ports": [
+        2,
+        3
+      ],
+      "replay": "replays/validation/sheik/MixedAllQuetzal.slpz",
+      "stage_id": 28
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "4": "Marth"
+      },
+      "ports": [
+        2,
+        4
+      ],
+      "replay": "replays/validation/sheik/UnusedLivelyLouse.slpz",
+      "stage_id": 28
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "4": "Falco"
+      },
+      "ports": [
+        2,
+        4
+      ],
+      "replay": "replays/validation/sheik/ToughOutlyingChicken.slpz",
+      "stage_id": 28
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "4": "Fox"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/validation/sheik/GlaringRosyAlpaca.slpz",
+      "stage_id": 32
+    },
+    {
+      "characters": {
+        "1": "Marth",
+        "4": "Sheik"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/validation/sheik/IcyFailingGuanaco.slpz",
+      "stage_id": 32
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "2": "Falco"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/validation/sheik/PaleMajorEchidna.slpz",
+      "stage_id": 32
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "3": "Fox"
+      },
+      "ports": [
+        2,
+        3
+      ],
+      "replay": "replays/validation/sheik/ConstantStiffOtter.slpz",
+      "stage_id": 2
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "4": "Marth"
+      },
+      "ports": [
+        2,
+        4
+      ],
+      "replay": "replays/validation/sheik/SnarlingHelplessBeaver.slpz",
+      "stage_id": 2
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "3": "Falco"
+      },
+      "ports": [
+        2,
+        3
+      ],
+      "replay": "replays/validation/sheik/ZestyPreciousTurtle.slpz",
+      "stage_id": 2
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "3": "Fox"
+      },
+      "ports": [
+        2,
+        3
+      ],
+      "replay": "replays/validation/sheik/UselessGlassLoris.slpz",
+      "stage_id": 3
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "4": "Marth"
+      },
+      "ports": [
+        2,
+        4
+      ],
+      "replay": "replays/validation/sheik/AttractiveAnyClam.slpz",
+      "stage_id": 3
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "3": "Falco"
+      },
+      "ports": [
+        2,
+        3
+      ],
+      "replay": "replays/validation/sheik/TornEnchantingGiraffe.slpz",
+      "stage_id": 3
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "4": "Fox"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/validation/sheik/WavyRundownAardvark.slpz",
+      "stage_id": 8
+    },
+    {
+      "characters": {
+        "1": "Marth",
+        "4": "Sheik"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/validation/sheik/BeautifulDistantWolverine.slpz",
+      "stage_id": 8
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "3": "Falco"
+      },
+      "ports": [
+        2,
+        3
+      ],
+      "replay": "replays/validation/sheik/DrabMeanArmadillo.slpz",
+      "stage_id": 8
+    }
+  ],
+  "ucf_cardinals_1_0_enabled": true,
+  "ucf_enabled": true
+}

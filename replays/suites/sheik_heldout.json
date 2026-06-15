@@ -1,0 +1,152 @@
+{
+  "name": "sheik_heldout",
+  "notes": "Held-out Sheik telemetry suite from SlippiLab. Do not use rows from this suite as direct lock targets or implementation selectors.",
+  "replays": [
+    {
+      "characters": {
+        "2": "Sheik",
+        "3": "Fox"
+      },
+      "ports": [
+        2,
+        3
+      ],
+      "replay": "replays/heldout/sheik/MulticoloredMenacingTermite.slpz",
+      "stage_id": 31
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "4": "Marth"
+      },
+      "ports": [
+        2,
+        4
+      ],
+      "replay": "replays/heldout/sheik/MiserlyWhiteCassowary.slpz",
+      "stage_id": 31
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "2": "Falco"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/heldout/sheik/OldMagnificentFlamingo.slpz",
+      "stage_id": 28
+    },
+    {
+      "characters": {
+        "1": "Fox",
+        "2": "Sheik"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/heldout/sheik/FrailGiganticCrow.slpz",
+      "stage_id": 28
+    },
+    {
+      "characters": {
+        "1": "Marth",
+        "2": "Sheik"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/heldout/sheik/WiseTenseMole.slpz",
+      "stage_id": 32
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "2": "Falco"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/heldout/sheik/VibrantObedientMandrill.slpz",
+      "stage_id": 32
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "4": "Fox"
+      },
+      "ports": [
+        2,
+        4
+      ],
+      "replay": "replays/heldout/sheik/AblePertinentSeahorse.slpz",
+      "stage_id": 2
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "4": "Marth"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/heldout/sheik/CourteousCelebratedZebra.slpz",
+      "stage_id": 2
+    },
+    {
+      "characters": {
+        "1": "Falco",
+        "4": "Sheik"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/heldout/sheik/PolishedMemorableOryx.slpz",
+      "stage_id": 3
+    },
+    {
+      "characters": {
+        "2": "Sheik",
+        "3": "Fox"
+      },
+      "ports": [
+        2,
+        3
+      ],
+      "replay": "replays/heldout/sheik/NiceOrganicSandpiper.slpz",
+      "stage_id": 3
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "2": "Marth"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/heldout/sheik/EarlyPreciousLobster.slpz",
+      "stage_id": 8
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "3": "Falco"
+      },
+      "ports": [
+        1,
+        3
+      ],
+      "replay": "replays/heldout/sheik/DazzlingAccomplishedMink.slpz",
+      "stage_id": 8
+    }
+  ],
+  "ucf_cardinals_1_0_enabled": true,
+  "ucf_enabled": true
+}

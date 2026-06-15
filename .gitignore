@@ -24,6 +24,9 @@ replays/**/*.slpz
 !replays/validation/**/
 !replays/validation/**/*.slp
 !replays/validation/**/*.slpz
+!replays/heldout/
+!replays/heldout/**/
+!replays/heldout/**/*.slpz
 
 # Preprocessed datasets (local-only)
 datasets/
