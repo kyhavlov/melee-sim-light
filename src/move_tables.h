@@ -173,6 +173,16 @@ uint8_t move_tables_grounded_smash_charge_crossed(uint8_t char_id, uint16_t grou
                                                   float cur_anim_frame_f32,
                                                   uint8_t* out_hold_frames);
 
+// Returns the grounded-smash script frame and hold-frame argument for start_smash_charge.
+// Use this when the source owner is the already-published smash_attrs lifecycle rather than a
+// newly crossed command-script event.
+//
+// Source of truth:
+// data/scripts/<char>.bin (MSLFTSC1) moves["ftCo_SM_AttackS4"/"ftCo_SM_AttackHi4"/"ftCo_SM_AttackLw4"]
+// .events start_smash_charge.
+uint8_t move_tables_grounded_smash_charge_info(uint8_t char_id, uint16_t grounded_action_id,
+                                               uint16_t* out_frame, uint8_t* out_hold_frames);
+
 // Returns the damage multiplier argument from the grounded-smash start_smash_charge command.
 //
 // Decomp:

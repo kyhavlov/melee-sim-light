@@ -699,6 +699,21 @@ uint8_t move_tables_grounded_smash_charge_crossed(uint8_t char_id, uint16_t grou
   return 1u;
 }
 
+uint8_t move_tables_grounded_smash_charge_info(uint8_t char_id, uint16_t grounded_action_id,
+                                               uint16_t* out_frame, uint8_t* out_hold_frames) {
+  const MslMoveTableCache* cache = grounded_smash_charge_cache(char_id, grounded_action_id);
+  if (cache == NULL || cache->smash_charge_frame < 0) {
+    return 0u;
+  }
+  if (out_frame != NULL) {
+    *out_frame = (uint16_t)cache->smash_charge_frame;
+  }
+  if (out_hold_frames != NULL) {
+    *out_hold_frames = cache->smash_charge_hold_frames;
+  }
+  return 1u;
+}
+
 float move_tables_grounded_smash_charge_damage_mul(uint8_t char_id, uint16_t grounded_action_id) {
   const MslMoveTableCache* cache = grounded_smash_charge_cache(char_id, grounded_action_id);
   if (cache == NULL || cache->smash_charge_frame < 0 || !(cache->smash_charge_damage_mul > 0.0f)) {

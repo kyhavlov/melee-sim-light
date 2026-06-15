@@ -1494,7 +1494,7 @@ overall.float_norm_mae_p95: 0.00014104
 == datasets/aggregate_recent/replays/validation/marth/InternalPowerlessWallaby.msl ==
 Records: 10165  Players/scored per record: 2  Total player-frames: 20330
 mismatch.action_id: 19 / 20330 (0.000935)
-mismatch.action_frame: 20 / 20330 (0.000984)
+mismatch.action_frame: 14 / 20330 (0.000689)
 mismatch.on_ground: 6 / 20330 (0.000295)
 mismatch.facing: 3 / 20330 (0.000148)
 mismatch.stocks: 0 / 20330 (0.000000)
@@ -1531,8 +1531,8 @@ err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 153 / 1229965
-overall.strict_discrete_mismatch: 244 / 1229965
+overall.discrete_mismatch: 147 / 1229965
+overall.strict_discrete_mismatch: 238 / 1229965
 overall.ignored_discrete_mismatch: 91
 overall.float_norm_mae_p95: 0.00058886
 
@@ -1584,7 +1584,7 @@ overall.float_norm_mae_p95: 0.00026865
 == datasets/aggregate_recent/replays/validation/marth/MetallicUniqueGrouse.msl ==
 Records: 5385  Players/scored per record: 2  Total player-frames: 10770
 mismatch.action_id: 7 / 10770 (0.000650)
-mismatch.action_frame: 7 / 10770 (0.000650)
+mismatch.action_frame: 6 / 10770 (0.000557)
 mismatch.on_ground: 3 / 10770 (0.000279)
 mismatch.facing: 0 / 10770 (0.000000)
 mismatch.stocks: 0 / 10770 (0.000000)
@@ -1621,15 +1621,15 @@ err.item_pos_x: mae=0.000219 p95=0.000000 max=0.750000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000219 p95=0.000000 max=0.750000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 48 / 651585
-overall.strict_discrete_mismatch: 98 / 651585
+overall.discrete_mismatch: 47 / 651585
+overall.strict_discrete_mismatch: 97 / 651585
 overall.ignored_discrete_mismatch: 50
 overall.float_norm_mae_p95: 0.00025158
 
 == datasets/aggregate_recent/replays/validation/marth/ParallelFamiliarZebra.msl ==
 Records: 8357  Players/scored per record: 2  Total player-frames: 16714
 mismatch.action_id: 8 / 16714 (0.000479)
-mismatch.action_frame: 10 / 16714 (0.000598)
+mismatch.action_frame: 7 / 16714 (0.000419)
 mismatch.on_ground: 2 / 16714 (0.000120)
 mismatch.facing: 1 / 16714 (0.000060)
 mismatch.stocks: 0 / 16714 (0.000000)
@@ -1666,8 +1666,8 @@ err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 82 / 1011197
-overall.strict_discrete_mismatch: 112 / 1011197
+overall.discrete_mismatch: 79 / 1011197
+overall.strict_discrete_mismatch: 109 / 1011197
 overall.ignored_discrete_mismatch: 30
 overall.float_norm_mae_p95: 0.00053100
 
@@ -1899,7 +1899,7 @@ overall.float_norm_mae_p95: 0.00016820
 == datasets/aggregate_recent/replays/validation/marth/StiffDraftyWalrus.msl ==
 Records: 10153  Players/scored per record: 2  Total player-frames: 20306
 mismatch.action_id: 7 / 20306 (0.000345)
-mismatch.action_frame: 8 / 20306 (0.000394)
+mismatch.action_frame: 6 / 20306 (0.000295)
 mismatch.on_ground: 1 / 20306 (0.000049)
 mismatch.facing: 0 / 20306 (0.000000)
 mismatch.stocks: 0 / 20306 (0.000000)
@@ -1936,8 +1936,8 @@ err.item_pos_x: mae=0.443882 p95=0.000000 max=70.135826
 err.item_pos_y: mae=0.143271 p95=0.000000 max=19.609058
 err.item_vel_x: mae=0.050605 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000032
-overall.discrete_mismatch: 78 / 1228513
-overall.strict_discrete_mismatch: 152 / 1228513
+overall.discrete_mismatch: 76 / 1228513
+overall.strict_discrete_mismatch: 150 / 1228513
 overall.ignored_discrete_mismatch: 74
 overall.float_norm_mae_p95: 0.00005301
 
@@ -1989,7 +1989,7 @@ overall.float_norm_mae_p95: 0.00019635
 == datasets/aggregate_recent/replays/validation/marth/DraftyHealthyHare.msl ==
 Records: 10505  Players/scored per record: 2  Total player-frames: 21010
 mismatch.action_id: 10 / 21010 (0.000476)
-mismatch.action_frame: 16 / 21010 (0.000762)
+mismatch.action_frame: 12 / 21010 (0.000571)
 mismatch.on_ground: 4 / 21010 (0.000190)
 mismatch.facing: 3 / 21010 (0.000143)
 mismatch.stocks: 0 / 21010 (0.000000)
@@ -2026,15 +2026,15 @@ err.item_pos_x: mae=0.060223 p95=0.000292 max=3.790001
 err.item_pos_y: mae=0.000001 p95=0.000000 max=0.000036
 err.item_vel_x: mae=0.000008 p95=0.000000 max=0.000193
 err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000032
-overall.discrete_mismatch: 143 / 1271105
-overall.strict_discrete_mismatch: 168 / 1271105
+overall.discrete_mismatch: 139 / 1271105
+overall.strict_discrete_mismatch: 164 / 1271105
 overall.ignored_discrete_mismatch: 25
 overall.float_norm_mae_p95: 0.00011681
 
 == datasets/aggregate_recent/replays/validation/marth/VigorousRelievedLlama.msl ==
 Records: 9977  Players/scored per record: 2  Total player-frames: 19954
 mismatch.action_id: 21 / 19954 (0.001052)
-mismatch.action_frame: 26 / 19954 (0.001303)
+mismatch.action_frame: 24 / 19954 (0.001203)
 mismatch.on_ground: 18 / 19954 (0.000902)
 mismatch.facing: 2 / 19954 (0.000100)
 mismatch.stocks: 0 / 19954 (0.000000)
@@ -2071,8 +2071,8 @@ err.item_pos_x: mae=0.017114 p95=0.000000 max=4.820515
 err.item_pos_y: mae=0.003442 p95=0.000000 max=0.707600
 err.item_vel_x: mae=0.000002 p95=0.000000 max=0.001400
 err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000780
-overall.discrete_mismatch: 214 / 1207217
-overall.strict_discrete_mismatch: 275 / 1207217
+overall.discrete_mismatch: 212 / 1207217
+overall.strict_discrete_mismatch: 273 / 1207217
 overall.ignored_discrete_mismatch: 61
 overall.float_norm_mae_p95: 0.00013372
 
@@ -2302,7 +2302,7 @@ overall.ignored_discrete_mismatch: 51
 overall.float_norm_mae_p95: 0.00023364
 
 == suite summary ==
-overall.discrete_mismatch: 3516 / 57060091
-overall.strict_discrete_mismatch: 6154 / 57060091
+overall.discrete_mismatch: 3498 / 57060091
+overall.strict_discrete_mismatch: 6136 / 57060091
 overall.ignored_discrete_mismatch: 2638
 overall.float_norm_mae_p95: 0.77068589

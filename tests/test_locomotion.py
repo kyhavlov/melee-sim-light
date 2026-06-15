@@ -118,6 +118,7 @@ MSL_COLLIDE_EDGE = 0x00800000
 MSL_COLLIDE_RIGHT_WALL_HUG = 0x00000800
 
 CHAR_FOX = 1
+CHAR_SHEIK = 7
 CHAR_FALCO = 22
 STAGE_FD = 32
 MAX_PLAYERS = 4
@@ -3995,6 +3996,56 @@ def test_attackhi4_live_smash_charge_starts_from_fresh_a_on_action_frame_2() -> 
             out = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
             frames.append(int(out["action_frame"][0]))
         assert frames == [1, 2, 2]
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_attackhi4_live_smash_charge_uses_character_script_start_frame() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    # Source owner is the start_smash_charge script command. Fox/Falco AttackHi4 emit it at frame
+    # 2; Sheik emits it at frame 10. The replay-real timebase bridge must follow the extracted
+    # MSLFTSC1 frame rather than the old non-S4 == 2 shortcut.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
+    # refs/melee/src/melee/ft/ft_0DF0.c::ftCo_800DF0D0
+    # data/moves/sheik.json::moves.ftCo_SM_AttackHi4.events start_smash_charge
+    ok, frame, hold = msl_binding.move_tables_debug_query(
+        "grounded_smash_charge_info", CHAR_SHEIK, ACT_ATTACK_HI4, 0.0, 0.0
+    )
+    assert (ok, frame, hold) == (1, 10, 60)
+
+    seed = _seed_base()
+    seed["char_id"][0, 0] = np.uint8(CHAR_SHEIK)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_HI4)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_HI4)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+
+    hold_input = _mk_input_bytes(1, input_stride)
+    hold_input.view(INPUT_DTYPE).reshape((1,))["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        frames: list[int] = []
+        for _ in range(12):
+            msl_binding.step_input(handle, hold_input, hold_input)
+            msl_binding.write_compare(handle, out_bytes)
+            out = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+            frames.append(int(out["action_frame"][0]))
+
+        assert frames == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10]
     finally:
         msl_binding.destroy(handle)
 

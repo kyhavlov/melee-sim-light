@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
+from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row, _run_rollout_window_rows
 
 
 @dataclass(frozen=True)
@@ -79,3 +79,44 @@ def test_state_flags_221a_b5_entry_clears_replay_real_locks(case: _Case) -> None
         assert int(out_row["action_id"][case.p]) == int(ref_row["action_id"][case.p]), case.note
         assert int(out_row["action_frame"][case.p]) == int(ref_row["action_frame"][case.p]), case.note
         assert int(out_row["state_flags"][case.p, 1]) == int(ref_row["state_flags"][case.p, 1]), case.note
+
+
+@pytest.mark.integration
+def test_sheik_attackhi4_smash_charge_reaches_script_hurt_state_rollout_lock() -> None:
+    # Official-suite positive for the Sheik AttackHi4 timebase owner. The source boundary is the
+    # character's decoded start_smash_charge script frame: Sheik AttackHi4 holds at frame 10, then
+    # releasing A resumes to frame 11/12, where the script set_hurt_state commands publish
+    # fp+0x221A_b5. This guards against the old Fox/Falco-shaped frame-2 bridge without adding a
+    # state-flag runtime exception.
+    #
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
+    # refs/melee/src/melee/ft/ft_0DF0.c::ftCo_800DF0D0
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B128
+    # data/moves/sheik.json::moves.ftCo_SM_AttackHi4.events start_smash_charge/set_hurt_state
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl"
+    if not dataset_path.exists():
+        pytest.skip("missing local Sheik validation dataset")
+
+    rows = _run_rollout_window_rows(
+        dataset_path,
+        start_record=8715,
+        window_records=(9124, 9131, 9132, 9151, 9152, 9153),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    p = 0
+    expected = {
+        9124: (63, 3, 0),
+        9131: (63, 10, 0),
+        9132: (63, 10, 0),
+        9151: (63, 10, 0),
+        9152: (63, 11, 0),
+        9153: (63, 12, 0x04),
+    }
+    for record, (action_id, action_frame, state_flags_221a_mask) in expected.items():
+        ref_row, out_row = rows[record]
+        assert int(ref_row["action_id"][p]) == int(out_row["action_id"][p]) == action_id
+        assert int(ref_row["action_frame"][p]) == int(out_row["action_frame"][p]) == action_frame
+        assert int(ref_row["state_flags"][p, 1] & 0x04) == state_flags_221a_mask
+        assert int(out_row["state_flags"][p, 1] & 0x04) == state_flags_221a_mask

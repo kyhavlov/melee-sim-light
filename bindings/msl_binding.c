@@ -6531,6 +6531,13 @@ static PyObject* msl_move_tables_debug_query_py(PyObject* self, PyObject* args) 
         (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a), f32_from_double(b), &hold);
     return Py_BuildValue("(ii)", (int)ok, (int)hold);
   }
+  if (strcmp(kind, "grounded_smash_charge_info") == 0) {
+    uint16_t frame = 0u;
+    uint8_t hold = 0u;
+    const uint8_t ok = move_tables_grounded_smash_charge_info(
+        (uint8_t)char_id, (uint16_t)action_or_msid, &frame, &hold);
+    return Py_BuildValue("(iii)", (int)ok, ok ? (int)frame : -1, ok ? (int)hold : 0);
+  }
   if (strcmp(kind, "grounded_smash_charge_damage_mul") == 0) {
     return PyFloat_FromDouble((double)move_tables_grounded_smash_charge_damage_mul(
         (uint8_t)char_id, (uint16_t)action_or_msid));

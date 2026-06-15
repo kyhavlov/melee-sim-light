@@ -1009,9 +1009,9 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // Grounded smash early-hold replay bridge:
       // - The live current-sim owner is opcode 56 / `smash_attrs` in input.c
       //   (`ftAction_80073008` -> `ftCo_800DEE84` / `ftCo_800DF0D0`).
-      // - Teacher-forced reseed can still start mid-hold on AttackHi4/AttackLw4 af=2 rows without
-      //   the prior frame's live smash_attrs lifecycle, so keep this narrow replay-real bridge for
-      //   those seeded rows.
+      // - Teacher-forced reseed can still start mid-hold on the start_smash_charge row without
+      //   the prior frame's live smash_attrs lifecycle, so keep this narrow replay-real bridge at
+      //   the extracted script boundary.
       // - Decomp input ownership: `fp->input.x668` is updated in Fighter_procUpdate (prio3), so
       //   prio1 Anim callbacks use prior-frame input state.
       // refs/melee/src/melee/ft/ftattacks4combo.c::ftCo_800CECE8
@@ -1019,18 +1019,16 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DF0D0}
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
       // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackHi4.c,ftCo_AttackLw4.c}
-      // data/moves/{fox,falco}.json::ftCo_SM_Attack{Hi4,Lw4}
+      // data/scripts/<char>.bin::MSLFTSC1 start_smash_charge
+      uint16_t smash_charge_frame = 0u;
+      uint8_t smash_hold_timer_max = 0u;
       if ((a == (uint16_t)MSL_ACT_ATTACK_S4_S || a == (uint16_t)MSL_ACT_ATTACK_HI4 ||
            a == (uint16_t)MSL_ACT_ATTACK_LW4) &&
           batch->state.on_ground[idx] != 0u && batch->state.hitstun[idx] == 0u &&
           batch->state.hitlag[idx] == 0u &&
-          ((a == (uint16_t)MSL_ACT_ATTACK_S4_S && action_frame_pre == 7) ||
-           (a != (uint16_t)MSL_ACT_ATTACK_S4_S && action_frame_pre == 2))) {
-        const uint8_t smash_hold_timer_max =
-            (a == (uint16_t)MSL_ACT_ATTACK_S4_S)
-                ? 60u
-                : ((a == (uint16_t)MSL_ACT_ATTACK_HI4) ? c->attack_hi4_tilt_max_frames
-                                                       : c->attack_lw4_tilt_max_frames);
+          move_tables_grounded_smash_charge_info(batch->state.char_id[idx], a, &smash_charge_frame,
+                                                 &smash_hold_timer_max) &&
+          action_frame_pre == (int16_t)smash_charge_frame) {
         const uint8_t pre_input_a_held =
             ((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
         if (pre_input_a_held != 0u && batch->state.x67C[idx] <= smash_hold_timer_max) {
@@ -1041,14 +1039,12 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           // - when prior-frame A is no longer held, clear stale seeded hold-rate carry and resume
           //   default 1.0 on the next advance.
           // Decomp/data refs:
-          // - AttackHi4/AttackLw4 input checks use p_ftCommonData->xD0/xD8 as their action-specific
-          //   tilt windows for the hold admission side.
-          // - Fresh held-A admission on the visible af=2 row is legal in live play (`x67C == 0`),
-          //   but rows with prevA==0 still resume on the next step once A is no longer held.
+          // - Fresh held-A admission on the visible start_smash_charge row is legal in live play
+          //   (`x67C == 0`), but rows with prevA==0 still resume on the next step once A is no
+          //   longer held.
           // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackHi4.c,ftCo_AttackLw4.c}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-          // data/common/ft_common_data.json::{attack_hi4_tilt_max_frames,attack_lw4_tilt_max_frames}
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+          // data/scripts/<char>.bin::MSLFTSC1 start_smash_charge
           batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
         }
       }
