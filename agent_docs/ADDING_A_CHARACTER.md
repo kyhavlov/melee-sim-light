@@ -1103,7 +1103,10 @@ cover most of it.
    Sheik Needles use `fv.sk.x0` for stored needle count; timers/latches live in
    move-vars. If one-step replay reconstruction needs those lanes, add explicit
    seed fields and native preprocessing derivation before claiming replay
-   exactness.
+   exactness. For article-publishing specials, lock the same-frame publication
+   boundary separately: source may create a held article in an Anim callback or
+   a thrown article from an accessory callback before ordinary item simulation
+   advances it.
    Special-spawned articles need their own source-owner audit beyond the
    fighter MotionState code. For Sheik, thrown Needle correctness required
    MSLITAR1 article extraction from `ftSk_Init_OnLoad` / `itseakneedlethrown.c`

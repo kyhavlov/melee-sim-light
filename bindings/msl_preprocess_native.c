@@ -5049,6 +5049,125 @@ PyObject* msl_derive_common_fall_blend_seed_py(PyObject* self, PyObject* args) {
   return Py_BuildValue("NNN", out_valid, out_x4, out_msid);
 }
 
+static inline uint8_t msl_py_action_is_sheik_needle_start(uint16_t action) {
+  return action == 341u || action == 345u;
+}
+
+static inline uint8_t msl_py_action_is_sheik_needle_loop(uint16_t action) {
+  return action == 342u || action == 346u;
+}
+
+static inline uint8_t msl_py_action_is_sheik_needle_cancel(uint16_t action) {
+  return action == 343u || action == 347u;
+}
+
+static inline uint8_t msl_py_action_is_sheik_needle_end(uint16_t action) {
+  return action == 344u || action == 348u;
+}
+
+static inline uint8_t msl_py_action_is_sheik_needle_family(uint16_t action) {
+  return msl_py_action_is_sheik_needle_start(action) ||
+         msl_py_action_is_sheik_needle_loop(action) ||
+         msl_py_action_is_sheik_needle_cancel(action) || msl_py_action_is_sheik_needle_end(action);
+}
+
+static inline uint8_t msl_py_sheik_needle_end_shoot_frame(int16_t frame) {
+  return frame == 2 || frame == 5 || frame == 8 || frame == 11 || frame == 14 || frame == 17;
+}
+
+PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* char_obj = NULL;
+  PyObject* action_obj = NULL;
+  PyObject* frame_obj = NULL;
+  int sheik_internal_id = -1;
+  if (!PyArg_ParseTuple(args, "OOOi", &char_obj, &action_obj, &frame_obj, &sheik_internal_id)) {
+    return NULL;
+  }
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 2, "char_id_u8");
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 2, "action_id_u16");
+  PyArrayObject* frame = require_contiguous_array(frame_obj, NPY_INT16, 2, "action_frame_i16");
+  if (chr == NULL || action == NULL || frame == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(chr, 0);
+  const npy_intp width = PyArray_DIM(chr, 1);
+  if (require_exact_2d_shape(action, n, width, "action_id_u16") < 0 ||
+      require_exact_2d_shape(frame, n, width, "action_frame_i16") < 0) {
+    return NULL;
+  }
+
+  PyArrayObject* out_count = (PyArrayObject*)PyArray_ZEROS(2, PyArray_DIMS(chr), NPY_UINT8, 0);
+  PyArrayObject* out_timer = (PyArrayObject*)PyArray_ZEROS(2, PyArray_DIMS(chr), NPY_UINT8, 0);
+  if (out_count == NULL || out_timer == NULL) {
+    Py_XDECREF(out_count);
+    Py_XDECREF(out_timer);
+    return NULL;
+  }
+  if (sheik_internal_id < 0 || sheik_internal_id > 255) {
+    return Py_BuildValue("NN", out_count, out_timer);
+  }
+
+  const uint8_t* ch = (const uint8_t*)PyArray_DATA(chr);
+  const uint16_t* act = (const uint16_t*)PyArray_DATA(action);
+  const int16_t* af = (const int16_t*)PyArray_DATA(frame);
+  uint8_t* count_out = (uint8_t*)PyArray_DATA(out_count);
+  uint8_t* timer_out = (uint8_t*)PyArray_DATA(out_timer);
+  const uint8_t sheik_id = (uint8_t)sheik_internal_id;
+
+  for (npy_intp p = 0; p < width; p++) {
+    uint8_t count = 0u;
+    uint16_t prev_action = 0u;
+    int16_t prev_frame = -1;
+    for (npy_intp i = 0; i < n; i++) {
+      const npy_intp idx = (i * width) + p;
+      const uint16_t action_i = act[idx];
+      const int16_t frame_i = af[idx];
+      if (ch[idx] != sheik_id || !msl_py_action_is_sheik_needle_family(action_i)) {
+        count = 0u;
+        prev_action = action_i;
+        prev_frame = frame_i;
+        continue;
+      }
+
+      uint8_t timer = 0u;
+      if (msl_py_action_is_sheik_needle_start(action_i)) {
+        if (!msl_py_action_is_sheik_needle_family(prev_action) && count == 0u) {
+          count = 1u;
+        }
+      } else if (msl_py_action_is_sheik_needle_loop(action_i)) {
+        if (count == 0u) {
+          count = 1u;
+        }
+        if (msl_py_action_is_sheik_needle_loop(prev_action) && frame_i == 0 && prev_frame > 0 &&
+            count < 6u) {
+          count++;
+        }
+      } else if (!msl_py_action_is_sheik_needle_cancel(action_i)) {
+        // End rows seed mv.sk.specialn.x0 before this row's End_Anim callback. A fresh Loop->End
+        // handoff starts at zero; subsequent End rows expose their post-frame action_frame.
+        //
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+        //   doEnter,ftSk_SpecialNLoop_Anim,doIasa,ftSk_SpecialNEnd_Anim,shootNeedles}
+        timer = msl_py_action_is_sheik_needle_loop(prev_action)
+                    ? 0u
+                    : (uint8_t)(frame_i < 0 ? 0 : (frame_i > 255 ? 255 : frame_i));
+      }
+
+      count_out[idx] = count;
+      timer_out[idx] = timer;
+      if (msl_py_action_is_sheik_needle_end(action_i) &&
+          msl_py_sheik_needle_end_shoot_frame(frame_i) && count > 0u) {
+        count--;
+      }
+      prev_action = action_i;
+      prev_frame = frame_i;
+    }
+  }
+
+  return Py_BuildValue("NN", out_count, out_timer);
+}
+
 PyObject* msl_derive_camera_target_world_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* char_obj = NULL;

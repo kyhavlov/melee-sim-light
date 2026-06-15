@@ -59,6 +59,9 @@ ACT_SK_SPECIAL_LW = 361
 ACT_SK_SPECIAL_AIR_LW = 363
 ACT_CLIFF_CATCH = 252
 
+ITEM_SHEIK_NEEDLE_THROWN = 79
+ITEM_SHEIK_NEEDLE_HELD = 80
+
 
 def test_sheik_special_attrs_are_required_for_runtime_load(tmp_path: Path) -> None:
     """Missing Sheik ftSeakAttributes keys must fail init instead of zeroing mechanics."""
@@ -583,6 +586,108 @@ def test_sheik_ground_needle_cancel_to_guardon_replay_real_lock() -> None:
 
     out = _run_sample_row(samples, record)
     assert int(out["action_id"][0]) == ACT_GUARD_ON
+
+
+@pytest.mark.integration
+def test_sheik_demo_ground_needle_start_anim_spawns_held_article_replay_real() -> None:
+    # ftSk_SpecialNStart_Anim creates the held Needle article with it_802B19AC before entering
+    # Loop. Slippi's same-frame item publication is the held-item spawn position, not a later hand
+    # model transform.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialNStart_Anim
+    # refs/melee/src/melee/it/items/itseakneedleheld.c::it_802B19AC
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    record = 95
+    ref = samples[record]["ref_t1"]
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_N_START
+    assert int(ref["action_id"][0]) == ACT_SK_SPECIAL_N_LOOP
+    assert int(ref["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_HELD
+
+    out = _run_sample_row(samples, record)
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_HELD
+    assert int(out["items"]["spawn_id"][0]) == int(ref["items"]["spawn_id"][0])
+    assert float(out["items"]["pos_x"][0]) == pytest.approx(float(ref["items"]["pos_x"][0]))
+    assert float(out["items"]["pos_y"][0]) == pytest.approx(float(ref["items"]["pos_y"][0]))
+
+
+@pytest.mark.integration
+def test_sheik_demo_air_needle_start_anim_spawns_held_article_replay_real() -> None:
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    record = 545
+    ref = samples[record]["ref_t1"]
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_N_START
+    assert int(ref["action_id"][0]) == ACT_SK_SPECIAL_AIR_N_LOOP
+    assert int(ref["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_HELD
+
+    out = _run_sample_row(samples, record)
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_HELD
+    assert float(out["items"]["pos_x"][0]) == pytest.approx(float(ref["items"]["pos_x"][0]))
+    assert float(out["items"]["pos_y"][0]) == pytest.approx(float(ref["items"]["pos_y"][0]))
+
+
+@pytest.mark.integration
+def test_sheik_demo_needle_end_anim_first_latch_spawns_thrown_article_replay_real() -> None:
+    # ftSk_SpecialNEnd_Anim arms mv.sk.specialn.x4 at timer 2, and accessory4_cb shootNeedles
+    # consumes it to spawn one thrown Needle. The row locks the source latch path and the no
+    # same-frame item-motion publication boundary.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    #   ftSk_SpecialNEnd_Anim,shootNeedles}
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::it_802AFD8C
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    record = 118
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_N_END
+    assert int(seed["sheik_needle_count_u8"][0]) == 2
+    assert int(seed["sheik_needle_specialn_timer_u8"][0]) == 2
+    assert int(ref["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_THROWN
+
+    out = _run_sample_row(samples, record)
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_THROWN
+    assert int(out["items"]["spawn_id"][0]) == int(ref["items"]["spawn_id"][0])
+    assert float(out["items"]["timer"][0]) == pytest.approx(float(ref["items"]["timer"][0]))
+    assert float(out["items"]["pos_x"][0]) == pytest.approx(float(ref["items"]["pos_x"][0]))
+    assert float(out["items"]["pos_y"][0]) == pytest.approx(float(ref["items"]["pos_y"][0]))
+    assert float(out["items"]["vel_x"][0]) == pytest.approx(float(ref["items"]["vel_x"][0]))
+
+
+def test_sheik_needle_start_without_hidden_count_does_not_spawn_held_article_negative() -> None:
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_START)
+    seed["animation_index"][0, 0] = np.uint32(295)
+    seed["anim_frame_f32"][0, 0] = np.float32(999.0)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(0)
+
+    out = _run(seed, [_mk_inputs(buttons=B)])[0]
+    assert int(out["items"]["exists"][0]) == 0
+
+
+def test_sheik_needle_mid_start_with_hidden_count_does_not_spawn_held_article_negative() -> None:
+    # ftSk_SpecialNStart_Anim calls it_802B19AC only when Start has no frames remaining, then
+    # immediately enters Loop. A positive stored count is not itself article publication authority.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialNStart_Anim
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_START)
+    seed["animation_index"][0, 0] = np.uint32(295)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(1)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 0
+
+
+def test_sheik_needle_end_without_hidden_count_does_not_spawn_thrown_article_negative() -> None:
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_END)
+    seed["animation_index"][0, 0] = np.uint32(298)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(0)
+    seed["sheik_needle_specialn_timer_u8"][0, 0] = np.uint8(2)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 0
 
 
 @pytest.mark.integration

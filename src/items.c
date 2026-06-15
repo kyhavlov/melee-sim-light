@@ -33,6 +33,7 @@
 #include "msl_math.h"
 #include "mtx34.h"
 #include "shield_tilt_table.h"
+#include "sheik_specials.h"
 #include "special_msids.h"
 #include "stage_collision.h"
 #include "stage_item_params.h"
@@ -40,6 +41,7 @@
 
 enum {
   MSL_ITEM_HIDDEN_CALLBACK_CLEAR = 1u << 0u,
+  MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME = 1u << 1u,
 };
 
 enum {
@@ -1298,6 +1300,16 @@ static inline uint16_t item_article_illusion_kind(uint8_t char_id) {
   return ap != NULL ? ap->side_special_illusion_itkind : 0u;
 }
 
+static inline uint16_t item_article_sheik_needle_held_kind(uint8_t char_id) {
+  const MslItemArticleParams* ap = item_article_params_get(char_id);
+  return ap != NULL ? ap->needle_held_itkind : 0u;
+}
+
+static inline uint16_t item_article_sheik_needle_throw_kind(uint8_t char_id) {
+  const MslItemArticleParams* ap = item_article_params_get(char_id);
+  return ap != NULL ? ap->needle_throw_itkind : 0u;
+}
+
 static inline uint8_t item_type_is_fox_laser(uint16_t item_type) {
   return item_type == item_article_laser_shot_kind((uint8_t)MSL_CHAR_ID_FOX) ? 1u : 0u;
 }
@@ -1554,6 +1566,30 @@ static inline uint8_t action_is_illusion_end(uint8_t char_id, uint16_t action_id
                    fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END);
 }
 
+static inline uint8_t action_is_sheik_needle_start(uint8_t char_id, uint16_t action_id_u16) {
+  if (char_id != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  return (uint8_t)(action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_N_START ||
+                   action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_START);
+}
+
+static inline uint8_t action_is_sheik_needle_loop(uint8_t char_id, uint16_t action_id_u16) {
+  if (char_id != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  return (uint8_t)(action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_N_LOOP ||
+                   action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_LOOP);
+}
+
+static inline uint8_t action_is_sheik_needle_end(uint8_t char_id, uint16_t action_id_u16) {
+  if (char_id != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  return (uint8_t)(action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_N_END ||
+                   action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_END);
+}
+
 static inline uint8_t action_is_illusion_setphys(uint8_t char_id, uint16_t action_id_u16) {
   // Illusion/Phantasm ghost position is advanced by ftFox_SpecialS_SetPhys, which is called from
   // the grounded/air main and end Phys callbacks.
@@ -1571,6 +1607,10 @@ static inline uint8_t action_can_own_fighter_anim_article_spawn(uint8_t char_id,
                                                                 uint16_t action_id_u16) {
   if (action_is_illusion_dash(char_id, action_id_u16) ||
       action_is_illusion_end(char_id, action_id_u16)) {
+    return 1u;
+  }
+  if (action_is_sheik_needle_loop(char_id, action_id_u16) ||
+      action_is_sheik_needle_end(char_id, action_id_u16)) {
     return 1u;
   }
   return (blaster_gun_state_from_action_id(action_id_u16) != 9u) ? 1u : 0u;
@@ -1673,6 +1713,156 @@ static inline int items_find_illusion_slot(const MslBatch* batch, int bi, int ow
 }
 
 static inline float items_cur_anim_frame_f32(const MslBatch* batch, size_t idx);
+
+static inline int items_find_owned_item_slot(const MslBatch* batch, int bi, int owner,
+                                             uint16_t item_kind) {
+  if (batch == NULL || owner < 0) {
+    return -1;
+  }
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] != 0u && batch->state.item_owner[ii] == (int8_t)owner &&
+        batch->state.item_type[ii] == item_kind) {
+      return it;
+    }
+  }
+  return -1;
+}
+
+static void sheik_needle_held_article_position(const MslBatch* batch, size_t owner_idx,
+                                               float* out_x, float* out_y) {
+  if (batch == NULL || out_x == NULL || out_y == NULL) {
+    return;
+  }
+  // Held Needle creation initializes the item from the fighter position and then attaches the item
+  // GObj to the selected fighter part. Slippi's same-frame item publication serializes that initial
+  // item position, not the later visible hand/needle model transform. Grounded held-Needle rows
+  // publish the same +1.5 Y item initialization used by the engine's held-item setup; aerial rows
+  // publish the raw fighter position.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{ftSk_SpecialNStart_Anim,ftSk_SpecialAirNStart_Anim}
+  // refs/melee/src/melee/it/items/itseakneedleheld.c::it_802B19AC
+  // refs/melee/src/melee/it/item.c::{Item_80268B18,Item_80267130}
+  *out_x = batch->state.pos_x[owner_idx];
+  *out_y = batch->state.pos_y[owner_idx] + (batch->state.on_ground[owner_idx] != 0u
+                                                ? 1.5f * batch->state.fighter_scale_y[owner_idx]
+                                                : 0.0f);
+}
+
+static void sheik_needle_spawn_held_article_from_fighter(MslBatch* batch, int bi, int owner) {
+  if (batch == NULL) {
+    return;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  const uint8_t char_id = batch->state.char_id[o_idx];
+  const uint16_t held_kind = item_article_sheik_needle_held_kind(char_id);
+  if (held_kind == 0u || batch->state.sheik_needle_count[o_idx] == 0u ||
+      items_find_owned_item_slot(batch, bi, owner, held_kind) >= 0) {
+    return;
+  }
+  const uint16_t action = batch->state.action_id[o_idx];
+  const uint16_t prev_action = batch->state.prev_action_id[o_idx];
+  if (!action_is_sheik_needle_loop(char_id, action) ||
+      !action_is_sheik_needle_start(char_id, prev_action) ||
+      batch->state.action_frame[o_idx] != 0) {
+    // Start_Anim creates the held article only when its animation finishes, immediately before
+    // Fighter_ChangeMotionState enters Loop. A mid-Start replay seed with fv.sk.x0 > 0 is stored
+    // count state, not article publication authority.
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{ftSk_SpecialNStart_Anim,ftSk_SpecialAirNStart_Anim}
+    return;
+  }
+
+  const int slot = items_alloc_slot(batch, bi);
+  if (slot < 0) {
+    return;
+  }
+  const size_t ii = msl_idx_item(bi, slot);
+  item_slot_clear(batch, ii);
+  batch->state.item_exists[ii] = 1u;
+  batch->state.item_type[ii] = held_kind;
+  batch->state.item_state[ii] = 0u;
+  batch->state.item_owner[ii] = (int8_t)owner;
+  batch->state.item_instance_id[ii] = batch->state.instance_id[o_idx];
+  batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
+  batch->state.item_direction[ii] = batch->state.facing[o_idx] ? 1.0f : -1.0f;
+  batch->state.item_attack_id[ii] = batch->state.attack_id[o_idx];
+  batch->state.item_attack_instance[ii] = batch->state.attack_instance[o_idx];
+  batch->state.item_timer[ii] = 1400.0f;
+  sheik_needle_held_article_position(batch, o_idx, &batch->state.item_pos_x[ii],
+                                     &batch->state.item_pos_y[ii]);
+}
+
+static void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int bi, int owner) {
+  if (batch == NULL) {
+    return;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  const uint8_t char_id = batch->state.char_id[o_idx];
+  const uint16_t action = batch->state.action_id[o_idx];
+  if (!action_is_sheik_needle_end(char_id, action) ||
+      batch->state.sheik_special_latch[o_idx] == 0u) {
+    // ftSk_Special{Air}NEnd_Anim owns the six-frame cadence and only arms shootNeedles
+    // (`mv.sk.specialn.x4`) when `fv.sk.x0` was nonzero before decrementing it. The fighter
+    // special update writes that source latch; the item phase consumes the latch instead of
+    // rechecking the post-decrement count/timer snapshot.
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    //   ftSk_SpecialNEnd_Anim,ftSk_SpecialAirNEnd_Anim,shootNeedles}
+    return;
+  }
+  batch->state.sheik_special_latch[o_idx] = 0u;
+  const MslItemArticleParams* ap = item_article_params_get(char_id);
+  const MslCharParams* chp = msl_char_params_fast(char_id);
+  if (ap == NULL || chp == NULL || ap->needle_throw_itkind == 0u ||
+      !(ap->needle_launch_speed > 0.0f)) {
+    return;
+  }
+  const uint16_t held_kind = ap->needle_held_itkind;
+  const int held_slot = items_find_owned_item_slot(batch, bi, owner, held_kind);
+  if (held_slot >= 0) {
+    item_slot_clear(batch, msl_idx_item(bi, held_slot));
+  }
+
+  const int slot = items_alloc_slot(batch, bi);
+  if (slot < 0) {
+    return;
+  }
+  const size_t ii = msl_idx_item(bi, slot);
+  item_slot_clear(batch, ii);
+
+  static const float needle_y_pos_scale[9] = {
+      -1.0f, -0.75f, -0.5f, -0.25f, 0.0f, 0.25f, 0.5f, 0.75f, 1.0f,
+  };
+  const int rand_idx =
+      combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_SHOOT_YPOS9, 9);
+  const uint8_t air = (uint8_t)(batch->state.on_ground[o_idx] == 0u);
+  const float facing_dir = batch->state.facing[o_idx] ? 1.0f : -1.0f;
+  const float scale_y = batch->state.fighter_scale_y[o_idx];
+  const float x_off =
+      (air ? chp->sheik_needle_air_spawn_x_offset : chp->sheik_needle_ground_spawn_x_offset) *
+      facing_dir;
+  const float y_base =
+      air ? chp->sheik_needle_air_spawn_y_offset : chp->sheik_needle_ground_spawn_y_offset;
+  const float y_jitter =
+      needle_y_pos_scale[(rand_idx >= 0 && rand_idx < 9) ? rand_idx : 0] * (air ? 2.0f : 1.0f);
+  const float angle = air ? (facing_dir * (3.0f * MSL_PI_F / 4.0f) + MSL_PI_F / 2.0f)
+                          : (facing_dir * (MSL_PI_F / 2.0f) + MSL_PI_F / 2.0f);
+
+  batch->state.item_exists[ii] = 1u;
+  batch->state.item_type[ii] = ap->needle_throw_itkind;
+  batch->state.item_state[ii] = 0u;
+  batch->state.item_owner[ii] = (int8_t)owner;
+  batch->state.item_instance_id[ii] = batch->state.instance_id[o_idx];
+  batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
+  batch->state.item_direction[ii] = facing_dir;
+  batch->state.item_pos_x[ii] = batch->state.pos_x[o_idx] + scale_y * x_off;
+  batch->state.item_pos_y[ii] = batch->state.pos_y[o_idx] + scale_y * (y_base + y_jitter);
+  batch->state.item_vel_x[ii] = -ap->needle_launch_speed * cosf(angle);
+  batch->state.item_vel_y[ii] = ap->needle_launch_speed * sinf(angle);
+  batch->state.item_timer[ii] = (float)ap->needle_lifetime_frames;
+  batch->state.item_attack_id[ii] = batch->state.attack_id[o_idx];
+  batch->state.item_attack_instance[ii] = batch->state.attack_instance[o_idx];
+  batch->state.item_hidden_callback_flags[ii] |=
+      (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
+}
 
 static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
   if (batch == NULL) {
@@ -3759,6 +3949,17 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
     const MslItemArticleParams* params =
         item_article_params_for_sheik_needle_throw_item_type(batch->state.item_type[ii]);
     if (params == NULL) {
+      continue;
+    }
+    if ((batch->state.item_hidden_callback_flags[ii] &
+         (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME) != 0u) {
+      // it_802AFD8C-created Needles serialize at their spawn position/lifetime on the creation
+      // row. Their item motion/collision callback starts on the next item proc, unlike the
+      // special-cased throw-laser source paths that explicitly consume same-frame item motion.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::shootNeedles
+      // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_802AFD8C
+      batch->state.item_hidden_callback_flags[ii] &=
+          (uint8_t)~MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
       continue;
     }
     if (batch->replay_reseed_frame_active != NULL && batch->replay_reseed_frame_active[bi] != 0u &&
@@ -10049,6 +10250,25 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
           }
         }
       }
+    }
+
+    // Spawn Sheik Needle articles from SpecialN fighter callbacks.
+    // Decomp ownership:
+    // - Start_Anim / AirStart_Anim create the held needle with it_802B19AC before entering Loop.
+    // - Loop_Anim owns the hidden `fv.sk.x0` charge count; replay reseed restores that count.
+    // - End_Anim / AirEnd_Anim arm `mv.sk.specialn.x4`; accessory4_cb shootNeedles consumes the
+    //   latch and spawns one thrown Needle through it_802AFD8C.
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    //   ftSk_SpecialNStart_Anim,ftSk_SpecialAirNStart_Anim,ftSk_SpecialNLoop_Anim,
+    //   ftSk_SpecialAirNLoop_Anim,ftSk_SpecialNEnd_Anim,ftSk_SpecialAirNEnd_Anim,shootNeedles}
+    // refs/melee/src/melee/it/items/{itseakneedleheld.c,itseakneedlethrown.c}
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.hitlag_started_frame[idx] != 0u) {
+        continue;
+      }
+      sheik_needle_spawn_held_article_from_fighter(batch, bi, p);
+      sheik_needle_spawn_thrown_article_from_fighter(batch, bi, p);
     }
 
     // Spawn Illusion/Phantasm ghost article from side-special cmd_var[2] pulse.

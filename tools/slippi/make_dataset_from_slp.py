@@ -142,6 +142,28 @@ def _derive_common_fall_blend_seed(
     )
 
 
+def _derive_sheik_needle_seed_lanes(
+    *,
+    char_id_u8: np.ndarray,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    sheik_internal_id: int | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive prefix-causal Sheik Needle `fv.sk.x0` count and End timer seed lanes."""
+
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_sheik_needle_seed_lanes is required; run `make build`") from exc
+    sheik_id = -1 if sheik_internal_id is None else int(sheik_internal_id)
+    return msl_binding.derive_sheik_needle_seed_lanes(
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(action_frame_i16, dtype=np.int16),
+        sheik_id,
+    )
+
+
 MSL_MS_CLASS_ATTACK_AIR = 1 << 0
 
 # Keep preprocessing geometry constants named with the same source owners as the runtime mpcoll
@@ -6461,6 +6483,15 @@ def _main_impl(args) -> Dataset:
         action_id_u16=samples["seed_t"]["action_id"],
         sheik_internal_id=sheik_char_id,
         travel_frames=sheik_vanish_travel_frames,
+    )
+    (
+        samples["seed_t"]["sheik_needle_count_u8"][:, :],
+        samples["seed_t"]["sheik_needle_specialn_timer_u8"][:, :],
+    ) = _derive_sheik_needle_seed_lanes(
+        char_id_u8=samples["seed_t"]["char_id"],
+        action_id_u16=samples["seed_t"]["action_id"],
+        action_frame_i16=samples["seed_t"]["action_frame"],
+        sheik_internal_id=sheik_char_id,
     )
 
     samples["seed_t"]["match_flow_pending_rebirth_char_id"][:, :] = _derive_match_flow_pending_rebirth_char_id(

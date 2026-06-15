@@ -1487,6 +1487,22 @@ typedef struct MslSeed {
   //   ftSk_SpecialHi_80113838,ftSk_SpecialHi_80113A30,
   //   ftSk_SpecialHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Anim}
   uint8_t sheik_vanish_travel_timer_u8[MSL_MAX_PLAYERS];
+  // Sheik Needle hidden state (`fv.sk.x0`, `mv.sk.specialn.x0`).
+  //
+  // Decomp owner:
+  // - doEnter initializes stored count to at least one.
+  // - SpecialNLoop_Anim increments stored count on loop-frame wrap, clamped to six.
+  // - SpecialNLoop_IASA enters End and resets mv.sk.specialn.x0.
+  // - SpecialNEnd_Anim / SpecialAirNEnd_Anim arm accessory4 shootNeedles on x0
+  //   2,5,8,11,14,17 and increment x0 once per Anim callback.
+  //
+  // Seed representation:
+  // - count=0/timer=0: no live Needle source state.
+  // - count>0: remaining stored needles (`fv.sk.x0`) before this seed frame's Anim callback.
+  // - timer: current End shoot timer (`mv.sk.specialn.x0`) before this seed frame's Anim callback.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c
+  uint8_t sheik_needle_count_u8[MSL_MAX_PLAYERS];
+  uint8_t sheik_needle_specialn_timer_u8[MSL_MAX_PLAYERS];
   // Hidden CommonFall/FallAerial/FallSpecial blend state (`mv.co.*.x4` + selected submotion).
   //
   // Decomp owner:

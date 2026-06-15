@@ -898,6 +898,46 @@ Cache/regeneration:
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{ftSk_SpecialHi_80113838,ftSk_SpecialHi_80113A30,ftSk_SpecialHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Anim}`.
 
+## Replay Seed Contract: Sheik Needle Count And End Timer
+
+The replay seed contains:
+- `sheik_needle_count_u8[player]`
+- `sheik_needle_specialn_timer_u8[player]`
+
+These lanes carry Sheik Neutral-B hidden state needed to reproduce replay reseeds inside
+Needle charge/release sequences.
+
+Owner:
+- `fv.sk.x0` stores the current Needle count. `doEnter` initializes it to at least one,
+  `ftSk_SpecialNLoop_Anim` increments it on Loop frame wrap, and `shootNeedles` decrements it after
+  each thrown-Needle spawn.
+- `mv.sk.specialn.x0` is the End-state shot cadence timer. `ftSk_SpecialNEnd_Anim` arms
+  `mv.sk.specialn.x4` on frames `2, 5, 8, 11, 14, 17`; the `accessory4_cb` `shootNeedles`
+  consumes that latch to publish the thrown Needle article.
+- Replay-visible item rows alone are not the owner. The lanes are prefix-causal fighter special
+  state, and runtime article publication consumes them through the source MotionState/accessory
+  callback path.
+
+Derivation:
+- Generated natively by
+  `msl_binding.derive_sheik_needle_seed_lanes` from replay-prefix `char_id`, `action_id`, and
+  `action_frame`.
+- Non-Sheik rows and non-Needle actions seed zero. The derivation does not inspect future item
+  rows or replay names.
+
+Runtime consumption:
+- `src/api.c` seeds `MslState::sheik_needle_count` and the Needle-owned `sheik_special_timer`.
+- `src/sheik_specials.c` owns free-running count/timer transitions for the fighter MotionState.
+- `src/items.c` publishes held and thrown Needle articles from the fighter special callbacks.
+
+Cache/regeneration:
+- These lanes expand `MslSeed` and `tools/eval/dataset.py::SEED_DTYPE`. Cache version 24 is the
+  first valid cache generation for Sheik datasets that include Needle count/timer lanes; older
+  `.msl` files must be regenerated before Sheik one-step/rollout validation is trusted.
+
+Decomp contract:
+- `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{doEnter,ftSk_SpecialNLoop_Anim,doIasa,ftSk_SpecialNEnd_Anim,shootNeedles}`.
+
 ## Replay Seed Contract: CommonFall Blend State
 
 The replay seed contains:

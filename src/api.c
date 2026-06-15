@@ -3112,12 +3112,17 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           seed->motion_entry_instance_id_override_u16[p];
       batch->state.specialn_blaster_loop_requested[idx] =
           seed->specialn_blaster_loop_requested[p] ? 1u : 0u;
-      // Sheik stored needles remain live-only in this slice; Vanish travel x0 is seeded below
-      // because Special(Air)HiStart_1 freezes its animation at frame 35, so action_frame cannot
-      // reconstruct the hidden countdown.
-      // refs/melee/src/melee/ft/chara/ftSeak/{types.h,ftSk_SpecialHi.c}
-      batch->state.sheik_needle_count[idx] = 0u;
-      batch->state.sheik_special_timer[idx] = seed->sheik_vanish_travel_timer_u8[p];
+      // Sheik hidden special lanes:
+      // - Vanish travel x0 is seeded because Special(Air)HiStart_1 freezes its animation at frame
+      //   35, so action_frame cannot reconstruct the countdown.
+      // - Needle fv.sk.x0 / mv.sk.specialn.x0 are seeded prefix-causally because End's
+      //   accessory4 shootNeedles callback publishes articles from hidden stored count and shoot
+      //   timer, not from action id alone.
+      // refs/melee/src/melee/ft/chara/ftSeak/{types.h,ftSk_SpecialHi.c,ftSk_SpecialN.c}
+      batch->state.sheik_needle_count[idx] = seed->sheik_needle_count_u8[p];
+      batch->state.sheik_special_timer[idx] = seed->sheik_needle_specialn_timer_u8[p] != 0u
+                                                  ? seed->sheik_needle_specialn_timer_u8[p]
+                                                  : seed->sheik_vanish_travel_timer_u8[p];
       batch->state.sheik_special_latch[idx] = 0u;
       {
         batch->state.capture_grab_timer[idx] = seed->capture_grab_timer_f32[p];
