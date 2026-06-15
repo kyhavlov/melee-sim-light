@@ -19,9 +19,10 @@ from tools.extraction.known_data_artifacts import (
 
 from tools.extraction.char_registry import CHARS
 
-# Article params exist only for characters whose ftData registers items (registry
-# has_articles); article-less characters (Marth, ...) are skipped by _records.
-CHAR_IDS = {name: info.external_id for name, info in CHARS.items() if info.has_articles}
+# The current MSLITAR1 table only exports the Fox/Falco laser/illusion constants it knows how
+# to name. Characters such as Sheik have source articles, but their Needle/Chain/Vanish article
+# contracts are separate Stage-4 work and must not be routed through this Fox/Falco table.
+CHAR_IDS = {name: info.external_id for name, info in CHARS.items() if info.exports_item_article_constants}
 ILLUSION_ITEM_KINDS = {
     # refs/melee/src/melee/it/forward.h::ItemKind
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_OnLoad

@@ -25,7 +25,11 @@ Collect before writing any code:
   characters — the **donor submotion enum** (Falco reuses ftFox's `ftFx_SM_*`;
   a clone's submotion_dir/prefix point at the donor).
 - **Articles**: does the character spawn items/articles (lasers, projectiles,
-  turnips...)? Sets `has_articles` and decides whether the item pipeline needs
+  turnips...)? Set `has_articles` for the source fact, but do not route the
+  character through an existing article exporter unless that exporter knows the
+  character's article contract. For example, `exports_item_article_constants`
+  is only for the current Fox/Falco MSLITAR1 laser/illusion table; Sheik has
+  articles, but Needle/Chain/Vanish article contracts are separate special
   work (Phase 4).
 - **Specials inventory**: list every special action state from the decomp
   (`ftCo`-range ids are shared; char ranges start at 341+) with ground/air

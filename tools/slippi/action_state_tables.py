@@ -45,7 +45,7 @@ def read_mslacid1_v3(path: str | Path) -> ActionStateTable:
         raise ValueError(
             f"{p}: unsupported MSLACID1 version {int(ver)}; regenerate v{VERSION} tables with: "
             "uv run python -m tools.extraction.extract_attack_id_move_id "
-            "--melee_decomp refs/melee --out_dir data/attack_id/move_id --chars fox,falco"
+            "--melee_decomp refs/melee --out_dir data/attack_id/move_id --chars fox,falco,marth,sheik"
         )
     (count,) = struct.unpack_from("<H", buf, 12)
     (reserved,) = struct.unpack_from("<H", buf, 14)

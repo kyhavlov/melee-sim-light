@@ -3,6 +3,7 @@
 // Melee internal FighterKind ids (ft/types.h order) supported by the current runtime.
 typedef enum MslCharacterId {
   MSL_CHAR_ID_FOX = 1,
+  MSL_CHAR_ID_SHEIK = 7,
   MSL_CHAR_ID_MARTH = 18,
   MSL_CHAR_ID_FALCO = 22,
 } MslCharacterId;

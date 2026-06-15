@@ -5,10 +5,10 @@ ftData symbol, decomp source dir, ids) should consume this instead of carrying i
 fox/falco literals.
 
 Id spaces:
-- internal_id: Melee in-engine character kind (ft/types.h FighterKind order; Fox=1, Falco=22,
-  Marth=18). This is the id the sim's seeds/binding use (char_id lanes).
-- external_id: Slippi/CSS external character id (Fox=2, Falco=20, Marth=9), what replay
-  metadata carries.
+- internal_id: Melee in-engine character kind (ft/types.h FighterKind order; Fox=1, Sheik=7,
+  Marth=18, Falco=22). This is the id the sim's seeds/binding use (char_id lanes).
+- external_id: Slippi/CSS external character id (Fox=2, Marth=9, Sheik=19, Falco=20),
+  what replay metadata carries.
 """
 
 from __future__ import annotations
@@ -30,7 +30,8 @@ class CharInfo:
     # MotionState table (clones reuse the donor's enum: Falco uses ftFox's ftFx_SM_*).
     submotion_dir: str
     submotion_prefix: str
-    has_articles: bool  # spawns items/articles (lasers etc.)
+    has_articles: bool  # source character spawns items/articles.
+    exports_item_article_constants: bool  # supported by current compact MSLITAR1 exporter.
 
 
 CHARS: dict[str, CharInfo] = {
@@ -46,6 +47,7 @@ CHARS: dict[str, CharInfo] = {
         submotion_dir="ftFox",
         submotion_prefix="ftFx_SM_",
         has_articles=True,
+        exports_item_article_constants=True,
     ),
     "falco": CharInfo(
         name="falco",
@@ -59,6 +61,7 @@ CHARS: dict[str, CharInfo] = {
         submotion_dir="ftFox",
         submotion_prefix="ftFx_SM_",
         has_articles=True,
+        exports_item_article_constants=True,
     ),
     "marth": CharInfo(
         name="marth",
@@ -72,6 +75,21 @@ CHARS: dict[str, CharInfo] = {
         submotion_dir="ftMars",
         submotion_prefix="ftMs_SM_",
         has_articles=False,
+        exports_item_article_constants=False,
+    ),
+    "sheik": CharInfo(
+        name="sheik",
+        internal_id=7,
+        external_id=19,
+        pl_dat="PlSk.dat",
+        aj_dat="PlSkAJ.dat",
+        ftdata_symbol="ftDataSeak",
+        decomp_dir="ftSeak",
+        decomp_prefix="ftSk_",
+        submotion_dir="ftSeak",
+        submotion_prefix="ftSk_SM_",
+        has_articles=True,
+        exports_item_article_constants=False,
     ),
 }
 

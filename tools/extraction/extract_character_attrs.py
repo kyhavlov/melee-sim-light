@@ -409,7 +409,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     # refs/Ishiiruka engine-dump-v12-probes ftCo_800DDDE4 probe:
     #   IPW 1231..1233/10031, ParallelFamiliarZebra 1427..1429, FSP 9061..9067.
     throw_release_mpcoll_floor_publication_mask = 0
-    if ftdata_symbol == "ftData_Marth":
+    if ftdata_symbol == "ftDataMars":
         throw_release_mpcoll_floor_publication_mask = (1 << 0) | (1 << 3)
     # Source-callsite gameplay overlay:
     # ftCo_80096900 stores arg1 into mv.co.fallspecial.xC. Marth Dolphin Slash calls it with
@@ -421,7 +421,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c
     fallspecial_xc0_source_fx_kind_mask = 0
-    if ftdata_symbol == "ftData_Marth":
+    if ftdata_symbol == "ftDataMars":
         fallspecial_xc0_source_fx_kind_mask = (1 << 15) | (1 << 16)
     # Probe-backed seed/provenance overlay:
     # Slippi does not expose CollData ECB bottom. Marth FallAerial shallow landing witnesses need
@@ -434,7 +434,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     #   ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
     common_fall_blended_ecb_seed_mask = 0
-    if ftdata_symbol == "ftData_Marth":
+    if ftdata_symbol == "ftDataMars":
         common_fall_blended_ecb_seed_mask = 1 << 1
 
     out = {

@@ -42,7 +42,7 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     out_dir = tmp_path / "data"
     missing_decomp = tmp_path / "missing_decomp"
     iso_dir.mkdir()
-    for name in ("PlCo.dat", "ItCo.dat", "PlFx.dat", "PlFc.dat", "PlMs.dat", "GrNLa.dat"):
+    for name in ("PlCo.dat", "ItCo.dat", "PlFx.dat", "PlFc.dat", "PlMs.dat", "PlSk.dat", "GrNLa.dat"):
         (iso_dir / name).write_bytes(b"fake")
 
     commands: list[list[str]] = []
@@ -61,7 +61,7 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
             "--stages",
             "grnla",
             "--chars",
-            "fox,falco,marth",
+            "fox,falco,marth,sheik",
             "--melee-decomp",
             str(missing_decomp),
         ]
@@ -72,29 +72,45 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     assert (out_dir / "staling/move_id/marth.bin").exists()
     assert (out_dir / "attack_id/move_id/marth.bin").exists()
     assert (out_dir / "motion_state/owners/marth.bin").exists()
+    assert (out_dir / "staling/move_id/sheik.bin").exists()
+    assert (out_dir / "attack_id/move_id/sheik.bin").exists()
+    assert (out_dir / "motion_state/owners/sheik.bin").exists()
     assert (out_dir / "motion_state/owners/callback_symbols.json").exists()
     manifest = out_dir / "manifest.json"
     assert manifest.exists()
-    from tools.extraction.extract_motion_state_owners import FORMAT_VERSION
+    from tools.extraction.extract_attack_id_move_id import FORMAT_VERSION as ATTACK_ID_MOVE_ID_VERSION
+    from tools.extraction.extract_motion_state_owners import FORMAT_VERSION as MOTION_STATE_OWNER_VERSION
 
-    assert f'"motion_state_owners": {FORMAT_VERSION}' in manifest.read_text(encoding="utf-8")
+    assert f'"motion_state_owners": {MOTION_STATE_OWNER_VERSION}' in manifest.read_text(encoding="utf-8")
     # The manifest alone is not enough: the packaged no-decomp artifacts must THEMSELVES be
     # at the runtime version, or Python preflight passes and native init then rejects the
     # bins (the v16-packaged/v17-runtime skew class). Check the copied headers.
     import json as _json
     import struct as _struct
 
-    for ch in ("fox", "falco", "marth"):
+    for ch in ("fox", "falco", "marth", "sheik"):
+        b = (out_dir / "staling" / "move_id" / f"{ch}.bin").read_bytes()
+        assert b[:8] == b"MSLSTID1"
+        assert _struct.unpack_from("<I", b, 8)[0] == 1, (
+            f"packaged {ch}.bin is not MSLSTID1 v1 - regenerate "
+            "tools/extraction/source_artifacts/staling/move_id/"
+        )
+        b = (out_dir / "attack_id" / "move_id" / f"{ch}.bin").read_bytes()
+        assert b[:8] == b"MSLACID1"
+        assert _struct.unpack_from("<I", b, 8)[0] == ATTACK_ID_MOVE_ID_VERSION, (
+            f"packaged {ch}.bin is not MSLACID1 v{ATTACK_ID_MOVE_ID_VERSION} - regenerate "
+            "tools/extraction/source_artifacts/attack_id/move_id/"
+        )
         b = (out_dir / "motion_state" / "owners" / f"{ch}.bin").read_bytes()
         assert b[:8] == b"MSLMSO01"
-        assert _struct.unpack_from("<I", b, 8)[0] == FORMAT_VERSION, (
-            f"packaged {ch}.bin is not MSLMSO01 v{FORMAT_VERSION} - regenerate "
+        assert _struct.unpack_from("<I", b, 8)[0] == MOTION_STATE_OWNER_VERSION, (
+            f"packaged {ch}.bin is not MSLMSO01 v{MOTION_STATE_OWNER_VERSION} - regenerate "
             "tools/extraction/source_artifacts/motion_state/owners/"
         )
     symbols = _json.loads(
         (out_dir / "motion_state" / "owners" / "callback_symbols.json").read_text(encoding="utf-8")
     )
-    assert int(symbols["version"]) == FORMAT_VERSION
+    assert int(symbols["version"]) == MOTION_STATE_OWNER_VERSION
     assert not any(cmd[0] == "tools.extraction.extract_staling_move_id" for cmd in commands)
     assert not any(cmd[0] == "tools.extraction.extract_attack_id_move_id" for cmd in commands)
     assert not any(cmd[0] == "tools.extraction.extract_motion_state_owners" for cmd in commands)

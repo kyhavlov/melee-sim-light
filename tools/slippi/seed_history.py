@@ -34,7 +34,7 @@ def derive_instance_id_x2073(
     - refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
 
     x4_flags mapping source:
-    - data/attack_id/move_id/{fox,falco}.bin (ISO-derived; also used by C via src/attack_id_tables.c)
+    - data/attack_id/move_id/<char>.bin (ISO-derived; also used by C via src/attack_id_tables.c)
     """
     if str(data_dir) not in ("data", "./data"):
         raise ValueError(
@@ -1006,9 +1006,9 @@ def derive_camera_target_world(
     - refs/melee/src/melee/ft/ftlib.c::ftLib_800866DC
     - refs/melee/src/melee/ft/ftcamera.c::ftCamera_80076018
     - refs/melee/src/melee/ft/fighter.c (root facing rotation via ftPartSetRotY)
-    - data/characters/{fox,falco}.json: camera_zoom_target_bone_part_id,
+    - data/characters/<char>.json: camera_zoom_target_bone_part_id,
       camera_zoom_target_offset, camera_box_radius, model_scaling
-    - data/anims/{fox,falco}.bin (SSANIM01 v4 pose matrices)
+    - data/anims/<char>.bin (SSANIM01 v4 pose matrices)
     """
     char = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
     anim = np.asarray(animation_index_u32, dtype=np.uint32).reshape(-1)
@@ -1274,7 +1274,7 @@ def derive_runbrake_cmd0(
       refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
 
     Source of truth:
-    - data/moves/{fox,falco}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0)
+    - data/moves/<char>.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0)
 
     Representation:
     - 0: RunBrake TurnRun gate disabled on this post-frame.

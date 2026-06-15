@@ -16,6 +16,7 @@ typedef struct MslCharRegistryEntry {
 
 static const MslCharRegistryEntry MSL_CHAR_REGISTRY[] = {
     {(uint8_t)MSL_CHAR_ID_FOX, "fox"},
+    {(uint8_t)MSL_CHAR_ID_SHEIK, "sheik"},
     {(uint8_t)MSL_CHAR_ID_FALCO, "falco"},
     {(uint8_t)MSL_CHAR_ID_MARTH, "marth"},
 };

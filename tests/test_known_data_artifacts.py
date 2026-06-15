@@ -580,6 +580,26 @@ def test_runtime_char_part_anchors_match_mslpart1() -> None:
 
 
 @pytest.mark.integration
+def test_character_overlay_masks_survive_fresh_extraction() -> None:
+    import msl_binding
+
+    cases = {
+        "fox": (1, 0, 0, 0),
+        "falco": (22, 0, 0, 0),
+        "marth": (18, (1 << 0) | (1 << 3), (1 << 15) | (1 << 16), 1 << 1),
+        "sheik": (7, 0, 0, 0),
+    }
+    for char_name, (sim_char, throw_mask, fallspecial_mask, commonfall_mask) in cases.items():
+        attrs = json.loads(Path(f"data/characters/{char_name}.json").read_text(encoding="utf-8"))
+        assert int(attrs["throw_release_mpcoll_floor_publication_mask"]) == throw_mask
+        assert int(attrs["fallspecial_xc0_source_fx_kind_mask"]) == fallspecial_mask
+        assert int(attrs["common_fall_blended_ecb_seed_mask"]) == commonfall_mask
+
+        runtime = msl_binding.char_params_part_anchors(sim_char)
+        assert int(runtime["throw_release_mpcoll_floor_publication_mask"]) == throw_mask
+
+
+@pytest.mark.integration
 def test_fighter_part_metadata_known_parent_rows() -> None:
     fox = read_mslpart1_v1(Path("data/model_parts/fox.bin"))
     falco = read_mslpart1_v1(Path("data/model_parts/falco.bin"))

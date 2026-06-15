@@ -281,14 +281,19 @@ def test_air_drift_caps_at_max_h_air_speed(char_name: str) -> None:
 @CHAR_PARAMS
 def test_ground_friction_in_wait(char_name: str) -> None:
     # Decomp: ftCommon_8007CB74 applies gr_friction toward zero each grounded frame.
+    # Keep the seed below walk_max_vel: ft_80084F3C-style high-speed friction paths scale
+    # gr_friction once |gr_vel| exceeds the character's walk cap (Sheik's is below the old
+    # hardcoded 1.5 fixture value).
     a = _char_attrs(char_name)
     seed = _seed_base(char_name)
-    seed["speed_ground_x_self"][0, 0] = np.float32(1.5)
+    start_v = min(1.5, float(a["walk_max_vel"]) - 0.1)
+    assert start_v > float(a["gr_friction"])
+    seed["speed_ground_x_self"][0, 0] = np.float32(start_v)
     idle = _mk_inputs()
     outs = _run(seed, [idle, idle])
     v0 = float(outs[0]["speed_ground_x_self"][0])
-    assert abs((1.5 - v0) - float(a["gr_friction"])) < 0.02 or v0 == 0.0, (
-        f"{char_name}: friction step 1.5->{v0} vs gr_friction {a['gr_friction']}"
+    assert abs((start_v - v0) - float(a["gr_friction"])) < 0.02 or v0 == 0.0, (
+        f"{char_name}: friction step {start_v}->{v0} vs gr_friction {a['gr_friction']}"
     )
 
 
