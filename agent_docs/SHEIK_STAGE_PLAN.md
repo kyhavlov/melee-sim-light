@@ -4,15 +4,15 @@ Draft owner: Codex worker.
 Branch target: create `newchar-sheik` from the current `newchar` branch tip in `/mnt/nvme0/projects/melee-sim-light-newchar`.
 Primary objective: implement Sheik as a high-fidelity supported character, using the Marth port guide as the operating checklist and source/data/probe evidence as the acceptance bar.
 
-This is a planning contract. Do not start implementation until this plan is reviewed and the Sheik/Zelda policy below is resolved by the user/reviewer.
+This is a planning contract. Do not start implementation until this plan is reviewed and the Sheik/Zelda policy below is resolved by the user/main reviewer.
 
 Worktree convention:
 
 - Canonical planning contract: `agent_docs/SHEIK_STAGE_PLAN.md` in the implementation worktree.
-- Stage 0 may create `reports/triage/newchar_sheik/STAGE_PLAN.md` as an execution snapshot with run-specific source commit, branch path, commit policy, and reviewer command details, but the tracked `agent_docs/SHEIK_STAGE_PLAN.md` remains the durable contract.
+- Stage 0 may create `reports/triage/newchar_sheik/STAGE_PLAN.md` as an execution snapshot with run-specific source commit, branch path, and commit policy, but the tracked `agent_docs/SHEIK_STAGE_PLAN.md` remains the durable contract.
 - Implementation branch source: the current `newchar` branch HEAD, not `dev` and not `/mnt/nvme0/projects/melee-sim-light` unless the user explicitly redirects.
-- Implementation location after Stage 0: either switch this worktree to `newchar-sheik` or create `/mnt/nvme0/projects/melee-sim-light-newchar-sheik`, but record the chosen path before code changes and use only that path in reviewer packets.
-- Do not mirror planning or reviewer artifacts into `/mnt/nvme0/projects/melee-sim-light`; that main/dev worktree is not part of this Sheik port unless explicitly requested.
+- Implementation location after Stage 0: either switch this worktree to `newchar-sheik` or create `/mnt/nvme0/projects/melee-sim-light-newchar-sheik`, but record the chosen path before code changes and use only that path in review packets.
+- Do not mirror planning or review artifacts into `/mnt/nvme0/projects/melee-sim-light`; that main/dev worktree is not part of this Sheik port unless explicitly requested.
 - Keep a single canonical `reports/triage/newchar_sheik/worklog.md` in the implementation worktree after Stage 0; if a sibling worktree is created, copy this tracked plan there and treat the sibling copy as canonical from that point forward.
 - If this tracked plan is still uncommitted when Stage 0 starts, carry it into `newchar-sheik` deliberately and make it part of the Stage 0 review packet. Do not let branch creation or worktree switching orphan the plan as an ignored/local-only artifact.
 
@@ -20,18 +20,17 @@ Autonomous goal interpretation:
 
 - A `/goal` to complete this plan means "advance through the stages under this contract," not "skip review, commit, or validation gates to finish faster."
 - The worker should keep going without asking the user when the next step is local, source-bounded, and covered by the current stage contract.
-- The worker must pause and ask the user only for product-scope decisions, unavailable external credentials/data, persistent reviewer-chat failure, commit authorization when Stage 0 did not grant it, or a blocker that cannot be resolved with local code/probes/tests.
-- Persistent reviewer approval is required before each stage is considered complete. If the reviewer requests changes, fix them and re-request review before advancing.
-- Stage commits are allowed only if Stage 0 records automatic stage-commit authorization. Otherwise, approval means "ready for user commit decision," not "commit now."
+- The worker must pause and ask the user only for product-scope decisions, unavailable external credentials/data, commit authorization, or a blocker that cannot be resolved with local code/probes/tests.
+- Main-reviewer approval is required before each stage is considered complete. If the reviewer requests changes, fix them and re-request review before advancing.
+- Stage approval means "ready for user commit decision," not "commit now." Do not commit unless the user explicitly says to commit.
 - If an implementation stage grows into unrelated owner families, split the work into coherent reviewed slices rather than returning one giant undifferentiated patch.
 
 ## Operating Rules
 
-- Work stage-by-stage. Do not start the next stage until the current stage is reviewed and either committed or explicitly approved to continue uncommitted.
-- Use the persistent reviewer Codex chat after every stage packet. Reviewer approval is intermediate only; final approval still comes from the user/main reviewer.
-- Every reviewer request must include a complete packet; do not rely on reviewer-chat memory.
-- Follow the Stage 0 commit policy. Until Stage 0 records automatic stage-commit authorization, leave work uncommitted unless explicitly told to commit that stage.
-- Do not stage changes for review packets. Stage only immediately before an authorized commit, after reviewer approval and passing gates.
+- Work stage-by-stage. Do not start the next stage until the current stage is reviewed and either committed by explicit user instruction or explicitly approved to continue uncommitted.
+- Every review request must include a complete packet; do not rely on chat memory.
+- Leave work uncommitted unless explicitly told to commit that stage.
+- Do not stage changes for review packets. Stage only immediately before an authorized commit, after approval and passing gates.
 - No replay row hacks, dataset-name logic, record-id logic, or validation-fit runtime branches.
 - No character-id proxy in shared systems if decomp/source data or generated tables can express the owner.
 - New runtime-required data fields must include extractor/export, stable binary/JSON contract, runtime loader, packaged source-artifact/no-decomp fallback if applicable, docs, and tests in the same stage.
@@ -48,7 +47,7 @@ Before starting each stage, write the preflight result into `reports/triage/newc
 - Confirm the active implementation path with `pwd`; it must match the Stage 0 recorded implementation path.
 - Confirm branch state with `git status --short --branch`; branch must be `newchar-sheik` after Stage 0, and must be based on the recorded `newchar` source commit.
 - Confirm `git submodule status refs/Ishiiruka`; if any probe/submodule change is required, it must be committed/pushed/fetchable before the superproject points at it.
-- Confirm all required generated/source artifacts are tracked or deliberately ignored. Reviewer packets must include `git status --porcelain=v1 -uall`, not only tracked modifications.
+- Confirm all required generated/source artifacts are tracked or deliberately ignored. Review packets must include `git status --porcelain=v1 -uall`, not only tracked modifications.
 - Confirm there is no dependency on ignored local data, datasets, Dolphin binaries, or generated reports unless the stage packet explains how a fresh checkout recreates them.
 - Confirm the Sheik/Zelda policy and commit policy are resolved before Stage 1. Do not infer them from replay convenience.
 - Confirm no held-out replay filename appears in the official training/eval suite manifest.
@@ -56,14 +55,13 @@ Before starting each stage, write the preflight result into `reports/triage/newc
 
 Stage commit policy:
 
-- Stage 0 decision: automatic stage commits are authorized after persistent-reviewer approval and all stage gates pass.
-- The worker may commit a stage after the persistent reviewer approves and all stage gates pass.
-- If automatic stage commits are not authorized, leave the stage uncommitted after reviewer approval and ask the user before committing.
+- Do not commit unless the user explicitly says to commit.
+- Leave the stage uncommitted after reviewer approval and ask the user before committing.
 - Never commit with unresolved reviewer findings, missing untracked package files, dirty submodule state, or failing gates.
 
-## Reviewer Chat Template
+## Review Packet Template
 
-Use this template for each persistent reviewer request. Fill it completely; do not rely on reviewer-chat memory.
+Use this template for each review request. Fill it completely; do not rely on chat memory.
 
 ```text
 Review the current uncommitted stage packet in <Stage 0 recorded implementation path>.
@@ -96,22 +94,11 @@ Known caveats:
 <caveats>
 
 Commit policy:
-<automatic stage commit authorized after reviewer approval: yes/no>
+<no commit unless explicitly authorized by user>
 
 Please review as a strict code reviewer. Focus on bugs, source-shape violations, data-contract/package holes, missing tests, validation gaps, and scope creep.
 Findings first with file:line refs. Do not approve if any gate is missing.
 ```
-
-Reviewer CLI handoff:
-
-- Persistent reviewer conversation id: `019d8d43-e2eb-7163-90b8-23f2d600d9cd`.
-- Preferred non-interactive resume command:
-  `codex exec resume -o reports/triage/newchar_sheik/reviewer_responses/<stage>.md 019d8d43-e2eb-7163-90b8-23f2d600d9cd - < reports/triage/newchar_sheik/reviewer_packets/<stage>.md`
-- Smoke proof: `codex exec resume` returned `REVIEWER_EXEC_THREAD_OK` and wrote `reports/triage/newchar_sheik/reviewer_smoke_exec.txt`.
-- Avoid the interactive TUI form (`codex resume ...`) for automation; it requires a PTY and stays open after the response.
-- Run the command from the active implementation worktree so relative paths resolve correctly.
-- Reviewer prompt file convention: `reports/triage/newchar_sheik/reviewer_packets/<stage>.md`.
-- Reviewer response file convention: `reports/triage/newchar_sheik/reviewer_responses/<stage>.md`.
 
 ## Sheik/Zelda Transform Policy
 
@@ -150,12 +137,10 @@ Objectives:
   - `agent_docs/SHEIK_STAGE_PLAN.md`
   - `reports/triage/newchar_sheik/STAGE_PLAN.md` if a run-specific execution snapshot is useful
   - `reports/triage/newchar_sheik/worklog.md`
-  - `reports/triage/newchar_sheik/reviewer_packets/`
-  - `reports/triage/newchar_sheik/reviewer_responses/`
+  - `reports/triage/newchar_sheik/review_packets/` may be used for durable review summaries, but review happens in the current user/main-reviewer flow.
 - Record branch tip, submodule pin, data manifest state, and current validation baseline.
 - Resolve and write final Sheik/Zelda policy before Stage 1 code changes.
-- Resolve and write commit policy before Stage 1 code changes: automatic commits after persistent-reviewer approval, or explicit user approval before each commit.
-- Record the persistent reviewer conversation id and exact Codex CLI resume command in this file.
+- Resolve and write commit policy before Stage 1 code changes: explicit user approval is required before each commit.
 
 Expected changed surfaces:
 
@@ -181,11 +166,10 @@ Validation gates:
 Reviewer checkpoint:
 
 - Reviewer confirms the plan, stage gates, and Sheik/Zelda policy are explicit enough to constrain implementation.
-- Reviewer confirms the persistent reviewer-chat invocation works by reviewing this plan packet before code work starts.
 
 Commit rule:
 
-- Commit after persistent-reviewer approval and passing Stage 0 gates, because automatic stage commits are authorized for this branch.
+- Leave changes uncommitted for review; commit only after explicit user instruction.
 
 ## Stage 1 - Registry, Data Pipeline, And No-Decomp Packaging
 
@@ -245,7 +229,7 @@ Reviewer checkpoint:
 
 Commit rule:
 
-- Follow the Stage 0 commit policy. If automatic stage commits are authorized, commit after persistent-reviewer approval and passing gates; otherwise ask the user before committing.
+- Follow the Stage 0 commit policy: leave changes uncommitted for review and commit only after explicit user instruction.
 
 ## Stage 2 - Engine Boot, Common Actions, And Coverage Suite
 
@@ -299,7 +283,7 @@ Reviewer checkpoint:
 
 Commit rule:
 
-- Follow the Stage 0 commit policy. If automatic stage commits are authorized, commit after persistent-reviewer approval and passing gates; otherwise ask the user before committing.
+- Follow the Stage 0 commit policy: leave changes uncommitted for review and commit only after explicit user instruction.
 
 ## Stage 3 - Sheik Replay Intake And Baseline Metrics
 
@@ -370,7 +354,7 @@ Reviewer checkpoint:
 
 Commit rule:
 
-- Follow the Stage 0 commit policy, but do not commit suite inclusion until the persistent reviewer approves replay admission, baseline reports, and held-out/training separation.
+- Follow the Stage 0 commit policy. Do not commit suite inclusion until the main reviewer approves replay admission, baseline reports, and held-out/training separation, and the user explicitly authorizes the commit.
 
 ## Stage 4 - Sheik Specials And Transform Core
 
@@ -435,7 +419,7 @@ Reviewer checkpoint:
 
 Commit rule:
 
-- Follow the Stage 0 commit policy. If automatic stage commits are authorized, commit after persistent-reviewer approval and passing gates; otherwise ask the user before committing.
+- Follow the Stage 0 commit policy: leave changes uncommitted for review and commit only after explicit user instruction.
 
 ## Stage 5 - Combat, Hitbox, Hurtbox, BODY, And Pose Audit
 
@@ -483,7 +467,7 @@ Reviewer checkpoint:
 
 Commit rule:
 
-- Follow the Stage 0 commit policy. If automatic stage commits are authorized, commit after persistent-reviewer approval and passing gates; otherwise ask the user before committing.
+- Follow the Stage 0 commit policy: leave changes uncommitted for review and commit only after explicit user instruction.
 
 ## Stage 6 - Throw, Capture, Ledge, Landing, Damage, And Stage-Collision Burn-Down
 
@@ -535,7 +519,7 @@ Reviewer checkpoint:
 
 Commit rule:
 
-- Follow the Stage 0 commit policy. Commit coherent reviewed slices, not every experiment.
+- Follow the Stage 0 commit policy. Prepare coherent reviewed slices, not every experiment; commit only after explicit user instruction.
 
 ## Stage 7 - Metrics Parity, Documentation, And Final Packaging
 
@@ -558,13 +542,13 @@ Objectives:
   - `agent_docs/ADDING_A_CHARACTER.md`
   - `agent_docs/DATA_CONTRACT.md`
   - `agent_docs/SPEC.md` if source/system behavior belongs there
-- Prepare final commit-by-commit review packet for the original reviewer.
+- Prepare final commit-by-commit review packet for the user/main reviewer.
 
 Expected changed surfaces:
 
 - docs
 - validation reports
-- final worklog and reviewer packet summaries
+- final worklog and review packet summaries
 - no-decomp/package tests if artifacts changed
 
 Non-goals:
@@ -595,12 +579,11 @@ Final gates:
 
 Reviewer checkpoint:
 
-- Persistent reviewer approves final packet.
-- User/main reviewer performs commit-by-commit final review.
+- User/main reviewer approves final packet and performs commit-by-commit final review.
 
 Commit rule:
 
-- Final cleanup/docs commit follows the Stage 0 commit policy, with persistent-reviewer approval required before any commit.
+- Final cleanup/docs commit follows the Stage 0 commit policy: commit only after explicit user instruction.
 
 ## Initial Risk Register
 
@@ -630,9 +613,9 @@ Every stage packet must include:
 
 Reviewer finding loop:
 
-- If the persistent reviewer returns any finding, do not advance stages and do not commit.
+- If the reviewer returns any finding, do not advance stages and do not commit.
 - Record each finding in the worklog with the resolution: fixed, rejected with source-backed reason, or escalated to user.
-- Send a follow-up reviewer packet after fixes. The follow-up packet must include the original finding text, changed files, and the validation rerun.
+- Send a follow-up review packet after fixes. The follow-up packet must include the original finding text, changed files, and the validation rerun.
 
 Stage completion standard:
 
