@@ -1,4 +1,5 @@
 {
+  "default_spawn_lifetime_frames": 80.0,
   "item_damage_facing_velocity_threshold": 0.15000000596046448,
   "item_hitlag_base": 5.0,
   "item_hitlag_damage_mul": 0.3333333432674408,

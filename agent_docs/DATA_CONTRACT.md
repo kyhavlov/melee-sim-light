@@ -922,8 +922,10 @@ Derivation:
 - Generated natively by
   `msl_binding.derive_sheik_needle_seed_lanes` from replay-prefix `char_id`, `action_id`, and
   `action_frame`.
-- Non-Sheik rows and non-Needle actions seed zero. The derivation does not inspect future item
-  rows or replay names.
+- Non-Sheik rows seed zero. Sheik non-Needle actions preserve the prior stored count because
+  `fv.sk.x0` is character persistent state, not SpecialN-local state; for example,
+  `SpecialNCancel -> Wait -> SpecialAirNEnd` can still shoot the previously stored needles.
+  The derivation does not inspect future item rows or replay names.
 
 Runtime consumption:
 - `src/api.c` seeds `MslState::sheik_needle_count` and the Needle-owned `sheik_special_timer`.
@@ -943,6 +945,9 @@ Cache/regeneration:
 - Cache version 25 is the first valid cache generation for Needle End shoot-frame
   `seed_t.frame_pre_random_seed` reconstruction; older same-record-size `.msl` files have stale
   Y-jitter RNG semantics.
+- Cache version 29 is the first valid cache generation for stored Needle count persistence across
+  non-SpecialN Sheik actions; older same-record-size `.msl` files can under-seed later Needle
+  volleys after a cancel or movement gap.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{doEnter,ftSk_SpecialNLoop_Anim,doIasa,ftSk_SpecialNEnd_Anim,shootNeedles}`.
@@ -1732,9 +1737,9 @@ Characters (Fox/Falco/Marth/Sheik):
     - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
   - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
     the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
-  - Binary layout: `MSLITAR1` v4
+  - Binary layout: `MSLITAR1` v7
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 4`
+    - `u32 version = 7`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
@@ -1747,6 +1752,22 @@ Characters (Fox/Falco/Marth/Sheik):
       reject a Sheik row missing any of these fields. Gameplay code must consume these fields
       through `item_article_params_get(MSL_CHAR_ID_SHEIK)` rather than local item-kind or
       lifetime constants in `src/items.c`.
+    - v5 adds Sheik thrown-Needle state-0 item HitCapsule fields extracted from the article state
+      script: count, per-hitbox damage, size, offsets, angle, knockback, element, shield damage,
+      and grounded/aerial target flags. These fields are source/data substrate for the eventual
+      Needle item BODY contact owner; runtime BODY contact remains disabled until the item
+      HitCapsule refresh and collision-update phase are bounded. The state-1..4 script clears
+      hitboxes and must not inherit state-0 BODY admission.
+    - v6 adds Sheik Vanish state-0 item HitCapsule fields extracted from the article state script:
+      count, damage, size, offsets, angle, knockback, element, shield damage, and grounded/aerial
+      target flags. These fields describe the source-authored damage surface; runtime Vanish BODY
+      contact still requires a bounded item-collision/update-phase owner before it is enabled.
+    - v7 adds Sheik Vanish state-0 HitCapsule active-window fields extracted from the same item
+      state script: size keyframes at frames 7 and 11, plus the remove frame at 13. The visual
+      article lifetime is the replay-visible post-`it_8027518C` `xD44_lifeTimer` value from
+      `ItemCommonData::xF8` (currently 80), not the earlier 60-frame local seed in
+      `it_802B1D40`; BODY collision is only active until the script removes the HitCapsule.
+      Runtime must not treat `vanish_lifetime_frames` as the damage lifetime.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:

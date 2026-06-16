@@ -119,6 +119,7 @@ def _run_sample_row(
     *,
     mutate_input_y: int | None = None,
     mutate_seed: dict[str, int | tuple[int, int]] | None = None,
+    mutate_item0_type: int | None = None,
     replay_frame_rng: bool = False,
 ) -> np.void:
     import msl_binding
@@ -133,6 +134,8 @@ def _run_sample_row(
             else:
                 slot, raw = 0, value
             row["seed_t"][field][0, slot] = raw
+    if mutate_item0_type is not None:
+        row["seed_t"]["items"]["type"][0, 0] = np.uint16(mutate_item0_type)
 
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -708,6 +711,43 @@ def test_sheik_chain_seed_lanes_use_source_x0_and_iasa_latch_order() -> None:
     assert int(latch[12, 0]) == 1
 
 
+def test_sheik_needle_seed_lane_persists_stored_count_across_non_specialn_actions() -> None:
+    import msl_binding
+
+    char = np.full((34, 1), 7, dtype=np.uint8)
+    action = np.full((34, 1), ACT_SK_SPECIAL_N_LOOP, dtype=np.uint16)
+    frame = np.arange(34, dtype=np.int16).reshape(34, 1)
+    # Source fv.sk.x0 is stored Needle count, not a SpecialN-local timer. Cancel exits preserve it,
+    # and a later fresh Neutral-B keeps the stored count instead of restarting from one.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    #   doEnter,ftSk_SpecialNLoop_Anim,ftSk_SpecialNCancel_Anim,ftSk_SpecialNEnd_Anim}
+    frame[:, 0] = 0
+    action[0:4, 0] = ACT_SK_SPECIAL_N_LOOP
+    frame[0:4, 0] = [0, 1, 0, 1]
+    action[4:8, 0] = ACT_SK_SPECIAL_N_CANCEL
+    frame[4:8, 0] = [0, 1, 2, 3]
+    action[8:14, 0] = ACT_WAIT
+    frame[8:14, 0] = [0, 1, 2, 3, 4, 5]
+    action[14:18, 0] = ACT_SK_SPECIAL_AIR_N_START
+    frame[14:18, 0] = [0, 1, 2, 3]
+    action[18:21, 0] = ACT_SK_SPECIAL_AIR_N_LOOP
+    frame[18:21, 0] = [0, 1, 2]
+    action[21:, 0] = ACT_SK_SPECIAL_AIR_N_END
+    frame[21:, 0] = np.arange(13, dtype=np.int16)
+
+    count, timer = msl_binding.derive_sheik_needle_seed_lanes(char, action, frame, 7)
+
+    assert int(count[0, 0]) == 1
+    assert int(count[2, 0]) == 2
+    assert int(count[7, 0]) == 2
+    assert int(count[13, 0]) == 2
+    assert int(count[21, 0]) == 2
+    assert int(timer[23, 0]) == 2
+    assert int(count[24, 0]) == 1
+    assert int(timer[26, 0]) == 5
+    assert int(count[27, 0]) == 0
+
+
 def test_sheik_chain_seed_lanes_freeze_anim_owned_x0_during_hitlag() -> None:
     import msl_binding
 
@@ -1231,6 +1271,32 @@ def test_sheik_demo_needle_shoot_uses_replay_frame_rng_at_accessory_phase() -> N
     assert int(out["items"]["spawn_id"][1]) == int(ref["items"]["spawn_id"][1])
     assert float(out["items"]["pos_y"][1]) == pytest.approx(float(ref["items"]["pos_y"][1]))
     assert float(out["items"]["vel_x"][1]) == pytest.approx(float(ref["items"]["vel_x"][1]))
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(("record", "slot", "stored_count"), [(4925, 1, 2), (4928, 2, 1)])
+def test_sheik_demo_needle_stored_count_survives_cancel_gap_then_shoots_volley(
+    record: int, slot: int, stored_count: int
+) -> None:
+    # Earlier rows in this replay charge to three, cancel to Wait, move, then start Neutral-B
+    # again. Source `fv.sk.x0` persists through that non-SpecialN gap, so the later End volley
+    # still publishes multiple thrown Needles.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    #   doEnter,ftSk_SpecialNCancel_Anim,ftSk_SpecialNEnd_Anim,shootNeedles}
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_AIR_N_END
+    assert int(seed["sheik_needle_count_u8"][0]) == stored_count
+    assert int(ref["items"]["exists"][slot]) == 1
+    assert int(ref["items"]["type"][slot]) == ITEM_SHEIK_NEEDLE_THROWN
+
+    out = _run_sample_row(samples, record, replay_frame_rng=True)
+    assert int(out["items"]["exists"][slot]) == 1
+    assert int(out["items"]["type"][slot]) == ITEM_SHEIK_NEEDLE_THROWN
+    assert int(out["items"]["spawn_id"][slot]) == int(ref["items"]["spawn_id"][slot])
+    assert float(out["items"]["timer"][slot]) == pytest.approx(float(ref["items"]["timer"][slot]))
+    assert float(out["items"]["vel_x"][slot]) == pytest.approx(float(ref["items"]["vel_x"][slot]))
 
 
 @pytest.mark.integration

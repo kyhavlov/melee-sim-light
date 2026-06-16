@@ -37,7 +37,9 @@ SHEIK_SPECIAL_ARTICLE_CONSTANTS = {
     # refs/melee/src/melee/it/forward.h::ItemKind
     # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
     "vanish_itkind": 85,
-    "vanish_lifetime_frames": 60,
+}
+SHEIK_SPECIAL_ARTICLE_COMMON_LIFETIME_KEYS = {
+    "vanish_lifetime_frames": "default_spawn_lifetime_frames",
 }
 
 UNIT_ITEM_KIND = 1
@@ -49,6 +51,7 @@ UNIT_DEGREES = 6
 UNIT_VELOCITY = 7
 UNIT_COUNT = 8
 UNIT_BONE_ID = 9
+UNIT_FLAGS = 10
 
 
 @dataclass(frozen=True)
@@ -90,12 +93,84 @@ FIELD_SPECS = {
     "chain_lifetime_frames": FieldSpec(29, ITEM_ARTICLE_VALUE_U32, UNIT_FRAMES),
     "vanish_itkind": FieldSpec(30, ITEM_ARTICLE_VALUE_U16, UNIT_ITEM_KIND),
     "vanish_lifetime_frames": FieldSpec(31, ITEM_ARTICLE_VALUE_U32, UNIT_FRAMES),
+    "needle_hitbox_count": FieldSpec(32, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    **{
+        f"needle_hitbox_damage_by_id_{i}": FieldSpec(33 + i, ITEM_ARTICLE_VALUE_F32, UNIT_DAMAGE)
+        for i in range(4)
+    },
+    **{
+        f"needle_hitbox_size_{i}": FieldSpec(37 + i, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE)
+        for i in range(4)
+    },
+    **{
+        f"needle_hitbox_x_offset_{i}": FieldSpec(41 + i, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE)
+        for i in range(4)
+    },
+    **{
+        f"needle_hitbox_y_offset_{i}": FieldSpec(45 + i, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE)
+        for i in range(4)
+    },
+    **{
+        f"needle_hitbox_z_offset_{i}": FieldSpec(49 + i, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE)
+        for i in range(4)
+    },
+    **{
+        f"needle_hitbox_angle_{i}": FieldSpec(53 + i, ITEM_ARTICLE_VALUE_U16, UNIT_DEGREES)
+        for i in range(4)
+    },
+    **{
+        f"needle_hitbox_kbg_{i}": FieldSpec(57 + i, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT)
+        for i in range(4)
+    },
+    **{
+        f"needle_hitbox_wsk_{i}": FieldSpec(61 + i, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT)
+        for i in range(4)
+    },
+    **{
+        f"needle_hitbox_bkb_{i}": FieldSpec(65 + i, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT)
+        for i in range(4)
+    },
+    **{
+        f"needle_hitbox_element_{i}": FieldSpec(69 + i, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT)
+        for i in range(4)
+    },
+    **{
+        f"needle_hitbox_shield_damage_{i}": FieldSpec(73 + i, ITEM_ARTICLE_VALUE_U16, UNIT_DAMAGE)
+        for i in range(4)
+    },
+    **{
+        f"needle_hitbox_flags_{i}": FieldSpec(77 + i, ITEM_ARTICLE_VALUE_U32, UNIT_FLAGS)
+        for i in range(4)
+    },
+    "vanish_hitbox_count": FieldSpec(81, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "vanish_hitbox_damage": FieldSpec(82, ITEM_ARTICLE_VALUE_F32, UNIT_DAMAGE),
+    "vanish_hitbox_size": FieldSpec(83, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "vanish_hitbox_x_offset": FieldSpec(84, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "vanish_hitbox_y_offset": FieldSpec(85, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "vanish_hitbox_z_offset": FieldSpec(86, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "vanish_hitbox_angle": FieldSpec(87, ITEM_ARTICLE_VALUE_U16, UNIT_DEGREES),
+    "vanish_hitbox_kbg": FieldSpec(88, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "vanish_hitbox_wsk": FieldSpec(89, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "vanish_hitbox_bkb": FieldSpec(90, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "vanish_hitbox_element": FieldSpec(91, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "vanish_hitbox_shield_damage": FieldSpec(92, ITEM_ARTICLE_VALUE_U16, UNIT_DAMAGE),
+    "vanish_hitbox_flags": FieldSpec(93, ITEM_ARTICLE_VALUE_U32, UNIT_FLAGS),
+    "vanish_hitbox_size_keyframe_count": FieldSpec(94, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "vanish_hitbox_size_keyframe_frame_0": FieldSpec(95, ITEM_ARTICLE_VALUE_U16, UNIT_FRAMES),
+    "vanish_hitbox_size_keyframe_value_0": FieldSpec(96, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "vanish_hitbox_size_keyframe_frame_1": FieldSpec(97, ITEM_ARTICLE_VALUE_U16, UNIT_FRAMES),
+    "vanish_hitbox_size_keyframe_value_1": FieldSpec(98, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "vanish_hitbox_remove_frame": FieldSpec(99, ITEM_ARTICLE_VALUE_U16, UNIT_FRAMES),
 }
 
 SHEIK_NEEDLE_FIELD_NAMES = tuple(
     name for name in FIELD_SPECS if name.startswith("needle_")
 )
 SHEIK_SPECIAL_ARTICLE_FIELD_NAMES = tuple(SHEIK_SPECIAL_ARTICLE_CONSTANTS)
+SHEIK_SPECIAL_ARTICLE_FIELD_NAMES += tuple(SHEIK_SPECIAL_ARTICLE_COMMON_LIFETIME_KEYS)
+SHEIK_VANISH_HITBOX_FIELD_NAMES = tuple(
+    name for name in FIELD_SPECS if name.startswith("vanish_hitbox_")
+)
 
 
 def _f32(v: float) -> float:
@@ -127,6 +202,7 @@ def _pack_record(char_id: int, spec: FieldSpec, value: float) -> bytes:
 
 def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple[int, FieldSpec, float]]:
     out: list[tuple[int, FieldSpec, float]] = []
+    common = json.loads(item_common.read_text(encoding="utf-8"))
     for ch in chars:
         if ch not in CHAR_IDS:
             continue
@@ -138,14 +214,45 @@ def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple
                 if key not in attrs
                 and not key.startswith("needle_hurtbox_a_offset_")
                 and not key.startswith("needle_hurtbox_b_offset_")
+                and not (key.startswith("needle_hitbox_") and key[-1].isdigit())
             ]
             for vec_key in ("needle_hurtbox_a_offset", "needle_hurtbox_b_offset"):
                 vals = attrs.get(vec_key)
                 if not isinstance(vals, list) or len(vals) < 3:
                     missing.append(vec_key)
+            for vec_key in (
+                "needle_hitbox_damage_by_id",
+                "needle_hitbox_size",
+                "needle_hitbox_x_offset",
+                "needle_hitbox_y_offset",
+                "needle_hitbox_z_offset",
+                "needle_hitbox_angle",
+                "needle_hitbox_kbg",
+                "needle_hitbox_wsk",
+                "needle_hitbox_bkb",
+                "needle_hitbox_element",
+                "needle_hitbox_shield_damage",
+                "needle_hitbox_flags",
+            ):
+                vals = attrs.get(vec_key)
+                if not isinstance(vals, list) or len(vals) < 4:
+                    missing.append(vec_key)
+            for key in SHEIK_VANISH_HITBOX_FIELD_NAMES:
+                if key.startswith("vanish_hitbox_size_keyframe_frame_"):
+                    vals = attrs.get("vanish_hitbox_size_keyframe_frame")
+                    if not isinstance(vals, list) or len(vals) < 2:
+                        missing.append("vanish_hitbox_size_keyframe_frame")
+                    continue
+                if key.startswith("vanish_hitbox_size_keyframe_value_"):
+                    vals = attrs.get("vanish_hitbox_size_keyframe_value")
+                    if not isinstance(vals, list) or len(vals) < 2:
+                        missing.append("vanish_hitbox_size_keyframe_value")
+                    continue
+                if key not in attrs:
+                    missing.append(key)
             if missing:
                 raise ValueError(
-                    "Sheik exports MSLITAR1 Needle article fields but "
+                    "Sheik exports MSLITAR1 special article fields but "
                     f"{attrs_dir / f'{ch}.json'} is missing: {', '.join(sorted(missing))}"
                 )
         char_id = CHAR_IDS[ch]
@@ -161,6 +268,15 @@ def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple
                 if ch == "sheik":
                     out.append((char_id, spec, float(SHEIK_SPECIAL_ARTICLE_CONSTANTS[key])))
                 continue
+            if key in SHEIK_SPECIAL_ARTICLE_COMMON_LIFETIME_KEYS:
+                if ch == "sheik":
+                    common_key = SHEIK_SPECIAL_ARTICLE_COMMON_LIFETIME_KEYS[key]
+                    if common_key not in common:
+                        raise ValueError(
+                            f"{item_common} is missing required Sheik article lifetime key {common_key}"
+                        )
+                    out.append((char_id, spec, float(common[common_key])))
+                continue
             if key.startswith("needle_hurtbox_a_offset_"):
                 vals = attrs.get("needle_hurtbox_a_offset")
                 comp = "xyz".index(key[-1])
@@ -173,9 +289,22 @@ def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple
                 if isinstance(vals, list) and len(vals) > comp:
                     out.append((char_id, spec, float(vals[comp])))
                 continue
+            if key.startswith("needle_hitbox_") and key[-1].isdigit():
+                idx = int(key[-1])
+                base_key = key[:-2]
+                vals = attrs.get(base_key)
+                if isinstance(vals, list) and len(vals) > idx:
+                    out.append((char_id, spec, float(vals[idx])))
+                continue
+            if key.startswith("vanish_hitbox_size_keyframe_") and key[-1].isdigit():
+                idx = int(key[-1])
+                base_key = key[:-2]
+                vals = attrs.get(base_key)
+                if isinstance(vals, list) and len(vals) > idx:
+                    out.append((char_id, spec, float(vals[idx])))
+                continue
             if key in attrs:
                 out.append((char_id, spec, float(attrs[key])))
-    common = json.loads(item_common.read_text(encoding="utf-8"))
     if "shield_bounce_extra_degrees" in common:
         for ch in chars:
             if ch not in CHAR_IDS:
@@ -221,6 +350,7 @@ def main() -> None:
                 {"id": UNIT_VELOCITY, "name": "velocity"},
                 {"id": UNIT_COUNT, "name": "count"},
                 {"id": UNIT_BONE_ID, "name": "bone_id"},
+                {"id": UNIT_FLAGS, "name": "flags"},
             ],
             "value_types": [
                 {"id": ITEM_ARTICLE_VALUE_U16, "name": "u16"},

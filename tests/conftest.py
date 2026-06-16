@@ -453,7 +453,7 @@ def _ensure_known_data_artifacts() -> None:
         (ROOT / "data" / "stages" / "bin" / "grop.bin", b"MSLSTG01", 10),
         (ROOT / "data" / "model_parts" / "fox.bin", b"MSLPART1", 1),
         (ROOT / "data" / "model_parts" / "falco.bin", b"MSLPART1", 1),
-        (ROOT / "data" / "items" / "articles" / "fox_falco.bin", b"MSLITAR1", 4),
+        (ROOT / "data" / "items" / "articles" / "fox_falco.bin", b"MSLITAR1", 7),
         (ROOT / "data" / "scripts" / "fox.bin", b"MSLFTSC1", 2),
         (ROOT / "data" / "scripts" / "falco.bin", b"MSLFTSC1", 2),
     ]
@@ -487,13 +487,15 @@ def _ensure_known_data_artifacts() -> None:
             ROOT / "_iso" / "PlCo.dat",
             ROOT / "_iso" / "PlFx.dat",
             ROOT / "_iso" / "PlFc.dat",
+            ROOT / "_iso" / "PlMs.dat",
+            ROOT / "_iso" / "PlSk.dat",
         )
         if not p.exists()
     ]
     if missing_iso:
         raise RuntimeError(
             "missing required known-data artifact(s), and cannot rebuild because _iso inputs are missing: "
-            f"{missing_iso}. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`"
+            f"{missing_iso}. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco,marth,sheik`"
         )
     subprocess.run(
         [
@@ -505,7 +507,7 @@ def _ensure_known_data_artifacts() -> None:
             "--stages",
             "grnla,grnba,griz,grps,grst,grop",
             "--chars",
-            "fox,falco",
+            "fox,falco,marth,sheik",
         ],
         check=True,
     )

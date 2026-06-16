@@ -4498,9 +4498,54 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
     Py_DECREF(a_offsets);
     return NULL;
   }
-  return Py_BuildValue(
+  PyObject* hb_damage = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  PyObject* hb_size = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  PyObject* hb_x = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  PyObject* hb_y = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  PyObject* hb_z = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  PyObject* hb_angle = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  PyObject* hb_kbg = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  PyObject* hb_wsk = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  PyObject* hb_bkb = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  PyObject* hb_element = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  PyObject* hb_shield_damage = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  PyObject* hb_flags = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);
+  if (hb_damage == NULL || hb_size == NULL || hb_x == NULL || hb_y == NULL || hb_z == NULL ||
+      hb_angle == NULL || hb_kbg == NULL || hb_wsk == NULL || hb_bkb == NULL ||
+      hb_element == NULL || hb_shield_damage == NULL || hb_flags == NULL) {
+    Py_XDECREF(a_offsets);
+    Py_XDECREF(b_offsets);
+    Py_XDECREF(hb_damage);
+    Py_XDECREF(hb_size);
+    Py_XDECREF(hb_x);
+    Py_XDECREF(hb_y);
+    Py_XDECREF(hb_z);
+    Py_XDECREF(hb_angle);
+    Py_XDECREF(hb_kbg);
+    Py_XDECREF(hb_wsk);
+    Py_XDECREF(hb_bkb);
+    Py_XDECREF(hb_element);
+    Py_XDECREF(hb_shield_damage);
+    Py_XDECREF(hb_flags);
+    return NULL;
+  }
+  for (int i = 0; i < MSL_ITEM_ARTICLE_MAX_HITBOXES; i++) {
+    PyList_SET_ITEM(hb_damage, i, PyFloat_FromDouble((double)p->needle_hitbox_damage_by_id[i]));
+    PyList_SET_ITEM(hb_size, i, PyFloat_FromDouble((double)p->needle_hitbox_size[i]));
+    PyList_SET_ITEM(hb_x, i, PyFloat_FromDouble((double)p->needle_hitbox_x_offset[i]));
+    PyList_SET_ITEM(hb_y, i, PyFloat_FromDouble((double)p->needle_hitbox_y_offset[i]));
+    PyList_SET_ITEM(hb_z, i, PyFloat_FromDouble((double)p->needle_hitbox_z_offset[i]));
+    PyList_SET_ITEM(hb_angle, i, PyLong_FromLong((long)p->needle_hitbox_angle[i]));
+    PyList_SET_ITEM(hb_kbg, i, PyLong_FromLong((long)p->needle_hitbox_kbg[i]));
+    PyList_SET_ITEM(hb_wsk, i, PyLong_FromLong((long)p->needle_hitbox_wsk[i]));
+    PyList_SET_ITEM(hb_bkb, i, PyLong_FromLong((long)p->needle_hitbox_bkb[i]));
+    PyList_SET_ITEM(hb_element, i, PyLong_FromLong((long)p->needle_hitbox_element[i]));
+    PyList_SET_ITEM(hb_shield_damage, i, PyLong_FromLong((long)p->needle_hitbox_shield_damage[i]));
+    PyList_SET_ITEM(hb_flags, i, PyLong_FromUnsignedLong((unsigned long)p->needle_hitbox_flags[i]));
+  }
+  PyObject* out = Py_BuildValue(
       "{s:i,s:i,s:i,s:i,s:i,s:f,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:f,s:i,s:i,s:N,s:"
-      "N,s:f,s:f}",
+      "N,s:f,s:f,s:i,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N}",
       "blaster_shot_itkind", (int)p->blaster_shot_itkind, "blaster_gun_itkind",
       (int)p->blaster_gun_itkind, "laser_spawn_joint_part_id", (int)p->laser_spawn_joint_part_id,
       "laser_lifetime_frames", (int)p->laser_lifetime_frames, "side_special_illusion_itkind",
@@ -4517,7 +4562,67 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
       "needle_hurtbox_count", (int)p->needle_hurtbox_count, "needle_hurtbox_bone_id",
       (int)p->needle_hurtbox_bone_id, "needle_hurtbox_a_offset", a_offsets,
       "needle_hurtbox_b_offset", b_offsets, "needle_hurtbox_scale", (double)p->needle_hurtbox_scale,
-      "needle_hitbox_damage", (double)p->needle_hitbox_damage);
+      "needle_hitbox_damage", (double)p->needle_hitbox_damage, "needle_hitbox_count",
+      (int)p->needle_hitbox_count, "needle_hitbox_damage_by_id", hb_damage, "needle_hitbox_size",
+      hb_size, "needle_hitbox_x_offset", hb_x, "needle_hitbox_y_offset", hb_y,
+      "needle_hitbox_z_offset", hb_z, "needle_hitbox_angle", hb_angle, "needle_hitbox_kbg", hb_kbg,
+      "needle_hitbox_wsk", hb_wsk, "needle_hitbox_bkb", hb_bkb, "needle_hitbox_element", hb_element,
+      "needle_hitbox_shield_damage", hb_shield_damage, "needle_hitbox_flags", hb_flags);
+  if (out == NULL) {
+    return NULL;
+  }
+#define MSL_SET_DICT_LONG(KEY, VALUE)                 \
+  do {                                                \
+    PyObject* v__ = PyLong_FromLong((long)(VALUE));   \
+    if (v__ == NULL) {                                \
+      Py_DECREF(out);                                 \
+      return NULL;                                    \
+    }                                                 \
+    if (PyDict_SetItemString(out, (KEY), v__) != 0) { \
+      Py_DECREF(v__);                                 \
+      Py_DECREF(out);                                 \
+      return NULL;                                    \
+    }                                                 \
+    Py_DECREF(v__);                                   \
+  } while (0)
+#define MSL_SET_DICT_FLOAT(KEY, VALUE)                   \
+  do {                                                   \
+    PyObject* v__ = PyFloat_FromDouble((double)(VALUE)); \
+    if (v__ == NULL) {                                   \
+      Py_DECREF(out);                                    \
+      return NULL;                                       \
+    }                                                    \
+    if (PyDict_SetItemString(out, (KEY), v__) != 0) {    \
+      Py_DECREF(v__);                                    \
+      Py_DECREF(out);                                    \
+      return NULL;                                       \
+    }                                                    \
+    Py_DECREF(v__);                                      \
+  } while (0)
+  MSL_SET_DICT_LONG("vanish_hitbox_count", p->vanish_hitbox_count);
+  MSL_SET_DICT_FLOAT("vanish_hitbox_damage", p->vanish_hitbox_damage);
+  MSL_SET_DICT_FLOAT("vanish_hitbox_size", p->vanish_hitbox_size);
+  MSL_SET_DICT_FLOAT("vanish_hitbox_x_offset", p->vanish_hitbox_x_offset);
+  MSL_SET_DICT_FLOAT("vanish_hitbox_y_offset", p->vanish_hitbox_y_offset);
+  MSL_SET_DICT_FLOAT("vanish_hitbox_z_offset", p->vanish_hitbox_z_offset);
+  MSL_SET_DICT_LONG("vanish_hitbox_angle", p->vanish_hitbox_angle);
+  MSL_SET_DICT_LONG("vanish_hitbox_kbg", p->vanish_hitbox_kbg);
+  MSL_SET_DICT_LONG("vanish_hitbox_wsk", p->vanish_hitbox_wsk);
+  MSL_SET_DICT_LONG("vanish_hitbox_bkb", p->vanish_hitbox_bkb);
+  MSL_SET_DICT_LONG("vanish_hitbox_element", p->vanish_hitbox_element);
+  MSL_SET_DICT_LONG("vanish_hitbox_shield_damage", p->vanish_hitbox_shield_damage);
+  MSL_SET_DICT_LONG("vanish_hitbox_flags", p->vanish_hitbox_flags);
+  MSL_SET_DICT_LONG("vanish_hitbox_size_keyframe_count", p->vanish_hitbox_size_keyframe_count);
+  MSL_SET_DICT_LONG("vanish_hitbox_size_keyframe_frame_0", p->vanish_hitbox_size_keyframe_frame[0]);
+  MSL_SET_DICT_FLOAT("vanish_hitbox_size_keyframe_value_0",
+                     p->vanish_hitbox_size_keyframe_value[0]);
+  MSL_SET_DICT_LONG("vanish_hitbox_size_keyframe_frame_1", p->vanish_hitbox_size_keyframe_frame[1]);
+  MSL_SET_DICT_FLOAT("vanish_hitbox_size_keyframe_value_1",
+                     p->vanish_hitbox_size_keyframe_value[1]);
+  MSL_SET_DICT_LONG("vanish_hitbox_remove_frame", p->vanish_hitbox_remove_frame);
+#undef MSL_SET_DICT_LONG
+#undef MSL_SET_DICT_FLOAT
+  return out;
 }
 
 static PyObject* msl_stage_floor_segment_py(PyObject* self, PyObject* args) {

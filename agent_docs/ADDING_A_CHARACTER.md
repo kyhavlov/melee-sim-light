@@ -202,6 +202,12 @@ Collect before writing any code:
    otherwise source-correct. Source anchors:
    `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{ftSk_SpecialS_CheckInitChain,ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim,ftSk_SpecialS_IASA,ftSk_SpecialAirS_IASA}`;
    `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}`.
+   **Hidden special state can outlive the special action family**: do not reset
+   replay seed lanes just because the visible action leaves the move. Sheik
+   Needle count (`fv.sk.x0`) persists through `SpecialNCancel -> Wait` and a
+   later `SpecialAirNEnd` still shoots the stored needles. Only source
+   decrement/clear owners (`shootNeedles`, damage/death callbacks) should change
+   the lane.
    **Run entry collision pose can diverge from replay seed timebase**:
    `ftCo_Run_Anim` writes the next animation rate from hidden `mv.co.run.x4`
    only on reduced-friction floors; ordinary floors use `fp->gr_vel`. One-step
@@ -1196,7 +1202,21 @@ cover most of it.
    simulation. Finally, separate article state publication from article
    geometry: Sheik Chain state transitions are fighter callback/timer-owned,
    while full Chain segment pose and hitboxes require a separate article
-   physics/extraction audit.
+   physics/extraction audit. For projectile articles, do not collapse item
+   hurtboxes and item HitCapsules into one field: Sheik Needle's Article
+   hurtbone descriptor owns fighter-HitCapsule-to-item DmgReceived contact,
+   while its state-0 item script HitCapsules own item-BODY damage into
+   fighters. Extract both surfaces and lock grounded/aerial target flags plus
+   adjacent no-contact rows. For hit-capable articles, do not confuse article
+   visual lifetime with HitCapsule active lifetime, and watch for common item
+   setup overwriting local lifetime seeds: Sheik Vanish
+   writes a local 60-frame lifetime, then `it_8027518C` overwrites xD44 from
+   `ItemCommonData::xF8` to the replay-visible 80-frame lifetime. The state-0
+   item script still shrinks the HitCapsule at frames 7 and 11 and removes it
+   at frame 13. Extract timed set-size/remove events for hit-capable articles
+   instead of keeping the create_hitbox payload active until item destruction;
+   retain runtime damage only after the item collision/update phase is bounded
+   by source or probe.
 9. **GATE**: all specials tests green; fox/falco validate-all "no suite total
    changes" (byte-stable) after every retained change.
 

@@ -283,14 +283,107 @@ def _extract_seak_needle_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
         script_abs = arc.ptr32(states_abs + 0x0C)
         if script_abs != arc.data_base:
             events = _parse_subaction_events(arc, script_abs, max_frames=8, max_steps_per_frame=500)
+            hitboxes: list[dict] = []
             for ev in events:
                 if ev.kind != "create_hitbox":
                     continue
                 hb = ev.data.get("hitbox")
                 if isinstance(hb, dict):
-                    out["needle_hitbox_damage"] = float(hb.get("damage", 0.0))
-                    break
+                    hitboxes.append(hb)
+            if hitboxes:
+                out["needle_hitbox_count"] = int(min(4, len(hitboxes)))
+                out["needle_hitbox_damage"] = float(hitboxes[0].get("damage", 0.0))
+                out["needle_hitbox_damage_by_id"] = [
+                    float(hb.get("damage", 0.0)) for hb in hitboxes[:4]
+                ]
+                out["needle_hitbox_size"] = [float(hb.get("size", 0.0)) for hb in hitboxes[:4]]
+                out["needle_hitbox_x_offset"] = [
+                    float(hb.get("x_offset", 0.0)) for hb in hitboxes[:4]
+                ]
+                out["needle_hitbox_y_offset"] = [
+                    float(hb.get("y_offset", 0.0)) for hb in hitboxes[:4]
+                ]
+                out["needle_hitbox_z_offset"] = [
+                    float(hb.get("z_offset", 0.0)) for hb in hitboxes[:4]
+                ]
+                out["needle_hitbox_angle"] = [int(hb.get("angle", 0)) for hb in hitboxes[:4]]
+                out["needle_hitbox_kbg"] = [int(hb.get("kbg", 0)) for hb in hitboxes[:4]]
+                out["needle_hitbox_wsk"] = [int(hb.get("wsk", 0)) for hb in hitboxes[:4]]
+                out["needle_hitbox_bkb"] = [int(hb.get("bkb", 0)) for hb in hitboxes[:4]]
+                out["needle_hitbox_element"] = [
+                    int(hb.get("element", 0)) for hb in hitboxes[:4]
+                ]
+                out["needle_hitbox_shield_damage"] = [
+                    int(hb.get("shield_damage", 0)) for hb in hitboxes[:4]
+                ]
+                out["needle_hitbox_flags"] = [
+                    (1 if bool(hb.get("hit_grounded", False)) else 0)
+                    | (2 if bool(hb.get("hit_aerial", False)) else 0)
+                    for hb in hitboxes[:4]
+                ]
     return out
+
+
+def _extract_seak_vanish_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
+    """Extract Sheik Vanish smoke article hitbox data from ftData.x48_items[2].
+
+    Source:
+    - refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialHi_80112F48
+    - refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
+    """
+    items_abs = arc.ptr32(ftdata_abs + 0x48)
+    if items_abs == arc.data_base:
+        return {}
+    article_abs = arc.ptr32(items_abs + 0x08)
+    if article_abs == arc.data_base:
+        return {}
+    states_abs = arc.ptr32(article_abs + 0x0C)
+    if states_abs == arc.data_base:
+        return {}
+    script_abs = arc.ptr32(states_abs + 0x0C)
+    if script_abs == arc.data_base:
+        return {}
+
+    events = _parse_subaction_events(arc, script_abs, max_frames=80, max_steps_per_frame=500)
+    hitboxes: list[dict] = []
+    size_keyframes: list[tuple[int, float]] = []
+    remove_frame: int | None = None
+    for ev in events:
+        if ev.kind != "create_hitbox":
+            if ev.kind == "set_hitbox_size" and int(ev.data.get("idx", -1)) == 0:
+                size_keyframes.append((int(ev.frame), float(ev.data.get("size", 0.0))))
+            elif ev.kind == "remove_hitbox" and int(ev.data.get("idx", -1)) == 0:
+                remove_frame = int(ev.frame) if remove_frame is None else min(remove_frame, int(ev.frame))
+            elif ev.kind == "clear_hitboxes":
+                remove_frame = int(ev.frame) if remove_frame is None else min(remove_frame, int(ev.frame))
+            continue
+        hb = ev.data.get("hitbox")
+        if isinstance(hb, dict):
+            hitboxes.append(hb)
+    if not hitboxes:
+        return {}
+    hb0 = hitboxes[0]
+    size_keyframes = size_keyframes[:2]
+    return {
+        "vanish_hitbox_count": int(min(1, len(hitboxes))),
+        "vanish_hitbox_damage": float(hb0.get("damage", 0.0)),
+        "vanish_hitbox_size": float(hb0.get("size", 0.0)),
+        "vanish_hitbox_x_offset": float(hb0.get("x_offset", 0.0)),
+        "vanish_hitbox_y_offset": float(hb0.get("y_offset", 0.0)),
+        "vanish_hitbox_z_offset": float(hb0.get("z_offset", 0.0)),
+        "vanish_hitbox_angle": int(hb0.get("angle", 0)),
+        "vanish_hitbox_kbg": int(hb0.get("kbg", 0)),
+        "vanish_hitbox_wsk": int(hb0.get("wsk", 0)),
+        "vanish_hitbox_bkb": int(hb0.get("bkb", 0)),
+        "vanish_hitbox_element": int(hb0.get("element", 0)),
+        "vanish_hitbox_shield_damage": int(hb0.get("shield_damage", 0)),
+        "vanish_hitbox_flags": (1 if bool(hb0.get("hit_grounded", False)) else 0)
+        | (2 if bool(hb0.get("hit_aerial", False)) else 0),
+        "vanish_hitbox_size_keyframe_count": len(size_keyframes),
+        "vanish_hitbox_size_keyframe_frame": [int(frame) for frame, _size in size_keyframes],
+        "vanish_hitbox_size_keyframe_value": [float(size) for _frame, size in size_keyframes],
+        "vanish_hitbox_remove_frame": int(remove_frame or 0),
+    }
 
 
 def _extract_wait_anim_choices(buf: bytes, wait_abs: int) -> dict:
@@ -700,6 +793,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     elif ext_attr_layout == "seak_special":
         out.update(_extract_seak_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
         out.update(_extract_seak_needle_article(buf, arc, ftdata_abs=ftdata_abs))
+        out.update(_extract_seak_vanish_article(buf, arc, ftdata_abs=ftdata_abs))
     if extract_fox_blaster:
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
@@ -1007,6 +1101,36 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "needle_hurtbox_b_offset",
         "needle_hurtbox_scale",
         "needle_hitbox_damage",
+        "needle_hitbox_count",
+        "needle_hitbox_damage_by_id",
+        "needle_hitbox_size",
+        "needle_hitbox_x_offset",
+        "needle_hitbox_y_offset",
+        "needle_hitbox_z_offset",
+        "needle_hitbox_angle",
+        "needle_hitbox_kbg",
+        "needle_hitbox_wsk",
+        "needle_hitbox_bkb",
+        "needle_hitbox_element",
+        "needle_hitbox_shield_damage",
+        "needle_hitbox_flags",
+        "vanish_hitbox_count",
+        "vanish_hitbox_damage",
+        "vanish_hitbox_size",
+        "vanish_hitbox_x_offset",
+        "vanish_hitbox_y_offset",
+        "vanish_hitbox_z_offset",
+        "vanish_hitbox_angle",
+        "vanish_hitbox_kbg",
+        "vanish_hitbox_wsk",
+        "vanish_hitbox_bkb",
+        "vanish_hitbox_element",
+        "vanish_hitbox_shield_damage",
+        "vanish_hitbox_flags",
+        "vanish_hitbox_size_keyframe_count",
+        "vanish_hitbox_size_keyframe_frame",
+        "vanish_hitbox_size_keyframe_value",
+        "vanish_hitbox_remove_frame",
         "laser_shield_damage",
         "landing_lag_frames",
         "landing_airn_lag_frames",

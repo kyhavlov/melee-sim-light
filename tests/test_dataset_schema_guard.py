@@ -641,6 +641,9 @@ def test_item_common_data_exports_shield_bounce_threshold_source() -> None:
     # ftColl_8007A06C uses ItemCommonData->x78 as the item x-velocity threshold below which
     # item-hit damage facing is position-owned instead of velocity-owned.
     assert data["item_damage_facing_velocity_threshold"] == pytest.approx(0.15000000596046448)
+    # it_8027518C overwrites several spawned item lifetimes from ItemCommonData->xF8; Sheik
+    # Vanish smoke uses this post-setup xD44 lifetime instead of the earlier local 60.0f seed.
+    assert data["default_spawn_lifetime_frames"] == pytest.approx(80.0)
 
 
 def test_ft_common_data_exports_magnify_damage_source_constants() -> None:

@@ -16,8 +16,10 @@ from tools.extraction.extract_item_articles import (
     FIELD_SPECS,
     SHEIK_NEEDLE_FIELD_NAMES,
     SHEIK_SPECIAL_ARTICLE_FIELD_NAMES,
+    SHEIK_VANISH_HITBOX_FIELD_NAMES,
     UNIT_DEGREES,
     UNIT_FRAMES,
+    UNIT_FLAGS,
     UNIT_ITEM_KIND,
     UNIT_PART_ID,
 )
@@ -635,6 +637,47 @@ def test_sheik_overlay_masks_survive_fresh_character_attr_extraction(tmp_path: P
     attrs = json.loads((out_dir / "sheik.json").read_text(encoding="utf-8"))
     assert int(attrs["throw_release_mpcoll_floor_publication_mask"]) == (1 << 3)
     assert int(attrs["common_fall_blended_ecb_seed_mask"]) == (1 << 0)
+    assert int(attrs["needle_hitbox_count"]) == 4
+    assert attrs["needle_hitbox_size"] == pytest.approx([1.953, 1.953, 1.953, 1.953])
+    assert attrs["needle_hitbox_flags"] == [1, 2, 2, 2]
+    assert int(attrs["vanish_hitbox_count"]) == 1
+    assert float(attrs["vanish_hitbox_size"]) == pytest.approx(10.155599594116211)
+    assert int(attrs["vanish_hitbox_size_keyframe_count"]) == 2
+    assert attrs["vanish_hitbox_size_keyframe_frame"] == [7, 11]
+    assert attrs["vanish_hitbox_size_keyframe_value"] == pytest.approx(
+        [3.999743938446045, 1.9998719692230225]
+    )
+    assert int(attrs["vanish_hitbox_remove_frame"]) == 13
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.extraction.extract_item_articles",
+            "--attrs-dir",
+            str(out_dir),
+            "--item-common",
+            "data/items/item_common.json",
+            "--out",
+            str(tmp_path / "articles.bin"),
+            "--chars",
+            "sheik",
+        ],
+        check=True,
+    )
+    table = read_mslitar1(tmp_path / "articles.bin")
+    field_ids = {
+        FIELD_SPECS[name].field_id
+        for name in (
+            "needle_hitbox_size_0",
+            "needle_hitbox_flags_3",
+            "vanish_hitbox_size_keyframe_frame_0",
+            "vanish_hitbox_size_keyframe_value_1",
+            "vanish_hitbox_remove_frame",
+        )
+    }
+    seen = {rec.field_id for rec in table.records if rec.char_id == 19}
+    assert field_ids <= seen
 
 
 @pytest.mark.integration
@@ -663,10 +706,14 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
     assert "needle_throw_itkind" in fields
     assert "needle_hurtbox_scale" in fields
     assert "needle_hitbox_damage" in fields
+    assert "needle_hitbox_count" in fields
+    assert "needle_hitbox_flags_3" in fields
     assert "chain_itkind" in fields
     assert "chain_lifetime_frames" in fields
     assert "vanish_itkind" in fields
     assert "vanish_lifetime_frames" in fields
+    assert "vanish_hitbox_damage" in fields
+    assert "vanish_hitbox_flags" in fields
     assert manifest["char_domain"]["name"] == "Slippi/CSS external character id"
 
     def rec(char_id: int, field_name: str):
@@ -703,6 +750,55 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         "needle_hurtbox_b_offset_z": 0.0,
         "needle_hurtbox_scale": 1.0,
         "needle_hitbox_damage": 3.0,
+        "needle_hitbox_count": 4,
+        "needle_hitbox_damage_by_id_0": 3.0,
+        "needle_hitbox_damage_by_id_1": 3.0,
+        "needle_hitbox_damage_by_id_2": 3.0,
+        "needle_hitbox_damage_by_id_3": 3.0,
+        "needle_hitbox_size_0": 1.9529999494552612,
+        "needle_hitbox_size_1": 1.9529999494552612,
+        "needle_hitbox_size_2": 1.9529999494552612,
+        "needle_hitbox_size_3": 1.9529999494552612,
+        "needle_hitbox_x_offset_0": 0.0,
+        "needle_hitbox_x_offset_1": 0.0,
+        "needle_hitbox_x_offset_2": 3.9059998989105225,
+        "needle_hitbox_x_offset_3": -3.9059998989105225,
+        "needle_hitbox_y_offset_0": 0.0,
+        "needle_hitbox_y_offset_1": 0.0,
+        "needle_hitbox_y_offset_2": 0.0,
+        "needle_hitbox_y_offset_3": 0.0,
+        "needle_hitbox_z_offset_0": 0.0,
+        "needle_hitbox_z_offset_1": 0.0,
+        "needle_hitbox_z_offset_2": 0.0,
+        "needle_hitbox_z_offset_3": 0.0,
+        "needle_hitbox_angle_0": 0,
+        "needle_hitbox_angle_1": 70,
+        "needle_hitbox_angle_2": 0,
+        "needle_hitbox_angle_3": 0,
+        "needle_hitbox_kbg_0": 34,
+        "needle_hitbox_kbg_1": 34,
+        "needle_hitbox_kbg_2": 34,
+        "needle_hitbox_kbg_3": 34,
+        "needle_hitbox_wsk_0": 0,
+        "needle_hitbox_wsk_1": 0,
+        "needle_hitbox_wsk_2": 0,
+        "needle_hitbox_wsk_3": 0,
+        "needle_hitbox_bkb_0": 24,
+        "needle_hitbox_bkb_1": 24,
+        "needle_hitbox_bkb_2": 24,
+        "needle_hitbox_bkb_3": 24,
+        "needle_hitbox_element_0": 3,
+        "needle_hitbox_element_1": 3,
+        "needle_hitbox_element_2": 3,
+        "needle_hitbox_element_3": 3,
+        "needle_hitbox_shield_damage_0": 0,
+        "needle_hitbox_shield_damage_1": 0,
+        "needle_hitbox_shield_damage_2": 0,
+        "needle_hitbox_shield_damage_3": 0,
+        "needle_hitbox_flags_0": 1,
+        "needle_hitbox_flags_1": 2,
+        "needle_hitbox_flags_2": 2,
+        "needle_hitbox_flags_3": 2,
     }
     assert set(SHEIK_NEEDLE_FIELD_NAMES) == set(sheik_expected)
     for field_name, expected in sheik_expected.items():
@@ -716,13 +812,42 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         "chain_itkind": 97,
         "chain_lifetime_frames": 1400,
         "vanish_itkind": 85,
-        "vanish_lifetime_frames": 60,
+        "vanish_lifetime_frames": 80,
     }
     assert set(SHEIK_SPECIAL_ARTICLE_FIELD_NAMES) == set(sheik_special_expected)
     for field_name, expected in sheik_special_expected.items():
         special_rec = rec(19, field_name)
         assert special_rec.value_type in (ITEM_ARTICLE_VALUE_U16, ITEM_ARTICLE_VALUE_U32)
         assert special_rec.u32_value == expected
+    sheik_vanish_hitbox_expected = {
+        "vanish_hitbox_count": 1,
+        "vanish_hitbox_damage": 12.0,
+        "vanish_hitbox_size": 10.155599594116211,
+        "vanish_hitbox_x_offset": 0.0,
+        "vanish_hitbox_y_offset": 0.0,
+        "vanish_hitbox_z_offset": 0.0,
+        "vanish_hitbox_angle": 90,
+        "vanish_hitbox_kbg": 60,
+        "vanish_hitbox_wsk": 0,
+        "vanish_hitbox_bkb": 80,
+        "vanish_hitbox_element": 1,
+        "vanish_hitbox_shield_damage": 0xFFFFFF80,
+        "vanish_hitbox_flags": 3,
+        "vanish_hitbox_size_keyframe_count": 2,
+        "vanish_hitbox_size_keyframe_frame_0": 7,
+        "vanish_hitbox_size_keyframe_value_0": 3.999743938446045,
+        "vanish_hitbox_size_keyframe_frame_1": 11,
+        "vanish_hitbox_size_keyframe_value_1": 1.9998719692230225,
+        "vanish_hitbox_remove_frame": 13,
+    }
+    assert set(SHEIK_VANISH_HITBOX_FIELD_NAMES) == set(sheik_vanish_hitbox_expected)
+    for field_name, expected in sheik_vanish_hitbox_expected.items():
+        vanish_rec = rec(19, field_name)
+        if FIELD_SPECS[field_name].value_type == ITEM_ARTICLE_VALUE_F32:
+            assert vanish_rec.value_type == ITEM_ARTICLE_VALUE_F32
+            assert vanish_rec.f32_value == pytest.approx(float(expected))
+        else:
+            assert vanish_rec.u32_value == int(expected)
     fox_illusion_kind = rec(2, "side_special_illusion_itkind")
     assert fox_illusion_kind.value_type == ITEM_ARTICLE_VALUE_U16
     assert fox_illusion_kind.unit_id == UNIT_ITEM_KIND
@@ -779,6 +904,19 @@ def test_item_article_exporter_rejects_partial_sheik_needle_attrs(tmp_path: Path
         "needle_hurtbox_b_offset": [0.0, 0.0, 0.0],
         "needle_hurtbox_scale": 1.0,
         "needle_hitbox_damage": 3.0,
+        "needle_hitbox_count": 4,
+        "needle_hitbox_damage_by_id": [3.0, 3.0, 3.0, 3.0],
+        "needle_hitbox_size": [1.953, 1.953, 1.953, 1.953],
+        "needle_hitbox_x_offset": [0.0, 0.0, 3.906, -3.906],
+        "needle_hitbox_y_offset": [0.0, 0.0, 0.0, 0.0],
+        "needle_hitbox_z_offset": [0.0, 0.0, 0.0, 0.0],
+        "needle_hitbox_angle": [0, 70, 0, 0],
+        "needle_hitbox_kbg": [34, 34, 34, 34],
+        "needle_hitbox_wsk": [0, 0, 0, 0],
+        "needle_hitbox_bkb": [24, 24, 24, 24],
+        "needle_hitbox_element": [3, 3, 3, 3],
+        "needle_hitbox_shield_damage": [0, 0, 0, 0],
+        "needle_hitbox_flags": [1, 2, 2, 2],
     }
     (attrs_dir / "sheik.json").write_text(json.dumps(sheik), encoding="utf-8")
 

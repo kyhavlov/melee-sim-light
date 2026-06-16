@@ -52,6 +52,13 @@ def main() -> None:
         # refs/melee/src/melee/it/item.c::Item_80269DC8
         # refs/melee/src/melee/it/types.h::ItemCommonData::unk_degrees at 0xE0
         "shield_bounce_extra_degrees": float(_f32_be(buf, item_common_abs + 0xE0)),
+        # it_8027518C overwrites several spawned item lifetimes from ItemCommonData::xF8 after
+        # item-local setup. Sheik's Vanish smoke calls this path immediately after seeding 60.0f,
+        # so the replay-visible xD44_lifeTimer is this common value instead.
+        # refs/melee/src/melee/it/it_2725.c::it_8027518C
+        # refs/melee/src/melee/it/items/itseakvanish.c::it_802B1D40
+        # refs/melee/src/melee/it/types.h::ItemCommonData::xF8
+        "default_spawn_lifetime_frames": float(_f32_be(buf, item_common_abs + 0xF8)),
     }
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

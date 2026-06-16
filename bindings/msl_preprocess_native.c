@@ -5123,8 +5123,20 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
       const npy_intp idx = (i * width) + p;
       const uint16_t action_i = act[idx];
       const int16_t frame_i = af[idx];
-      if (ch[idx] != sheik_id || !msl_py_action_is_sheik_needle_family(action_i)) {
+      if (ch[idx] != sheik_id) {
         count = 0u;
+        prev_action = action_i;
+        prev_frame = frame_i;
+        continue;
+      }
+      if (!msl_py_action_is_sheik_needle_family(action_i)) {
+        // fv.sk.x0 is stored Needle count, not SpecialN-local motion state. It persists after
+        // Cancel/End exits and across unrelated Sheik actions until a shootNeedles decrement or
+        // the source damage/death callback clears it.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+        //   doEnter,ftSk_SpecialNLoop_Anim,ftSk_SpecialNEnd_Anim,shootNeedles,
+        //   ftSk_SpecialN_80111FBC}
+        count_out[idx] = count;
         prev_action = action_i;
         prev_frame = frame_i;
         continue;

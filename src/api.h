@@ -1497,8 +1497,9 @@ typedef struct MslSeed {
   //   2,5,8,11,14,17 and increment x0 once per Anim callback.
   //
   // Seed representation:
-  // - count=0/timer=0: no live Needle source state.
+  // - count=0/timer=0: no stored Needle source state.
   // - count>0: remaining stored needles (`fv.sk.x0`) before this seed frame's Anim callback.
+  //   This persists across non-SpecialN Sheik actions until source callbacks decrement/clear it.
   // - timer: current End shoot timer (`mv.sk.specialn.x0`) before this seed frame's Anim callback.
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c
   uint8_t sheik_needle_count_u8[MSL_MAX_PLAYERS];
@@ -1777,7 +1778,7 @@ typedef struct MslSeed {
   // - Strictly-causal per-item value aligned to fixed item slots in `items`.
   // - Runtime reseed sanitizes invalid/non-positive values back to 1.0f.
   float item_reflect_damage_mul[MSL_MAX_ITEMS];
-  // Item HitCapsule victims_1 seed lane for throw-side laser articles.
+  // Item HitCapsule victims_1 seed lane for source-bounded item BODY articles.
   //
   // Decomp ownership:
   // - Item-vs-fighter BODY collision routes through it_8026FAC4 / it_8026FA2C and inserts fighter

@@ -2028,7 +2028,7 @@ static void sheik_vanish_smoke_items_update(MslBatch* batch, int bi) {
       continue;
     }
     // itSeakvanish_UnkMotion0_Anim delegates to the generic item lifetime decrement/destroy path
-    // after it_802B1D40 seeds xD44_lifeTimer.
+    // after it_802B1D40 -> it_8027518C publishes the final xD44_lifeTimer.
     // refs/melee/src/melee/it/items/itseakvanish.c::{
     //   it_802B1D40,itSeakvanish_UnkMotion0_Anim}
     if (batch->state.item_timer[ii] <= 1.0f) {
@@ -2066,10 +2066,12 @@ uint8_t items_spawn_sheik_vanish_smoke_article(MslBatch* batch, size_t owner_idx
 
   // Vanish travel entry installs `fn_80112ED8` through inlineA0 / ftSk_SpecialHi_80113A30.
   // The accessory callback spawns the smoke article once with it_802B1C60, which initializes
-  // It_Kind_Seak_Vanish state 0 and a 60-frame lifetime.
+  // It_Kind_Seak_Vanish state 0. The runtime-visible lifetime comes from it_8027518C, which
+  // overwrites the local 60.0f seed with ItemCommonData::xF8 before the script starts.
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
   //   inlineA0,ftSk_SpecialHi_80113A30,fn_80112ED8,ftSk_SpecialHi_80112F48}
   // refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
+  // refs/melee/src/melee/it/it_2725.c::it_8027518C
   batch->state.item_exists[ii] = 1u;
   batch->state.item_type[ii] = ap->sheik_vanish_itkind;
   batch->state.item_state[ii] = 0u;
