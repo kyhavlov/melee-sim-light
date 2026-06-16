@@ -518,6 +518,7 @@ static void sk_update_specialn(MslBatch* batch, const MslCommonParams* c, const 
     case MSL_ACT_SK_SPECIAL_N_START:
     case MSL_ACT_SK_SPECIAL_AIR_N_START:
       if (sk_anim_finished(batch, idx, a)) {
+        (void)items_spawn_sheik_held_needle_article(batch, idx);
         const uint16_t loop = a == (uint16_t)MSL_ACT_SK_SPECIAL_N_START
                                   ? (uint16_t)MSL_ACT_SK_SPECIAL_N_LOOP
                                   : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_LOOP;
@@ -580,6 +581,12 @@ static void sk_update_specials(MslBatch* batch, const MslCommonParams* c, const 
       if ((float)t == ch->sheik_chain_spawn_frame) {
         (void)items_spawn_sheik_chain_article(batch, idx);
       }
+      if ((float)t == ch->sheik_chain_spawn_frame + 1.0f) {
+        (void)items_set_sheik_chain_article_state(batch, idx, 1u);
+      }
+      if ((float)t == ch->sheik_chain_start_end_frame) {
+        (void)items_set_sheik_chain_article_state(batch, idx, 3u);
+      }
       if ((float)t > ch->sheik_chain_start_end_frame) {
         sk_enter(batch, idx,
                  a == (uint16_t)MSL_ACT_SK_SPECIAL_S_START ? (uint16_t)MSL_ACT_SK_SPECIAL_S
@@ -617,6 +624,10 @@ static void sk_update_specials(MslBatch* batch, const MslCommonParams* c, const 
       batch->state.sheik_special_timer[idx] = t;
       if ((float)t == ch->sheik_chain_destroy_frame) {
         (void)items_destroy_sheik_chain_article(batch, idx);
+      } else if ((float)t == ch->sheik_chain_destroy_frame - 1.0f) {
+        (void)items_set_sheik_chain_article_state(batch, idx, 0u);
+      } else if ((float)t == ch->sheik_chain_retract_frame) {
+        (void)items_set_sheik_chain_article_state(batch, idx, 4u);
       }
       if (sk_anim_finished(batch, idx, a)) {
         sk_enter_wait(batch, idx);
@@ -628,6 +639,10 @@ static void sk_update_specials(MslBatch* batch, const MslCommonParams* c, const 
       batch->state.sheik_special_timer[idx] = t;
       if ((float)t == ch->sheik_chain_destroy_frame) {
         (void)items_destroy_sheik_chain_article(batch, idx);
+      } else if ((float)t == ch->sheik_chain_destroy_frame - 1.0f) {
+        (void)items_set_sheik_chain_article_state(batch, idx, 0u);
+      } else if ((float)t == ch->sheik_chain_retract_frame) {
+        (void)items_set_sheik_chain_article_state(batch, idx, 4u);
       }
       if (sk_anim_finished(batch, idx, a)) {
         sk_enter_fall(batch, idx);

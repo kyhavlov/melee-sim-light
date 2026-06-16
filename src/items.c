@@ -1748,35 +1748,32 @@ static void sheik_needle_held_article_position(const MslBatch* batch, size_t own
                                                 : 0.0f);
 }
 
-static void sheik_needle_spawn_held_article_from_fighter(MslBatch* batch, int bi, int owner) {
+uint8_t items_spawn_sheik_held_needle_article(MslBatch* batch, size_t owner_idx) {
   if (batch == NULL) {
-    return;
+    return 0u;
   }
-  const size_t o_idx = msl_idx_player(bi, owner);
+  const int bi = (int)(owner_idx / (size_t)MSL_MAX_PLAYERS);
+  const int owner = (int)(owner_idx % (size_t)MSL_MAX_PLAYERS);
+  const size_t o_idx = owner_idx;
   const uint8_t char_id = batch->state.char_id[o_idx];
   const uint16_t held_kind = item_article_sheik_needle_held_kind(char_id);
   if (held_kind == 0u || batch->state.sheik_needle_count[o_idx] == 0u ||
       items_find_owned_item_slot(batch, bi, owner, held_kind) >= 0) {
-    return;
-  }
-  const uint16_t action = batch->state.action_id[o_idx];
-  const uint16_t prev_action = batch->state.prev_action_id[o_idx];
-  if (!action_is_sheik_needle_loop(char_id, action) ||
-      !action_is_sheik_needle_start(char_id, prev_action) ||
-      batch->state.action_frame[o_idx] != 0) {
-    // Start_Anim creates the held article only when its animation finishes, immediately before
-    // Fighter_ChangeMotionState enters Loop. A mid-Start replay seed with fv.sk.x0 > 0 is stored
-    // count state, not article publication authority.
-    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{ftSk_SpecialNStart_Anim,ftSk_SpecialAirNStart_Anim}
-    return;
+    return 0u;
   }
 
   const int slot = items_alloc_slot(batch, bi);
   if (slot < 0) {
-    return;
+    return 0u;
   }
   const size_t ii = msl_idx_item(bi, slot);
   item_slot_clear(batch, ii);
+  // Start_Anim creates the held article immediately before Fighter_ChangeMotionState enters Loop.
+  // Loop IASA may then enter End in the same fighter proc, but the article publication remains
+  // owned by Start_Anim rather than by the final destination action.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+  //   ftSk_SpecialNStart_Anim,ftSk_SpecialAirNStart_Anim,doIasa}
+  // refs/melee/src/melee/it/items/itseakneedleheld.c::it_802B19AC
   batch->state.item_exists[ii] = 1u;
   batch->state.item_type[ii] = held_kind;
   batch->state.item_state[ii] = 0u;
@@ -1789,6 +1786,7 @@ static void sheik_needle_spawn_held_article_from_fighter(MslBatch* batch, int bi
   batch->state.item_timer[ii] = 1400.0f;
   sheik_needle_held_article_position(batch, o_idx, &batch->state.item_pos_x[ii],
                                      &batch->state.item_pos_y[ii]);
+  return 1u;
 }
 
 static void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int bi, int owner) {
@@ -1917,6 +1915,37 @@ uint8_t items_spawn_sheik_chain_article(MslBatch* batch, size_t owner_idx) {
   return 1u;
 }
 
+uint8_t items_set_sheik_chain_article_state(MslBatch* batch, size_t owner_idx, uint8_t state) {
+  if (batch == NULL || batch->state.char_id[owner_idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || ap->sheik_chain_itkind == 0u) {
+    return 0u;
+  }
+  const int bi = (int)(owner_idx / (size_t)MSL_MAX_PLAYERS);
+  const int owner = (int)(owner_idx % (size_t)MSL_MAX_PLAYERS);
+  const int slot = items_find_owned_item_slot(batch, bi, owner, ap->sheik_chain_itkind);
+  if (slot < 0) {
+    return 0u;
+  }
+  // Chain item state changes are fighter-callback owned. The lite runtime does not yet model the
+  // full segment chain, but it does carry mv.sk.specials.x0/x4 and therefore can publish the
+  // source article state transitions:
+  // - CheckInitChain calls it_802BCFC4 after spawn when x0 == x1C + 1, entering state 1.
+  // - Chain segment accessory movement calls it_802BCED4 when extension reaches the terminal link,
+  //   entering state 3.
+  // - End_Anim calls it_802BCF84 at x24, entering retract state 4.
+  // - it_802BC94C / it_2725_Logic54_PickedUp returns the fully retracted article to state 0
+  //   shortly before End_Anim's x28 destroy call.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+  //   ftSk_SpecialS_CheckInitChain,ftSk_SpecialSEnd_Anim,ftSk_SpecialAirSEnd_Anim}
+  // refs/melee/src/melee/it/items/itseakchain.c::{
+  //   it_802BCFC4,it_802BCED4,it_802BCF84,it_2725_Logic54_PickedUp}
+  batch->state.item_state[msl_idx_item(bi, slot)] = state;
+  return 1u;
+}
+
 uint8_t items_destroy_sheik_chain_article(MslBatch* batch, size_t owner_idx) {
   if (batch == NULL || batch->state.char_id[owner_idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;
@@ -1938,6 +1967,50 @@ uint8_t items_destroy_sheik_chain_article(MslBatch* batch, size_t owner_idx) {
   // refs/melee/src/melee/it/items/itseakchain.c::it_802BB20C
   item_slot_clear(batch, msl_idx_item(bi, slot));
   return 1u;
+}
+
+static inline uint8_t sheik_chain_owner_still_in_specials(const MslBatch* batch, size_t owner_idx) {
+  if (batch == NULL || owner_idx >= (size_t)batch->batch_size * (size_t)MSL_MAX_PLAYERS ||
+      batch->state.char_id[owner_idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[owner_idx];
+  return (uint8_t)(action == (uint16_t)MSL_ACT_SK_SPECIAL_S_START ||
+                   action == (uint16_t)MSL_ACT_SK_SPECIAL_S ||
+                   action == (uint16_t)MSL_ACT_SK_SPECIAL_S_END ||
+                   action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START ||
+                   action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S ||
+                   action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END);
+}
+
+static void sheik_chain_items_update_anim_phase(MslBatch* batch, int bi) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || ap->sheik_chain_itkind == 0u) {
+    return;
+  }
+  uint8_t needs_sort = 0u;
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] == 0u ||
+        batch->state.item_type[ii] != ap->sheik_chain_itkind) {
+      continue;
+    }
+    const int owner = (int)batch->state.item_owner[ii];
+    if (owner < 0 || owner >= (int)batch->config.num_players ||
+        sheik_chain_owner_still_in_specials(batch, msl_idx_player(bi, owner)) == 0u) {
+      // itSeakchain_UnkMotion4_Anim destroys the Chain if the owning fighter is no longer in the
+      // Sheik SpecialS action family.
+      // refs/melee/src/melee/it/items/itseakchain.c::{itSeakchain_UnkMotion4_Anim,notInSpecialS}
+      item_slot_clear(batch, ii);
+      needs_sort = 1u;
+    }
+  }
+  if (needs_sort != 0u) {
+    items_sort(batch, bi);
+  }
 }
 
 static void sheik_vanish_smoke_items_update(MslBatch* batch, int bi) {
@@ -3845,6 +3918,52 @@ static inline uint8_t sheik_needle_state_accepts_fighter_hitcapsule(uint8_t stat
   return (uint8_t)(state == 0u || state == 1u || state == 2u || state == 4u);
 }
 
+static inline uint8_t sheik_held_needle_owner_pointer_live(const MslBatch* batch,
+                                                           size_t owner_idx) {
+  if (batch == NULL || owner_idx >= (size_t)batch->batch_size * (size_t)MSL_MAX_PLAYERS ||
+      batch->state.char_id[owner_idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[owner_idx];
+  // Held Needle item Anim destroys the article once fp->fv.sk.x4 is NULL. Source keeps that
+  // pointer live through Loop and through End until shootNeedles consumes the first firing latch;
+  // Cancel explicitly zeros it in its Anim callback. The runtime clears the held slot in
+  // shootNeedles' item-phase spawn helper, so End remains live here until that owner runs.
+  // refs/melee/src/melee/it/items/itseakneedleheld.c::itSeakneedleheld_UnkMotion0_Anim
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+  //   ftSk_SpecialNCancel_Anim,ftSk_SpecialAirNCancel_Anim,ftSk_SpecialNEnd_Anim,
+  //   ftSk_SpecialAirNEnd_Anim,shootNeedles}
+  return (uint8_t)(action_is_sheik_needle_loop((uint8_t)MSL_CHAR_ID_SHEIK, action) ||
+                   action_is_sheik_needle_end((uint8_t)MSL_CHAR_ID_SHEIK, action));
+}
+
+static void sheik_held_needles_update_anim_phase(MslBatch* batch, int bi) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslItemArticleParams* sheik_ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (sheik_ap == NULL || sheik_ap->needle_held_itkind == 0u) {
+    return;
+  }
+  uint8_t needs_sort = 0u;
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] == 0u ||
+        batch->state.item_type[ii] != sheik_ap->needle_held_itkind) {
+      continue;
+    }
+    const int owner = (int)batch->state.item_owner[ii];
+    if (owner < 0 || owner >= (int)batch->config.num_players ||
+        sheik_held_needle_owner_pointer_live(batch, msl_idx_player(bi, owner)) == 0u) {
+      item_slot_clear(batch, ii);
+      needs_sort = 1u;
+    }
+  }
+  if (needs_sort != 0u) {
+    items_sort(batch, bi);
+  }
+}
+
 static inline uint8_t sheik_needle_hitbox_targets_item_ground_state(uint16_t flags,
                                                                     uint8_t item_ga) {
   if (item_ga != 0u) {
@@ -3888,10 +4007,29 @@ static inline float sheik_needle_state1_4_gravity_from_visible_vel(float vel_y) 
   return best_g;
 }
 
-static inline void sheik_needle_motion_timer_step(MslBatch* batch, size_t ii) {
-  if (batch->state.item_timer[ii] > 0.0f) {
-    batch->state.item_timer[ii] -= 1.0f;
+static inline uint8_t sheik_needle_anim_lifetime_step(MslBatch* batch, size_t ii) {
+  const uint8_t state = batch->state.item_state[ii];
+  if (state == 4u) {
+    // Bounced Needle state 4 Anim only updates its previous-position/rotation lanes and returns
+    // false; it does not call the generic lifeTimer decrement used by states 0..3.
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion4_Anim
+    return 0u;
   }
+  // States 0..3 return it_80273130 from Anim. A serialized lifeTimer of 1 is destroyed in this
+  // item Anim callback before Phys/Coll run.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   itSeakneedlethrown_UnkMotion0_Anim,itSeakneedlethrown_UnkMotion1_Anim,
+  //   itSeakneedlethrown_UnkMotion2_Anim,itSeakneedlethrown_UnkMotion3_Anim}
+  // refs/melee/src/melee/it/item.c::Item_80269528
+  if (batch->state.item_timer[ii] <= 1.0f) {
+    item_slot_clear(batch, ii);
+    return 1u;
+  }
+  batch->state.item_timer[ii] -= 1.0f;
+  return 0u;
+}
+
+static inline void sheik_needle_motion_step(MslBatch* batch, size_t ii) {
   const uint8_t state = batch->state.item_state[ii];
   if (state == 0u) {
     batch->state.item_pos_x[ii] += batch->state.item_vel_x[ii];
@@ -4087,9 +4225,10 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
   if (batch == NULL) {
     return;
   }
-  if (batch->replay_reseed_frame_active == NULL || batch->replay_reseed_frame_active[bi] == 0u) {
-    return;
-  }
+  const uint8_t replay_reseed =
+      (batch->replay_reseed_frame_active != NULL && batch->replay_reseed_frame_active[bi] != 0u)
+          ? 1u
+          : 0u;
   uint8_t needs_sort = 0u;
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
     const size_t ii = msl_idx_item(bi, it);
@@ -4112,8 +4251,8 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
           (uint8_t)~MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
       continue;
     }
-    if (batch->replay_reseed_frame_active != NULL && batch->replay_reseed_frame_active[bi] != 0u &&
-        batch->state.item_state[ii] == 4u && batch->state.item_damage[ii] != 0u) {
+    if (replay_reseed != 0u && batch->state.item_state[ii] == 4u &&
+        batch->state.item_damage[ii] != 0u) {
       uint8_t fighter_hitlag_active = 0u;
       for (int p = 0; p < (int)batch->config.num_players; p++) {
         if (batch->state.hitlag[msl_idx_player(bi, p)] != 0u) {
@@ -4136,7 +4275,11 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
       batch->state.item_hitlag[ii]--;
       continue;
     }
-    sheik_needle_motion_timer_step(batch, ii);
+    if (sheik_needle_anim_lifetime_step(batch, ii) != 0u) {
+      needs_sort = 1u;
+      continue;
+    }
+    sheik_needle_motion_step(batch, ii);
     if (sheik_needle_try_fighter_hitbox_damage(batch, bi, it, params) != 0u) {
       needs_sort = 1u;
     }
@@ -10123,13 +10266,26 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
 }
 
 void items_update_pre_fighter_anim_phase(MslBatch* batch) {
-  (void)batch;
   // Reserved item prio 0/1 phase:
   // - Item_802693E4 decrements item hitlag and consumes deferred hitlag callbacks.
   // - Item_80269528 advances item anim/script and lifetime.
   // Supported RL 1.0 item families run their admitted timer/anim owners in their explicit
   // collision-phase functions; full arbitrary item GObj priority is outside current gameplay scope.
   // refs/melee/src/melee/it/item.c::{Item_802693E4,Item_80269528}
+  if (batch == NULL) {
+    return;
+  }
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (items_row_has_any(batch, bi) == 0u) {
+      continue;
+    }
+    // Held Needle self-destruction is owned by item Anim before fighter Anim/IASA can clear
+    // fp->fv.sk.x4 on a same-frame Loop -> Cancel transition.
+    // refs/melee/src/melee/it/items/itseakneedleheld.c::itSeakneedleheld_UnkMotion0_Anim
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialNCancel_Anim
+    sheik_held_needles_update_anim_phase(batch, bi);
+    sheik_chain_items_update_anim_phase(batch, bi);
+  }
 }
 
 void items_update_collision_phase(MslBatch* batch) {
@@ -10405,22 +10561,20 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
       }
     }
 
-    // Spawn Sheik Needle articles from SpecialN fighter callbacks.
+    // Spawn Sheik thrown Needle articles from SpecialN fighter callbacks.
     // Decomp ownership:
-    // - Start_Anim / AirStart_Anim create the held needle with it_802B19AC before entering Loop.
     // - Loop_Anim owns the hidden `fv.sk.x0` charge count; replay reseed restores that count.
     // - End_Anim / AirEnd_Anim arm `mv.sk.specialn.x4`; accessory4_cb shootNeedles consumes the
     //   latch and spawns one thrown Needle through it_802AFD8C.
     // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
-    //   ftSk_SpecialNStart_Anim,ftSk_SpecialAirNStart_Anim,ftSk_SpecialNLoop_Anim,
-    //   ftSk_SpecialAirNLoop_Anim,ftSk_SpecialNEnd_Anim,ftSk_SpecialAirNEnd_Anim,shootNeedles}
-    // refs/melee/src/melee/it/items/{itseakneedleheld.c,itseakneedlethrown.c}
+    //   ftSk_SpecialNLoop_Anim,ftSk_SpecialAirNLoop_Anim,ftSk_SpecialNEnd_Anim,
+    //   ftSk_SpecialAirNEnd_Anim,shootNeedles}
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       if (batch->state.hitlag_started_frame[idx] != 0u) {
         continue;
       }
-      sheik_needle_spawn_held_article_from_fighter(batch, bi, p);
       sheik_needle_spawn_thrown_article_from_fighter(batch, bi, p);
     }
 

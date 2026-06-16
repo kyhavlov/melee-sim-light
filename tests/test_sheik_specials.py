@@ -1157,6 +1157,29 @@ def test_sheik_demo_air_needle_start_anim_spawns_held_article_replay_real() -> N
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("record", [2838, 3193])
+def test_sheik_demo_needle_start_spawns_held_before_same_frame_end_iasa_replay_real(
+    record: int,
+) -> None:
+    # Start_Anim creates the held Needle article before entering Loop; Loop IASA can immediately
+    # enter End on B release in the same fighter proc, but the held article is still published.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    #   ftSk_SpecialNStart_Anim,ftSk_SpecialNLoop_IASA,ftSk_SpecialAirNStart_Anim,
+    #   ftSk_SpecialAirNLoop_IASA}
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_N_START
+    assert int(ref["action_id"][0]) == ACT_SK_SPECIAL_N_END
+    assert int(ref["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_HELD
+
+    out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_N_END
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_HELD
+
+
+@pytest.mark.integration
 def test_sheik_demo_needle_end_anim_first_latch_spawns_thrown_article_replay_real() -> None:
     # ftSk_SpecialNEnd_Anim arms mv.sk.specialn.x4 at timer 2, and accessory4_cb shootNeedles
     # consumes it to spawn one thrown Needle. The row locks the source latch path and the no
@@ -1263,6 +1286,203 @@ def test_sheik_needle_end_without_hidden_count_does_not_spawn_thrown_article_neg
     seed["sheik_needle_specialn_timer_u8"][0, 0] = np.uint8(2)
 
     out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 0
+
+
+def _install_sheik_item(
+    seed: np.ndarray,
+    *,
+    item_type: int,
+    state: int,
+    timer: float,
+    pos_x: float = 10.0,
+    pos_y: float = 20.0,
+    vel_x: float = 3.0,
+    vel_y: float = 0.0,
+) -> None:
+    seed["items"]["exists"][0, 0] = np.uint8(1)
+    seed["items"]["type"][0, 0] = np.uint16(item_type)
+    seed["items"]["state"][0, 0] = np.uint8(state)
+    seed["items"]["owner"][0, 0] = np.int8(0)
+    seed["items"]["instance_id"][0, 0] = np.uint16(17)
+    seed["items"]["spawn_id"][0, 0] = np.uint32(33)
+    seed["items"]["direction"][0, 0] = np.float32(1.0)
+    seed["items"]["timer"][0, 0] = np.float32(timer)
+    seed["items"]["pos_x"][0, 0] = np.float32(pos_x)
+    seed["items"]["pos_y"][0, 0] = np.float32(pos_y)
+    seed["items"]["vel_x"][0, 0] = np.float32(vel_x)
+    seed["items"]["vel_y"][0, 0] = np.float32(vel_y)
+
+
+def test_sheik_thrown_needle_updates_in_free_run_without_reseed_bridge() -> None:
+    # Thrown Needle is a live item GObj: its item Anim/Phys/Coll callbacks run during normal
+    # item phase, not only when replay reseed reconstruction is active.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    #   itSeakneedlethrown_UnkMotion0_Anim,itSeakneedlethrown_UnkMotion0_Phys}
+    # refs/melee/src/melee/it/item.c::{Item_80269528,Item_802697D4}
+    seed = _seed_base("sheik")
+    _install_sheik_item(seed, item_type=ITEM_SHEIK_NEEDLE_THROWN, state=0, timer=2.0)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 1
+    assert float(out["items"]["timer"][0]) == pytest.approx(1.0)
+    assert float(out["items"]["pos_x"][0]) == pytest.approx(13.0)
+
+
+def test_sheik_thrown_needle_timer_one_destroys_before_motion() -> None:
+    # States 0..3 return it_80273130 from Anim; a lifeTimer of 1 destroys the item before
+    # Phys/Coll publication.
+    seed = _seed_base("sheik")
+    _install_sheik_item(seed, item_type=ITEM_SHEIK_NEEDLE_THROWN, state=0, timer=1.0)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 0
+    assert float(out["items"]["pos_x"][0]) == pytest.approx(0.0)
+
+
+def test_sheik_bounced_needle_state4_anim_does_not_decrement_lifetime_negative() -> None:
+    # State 4's Anim callback returns false instead of it_80273130; it still runs Phys movement.
+    seed = _seed_base("sheik")
+    _install_sheik_item(
+        seed,
+        item_type=ITEM_SHEIK_NEEDLE_THROWN,
+        state=4,
+        timer=1.0,
+        vel_x=0.0,
+        vel_y=2.0,
+    )
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 1
+    assert float(out["items"]["timer"][0]) == pytest.approx(1.0)
+    assert float(out["items"]["pos_y"][0]) > 20.0
+
+
+def test_sheik_held_needle_loop_keeps_article_but_cancel_destroys() -> None:
+    # Held Needle self-destructs when ftSk_SpecialS_80111F70 sees fp->fv.sk.x4 cleared.
+    # Loop keeps that pointer live; Cancel clears it in Anim.
+    # refs/melee/src/melee/it/items/itseakneedleheld.c::itSeakneedleheld_UnkMotion0_Anim
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    #   ftSk_SpecialNLoop_Anim,ftSk_SpecialNCancel_Anim}
+    loop_seed = _seed_base("sheik")
+    loop_seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_LOOP)
+    loop_seed["animation_index"][0, 0] = np.uint32(296)
+    _install_sheik_item(loop_seed, item_type=ITEM_SHEIK_NEEDLE_HELD, state=0, timer=1400.0)
+    loop_out = _run(loop_seed, [_mk_inputs(buttons=B)])[0]
+    assert int(loop_out["items"]["exists"][0]) == 1
+    assert int(loop_out["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_HELD
+
+    cancel_seed = _seed_base("sheik")
+    cancel_seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_CANCEL)
+    cancel_seed["animation_index"][0, 0] = np.uint32(297)
+    _install_sheik_item(cancel_seed, item_type=ITEM_SHEIK_NEEDLE_HELD, state=0, timer=1400.0)
+    cancel_out = _run(cancel_seed, [_mk_inputs()])[0]
+    assert int(cancel_out["items"]["exists"][0]) == 0
+
+
+@pytest.mark.parametrize(
+    ("action", "x0", "start_state", "expected_state"),
+    [
+        (ACT_SK_SPECIAL_S_START, 22, 0, 1),
+        (ACT_SK_SPECIAL_AIR_S_START, 31, 1, 3),
+        (ACT_SK_SPECIAL_S_END, 17, 3, 4),
+        (ACT_SK_SPECIAL_AIR_S_END, 26, 4, 0),
+    ],
+)
+def test_sheik_chain_article_state_thresholds_follow_source_timer(
+    action: int,
+    x0: int,
+    start_state: int,
+    expected_state: int,
+) -> None:
+    # Sheik Chain article state transitions are owned by ftSk_SpecialS.c and itseakchain.c, using
+    # mv.sk.specials.x0 thresholds rather than replay row ids or final action labels.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialS_CheckInitChain,ftSk_SpecialSEnd_Anim,ftSk_SpecialAirSEnd_Anim}
+    # refs/melee/src/melee/it/items/itseakchain.c::{
+    #   it_802BCFC4,it_802BCED4,it_802BCF84,it_2725_Logic54_PickedUp}
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(action)
+    seed["sheik_chain_x0_u8"][0, 0] = np.uint8(x0)
+    _install_sheik_item(seed, item_type=ITEM_SHEIK_CHAIN, state=start_state, timer=1400.0)
+
+    out = _run(seed, [_mk_inputs(buttons=B)])[0]
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == expected_state
+
+
+def test_sheik_chain_article_destroy_threshold_and_orphan_owner_negative() -> None:
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_S_END)
+    seed["sheik_chain_x0_u8"][0, 0] = np.uint8(27)
+    _install_sheik_item(seed, item_type=ITEM_SHEIK_CHAIN, state=0, timer=1400.0)
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 0
+
+    orphan_seed = _seed_base("sheik")
+    orphan_seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    _install_sheik_item(orphan_seed, item_type=ITEM_SHEIK_CHAIN, state=3, timer=1400.0)
+    orphan_out = _run(orphan_seed, [_mk_inputs()])[0]
+    assert int(orphan_out["items"]["exists"][0]) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "seed_state", "ref_state"),
+    [
+        (249, 0, 1),
+        (258, 1, 3),
+        (484, 3, 4),
+        (1392, 0, 1),
+        (1401, 1, 3),
+        (1431, 3, 4),
+        (4667, 4, 0),
+    ],
+)
+def test_sheik_demo_chain_article_state_machine_replay_real(
+    record: int,
+    seed_state: int,
+    ref_state: int,
+) -> None:
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["items"]["type"][0]) == ITEM_SHEIK_CHAIN
+    assert int(seed["items"]["state"][0]) == seed_state
+    assert int(ref["items"]["state"][0]) == ref_state
+
+    out = _run_sample_row(samples, record)
+    assert int(out["items"]["exists"][0]) == int(ref["items"]["exists"][0])
+    assert int(out["items"]["type"][0]) == ITEM_SHEIK_CHAIN
+    assert int(out["items"]["state"][0]) == ref_state
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [2743, 3577, 4024])
+def test_sheik_demo_needle_cancel_destroys_held_article_replay_real(record: int) -> None:
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][0]) in (ACT_SK_SPECIAL_N_CANCEL, ACT_SK_SPECIAL_AIR_N_CANCEL)
+    assert int(seed["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_HELD
+    assert int(ref["items"]["exists"][0]) == 0
+
+    out = _run_sample_row(samples, record)
+    assert int(out["items"]["exists"][0]) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [2871, 3226, 5095])
+def test_sheik_demo_thrown_needle_lifetime_expires_replay_real(record: int) -> None:
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_THROWN
+    assert int(seed["items"]["state"][0]) in (0, 1, 2, 3)
+    assert float(seed["items"]["timer"][0]) <= 1.0
+    assert int(ref["items"]["exists"][0]) == 0
+
+    out = _run_sample_row(samples, record)
     assert int(out["items"]["exists"][0]) == 0
 
 

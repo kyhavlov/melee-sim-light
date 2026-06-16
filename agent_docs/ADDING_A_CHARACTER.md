@@ -1182,6 +1182,21 @@ cover most of it.
    Sheik Chain spawns at `ftSeakAttributes::x1C` and destroys at `x28`. A
    source-correct MotionState transition can still leave stale or missing
    article rows if the item owner is not modeled.
+   Do not infer article publication from the final action serialized at
+   post-frame. Sheik Needle Start creates the held article in `Start_Anim`
+   immediately before entering Loop, and Loop IASA may enter End in the same
+   fighter proc. The held article is still Start-owned. Conversely, held-item
+   destruction can be item-Anim-owned before fighter Anim/IASA clears the
+   pointer on a later frame; Sheik's held Needle survives the same-frame
+   Loop-to-Cancel transition because `itseakneedleheld` samples `fv.sk.x4`
+   before `ftSk_SpecialNCancel_Anim` clears it, then clears on the next item
+   Anim tick. Live articles also need live item Anim/Phys/Coll callbacks; keep
+   replay-only seed bridges limited to hidden provenance such as hitlag or
+   source-owned latches, not as a gate around ordinary free-running item
+   simulation. Finally, separate article state publication from article
+   geometry: Sheik Chain state transitions are fighter callback/timer-owned,
+   while full Chain segment pose and hitboxes require a separate article
+   physics/extraction audit.
 9. **GATE**: all specials tests green; fox/falco validate-all "no suite total
    changes" (byte-stable) after every retained change.
 
