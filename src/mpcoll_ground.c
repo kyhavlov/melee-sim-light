@@ -506,6 +506,7 @@ enum {
 #define MSL_MPCOLL_REJECT_ATTACKAIR_SINGLE_CREATE_NO_BOTTOM_OWNER (UINT64_C(1) << 35)
 #define MSL_MPCOLL_REJECT_FALL_STATIC_PLATFORM_FROM_BELOW (UINT64_C(1) << 36)
 #define MSL_MPCOLL_REJECT_MISSFOOT_ECB_LOCK_FIRST_FLOOR (UINT64_C(1) << 37)
+#define MSL_MPCOLL_REJECT_FALL_ATTACKAIR_ENTRY_TRANSFORMED_PLATFORM_ROOT_ONLY (UINT64_C(1) << 38)
 #define MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_PLATFORM_LOCK (UINT64_C(1) << 19)
 #define MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_LEDGE_LOCK (UINT64_C(1) << 20)
 #define MSL_MPCOLL_REJECT_LOCKED_ESCAPEAIR_MISSING_BOTTOM_OWNER (UINT64_C(1) << 21)
@@ -15805,6 +15806,39 @@ void mpcoll_ground_apply(MslBatch* batch) {
              y < (contact_y - k_floor_y_bias))
                 ? 1u
                 : 0u;
+        const uint8_t suppress_fall_attackair_entry_transformed_platform_root_only_land =
+            // AttackAir_Anim -> Fall first-callback transformed-platform root-only guard:
+            // `ftCo_AttackAir_Anim` can enter `ftCo_Fall_Enter` before Fighter_procMap while
+            // already airborne. `ftCo_Fall_Enter` therefore does not call ftCommon_8007D5D4 and
+            // the next `Fall_Coll -> ft_800831CC -> mpColl_80047E14` consumes the carried
+            // AttackAir CollData lifetime. That provenance alone is not enough to publish a
+            // transformed-platform Landing: source still must let `mpColl_80044628_Floor` accept an
+            // active callback-local floor before the later root projection (`mpColl_80044838_Floor`)
+            // can snap to the FoD platform. Reject only a frame-start Fall callback entered from a
+            // previous AttackAir motion when the final floor is a FoD height platform with neither
+            // current direct/contact height source nor live scheduler/velocity source. Same-frame
+            // AttackAir_Anim -> Fall rows and visible/current FoD platform rows keep the ordinary
+            // publication path.
+            //
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_Coll}
+            // refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor,
+            //   mpColl_80044838_Floor}
+            // data/stages/bin/griz.bin::MSLSTG01 platform_transforms
+            (action_id == (uint16_t)MSL_ACT_FALL && prev_action_id == (uint16_t)MSL_ACT_FALL &&
+             batch->state.action_frame[idx] <= 1 &&
+             is_attackair_action(batch->state.seed_prev_action_id[idx]) &&
+             stage_collision_floor_line_has_height_platform_transform(stage_id, ground_id) &&
+             !stage_height_platform_line_has_current_source(batch, bi, stage_id, ground_id) &&
+             !stage_height_platform_line_has_live_scheduler_source(batch, bi, stage_id,
+                                                                   ground_id) &&
+             batch->state.coll_floor_probe_raw_bottom_sweep_hit[idx] == 0u &&
+             batch->state.coll_floor_probe_projection_hit[idx] == 0u &&
+             floor_publication.result_mode == (uint8_t)MSL_MPCOLL_FLOOR_MODE_BOTTOM_SWEEP &&
+             batch->state.speed_y_self[idx] < 0.0f)
+                ? 1u
+                : 0u;
         const uint8_t suppress_missfoot_ecb_lock_first_floor_land =
             // Fresh MissFoot ground-to-air floor-loss callback:
             // ftCo_8009F39C enters MissFoot through ftCommon_8007D5D4, which sets
@@ -16474,6 +16508,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                          MSL_MPCOLL_REJECT_FALL_STATIC_PLATFORM_FROM_BELOW,
                                          MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
                                          (uint32_t)MSL_MPCOLL_PHASE_PLATFORM_PASS);
+        mpcoll_floor_reject_add_if_state(
+            &final_floor_reject, suppress_fall_attackair_entry_transformed_platform_root_only_land,
+            MSL_MPCOLL_REJECT_FALL_ATTACKAIR_ENTRY_TRANSFORMED_PLATFORM_ROOT_ONLY,
+            MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
+            (uint32_t)MSL_MPCOLL_PHASE_PLATFORM_PASS);
         mpcoll_floor_reject_add_if_state(&final_floor_reject,
                                          suppress_missfoot_ecb_lock_first_floor_land,
                                          MSL_MPCOLL_REJECT_MISSFOOT_ECB_LOCK_FIRST_FLOOR,

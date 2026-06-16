@@ -479,14 +479,15 @@ def test_sheik_chain_seed_lanes_use_source_x0_and_iasa_latch_order() -> None:
     char = np.full((40, 1), 7, dtype=np.uint8)
     action = np.full((40, 1), ACT_SK_SPECIAL_S_START, dtype=np.uint16)
     buttons = np.full((40, 1), B, dtype=np.uint16)
-    x0, latch = msl_binding.derive_sheik_chain_seed_lanes(char, action, buttons, 7, B, 10)
+    hitlag = np.zeros((40, 1), dtype=np.uint16)
+    x0, latch = msl_binding.derive_sheik_chain_seed_lanes(char, action, buttons, hitlag, 7, B, 10)
     assert int(x0[0, 0]) == 0
     assert int(x0[32, 0]) == 32
     assert int(latch[32, 0]) == 0
 
     # Start ground/air swaps preserve mv.sk.specials.x0 through transition_flags.
     action[20:26, 0] = ACT_SK_SPECIAL_AIR_S_START
-    x0, _ = msl_binding.derive_sheik_chain_seed_lanes(char, action, buttons, 7, B, 10)
+    x0, _ = msl_binding.derive_sheik_chain_seed_lanes(char, action, buttons, hitlag, 7, B, 10)
     assert int(x0[19, 0]) == 19
     assert int(x0[20, 0]) == 20
     assert int(x0[25, 0]) == 25
@@ -497,10 +498,26 @@ def test_sheik_chain_seed_lanes_use_source_x0_and_iasa_latch_order() -> None:
     action[:, 0] = ACT_SK_SPECIAL_S
     buttons[:, 0] = B
     buttons[11:, 0] = 0
-    x0, latch = msl_binding.derive_sheik_chain_seed_lanes(char, action, buttons, 7, B, 10)
+    x0, latch = msl_binding.derive_sheik_chain_seed_lanes(char, action, buttons, hitlag, 7, B, 10)
     assert int(x0[10, 0]) == 10
     assert int(latch[11, 0]) == 0
     assert int(latch[12, 0]) == 1
+
+
+def test_sheik_chain_seed_lanes_freeze_anim_owned_x0_during_hitlag() -> None:
+    import msl_binding
+
+    char = np.full((12, 1), 7, dtype=np.uint8)
+    action = np.full((12, 1), ACT_SK_SPECIAL_AIR_S_START, dtype=np.uint16)
+    buttons = np.full((12, 1), B, dtype=np.uint16)
+    hitlag = np.zeros((12, 1), dtype=np.uint16)
+    hitlag[4:7, 0] = [4, 3, 2]
+    hitlag[7, 0] = 1
+
+    x0, latch = msl_binding.derive_sheik_chain_seed_lanes(char, action, buttons, hitlag, 7, B, 10)
+
+    assert [int(v) for v in x0[:, 0]] == [0, 1, 2, 3, 4, 4, 4, 4, 5, 6, 7, 8]
+    assert not latch.any()
 
 
 @pytest.mark.integration
@@ -525,6 +542,31 @@ def test_sheik_chain_start_hidden_x0_enters_active_demo_lock() -> None:
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_S
     out = _run_sample_row(samples, record)
     assert int(out["action_id"][0]) == ACT_SK_SPECIAL_S
+
+
+@pytest.mark.integration
+def test_sheik_chain_start_hidden_x0_hitlag_freeze_delays_active_demo_lock() -> None:
+    # Chain Start's x0 is Anim-owned. Hitlag freezes Fighter_8006A360's Anim/IASA path, so the
+    # hidden x0 seed lane must not count hitlag-frozen frames even while the replay-visible action
+    # stays in SpecialAirSStart.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+
+    assert int(samples[4630]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+    assert int(samples[4630]["seed_t"]["sheik_chain_x0_u8"][0]) == 29
+    assert int(samples[4630]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+    assert int(_run_sample_row(samples, 4630)["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+
+    assert int(samples[4632]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+    assert int(samples[4632]["seed_t"]["sheik_chain_x0_u8"][0]) == 31
+    assert int(samples[4632]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+    assert int(_run_sample_row(samples, 4632)["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+
+    assert int(samples[4633]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+    assert int(samples[4633]["seed_t"]["sheik_chain_x0_u8"][0]) == 32
+    assert int(samples[4633]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S
+    assert int(_run_sample_row(samples, 4633)["action_id"][0]) == ACT_SK_SPECIAL_AIR_S
 
 
 @pytest.mark.integration

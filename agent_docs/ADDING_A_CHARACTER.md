@@ -194,8 +194,14 @@ Collect before writing any code:
    `ftSk_SpecialS_CheckInitChain`: Start holds visible frame 25 while
    `mv.sk.specials.x0` reaches `ftSeakAttributes::x20`, and active Chain
    consumes a release latch set by the previous IASA callback, not the current
-   Anim callback. Source anchors:
-   `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{ftSk_SpecialS_CheckInitChain,ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim,ftSk_SpecialS_IASA,ftSk_SpecialAirS_IASA}`.
+   Anim callback. If the hidden timer/latch is callback-owned, hitlag must also
+   be part of the seed contract: `Fighter_8006A1BC` decrements hitlag before
+   `Fighter_8006A360` resumes non-hitlag Anim/IASA callbacks, so frozen rows
+   must not advance the hidden special lane. Sheik Chain hitlag at
+   `sheik_demo_game.msl:4625..4628:p0` exposed this after the Start timer was
+   otherwise source-correct. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{ftSk_SpecialS_CheckInitChain,ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim,ftSk_SpecialS_IASA,ftSk_SpecialAirS_IASA}`;
+   `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}`.
    **Run entry collision pose can diverge from replay seed timebase**:
    `ftCo_Run_Anim` writes the next animation rate from hidden `mv.co.run.x4`
    only on reduced-friction floors; ordinary floors use `fp->gr_vel`. One-step
@@ -390,6 +396,26 @@ Collect before writing any code:
    `data/motion_state/owners/<char>.bin::MSLMSO01 submotion_id`,
    `data/moves/<char>.json::moves.ftCo_SM_AttackAir*.events`, and
    `data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)`.
+   **Frame-start Fall after AttackAir still needs a current platform owner**:
+   `ftCo_AttackAir_Anim` can enter `ftCo_Fall_Enter` before the collision
+   callback, and if the fighter is already airborne `ftCo_Fall_Enter` does not
+   refresh CollData with `ftCommon_8007D5D4`. A reseeded frame-start `Fall`
+   whose previous visible action was already `Fall` may therefore still carry
+   AttackAir provenance, but that carry alone is not enough to publish Landing
+   on a FoD height platform. Require a current direct/contact platform source,
+   live scheduler/velocity source, or the callback-local bottom/projection floor
+   producer before allowing `mpColl_80044838_Floor` to root-snap to a transformed
+   platform. Keep same-frame `AttackAir* -> Fall` rows on the ordinary
+   AttackAir/Fall callback path and add current-source landing negatives so this
+   guard does not suppress real platform contacts. Sheik exposed the no-current
+   source boundary at `SnarlingHelplessBeaver.msl:2464:p0`; current-source and
+   same-frame controls came from `ZestyPreciousTurtle.msl` and
+   `ConstantStiffOtter.msl`. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_Coll}`,
+   `refs/melee/src/melee/ft/ft_081B.c::ft_800831CC`,
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
+   and `data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)`.
    **AttackAirLw first-create publication is a script-timeline
    boundary**: DAir-style platform publication should be audited against the
    decoded first `create_hitbox` command, in the callback-visible action-frame

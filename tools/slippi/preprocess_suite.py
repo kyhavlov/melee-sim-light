@@ -17,6 +17,8 @@ from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, rep
 from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 
 
+# v27 invalidates Sheik Chain x0/x4 rows generated before hitlag-frozen Anim/IASA callback
+# reconstruction.
 # v25 invalidates Sheik Needle End rows generated before the shootNeedles callback-frame
 # frame_pre_random_seed reconstruction.
 # v24 invalidates datasets generated before Sheik Needle count/timer seed lanes.
@@ -29,7 +31,7 @@ from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 # reconstructed floor_sweep_prev_pos from callback-visible CollData.cur_pos instead of the older
 # public replay row before the seed.
 # Record-size checks alone cannot detect this semantic.
-_CACHE_VERSION = 26
+_CACHE_VERSION = 27
 _SOURCE_INPUT_PY_TREES = ("tools/slippi",)
 _SOURCE_INPUT_FILES = ("tools/eval/dataset.py", "bindings/msl_preprocess_native.c")
 

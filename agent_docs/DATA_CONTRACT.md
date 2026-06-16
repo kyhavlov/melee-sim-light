@@ -970,10 +970,14 @@ Owner:
 - Visible `action_frame` and `anim_frame_f32` are not sufficient: Chain Start can hold its visible
   animation at the terminal frame while x0 keeps ticking, and active Chain can hold its visible
   frame while waiting for B release.
+- The timer and release latch are callback-owned. Hitlag-frozen frames must not advance either
+  lane: `Fighter_8006A1BC` decrements hitlag before `Fighter_8006A360`'s non-hitlag Anim/IASA
+  path, so preprocessing freezes Chain x0/x4 while the replay seed has `hitlag > 1`. The terminal
+  `hitlag == 1` row is the callback-visible exit tick for the next seed.
 
 Derivation:
 - Generated natively by `msl_binding.derive_sheik_chain_seed_lanes` from replay-prefix `char_id`,
-  `action_id`, and current-frame held buttons.
+  `action_id`, current-frame held buttons, and replay-visible hitlag.
 - The B mask is `src/buttons.h::MSL_BUTTON_B`.
 - The release threshold is loaded from
   `data/characters/sheik.json::sheik_chain_release_min_frames`, extracted from
@@ -990,11 +994,13 @@ Runtime consumption:
 
 Cache/regeneration:
 - These lanes expand `MslSeed` and `tools/eval/dataset.py::SEED_DTYPE`. Cache version 26 is the
-  first valid cache generation for Sheik datasets that include Chain x0/latch lanes; older `.msl`
-  files must be regenerated before Sheik one-step/rollout validation is trusted.
+  first valid cache generation for Sheik datasets that include Chain x0/latch lanes. Cache version
+  27 is the first generation whose Chain lanes honor hitlag-frozen callback ownership. Older
+  `.msl` files must be regenerated before Sheik one-step/rollout validation is trusted.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{ftSk_SpecialS_CheckInitChain,ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim,ftSk_SpecialS_IASA,ftSk_SpecialAirS_IASA,ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_80111DF8,ftSk_SpecialS_80111EB4}`.
+- `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}`.
 
 ## Replay Seed Contract: CommonFall Blend State
 

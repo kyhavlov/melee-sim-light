@@ -5194,23 +5194,26 @@ PyObject* msl_derive_sheik_chain_seed_lanes_py(PyObject* self, PyObject* args) {
   PyObject* char_obj = NULL;
   PyObject* action_obj = NULL;
   PyObject* buttons_obj = NULL;
+  PyObject* hitlag_obj = NULL;
   int sheik_internal_id = -1;
   unsigned int b_mask_in = 0u;
   int release_min_frames = 0;
-  if (!PyArg_ParseTuple(args, "OOOiIi", &char_obj, &action_obj, &buttons_obj, &sheik_internal_id,
-                        &b_mask_in, &release_min_frames)) {
+  if (!PyArg_ParseTuple(args, "OOOOiIi", &char_obj, &action_obj, &buttons_obj, &hitlag_obj,
+                        &sheik_internal_id, &b_mask_in, &release_min_frames)) {
     return NULL;
   }
   PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 2, "char_id_u8");
   PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 2, "action_id_u16");
   PyArrayObject* buttons = require_contiguous_array(buttons_obj, NPY_UINT16, 2, "buttons_u16");
-  if (chr == NULL || action == NULL || buttons == NULL) {
+  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT16, 2, "hitlag_u16");
+  if (chr == NULL || action == NULL || buttons == NULL || hitlag == NULL) {
     return NULL;
   }
   const npy_intp n = PyArray_DIM(chr, 0);
   const npy_intp width = PyArray_DIM(chr, 1);
   if (require_exact_2d_shape(action, n, width, "action_id_u16") < 0 ||
-      require_exact_2d_shape(buttons, n, width, "buttons_u16") < 0) {
+      require_exact_2d_shape(buttons, n, width, "buttons_u16") < 0 ||
+      require_exact_2d_shape(hitlag, n, width, "hitlag_u16") < 0) {
     return NULL;
   }
 
@@ -5228,6 +5231,7 @@ PyObject* msl_derive_sheik_chain_seed_lanes_py(PyObject* self, PyObject* args) {
   const uint8_t* ch = (const uint8_t*)PyArray_DATA(chr);
   const uint16_t* act = (const uint16_t*)PyArray_DATA(action);
   const uint16_t* held_buttons = (const uint16_t*)PyArray_DATA(buttons);
+  const uint16_t* hitlag_frames = (const uint16_t*)PyArray_DATA(hitlag);
   uint8_t* x0_out = (uint8_t*)PyArray_DATA(out_x0);
   uint8_t* latch_out = (uint8_t*)PyArray_DATA(out_latch);
   const uint8_t sheik_id = (uint8_t)sheik_internal_id;
@@ -5269,6 +5273,20 @@ PyObject* msl_derive_sheik_chain_seed_lanes_py(PyObject* self, PyObject* args) {
 
       x0_out[idx] = x0;
       latch_out[idx] = latch;
+
+      // Chain's timers are owned by Anim/IASA callbacks, not by the replay-visible action row.
+      // Fighter_8006A1BC decrements hitlag at proc prio 0 before Fighter_8006A360's non-hitlag
+      // update path. A frame-start replay seed with hitlag > 1 therefore remains callback-frozen
+      // for the derived next seed; the terminal tick (1 -> 0) is the post-hitlag callback-visible
+      // frame.
+      //
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+      //   ftSk_SpecialS_CheckInitChain,ftSk_SpecialS_Anim,ftSk_SpecialS_IASA}
+      if (hitlag_frames[idx] > 1u) {
+        prev_action = action_i;
+        continue;
+      }
 
       if (msl_py_action_is_sheik_chain_start(action_i)) {
         x0 = msl_py_saturating_inc_u8(x0);
