@@ -26,6 +26,7 @@ typedef struct MslItemArticleParams {
   uint16_t needle_bounce_lifetime_frames;
   uint16_t needle_hurtbox_bone_id;
   uint16_t sheik_chain_itkind;
+  uint16_t sheik_chain_spawn_part_id;
   uint16_t sheik_chain_lifetime_frames;
   uint16_t sheik_vanish_itkind;
   uint16_t sheik_vanish_lifetime_frames;

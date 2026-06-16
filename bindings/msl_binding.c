@@ -4544,7 +4544,8 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
     PyList_SET_ITEM(hb_flags, i, PyLong_FromUnsignedLong((unsigned long)p->needle_hitbox_flags[i]));
   }
   PyObject* out = Py_BuildValue(
-      "{s:i,s:i,s:i,s:i,s:i,s:f,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:f,s:i,s:i,s:N,s:"
+      "{s:i,s:i,s:i,s:i,s:i,s:f,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:f,s:i,s:i,s:"
+      "N,s:"
       "N,s:f,s:f,s:i,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N}",
       "blaster_shot_itkind", (int)p->blaster_shot_itkind, "blaster_gun_itkind",
       (int)p->blaster_gun_itkind, "laser_spawn_joint_part_id", (int)p->laser_spawn_joint_part_id,
@@ -4556,15 +4557,15 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
       (int)p->needle_throw_itkind, "needle_held_itkind", (int)p->needle_held_itkind,
       "needle_lifetime_frames", (int)p->needle_lifetime_frames, "needle_bounce_lifetime_frames",
       (int)p->needle_bounce_lifetime_frames, "sheik_chain_itkind", (int)p->sheik_chain_itkind,
-      "sheik_chain_lifetime_frames", (int)p->sheik_chain_lifetime_frames, "sheik_vanish_itkind",
-      (int)p->sheik_vanish_itkind, "sheik_vanish_lifetime_frames",
-      (int)p->sheik_vanish_lifetime_frames, "needle_launch_speed", (double)p->needle_launch_speed,
-      "needle_hurtbox_count", (int)p->needle_hurtbox_count, "needle_hurtbox_bone_id",
-      (int)p->needle_hurtbox_bone_id, "needle_hurtbox_a_offset", a_offsets,
-      "needle_hurtbox_b_offset", b_offsets, "needle_hurtbox_scale", (double)p->needle_hurtbox_scale,
-      "needle_hitbox_damage", (double)p->needle_hitbox_damage, "needle_hitbox_count",
-      (int)p->needle_hitbox_count, "needle_hitbox_damage_by_id", hb_damage, "needle_hitbox_size",
-      hb_size, "needle_hitbox_x_offset", hb_x, "needle_hitbox_y_offset", hb_y,
+      "sheik_chain_spawn_part_id", (int)p->sheik_chain_spawn_part_id, "sheik_chain_lifetime_frames",
+      (int)p->sheik_chain_lifetime_frames, "sheik_vanish_itkind", (int)p->sheik_vanish_itkind,
+      "sheik_vanish_lifetime_frames", (int)p->sheik_vanish_lifetime_frames, "needle_launch_speed",
+      (double)p->needle_launch_speed, "needle_hurtbox_count", (int)p->needle_hurtbox_count,
+      "needle_hurtbox_bone_id", (int)p->needle_hurtbox_bone_id, "needle_hurtbox_a_offset",
+      a_offsets, "needle_hurtbox_b_offset", b_offsets, "needle_hurtbox_scale",
+      (double)p->needle_hurtbox_scale, "needle_hitbox_damage", (double)p->needle_hitbox_damage,
+      "needle_hitbox_count", (int)p->needle_hitbox_count, "needle_hitbox_damage_by_id", hb_damage,
+      "needle_hitbox_size", hb_size, "needle_hitbox_x_offset", hb_x, "needle_hitbox_y_offset", hb_y,
       "needle_hitbox_z_offset", hb_z, "needle_hitbox_angle", hb_angle, "needle_hitbox_kbg", hb_kbg,
       "needle_hitbox_wsk", hb_wsk, "needle_hitbox_bkb", hb_bkb, "needle_hitbox_element", hb_element,
       "needle_hitbox_shield_damage", hb_shield_damage, "needle_hitbox_flags", hb_flags);

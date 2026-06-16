@@ -10,7 +10,7 @@
 #include "alloc.h"
 
 enum {
-  MSLITAR1_VERSION = 7,
+  MSLITAR1_VERSION = 8,
   MSLITAR1_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1,
   MSLITAR1_VALUE_U16 = 1,
   MSLITAR1_VALUE_U32 = 2,
@@ -77,11 +77,11 @@ enum {
   MSLITAR1_FIELD_VANISH_HITBOX_SIZE_KEYFRAME_FRAME_1 = 97,
   MSLITAR1_FIELD_VANISH_HITBOX_SIZE_KEYFRAME_VALUE_1 = 98,
   MSLITAR1_FIELD_VANISH_HITBOX_REMOVE_FRAME = 99,
+  MSLITAR1_FIELD_SHEIK_CHAIN_SPAWN_PART_ID = 100,
   MSLITAR1_FIELD_NEEDLE_FIRST = MSLITAR1_FIELD_NEEDLE_THROW_ITKIND,
   MSLITAR1_FIELD_SHEIK_SPECIAL_FIRST = MSLITAR1_FIELD_SHEIK_CHAIN_ITKIND,
-  MSLITAR1_FIELD_SHEIK_SPECIAL_LAST = MSLITAR1_FIELD_SHEIK_VANISH_LIFETIME_FRAMES,
-  MSLITAR1_FIELD_SHEIK_SPECIAL_REQUIRED_MASK =
-      (1u << (MSLITAR1_FIELD_SHEIK_SPECIAL_LAST - MSLITAR1_FIELD_SHEIK_SPECIAL_FIRST + 1u)) - 1u,
+  MSLITAR1_FIELD_SHEIK_SPECIAL_LAST = MSLITAR1_FIELD_SHEIK_CHAIN_SPAWN_PART_ID,
+  MSLITAR1_FIELD_SHEIK_SPECIAL_REQUIRED_MASK = 0x1Fu,
   MSLITAR1_FIELD_VANISH_HITBOX_FIRST = MSLITAR1_FIELD_VANISH_HITBOX_COUNT,
   MSLITAR1_FIELD_VANISH_HITBOX_LAST = MSLITAR1_FIELD_VANISH_HITBOX_REMOVE_FRAME,
   MSLITAR1_FIELD_VANISH_HITBOX_REQUIRED_MASK =
@@ -159,6 +159,23 @@ static uint64_t needle_required_mask(void) {
     mask = (mask << 1u) | 1ull;
   }
   return mask;
+}
+
+static uint8_t sheik_special_required_bit_for_field(uint16_t field_id) {
+  switch (field_id) {
+    case MSLITAR1_FIELD_SHEIK_CHAIN_ITKIND:
+      return 0u;
+    case MSLITAR1_FIELD_SHEIK_CHAIN_LIFETIME_FRAMES:
+      return 1u;
+    case MSLITAR1_FIELD_SHEIK_VANISH_ITKIND:
+      return 2u;
+    case MSLITAR1_FIELD_SHEIK_VANISH_LIFETIME_FRAMES:
+      return 3u;
+    case MSLITAR1_FIELD_SHEIK_CHAIN_SPAWN_PART_ID:
+      return 4u;
+    default:
+      return 0xFFu;
+  }
 }
 
 static uint8_t needle_hitbox_field_index(uint16_t field_id, uint16_t base_field_id) {
@@ -280,6 +297,10 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
     case MSLITAR1_FIELD_SHEIK_CHAIN_ITKIND:
       if (value_type != MSLITAR1_VALUE_U16) return -1;
       rec->sheik_chain_itkind = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_SHEIK_CHAIN_SPAWN_PART_ID:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->sheik_chain_spawn_part_id = (uint16_t)u32_value;
       break;
     case MSLITAR1_FIELD_SHEIK_CHAIN_LIFETIME_FRAMES:
       if (value_type != MSLITAR1_VALUE_U32) return -1;
@@ -453,10 +474,9 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
   if (char_id == 7u && needle_bit != 0xFFu) {
     g_tbl.sheik_needle_fields_seen |= (uint64_t)1ull << (uint64_t)needle_bit;
   }
-  if (char_id == 7u && field_id >= MSLITAR1_FIELD_SHEIK_SPECIAL_FIRST &&
-      field_id <= MSLITAR1_FIELD_SHEIK_SPECIAL_LAST) {
-    g_tbl.sheik_special_article_fields_seen |=
-        (uint32_t)1u << (uint32_t)(field_id - MSLITAR1_FIELD_SHEIK_SPECIAL_FIRST);
+  const uint8_t sheik_special_bit = sheik_special_required_bit_for_field(field_id);
+  if (char_id == 7u && sheik_special_bit != 0xFFu) {
+    g_tbl.sheik_special_article_fields_seen |= (uint32_t)1u << (uint32_t)sheik_special_bit;
   }
   if (char_id == 7u && field_id >= MSLITAR1_FIELD_VANISH_HITBOX_FIRST &&
       field_id <= MSLITAR1_FIELD_VANISH_HITBOX_LAST) {
@@ -571,6 +591,7 @@ int item_article_params_init(void) {
       !(g_tbl.by_char[7].needle_hitbox_damage > 0.0f) ||
       !(g_tbl.by_char[7].needle_hitbox_size[0] > 0.0f) ||
       g_tbl.by_char[7].sheik_chain_itkind == 0u ||
+      g_tbl.by_char[7].sheik_chain_spawn_part_id == 0u ||
       g_tbl.by_char[7].sheik_chain_lifetime_frames == 0u ||
       g_tbl.by_char[7].sheik_vanish_itkind == 0u ||
       g_tbl.by_char[7].sheik_vanish_lifetime_frames == 0u ||

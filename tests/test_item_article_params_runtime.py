@@ -44,6 +44,7 @@ def test_runtime_item_article_params_known_values() -> None:
     # Extracted from state-0 item script target bits: hb0 grounded, hb1-3 aerial.
     assert sheik["needle_hitbox_flags"] == [1, 2, 2, 2]
     assert sheik["sheik_chain_itkind"] == 97
+    assert sheik["sheik_chain_spawn_part_id"] == 26
     assert sheik["sheik_chain_lifetime_frames"] == 1400
     assert sheik["sheik_vanish_itkind"] == 85
     assert sheik["sheik_vanish_lifetime_frames"] == 80
@@ -98,7 +99,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_needle_record(tmp_pat
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 7
+    assert version == 8
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -135,7 +136,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_hitbox_record(
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 7
+    assert version == 8
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -172,7 +173,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_active_window_
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 7
+    assert version == 8
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -184,6 +185,42 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_active_window_
     assert len(kept) == len(records) - 1
     struct.pack_into("<I", header, 12, len(kept))
     dst.write_bytes(bytes(header) + b"".join(kept))
+
+    code = """
+import msl_binding
+try:
+    msl_binding.item_article_params(7)
+except RuntimeError:
+    raise SystemExit(0)
+raise SystemExit(1)
+"""
+    env = dict(os.environ)
+    env["MSL_DATA_DIR"] = str(data_dir)
+    proc = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
+def test_runtime_item_article_params_rejects_zero_sheik_chain_spawn_part_id(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    dst = data_dir / "items" / "articles" / "fox_falco.bin"
+    dst.parent.mkdir(parents=True)
+    buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
+
+    version, count = struct.unpack_from("<II", buf, 8)
+    assert version == 8
+    record_size = 24
+    patched = False
+    for i in range(count):
+        off = 16 + i * record_size
+        char_id, char_domain, value_type, field_id = struct.unpack_from("<HBBH", buf, off)
+        if (char_id, char_domain, value_type, field_id) == (19, 1, 1, 100):
+            struct.pack_into("<I", buf, off + 8, 0)
+            patched = True
+            break
+    assert patched
+    dst.write_bytes(bytes(buf))
 
     code = """
 import msl_binding

@@ -291,6 +291,13 @@ def _item_type_present(row: np.void, item_type: int) -> bool:
     )
 
 
+def _item_slot_for_type(row: np.void, item_type: int) -> int:
+    for i, (t, e) in enumerate(zip(row["items"]["type"], row["items"]["exists"])):
+        if int(t) == item_type and int(e) != 0:
+            return i
+    raise AssertionError(f"missing item type {item_type}")
+
+
 def _attrs() -> dict:
     return json.loads((ROOT / "data" / "characters" / "sheik.json").read_text())
 
@@ -576,16 +583,28 @@ def test_sheik_chain_start_spawn_frame_publishes_chain_article_demo_locks(
     record: int, expected_action: int
 ) -> None:
     # ftSk_SpecialS_CheckInitChain increments mv.sk.specials.x0 and spawns It_Kind_Seak_Chain
-    # exactly when x0 reaches ftSeakAttributes::x1C.
+    # exactly when x0 reaches ftSeakAttributes::x1C, at the L3rdNa lb_8000B1CC position rather
+    # than fighter root.
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
     # refs/melee/src/melee/it/items/itseakchain.c::itSeakChain_Spawn
+    # data/items/articles/fox_falco.bin::MSLITAR1 chain_spawn_part_id
     samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
     assert int(samples[record]["seed_t"]["action_id"][0]) == expected_action
     assert int(samples[record]["seed_t"]["sheik_chain_x0_u8"][0]) == 21
-    assert _item_type_present(samples[record]["ref_t1"], ITEM_SHEIK_CHAIN)
+    ref_slot = _item_slot_for_type(ref, ITEM_SHEIK_CHAIN)
+    assert abs(float(ref["items"]["pos_x"][ref_slot]) - float(seed["pos_x"][0])) > 10.0
+    assert abs(float(ref["items"]["pos_y"][ref_slot]) - float(seed["pos_y"][0])) > 5.0
 
     out = _run_sample_row(samples, record)
-    assert _item_type_present(out, ITEM_SHEIK_CHAIN)
+    out_slot = _item_slot_for_type(out, ITEM_SHEIK_CHAIN)
+    assert float(out["items"]["pos_x"][out_slot]) == pytest.approx(
+        float(ref["items"]["pos_x"][ref_slot]), abs=1e-5
+    )
+    assert float(out["items"]["pos_y"][out_slot]) == pytest.approx(
+        float(ref["items"]["pos_y"][ref_slot]), abs=1e-5
+    )
 
 
 @pytest.mark.integration

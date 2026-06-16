@@ -1871,6 +1871,48 @@ static void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int 
       (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
 }
 
+static uint8_t sheik_chain_spawn_anchor_position(const MslBatch* batch,
+                                                 const MslItemArticleParams* ap, size_t owner_idx,
+                                                 float* out_x, float* out_y) {
+  if (batch == NULL || ap == NULL || out_x == NULL || out_y == NULL) {
+    return 0u;
+  }
+  const uint32_t anim_u32 = batch->state.animation_index[owner_idx];
+  if (ap->sheik_chain_spawn_part_id == 0u || anim_u32 > 0xFFFFu) {
+    return 0u;
+  }
+
+  float m[12];
+  const uint16_t msid = (uint16_t)anim_u32;
+  const float anim_frame_f32 = items_cur_anim_frame_f32(batch, owner_idx);
+  if (anim_pose_get_collision_matrix_f32(batch, owner_idx, msid, anim_frame_f32,
+                                         ap->sheik_chain_spawn_part_id, m) != 0) {
+    return 0u;
+  }
+
+  float lx = 0.0f, ly = 0.0f, lz = 0.0f;
+  static const float zero[3] = {0.0f, 0.0f, 0.0f};
+  msl_mtx34_mul_point(m, zero, &lx, &ly, &lz);
+  (void)lx;
+
+  const MslCharParams* chp = msl_char_params_fast(batch->state.char_id[owner_idx]);
+  float model_scaling = 1.0f;
+  if (chp != NULL && chp->model_scaling > 0.0f) {
+    model_scaling = chp->model_scaling;
+  }
+  const float model_scale = batch->state.fighter_scale_y[owner_idx] * model_scaling;
+
+  // Fighter root Y rotation maps source joint Z into stage X. This mirrors the existing
+  // lb_8000B1CC-backed blaster spawn path, but Chain has a zero local offset and keeps only the
+  // sampled L3rdNa joint translation.
+  // refs/melee/src/melee/ft/fighter.c (ftPartSetRotY(fp, 0, M_PI_2 * fp->facing_dir))
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
+  const float facing_dir = batch->state.facing[owner_idx] ? 1.0f : -1.0f;
+  *out_x = batch->state.pos_x[owner_idx] + facing_dir * lz * model_scale;
+  *out_y = batch->state.pos_y[owner_idx] + ly * model_scale;
+  return 1u;
+}
+
 uint8_t items_spawn_sheik_chain_article(MslBatch* batch, size_t owner_idx) {
   if (batch == NULL) {
     return 0u;
@@ -1886,6 +1928,12 @@ uint8_t items_spawn_sheik_chain_article(MslBatch* batch, size_t owner_idx) {
     return 0u;
   }
 
+  float spawn_x = 0.0f;
+  float spawn_y = 0.0f;
+  if (sheik_chain_spawn_anchor_position(batch, ap, owner_idx, &spawn_x, &spawn_y) == 0u) {
+    return 0u;
+  }
+
   const int slot = items_alloc_slot(batch, bi);
   if (slot < 0) {
     return 0u;
@@ -1893,9 +1941,10 @@ uint8_t items_spawn_sheik_chain_article(MslBatch* batch, size_t owner_idx) {
   const size_t ii = msl_idx_item(bi, slot);
   item_slot_clear(batch, ii);
 
-  // ftSk_SpecialS_CheckInitChain spawns It_Kind_Seak_Chain from L3rdNa when
-  // mv.sk.specials.x0 reaches ftSeakAttributes::x1C. The full segment chain is model work; this
-  // publication slice owns the source article identity/lifetime used by replay item lanes.
+  // ftSk_SpecialS_CheckInitChain samples L3rdNa with lb_8000B1CC and spawns It_Kind_Seak_Chain
+  // from that point when mv.sk.specials.x0 reaches ftSeakAttributes::x1C. The full segment chain
+  // remains model work; this slice owns the source article identity, lifetime, and spawn anchor
+  // publication used by replay item lanes.
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
   // refs/melee/src/melee/it/items/itseakchain.c::itSeakChain_Spawn
   batch->state.item_exists[ii] = 1u;
@@ -1905,8 +1954,8 @@ uint8_t items_spawn_sheik_chain_article(MslBatch* batch, size_t owner_idx) {
   batch->state.item_instance_id[ii] = batch->state.instance_id[owner_idx];
   batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
   batch->state.item_direction[ii] = batch->state.facing[owner_idx] ? 1.0f : -1.0f;
-  batch->state.item_pos_x[ii] = batch->state.pos_x[owner_idx];
-  batch->state.item_pos_y[ii] = batch->state.pos_y[owner_idx];
+  batch->state.item_pos_x[ii] = spawn_x;
+  batch->state.item_pos_y[ii] = spawn_y;
   batch->state.item_vel_x[ii] = 0.0f;
   batch->state.item_vel_y[ii] = 0.0f;
   batch->state.item_timer[ii] = (float)ap->sheik_chain_lifetime_frames;

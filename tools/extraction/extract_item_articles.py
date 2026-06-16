@@ -31,6 +31,10 @@ SHEIK_SPECIAL_ARTICLE_CONSTANTS = {
     # refs/melee/src/melee/it/forward.h::ItemKind
     # refs/melee/src/melee/it/items/itseakchain.c::itSeakChain_Spawn
     "chain_itkind": 97,
+    # Source spawn part for `lb_8000B1CC(fp->parts[FtPart_L3rdNa].joint, NULL, &vec)`.
+    # refs/melee/src/melee/ft/forward.h::FtPart_L3rdNa
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
+    "chain_spawn_part_id": 26,
     # Item_80268B18 seeds generic item lifetime from ItemCommonData; keep this article default
     # data-owned alongside the source article kind so runtime has no Sheik Chain literals.
     "chain_lifetime_frames": 1400,
@@ -161,6 +165,7 @@ FIELD_SPECS = {
     "vanish_hitbox_size_keyframe_frame_1": FieldSpec(97, ITEM_ARTICLE_VALUE_U16, UNIT_FRAMES),
     "vanish_hitbox_size_keyframe_value_1": FieldSpec(98, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
     "vanish_hitbox_remove_frame": FieldSpec(99, ITEM_ARTICLE_VALUE_U16, UNIT_FRAMES),
+    "chain_spawn_part_id": FieldSpec(100, ITEM_ARTICLE_VALUE_U16, UNIT_PART_ID),
 }
 
 SHEIK_NEEDLE_FIELD_NAMES = tuple(

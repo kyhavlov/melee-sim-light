@@ -1201,7 +1201,9 @@ cover most of it.
    source-owned latches, not as a gate around ordinary free-running item
    simulation. Finally, separate article state publication from article
    geometry: Sheik Chain state transitions are fighter callback/timer-owned,
-   while full Chain segment pose and hitboxes require a separate article
+   Chain spawn publication is anchored to the source part sampled by
+   `lb_8000B1CC` (`FtPart_L3rdNa` for Sheik) rather than fighter root, and
+   full Chain segment pose and hitboxes require a separate article
    physics/extraction audit. For projectile articles, do not collapse item
    hurtboxes and item HitCapsules into one field: Sheik Needle's Article
    hurtbone descriptor owns fighter-HitCapsule-to-item DmgReceived contact,

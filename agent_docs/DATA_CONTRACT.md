@@ -1737,9 +1737,9 @@ Characters (Fox/Falco/Marth/Sheik):
     - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
   - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
     the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
-  - Binary layout: `MSLITAR1` v7
+  - Binary layout: `MSLITAR1` v8
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 7`
+    - `u32 version = 8`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
@@ -1768,6 +1768,10 @@ Characters (Fox/Falco/Marth/Sheik):
       `ItemCommonData::xF8` (currently 80), not the earlier 60-frame local seed in
       `it_802B1D40`; BODY collision is only active until the script removes the HitCapsule.
       Runtime must not treat `vanish_lifetime_frames` as the damage lifetime.
+    - v8 adds `chain_spawn_part_id`, the `FtPart_L3rdNa` source spawn anchor sampled by
+      `ftSk_SpecialS_CheckInitChain` with `lb_8000B1CC` before `itSeakChain_Spawn`. Runtime Chain
+      article publication must use this generated part id and live pose sampling rather than
+      spawning at fighter root or embedding a local part literal in `src/items.c`.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:
