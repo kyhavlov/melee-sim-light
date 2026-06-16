@@ -33,6 +33,7 @@ B = 0x0200
 
 ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
+ACT_KNEE_BEND = 0x0018
 ACT_JUMP_F = 0x0019
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
@@ -289,6 +290,34 @@ def test_sheik_grounded_b_special_dispatch_order_is_source_ordered() -> None:
     for name, axes, expected in cases:
         out = _run(_seed_base("sheik"), [_mk_inputs(**axes)])[0]
         assert int(out["action_id"][0]) == expected, name
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [1259, 1786])
+def test_sheik_kneebend_iasa_up_b_presence_beats_side_special_demo_lock(record: int) -> None:
+    # KneeBend_IASA does not call the full grounded Wait B-special resolver. It calls
+    # ftCo_Attack100_CheckInput first, and that source path admits only SpecialHi through x686==0.
+    # These demo rows have B+diagonal-up during KneeBend and must enter Vanish, not Chain.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100_CheckInput
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_KNEE_BEND
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_HI_START_0
+
+    out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_HI_START_0
+
+
+def test_sheik_kneebend_iasa_does_not_admit_side_b_negative() -> None:
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_KNEE_BEND)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_KNEE_BEND)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+
+    out = _run(seed, [_mk_inputs(buttons=B, main_x=80)])[0]
+    assert int(out["action_id"][0]) != ACT_SK_SPECIAL_S_START
+    assert int(out["action_id"][0]) == ACT_KNEE_BEND
 
 
 @pytest.mark.integration

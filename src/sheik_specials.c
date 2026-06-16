@@ -113,8 +113,6 @@ static uint8_t sk_action_allows_ground_special(const MslBatch* batch, size_t idx
     case MSL_ACT_OTTOTTO:
     case MSL_ACT_OTTOTTO_WAIT:
       return 1u;
-    case MSL_ACT_KNEE_BEND:
-      return (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_KNEE_BEND) ? 1u : 0u;
     case MSL_ACT_LANDING:
     case MSL_ACT_LANDING_FALL_SPECIAL: {
       const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
@@ -337,17 +335,35 @@ static uint8_t sk_hsd_lr_edge(const MslBatch* batch, const MslCommonParams* c, s
 static uint8_t sk_try_enter_b_special(MslBatch* batch, const MslCommonParams* c,
                                       const MslCharParams* ch, size_t idx, uint8_t ground) {
   if (batch == NULL || c == NULL || ch == NULL || batch->state.hitlag[idx] != 0u ||
-      batch->state.hitstun[idx] != 0u ||
-      (batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u) {
+      batch->state.hitstun[idx] != 0u) {
     return 0u;
   }
   const uint16_t a = batch->state.action_id[idx];
+  const uint8_t b_edge =
+      ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) != 0u) ? 1u : 0u;
+  const uint8_t up_b_present = (batch->state.x686[idx] == 0u) ? 1u : 0u;
   if (ground) {
+    if (a == (uint16_t)MSL_ACT_KNEE_BEND) {
+      if (batch->state.prev_action_id[idx] != (uint16_t)MSL_ACT_KNEE_BEND || !up_b_present) {
+        return 0u;
+      }
+      // KneeBend_IASA does not run the ordinary grounded B-special chain. It calls
+      // ftCo_Attack100_CheckInput, whose only special path is ftData_SpecialHi when fp->x686 == 0.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100_CheckInput
+      sk_enter_specialhi(batch, ch, idx, 1u);
+      return 1u;
+    }
+    if (!b_edge) {
+      return 0u;
+    }
     if (!sk_action_allows_ground_special(batch, idx, a)) {
       return 0u;
     }
-  } else if (!sk_action_allows_air_special(a)) {
-    return 0u;
+  } else {
+    if (!b_edge || !sk_action_allows_air_special(a)) {
+      return 0u;
+    }
   }
   const float sx = sk_deadzone(sk_stick_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
   const float sy = sk_deadzone(sk_stick_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);

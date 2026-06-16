@@ -1034,6 +1034,12 @@ cover most of it.
      (Dash=side-only, KneeBend=up-only post-entry, SquatWait=up/down,
      Turn=no-neutral, RunBrake/TurnRun=none, RunDirect/SquatRv/OttottoWait
      included; AppealS blocked when data-absent).
+   - KneeBend is not a generic grounded special resolver callsite.
+     `ftCo_KneeBend_IASA` calls `ftCo_Attack100_CheckInput`, so the only
+     special it can enter is Up-B through the `x686 == 0` up+B presence lane.
+     Do not let diagonal B become Side-B/Neutral-B/Down-B from KneeBend just
+     because Wait resolves those directions. Sheik exposed this with
+     `sheik_demo_game.msl:{1259,1786}:p0`.
    - Grounded resolution order is source order: SpecialS -> up -> neutral
      (D6824) -> down (D68C0). Watch same-frame races (Run_IASA dispatches
      before RunBrake entry — the brake entry frame honors Run's chain).
