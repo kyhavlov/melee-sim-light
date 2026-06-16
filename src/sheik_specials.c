@@ -46,11 +46,31 @@ static uint8_t sk_timer_saturating_inc(uint8_t x) {
   return x == UINT8_MAX ? UINT8_MAX : (uint8_t)(x + 1u);
 }
 
+static void sk_arm_vanish_smoke_accessory(MslBatch* batch, size_t idx) {
+  // Source assigns fp->accessory4_cb = fn_80112ED8; Fighter_8006C80C consumes accessory4 after
+  // procUpdate physics and procMap collision, so article publication samples the final same-frame
+  // JObj pose/action rather than the transition-time pose.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{inlineA0,ftSk_SpecialHi_80113324,ftSk_SpecialHi_80113390}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procMap,Fighter_8006C80C}
+  batch->state.sheik_vanish_smoke_accessory_pending[idx] = 1u;
+}
+
 static void sk_enter(MslBatch* batch, size_t idx, uint16_t action_id, float start_frame,
                      float anim_rate) {
   batch->state.action_id[idx] = action_id;
   batch->state.animation_index[idx] = (uint32_t)sk_submotion(action_id);
   msl_anim_timebase_enter(batch, idx, start_frame, anim_rate);
+}
+
+static void sk_enter_vanish_start1_then_freeze(MslBatch* batch, size_t idx, uint16_t action_id) {
+  // AS_SheikUpBTravel{Ground,Air} enters at frame 35/rate 1, explicitly advances once via
+  // ftAnim_8006EBA4, then freezes the AObj with ftAnim_SetAnimRate(0). The accessory4 smoke
+  // callback samples the post-advance JObj pose.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{ftSk_SpecialHi_80113838,ftSk_SpecialHi_80113A30}
+  sk_enter(batch, idx, action_id, 35.0f, 1.0f);
+  msl_anim_timebase_tick_once(batch, idx);
+  batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+  msl_anim_timebase_recompute_derived(batch, idx);
 }
 
 static uint8_t sk_try_enter_b_special(MslBatch* batch, const MslCommonParams* c,
@@ -244,10 +264,16 @@ static void sk_enter_specials(MslBatch* batch, size_t idx, uint8_t ground, float
   msl_anim_timebase_tick_once(batch, idx);
 }
 
-static void sk_vanish_callback_stick(const MslBatch* batch, size_t idx, float* out_sx,
-                                     float* out_sy, float* out_mag) {
-  float sx = sk_stick_unit(batch->state.prev_input_main_x[idx]);
-  float sy = sk_stick_unit(batch->state.prev_input_main_y[idx]);
+static void sk_vanish_callback_stick(const MslBatch* batch, const MslCommonParams* c, size_t idx,
+                                     float* out_sx, float* out_sy, float* out_mag) {
+  // ftSk_SpecialHi_80113838 / 80113A30 read callback-visible fp->input.lstick, after the common
+  // stick preprocessing deadzone. Replay raw axes below that threshold must not tilt the launch
+  // vector away from the source's cardinal boundary.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{ftSk_SpecialHi_80113838,ftSk_SpecialHi_80113A30}
+  const float dz_x = (c != NULL) ? c->lstick_deadzone_x : 0.0f;
+  const float dz_y = (c != NULL) ? c->lstick_deadzone_y : 0.0f;
+  float sx = sk_deadzone(sk_stick_unit(batch->state.prev_input_main_x[idx]), dz_x);
+  float sy = sk_deadzone(sk_stick_unit(batch->state.prev_input_main_y[idx]), dz_y);
   float mag = sqrtf(sx * sx + sy * sy);
   if (mag > 1.0f) {
     mag = 1.0f;
@@ -263,11 +289,12 @@ static void sk_vanish_callback_stick(const MslBatch* batch, size_t idx, float* o
   }
 }
 
-static void sk_vanish_enter_air_travel(MslBatch* batch, const MslCharParams* ch, size_t idx) {
+static void sk_vanish_enter_air_travel(MslBatch* batch, const MslCommonParams* c,
+                                       const MslCharParams* ch, size_t idx) {
   float sx = 0.0f;
   float sy = 0.0f;
   float mag = 0.0f;
-  sk_vanish_callback_stick(batch, idx, &sx, &sy, &mag);
+  sk_vanish_callback_stick(batch, c, idx, &sx, &sy, &mag);
   if (mag <= ch->sheik_vanish_stick_mag_min) {
     sx = 0.0f;
     sy = 1.0f;
@@ -286,21 +313,20 @@ static void sk_vanish_enter_air_travel(MslBatch* batch, const MslCharParams* ch,
       (ch->sheik_vanish_travel_frames > 0 && ch->sheik_vanish_travel_frames < 255)
           ? (uint8_t)ch->sheik_vanish_travel_frames
           : 0u;
-  sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1, 35.0f, 0.0f);
-  (void)items_spawn_sheik_vanish_smoke_article(batch, idx);
-  msl_anim_timebase_tick_once(batch, idx);
+  sk_enter_vanish_start1_then_freeze(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1);
+  sk_arm_vanish_smoke_accessory(batch, idx);
 }
 
-static void sk_vanish_enter_travel(MslBatch* batch, const MslCharParams* ch, size_t idx,
-                                   uint8_t ground) {
+static void sk_vanish_enter_travel(MslBatch* batch, const MslCommonParams* c,
+                                   const MslCharParams* ch, size_t idx, uint8_t ground) {
   if (!ground) {
-    sk_vanish_enter_air_travel(batch, ch, idx);
+    sk_vanish_enter_air_travel(batch, c, ch, idx);
     return;
   }
   float sx = 0.0f;
   float sy = 0.0f;
   float mag = 0.0f;
-  sk_vanish_callback_stick(batch, idx, &sx, &sy, &mag);
+  sk_vanish_callback_stick(batch, c, idx, &sx, &sy, &mag);
   const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
   const uint8_t is_platform = mpcoll_is_on_platform(batch, bi, idx);
   const float floor_dot =
@@ -323,16 +349,15 @@ static void sk_vanish_enter_travel(MslBatch* batch, const MslCharParams* ch, siz
         (ch->sheik_vanish_travel_frames > 0 && ch->sheik_vanish_travel_frames < 255)
             ? (uint8_t)ch->sheik_vanish_travel_frames
             : 0u;
-    sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_1, 35.0f, 0.0f);
-    (void)items_spawn_sheik_vanish_smoke_article(batch, idx);
-    msl_anim_timebase_tick_once(batch, idx);
+    sk_enter_vanish_start1_then_freeze(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_1);
+    sk_arm_vanish_smoke_accessory(batch, idx);
     return;
   }
   if (is_platform && batch->state.ground_id[idx] != 0xFFFFu) {
     msl_mpcoll_update_floor_skip(batch, idx, batch->state.ground_id[idx]);
   }
   batch->state.on_ground[idx] = 0u;
-  sk_vanish_enter_air_travel(batch, ch, idx);
+  sk_vanish_enter_air_travel(batch, c, ch, idx);
 }
 
 static void sk_enter_specialhi(MslBatch* batch, const MslCharParams* ch, size_t idx,
@@ -659,7 +684,7 @@ static void sk_update_specialhi(MslBatch* batch, const MslCommonParams* c, const
     case MSL_ACT_SK_SPECIAL_HI_START_0:
     case MSL_ACT_SK_SPECIAL_AIR_HI_START_0:
       if (sk_anim_finished(batch, idx, a)) {
-        sk_vanish_enter_travel(batch, ch, idx,
+        sk_vanish_enter_travel(batch, c, ch, idx,
                                a == (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_0 ? 1u : 0u);
       }
       break;
@@ -868,6 +893,27 @@ void sheik_specials_update_pre_physics(MslBatch* batch) {
   }
 }
 
+void sheik_specials_update_accessory4_phase(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
+          batch->state.sheik_vanish_smoke_accessory_pending[idx] == 0u) {
+        continue;
+      }
+      if (batch->state.hitlag_started_frame[idx] != 0) {
+        continue;
+      }
+      batch->state.sheik_vanish_smoke_accessory_pending[idx] = 0u;
+      (void)items_spawn_sheik_vanish_smoke_article(batch, idx);
+    }
+  }
+}
+
 static float sk_apply_air_friction(float vel, float friction) {
   float a = friction;
   if (fabsf(a) >= fabsf(vel)) {
@@ -901,6 +947,25 @@ static void sk_apply_common_fall(MslBatch* batch, const MslCharParams* ch, size_
   batch->state.speed_air_x_self[idx] = vx;
 }
 
+static void sk_apply_ground_friction_f3c(MslBatch* batch, const MslCharParams* ch, size_t idx) {
+  // ft_80084F3C applies ordinary ground friction, with the common high-speed multiplier when
+  // |gr_vel| exceeds walk_max.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
+  const MslCommonParams* c = msl_common_params();
+  float friction = ch->gr_friction;
+  float v = batch->state.speed_ground_x_self[idx];
+  if (fabsf(v) > ch->walk_max_vel && c != NULL) {
+    friction *= c->high_speed_friction_mul;
+  }
+  if (v > 0.0f) {
+    v = (v > friction) ? v - friction : 0.0f;
+  } else if (v < 0.0f) {
+    v = (v < -friction) ? v + friction : 0.0f;
+  }
+  batch->state.speed_ground_x_self[idx] = v;
+  batch->state.speed_air_x_self[idx] = v;
+}
+
 uint8_t sheik_specials_phys(MslBatch* batch, size_t idx) {
   if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;
@@ -911,6 +976,12 @@ uint8_t sheik_specials_phys(MslBatch* batch, size_t idx) {
   }
   const uint16_t a = batch->state.action_id[idx];
   switch (a) {
+    case MSL_ACT_SK_SPECIAL_HI_START_0:
+      // ftSk_SpecialHiStart_0_Phys: grounded Vanish startup uses ft_80084F3C before Coll can
+      // floor-loss into aerial Start0 and publish the accessory4 smoke callback.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialHiStart_0_Phys
+      sk_apply_ground_friction_f3c(batch, ch, idx);
+      return 1u;
     case MSL_ACT_SK_SPECIAL_AIR_HI_START_0:
       sk_apply_common_fall(batch, ch, idx, ch->sheik_vanish_start_air_gravity,
                            ch->sheik_vanish_start_air_terminal_vel);
@@ -992,7 +1063,7 @@ uint8_t sheik_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
       // by normal travel entry.
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
       //   ftSk_SpecialHiStart_0_Coll,ftSk_SpecialHi_80113324,fn_80112ED8}
-      (void)items_spawn_sheik_vanish_smoke_article(batch, idx);
+      sk_arm_vanish_smoke_accessory(batch, idx);
       return 1u;
     case MSL_ACT_SK_SPECIAL_HI_START_1:
       sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1,
@@ -1055,7 +1126,7 @@ uint8_t sheik_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {
       // installs fn_80112ED8 at the preserved Start0 frame.
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
       //   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialHi_80113390,fn_80112ED8}
-      (void)items_spawn_sheik_vanish_smoke_article(batch, idx);
+      sk_arm_vanish_smoke_accessory(batch, idx);
       return 1u;
     case MSL_ACT_SK_SPECIAL_AIR_HI_START_1:
       // ftSk_SpecialAirHi_Coll enters the grounded travel state after the common collision path

@@ -675,6 +675,7 @@ def test_sheik_overlay_masks_survive_fresh_character_attr_extraction(tmp_path: P
             "vanish_hitbox_size_keyframe_value_1",
             "vanish_hitbox_remove_frame",
             "chain_spawn_part_id",
+            "vanish_spawn_part_id",
         )
     }
     seen = {rec.field_id for rec in table.records if rec.char_id == 19}
@@ -713,6 +714,7 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
     assert "chain_spawn_part_id" in fields
     assert "chain_lifetime_frames" in fields
     assert "vanish_itkind" in fields
+    assert "vanish_spawn_part_id" in fields
     assert "vanish_lifetime_frames" in fields
     assert "vanish_hitbox_damage" in fields
     assert "vanish_hitbox_flags" in fields
@@ -815,6 +817,7 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         "chain_spawn_part_id": 26,
         "chain_lifetime_frames": 1400,
         "vanish_itkind": 85,
+        "vanish_spawn_part_id": 4,
         "vanish_lifetime_frames": 80,
     }
     assert set(SHEIK_SPECIAL_ARTICLE_FIELD_NAMES) == set(sheik_special_expected)

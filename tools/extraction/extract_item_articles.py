@@ -41,6 +41,10 @@ SHEIK_SPECIAL_ARTICLE_CONSTANTS = {
     # refs/melee/src/melee/it/forward.h::ItemKind
     # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
     "vanish_itkind": 85,
+    # Source spawn part for `lb_8000B1CC(fp->parts[FtPart_HipN].joint, NULL, &pos)`.
+    # refs/melee/src/melee/ft/forward.h::FtPart_HipN
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialHi_80112F48
+    "vanish_spawn_part_id": 4,
 }
 SHEIK_SPECIAL_ARTICLE_COMMON_LIFETIME_KEYS = {
     "vanish_lifetime_frames": "default_spawn_lifetime_frames",
@@ -166,6 +170,7 @@ FIELD_SPECS = {
     "vanish_hitbox_size_keyframe_value_1": FieldSpec(98, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
     "vanish_hitbox_remove_frame": FieldSpec(99, ITEM_ARTICLE_VALUE_U16, UNIT_FRAMES),
     "chain_spawn_part_id": FieldSpec(100, ITEM_ARTICLE_VALUE_U16, UNIT_PART_ID),
+    "vanish_spawn_part_id": FieldSpec(101, ITEM_ARTICLE_VALUE_U16, UNIT_PART_ID),
 }
 
 SHEIK_NEEDLE_FIELD_NAMES = tuple(

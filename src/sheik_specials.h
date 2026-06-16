@@ -44,6 +44,7 @@ static inline uint8_t sheik_action_is_special(uint16_t action_id) {
 }
 
 void sheik_specials_update_pre_physics(MslBatch* batch);
+void sheik_specials_update_accessory4_phase(MslBatch* batch);
 uint8_t sheik_specials_phys(MslBatch* batch, size_t idx);
 uint8_t sheik_special_try_landing_iasa(MslBatch* batch, size_t idx);
 uint8_t sheik_special_try_vanish_travel_wallceil_end(MslBatch* batch, size_t idx);

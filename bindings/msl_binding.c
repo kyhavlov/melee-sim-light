@@ -4544,7 +4544,8 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
     PyList_SET_ITEM(hb_flags, i, PyLong_FromUnsignedLong((unsigned long)p->needle_hitbox_flags[i]));
   }
   PyObject* out = Py_BuildValue(
-      "{s:i,s:i,s:i,s:i,s:i,s:f,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:f,s:i,s:i,s:"
+      "{s:i,s:i,s:i,s:i,s:i,s:f,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:f,s:i,s:"
+      "i,s:"
       "N,s:"
       "N,s:f,s:f,s:i,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N}",
       "blaster_shot_itkind", (int)p->blaster_shot_itkind, "blaster_gun_itkind",
@@ -4559,6 +4560,7 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
       (int)p->needle_bounce_lifetime_frames, "sheik_chain_itkind", (int)p->sheik_chain_itkind,
       "sheik_chain_spawn_part_id", (int)p->sheik_chain_spawn_part_id, "sheik_chain_lifetime_frames",
       (int)p->sheik_chain_lifetime_frames, "sheik_vanish_itkind", (int)p->sheik_vanish_itkind,
+      "sheik_vanish_spawn_part_id", (int)p->sheik_vanish_spawn_part_id,
       "sheik_vanish_lifetime_frames", (int)p->sheik_vanish_lifetime_frames, "needle_launch_speed",
       (double)p->needle_launch_speed, "needle_hurtbox_count", (int)p->needle_hurtbox_count,
       "needle_hurtbox_bone_id", (int)p->needle_hurtbox_bone_id, "needle_hurtbox_a_offset",
@@ -5887,6 +5889,30 @@ static PyObject* msl_debug_set_hitlag_py(PyObject* self, PyObject* args) {
       msl_batch_debug_set_hitlag(h->batch, batch_index, player_index, (uint16_t)hitlag_frames);
   if (err != 0) {
     PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hitlag failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_set_sheik_vanish_smoke_accessory_pending_py(PyObject* self,
+                                                                       PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int pending = 0;
+  if (!PyArg_ParseTuple(args, "Oiii", &handle_obj, &batch_index, &player_index, &pending)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_sheik_vanish_smoke_accessory_pending(
+      h->batch, batch_index, player_index, (uint8_t)(pending ? 1u : 0u));
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError,
+                 "msl_batch_debug_set_sheik_vanish_smoke_accessory_pending failed: %d", err);
     return NULL;
   }
   Py_RETURN_NONE;
@@ -7739,6 +7765,9 @@ static PyMethodDef methods[] = {
      "debug_combat_resolve(handle) -> run combat_resolve() only"},
     {"debug_set_hitlag", msl_debug_set_hitlag_py, METH_VARARGS,
      "debug_set_hitlag(handle, batch_index, player_index, hitlag_frames_u16)"},
+    {"debug_set_sheik_vanish_smoke_accessory_pending",
+     msl_debug_set_sheik_vanish_smoke_accessory_pending_py, METH_VARARGS,
+     "debug_set_sheik_vanish_smoke_accessory_pending(handle, batch_index, player_index, pending)"},
     {"debug_set_damage_source", msl_debug_set_damage_source_py, METH_VARARGS,
      "debug_set_damage_source(handle, batch_index, player_index, last_hit_by_u8, "
      "instance_hit_by_u16)"},

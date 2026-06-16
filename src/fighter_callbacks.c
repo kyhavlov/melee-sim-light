@@ -26,6 +26,7 @@
 #include "knockdown.h"
 #include "physics.h"
 #include "shields.h"
+#include "sheik_specials.h"
 #include "shine.h"
 #include "specialhi_pose.h"
 #include "stage_collision.h"
@@ -677,6 +678,7 @@ static void fighter_callbacks_collision_phase(MslBatch* batch) {
   blaster_update_post_collision(batch);
   locomotion_update_post_collision(batch);
   shine_update_post_collision(batch);
+  sheik_specials_update_accessory4_phase(batch);
 }
 
 static void fighter_callbacks_primitive_refresh_phase(MslBatch* batch, uint8_t run_combat) {

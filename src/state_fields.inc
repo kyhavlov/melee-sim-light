@@ -321,6 +321,7 @@ MSL_STATE_FIELD(speciallw_countered_damage, uint16_t, bp, (size_t)MSL_MAX_PLAYER
 MSL_STATE_FIELD(sheik_needle_count, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(sheik_special_timer, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(sheik_special_latch, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(sheik_vanish_smoke_accessory_pending, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(special_stick_angle, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(specials_air_used, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(fallspecial_mobility_mul, float, bp, (size_t)MSL_MAX_PLAYERS)

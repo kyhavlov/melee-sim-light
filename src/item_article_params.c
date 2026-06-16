@@ -10,7 +10,7 @@
 #include "alloc.h"
 
 enum {
-  MSLITAR1_VERSION = 8,
+  MSLITAR1_VERSION = 9,
   MSLITAR1_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1,
   MSLITAR1_VALUE_U16 = 1,
   MSLITAR1_VALUE_U32 = 2,
@@ -78,10 +78,11 @@ enum {
   MSLITAR1_FIELD_VANISH_HITBOX_SIZE_KEYFRAME_VALUE_1 = 98,
   MSLITAR1_FIELD_VANISH_HITBOX_REMOVE_FRAME = 99,
   MSLITAR1_FIELD_SHEIK_CHAIN_SPAWN_PART_ID = 100,
+  MSLITAR1_FIELD_SHEIK_VANISH_SPAWN_PART_ID = 101,
   MSLITAR1_FIELD_NEEDLE_FIRST = MSLITAR1_FIELD_NEEDLE_THROW_ITKIND,
   MSLITAR1_FIELD_SHEIK_SPECIAL_FIRST = MSLITAR1_FIELD_SHEIK_CHAIN_ITKIND,
-  MSLITAR1_FIELD_SHEIK_SPECIAL_LAST = MSLITAR1_FIELD_SHEIK_CHAIN_SPAWN_PART_ID,
-  MSLITAR1_FIELD_SHEIK_SPECIAL_REQUIRED_MASK = 0x1Fu,
+  MSLITAR1_FIELD_SHEIK_SPECIAL_LAST = MSLITAR1_FIELD_SHEIK_VANISH_SPAWN_PART_ID,
+  MSLITAR1_FIELD_SHEIK_SPECIAL_REQUIRED_MASK = 0x3Fu,
   MSLITAR1_FIELD_VANISH_HITBOX_FIRST = MSLITAR1_FIELD_VANISH_HITBOX_COUNT,
   MSLITAR1_FIELD_VANISH_HITBOX_LAST = MSLITAR1_FIELD_VANISH_HITBOX_REMOVE_FRAME,
   MSLITAR1_FIELD_VANISH_HITBOX_REQUIRED_MASK =
@@ -173,6 +174,8 @@ static uint8_t sheik_special_required_bit_for_field(uint16_t field_id) {
       return 3u;
     case MSLITAR1_FIELD_SHEIK_CHAIN_SPAWN_PART_ID:
       return 4u;
+    case MSLITAR1_FIELD_SHEIK_VANISH_SPAWN_PART_ID:
+      return 5u;
     default:
       return 0xFFu;
   }
@@ -309,6 +312,10 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
     case MSLITAR1_FIELD_SHEIK_VANISH_ITKIND:
       if (value_type != MSLITAR1_VALUE_U16) return -1;
       rec->sheik_vanish_itkind = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_SHEIK_VANISH_SPAWN_PART_ID:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->sheik_vanish_spawn_part_id = (uint16_t)u32_value;
       break;
     case MSLITAR1_FIELD_SHEIK_VANISH_LIFETIME_FRAMES:
       if (value_type != MSLITAR1_VALUE_U32) return -1;
@@ -594,6 +601,7 @@ int item_article_params_init(void) {
       g_tbl.by_char[7].sheik_chain_spawn_part_id == 0u ||
       g_tbl.by_char[7].sheik_chain_lifetime_frames == 0u ||
       g_tbl.by_char[7].sheik_vanish_itkind == 0u ||
+      g_tbl.by_char[7].sheik_vanish_spawn_part_id == 0u ||
       g_tbl.by_char[7].sheik_vanish_lifetime_frames == 0u ||
       g_tbl.by_char[7].vanish_hitbox_count == 0u ||
       !(g_tbl.by_char[7].vanish_hitbox_damage > 0.0f) ||

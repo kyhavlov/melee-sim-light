@@ -528,17 +528,34 @@ def test_sheik_vanish_travel_entry_spawns_smoke_article_demo_locks(
     record: int, expected_action: int
 ) -> None:
     # Travel entry installs fn_80112ED8, whose accessory callback spawns It_Kind_Seak_Vanish
-    # through it_802B1C60 in the same item/accessory phase. Cover both the air and ground travel
-    # entry paths from the demo fixture.
+    # through it_802B1C60 after procMap/collision in Fighter_8006C80C's accessory phase. Cover
+    # both the air and ground travel entry paths from the demo fixture.
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
     #   inlineA0,ftSk_SpecialHi_80113A30,fn_80112ED8,ftSk_SpecialHi_80112F48}
     # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
     samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
     assert int(samples[record]["seed_t"]["action_id"][0]) == expected_action
+    assert int(samples[record]["ref_t1"]["action_id"][0]) in (
+        ACT_SK_SPECIAL_HI_START_1,
+        ACT_SK_SPECIAL_AIR_HI_START_0,
+        ACT_SK_SPECIAL_AIR_HI_START_1,
+    )
     assert _item_type_present(samples[record]["ref_t1"], ITEM_SHEIK_VANISH)
 
     out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == int(samples[record]["ref_t1"]["action_id"][0])
     assert _item_type_present(out, ITEM_SHEIK_VANISH)
+    ref_slot = _item_slot_for_type(samples[record]["ref_t1"], ITEM_SHEIK_VANISH)
+    out_slot = _item_slot_for_type(out, ITEM_SHEIK_VANISH)
+    assert float(out["items"]["timer"][out_slot]) == pytest.approx(
+        float(samples[record]["ref_t1"]["items"]["timer"][ref_slot]), abs=1e-6
+    )
+    assert float(out["items"]["pos_x"][out_slot]) == pytest.approx(
+        float(samples[record]["ref_t1"]["items"]["pos_x"][ref_slot]), abs=1e-5
+    )
+    assert float(out["items"]["pos_y"][out_slot]) == pytest.approx(
+        float(samples[record]["ref_t1"]["items"]["pos_y"][ref_slot]), abs=1e-5
+    )
 
 
 def test_sheik_non_vanish_special_does_not_spawn_smoke_article_negative() -> None:
@@ -547,6 +564,46 @@ def test_sheik_non_vanish_special_does_not_spawn_smoke_article_negative() -> Non
     seed["animation_index"][0, 0] = np.uint32(298)
     seed["anim_frame_f32"][0, 0] = np.float32(39.0)
     out = _run(seed, [_mk_inputs()])[0]
+    assert not _item_type_present(out, ITEM_SHEIK_VANISH)
+
+
+def test_sheik_vanish_pending_accessory_is_runtime_only_and_clears_on_reseed() -> None:
+    # Regression for runtime-only accessory4 state: reseed writes SoA fields directly instead of
+    # entering a MotionState, so it must clear stale pending callbacks explicitly.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::fn_80112ED8
+    import msl_binding
+
+    stale_seed = _seed_base("sheik")
+    stale_seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_AIR_HI_START_0)
+    stale_seed["animation_index"][0, 0] = np.uint32(310)
+    stale_seed["anim_frame_f32"][0, 0] = np.float32(8.0)
+
+    next_seed = _seed_base("sheik")
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    stale_seed_bytes = stale_seed.view(np.uint8).reshape((1, seed_stride)).copy()
+    next_seed_bytes = next_seed.view(np.uint8).reshape((1, seed_stride)).copy()
+    prev = _mk_inputs().reshape((1, input_stride)).copy()
+    cur = _mk_inputs().reshape((1, input_stride)).copy()
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, stale_seed_bytes)
+        msl_binding.debug_set_sheik_vanish_smoke_accessory_pending(handle, 0, 0, 1)
+        msl_binding.debug_set_hitlag(handle, 0, 0, 2)
+        msl_binding.reseed_seed(handle, next_seed_bytes)
+        msl_binding.step_input(handle, prev, cur)
+        msl_binding.write_compare(handle, out_bytes)
+    finally:
+        msl_binding.destroy(handle)
+
+    out = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+    assert int(out["action_id"][0]) == ACT_WAIT
     assert not _item_type_present(out, ITEM_SHEIK_VANISH)
 
 

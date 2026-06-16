@@ -2282,6 +2282,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.seed_prev_action_id[idx] = seed->seed_prev_action_id[p];
       batch->state.seed_prev_action_frame[idx] = seed->seed_prev_action_frame[p];
       batch->state.blaster_gun_spawned_this_frame[idx] = 0u;
+      batch->state.sheik_vanish_smoke_accessory_pending[idx] = 0u;
       batch->state.illusion_ghost_pos0_x[idx] = seed->illusion_ghost_pos0_x[p];
       batch->state.illusion_ghost_pos0_y[idx] = seed->illusion_ghost_pos0_y[p];
       batch->state.illusion_ghost_pos1_x[idx] = seed->illusion_ghost_pos1_x[p];
@@ -6859,6 +6860,23 @@ int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_inde
 
   const size_t idx = msl_idx_player(batch_index, player_index);
   batch->state.hitlag[idx] = hitlag_frames;
+  return 0;
+}
+
+int msl_batch_debug_set_sheik_vanish_smoke_accessory_pending(MslBatch* batch, int batch_index,
+                                                             int player_index, uint8_t pending) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  batch->state.sheik_vanish_smoke_accessory_pending[idx] = pending ? 1u : 0u;
   return 0;
 }
 

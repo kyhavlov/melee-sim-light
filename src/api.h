@@ -2710,6 +2710,8 @@ int msl_batch_debug_set_prev_action_id(MslBatch* batch, int batch_index, int pla
                                        uint16_t prev_action_id);
 int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_index,
                                uint16_t hitlag_frames);
+int msl_batch_debug_set_sheik_vanish_smoke_accessory_pending(MslBatch* batch, int batch_index,
+                                                             int player_index, uint8_t pending);
 int msl_batch_debug_set_damage_source(MslBatch* batch, int batch_index, int player_index,
                                       uint8_t last_hit_by, uint16_t instance_hit_by);
 int msl_batch_debug_set_damage_phase(MslBatch* batch, int batch_index, int player_index,

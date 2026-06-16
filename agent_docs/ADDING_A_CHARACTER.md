@@ -1203,7 +1203,9 @@ cover most of it.
    geometry: Sheik Chain state transitions are fighter callback/timer-owned,
    Chain spawn publication is anchored to the source part sampled by
    `lb_8000B1CC` (`FtPart_L3rdNa` for Sheik) rather than fighter root, and
-   full Chain segment pose and hitboxes require a separate article
+   Vanish smoke article publication similarly samples `FtPart_HipN` before the
+   item spawn. These spawn anchors are article-publication owners; full Chain
+   segment pose and hitboxes and Vanish smoke BODY damage require separate article
    physics/extraction audit. For projectile articles, do not collapse item
    hurtboxes and item HitCapsules into one field: Sheik Needle's Article
    hurtbone descriptor owns fighter-HitCapsule-to-item DmgReceived contact,

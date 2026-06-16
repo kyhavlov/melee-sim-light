@@ -47,6 +47,7 @@ def test_runtime_item_article_params_known_values() -> None:
     assert sheik["sheik_chain_spawn_part_id"] == 26
     assert sheik["sheik_chain_lifetime_frames"] == 1400
     assert sheik["sheik_vanish_itkind"] == 85
+    assert sheik["sheik_vanish_spawn_part_id"] == 4
     assert sheik["sheik_vanish_lifetime_frames"] == 80
     assert sheik["vanish_hitbox_count"] == 1
     assert sheik["vanish_hitbox_damage"] == pytest.approx(12.0)
@@ -99,7 +100,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_needle_record(tmp_pat
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 8
+    assert version == 9
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -136,7 +137,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_hitbox_record(
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 8
+    assert version == 9
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -173,7 +174,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_active_window_
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 8
+    assert version == 9
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -209,13 +210,49 @@ def test_runtime_item_article_params_rejects_zero_sheik_chain_spawn_part_id(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 8
+    assert version == 9
     record_size = 24
     patched = False
     for i in range(count):
         off = 16 + i * record_size
         char_id, char_domain, value_type, field_id = struct.unpack_from("<HBBH", buf, off)
         if (char_id, char_domain, value_type, field_id) == (19, 1, 1, 100):
+            struct.pack_into("<I", buf, off + 8, 0)
+            patched = True
+            break
+    assert patched
+    dst.write_bytes(bytes(buf))
+
+    code = """
+import msl_binding
+try:
+    msl_binding.item_article_params(7)
+except RuntimeError:
+    raise SystemExit(0)
+raise SystemExit(1)
+"""
+    env = dict(os.environ)
+    env["MSL_DATA_DIR"] = str(data_dir)
+    proc = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
+def test_runtime_item_article_params_rejects_zero_sheik_vanish_spawn_part_id(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    dst = data_dir / "items" / "articles" / "fox_falco.bin"
+    dst.parent.mkdir(parents=True)
+    buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
+
+    version, count = struct.unpack_from("<II", buf, 8)
+    assert version == 9
+    record_size = 24
+    patched = False
+    for i in range(count):
+        off = 16 + i * record_size
+        char_id, char_domain, value_type, field_id = struct.unpack_from("<HBBH", buf, off)
+        if (char_id, char_domain, value_type, field_id) == (19, 1, 1, 101):
             struct.pack_into("<I", buf, off + 8, 0)
             patched = True
             break

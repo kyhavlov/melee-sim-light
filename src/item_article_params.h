@@ -29,6 +29,7 @@ typedef struct MslItemArticleParams {
   uint16_t sheik_chain_spawn_part_id;
   uint16_t sheik_chain_lifetime_frames;
   uint16_t sheik_vanish_itkind;
+  uint16_t sheik_vanish_spawn_part_id;
   uint16_t sheik_vanish_lifetime_frames;
   uint8_t vanish_hitbox_count;
   float laser_damage;

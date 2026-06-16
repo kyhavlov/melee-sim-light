@@ -1737,9 +1737,9 @@ Characters (Fox/Falco/Marth/Sheik):
     - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
   - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
     the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
-  - Binary layout: `MSLITAR1` v8
+  - Binary layout: `MSLITAR1` v9
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 8`
+    - `u32 version = 9`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
@@ -1772,6 +1772,10 @@ Characters (Fox/Falco/Marth/Sheik):
       `ftSk_SpecialS_CheckInitChain` with `lb_8000B1CC` before `itSeakChain_Spawn`. Runtime Chain
       article publication must use this generated part id and live pose sampling rather than
       spawning at fighter root or embedding a local part literal in `src/items.c`.
+    - v9 adds `vanish_spawn_part_id`, the `FtPart_HipN` source spawn anchor sampled by
+      `ftSk_SpecialHi_80112F48` with `lb_8000B1CC` before `it_802B1C60`. This only owns Vanish
+      smoke article publication. Vanish smoke BODY damage still requires the item callback/contact
+      phase to be bounded separately.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:

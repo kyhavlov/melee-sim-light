@@ -1871,22 +1871,22 @@ static void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int 
       (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
 }
 
-static uint8_t sheik_chain_spawn_anchor_position(const MslBatch* batch,
-                                                 const MslItemArticleParams* ap, size_t owner_idx,
-                                                 float* out_x, float* out_y) {
-  if (batch == NULL || ap == NULL || out_x == NULL || out_y == NULL) {
+static uint8_t sheik_article_spawn_anchor_position(const MslBatch* batch, size_t owner_idx,
+                                                   uint16_t spawn_part_id, float* out_x,
+                                                   float* out_y) {
+  if (batch == NULL || out_x == NULL || out_y == NULL) {
     return 0u;
   }
   const uint32_t anim_u32 = batch->state.animation_index[owner_idx];
-  if (ap->sheik_chain_spawn_part_id == 0u || anim_u32 > 0xFFFFu) {
+  if (spawn_part_id == 0u || anim_u32 > 0xFFFFu) {
     return 0u;
   }
 
   float m[12];
   const uint16_t msid = (uint16_t)anim_u32;
   const float anim_frame_f32 = items_cur_anim_frame_f32(batch, owner_idx);
-  if (anim_pose_get_collision_matrix_f32(batch, owner_idx, msid, anim_frame_f32,
-                                         ap->sheik_chain_spawn_part_id, m) != 0) {
+  if (anim_pose_get_collision_matrix_f32(batch, owner_idx, msid, anim_frame_f32, spawn_part_id,
+                                         m) != 0) {
     return 0u;
   }
 
@@ -1903,10 +1903,11 @@ static uint8_t sheik_chain_spawn_anchor_position(const MslBatch* batch,
   const float model_scale = batch->state.fighter_scale_y[owner_idx] * model_scaling;
 
   // Fighter root Y rotation maps source joint Z into stage X. This mirrors the existing
-  // lb_8000B1CC-backed blaster spawn path, but Chain has a zero local offset and keeps only the
-  // sampled L3rdNa joint translation.
+  // lb_8000B1CC-backed blaster spawn path, but these Sheik articles use zero local offsets and keep
+  // only the sampled source joint translation.
   // refs/melee/src/melee/ft/fighter.c (ftPartSetRotY(fp, 0, M_PI_2 * fp->facing_dir))
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialHi_80112F48
   const float facing_dir = batch->state.facing[owner_idx] ? 1.0f : -1.0f;
   *out_x = batch->state.pos_x[owner_idx] + facing_dir * lz * model_scale;
   *out_y = batch->state.pos_y[owner_idx] + ly * model_scale;
@@ -1930,7 +1931,8 @@ uint8_t items_spawn_sheik_chain_article(MslBatch* batch, size_t owner_idx) {
 
   float spawn_x = 0.0f;
   float spawn_y = 0.0f;
-  if (sheik_chain_spawn_anchor_position(batch, ap, owner_idx, &spawn_x, &spawn_y) == 0u) {
+  if (sheik_article_spawn_anchor_position(batch, owner_idx, ap->sheik_chain_spawn_part_id, &spawn_x,
+                                          &spawn_y) == 0u) {
     return 0u;
   }
 
@@ -2080,6 +2082,12 @@ static void sheik_vanish_smoke_items_update(MslBatch* batch, int bi) {
     // after it_802B1D40 -> it_8027518C publishes the final xD44_lifeTimer.
     // refs/melee/src/melee/it/items/itseakvanish.c::{
     //   it_802B1D40,itSeakvanish_UnkMotion0_Anim}
+    if ((batch->state.item_hidden_callback_flags[ii] &
+         (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME) != 0u) {
+      batch->state.item_hidden_callback_flags[ii] &=
+          (uint8_t)~MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
+      continue;
+    }
     if (batch->state.item_timer[ii] <= 1.0f) {
       item_slot_clear(batch, ii);
     } else {
@@ -2106,6 +2114,13 @@ uint8_t items_spawn_sheik_vanish_smoke_article(MslBatch* batch, size_t owner_idx
   if (items_find_owned_item_slot(batch, bi, owner, ap->sheik_vanish_itkind) >= 0) {
     return 0u;
   }
+  float spawn_x = 0.0f;
+  float spawn_y = 0.0f;
+  if (sheik_article_spawn_anchor_position(batch, owner_idx, ap->sheik_vanish_spawn_part_id,
+                                          &spawn_x, &spawn_y) == 0u) {
+    return 0u;
+  }
+
   const int slot = items_alloc_slot(batch, bi);
   if (slot < 0) {
     return 0u;
@@ -2114,9 +2129,10 @@ uint8_t items_spawn_sheik_vanish_smoke_article(MslBatch* batch, size_t owner_idx
   item_slot_clear(batch, ii);
 
   // Vanish travel entry installs `fn_80112ED8` through inlineA0 / ftSk_SpecialHi_80113A30.
-  // The accessory callback spawns the smoke article once with it_802B1C60, which initializes
-  // It_Kind_Seak_Vanish state 0. The runtime-visible lifetime comes from it_8027518C, which
-  // overwrites the local 60.0f seed with ItemCommonData::xF8 before the script starts.
+  // The accessory callback samples HipN with lb_8000B1CC, spawns the smoke article once with
+  // it_802B1C60, and initializes It_Kind_Seak_Vanish state 0. The runtime-visible lifetime comes
+  // from it_8027518C, which overwrites the local 60.0f seed with ItemCommonData::xF8 before the
+  // script starts.
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
   //   inlineA0,ftSk_SpecialHi_80113A30,fn_80112ED8,ftSk_SpecialHi_80112F48}
   // refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
@@ -2128,8 +2144,8 @@ uint8_t items_spawn_sheik_vanish_smoke_article(MslBatch* batch, size_t owner_idx
   batch->state.item_instance_id[ii] = batch->state.instance_id[o_idx];
   batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
   batch->state.item_direction[ii] = batch->state.facing[o_idx] ? 1.0f : -1.0f;
-  batch->state.item_pos_x[ii] = batch->state.pos_x[o_idx];
-  batch->state.item_pos_y[ii] = batch->state.pos_y[o_idx];
+  batch->state.item_pos_x[ii] = spawn_x;
+  batch->state.item_pos_y[ii] = spawn_y;
   batch->state.item_vel_x[ii] = 0.0f;
   batch->state.item_vel_y[ii] = 0.0f;
   batch->state.item_timer[ii] = (float)ap->sheik_vanish_lifetime_frames;

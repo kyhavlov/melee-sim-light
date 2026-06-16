@@ -300,6 +300,11 @@ static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t i
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Enter
     batch->state.squat_pass_x0[idx] = 0u;
     batch->state.squat_pass_x4[idx] = 0u;
+    // Fighter_ChangeMotionState clears accessory4_cb. Sheik Vanish travel/floor-loss paths arm the
+    // smoke callback again after entry when source does so through inlineA0 / 80113324 / 80113390.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{inlineA0,ftSk_SpecialHi_80113324,ftSk_SpecialHi_80113390}
+    batch->state.sheik_vanish_smoke_accessory_pending[idx] = 0u;
   }
 
   attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
