@@ -26,6 +26,7 @@
 #include "move_tables.h"
 #include "msl_math.h"
 #include "mtx34.h"
+#include "sheik_specials.h"
 #include "specialhi_pose.h"
 #include "state_flags.h"
 #include "stage_collision.h"
@@ -522,6 +523,7 @@ enum {
 #define MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM (UINT64_C(1) << 31)
 #define MSL_MPCOLL_REJECT_FALL_SHALLOW_TERMINAL_HARD_FLOOR (UINT64_C(1) << 32)
 #define MSL_MPCOLL_REJECT_ESCAPEAIR_JUMPAERIAL_SOFT_OWNER_EARLY_DIRECT_LAND (UINT64_C(1) << 33)
+#define MSL_MPCOLL_REJECT_SHEIK_VANISH_START1_PLATFORM_PASS (UINT64_C(1) << 39)
 typedef enum MslMpcollFloorRejectRestore {
   MSL_MPCOLL_FLOOR_REJECT_RESTORE_NONE = 0u,
   MSL_MPCOLL_FLOOR_REJECT_RESTORE_KEEP_CURRENT = 1u,
@@ -15095,6 +15097,21 @@ void mpcoll_ground_apply(MslBatch* batch) {
              stage_collision_floor_line_is_platform(stage_id, ground_id))
                 ? 1u
                 : 0u;
+        const uint8_t suppress_sheik_vanish_start1_platform_pass_land =
+            // Sheik Vanish Start1 uses a different ft_CheckGroundAndLedge branch than Firefox:
+            // accepted platform contact during the early xC < ftSeakAttributes::x3C window calls
+            // ftCo_8009A134, writes CollData.floor_skip, and keeps the current airborne travel
+            // root rather than publishing grounded SpecialHiStart_1.
+            // data/characters/sheik.json::{sheik_vanish_travel_frames,
+            //   sheik_vanish_ground_contact_min_frames}
+            // data/motion_state/owners/sheik.bin::MSLMSO01 FT_CHECK_GROUND_LEDGE_AIR_COLL
+            // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+            //   ftSk_SpecialAirHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Coll}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+            (sheik_special_vanish_air_start1_platform_pass_active(batch, idx) &&
+             stage_collision_floor_line_is_platform(stage_id, ground_id))
+                ? 1u
+                : 0u;
         const uint8_t suppress_specialairlw_start_stale_platform_land =
             // Aerial Shine startup enters from JumpF/B before Fighter_procMap. Source
             // `ftFx_SpecialAirLwStart_Coll -> ft_80081D0C` sets CollData.last_pos from the
@@ -16402,6 +16419,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
             (uint32_t)MSL_MPCOLL_FLOOR_REJECT_SIDE_FLOOR_SKIP_TO_CONTACT,
             (uint32_t)MSL_MPCOLL_PHASE_GROUND_B108);
         mpcoll_floor_reject_add_if_state(&final_floor_reject,
+                                         suppress_sheik_vanish_start1_platform_pass_land,
+                                         MSL_MPCOLL_REJECT_SHEIK_VANISH_START1_PLATFORM_PASS,
+                                         MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
+                                         (uint32_t)MSL_MPCOLL_PHASE_AIR_473CC);
+        mpcoll_floor_reject_add_if_state(&final_floor_reject,
                                          suppress_fallspecial_first_sustained_current_ecb_land,
                                          MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED,
                                          MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
@@ -16529,6 +16551,15 @@ void mpcoll_ground_apply(MslBatch* batch) {
             &final_floor_reject, damage_active_hitlag_floor_owner,
             damage_active_hitlag_root_below_bottom_above_floor_owner);
         if (final_floor_reject.bits != 0u) {
+          if ((final_floor_reject.bits & MSL_MPCOLL_REJECT_SHEIK_VANISH_START1_PLATFORM_PASS) !=
+              0u) {
+            // `ftCo_8009A134` writes CollData.floor_skip as the source branch side effect; this can
+            // happen before the simulator has a final floor publication object. Publish it when the
+            // source-owned probe reject bit is emitted, not only in final-publication cleanup.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+            // refs/melee/src/melee/mp/mpcoll.c::mpUpdateFloorSkip
+            msl_mpcoll_update_floor_skip(batch, idx, (uint16_t)final_ground_line_idx);
+          }
           mpcoll_floor_probe_reject_bits(&mpcoll_ctx, final_floor_reject.bits,
                                          (MslMpcollSourcePhases)final_floor_reject.source_phases,
                                          final_ground_line_idx, final_ground_line_idx);

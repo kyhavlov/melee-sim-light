@@ -47,5 +47,6 @@ void sheik_specials_update_pre_physics(MslBatch* batch);
 uint8_t sheik_specials_phys(MslBatch* batch, size_t idx);
 uint8_t sheik_special_try_landing_iasa(MslBatch* batch, size_t idx);
 uint8_t sheik_special_try_vanish_travel_wallceil_end(MslBatch* batch, size_t idx);
+uint8_t sheik_special_vanish_air_start1_platform_pass_active(const MslBatch* batch, size_t idx);
 uint8_t sheik_special_try_air_to_ground_swap(MslBatch* batch, size_t idx);
 uint8_t sheik_special_try_ground_to_air_swap(MslBatch* batch, size_t idx);

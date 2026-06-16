@@ -734,6 +734,20 @@ Collect before writing any code:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA_inline`,
    and `data/common/ft_common_data.json::{floor_skip_frames,pass_tilt_max_frames,pass_stick_threshold}`.
+   **Character specials can create `CollData.floor_skip` without entering Pass**:
+   audit every special collision callback that calls `ftCo_8009A134` or `mpUpdateFloorSkip`.
+   The runtime must write the real floor-skip owner and replay preprocessing must serialize the
+   hidden skip when a one-step seed starts after the pass-through. Sheik Vanish exposed this in
+   `SpecialAirHiStart_1`: while `mv.sk.specialhi.xC < ftSeakAttributes::x3C`,
+   `ftSk_SpecialAirHiStart_1_Coll` consumes static platform contact through
+   `ftCo_8009A134 -> mpUpdateFloorSkip` and stays airborne; later `xC` contacts ground normally
+   unless `CollData.floor_skip` was already live. Add a replay positive for the first consumed
+   platform frame, a carried-skip positive, and a late-`xC` no-skip negative. Source anchors:
+   `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+   ftSk_SpecialAirHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Coll}`,
+   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134`, and
+   `data/characters/sheik.json::{sheik_vanish_travel_frames,
+   sheik_vanish_ground_contact_min_frames}`.
    **Ottotto -> Squat floor loss is a floor-sweep provenance audit, not an
    Ottotto row exception**: `ftCo_Ottotto_IASA` can enter `Squat` from down
    input and the same fighter proc can then run `Squat_Coll`. If the current

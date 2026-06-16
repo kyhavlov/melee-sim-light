@@ -1030,17 +1030,22 @@ none are retained as validation safety.
 
 - Owner family: SpecialHi.
 - Source function(s): `ftFx_SpecialAirHi_Coll`, `ftFx_SpecialHiFall_Coll`,
-  `ftFox_SpecialHi_IsBound`, `ftCo_8009A134`, `mpColl_800471F8`, `mpUpdateFloorSkip`.
+  `ftFox_SpecialHi_IsBound`, `ftSk_SpecialAirHiStart_1_Coll`, `ftCo_8009A134`,
+  `mpColl_800471F8`, `mpUpdateFloorSkip`.
 - Why retained after Phases 1-4: SpecialHi floor publication remains character-callback owned:
   platform pass, floor-angle bound, JObj ECB, transformed-platform, and under-stage floor-side
-  policy cannot be replaced by generic floor publication.
+  policy cannot be replaced by generic floor publication. Sheik Vanish Start1 has the same
+  `ftCo_8009A134 -> mpUpdateFloorSkip` platform-pass side effect as a special-callback owner, but
+  keeps the airborne Vanish root and preserves `CollData.floor_skip` only through the early
+  `mv.sk.specialhi.xC < ftSeakAttributes::x3C` branch.
 - Test/proof: `tests/test_specialhi_mpcoll_ecb_replay_real_locks.py`,
-  `tests/test_special_cliffcatch_collision_window_regression.py`.
+  `tests/test_special_cliffcatch_collision_window_regression.py`,
+  `tests/test_sheik_specials.py::test_sheik_vanish_start1_early_platform_pass_writes_floor_skip_replay_real_lock`.
 
 | Kind | Exact guard name(s) |
 | --- | --- |
-| Reject bit | `MSL_MPCOLL_REJECT_SPECIALAIRHI_FLOOR_ANGLE`, `MSL_MPCOLL_REJECT_SPECIALAIRHI_PLATFORM`, `MSL_MPCOLL_REJECT_SPECIALHI_FROM_BELOW_HARD_FLOOR`, `MSL_MPCOLL_REJECT_SPECIALHI_TRANSFORMED_PLATFORM`, `MSL_MPCOLL_REJECT_SPECIALHI_UNDERSTAGE_HARD_FLOOR` |
-| Suppression | `suppress_projected_specialairhi_floor_angle_land`, `suppress_projected_specialhi_from_below_hard_floor_clip`, `suppress_projected_specialhi_transformed_platform_land`, `suppress_projected_specialhi_understage_hard_floor_clip`, `suppress_specialairhi_floor_angle_land`, `suppress_specialairhi_platform_land`, `suppress_specialhi_from_below_hard_floor_land`, `suppress_specialhi_transformed_platform_land`, `suppress_specialhi_understage_hard_floor_land` |
+| Reject bit | `MSL_MPCOLL_REJECT_SHEIK_VANISH_START1_PLATFORM_PASS`, `MSL_MPCOLL_REJECT_SPECIALAIRHI_FLOOR_ANGLE`, `MSL_MPCOLL_REJECT_SPECIALAIRHI_PLATFORM`, `MSL_MPCOLL_REJECT_SPECIALHI_FROM_BELOW_HARD_FLOOR`, `MSL_MPCOLL_REJECT_SPECIALHI_TRANSFORMED_PLATFORM`, `MSL_MPCOLL_REJECT_SPECIALHI_UNDERSTAGE_HARD_FLOOR` |
+| Suppression | `suppress_projected_specialairhi_floor_angle_land`, `suppress_projected_specialhi_from_below_hard_floor_clip`, `suppress_projected_specialhi_transformed_platform_land`, `suppress_projected_specialhi_understage_hard_floor_clip`, `suppress_sheik_vanish_start1_platform_pass_land`, `suppress_specialairhi_floor_angle_land`, `suppress_specialairhi_platform_land`, `suppress_specialhi_from_below_hard_floor_land`, `suppress_specialhi_transformed_platform_land`, `suppress_specialhi_understage_hard_floor_land` |
 
 #### Phase 5 Owner Accounting: SpecialAirLw
 

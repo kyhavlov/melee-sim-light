@@ -7424,6 +7424,11 @@ static PyMethodDef methods[] = {
     {"derive_sheik_chain_seed_lanes", msl_derive_sheik_chain_seed_lanes_py, METH_VARARGS,
      "derive_sheik_chain_seed_lanes(char, action, buttons, hitlag, sheik_id, b_mask, "
      "release_min) -> (x0,latch)"},
+    {"derive_sheik_vanish_floor_skip_segments", msl_derive_sheik_vanish_floor_skip_segments_py,
+     METH_VARARGS,
+     "derive_sheik_vanish_floor_skip_segments(char, action, on_ground, ground_id, vanish_timer, "
+     "pos_x, pos_y, platform_ids, platform_x0, platform_y0, platform_x1, platform_y1, sheik_id, "
+     "travel_frames, ground_contact_min_frames) -> uint16[:,players]"},
     {"derive_specialhi_rotate_model_seed_lane", msl_derive_specialhi_rotate_model_seed_lane_py,
      METH_VARARGS, "derive_specialhi_rotate_model_seed_lane(...) -> (angle, valid)"},
     {"derive_throw_pulse_seed_lanes", msl_derive_throw_pulse_seed_lanes_py, METH_VARARGS,

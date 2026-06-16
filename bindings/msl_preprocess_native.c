@@ -5308,6 +5308,147 @@ PyObject* msl_derive_sheik_chain_seed_lanes_py(PyObject* self, PyObject* args) {
   return Py_BuildValue("NN", out_x0, out_latch);
 }
 
+static inline uint8_t msl_py_action_is_sheik_vanish_air_start1(uint16_t action) {
+  return action == 359u;
+}
+
+PyObject* msl_derive_sheik_vanish_floor_skip_segments_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* char_obj = NULL;
+  PyObject* action_obj = NULL;
+  PyObject* on_ground_obj = NULL;
+  PyObject* ground_id_obj = NULL;
+  PyObject* timer_obj = NULL;
+  PyObject* pos_x_obj = NULL;
+  PyObject* pos_y_obj = NULL;
+  PyObject* platform_ids_obj = NULL;
+  PyObject* platform_x0_obj = NULL;
+  PyObject* platform_y0_obj = NULL;
+  PyObject* platform_x1_obj = NULL;
+  PyObject* platform_y1_obj = NULL;
+  int sheik_internal_id = -1;
+  int travel_frames = 0;
+  double ground_contact_min_frames = 0.0;
+  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOiid", &char_obj, &action_obj, &on_ground_obj,
+                        &ground_id_obj, &timer_obj, &pos_x_obj, &pos_y_obj, &platform_ids_obj,
+                        &platform_x0_obj, &platform_y0_obj, &platform_x1_obj, &platform_y1_obj,
+                        &sheik_internal_id, &travel_frames, &ground_contact_min_frames)) {
+    return NULL;
+  }
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 2, "char_id_u8");
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 2, "action_id_u16");
+  PyArrayObject* on_ground = require_contiguous_array(on_ground_obj, NPY_UINT8, 2, "on_ground_u8");
+  PyArrayObject* ground_id =
+      require_contiguous_array(ground_id_obj, NPY_UINT16, 2, "ground_id_u16");
+  PyArrayObject* timer =
+      require_contiguous_array(timer_obj, NPY_UINT8, 2, "vanish_travel_timer_u8");
+  PyArrayObject* pos_x = require_contiguous_array(pos_x_obj, NPY_FLOAT32, 2, "pos_x_f32");
+  PyArrayObject* pos_y = require_contiguous_array(pos_y_obj, NPY_FLOAT32, 2, "pos_y_f32");
+  PyArrayObject* platform_ids =
+      require_contiguous_array(platform_ids_obj, NPY_UINT16, 1, "platform_segment_ids_u16");
+  PyArrayObject* platform_x0 =
+      require_contiguous_array(platform_x0_obj, NPY_FLOAT32, 1, "platform_x0_f32");
+  PyArrayObject* platform_y0 =
+      require_contiguous_array(platform_y0_obj, NPY_FLOAT32, 1, "platform_y0_f32");
+  PyArrayObject* platform_x1 =
+      require_contiguous_array(platform_x1_obj, NPY_FLOAT32, 1, "platform_x1_f32");
+  PyArrayObject* platform_y1 =
+      require_contiguous_array(platform_y1_obj, NPY_FLOAT32, 1, "platform_y1_f32");
+  if (chr == NULL || action == NULL || on_ground == NULL || ground_id == NULL || timer == NULL ||
+      pos_x == NULL || pos_y == NULL || platform_ids == NULL || platform_x0 == NULL ||
+      platform_y0 == NULL || platform_x1 == NULL || platform_y1 == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(chr, 0);
+  const npy_intp width = PyArray_DIM(chr, 1);
+  if (require_exact_2d_shape(action, n, width, "action_id_u16") < 0 ||
+      require_exact_2d_shape(on_ground, n, width, "on_ground_u8") < 0 ||
+      require_exact_2d_shape(ground_id, n, width, "ground_id_u16") < 0 ||
+      require_exact_2d_shape(timer, n, width, "vanish_travel_timer_u8") < 0 ||
+      require_exact_2d_shape(pos_x, n, width, "pos_x_f32") < 0 ||
+      require_exact_2d_shape(pos_y, n, width, "pos_y_f32") < 0) {
+    return NULL;
+  }
+  const npy_intp n_platforms = PyArray_SIZE(platform_ids);
+  if (PyArray_SIZE(platform_x0) != n_platforms || PyArray_SIZE(platform_y0) != n_platforms ||
+      PyArray_SIZE(platform_x1) != n_platforms || PyArray_SIZE(platform_y1) != n_platforms) {
+    PyErr_SetString(PyExc_ValueError, "platform geometry arrays must have equal lengths");
+    return NULL;
+  }
+
+  PyArrayObject* out = (PyArrayObject*)PyArray_EMPTY(2, PyArray_DIMS(chr), NPY_UINT16, 0);
+  if (out == NULL) {
+    return NULL;
+  }
+  uint16_t* out_skip = (uint16_t*)PyArray_DATA(out);
+  for (npy_intp i = 0; i < PyArray_SIZE(out); i++) {
+    out_skip[i] = 0xFFFFu;
+  }
+  if (sheik_internal_id < 0 || sheik_internal_id > 255 || travel_frames <= 0 ||
+      !(ground_contact_min_frames > 0.0) || PyArray_SIZE(platform_ids) == 0) {
+    return (PyObject*)out;
+  }
+
+  const uint8_t* ch = (const uint8_t*)PyArray_DATA(chr);
+  const uint16_t* act = (const uint16_t*)PyArray_DATA(action);
+  const uint8_t* ground = (const uint8_t*)PyArray_DATA(on_ground);
+  const uint16_t* floor = (const uint16_t*)PyArray_DATA(ground_id);
+  const uint8_t* vanish_timer = (const uint8_t*)PyArray_DATA(timer);
+  const float* px = (const float*)PyArray_DATA(pos_x);
+  const float* py = (const float*)PyArray_DATA(pos_y);
+  const uint16_t* platforms = (const uint16_t*)PyArray_DATA(platform_ids);
+  const float* plat_x0 = (const float*)PyArray_DATA(platform_x0);
+  const float* plat_y0 = (const float*)PyArray_DATA(platform_y0);
+  const float* plat_x1 = (const float*)PyArray_DATA(platform_x1);
+  const float* plat_y1 = (const float*)PyArray_DATA(platform_y1);
+  const uint8_t sheik_id = (uint8_t)sheik_internal_id;
+
+  for (npy_intp p = 0; p < width; p++) {
+    uint16_t active_skip = 0xFFFFu;
+    for (npy_intp i = 0; i < n; i++) {
+      const npy_intp idx = (i * width) + p;
+      const uint16_t action_i = act[idx];
+      if (ch[idx] != sheik_id || !msl_py_action_is_sheik_vanish_air_start1(action_i) ||
+          ground[idx] != 0u) {
+        active_skip = 0xFFFFu;
+        continue;
+      }
+      if (active_skip != 0xFFFFu) {
+        out_skip[idx] = active_skip;
+      }
+      const uint16_t line = floor[idx];
+      npy_intp platform_i = -1;
+      for (npy_intp j = 0; j < n_platforms; j++) {
+        if (platforms[j] == line) {
+          platform_i = j;
+          break;
+        }
+      }
+      if (platform_i < 0) {
+        continue;
+      }
+      const int remaining_after_anim = vanish_timer[idx] > 0u ? (int)vanish_timer[idx] - 1 : 0;
+      const int collision_tick = travel_frames - remaining_after_anim;
+      const float x0 = plat_x0[platform_i];
+      const float y0 = plat_y0[platform_i];
+      const float x1 = plat_x1[platform_i];
+      const float y1 = plat_y1[platform_i];
+      const float denom = x1 - x0;
+      float platform_y = y0;
+      if (fabsf(denom) > 0.000001f) {
+        const float t = (px[idx] - x0) / denom;
+        platform_y = y0 + (t * (y1 - y0));
+      }
+      const uint8_t root_below_platform = py[idx] < platform_y ? 1u : 0u;
+      if (root_below_platform && collision_tick >= 0 &&
+          (double)collision_tick < ground_contact_min_frames) {
+        active_skip = line;
+      }
+    }
+  }
+  return (PyObject*)out;
+}
+
 PyObject* msl_derive_camera_target_world_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* char_obj = NULL;

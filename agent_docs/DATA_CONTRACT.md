@@ -1599,6 +1599,15 @@ Characters (Fox/Falco/Marth/Sheik):
       the down-held platform contact, down-held/root-clear carry while the hidden platform skip
       remains live, and the first hard-floor crossing that consumes that owner. Intermediate
       airborne frames stay unseeded unless one of those source handoff boundaries is visible.
+      For Sheik Vanish `SpecialAirHiStart_1`, preprocessing also serializes static-platform
+      `floor_skip` carry after the early `mv.sk.specialhi.xC < ftSeakAttributes::x3C` branch where
+      `ftSk_SpecialAirHiStart_1_Coll` calls `ftCo_8009A134 -> mpUpdateFloorSkip` and keeps Sheik
+      airborne. The runtime owner is `src/sheik_specials.c` plus the final mpColl floor-reject
+      packet; the replay seed owner is
+      `bindings/msl_preprocess_native.c::msl_derive_sheik_vanish_floor_skip_segments_py`,
+      called by `tools/slippi/make_dataset_from_slp.py::_derive_sheik_vanish_floor_skip_segments`.
+      Source proof: `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c` and
+      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134`.
       Sustained airborne FoD `DamageFly*` rows with same-action active hitstun and no hitlag seed
       `floor_sweep_prev_pos` from the current visible root for transformed-platform stale sweeps
       and already-below-main-floor hard-floor projection, matching `ft_80081DD4`'s

@@ -18,6 +18,7 @@
 #include "mpcoll_wall_ceil.h"
 #include "msl_math.h"
 #include "move_tables.h"
+#include "stage_collision.h"
 #include "trigger_input.h"
 
 static inline float sk_stick_unit(int8_t v) { return (float)v * (1.0f / 80.0f); }
@@ -668,6 +669,39 @@ uint8_t sheik_special_try_vanish_travel_wallceil_end(MslBatch* batch, size_t idx
   // data/characters/sheik.json::sheik_vanish_end_vel_mul.
   sk_enter_vanish_air_end(batch, ch, idx);
   return 1u;
+}
+
+uint8_t sheik_special_vanish_air_start1_platform_pass_active(const MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
+      batch->state.action_id[idx] != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1) {
+    return 0u;
+  }
+  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id == 0xFFFFu || !stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+    return 0u;
+  }
+  const MslCharParams* ch = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ch == NULL || ch->sheik_vanish_travel_frames <= 0 ||
+      !(ch->sheik_vanish_ground_contact_min_frames > 0.0f)) {
+    return 0u;
+  }
+  const int travel_frames = ch->sheik_vanish_travel_frames;
+  const int remaining_after_anim = (int)batch->state.sheik_special_timer[idx];
+  const int collision_tick = travel_frames - remaining_after_anim;
+  if (collision_tick < 0) {
+    return 0u;
+  }
+  // ftSk_SpecialAirHiStart_1_Coll increments mv.sk.specialhi.xC, then accepted platform floor
+  // contact consumes ftCo_8009A134/mpUpdateFloorSkip while xC is still below
+  // ftSeakAttributes::x3C. The hidden x0 travel timer and xC are initialized together by
+  // ftSk_SpecialHi_80113A30, so after the Anim callback has decremented x0, `x38 - x0` is the
+  // callback-visible xC value for this collision pass.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+  //   ftSk_SpecialHi_80113A30,ftSk_SpecialAirHiStart_1_Anim,
+  //   ftSk_SpecialAirHiStart_1_Coll}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+  return ((float)collision_tick < ch->sheik_vanish_ground_contact_min_frames) ? 1u : 0u;
 }
 
 static void sk_update_speciallw(MslBatch* batch, const MslCharParams* ch, size_t idx, uint16_t a) {

@@ -786,6 +786,72 @@ def _derive_fod_floor_skip_segments(
     return out
 
 
+def _derive_sheik_vanish_floor_skip_segments(
+    *,
+    stage_id: int,
+    action_id_u16: np.ndarray,
+    char_id_u8: np.ndarray,
+    on_ground_u8: np.ndarray,
+    ground_id_u16: np.ndarray,
+    vanish_travel_timer_u8: np.ndarray,
+    pos_x_f32: np.ndarray,
+    pos_y_f32: np.ndarray,
+    sheik_internal_id: int | None,
+    travel_frames: int,
+    ground_contact_min_frames: float,
+    data_root: Path | str = Path("data"),
+) -> np.ndarray:
+    """Derive hidden CollData.floor_skip for Sheik Vanish Start1 platform pass-through.
+
+    ftSk_SpecialAirHiStart_1_Coll increments mv.sk.specialhi.xC, then when accepted platform
+    contact happens while xC < ftSeakAttributes::x3C, ftCo_8009A134 writes mpUpdateFloorSkip and
+    leaves Sheik airborne. Slippi does not expose CollData.floor_skip, so subsequent one-step seeds
+    need the same hidden platform id serialized from the prefix-visible Vanish travel episode.
+    The frame-order state machine lives in native preprocessing; keep Python as the data-loader and
+    wrapper only.
+
+    refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+      ftSk_SpecialAirHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Coll}
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+    refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpColl_80044628_Floor}
+    """
+    try:
+        import msl_binding
+    except Exception as exc:  # pragma: no cover - exercised in build/test environments
+        raise RuntimeError(
+            "native msl_binding.derive_sheik_vanish_floor_skip_segments is required; run `make build`"
+        ) from exc
+    stage_segments = _load_stage_segments_for_seed(stage_id=int(stage_id), data_root=Path(data_root))
+    platform_rows = [
+        seg
+        for seg in stage_segments
+        if seg["kind"] == "floor" and bool(seg["platform"]) and bool(seg["fighter_solid"])
+    ]
+    platform_segments = np.asarray([int(seg["i"]) for seg in platform_rows], dtype=np.uint16)
+    platform_x0 = np.asarray([float(seg["x0"]) for seg in platform_rows], dtype=np.float32)
+    platform_y0 = np.asarray([float(seg["y0"]) for seg in platform_rows], dtype=np.float32)
+    platform_x1 = np.asarray([float(seg["x1"]) for seg in platform_rows], dtype=np.float32)
+    platform_y1 = np.asarray([float(seg["y1"]) for seg in platform_rows], dtype=np.float32)
+    sheik_id = -1 if sheik_internal_id is None else int(sheik_internal_id)
+    return msl_binding.derive_sheik_vanish_floor_skip_segments(
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(on_ground_u8, dtype=np.uint8),
+        np.ascontiguousarray(ground_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(vanish_travel_timer_u8, dtype=np.uint8),
+        np.ascontiguousarray(pos_x_f32, dtype=np.float32),
+        np.ascontiguousarray(pos_y_f32, dtype=np.float32),
+        np.ascontiguousarray(platform_segments, dtype=np.uint16),
+        np.ascontiguousarray(platform_x0, dtype=np.float32),
+        np.ascontiguousarray(platform_y0, dtype=np.float32),
+        np.ascontiguousarray(platform_x1, dtype=np.float32),
+        np.ascontiguousarray(platform_y1, dtype=np.float32),
+        sheik_id,
+        int(travel_frames),
+        float(ground_contact_min_frames),
+    )
+
+
 def _fod_platform_heights_with_ground_contact(
     heights: np.ndarray,
     valid: np.ndarray,
@@ -3903,6 +3969,7 @@ def _main_impl(args) -> Dataset:
     char_active_shield_hit_int_damage: dict[int, dict[int, dict[int, int]]] = {}
     sheik_char_id: int | None = None
     sheik_vanish_travel_frames = 0
+    sheik_vanish_ground_contact_min_frames = 0.0
     sheik_chain_release_min_frames = 0
 
     def _get_env_dmg_local(dmg: float) -> int:
@@ -4034,6 +4101,9 @@ def _main_impl(args) -> Dataset:
         if key == "sheik":
             sheik_char_id = int(cid)
             sheik_vanish_travel_frames = int(attrs.get("sheik_vanish_travel_frames", 0))
+            sheik_vanish_ground_contact_min_frames = float(
+                attrs.get("sheik_vanish_ground_contact_min_frames", 0.0)
+            )
             sheik_chain_release_min_frames = int(attrs.get("sheik_chain_release_min_frames", 0))
         move_file = json.loads((data_root / "moves" / f"{key}.json").read_text())
         move_data = move_file["moves"]
@@ -6514,6 +6584,29 @@ def _main_impl(args) -> Dataset:
         sheik_internal_id=sheik_char_id,
         travel_frames=sheik_vanish_travel_frames,
     )
+    sheik_vanish_floor_skip = _derive_sheik_vanish_floor_skip_segments(
+        stage_id=int(stage_id),
+        action_id_u16=samples["seed_t"]["action_id"][:, :num_players],
+        char_id_u8=samples["seed_t"]["char_id"][:, :num_players],
+        on_ground_u8=samples["seed_t"]["on_ground"][:, :num_players],
+        ground_id_u16=samples["seed_t"]["ground_id"][:, :num_players],
+        vanish_travel_timer_u8=samples["seed_t"]["sheik_vanish_travel_timer_u8"][:, :num_players],
+        pos_x_f32=samples["seed_t"]["pos_x"][:, :num_players],
+        pos_y_f32=samples["seed_t"]["pos_y"][:, :num_players],
+        sheik_internal_id=sheik_char_id,
+        travel_frames=sheik_vanish_travel_frames,
+        ground_contact_min_frames=sheik_vanish_ground_contact_min_frames,
+        data_root=data_root,
+    )
+    current_floor_skip = samples["seed_t"]["floor_skip_segment_id_u16"][:, :num_players]
+    current_floor_skip_valid = current_floor_skip != np.uint16(0xFFFF)
+    sheik_floor_skip_valid = sheik_vanish_floor_skip != np.uint16(0xFFFF)
+    samples["seed_t"]["floor_skip_segment_id_u16"][:, :num_players] = np.where(
+        current_floor_skip_valid, current_floor_skip, sheik_vanish_floor_skip
+    ).astype(np.uint16)
+    samples["seed_t"]["floor_skip_segment_valid_u8"][:, :num_players] = (
+        current_floor_skip_valid | sheik_floor_skip_valid
+    ).astype(np.uint8)
     (
         samples["seed_t"]["sheik_needle_count_u8"][:, :],
         samples["seed_t"]["sheik_needle_specialn_timer_u8"][:, :],

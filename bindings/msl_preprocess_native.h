@@ -60,6 +60,7 @@ PyObject* msl_derive_facing_dir1_sign_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_common_fall_blend_seed_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_sheik_chain_seed_lanes_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_sheik_vanish_floor_skip_segments_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_camera_target_world_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_hitbox_prev_centers_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_combo_push_timer_seed_py(PyObject* self, PyObject* args);

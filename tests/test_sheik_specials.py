@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 
 from test_char_common_action_coverage import _mk_inputs, _run, _seed_base  # noqa: E402
+from test_colldata_ecb_substrate import _colldata_ecb_dtype  # noqa: E402
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset  # noqa: E402
 
 pytest.importorskip("msl_binding")
@@ -106,6 +107,7 @@ def _run_sample_row(
     record: int,
     *,
     mutate_input_y: int | None = None,
+    mutate_seed: dict[str, int | tuple[int, int]] | None = None,
     replay_frame_rng: bool = False,
 ) -> np.void:
     import msl_binding
@@ -113,6 +115,13 @@ def _run_sample_row(
     row = samples[record : record + 1].copy()
     if mutate_input_y is not None:
         row["input_t"]["p"]["main_y"][0, 0] = np.int8(mutate_input_y)
+    if mutate_seed is not None:
+        for field, value in mutate_seed.items():
+            if isinstance(value, tuple):
+                slot, raw = value
+            else:
+                slot, raw = 0, value
+            row["seed_t"][field][0, slot] = raw
 
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -188,6 +197,50 @@ def _run_sample_row_with_contacts(samples: np.ndarray, record: int) -> tuple[np.
         out = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
         contacts = contact_bytes.view(contacts_dtype).reshape((1,))[0].copy()
         return out, contacts
+    finally:
+        msl_binding.destroy(handle)
+
+
+def _run_sample_row_with_colldata(
+    samples: np.ndarray,
+    record: int,
+    *,
+    mutate_seed: dict[str, int | tuple[int, int]] | None = None,
+) -> tuple[np.void, np.void]:
+    import msl_binding
+
+    row = samples[record : record + 1].copy()
+    if mutate_seed is not None:
+        for field, value in mutate_seed.items():
+            if isinstance(value, tuple):
+                slot, raw = value
+            else:
+                slot, raw = 0, value
+            row["seed_t"][field][0, slot] = raw
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    colldata_stride = int(sizes["colldata_ecb"])
+    colldata_dtype = _colldata_ecb_dtype()
+    assert colldata_stride == colldata_dtype.itemsize
+
+    seed_bytes = row["seed_t"].view(np.uint8).reshape((1, seed_stride)).copy()
+    prev_input_bytes = row["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy()
+    input_bytes = row["input_t"].view(np.uint8).reshape((1, input_stride)).copy()
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+    colldata_bytes = np.zeros((1, colldata_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, prev_input_bytes, input_bytes)
+        msl_binding.write_compare(handle, out_bytes)
+        msl_binding.debug_write_colldata_ecb(handle, colldata_bytes)
+        out = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        colldata = colldata_bytes.view(colldata_dtype).reshape((1,))[0].copy()
+        return out, colldata
     finally:
         msl_binding.destroy(handle)
 
@@ -671,6 +724,66 @@ def test_sheik_vanish_air_travel_no_wall_contact_stays_travel_adjacent_negative(
     assert int(contacts["wall_kind"][0]) == 0
     assert int(contacts["ceiling_id"][0]) == 0xFFFF
     assert int(out["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+
+
+@pytest.mark.integration
+def test_sheik_vanish_start1_early_platform_pass_writes_floor_skip_replay_real_lock() -> None:
+    # ftSk_SpecialAirHiStart_1_Coll increments mv.sk.specialhi.xC. While xC is still below
+    # ftSeakAttributes::x3C, an accepted platform contact calls ftCo_8009A134/mpUpdateFloorSkip and
+    # keeps Sheik airborne in SpecialAirHiStart_1. The same source-owned CollData.floor_skip is
+    # serialized into later one-step seeds so they do not re-ground on the skipped platform.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+    #   ftSk_SpecialAirHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Coll}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    first_contact = 1712
+    carried_skip = 1713
+
+    assert int(samples[first_contact]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert int(samples[first_contact]["seed_t"]["floor_skip_segment_valid_u8"][0]) == 0
+    expected_platform = int(samples[first_contact]["seed_t"]["ground_id"][0])
+    assert int(samples[first_contact]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    out, colldata = _run_sample_row_with_colldata(
+        samples,
+        first_contact,
+    )
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert int(out["on_ground"][0]) == 0
+    assert float(out["pos_y"][0]) == pytest.approx(
+        float(samples[first_contact]["ref_t1"]["pos_y"][0]), abs=1e-6
+    )
+    assert int(colldata["floor_skip_valid"][0]) == 1
+    assert int(colldata["floor_skip_segment_id"][0]) == expected_platform
+
+    assert int(samples[carried_skip]["seed_t"]["floor_skip_segment_valid_u8"][0]) == 1
+    out = _run_sample_row(samples, carried_skip)
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert int(out["on_ground"][0]) == 0
+    assert float(out["pos_y"][0]) == pytest.approx(
+        float(samples[carried_skip]["ref_t1"]["pos_y"][0]), abs=1e-6
+    )
+
+
+@pytest.mark.integration
+def test_sheik_vanish_start1_late_platform_contact_enters_grounded_negative() -> None:
+    # Adjacent negative: after the xC >= ftSeakAttributes::x3C boundary, the same platform contact
+    # must enter grounded SpecialHiStart_1 when no prior CollData.floor_skip is live. This prevents
+    # the early-platform owner from becoming "all Vanish platform contacts stay airborne."
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    record = 1712
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+
+    out = _run_sample_row(
+        samples,
+        record,
+        mutate_seed={
+            "sheik_vanish_travel_timer_u8": 2,
+            "floor_skip_segment_valid_u8": 0,
+            "floor_skip_segment_id_u16": 0xFFFF,
+        },
+    )
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_HI_START_1
+    assert int(out["on_ground"][0]) == 1
 
 
 @pytest.mark.integration

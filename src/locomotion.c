@@ -7207,13 +7207,26 @@ void locomotion_update_post_collision(MslBatch* batch) {
                 (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_END))
               ? 1u
               : 0u;
+      const uint8_t keep_sheik_vanish_start1_platform_pass_floor_skip =
+          // Sheik Vanish Start1 can call `ftCo_8009A134 -> mpUpdateFloorSkip` during the early
+          // xC < ftSeakAttributes::x3C platform branch while staying airborne in the same action.
+          // Preserve that hidden CollData.floor_skip through the next collision callback so the
+          // skipped platform is not immediately re-admitted.
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHiStart_1_Coll
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+          (floor_skip_segment != 0xFFFFu && now_ground == 0u &&
+           stage_collision_floor_line_is_platform(stage_id, floor_skip_segment) &&
+           sheik_special_vanish_air_start1_platform_pass_active(batch, idx))
+              ? 1u
+              : 0u;
       if (batch->state.floor_skip_segment_id != NULL && floor_skip_segment != 0xFFFFu &&
           a != (uint16_t)MSL_ACT_PASS &&
           msl_motion_state_fx_special_kind(batch->state.char_id[idx], a) !=
               (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI &&
           !keep_attackair_transformed_platform_floor_skip &&
           !keep_common_air_transformed_platform_floor_skip &&
-          !keep_shine_platform_pass_floor_skip) {
+          !keep_shine_platform_pass_floor_skip &&
+          !keep_sheik_vanish_start1_platform_pass_floor_skip) {
         // Fighter_ChangeMotionState clears CollData.floor_skip via mpClearFloorSkip. The current
         // frame has already consumed the old skip in stage collision, so clear it here for later
         // contacts once Pass has handed off to jump/aerial/fall/landing owners. SpecialAirHi is the
