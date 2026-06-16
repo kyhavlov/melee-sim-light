@@ -19,6 +19,10 @@ typedef struct MslItemArticleParams {
   uint16_t needle_lifetime_frames;
   uint16_t needle_bounce_lifetime_frames;
   uint16_t needle_hurtbox_bone_id;
+  uint16_t sheik_chain_itkind;
+  uint16_t sheik_chain_lifetime_frames;
+  uint16_t sheik_vanish_itkind;
+  uint16_t sheik_vanish_lifetime_frames;
   float laser_damage;
   float laser_size;
   float illusion_item_state0_damage;

@@ -27,6 +27,18 @@ ILLUSION_ITEM_KINDS = {
     # refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_OnLoad
     "falco": 57,
 }
+SHEIK_SPECIAL_ARTICLE_CONSTANTS = {
+    # refs/melee/src/melee/it/forward.h::ItemKind
+    # refs/melee/src/melee/it/items/itseakchain.c::itSeakChain_Spawn
+    "chain_itkind": 97,
+    # Item_80268B18 seeds generic item lifetime from ItemCommonData; keep this article default
+    # data-owned alongside the source article kind so runtime has no Sheik Chain literals.
+    "chain_lifetime_frames": 1400,
+    # refs/melee/src/melee/it/forward.h::ItemKind
+    # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
+    "vanish_itkind": 85,
+    "vanish_lifetime_frames": 60,
+}
 
 UNIT_ITEM_KIND = 1
 UNIT_PART_ID = 2
@@ -74,11 +86,16 @@ FIELD_SPECS = {
     "needle_hurtbox_b_offset_z": FieldSpec(25, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
     "needle_hurtbox_scale": FieldSpec(26, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
     "needle_hitbox_damage": FieldSpec(27, ITEM_ARTICLE_VALUE_F32, UNIT_DAMAGE),
+    "chain_itkind": FieldSpec(28, ITEM_ARTICLE_VALUE_U16, UNIT_ITEM_KIND),
+    "chain_lifetime_frames": FieldSpec(29, ITEM_ARTICLE_VALUE_U32, UNIT_FRAMES),
+    "vanish_itkind": FieldSpec(30, ITEM_ARTICLE_VALUE_U16, UNIT_ITEM_KIND),
+    "vanish_lifetime_frames": FieldSpec(31, ITEM_ARTICLE_VALUE_U32, UNIT_FRAMES),
 }
 
 SHEIK_NEEDLE_FIELD_NAMES = tuple(
     name for name in FIELD_SPECS if name.startswith("needle_")
 )
+SHEIK_SPECIAL_ARTICLE_FIELD_NAMES = tuple(SHEIK_SPECIAL_ARTICLE_CONSTANTS)
 
 
 def _f32(v: float) -> float:
@@ -139,6 +156,10 @@ def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple
                 if ch not in ILLUSION_ITEM_KINDS:
                     continue
                 out.append((char_id, spec, float(ILLUSION_ITEM_KINDS[ch])))
+                continue
+            if key in SHEIK_SPECIAL_ARTICLE_CONSTANTS:
+                if ch == "sheik":
+                    out.append((char_id, spec, float(SHEIK_SPECIAL_ARTICLE_CONSTANTS[key])))
                 continue
             if key.startswith("needle_hurtbox_a_offset_"):
                 vals = attrs.get("needle_hurtbox_a_offset")

@@ -1711,8 +1711,8 @@ Characters (Fox/Falco/Marth/Sheik):
 - `data/items/articles/fox_falco.bin` (known fighter item/article fields; `MSLITAR1` compact binary)
   - Purpose:
     - Collect stable, named item/article constants for Fox/Falco blaster, laser,
-      illusion/phantasm, Sheik thrown Needle, item-common item-damage facing, and item-common
-      shield bounce data.
+      illusion/phantasm, Sheik thrown Needle, Sheik Chain/Vanish article publication fields,
+      item-common item-damage facing, and item-common shield bounce data.
     - This is a known-field table only; it does not classify item behavior from replay observations.
     - The file name is a legacy path; the table is no longer limited to Fox/Falco records.
   - Sources:
@@ -1724,15 +1724,17 @@ Characters (Fox/Falco/Marth/Sheik):
     - `refs/melee/src/melee/it/item.c::Item_80269DC8`
     - `refs/melee/src/melee/it/items/itfoxblaster.c`
     - `refs/melee/src/melee/it/items/itfoxillusion.c`
+    - `refs/melee/src/melee/it/items/itseakchain.c::{itSeakChain_Spawn,it_802BB20C}`
+    - `refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}`
     - `refs/melee/src/melee/it/items/itseakneedlethrown.c`
     - `refs/melee/src/melee/ft/chara/ft{Fox,Falco}/ftF{c,x}_Init.c` item-list registration
     - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_Init.c::ftSk_Init_OnLoad` item-list registration
     - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
   - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
     the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
-  - Binary layout: `MSLITAR1` v3
+  - Binary layout: `MSLITAR1` v4
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 3`
+    - `u32 version = 4`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
@@ -1740,6 +1742,11 @@ Characters (Fox/Falco/Marth/Sheik):
       character domain to names for review/tooling.
     - v3 adds Sheik Needle item kinds, lifetimes, launch speed, Article hurtbox bone/endpoints,
       hurtbox scale, and state-0 hitbox damage.
+    - v4 adds Sheik Chain and Vanish article kind/lifetime fields. These are runtime-required
+      for Sheik special article publication and update paths; `src/item_article_params.c` must
+      reject a Sheik row missing any of these fields. Gameplay code must consume these fields
+      through `item_article_params_get(MSL_CHAR_ID_SHEIK)` rather than local item-kind or
+      lifetime constants in `src/items.c`.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:

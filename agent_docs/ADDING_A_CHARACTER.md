@@ -1175,7 +1175,13 @@ cover most of it.
    / `it_8027163C`, plus runtime item hurtbox contact, DmgReceived callback,
    item hitlag, and fighter hitlist locks. Do not treat "the special enters and
    spawns an item" as complete unless the article's collision/callback lifecycle
-   is also data-backed and covered by positive/negative controls.
+   is also data-backed and covered by positive/negative controls. Audit
+   publication, lifetime, and destruction as separate owners: Sheik Vanish smoke
+   spawns from `fn_80112ED8` installed by both normal travel entry and Start0
+   ground/air collision swaps, then `itseakvanish` owns the lifetime decrement;
+   Sheik Chain spawns at `ftSeakAttributes::x1C` and destroys at `x28`. A
+   source-correct MotionState transition can still leave stale or missing
+   article rows if the item owner is not modeled.
 9. **GATE**: all specials tests green; fox/falco validate-all "no suite total
    changes" (byte-stable) after every retained change.
 

@@ -453,7 +453,7 @@ def _ensure_known_data_artifacts() -> None:
         (ROOT / "data" / "stages" / "bin" / "grop.bin", b"MSLSTG01", 10),
         (ROOT / "data" / "model_parts" / "fox.bin", b"MSLPART1", 1),
         (ROOT / "data" / "model_parts" / "falco.bin", b"MSLPART1", 1),
-        (ROOT / "data" / "items" / "articles" / "fox_falco.bin", b"MSLITAR1", 3),
+        (ROOT / "data" / "items" / "articles" / "fox_falco.bin", b"MSLITAR1", 4),
         (ROOT / "data" / "scripts" / "fox.bin", b"MSLFTSC1", 2),
         (ROOT / "data" / "scripts" / "falco.bin", b"MSLFTSC1", 2),
     ]

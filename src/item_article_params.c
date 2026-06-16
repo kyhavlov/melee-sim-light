@@ -10,7 +10,7 @@
 #include "alloc.h"
 
 enum {
-  MSLITAR1_VERSION = 3,
+  MSLITAR1_VERSION = 4,
   MSLITAR1_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1,
   MSLITAR1_VALUE_U16 = 1,
   MSLITAR1_VALUE_U32 = 2,
@@ -40,16 +40,25 @@ enum {
   MSLITAR1_FIELD_NEEDLE_HURTBOX_B_OFFSET_Z = 25,
   MSLITAR1_FIELD_NEEDLE_HURTBOX_SCALE = 26,
   MSLITAR1_FIELD_NEEDLE_HITBOX_DAMAGE = 27,
+  MSLITAR1_FIELD_SHEIK_CHAIN_ITKIND = 28,
+  MSLITAR1_FIELD_SHEIK_CHAIN_LIFETIME_FRAMES = 29,
+  MSLITAR1_FIELD_SHEIK_VANISH_ITKIND = 30,
+  MSLITAR1_FIELD_SHEIK_VANISH_LIFETIME_FRAMES = 31,
   MSLITAR1_FIELD_NEEDLE_FIRST = MSLITAR1_FIELD_NEEDLE_THROW_ITKIND,
   MSLITAR1_FIELD_NEEDLE_LAST = MSLITAR1_FIELD_NEEDLE_HITBOX_DAMAGE,
   MSLITAR1_FIELD_NEEDLE_REQUIRED_MASK =
       (1u << (MSLITAR1_FIELD_NEEDLE_LAST - MSLITAR1_FIELD_NEEDLE_FIRST + 1u)) - 1u,
+  MSLITAR1_FIELD_SHEIK_SPECIAL_FIRST = MSLITAR1_FIELD_SHEIK_CHAIN_ITKIND,
+  MSLITAR1_FIELD_SHEIK_SPECIAL_LAST = MSLITAR1_FIELD_SHEIK_VANISH_LIFETIME_FRAMES,
+  MSLITAR1_FIELD_SHEIK_SPECIAL_REQUIRED_MASK =
+      (1u << (MSLITAR1_FIELD_SHEIK_SPECIAL_LAST - MSLITAR1_FIELD_SHEIK_SPECIAL_FIRST + 1u)) - 1u,
 };
 
 typedef struct ItemArticleTable {
   MslItemArticleParams by_char[256];
   uint8_t have_char[256];
   uint32_t sheik_needle_fields_seen;
+  uint32_t sheik_special_article_fields_seen;
   uint8_t loaded;
 } ItemArticleTable;
 
@@ -201,6 +210,22 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
       if (value_type != MSLITAR1_VALUE_F32) return -1;
       rec->needle_hitbox_damage = f32_value;
       break;
+    case MSLITAR1_FIELD_SHEIK_CHAIN_ITKIND:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->sheik_chain_itkind = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_SHEIK_CHAIN_LIFETIME_FRAMES:
+      if (value_type != MSLITAR1_VALUE_U32) return -1;
+      rec->sheik_chain_lifetime_frames = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_SHEIK_VANISH_ITKIND:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->sheik_vanish_itkind = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_SHEIK_VANISH_LIFETIME_FRAMES:
+      if (value_type != MSLITAR1_VALUE_U32) return -1;
+      rec->sheik_vanish_lifetime_frames = (uint16_t)u32_value;
+      break;
     default:
       break;
   }
@@ -208,6 +233,11 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
       field_id <= MSLITAR1_FIELD_NEEDLE_LAST) {
     g_tbl.sheik_needle_fields_seen |= (uint32_t)1u
                                       << (uint32_t)(field_id - MSLITAR1_FIELD_NEEDLE_FIRST);
+  }
+  if (char_id == 7u && field_id >= MSLITAR1_FIELD_SHEIK_SPECIAL_FIRST &&
+      field_id <= MSLITAR1_FIELD_SHEIK_SPECIAL_LAST) {
+    g_tbl.sheik_special_article_fields_seen |=
+        (uint32_t)1u << (uint32_t)(field_id - MSLITAR1_FIELD_SHEIK_SPECIAL_FIRST);
   }
   return 0;
 }
@@ -305,10 +335,16 @@ int item_article_params_init(void) {
       g_tbl.by_char[1].side_special_illusion_itkind == 0u ||
       g_tbl.by_char[22].side_special_illusion_itkind == 0u || !g_tbl.have_char[7] ||
       g_tbl.sheik_needle_fields_seen != (uint32_t)MSLITAR1_FIELD_NEEDLE_REQUIRED_MASK ||
+      g_tbl.sheik_special_article_fields_seen !=
+          (uint32_t)MSLITAR1_FIELD_SHEIK_SPECIAL_REQUIRED_MASK ||
       g_tbl.by_char[7].needle_throw_itkind == 0u || g_tbl.by_char[7].needle_hurtbox_count == 0u ||
       g_tbl.by_char[7].needle_bounce_lifetime_frames == 0u ||
       !(g_tbl.by_char[7].needle_hurtbox_scale > 0.0f) ||
-      !(g_tbl.by_char[7].needle_hitbox_damage > 0.0f)) {
+      !(g_tbl.by_char[7].needle_hitbox_damage > 0.0f) ||
+      g_tbl.by_char[7].sheik_chain_itkind == 0u ||
+      g_tbl.by_char[7].sheik_chain_lifetime_frames == 0u ||
+      g_tbl.by_char[7].sheik_vanish_itkind == 0u ||
+      g_tbl.by_char[7].sheik_vanish_lifetime_frames == 0u) {
     return -1;
   }
   g_tbl.loaded = 1u;

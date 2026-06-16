@@ -11,7 +11,9 @@
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
+#include "grab_flow.h"
 #include "ids.h"
+#include "items.h"
 #include "locomotion.h"
 #include "motion_state_owners.h"
 #include "mpcoll_floor_skip.h"
@@ -51,10 +53,61 @@ static void sk_enter(MslBatch* batch, size_t idx, uint16_t action_id, float star
   msl_anim_timebase_enter(batch, idx, start_frame, anim_rate);
 }
 
+static uint8_t sk_try_enter_b_special(MslBatch* batch, const MslCommonParams* c,
+                                      const MslCharParams* ch, size_t idx, uint8_t ground);
+
 static void sk_enter_wait(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+}
+
+static uint8_t sk_try_run_grounded_wait_iasa_after_ft_8008A2BC(MslBatch* batch,
+                                                               const MslCommonParams* c,
+                                                               const MslCharParams* ch, size_t idx,
+                                                               uint16_t source_action) {
+  if (batch == NULL || c == NULL || ch == NULL ||
+      batch->state.action_id[idx] != (uint16_t)MSL_ACT_WAIT || batch->state.on_ground[idx] == 0u) {
+    return 0u;
+  }
+
+  const uint16_t buttons = batch->state.input_buttons[idx];
+  const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+  const float stick_x =
+      sk_deadzone(sk_stick_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float stick_y =
+      sk_deadzone(sk_stick_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float facing_dir = sk_facing_dir(batch, idx);
+  const uint8_t tilt_timer_x = batch->state.tilt_timer_x[idx];
+  const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
+
+  // Grounded Sheik special Anim callbacks that call ft_8008A2BC enter Wait through ft_8008A348.
+  // The destination Wait_IASA can still run in the same Fighter_procUpdate pass, so terminal
+  // Needle, Chain, and Vanish exits must not serialize a bare Wait for one frame.
+  // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi}.c
+  if (sk_try_enter_b_special(batch, c, ch, idx, 1u)) {
+    return 1u;
+  }
+  if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+    return 1u;
+  }
+  if (locomotion_grounded_a_attack_try_enter_from_wait_iasa(batch, c, idx, buttons_pressed, stick_x,
+                                                            stick_y, tilt_timer_x, tilt_timer_y,
+                                                            facing_dir)) {
+    return 1u;
+  }
+  if (wait_iasa_try_enter_spotdodge_before_guard_hsd_lr(batch, c, idx)) {
+    return 1u;
+  }
+  guard_update_grounded(batch, c, idx, /*allow_entry=*/1u);
+  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_WAIT) {
+    return 1u;
+  }
+  return locomotion_wait_iasa_locomotion_subset_try_enter(
+      batch, c, ch, idx, buttons, buttons_pressed, stick_x, stick_y, tilt_timer_x, tilt_timer_y,
+      facing_dir, source_action);
 }
 
 static void sk_enter_fall(MslBatch* batch, size_t idx) {
@@ -234,6 +287,7 @@ static void sk_vanish_enter_air_travel(MslBatch* batch, const MslCharParams* ch,
           ? (uint8_t)ch->sheik_vanish_travel_frames
           : 0u;
   sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1, 35.0f, 0.0f);
+  (void)items_spawn_sheik_vanish_smoke_article(batch, idx);
   msl_anim_timebase_tick_once(batch, idx);
 }
 
@@ -270,6 +324,7 @@ static void sk_vanish_enter_travel(MslBatch* batch, const MslCharParams* ch, siz
             ? (uint8_t)ch->sheik_vanish_travel_frames
             : 0u;
     sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_1, 35.0f, 0.0f);
+    (void)items_spawn_sheik_vanish_smoke_article(batch, idx);
     msl_anim_timebase_tick_once(batch, idx);
     return;
   }
@@ -459,7 +514,6 @@ static void sk_update_specialn_loop_iasa(MslBatch* batch, const MslCommonParams*
 
 static void sk_update_specialn(MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch,
                                size_t idx, uint16_t a) {
-  (void)ch;
   switch (a) {
     case MSL_ACT_SK_SPECIAL_N_START:
     case MSL_ACT_SK_SPECIAL_AIR_N_START:
@@ -478,7 +532,7 @@ static void sk_update_specialn(MslBatch* batch, const MslCommonParams* c, const 
     case MSL_ACT_SK_SPECIAL_N_CANCEL:
       if (sk_anim_finished(batch, idx, a)) {
         sk_enter_wait(batch, idx);
-        (void)wait_iasa_try_guard_after_callback(batch, c, idx);
+        (void)sk_try_run_grounded_wait_iasa_after_ft_8008A2BC(batch, c, ch, idx, a);
       }
       break;
     case MSL_ACT_SK_SPECIAL_AIR_N_CANCEL:
@@ -502,6 +556,7 @@ static void sk_update_specialn(MslBatch* batch, const MslCommonParams* c, const 
       if (sk_anim_finished(batch, idx, a)) {
         if (a == (uint16_t)MSL_ACT_SK_SPECIAL_N_END) {
           sk_enter_wait(batch, idx);
+          (void)sk_try_run_grounded_wait_iasa_after_ft_8008A2BC(batch, c, ch, idx, a);
         } else {
           sk_enter_fall(batch, idx);
         }
@@ -512,7 +567,8 @@ static void sk_update_specialn(MslBatch* batch, const MslCommonParams* c, const 
   }
 }
 
-static void sk_update_specials(MslBatch* batch, const MslCharParams* ch, size_t idx, uint16_t a) {
+static void sk_update_specials(MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch,
+                               size_t idx, uint16_t a) {
   switch (a) {
     case MSL_ACT_SK_SPECIAL_S_START:
     case MSL_ACT_SK_SPECIAL_AIR_S_START: {
@@ -521,6 +577,9 @@ static void sk_update_specials(MslBatch* batch, const MslCharParams* ch, size_t 
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
       const uint8_t t = sk_timer_saturating_inc(batch->state.sheik_special_timer[idx]);
       batch->state.sheik_special_timer[idx] = t;
+      if ((float)t == ch->sheik_chain_spawn_frame) {
+        (void)items_spawn_sheik_chain_article(batch, idx);
+      }
       if ((float)t > ch->sheik_chain_start_end_frame) {
         sk_enter(batch, idx,
                  a == (uint16_t)MSL_ACT_SK_SPECIAL_S_START ? (uint16_t)MSL_ACT_SK_SPECIAL_S
@@ -553,22 +612,34 @@ static void sk_update_specials(MslBatch* batch, const MslCharParams* ch, size_t 
         batch->state.sheik_special_latch[idx] = 1u;
       }
     } break;
-    case MSL_ACT_SK_SPECIAL_S_END:
+    case MSL_ACT_SK_SPECIAL_S_END: {
+      const uint8_t t = sk_timer_saturating_inc(batch->state.sheik_special_timer[idx]);
+      batch->state.sheik_special_timer[idx] = t;
+      if ((float)t == ch->sheik_chain_destroy_frame) {
+        (void)items_destroy_sheik_chain_article(batch, idx);
+      }
       if (sk_anim_finished(batch, idx, a)) {
         sk_enter_wait(batch, idx);
+        (void)sk_try_run_grounded_wait_iasa_after_ft_8008A2BC(batch, c, ch, idx, a);
       }
-      break;
-    case MSL_ACT_SK_SPECIAL_AIR_S_END:
+    } break;
+    case MSL_ACT_SK_SPECIAL_AIR_S_END: {
+      const uint8_t t = sk_timer_saturating_inc(batch->state.sheik_special_timer[idx]);
+      batch->state.sheik_special_timer[idx] = t;
+      if ((float)t == ch->sheik_chain_destroy_frame) {
+        (void)items_destroy_sheik_chain_article(batch, idx);
+      }
       if (sk_anim_finished(batch, idx, a)) {
         sk_enter_fall(batch, idx);
       }
-      break;
+    } break;
     default:
       break;
   }
 }
 
-static void sk_update_specialhi(MslBatch* batch, const MslCharParams* ch, size_t idx, uint16_t a) {
+static void sk_update_specialhi(MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch,
+                                size_t idx, uint16_t a) {
   switch (a) {
     case MSL_ACT_SK_SPECIAL_HI_START_0:
     case MSL_ACT_SK_SPECIAL_AIR_HI_START_0:
@@ -598,6 +669,7 @@ static void sk_update_specialhi(MslBatch* batch, const MslCharParams* ch, size_t
     case MSL_ACT_SK_SPECIAL_HI:
       if (sk_anim_finished(batch, idx, a)) {
         sk_enter_wait(batch, idx);
+        (void)sk_try_run_grounded_wait_iasa_after_ft_8008A2BC(batch, c, ch, idx, a);
       }
       break;
     case MSL_ACT_SK_SPECIAL_AIR_HI:
@@ -774,8 +846,8 @@ void sheik_specials_update_pre_physics(MslBatch* batch) {
       }
       batch->state.animation_index[idx] = (uint32_t)sk_submotion(a);
       sk_update_specialn(batch, c, ch, idx, a);
-      sk_update_specials(batch, ch, idx, a);
-      sk_update_specialhi(batch, ch, idx, a);
+      sk_update_specials(batch, c, ch, idx, a);
+      sk_update_specialhi(batch, c, ch, idx, a);
       sk_update_speciallw(batch, ch, idx, a);
     }
   }
@@ -900,6 +972,12 @@ uint8_t sheik_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
     case MSL_ACT_SK_SPECIAL_HI_START_0:
       sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_0,
                batch->state.anim_frame_f32[idx], 1.0f);
+      // ftSk_SpecialHiStart_0_Coll can floor-loss into ftSk_SpecialHi_80113324, which preserves
+      // the Start0 animation frame and installs the same fn_80112ED8 smoke accessory callback used
+      // by normal travel entry.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+      //   ftSk_SpecialHiStart_0_Coll,ftSk_SpecialHi_80113324,fn_80112ED8}
+      (void)items_spawn_sheik_vanish_smoke_article(batch, idx);
       return 1u;
     case MSL_ACT_SK_SPECIAL_HI_START_1:
       sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1,
@@ -958,6 +1036,11 @@ uint8_t sheik_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {
     case MSL_ACT_SK_SPECIAL_AIR_HI_START_0:
       sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_0,
                batch->state.anim_frame_f32[idx], 1.0f);
+      // ftSk_SpecialAirHiStart_0_Coll can ground into ftSk_SpecialHi_80113390, which also
+      // installs fn_80112ED8 at the preserved Start0 frame.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+      //   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialHi_80113390,fn_80112ED8}
+      (void)items_spawn_sheik_vanish_smoke_article(batch, idx);
       return 1u;
     case MSL_ACT_SK_SPECIAL_AIR_HI_START_1:
       // ftSk_SpecialAirHi_Coll enters the grounded travel state after the common collision path

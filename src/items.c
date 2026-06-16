@@ -1873,6 +1873,147 @@ static void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int 
       (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
 }
 
+uint8_t items_spawn_sheik_chain_article(MslBatch* batch, size_t owner_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || ap->sheik_chain_itkind == 0u || ap->sheik_chain_lifetime_frames == 0u) {
+    return 0u;
+  }
+  const int bi = (int)(owner_idx / (size_t)MSL_MAX_PLAYERS);
+  const int owner = (int)(owner_idx % (size_t)MSL_MAX_PLAYERS);
+  if (batch->state.char_id[owner_idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
+      items_find_owned_item_slot(batch, bi, owner, ap->sheik_chain_itkind) >= 0) {
+    return 0u;
+  }
+
+  const int slot = items_alloc_slot(batch, bi);
+  if (slot < 0) {
+    return 0u;
+  }
+  const size_t ii = msl_idx_item(bi, slot);
+  item_slot_clear(batch, ii);
+
+  // ftSk_SpecialS_CheckInitChain spawns It_Kind_Seak_Chain from L3rdNa when
+  // mv.sk.specials.x0 reaches ftSeakAttributes::x1C. The full segment chain is model work; this
+  // publication slice owns the source article identity/lifetime used by replay item lanes.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
+  // refs/melee/src/melee/it/items/itseakchain.c::itSeakChain_Spawn
+  batch->state.item_exists[ii] = 1u;
+  batch->state.item_type[ii] = ap->sheik_chain_itkind;
+  batch->state.item_state[ii] = 0u;
+  batch->state.item_owner[ii] = (int8_t)owner;
+  batch->state.item_instance_id[ii] = batch->state.instance_id[owner_idx];
+  batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
+  batch->state.item_direction[ii] = batch->state.facing[owner_idx] ? 1.0f : -1.0f;
+  batch->state.item_pos_x[ii] = batch->state.pos_x[owner_idx];
+  batch->state.item_pos_y[ii] = batch->state.pos_y[owner_idx];
+  batch->state.item_vel_x[ii] = 0.0f;
+  batch->state.item_vel_y[ii] = 0.0f;
+  batch->state.item_timer[ii] = (float)ap->sheik_chain_lifetime_frames;
+  batch->state.item_hidden_callback_flags[ii] |=
+      (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
+  return 1u;
+}
+
+uint8_t items_destroy_sheik_chain_article(MslBatch* batch, size_t owner_idx) {
+  if (batch == NULL || batch->state.char_id[owner_idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || ap->sheik_chain_itkind == 0u) {
+    return 0u;
+  }
+  const int bi = (int)(owner_idx / (size_t)MSL_MAX_PLAYERS);
+  const int owner = (int)(owner_idx % (size_t)MSL_MAX_PLAYERS);
+  const int slot = items_find_owned_item_slot(batch, bi, owner, ap->sheik_chain_itkind);
+  if (slot < 0) {
+    return 0u;
+  }
+  // ftSk_SpecialS{Air}End_Anim calls it_802BB20C when mv.sk.specials.x0 reaches
+  // ftSeakAttributes::x28.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+  //   ftSk_SpecialSEnd_Anim,ftSk_SpecialAirSEnd_Anim}
+  // refs/melee/src/melee/it/items/itseakchain.c::it_802BB20C
+  item_slot_clear(batch, msl_idx_item(bi, slot));
+  return 1u;
+}
+
+static void sheik_vanish_smoke_items_update(MslBatch* batch, int bi) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || ap->sheik_vanish_itkind == 0u) {
+    return;
+  }
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] == 0u ||
+        batch->state.item_type[ii] != ap->sheik_vanish_itkind) {
+      continue;
+    }
+    // itSeakvanish_UnkMotion0_Anim delegates to the generic item lifetime decrement/destroy path
+    // after it_802B1D40 seeds xD44_lifeTimer.
+    // refs/melee/src/melee/it/items/itseakvanish.c::{
+    //   it_802B1D40,itSeakvanish_UnkMotion0_Anim}
+    if (batch->state.item_timer[ii] <= 1.0f) {
+      item_slot_clear(batch, ii);
+    } else {
+      batch->state.item_timer[ii] -= 1.0f;
+    }
+  }
+}
+
+uint8_t items_spawn_sheik_vanish_smoke_article(MslBatch* batch, size_t owner_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || ap->sheik_vanish_itkind == 0u || ap->sheik_vanish_lifetime_frames == 0u) {
+    return 0u;
+  }
+  const int bi = (int)(owner_idx / (size_t)MSL_MAX_PLAYERS);
+  const int owner = (int)(owner_idx % (size_t)MSL_MAX_PLAYERS);
+  const size_t o_idx = owner_idx;
+  const uint8_t char_id = batch->state.char_id[o_idx];
+  if (char_id != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  if (items_find_owned_item_slot(batch, bi, owner, ap->sheik_vanish_itkind) >= 0) {
+    return 0u;
+  }
+  const int slot = items_alloc_slot(batch, bi);
+  if (slot < 0) {
+    return 0u;
+  }
+  const size_t ii = msl_idx_item(bi, slot);
+  item_slot_clear(batch, ii);
+
+  // Vanish travel entry installs `fn_80112ED8` through inlineA0 / ftSk_SpecialHi_80113A30.
+  // The accessory callback spawns the smoke article once with it_802B1C60, which initializes
+  // It_Kind_Seak_Vanish state 0 and a 60-frame lifetime.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+  //   inlineA0,ftSk_SpecialHi_80113A30,fn_80112ED8,ftSk_SpecialHi_80112F48}
+  // refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
+  batch->state.item_exists[ii] = 1u;
+  batch->state.item_type[ii] = ap->sheik_vanish_itkind;
+  batch->state.item_state[ii] = 0u;
+  batch->state.item_owner[ii] = (int8_t)owner;
+  batch->state.item_instance_id[ii] = batch->state.instance_id[o_idx];
+  batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
+  batch->state.item_direction[ii] = batch->state.facing[o_idx] ? 1.0f : -1.0f;
+  batch->state.item_pos_x[ii] = batch->state.pos_x[o_idx];
+  batch->state.item_pos_y[ii] = batch->state.pos_y[o_idx];
+  batch->state.item_vel_x[ii] = 0.0f;
+  batch->state.item_vel_y[ii] = 0.0f;
+  batch->state.item_timer[ii] = (float)ap->sheik_vanish_lifetime_frames;
+  batch->state.item_hidden_callback_flags[ii] |=
+      (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
+  return 1u;
+}
+
 static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
   if (batch == NULL) {
     return;
@@ -10023,6 +10164,9 @@ void items_update_collision_phase(MslBatch* batch) {
 
       // Fighter HitCapsule -> Sheik thrown-Needle item hurtbox damage/callback.
       sheik_needles_update_and_collide(batch, bi);
+
+      // Sheik Vanish smoke article lifetime.
+      sheik_vanish_smoke_items_update(batch, bi);
 
       // Motion + collision/hit apply for existing lasers.
       lasers_update_and_collide(batch, bi);

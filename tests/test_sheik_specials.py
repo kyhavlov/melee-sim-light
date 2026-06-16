@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from test_char_common_action_coverage import _mk_inputs, _run, _seed_base  # noqa: E402
 from test_colldata_ecb_substrate import _colldata_ecb_dtype  # noqa: E402
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset  # noqa: E402
+from tools.slippi.item_article_data import item_article_values_by_sim_char  # noqa: E402
 
 pytest.importorskip("msl_binding")
 
@@ -32,8 +33,11 @@ A = 0x0100
 B = 0x0200
 
 ACT_WAIT = 0x000E
+ACT_TURN = 0x0012
 ACT_FALL = 0x001D
+ACT_FALL_SPECIAL = 0x0023
 ACT_KNEE_BEND = 0x0018
+ACT_SQUAT = 0x0027
 ACT_JUMP_F = 0x0019
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
@@ -67,8 +71,14 @@ ACT_CLIFF_CATCH = 252
 SM_LANDING = 35
 SM_LANDING_AIR_N = 73
 
-ITEM_SHEIK_NEEDLE_THROWN = 79
-ITEM_SHEIK_NEEDLE_HELD = 80
+def _sheik_article_int(field_name: str) -> int:
+    return int(item_article_values_by_sim_char(ROOT / "data", field_name)[7])
+
+
+ITEM_SHEIK_NEEDLE_THROWN = _sheik_article_int("needle_throw_itkind")
+ITEM_SHEIK_NEEDLE_HELD = _sheik_article_int("needle_held_itkind")
+ITEM_SHEIK_VANISH = _sheik_article_int("vanish_itkind")
+ITEM_SHEIK_CHAIN = _sheik_article_int("chain_itkind")
 
 
 def test_sheik_special_attrs_are_required_for_runtime_load(tmp_path: Path) -> None:
@@ -269,6 +279,13 @@ def _sheik_validation_samples(rel: str) -> np.ndarray:
     if not path.exists():
         pytest.skip(f"missing local dataset: {rel}")
     return read_dataset(str(path)).samples
+
+
+def _item_type_present(row: np.void, item_type: int) -> bool:
+    return any(
+        int(t) == item_type and int(e) != 0
+        for t, e in zip(row["items"]["type"], row["items"]["exists"])
+    )
 
 
 def _attrs() -> dict:
@@ -487,6 +504,111 @@ def test_sheik_ground_vanish_platform_pass_enters_air_travel_replay_real_lock() 
 
     out = _run_sample_row(samples, record)
     assert int(out["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "expected_action"),
+    [
+        (1262, ACT_SK_SPECIAL_HI_START_0),
+        (1821, ACT_SK_SPECIAL_HI_START_0),
+    ],
+)
+def test_sheik_vanish_travel_entry_spawns_smoke_article_demo_locks(
+    record: int, expected_action: int
+) -> None:
+    # Travel entry installs fn_80112ED8, whose accessory callback spawns It_Kind_Seak_Vanish
+    # through it_802B1C60 in the same item/accessory phase. Cover both the air and ground travel
+    # entry paths from the demo fixture.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+    #   inlineA0,ftSk_SpecialHi_80113A30,fn_80112ED8,ftSk_SpecialHi_80112F48}
+    # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    assert int(samples[record]["seed_t"]["action_id"][0]) == expected_action
+    assert _item_type_present(samples[record]["ref_t1"], ITEM_SHEIK_VANISH)
+
+    out = _run_sample_row(samples, record)
+    assert _item_type_present(out, ITEM_SHEIK_VANISH)
+
+
+def test_sheik_non_vanish_special_does_not_spawn_smoke_article_negative() -> None:
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_END)
+    seed["animation_index"][0, 0] = np.uint32(298)
+    seed["anim_frame_f32"][0, 0] = np.float32(39.0)
+    out = _run(seed, [_mk_inputs()])[0]
+    assert not _item_type_present(out, ITEM_SHEIK_VANISH)
+
+
+def test_sheik_vanish_smoke_timer_one_destroys_article_synthetic() -> None:
+    seed = _seed_base("sheik")
+    seed["items"]["exists"][0, 0] = np.uint8(1)
+    seed["items"]["type"][0, 0] = np.uint16(ITEM_SHEIK_VANISH)
+    seed["items"]["owner"][0, 0] = np.int8(0)
+    seed["items"]["timer"][0, 0] = np.float32(1.0)
+    out = _run(seed, [_mk_inputs()])[0]
+    assert not _item_type_present(out, ITEM_SHEIK_VANISH)
+
+
+def test_sheik_vanish_smoke_timer_two_survives_and_decrements_synthetic() -> None:
+    seed = _seed_base("sheik")
+    seed["items"]["exists"][0, 0] = np.uint8(1)
+    seed["items"]["type"][0, 0] = np.uint16(ITEM_SHEIK_VANISH)
+    seed["items"]["owner"][0, 0] = np.int8(0)
+    seed["items"]["timer"][0, 0] = np.float32(2.0)
+    out = _run(seed, [_mk_inputs()])[0]
+    assert _item_type_present(out, ITEM_SHEIK_VANISH)
+    assert float(out["items"][0]["timer"]) == pytest.approx(1.0, abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "expected_action"),
+    [
+        (248, ACT_SK_SPECIAL_AIR_S_START),
+        (1391, ACT_SK_SPECIAL_S_START),
+    ],
+)
+def test_sheik_chain_start_spawn_frame_publishes_chain_article_demo_locks(
+    record: int, expected_action: int
+) -> None:
+    # ftSk_SpecialS_CheckInitChain increments mv.sk.specials.x0 and spawns It_Kind_Seak_Chain
+    # exactly when x0 reaches ftSeakAttributes::x1C.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
+    # refs/melee/src/melee/it/items/itseakchain.c::itSeakChain_Spawn
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    assert int(samples[record]["seed_t"]["action_id"][0]) == expected_action
+    assert int(samples[record]["seed_t"]["sheik_chain_x0_u8"][0]) == 21
+    assert _item_type_present(samples[record]["ref_t1"], ITEM_SHEIK_CHAIN)
+
+    out = _run_sample_row(samples, record)
+    assert _item_type_present(out, ITEM_SHEIK_CHAIN)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [494, 1441])
+def test_sheik_chain_end_destroy_frame_clears_chain_article_demo_locks(record: int) -> None:
+    # ftSk_SpecialS{Air}End_Anim destroys the Chain article when mv.sk.specials.x0 reaches
+    # ftSeakAttributes::x28, after the earlier retract callback frame.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialSEnd_Anim,ftSk_SpecialAirSEnd_Anim}
+    # refs/melee/src/melee/it/items/itseakchain.c::it_802BB20C
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_S_END
+    assert int(samples[record]["seed_t"]["sheik_chain_x0_u8"][0]) == 27
+    assert not _item_type_present(samples[record]["ref_t1"], ITEM_SHEIK_CHAIN)
+
+    out = _run_sample_row(samples, record)
+    assert not _item_type_present(out, ITEM_SHEIK_CHAIN)
+
+
+def test_sheik_chain_start_before_spawn_frame_does_not_publish_chain_negative() -> None:
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_S_START)
+    seed["animation_index"][0, 0] = np.uint32(304)
+    seed["sheik_chain_x0_u8"][0, 0] = np.uint8(20)
+    out = _run(seed, [_mk_inputs(buttons=B)])[0]
+    assert not _item_type_present(out, ITEM_SHEIK_CHAIN)
 
 
 def test_sheik_vanish_reseed_timer_controls_travel_exit() -> None:
@@ -919,6 +1041,70 @@ def test_sheik_ground_needle_cancel_anim_end_no_shield_returns_wait_negative() -
     seed["anim_frame_f32"][0, 0] = np.float32(999.0)
     out = _run(seed, [_mk_inputs()])[0]
     assert int(out["action_id"][0]) == ACT_WAIT
+
+
+def test_sheik_ground_needle_end_anim_end_runs_destination_wait_tail_synthetic() -> None:
+    # ftSk_SpecialNEnd_Anim also calls ft_8008A2BC. The destination Wait_IASA locomotion tail
+    # consumes down-stick in the same source proc instead of exposing a one-frame Wait.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialNEnd_Anim
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_END)
+    seed["animation_index"][0, 0] = np.uint32(298)
+    seed["anim_frame_f32"][0, 0] = np.float32(999.0)
+    out = _run(seed, [_mk_inputs(main_y=-80)])[0]
+    assert int(out["action_id"][0]) == ACT_SQUAT
+
+
+@pytest.mark.integration
+def test_sheik_ground_vanish_end_anim_end_turns_from_destination_wait_demo_lock() -> None:
+    # ftSk_SpecialHi_Anim ends through ft_8008A2BC. The destination Wait_IASA tail can immediately
+    # enter Turn when the stick crosses the turn threshold.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialHi_Anim
+    # refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    record = 1880
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_HI
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_TURN
+
+    out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == ACT_TURN
+
+
+@pytest.mark.integration
+def test_sheik_ground_vanish_end_anim_end_can_remain_wait_demo_lock() -> None:
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    record = 1986
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_HI
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_WAIT
+
+    out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == ACT_WAIT
+
+
+@pytest.mark.integration
+def test_sheik_ground_chain_end_anim_end_squats_from_destination_wait_demo_lock() -> None:
+    # ftSk_SpecialSEnd_Anim calls ft_8008A2BC. The same destination Wait_IASA owner applies to
+    # terminal Chain and consumes the held down-stick as Squat.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialSEnd_Anim
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    record = 4680
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_S_END
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SQUAT
+
+    out = _run_sample_row(samples, record)
+    assert int(out["action_id"][0]) == ACT_SQUAT
+
+
+def test_sheik_air_vanish_end_anim_end_does_not_run_ground_wait_tail_negative() -> None:
+    # Aerial terminal Sheik specials do not use the grounded ft_8008A2BC destination-Wait tail.
+    # Vanish Air End follows ftCo_80096900 into FallSpecial instead.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Anim
+    seed = _seed_base("sheik", grounded=False, pos_y=30.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_AIR_HI)
+    seed["animation_index"][0, 0] = np.uint32(312)
+    seed["anim_frame_f32"][0, 0] = np.float32(999.0)
+    out = _run(seed, [_mk_inputs(main_y=-80)])[0]
+    assert int(out["action_id"][0]) == ACT_FALL_SPECIAL
 
 
 @pytest.mark.integration

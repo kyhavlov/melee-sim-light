@@ -4499,7 +4499,8 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
     return NULL;
   }
   return Py_BuildValue(
-      "{s:i,s:i,s:i,s:i,s:i,s:f,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:f,s:i,s:i,s:N,s:N,s:f,s:f}",
+      "{s:i,s:i,s:i,s:i,s:i,s:f,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:f,s:i,s:i,s:N,s:"
+      "N,s:f,s:f}",
       "blaster_shot_itkind", (int)p->blaster_shot_itkind, "blaster_gun_itkind",
       (int)p->blaster_gun_itkind, "laser_spawn_joint_part_id", (int)p->laser_spawn_joint_part_id,
       "laser_lifetime_frames", (int)p->laser_lifetime_frames, "side_special_illusion_itkind",
@@ -4509,7 +4510,10 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
       "shield_bounce_extra_degrees", (double)p->shield_bounce_extra_degrees, "needle_throw_itkind",
       (int)p->needle_throw_itkind, "needle_held_itkind", (int)p->needle_held_itkind,
       "needle_lifetime_frames", (int)p->needle_lifetime_frames, "needle_bounce_lifetime_frames",
-      (int)p->needle_bounce_lifetime_frames, "needle_launch_speed", (double)p->needle_launch_speed,
+      (int)p->needle_bounce_lifetime_frames, "sheik_chain_itkind", (int)p->sheik_chain_itkind,
+      "sheik_chain_lifetime_frames", (int)p->sheik_chain_lifetime_frames, "sheik_vanish_itkind",
+      (int)p->sheik_vanish_itkind, "sheik_vanish_lifetime_frames",
+      (int)p->sheik_vanish_lifetime_frames, "needle_launch_speed", (double)p->needle_launch_speed,
       "needle_hurtbox_count", (int)p->needle_hurtbox_count, "needle_hurtbox_bone_id",
       (int)p->needle_hurtbox_bone_id, "needle_hurtbox_a_offset", a_offsets,
       "needle_hurtbox_b_offset", b_offsets, "needle_hurtbox_scale", (double)p->needle_hurtbox_scale,

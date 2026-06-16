@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "batch_internal.h"
@@ -25,6 +26,9 @@ static inline uint8_t item_type_is_illusion_article(uint16_t type) {
 // item-core gameplay scope.
 void items_update_pre_fighter_anim_phase(MslBatch* batch);
 void items_spawn_fighter_anim_phase(MslBatch* batch);
+uint8_t items_spawn_sheik_chain_article(MslBatch* batch, size_t owner_idx);
+uint8_t items_destroy_sheik_chain_article(MslBatch* batch, size_t owner_idx);
+uint8_t items_spawn_sheik_vanish_smoke_article(MslBatch* batch, size_t owner_idx);
 void items_update_collision_phase(MslBatch* batch);
 
 // Runtime collision-demand predicate for consumers that need fighter hurtcap geometry before

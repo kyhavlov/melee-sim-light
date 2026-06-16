@@ -32,6 +32,10 @@ def test_runtime_item_article_params_known_values() -> None:
     assert sheik["needle_hurtbox_count"] == 1
     assert sheik["needle_hurtbox_scale"] == pytest.approx(1.0)
     assert sheik["needle_hitbox_damage"] == pytest.approx(3.0)
+    assert sheik["sheik_chain_itkind"] == 97
+    assert sheik["sheik_chain_lifetime_frames"] == 1400
+    assert sheik["sheik_vanish_itkind"] == 85
+    assert sheik["sheik_vanish_lifetime_frames"] == 60
 
 
 def test_runtime_item_article_params_rejects_stale_version(tmp_path: Path) -> None:
@@ -64,7 +68,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_needle_record(tmp_pat
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 3
+    assert version == 4
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 

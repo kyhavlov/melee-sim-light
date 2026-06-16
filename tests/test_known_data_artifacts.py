@@ -15,6 +15,7 @@ from tools.extraction.extract_fighter_script_timeline import EVENT_IDS, RUNTIME_
 from tools.extraction.extract_item_articles import (
     FIELD_SPECS,
     SHEIK_NEEDLE_FIELD_NAMES,
+    SHEIK_SPECIAL_ARTICLE_FIELD_NAMES,
     UNIT_DEGREES,
     UNIT_FRAMES,
     UNIT_ITEM_KIND,
@@ -662,6 +663,10 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
     assert "needle_throw_itkind" in fields
     assert "needle_hurtbox_scale" in fields
     assert "needle_hitbox_damage" in fields
+    assert "chain_itkind" in fields
+    assert "chain_lifetime_frames" in fields
+    assert "vanish_itkind" in fields
+    assert "vanish_lifetime_frames" in fields
     assert manifest["char_domain"]["name"] == "Slippi/CSS external character id"
 
     def rec(char_id: int, field_name: str):
@@ -707,6 +712,17 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
             assert needle_rec.f32_value == pytest.approx(float(expected))
         else:
             assert needle_rec.u32_value == int(expected)
+    sheik_special_expected = {
+        "chain_itkind": 97,
+        "chain_lifetime_frames": 1400,
+        "vanish_itkind": 85,
+        "vanish_lifetime_frames": 60,
+    }
+    assert set(SHEIK_SPECIAL_ARTICLE_FIELD_NAMES) == set(sheik_special_expected)
+    for field_name, expected in sheik_special_expected.items():
+        special_rec = rec(19, field_name)
+        assert special_rec.value_type in (ITEM_ARTICLE_VALUE_U16, ITEM_ARTICLE_VALUE_U32)
+        assert special_rec.u32_value == expected
     fox_illusion_kind = rec(2, "side_special_illusion_itkind")
     assert fox_illusion_kind.value_type == ITEM_ARTICLE_VALUE_U16
     assert fox_illusion_kind.unit_id == UNIT_ITEM_KIND
