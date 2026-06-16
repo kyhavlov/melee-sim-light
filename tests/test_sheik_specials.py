@@ -42,6 +42,8 @@ ACT_JUMP_F = 0x0019
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_LANDING_AIR_N = 0x0046
+ACT_DAMAGE_N_1 = 0x004E
+ACT_DAMAGE_N_3 = 0x0050
 ACT_GUARD_ON = 0x00B2
 ACT_FX_SPECIAL_N_START = 0x0155
 ACT_SK_SPECIAL_N_START = 341
@@ -70,6 +72,8 @@ ACT_CLIFF_CATCH = 252
 
 SM_LANDING = 35
 SM_LANDING_AIR_N = 73
+HIT_GROUNDED = 1 << 9
+HIT_AERIAL = 1 << 10
 
 def _sheik_article_int(field_name: str) -> int:
     return int(item_article_values_by_sim_char(ROOT / "data", field_name)[7])
@@ -811,7 +815,8 @@ def test_sheik_needle_seed_lane_persists_stored_count_across_non_specialn_action
     action[21:, 0] = ACT_SK_SPECIAL_AIR_N_END
     frame[21:, 0] = np.arange(13, dtype=np.int16)
 
-    count, timer = msl_binding.derive_sheik_needle_seed_lanes(char, action, frame, 7)
+    no_chain = np.zeros_like(char, dtype=np.uint8)
+    count, timer = msl_binding.derive_sheik_needle_seed_lanes(char, action, frame, no_chain, 7)
 
     assert int(count[0, 0]) == 1
     assert int(count[2, 0]) == 2
@@ -1471,6 +1476,30 @@ def test_sheik_thrown_needle_updates_in_free_run_without_reseed_bridge() -> None
     assert float(out["items"]["pos_x"][0]) == pytest.approx(13.0)
 
 
+@pytest.mark.parametrize("state", [1, 4])
+def test_sheik_thrown_needle_drop_gravity_comes_from_data_table(state: int) -> None:
+    # itSeakneedlethrown_UnkMotion{1,4}_Phys: x40_vel.y += xDE0 (gravity), clamp to xDDC. Replay
+    # seeds of pre-existing dropped/bounced Needles have no hidden xDE0 lane, so motion_step recovers
+    # the gravity from the visible y velocity using the MSLITAR1 data tables (needle_drop_gravity /
+    # needle_bounce_gravity), not a local literal array. vel_y=-1.0 is an exact multiple of the first
+    # source gravity entry (-0.1), so the recovered step is vel_y -> -1.1 with no min clamp.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    #   itSeakneedlethrown_UnkMotion1_Phys,itSeakneedlethrown_UnkMotion4_Phys,it_803F6FC0,it_803F7040}
+    import msl_binding
+
+    article = msl_binding.item_article_params(7)
+    grav_key = "needle_drop_gravity" if state == 1 else "needle_bounce_gravity"
+    assert article[grav_key][0] == pytest.approx(-0.1)
+
+    seed = _seed_base("sheik")
+    _install_sheik_item(
+        seed, item_type=ITEM_SHEIK_NEEDLE_THROWN, state=state, timer=30.0, vel_x=0.0, vel_y=-1.0
+    )
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 1
+    assert float(out["items"]["vel_y"][0]) == pytest.approx(-1.1)
+
+
 def test_sheik_thrown_needle_timer_one_destroys_before_motion() -> None:
     # States 0..3 return it_80273130 from Anim; a lifeTimer of 1 destroys the item before
     # Phys/Coll publication.
@@ -1520,6 +1549,186 @@ def test_sheik_held_needle_loop_keeps_article_but_cancel_destroys() -> None:
     _install_sheik_item(cancel_seed, item_type=ITEM_SHEIK_NEEDLE_HELD, state=0, timer=1400.0)
     cancel_out = _run(cancel_seed, [_mk_inputs()])[0]
     assert int(cancel_out["items"]["exists"][0]) == 0
+
+
+def _debug_sheik_needle_damage_callback(seed: np.ndarray) -> tuple[np.void, int]:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.debug_refresh_combat_geometry(handle)
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 1)
+        msl_binding.debug_set_hitbox_world(handle, 0, 1, 0, 0.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 1, 0, int(HIT_GROUNDED | HIT_AERIAL))
+        msl_binding.debug_set_hitbox_group(handle, 0, 1, 0, 0)
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 1, 0, 90, 100, 0, 20)
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 0)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 0, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5)
+        msl_binding.debug_set_hurtcap_height(handle, 0, 0, 0, 1)
+        msl_binding.debug_combat_resolve(handle)
+        needle_count = int(msl_binding.debug_get_sheik_needle_count(handle, 0, 0))
+        msl_binding.write_compare(handle, out_bytes)
+    finally:
+        msl_binding.destroy(handle)
+    return out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy(), needle_count
+
+
+def test_sheik_needle_damage_callback_drops_live_held_stock() -> None:
+    import msl_binding
+
+    # ftCommon_8007DB58 calls Sheik's take_dmg callback before Damage entry clears callback
+    # pointers. With fp->fv.sk.x4 live, ftSk_SpecialN_80111FBC converts every stored Needle into
+    # dropped thrown-Needle state 1 articles and clears fv.sk.x0.
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DB58
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialN_80111FBC
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_802AFD8C,it_802B00F4}
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_LOOP)
+    seed["animation_index"][0, 0] = np.uint32(296)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(3)
+    seed["pos_x"][0, 1] = np.float32(0.0)
+    _install_sheik_item(seed, item_type=ITEM_SHEIK_NEEDLE_HELD, state=0, timer=1400.0)
+
+    out, needle_count = _debug_sheik_needle_damage_callback(seed)
+    assert ACT_DAMAGE_N_1 <= int(out["action_id"][0]) <= ACT_DAMAGE_N_3
+    assert needle_count == 0
+    assert [int(out["items"]["type"][i]) for i in range(3)] == [ITEM_SHEIK_NEEDLE_THROWN] * 3
+    assert [int(out["items"]["state"][i]) for i in range(3)] == [1, 1, 1]
+    article = msl_binding.item_article_params(7)
+    assert [float(out["items"]["timer"][i]) for i in range(3)] == pytest.approx(
+        [float(article["needle_lifetime_frames"])] * 3
+    )
+    sheik_attrs = json.loads((ROOT / "data" / "characters" / "sheik.json").read_text())
+    assert float(out["items"]["pos_x"][0]) == pytest.approx(0.0)
+    assert float(out["items"]["pos_y"][0]) == pytest.approx(
+        float(sheik_attrs["sheik_needle_ground_spawn_y_offset"])
+    )
+
+
+def test_sheik_needle_damage_callback_cancel_gap_clears_without_drop_negative() -> None:
+    # In SpecialNCancel the take_dmg callback is still installed, but Cancel_Anim has already nulled
+    # fp->fv.sk.x4 (the held Needle is destroyed). Damage in that state clears fv.sk.x0 without
+    # spawning dropped Needles.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{ftSk_SpecialNCancel_Anim,setDmgCallbacks}
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_CANCEL)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(3)
+    seed["pos_x"][0, 1] = np.float32(0.0)
+
+    out, needle_count = _debug_sheik_needle_damage_callback(seed)
+    assert ACT_DAMAGE_N_1 <= int(out["action_id"][0]) <= ACT_DAMAGE_N_3
+    assert needle_count == 0
+    assert int(out["items"]["exists"][0]) == 0
+
+
+def test_sheik_needle_damage_callback_common_action_does_not_install_callback_negative() -> None:
+    # A common action like Wait does not install ftSk_Init_80110198 (it is installed by SpecialN and
+    # by SpecialS while a live Chain article exists). With the callback uninstalled, taking damage
+    # with a stored count and a (hypothetically) live held Needle neither drops Needles nor clears
+    # the held article.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_Init.c::ftSk_Init_80110198
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(3)
+    seed["pos_x"][0, 1] = np.float32(0.0)
+    _install_sheik_item(seed, item_type=ITEM_SHEIK_NEEDLE_HELD, state=0, timer=1400.0)
+
+    out, needle_count = _debug_sheik_needle_damage_callback(seed)
+    assert ACT_DAMAGE_N_1 <= int(out["action_id"][0]) <= ACT_DAMAGE_N_3
+    # Callback not installed in Wait: stored count survives and the held Needle article is untouched.
+    assert needle_count == 3
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_HELD
+    thrown = [
+        i for i in range(3) if int(out["items"]["type"][i]) == ITEM_SHEIK_NEEDLE_THROWN
+    ]
+    assert thrown == []
+
+
+def test_sheik_needle_damage_callback_specials_with_chain_clears_without_drop() -> None:
+    # ftSk_Init_80110198 is also installed during SpecialS while a live Chain article exists
+    # (fv.sk.x8 != NULL). Its Needle half clears fv.sk.x0; the held Needle pointer fv.sk.x4 is null in
+    # SpecialS, so the stored count clears without dropping any Needles.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_Init.c::ftSk_Init_80110198
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c (take_dmg_cb on fv.sk.x8 != NULL)
+    ACT_SK_SPECIAL_S_ACTIVE = 350
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_S_ACTIVE)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(3)
+    seed["pos_x"][0, 1] = np.float32(0.0)
+    # Live Chain article owned by the Sheik player installs the callback during SpecialS.
+    _install_sheik_item(seed, item_type=ITEM_SHEIK_CHAIN, state=1, timer=1400.0)
+
+    out, needle_count = _debug_sheik_needle_damage_callback(seed)
+    assert ACT_DAMAGE_N_1 <= int(out["action_id"][0]) <= ACT_DAMAGE_N_3
+    assert needle_count == 0
+    thrown = [i for i in range(3) if int(out["items"]["type"][i]) == ITEM_SHEIK_NEEDLE_THROWN]
+    assert thrown == []
+
+
+def test_sheik_needle_damage_callback_specials_without_chain_does_not_fire() -> None:
+    # In SpecialS with no live Chain article, ftSk_SpecialS never installs ftSk_Init_80110198, so a
+    # hit does not clear the stored Needle count.
+    ACT_SK_SPECIAL_S_ACTIVE = 350
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_S_ACTIVE)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(3)
+    seed["pos_x"][0, 1] = np.float32(0.0)
+
+    out, needle_count = _debug_sheik_needle_damage_callback(seed)
+    assert ACT_DAMAGE_N_1 <= int(out["action_id"][0]) <= ACT_DAMAGE_N_3
+    assert needle_count == 3
+
+
+def test_sheik_needle_seed_lane_clears_on_visible_damage_action() -> None:
+    import msl_binding
+
+    # Damage after a SpecialN state clears the count (callback was installed); damage after a common
+    # action does not (no installed callback), so a stored count survives a non-special hit.
+    char = np.full((3, 1), 7, dtype=np.uint8)
+    no_chain = np.zeros((3, 1), dtype=np.uint8)
+    action = np.array([[ACT_SK_SPECIAL_N_LOOP], [ACT_DAMAGE_N_1], [ACT_WAIT]], dtype=np.uint16)
+    frame = np.array([[0], [0], [0]], dtype=np.int16)
+
+    count, timer = msl_binding.derive_sheik_needle_seed_lanes(char, action, frame, no_chain, 7)
+    assert [int(v) for v in count[:, 0]] == [1, 0, 0]
+    assert [int(v) for v in timer[:, 0]] == [0, 0, 0]
+
+    # prev_action is Wait (no installed callback): the count built during the Loop survives the hit.
+    action_common = np.array(
+        [[ACT_SK_SPECIAL_N_LOOP], [ACT_WAIT], [ACT_DAMAGE_N_1]], dtype=np.uint16
+    )
+    count2, _ = msl_binding.derive_sheik_needle_seed_lanes(char, action_common, frame, no_chain, 7)
+    assert [int(v) for v in count2[:, 0]] == [1, 1, 1]
+
+
+def test_sheik_needle_seed_lane_chain_callback_installed_clears_count() -> None:
+    import msl_binding
+
+    # ftSk_SpecialS installs the same ftSk_Init_80110198 take_dmg/death callback as SpecialN, but
+    # only while a live Chain article exists (fv.sk.x8). So damage during SpecialS clears the stored
+    # Needle count iff the Chain-article-present lane is set on the SpecialS row.
+    ACT_SK_SPECIAL_S_ACTIVE = 350
+    char = np.full((3, 1), 7, dtype=np.uint8)
+    action = np.array(
+        [[ACT_SK_SPECIAL_N_LOOP], [ACT_SK_SPECIAL_S_ACTIVE], [ACT_DAMAGE_N_1]], dtype=np.uint16
+    )
+    frame = np.array([[0], [0], [0]], dtype=np.int16)
+
+    # Chain article present on the SpecialS row -> callback installed -> count clears on the hit.
+    chain_present = np.array([[0], [1], [1]], dtype=np.uint8)
+    count, _ = msl_binding.derive_sheik_needle_seed_lanes(char, action, frame, chain_present, 7)
+    assert [int(v) for v in count[:, 0]] == [1, 1, 0]
+
+    # No live Chain article -> SpecialS did not install the callback -> count survives the hit.
+    no_chain = np.zeros((3, 1), dtype=np.uint8)
+    count2, _ = msl_binding.derive_sheik_needle_seed_lanes(char, action, frame, no_chain, 7)
+    assert [int(v) for v in count2[:, 0]] == [1, 1, 1]
 
 
 @pytest.mark.parametrize(

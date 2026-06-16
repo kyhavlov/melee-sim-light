@@ -30,6 +30,7 @@
 #include "hitlist.h"
 #include "hurtcaps_tables.h"
 #include "input_axis.h"
+#include "items.h"
 #include "item_common_params.h"
 #include "item_article_params.h"
 #include "laser_params.h"
@@ -8896,6 +8897,20 @@ static inline void combat_damage_enter_state(
   uint32_t sm = (uint32_t)MSL_SM_WAIT1_0;
 
   const uint16_t pre_damage_action = batch->state.action_id[d_idx];
+  if (batch->state.char_id[d_idx] == (uint8_t)MSL_CHAR_ID_SHEIK) {
+    // Source take-damage/death callback owner:
+    // Fighter_ProcessHit reaches ftCommon_8007DB58 before ftCo_8008DCE0 changes motion state and
+    // Fighter_ChangeMotionState clears callback pointers. ftSk_Init_80110198 (the Sheik
+    // take-damage/death callback, installed by SpecialN and by SpecialS while a live Chain article
+    // exists) drops the live held Needle stock or clears the stored count if the held pointer is
+    // already null; the callee gates on the pre-damage action and Chain ownership accordingly.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DB58
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Init.c::ftSk_Init_80110198
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialN_80111FBC
+    items_sheik_needle_damage_callback(batch, bi, (int)(d_idx % (size_t)MSL_MAX_PLAYERS),
+                                       pre_damage_action, defender_on_ground_before);
+  }
   const uint8_t downed_damage_contact =
       (uint8_t)(combat_is_downed_damage_contact_action(pre_damage_action) &&
                 (batch->state.dmg_x2224_b2[d_idx] ||

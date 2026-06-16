@@ -68,6 +68,97 @@ def test_runtime_item_article_params_known_values() -> None:
     assert sheik["vanish_hitbox_size_keyframe_frame_1"] == 11
     assert sheik["vanish_hitbox_size_keyframe_value_1"] == pytest.approx(1.999872)
     assert sheik["vanish_hitbox_remove_frame"] == 13
+    # Thrown-Needle dropped/bounced motion RNG tables, transcribed by source symbol.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_803F6FA0,it_803F6FC0,it_803F7020,it_803F7040}
+    assert sheik["needle_drop_min_vel_y"] == pytest.approx(
+        [-2.0, -2.1, -2.2, -2.3, -2.4, -2.5, -2.6, -2.7]
+    )
+    assert sheik["needle_drop_gravity"] == pytest.approx(
+        [-0.1, -0.12, -0.14, -0.18, -0.2, -0.22, -0.24, -0.26]
+    )
+    assert sheik["needle_bounce_min_vel_y"] == pytest.approx(
+        [-2.0, -2.1, -2.2, -2.3, -2.4, -2.5, -2.6, -2.7]
+    )
+    assert sheik["needle_bounce_gravity"] == pytest.approx(
+        [-0.1, -0.12, -0.14, -0.18, -0.2, -0.22, -0.24, -0.26]
+    )
+
+
+def test_runtime_item_article_params_rejects_missing_sheik_needle_drop_record(
+    tmp_path: Path,
+) -> None:
+    # Drop a single needle_drop_min_vel_y_0 record (field_id 102) and prove the loader rejects the
+    # whole table rather than silently zeroing a Needle drop terminal-velocity entry.
+    data_dir = tmp_path / "data"
+    dst = data_dir / "items" / "articles" / "fox_falco.bin"
+    dst.parent.mkdir(parents=True)
+    src = Path("data/items/articles/fox_falco.bin").read_bytes()
+
+    header = bytearray(src[:16])
+    version, count = struct.unpack_from("<II", header, 8)
+    assert version == 10
+    record_size = 24
+    records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
+
+    def is_sheik_needle_drop_min_vel_y_0(rec: bytes) -> bool:
+        char_id, char_domain, value_type, field_id = struct.unpack_from("<HBBH", rec, 0)
+        return (char_id, char_domain, value_type, field_id) == (19, 1, 3, 102)
+
+    kept = [rec for rec in records if not is_sheik_needle_drop_min_vel_y_0(rec)]
+    assert len(kept) == len(records) - 1
+    struct.pack_into("<I", header, 12, len(kept))
+    dst.write_bytes(bytes(header) + b"".join(kept))
+
+    code = """
+import msl_binding
+try:
+    msl_binding.item_article_params(7)
+except RuntimeError:
+    raise SystemExit(0)
+raise SystemExit(1)
+"""
+    env = dict(os.environ)
+    env["MSL_DATA_DIR"] = str(data_dir)
+    proc = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
+def test_runtime_item_article_params_rejects_non_negative_sheik_needle_gravity(
+    tmp_path: Path,
+) -> None:
+    # Force one needle_bounce_gravity entry (field_id 126) non-negative and prove the loader rejects
+    # the artifact: SetupBounce gravities are strictly negative.
+    data_dir = tmp_path / "data"
+    dst = data_dir / "items" / "articles" / "fox_falco.bin"
+    dst.parent.mkdir(parents=True)
+    buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
+
+    version, count = struct.unpack_from("<II", buf, 8)
+    assert version == 10
+    record_size = 24
+    patched = False
+    for i in range(count):
+        off = 16 + i * record_size
+        char_id, char_domain, value_type, field_id = struct.unpack_from("<HBBH", buf, off)
+        if (char_id, char_domain, value_type, field_id) == (19, 1, 3, 126):
+            struct.pack_into("<f", buf, off + 12, 0.1)
+            patched = True
+            break
+    assert patched
+    dst.write_bytes(bytes(buf))
+
+    code = """
+import msl_binding
+try:
+    msl_binding.item_article_params(7)
+except RuntimeError:
+    raise SystemExit(0)
+raise SystemExit(1)
+"""
+    env = dict(os.environ)
+    env["MSL_DATA_DIR"] = str(data_dir)
+    proc = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
 
 
 def test_runtime_item_article_params_rejects_stale_version(tmp_path: Path) -> None:
@@ -100,7 +191,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_needle_record(tmp_pat
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 9
+    assert version == 10
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -137,7 +228,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_hitbox_record(
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 9
+    assert version == 10
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -174,7 +265,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_active_window_
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 9
+    assert version == 10
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -210,7 +301,7 @@ def test_runtime_item_article_params_rejects_zero_sheik_chain_spawn_part_id(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 9
+    assert version == 10
     record_size = 24
     patched = False
     for i in range(count):
@@ -246,7 +337,7 @@ def test_runtime_item_article_params_rejects_zero_sheik_vanish_spawn_part_id(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 9
+    assert version == 10
     record_size = 24
     patched = False
     for i in range(count):

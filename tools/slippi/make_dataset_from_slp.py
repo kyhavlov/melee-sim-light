@@ -147,9 +147,15 @@ def _derive_sheik_needle_seed_lanes(
     char_id_u8: np.ndarray,
     action_id_u16: np.ndarray,
     action_frame_i16: np.ndarray,
+    chain_article_present_u8: np.ndarray,
     sheik_internal_id: int | None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Derive prefix-causal Sheik Needle `fv.sk.x0` count and End timer seed lanes."""
+    """Derive prefix-causal Sheik Needle `fv.sk.x0` count and End timer seed lanes.
+
+    `chain_article_present_u8` is the prefix-visible per-player flag for a live Sheik Chain article
+    (source `fv.sk.x8 != NULL`); the Side-B `ftSk_Init_80110198` take-damage callback that clears
+    `fv.sk.x0` is installed during SpecialN, or during SpecialS only while that article exists.
+    """
 
     try:
         import msl_binding  # type: ignore
@@ -160,6 +166,7 @@ def _derive_sheik_needle_seed_lanes(
         np.ascontiguousarray(char_id_u8, dtype=np.uint8),
         np.ascontiguousarray(action_id_u16, dtype=np.uint16),
         np.ascontiguousarray(action_frame_i16, dtype=np.int16),
+        np.ascontiguousarray(chain_article_present_u8, dtype=np.uint8),
         sheik_id,
     )
 
@@ -6607,6 +6614,24 @@ def _main_impl(args) -> Dataset:
     samples["seed_t"]["floor_skip_segment_valid_u8"][:, :num_players] = (
         current_floor_skip_valid | sheik_floor_skip_valid
     ).astype(np.uint8)
+    # Prefix-visible per-player Sheik Chain-article presence (source fv.sk.x8 != NULL). The Side-B
+    # ftSk_Init_80110198 take-damage callback that clears stored Needles is installed during SpecialN
+    # always, but during SpecialS only while this article exists, so the Needle count clear must see
+    # it. The Chain article (It_Kind_Seak_Chain) appears in the seed item lane as its own item kind.
+    sheik_chain_article_present = np.zeros_like(samples["seed_t"]["char_id"], dtype=np.uint8)
+    if sheik_char_id is not None and int(sheik_char_id) >= 0:
+        import msl_binding  # type: ignore
+
+        sheik_chain_itkind = int(msl_binding.item_article_params(int(sheik_char_id))["sheik_chain_itkind"])
+        seed_items = samples["seed_t"]["items"]
+        is_chain_item = (seed_items["exists"] != 0) & (
+            seed_items["type"] == np.uint16(sheik_chain_itkind)
+        )
+        chain_owner = seed_items["owner"]
+        for p in range(int(num_players)):
+            sheik_chain_article_present[:, p] = np.any(
+                is_chain_item & (chain_owner == np.int8(p)), axis=1
+            ).astype(np.uint8)
     (
         samples["seed_t"]["sheik_needle_count_u8"][:, :],
         samples["seed_t"]["sheik_needle_specialn_timer_u8"][:, :],
@@ -6614,6 +6639,7 @@ def _main_impl(args) -> Dataset:
         char_id_u8=samples["seed_t"]["char_id"],
         action_id_u16=samples["seed_t"]["action_id"],
         action_frame_i16=samples["seed_t"]["action_frame"],
+        chain_article_present_u8=sheik_chain_article_present,
         sheik_internal_id=sheik_char_id,
     )
     (

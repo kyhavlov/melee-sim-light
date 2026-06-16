@@ -5071,6 +5071,25 @@ static inline uint8_t msl_py_action_is_sheik_needle_family(uint16_t action) {
          msl_py_action_is_sheik_needle_cancel(action) || msl_py_action_is_sheik_needle_end(action);
 }
 
+// Defined below with the other Side-B Chain predicates; forward-declared here so the Needle
+// seed-lane derivation can reference the shared owner instead of a duplicate range check.
+static inline uint8_t msl_py_action_is_sheik_chain_family(uint16_t action);
+
+static inline uint8_t msl_py_action_clears_sheik_needle_damage_callback(uint16_t action) {
+  // Damage/Dead/respawn entry actions on which ftCommon_8007DB58 runs the installed take_dmg/death
+  // callback: DeadDown..DeadUpFallHitCameraFlip (0..10), Rebirth (0x26), the Damage* family
+  // (0x4B..0x5B), DownDamage variants (0xB9, 0xC1), and DamageScrew (0x145). This is a raw common
+  // action-id set because the native preprocessor has no generated common-MotionState classifier for
+  // "take-damage/death callback-entry" actions; the runtime owner is the installed callback, and
+  // this list only matters in combination with the caller's callback-installed gate (prev action is
+  // SpecialN, or SpecialS with a live Chain article). It is the least-bad native-side representation
+  // until a shared damage/death entry predicate is exported to preprocessing.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DB58
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialN_80111FBC
+  return (uint8_t)((action <= 10u) || action == 0x26u || (action >= 0x4Bu && action <= 0x5Bu) ||
+                   action == 0xB9u || action == 0xC1u || action == 0x145u);
+}
+
 static inline uint8_t msl_py_sheik_needle_end_shoot_frame(int16_t frame) {
   return frame == 2 || frame == 5 || frame == 8 || frame == 11 || frame == 14 || frame == 17;
 }
@@ -5080,20 +5099,25 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
   PyObject* char_obj = NULL;
   PyObject* action_obj = NULL;
   PyObject* frame_obj = NULL;
+  PyObject* chain_present_obj = NULL;
   int sheik_internal_id = -1;
-  if (!PyArg_ParseTuple(args, "OOOi", &char_obj, &action_obj, &frame_obj, &sheik_internal_id)) {
+  if (!PyArg_ParseTuple(args, "OOOOi", &char_obj, &action_obj, &frame_obj, &chain_present_obj,
+                        &sheik_internal_id)) {
     return NULL;
   }
   PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 2, "char_id_u8");
   PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 2, "action_id_u16");
   PyArrayObject* frame = require_contiguous_array(frame_obj, NPY_INT16, 2, "action_frame_i16");
-  if (chr == NULL || action == NULL || frame == NULL) {
+  PyArrayObject* chain_present =
+      require_contiguous_array(chain_present_obj, NPY_UINT8, 2, "sheik_chain_article_present_u8");
+  if (chr == NULL || action == NULL || frame == NULL || chain_present == NULL) {
     return NULL;
   }
   const npy_intp n = PyArray_DIM(chr, 0);
   const npy_intp width = PyArray_DIM(chr, 1);
   if (require_exact_2d_shape(action, n, width, "action_id_u16") < 0 ||
-      require_exact_2d_shape(frame, n, width, "action_frame_i16") < 0) {
+      require_exact_2d_shape(frame, n, width, "action_frame_i16") < 0 ||
+      require_exact_2d_shape(chain_present, n, width, "sheik_chain_article_present_u8") < 0) {
     return NULL;
   }
 
@@ -5111,6 +5135,7 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
   const uint8_t* ch = (const uint8_t*)PyArray_DATA(chr);
   const uint16_t* act = (const uint16_t*)PyArray_DATA(action);
   const int16_t* af = (const int16_t*)PyArray_DATA(frame);
+  const uint8_t* chain_present_in = (const uint8_t*)PyArray_DATA(chain_present);
   uint8_t* count_out = (uint8_t*)PyArray_DATA(out_count);
   uint8_t* timer_out = (uint8_t*)PyArray_DATA(out_timer);
   const uint8_t sheik_id = (uint8_t)sheik_internal_id;
@@ -5119,14 +5144,17 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
     uint8_t count = 0u;
     uint16_t prev_action = 0u;
     int16_t prev_frame = -1;
+    uint8_t prev_chain_present = 0u;
     for (npy_intp i = 0; i < n; i++) {
       const npy_intp idx = (i * width) + p;
       const uint16_t action_i = act[idx];
       const int16_t frame_i = af[idx];
+      const uint8_t chain_present_i = (uint8_t)(chain_present_in[idx] != 0u);
       if (ch[idx] != sheik_id) {
         count = 0u;
         prev_action = action_i;
         prev_frame = frame_i;
+        prev_chain_present = chain_present_i;
         continue;
       }
       if (!msl_py_action_is_sheik_needle_family(action_i)) {
@@ -5136,9 +5164,19 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
         // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
         //   doEnter,ftSk_SpecialNLoop_Anim,ftSk_SpecialNEnd_Anim,shootNeedles,
         //   ftSk_SpecialN_80111FBC}
+        // The take_dmg/death callback clears fv.sk.x0 only when ftSk_Init_80110198 is installed:
+        // the prior action was SpecialN (always installed), or SpecialS while a live Chain article
+        // existed (fv.sk.x8 != NULL, here the prefix-visible Chain-article-present lane).
+        const uint8_t callback_installed =
+            msl_py_action_is_sheik_needle_family(prev_action) ||
+            (msl_py_action_is_sheik_chain_family(prev_action) && prev_chain_present != 0u);
+        if (callback_installed && msl_py_action_clears_sheik_needle_damage_callback(action_i)) {
+          count = 0u;
+        }
         count_out[idx] = count;
         prev_action = action_i;
         prev_frame = frame_i;
+        prev_chain_present = chain_present_i;
         continue;
       }
 
@@ -5174,6 +5212,7 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
       }
       prev_action = action_i;
       prev_frame = frame_i;
+      prev_chain_present = chain_present_i;
     }
   }
 

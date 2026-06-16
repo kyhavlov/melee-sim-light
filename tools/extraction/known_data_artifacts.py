@@ -11,7 +11,7 @@ STAGE_VERSION = 10
 PART_MAGIC = b"MSLPART1"
 PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
-ITEM_ARTICLE_VERSION = 9
+ITEM_ARTICLE_VERSION = 10
 ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1
 # Historical compatibility alias. The stored values are Slippi/CSS external character ids, not
 # GALE01 internal FighterKind ids.

@@ -1457,6 +1457,14 @@ typedef struct MslStateSoA {
   uint8_t* item_hidden_body_hit_victim_port;   // [batch * MSL_MAX_ITEMS], 0xFF = none
   uint8_t* item_hidden_body_hit_hurt_height;   // [batch * MSL_MAX_ITEMS]
   uint8_t* item_hidden_callback_flags;         // [batch * MSL_MAX_ITEMS]
+  // Sheik take-damage-dropped Needle hidden itemVar motion lanes (xDDC terminal min-y, xDE0
+  // gravity). Live ftSk_SpecialN_80111FBC drops seed these from itSeakNeedleThrown_SetupDrop; replay
+  // seeds of pre-existing state-1/4 Needles leave valid=0 and use visible-velocity reconstruction.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   itSeakNeedleThrown_SetupDrop,itSeakneedlethrown_UnkMotion1_Phys}
+  uint8_t* item_sheik_needle_hidden_drop_valid;    // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_needle_hidden_drop_min_vel_y;  // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_needle_hidden_drop_gravity;    // [batch * MSL_MAX_ITEMS]
   // Prefix-causal Shy Guy dynamic-bone velocity scratch.
   // refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
   float* item_shyguy_prev_vel_y;           // [batch * MSL_MAX_ITEMS]

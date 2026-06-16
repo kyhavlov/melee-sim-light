@@ -27,6 +27,8 @@ static inline uint8_t item_type_is_illusion_article(uint16_t type) {
 void items_update_pre_fighter_anim_phase(MslBatch* batch);
 void items_spawn_fighter_anim_phase(MslBatch* batch);
 uint8_t items_spawn_sheik_held_needle_article(MslBatch* batch, size_t owner_idx);
+void items_sheik_needle_damage_callback(MslBatch* batch, int batch_index, int owner,
+                                        uint16_t pre_damage_action, uint8_t source_on_ground);
 uint8_t items_spawn_sheik_chain_article(MslBatch* batch, size_t owner_idx);
 uint8_t items_set_sheik_chain_article_state(MslBatch* batch, size_t owner_idx, uint8_t state);
 uint8_t items_destroy_sheik_chain_article(MslBatch* batch, size_t owner_idx);

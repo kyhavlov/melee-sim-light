@@ -578,6 +578,9 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_hidden_body_hit_victim_port[ii] = 0xFFu;
   batch->state.item_hidden_body_hit_hurt_height[ii] = 0u;
   batch->state.item_hidden_callback_flags[ii] = 0u;
+  batch->state.item_sheik_needle_hidden_drop_valid[ii] = 0u;
+  batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] = 0.0f;
+  batch->state.item_sheik_needle_hidden_drop_gravity[ii] = 0.0f;
   batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
   batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
   batch->state.item_shyguy_dyn_y_phase[ii] = 0u;
@@ -658,6 +661,9 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint8_t, batch->state.item_hidden_body_hit_victim_port);
   SWAP(uint8_t, batch->state.item_hidden_body_hit_hurt_height);
   SWAP(uint8_t, batch->state.item_hidden_callback_flags);
+  SWAP(uint8_t, batch->state.item_sheik_needle_hidden_drop_valid);
+  SWAP(float, batch->state.item_sheik_needle_hidden_drop_min_vel_y);
+  SWAP(float, batch->state.item_sheik_needle_hidden_drop_gravity);
   SWAP(float, batch->state.item_shyguy_prev_vel_y);
   SWAP(uint8_t, batch->state.item_shyguy_prev_vel_y_valid);
   SWAP(uint8_t, batch->state.item_shyguy_dyn_y_phase);
@@ -1590,6 +1596,9 @@ static inline uint8_t action_is_sheik_needle_end(uint8_t char_id, uint16_t actio
                    action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_END);
 }
 
+static inline void sheik_needle_set_drop_hidden_lanes(MslBatch* batch, int bi, size_t ii,
+                                                      const MslItemArticleParams* ap);
+
 static inline uint8_t action_is_illusion_setphys(uint8_t char_id, uint16_t action_id_u16) {
   // Illusion/Phantasm ghost position is advanced by ftFox_SpecialS_SetPhys, which is called from
   // the grounded/air main and end Phys callbacks.
@@ -1869,6 +1878,105 @@ static void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int 
   batch->state.item_attack_instance[ii] = batch->state.attack_instance[o_idx];
   batch->state.item_hidden_callback_flags[ii] |=
       (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
+}
+
+void items_sheik_needle_damage_callback(MslBatch* batch, int bi, int owner,
+                                        uint16_t pre_damage_action, uint8_t source_on_ground) {
+  if (batch == NULL || owner < 0 || owner >= (int)batch->config.num_players) {
+    return;
+  }
+  // Source take-damage/death callback owner. ftSk_Init_80110198 runs ftSk_SpecialN_80111FBC (drop
+  // live held Needle stock + always clear fv.sk.x0) and then ftSk_SpecialS_CheckAndDestroyChain.
+  // It is installed by setDmgCallbacks during SpecialN states, and by ftSk_SpecialS when a live
+  // Chain article exists (fv.sk.x8 != NULL). In any other action it is NULL and ftCommon_8007DB58
+  // does not touch fv.sk.x0. The held Needle pointer fv.sk.x4 only exists during SpecialN, so a
+  // SpecialS-installed hit clears the stored count without materializing drops. (The Chain-destroy
+  // half of ftSk_Init_80110198 is owned by the Side-B Chain packet; this models the Needle half.)
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Init.c::ftSk_Init_80110198
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{setDmgCallbacks,clearDmgCallbacks}
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c (death2_cb/take_dmg_cb on fv.sk.x8 != NULL)
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DB58
+  const uint8_t in_specialn =
+      (uint8_t)(pre_damage_action >= (uint16_t)MSL_ACT_SK_SPECIAL_N_START &&
+                pre_damage_action <= (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_END);
+  const uint8_t in_specials =
+      (uint8_t)(pre_damage_action >= (uint16_t)MSL_ACT_SK_SPECIAL_S_START &&
+                pre_damage_action <= (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END);
+  if (!in_specialn && !in_specials) {
+    return;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  if (batch->state.char_id[o_idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
+      batch->state.sheik_needle_count[o_idx] == 0u) {
+    return;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  const MslCharParams* chp = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || chp == NULL || ap->needle_throw_itkind == 0u || ap->needle_held_itkind == 0u) {
+    batch->state.sheik_needle_count[o_idx] = 0u;
+    return;
+  }
+  if (in_specials) {
+    // SpecialS installs ftSk_Init_80110198 only while a live Chain article (fv.sk.x8) is owned.
+    if (ap->sheik_chain_itkind == 0u ||
+        items_find_owned_item_slot(batch, bi, owner, ap->sheik_chain_itkind) < 0) {
+      return;
+    }
+  }
+
+  const int held_slot = items_find_owned_item_slot(batch, bi, owner, ap->needle_held_itkind);
+  if (held_slot < 0) {
+    // ftSk_SpecialN_80111FBC always clears fv.sk.x0, but it only materializes dropped Needles
+    // while the held Needle pointer fp->fv.sk.x4 is live. Cancel gaps preserve stored count but
+    // have already nulled that pointer.
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    //   ftSk_SpecialN_80111FBC,ftSk_SpecialNCancel_Anim}
+    batch->state.sheik_needle_count[o_idx] = 0u;
+    return;
+  }
+  item_slot_clear(batch, msl_idx_item(bi, held_slot));
+
+  const uint8_t air = (uint8_t)(source_on_ground == 0u);
+  const float y_base =
+      air ? chp->sheik_needle_air_spawn_y_offset : chp->sheik_needle_ground_spawn_y_offset;
+  const float spawn_x = batch->state.pos_x[o_idx];
+  const float spawn_y = batch->state.pos_y[o_idx] + batch->state.fighter_scale_y[o_idx] * y_base;
+  const float facing_dir = batch->state.facing[o_idx] ? 1.0f : -1.0f;
+  uint8_t count = batch->state.sheik_needle_count[o_idx];
+  while (count != 0u) {
+    const int slot = items_alloc_slot(batch, bi);
+    if (slot < 0) {
+      break;
+    }
+    const size_t ii = msl_idx_item(bi, slot);
+    item_slot_clear(batch, ii);
+    // The take-damage/death callback runs through ftCommon_8007DB58 before the common damage
+    // state reset clears callback pointers. It converts every stored Needle into dropped state 1
+    // through it_802B00F4, which samples hidden SetupDrop RNG lanes but does not run item
+    // Anim/Phys/Coll until the next item callback phase.
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DB58
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialN_80111FBC
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_802AFD8C,it_802B00F4,itSeakNeedleThrown_SetupDrop}
+    batch->state.item_exists[ii] = 1u;
+    batch->state.item_type[ii] = ap->needle_throw_itkind;
+    batch->state.item_state[ii] = 1u;
+    batch->state.item_owner[ii] = (int8_t)owner;
+    batch->state.item_instance_id[ii] = batch->state.instance_id[o_idx];
+    batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
+    batch->state.item_direction[ii] = facing_dir;
+    batch->state.item_pos_x[ii] = spawn_x;
+    batch->state.item_pos_y[ii] = spawn_y;
+    batch->state.item_vel_x[ii] = 0.0f;
+    batch->state.item_vel_y[ii] = 0.0f;
+    batch->state.item_timer[ii] = (float)ap->needle_lifetime_frames;
+    batch->state.item_attack_id[ii] = batch->state.attack_id[o_idx];
+    batch->state.item_attack_instance[ii] = batch->state.attack_instance[o_idx];
+    sheik_needle_set_drop_hidden_lanes(batch, bi, ii, ap);
+    count--;
+  }
+  batch->state.sheik_needle_count[o_idx] = 0u;
+  batch->state.sheik_special_latch[o_idx] = 0u;
+  items_sort(batch, bi);
 }
 
 static uint8_t sheik_article_spawn_anchor_position(const MslBatch* batch, size_t owner_idx,
@@ -4057,8 +4165,8 @@ static inline float sheik_needle_hitbox_damage(const MslBatch* batch, size_t hb_
   return damage;
 }
 
-static inline float sheik_needle_state1_4_gravity_from_visible_vel(float vel_y) {
-  static const float gravity[8] = {-0.1f, -0.12f, -0.14f, -0.18f, -0.2f, -0.22f, -0.24f, -0.26f};
+static inline float sheik_needle_state1_4_gravity_from_visible_vel(float vel_y,
+                                                                   const float* gravity) {
   float best_g = gravity[0];
   float best_resid = 1000000.0f;
   for (int gi = 0; gi < 8; gi++) {
@@ -4096,6 +4204,27 @@ static inline uint8_t sheik_needle_anim_lifetime_step(MslBatch* batch, size_t ii
   return 0u;
 }
 
+static inline void sheik_needle_set_drop_hidden_lanes(MslBatch* batch, int bi, size_t ii,
+                                                      const MslItemArticleParams* ap) {
+  if (batch == NULL || ap == NULL) {
+    return;
+  }
+  // itSeakNeedleThrown_SetupDrop RNG order: rotation rate it_803F6FE0[Randi(8)] then a Randi(2)
+  // sign (cosmetic child-JObj rotation, value unmodeled here), then min-y it_803F6FA0[Randi(8)] and
+  // gravity it_803F6FC0[Randi(8)] stored in itemVar.seakneedlethrown.xDDC/xDE0. Those two tables are
+  // data-owned in MSLITAR1 (needle_drop_min_vel_y / needle_drop_gravity).
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakNeedleThrown_SetupDrop
+  (void)combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DROP_ROT_RATE8, 8);
+  (void)combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DROP_ROT_SIGN2, 2);
+  const int min_idx =
+      combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DROP_YVEL_MIN8, 8);
+  const int grav_idx =
+      combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DROP_GRAVITY8, 8);
+  batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] = ap->needle_drop_min_vel_y[min_idx & 7];
+  batch->state.item_sheik_needle_hidden_drop_gravity[ii] = ap->needle_drop_gravity[grav_idx & 7];
+  batch->state.item_sheik_needle_hidden_drop_valid[ii] = 1u;
+}
+
 static inline void sheik_needle_motion_step(MslBatch* batch, size_t ii) {
   const uint8_t state = batch->state.item_state[ii];
   if (state == 0u) {
@@ -4104,16 +4233,28 @@ static inline void sheik_needle_motion_step(MslBatch* batch, size_t ii) {
     return;
   }
   if (state == 1u || state == 4u) {
-    // Dropped/bounced Needle stores random gravity/min-y hidden lanes in
-    // `itemVar.seakneedlethrown`. Slippi does not expose them, but the visible y velocity is an
-    // exact multiple of the selected source gravity table during supported in-suite rows. Rebuild
-    // that hidden source lane from current velocity, then run the same Phys+generic movement step.
+    // itSeakneedlethrown_UnkMotion{1,4}_Phys: x40_vel.x = itemVar.xDD8, x40_vel.y += xDE0 (gravity),
+    // then clamp x40_vel.y to terminal xDDC. Live take-damage-dropped Needles carry the real hidden
+    // xDDC/xDE0 lanes (drop xDD8 = 0); replay-seeded state-1/4 items without those lanes fall back
+    // to source-table gravity recovered from the visible y velocity (needle_drop_gravity for the
+    // dropped state, needle_bounce_gravity for the bounced state).
     // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
-    //   itSeakNeedleThrown_SetupDrop,itSeakNeedleThrown_SetupBounce,
-    //   itSeakneedlethrown_UnkMotion1_Phys,itSeakneedlethrown_UnkMotion4_Phys}
-    // refs/melee/src/melee/it/item.c::{Item_80269528,Item_802697D4}
-    const float g = sheik_needle_state1_4_gravity_from_visible_vel(batch->state.item_vel_y[ii]);
-    batch->state.item_vel_y[ii] += g;
+    //   itSeakNeedleThrown_SetupDrop,itSeakneedlethrown_UnkMotion1_Phys,
+    //   itSeakneedlethrown_UnkMotion4_Phys}
+    if (batch->state.item_sheik_needle_hidden_drop_valid[ii] != 0u) {
+      batch->state.item_vel_x[ii] = 0.0f;
+      batch->state.item_vel_y[ii] += batch->state.item_sheik_needle_hidden_drop_gravity[ii];
+      if (batch->state.item_vel_y[ii] < batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii]) {
+        batch->state.item_vel_y[ii] = batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii];
+      }
+    } else {
+      const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+      if (ap != NULL) {
+        const float* gtab = (state == 4u) ? ap->needle_bounce_gravity : ap->needle_drop_gravity;
+        batch->state.item_vel_y[ii] +=
+            sheik_needle_state1_4_gravity_from_visible_vel(batch->state.item_vel_y[ii], gtab);
+      }
+    }
     batch->state.item_pos_x[ii] += batch->state.item_vel_x[ii];
     batch->state.item_pos_y[ii] += batch->state.item_vel_y[ii];
   }
@@ -4166,14 +4307,19 @@ static inline void sheik_needle_apply_damage_callback(MslBatch* batch, int bi, s
     return;
   }
 
-  static const float bounce_y_vel[8] = {2.0f, 2.1f, 2.2f, 2.3f, 2.4f, 2.5f, 2.6f, 2.7f};
   const int y_idx = combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_VEL_Y8, 8);
   batch->state.item_state[ii] = 4u;
   batch->state.item_timer[ii] =
       (params != NULL) ? (float)params->needle_bounce_lifetime_frames : 0.0f;
   batch->state.item_vel_x[ii] = 0.0f;
-  batch->state.item_vel_y[ii] = bounce_y_vel[y_idx & 7];
+  // it_2725_Logic109_DmgReceived sets x40_vel.y = ABS(it_803F7020[Randi(8)]) (data-owned as
+  // needle_bounce_min_vel_y). The remaining SetupBounce rotation/xvel/min-y/gravity samples advance
+  // RNG but are not materialized; the bounce gravity is recovered from this visible y velocity in
+  // sheik_needle_motion_step.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakNeedleThrown_SetupBounce
+  batch->state.item_vel_y[ii] =
+      (params != NULL) ? fabsf(params->needle_bounce_min_vel_y[y_idx & 7]) : 0.0f;
   (void)combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_ROT_SIGN2, 2);
   (void)combat_rng_consume_randi_site(

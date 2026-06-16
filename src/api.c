@@ -5264,6 +5264,26 @@ int msl_batch_debug_get_fighter_8006cda4_pre_gate_consume_count(const MslBatch* 
   return 0;
 }
 
+int msl_batch_debug_get_sheik_needle_count(const MslBatch* batch, int batch_index, int player_index,
+                                           uint8_t* out_count) {
+  if (batch == NULL || out_count == NULL) {
+    return EINVAL;
+  }
+  *out_count = 0u;
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (player_index >= (int)batch->config.num_players) {
+    return 0;
+  }
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  *out_count = batch->state.sheik_needle_count[idx];
+  return 0;
+}
+
 int msl_batch_debug_timebase(const MslBatch* batch, int batch_index, float* out_rows_8p) {
   if (batch == NULL || out_rows_8p == NULL) {
     return EINVAL;

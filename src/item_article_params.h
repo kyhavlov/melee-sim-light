@@ -9,6 +9,7 @@ extern "C" {
 enum {
   MSL_ITEM_ARTICLE_MAX_HITBOXES = 4,
   MSL_ITEM_ARTICLE_VANISH_SIZE_KEYFRAMES = 2,
+  MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN = 8,
 };
 
 typedef struct MslItemArticleParams {
@@ -70,6 +71,15 @@ typedef struct MslItemArticleParams {
   uint16_t vanish_hitbox_size_keyframe_frame[MSL_ITEM_ARTICLE_VANISH_SIZE_KEYFRAMES];
   float vanish_hitbox_size_keyframe_value[MSL_ITEM_ARTICLE_VANISH_SIZE_KEYFRAMES];
   uint16_t vanish_hitbox_remove_frame;
+  // Thrown-Needle dropped/bounced motion RNG tables from itseakneedlethrown.c. Indexed by HSD_Randi(8).
+  // - needle_drop_min_vel_y    <- it_803F6FA0 (SetupDrop xDDC terminal velocity)
+  // - needle_drop_gravity      <- it_803F6FC0 (SetupDrop xDE0 gravity)
+  // - needle_bounce_min_vel_y  <- it_803F7020 (DmgReceived x40_vel.y = ABS(...))
+  // - needle_bounce_gravity    <- it_803F7040 (SetupBounce xDE0 gravity)
+  float needle_drop_min_vel_y[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
+  float needle_drop_gravity[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
+  float needle_bounce_min_vel_y[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
+  float needle_bounce_gravity[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
 } MslItemArticleParams;
 
 // Init-time loader for MSLITAR1 known item/article constants. May perform IO/allocation; call only

@@ -182,6 +182,23 @@ SHEIK_VANISH_HITBOX_FIELD_NAMES = tuple(
     name for name in FIELD_SPECS if name.startswith("vanish_hitbox_")
 )
 
+# Thrown-Needle dropped/bounced motion RNG tables (HSD_Randi(8) lookups). These are decomp constant
+# `static f32` arrays, transcribed by source symbol. Routed through MSLITAR1 so src/items.c carries
+# no local literal copies. Registered after the needle/vanish field-name tuples above so they are
+# injected as sheik-only constants (like the chain/vanish article kinds), not attrs lookups.
+# refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_803F6FA0,it_803F6FC0,it_803F7020,it_803F7040}
+SHEIK_NEEDLE_DROP_BOUNCE_TABLES = {
+    "needle_drop_min_vel_y": (102, (-2.0, -2.1, -2.2, -2.3, -2.4, -2.5, -2.6, -2.7)),  # it_803F6FA0
+    "needle_drop_gravity": (110, (-0.1, -0.12, -0.14, -0.18, -0.2, -0.22, -0.24, -0.26)),  # it_803F6FC0
+    "needle_bounce_min_vel_y": (118, (-2.0, -2.1, -2.2, -2.3, -2.4, -2.5, -2.6, -2.7)),  # it_803F7020
+    "needle_bounce_gravity": (126, (-0.1, -0.12, -0.14, -0.18, -0.2, -0.22, -0.24, -0.26)),  # it_803F7040
+}
+for _base_name, (_base_id, _values) in SHEIK_NEEDLE_DROP_BOUNCE_TABLES.items():
+    for _i, _v in enumerate(_values):
+        _key = f"{_base_name}_{_i}"
+        FIELD_SPECS[_key] = FieldSpec(_base_id + _i, ITEM_ARTICLE_VALUE_F32, UNIT_VELOCITY)
+        SHEIK_SPECIAL_ARTICLE_CONSTANTS[_key] = _v
+
 
 def _f32(v: float) -> float:
     return struct.unpack("<f", struct.pack("<f", float(v)))[0]

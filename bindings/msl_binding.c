@@ -4093,6 +4093,29 @@ static PyObject* msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py(PyObje
   return PyLong_FromUnsignedLong((unsigned long)count);
 }
 
+static PyObject* msl_debug_get_sheik_needle_count_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  if (!PyArg_ParseTuple(args, "Oii", &handle_obj, &batch_index, &player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  uint8_t count = 0u;
+  const int err =
+      msl_batch_debug_get_sheik_needle_count(h->batch, batch_index, player_index, &count);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_get_sheik_needle_count failed: %d", err);
+    return NULL;
+  }
+  return PyLong_FromUnsignedLong((unsigned long)count);
+}
+
 static PyObject* msl_debug_attackairb_continuation_overlap_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -4623,6 +4646,28 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
   MSL_SET_DICT_FLOAT("vanish_hitbox_size_keyframe_value_1",
                      p->vanish_hitbox_size_keyframe_value[1]);
   MSL_SET_DICT_LONG("vanish_hitbox_remove_frame", p->vanish_hitbox_remove_frame);
+#define MSL_SET_DICT_FLOAT_TABLE(KEY, ARR)                                      \
+  do {                                                                          \
+    PyObject* lst__ = PyList_New(MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN);       \
+    if (lst__ == NULL) {                                                        \
+      Py_DECREF(out);                                                           \
+      return NULL;                                                              \
+    }                                                                           \
+    for (int ti__ = 0; ti__ < MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN; ti__++) { \
+      PyList_SET_ITEM(lst__, ti__, PyFloat_FromDouble((double)(ARR)[ti__]));    \
+    }                                                                           \
+    if (PyDict_SetItemString(out, (KEY), lst__) != 0) {                         \
+      Py_DECREF(lst__);                                                         \
+      Py_DECREF(out);                                                           \
+      return NULL;                                                              \
+    }                                                                           \
+    Py_DECREF(lst__);                                                           \
+  } while (0)
+  MSL_SET_DICT_FLOAT_TABLE("needle_drop_min_vel_y", p->needle_drop_min_vel_y);
+  MSL_SET_DICT_FLOAT_TABLE("needle_drop_gravity", p->needle_drop_gravity);
+  MSL_SET_DICT_FLOAT_TABLE("needle_bounce_min_vel_y", p->needle_bounce_min_vel_y);
+  MSL_SET_DICT_FLOAT_TABLE("needle_bounce_gravity", p->needle_bounce_gravity);
+#undef MSL_SET_DICT_FLOAT_TABLE
 #undef MSL_SET_DICT_LONG
 #undef MSL_SET_DICT_FLOAT
   return out;
@@ -7318,6 +7363,8 @@ static PyMethodDef methods[] = {
     {"debug_get_fighter_8006cda4_pre_gate_consume_count",
      msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py, METH_VARARGS,
      "debug_get_fighter_8006cda4_pre_gate_consume_count(handle, batch_index, player_index) -> int"},
+    {"debug_get_sheik_needle_count", msl_debug_get_sheik_needle_count_py, METH_VARARGS,
+     "debug_get_sheik_needle_count(handle, batch_index, player_index) -> int"},
     {"debug_attackairb_continuation_overlap", msl_debug_attackairb_continuation_overlap_py,
      METH_VARARGS,
      "debug_attackairb_continuation_overlap(handle, batch_index, attacker, hb_id, defender, "
@@ -7556,7 +7603,8 @@ static PyMethodDef methods[] = {
      "derive_common_fall_blend_seed(char, action, speed_air_x_self, facing_dir, air_drift_max, "
      "threshold, lerp) -> (valid,x4,msid)"},
     {"derive_sheik_needle_seed_lanes", msl_derive_sheik_needle_seed_lanes_py, METH_VARARGS,
-     "derive_sheik_needle_seed_lanes(char, action, action_frame, sheik_id) -> (count,timer)"},
+     "derive_sheik_needle_seed_lanes(char, action, action_frame, chain_present, sheik_id) -> "
+     "(count,timer)"},
     {"derive_sheik_chain_seed_lanes", msl_derive_sheik_chain_seed_lanes_py, METH_VARARGS,
      "derive_sheik_chain_seed_lanes(char, action, buttons, hitlag, sheik_id, b_mask, "
      "release_min) -> (x0,latch)"},

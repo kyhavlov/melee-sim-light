@@ -2580,6 +2580,10 @@ int msl_batch_debug_get_fighter_8006cda4_pre_gate_consume_count(const MslBatch* 
                                                                 int batch_index, int player_index,
                                                                 uint8_t* out_count);
 
+// Debug-only helper: read the Sheik stored-Needle count (`fv.sk.x0`) seed lane for a player.
+int msl_batch_debug_get_sheik_needle_count(const MslBatch* batch, int batch_index, int player_index,
+                                           uint8_t* out_count);
+
 // Debug-only helper: inspect one hurtcap slot's runtime eligibility for a fighter on this step.
 int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, int player_index,
                                        int cap_id, MslDebugHurtcapSlotFlags* out_flags);

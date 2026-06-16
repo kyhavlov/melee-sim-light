@@ -1737,9 +1737,9 @@ Characters (Fox/Falco/Marth/Sheik):
     - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
   - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
     the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
-  - Binary layout: `MSLITAR1` v9
+  - Binary layout: `MSLITAR1` v10
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 9`
+    - `u32 version = 10`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
@@ -1776,6 +1776,16 @@ Characters (Fox/Falco/Marth/Sheik):
       `ftSk_SpecialHi_80112F48` with `lb_8000B1CC` before `it_802B1C60`. This only owns Vanish
       smoke article publication. Vanish smoke BODY damage still requires the item callback/contact
       phase to be bounded separately.
+    - v10 adds the thrown-Needle dropped/bounced motion RNG tables as four 8-entry f32 arrays
+      transcribed by source symbol: `needle_drop_min_vel_y` (`it_803F6FA0`), `needle_drop_gravity`
+      (`it_803F6FC0`), `needle_bounce_min_vel_y` (`it_803F7020`), `needle_bounce_gravity`
+      (`it_803F7040`). These are `HSD_Randi(8)` lookups in `itSeakNeedleThrown_SetupDrop`/
+      `SetupBounce` for `itemVar.seakneedlethrown.xDDC`/`xDE0`. Runtime-required for Sheik: the
+      take-damage drop callback and `sheik_needle_motion_step` consume them through
+      `item_article_params_get(MSL_CHAR_ID_SHEIK)`, and `src/items.c` keeps no local literal copies.
+      `src/item_article_params.c` rejects a Sheik row missing any entry or with a non-negative
+      velocity/gravity value. The cosmetic rotation tables (`it_803F6FE0`/`it_803F7000`/`it_803F7060`)
+      are RNG-advancement only and are not materialized.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:
