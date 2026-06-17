@@ -22,9 +22,11 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 
-from test_char_common_action_coverage import _mk_inputs, _run, _seed_base  # noqa: E402
+from test_char_common_action_coverage import ACT_GUARD, _mk_inputs, _run, _seed_base  # noqa: E402
+
+ACT_GUARD_REFLECT = 0x00B6
 from test_colldata_ecb_substrate import _colldata_ecb_dtype  # noqa: E402
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset  # noqa: E402
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, read_dataset  # noqa: E402
 from tools.slippi.item_article_data import item_article_values_by_sim_char  # noqa: E402
 
 pytest.importorskip("msl_binding")
@@ -1500,6 +1502,34 @@ def test_sheik_thrown_needle_drop_gravity_comes_from_data_table(state: int) -> N
     assert float(out["items"]["vel_y"][0]) == pytest.approx(-1.1)
 
 
+def test_sheik_thrown_needle_no_body_hit_when_far_negative() -> None:
+    # Negative: a state-0 Needle that overlaps no hurtbox deals no damage and stays flying (state 0).
+    seed = _seed_base("sheik")
+    pct0 = float(seed["percent"][0, 1])
+    _install_sheik_item(
+        seed, item_type=ITEM_SHEIK_NEEDLE_THROWN, state=0, timer=30.0,
+        pos_x=0.0, pos_y=120.0, vel_x=4.0, vel_y=0.0,
+    )
+    out = _run(seed, [_mk_inputs()])[0]
+    assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == 0
+
+
+def test_sheik_bounced_needle_does_not_body_hit_negative() -> None:
+    # Negative: the state-4 bounced Needle has no active HitCapsule (state-1..4 scripts clear it), so
+    # overlapping a body deals no damage.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::ItemStateTable
+    seed = _seed_base("sheik")
+    pct0 = float(seed["percent"][0, 1])
+    _install_sheik_item(
+        seed, item_type=ITEM_SHEIK_NEEDLE_THROWN, state=4, timer=30.0,
+        pos_x=0.0, pos_y=7.0, vel_x=0.0, vel_y=-1.0,
+    )
+    out = _run(seed, [_mk_inputs()])[0]
+    assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)
+
+
 def test_sheik_thrown_needle_timer_one_destroys_before_motion() -> None:
     # States 0..3 return it_80273130 from Anim; a lifeTimer of 1 destroys the item before
     # Phys/Coll publication.
@@ -1850,3 +1880,91 @@ def test_sheik_needle_loop_analog_trigger_edge_cancel_replay_real_lock() -> None
 
     out = _run_sample_row(samples, record)
     assert int(out["action_id"][0]) == ACT_SK_SPECIAL_N_CANCEL
+
+
+def _seed_needle_over_fox_defender(*, defender_x: float = 20.0) -> np.ndarray:
+    # Sheik (P0) owns a state-0 flying Needle positioned on Fox (P1)'s body so the swept Needle
+    # HitCapsule overlaps P1's hurtcaps -> BODY damage, unless an active ReflectDesc or ShieldDesc
+    # defers it. The default _seed_base places P1 far away; bring P1 under the Needle.
+    seed = _seed_base("sheik")
+    seed["pos_x"][0, 1] = np.float32(defender_x)
+    seed["pos_y"][0, 1] = np.float32(0.0)
+    seed["on_ground"][0, 1] = np.uint8(1)
+    seed["shield_hp"][0, 1] = np.float32(60.0)
+    _install_sheik_item(
+        seed, item_type=ITEM_SHEIK_NEEDLE_THROWN, state=0, timer=30.0,
+        pos_x=defender_x, pos_y=8.0, vel_x=0.2, vel_y=0.0,
+    )
+    return seed
+
+
+def _inputs_defender_holds_shield() -> np.ndarray:
+    inp = np.zeros((1,), dtype=INPUT_DTYPE)
+    inp["p"]["l"][0, 1] = np.uint8(140)  # full analog shield trigger on the defender (P1)
+    return inp.view(np.uint8).reshape((1, INPUT_DTYPE.itemsize))
+
+
+def test_sheik_thrown_needle_body_hits_unguarded_defender_positive() -> None:
+    # Positive control: a state-0 flying Needle overlapping an UNGUARDED defender's body deals the
+    # 3-damage Needle BODY hit. This pins the synthetic overlap geometry so the ShieldDesc negatives
+    # below are not vacuous (the same seed body-hits when no shield is up).
+    seed = _seed_needle_over_fox_defender()
+    pct0 = float(seed["percent"][0, 1])
+    out = _run(seed, [_mk_inputs()])[0]
+    assert float(out["percent"][1]) == pytest.approx(pct0 + 3.0, abs=0.01)
+
+
+def test_sheik_thrown_needle_yields_body_to_active_shield_negative() -> None:
+    # Negative (deferred ShieldDesc): ftColl_8007925C resolves the defender shield contact before
+    # BODY hurtcaps. With the SAME overlap geometry as the positive control, a defender holding an
+    # active shield (Guard action + 221B_b0 ShieldDesc + held trigger -> live shield bubble) must NOT
+    # take the Needle BODY hit -- the deferred HitShield owns the contact. The Needle stays state-0
+    # (no BODY hit, no bounce).
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80076CBC}
+    seed = _seed_needle_over_fox_defender()
+    seed["action_id"][0, 1] = np.uint16(ACT_GUARD)
+    seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
+    seed["state_flags"][0, 1, 2] = np.uint8(0x80)  # 221B_b0 ShieldDesc active
+    pct0 = float(seed["percent"][0, 1])
+    out = _run(seed, [_inputs_defender_holds_shield()])[0]
+    assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == 0  # Needle did not BODY-hit/bounce
+
+
+def test_sheik_thrown_needle_yields_body_to_reflectdesc_negative() -> None:
+    # Negative (deferred ReflectDesc, source order reflect-before-BODY): ftColl_8007925C resolves
+    # `fp->reflecting` (fp+0x2218 REFLECTING) before ShieldDesc and BODY hurtcaps, and ReflectDesc is
+    # live INDEPENDENTLY of ShieldDesc (GuardReflect clears 221B_b0 while keeping reflect live). With
+    # the SAME overlap geometry as the positive control, a defender that is reflect-only -- 2218
+    # REFLECTING set, 221B_b0 ShieldDesc CLEARED, no held shield so shield_radius stays 0 -- must NOT
+    # take the Needle BODY hit; the deferred Reflected owns the contact and the Needle stays state-0.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077464}
+    seed = _seed_needle_over_fox_defender()
+    seed["state_flags"][0, 1, 0] = np.uint8(0x10)  # fp+0x2218 REFLECTING; 221B byte left cleared
+    pct0 = float(seed["percent"][0, 1])
+    out = _run(seed, [_mk_inputs()])[0]  # no shield input -> shield_radius stays 0
+    assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == 0
+
+
+def test_sheik_thrown_needle_yields_body_to_guardreflect_shielddesc_negative() -> None:
+    # Negative (deferred ShieldDesc, GuardReflect action): a GuardReflect defender holding shield
+    # carries an active ShieldDesc (221B_b0 + live shield bubble), so BODY defers via the SAME shield
+    # path as Guard above -- this exercises the ShieldDesc skip for the GuardReflect action, NOT a
+    # separate ReflectDesc branch. The reflect-without-ShieldDesc powershield window and shine
+    # reflectors are owned by the deferred projectile-vs-shield/reflect project, not this packet.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80076CBC}
+    seed = _seed_needle_over_fox_defender()
+    seed["action_id"][0, 1] = np.uint16(ACT_GUARD_REFLECT)
+    seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
+    seed["state_flags"][0, 1, 2] = np.uint8(0x80)  # 221B_b0 ShieldDesc active
+    seed["state_flags"][0, 1, 3] = np.uint8(0x20)  # 221C powershield-active
+    seed["guard_reflect_timer_x14"][0, 1] = np.uint8(8)
+    seed["guard_reflect_timer_x18"][0, 1] = np.uint8(12)
+    pct0 = float(seed["percent"][0, 1])
+    out = _run(seed, [_inputs_defender_holds_shield()])[0]
+    assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == 0
