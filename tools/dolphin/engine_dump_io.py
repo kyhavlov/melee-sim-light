@@ -348,8 +348,6 @@ def read_engine_dump(path: str | Path) -> EngineDump:
             )
         return np.frombuffer(blob, dtype=dtype, count=count, offset=offset)
 
-    frames = _read(FRAME_DTYPE, frame_count, int(header["frames_offset"]))
-    inputs = _read(INPUT_DTYPE, frame_count * port_count, int(header["inputs_offset"]))
     # v10 is a targeted item-hitlist/callback extension built on the v7 fighter record layout.
     # v11 appends the hidden-lane probe words to the v10 fighter record.
     fighter_dtype = (
@@ -365,11 +363,46 @@ def read_engine_dump(path: str | Path) -> EngineDump:
         if version >= 8
         else FIGHTER_DTYPE_V7
     )
-    fighters = _read(fighter_dtype, frame_count * port_count, int(header["fighters_offset"]))
     if version >= 10:
         item_dtype = ITEM_DTYPE
     else:
         item_dtype = np.dtype(ITEM_DTYPE.descr[:17], align=False)
+
+    # Section-layout consistency guard. The writer lays sections out contiguously after the header
+    # with fixed per-record strides; recompute the expected offsets from the reader's dtype sizes and
+    # require the header to agree. A mismatch means a writer/reader record stride drifted (e.g. a
+    # stale fighter_rec_size), which would otherwise read every post-fighter section as silent
+    # garbage instead of failing.
+    def _expect(name: str, expected: int) -> None:
+        got = int(header[name])
+        if got != expected:
+            raise ValueError(
+                f"engine dump section layout mismatch: header[{name}]={got} but dtype-computed "
+                f"offset={expected} (version={version}); a record stride is stale"
+            )
+
+    layout_off = int(HEADER_DTYPE.itemsize)
+    _expect("frames_offset", layout_off)
+    layout_off += frame_count * int(FRAME_DTYPE.itemsize)
+    _expect("inputs_offset", layout_off)
+    layout_off += frame_count * port_count * int(INPUT_DTYPE.itemsize)
+    _expect("fighters_offset", layout_off)
+    layout_off += frame_count * port_count * int(fighter_dtype.itemsize)
+    _expect("items_offset", layout_off)
+    layout_off += total_items * int(item_dtype.itemsize)
+    _expect("hitboxes_offset", layout_off)
+    layout_off += frame_count * port_count * 4 * int(HITBOX_DTYPE.itemsize)
+    _expect("hurtboxes_offset", layout_off)
+    layout_off += frame_count * port_count * 15 * int(HURTBOX_DTYPE.itemsize)
+    if int(header["hitlists_offset"]) > 0:
+        _expect("hitlists_offset", layout_off)
+        layout_off += frame_count * port_count * 4 * int(HITLIST_DTYPE.itemsize)
+    if int(header["item_hitlists_offset"]) > 0:
+        _expect("item_hitlists_offset", layout_off)
+
+    frames = _read(FRAME_DTYPE, frame_count, int(header["frames_offset"]))
+    inputs = _read(INPUT_DTYPE, frame_count * port_count, int(header["inputs_offset"]))
+    fighters = _read(fighter_dtype, frame_count * port_count, int(header["fighters_offset"]))
     items = _read(item_dtype, total_items, int(header["items_offset"]))
     hitboxes = _read(HITBOX_DTYPE, frame_count * port_count * 4, int(header["hitboxes_offset"]))
     hurtboxes = _read(HURTBOX_DTYPE, frame_count * port_count * 15, int(header["hurtboxes_offset"]))

@@ -198,6 +198,22 @@ def test_read_engine_dump_rejects_unknown_version(tmp_path: Path) -> None:
         io.read_engine_dump(dump_path)
 
 
+def test_read_engine_dump_rejects_stale_section_stride(tmp_path: Path) -> None:
+    # Regression guard: if a writer record stride (e.g. fighter_rec_size) drifts from the dtype, the
+    # header's post-fighter offsets stop matching the dtype-computed layout and every item/hitbox/
+    # hurtbox record would read as silent garbage. The reader must reject that instead.
+    dump_path = _build_dump(tmp_path / "stale_stride.bin", version=12)
+    blob = bytearray(dump_path.read_bytes())
+    header = np.frombuffer(blob, dtype=io.HEADER_DTYPE, count=1, offset=0)[0]
+    # Mislocate items_offset the way a stale fighter_rec_size would (point it earlier into fighters).
+    bad_items_offset = int(header["items_offset"]) - 36
+    field_off = io.HEADER_DTYPE.fields["items_offset"][1]
+    blob[field_off : field_off + 4] = int(bad_items_offset).to_bytes(4, "little")
+    dump_path.write_bytes(bytes(blob))
+    with pytest.raises(ValueError, match="section layout mismatch"):
+        io.read_engine_dump(dump_path)
+
+
 def test_read_engine_dump_v8_guard_recoil_fields(tmp_path: Path) -> None:
     dump_path = _build_dump(tmp_path / "v8.bin", version=8)
     d = io.read_engine_dump(dump_path)
