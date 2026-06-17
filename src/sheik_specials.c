@@ -936,13 +936,41 @@ static void sk_apply_common_fall(MslBatch* batch, const MslCharParams* ch, size_
   const float accel = stick_x * ch->air_drift_stick_mul +
                       ((stick_x >= 0.0f) ? ch->aerial_drift_base : -ch->aerial_drift_base);
   float vx = batch->state.speed_air_x_self[idx];
-  if (fabsf(stick_x) < 0.001f) {
+  // Shared Sheik common-fall helper horizontal drift = the engine common air drift
+  // ftCommon_8007D268 -> ftCommon_8007D174 (NOT a Vanish-specific rule; this helper backs the Sheik
+  // common-fall special states: Vanish windup, Transform, SpecialAirN/S, SpecialAirLw). Once the
+  // accel would carry the velocity past the stick target, source decelerates by aerial_friction
+  // toward the target (capped at air_max_horizontal_velocity) instead of hard-clamping to it; the
+  // prior hand-rolled hard-clamp under-drifted these air states by ~0.8/frame.
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D268,ftCommon_8007D174}
+  if (target == 0.0f) {
     vx = sk_apply_air_friction(vx, ch->aerial_friction);
   } else {
-    vx += accel;
-    if ((accel > 0.0f && vx > target) || (accel < 0.0f && vx < target)) {
-      vx = target;
+    float a = accel;
+    if (!(vx * a < 0.0f)) {
+      if (a > 0.0f) {
+        if (vx + a > target) {
+          a = -ch->aerial_friction;
+          if (vx + a < target) {
+            a = target - vx;
+          }
+          if (vx + a > ch->air_max_horizontal_velocity) {
+            a = ch->air_max_horizontal_velocity - vx;
+          }
+        }
+      } else {
+        if (vx + a < target) {
+          a = ch->aerial_friction;
+          if (vx + a > target) {
+            a = target - vx;
+          }
+          if (vx + a < -ch->air_max_horizontal_velocity) {
+            a = -ch->air_max_horizontal_velocity - vx;
+          }
+        }
+      }
     }
+    vx += a;
   }
   batch->state.speed_air_x_self[idx] = vx;
 }

@@ -1968,3 +1968,28 @@ def test_sheik_thrown_needle_yields_body_to_guardreflect_shielddesc_negative() -
     assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)
     assert int(out["items"]["exists"][0]) == 1
     assert int(out["items"]["state"][0]) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [1387, 3330, 5194, 6253])
+def test_sheik_vanish_airhistart0_windup_drift_matches_source_common_drift_replay_real(
+    record: int,
+) -> None:
+    # ftSk_SpecialAirHiStart_0_Phys applies ftCommon_Fall (vanish-start gravity/terminal) then the
+    # common air drift ftCommon_8007D268 -> ftCommon_8007D174. Source decelerates by aerial_friction
+    # toward the stick target (capped at air_max_horizontal_velocity) once accel would overshoot,
+    # rather than hard-clamping to the target; the prior hand-rolled clamp under-drifted the windup
+    # (~0.8/frame). Each row below drifts >1u horizontally from the seed and now tracks ref. This
+    # locks the AirHiStart0 WINDUP common-drift only; the separate AirHi post-teleport world-projection
+    # residual is unrelated and not asserted here (see worklog).
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHiStart_0_Phys
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D268,ftCommon_8007D174}
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl"
+    )
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_0
+    assert abs(float(ref["pos_x"][0]) - float(seed["pos_x"][0])) > 1.0
+    out = _run_sample_row(samples, record)
+    assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=0.05)
