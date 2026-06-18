@@ -2898,3 +2898,90 @@ def test_sheik_vanish_explosion_shield_miss_falls_through_to_body() -> None:
         _vanish_smoke_on_shielded_body_seed(shield_hp=8.0), [_inputs_defender_holds_shield()]
     )[0]
     assert float(out["percent"][1]) == pytest.approx(dmg)  # shrunk shield missed -> BODY hit
+
+
+# ---------------------------------------------------------------------------
+# Sheik Side-B Chain — free-run lifecycle + owner-tracking. The state machine / article lifecycle /
+# states / death cleanup are the replay-reconstructible behavior; the swung-tail link IK + 4 fighter
+# hitboxes + aim/length are the deferred segment subsystem (see chain_source_surface_checklist.md).
+# Grounded Side-B needs a diagonal (B + main_x + main_y); pure horizontal routes to Dash. Aerial Side-B
+# is B + main_x (a diagonal-up would route to Up-B).
+# refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c
+# ---------------------------------------------------------------------------
+
+
+def _chain_slots(row):
+    return [
+        s
+        for s in range(8)
+        if int(row["items"]["exists"][s]) == 1 and int(row["items"]["type"][s]) == ITEM_SHEIK_CHAIN
+    ]
+
+
+def test_sheik_chain_grounded_lifecycle_freerun() -> None:
+    # Drive grounded Side-B from a neutral stand: Chain article spawns mid-Start, persists through the
+    # held S state, then retracts and is destroyed during S_END; Sheik returns to a normal action.
+    seed = _seed_base("sheik")
+    seed["pos_x"][0, 1] = np.float32(400.0)
+    frames = (
+        [_mk_inputs(buttons=B, main_x=80, main_y=80)]
+        + [_mk_inputs(buttons=B, main_x=80, main_y=20) for _ in range(45)]
+        + [_mk_inputs(main_x=0) for _ in range(45)]
+    )
+    outs = _run(seed, frames)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_SK_SPECIAL_S_START in acts, acts[:3]  # entered grounded Side-B
+    assert ACT_SK_SPECIAL_S in acts  # reached the held swing state
+    assert ACT_SK_SPECIAL_S_END in acts  # released into End
+    # Chain article appears, then is destroyed by the End; article states are the source set {0,1,3,4}.
+    states = {
+        int(o["items"]["state"][s]) for o in outs for s in _chain_slots(o)
+    }
+    assert states.issubset({0, 1, 3, 4}) and states, states
+    spawned = any(_chain_slots(o) for o in outs)
+    gone_after = not _chain_slots(outs[-1])
+    assert spawned and gone_after, "chain must spawn then be destroyed by S_END"
+
+
+def test_sheik_chain_article_tracks_owner_freerun() -> None:
+    # Retained fix: the Chain root re-anchors to the owner's hand every frame, so it tracks Sheik with a
+    # constant offset instead of staying at the world-space spawn point. With Sheik drifting in the air,
+    # the chain-to-owner x offset stays ~constant (before the fix it shrank as she moved away).
+    seed = _seed_base("sheik")
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["pos_y"][0, 0] = np.float32(80.0)
+    seed["action_id"][0, 0] = np.uint16(29)
+    seed["speed_air_x_self"][0, 0] = np.float32(3.0)  # drift right
+    seed["pos_x"][0, 1] = np.float32(400.0)
+    outs = _run(seed, [_mk_inputs(buttons=B, main_x=80)] + [_mk_inputs(buttons=B, main_x=80) for _ in range(55)])
+    rels = []
+    owner_xs = []
+    for o in outs:
+        sl = _chain_slots(o)
+        if sl:
+            rels.append(float(o["items"]["pos_x"][sl[0]]) - float(o["pos_x"][0]))
+            owner_xs.append(float(o["pos_x"][0]))
+    assert len(rels) >= 8, "chain never present during the aerial drift"
+    # Non-vacuous: Sheik must drift FAR more than the rel-x band. A detached (world-space) chain would
+    # see rel-x change by ~the owner displacement; an anchored one only by the hand-pose swing.
+    owner_move = max(owner_xs) - min(owner_xs)
+    assert owner_move > 20.0, f"owner did not move enough to exercise the bug: {owner_move}"
+    # The chain rel-x stays in a tight band (the animated hand swing), dwarfed by the owner's drift, so a
+    # detached chain (rel-x band ~= owner_move) is clearly excluded.
+    rel_band = max(rels) - min(rels)
+    assert rel_band < 8.0, rels  # the L3rdNa hand swings within ~a few units during the animation
+    assert rel_band < 0.25 * owner_move, (rel_band, owner_move)
+
+
+def test_sheik_chain_aerial_entry_freerun() -> None:
+    # Aerial Side-B (B + forward) enters the aerial Chain family and spawns the article.
+    seed = _seed_base("sheik")
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["pos_y"][0, 0] = np.float32(40.0)
+    seed["action_id"][0, 0] = np.uint16(29)
+    seed["pos_x"][0, 1] = np.float32(400.0)
+    outs = _run(seed, [_mk_inputs(buttons=B, main_x=80)] + [_mk_inputs(buttons=B, main_x=80) for _ in range(45)])
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_SK_SPECIAL_AIR_S_START in acts, acts[:3]
+    assert ACT_SK_SPECIAL_AIR_S in acts  # reached the aerial held swing state
+    assert any(_chain_slots(o) for o in outs), "aerial chain article never spawned"

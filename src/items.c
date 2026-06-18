@@ -2167,6 +2167,26 @@ static void sheik_chain_items_update_anim_phase(MslBatch* batch, int bi) {
       // refs/melee/src/melee/it/items/itseakchain.c::{itSeakchain_UnkMotion4_Anim,notInSpecialS}
       item_slot_clear(batch, ii);
       needs_sort = 1u;
+      continue;
+    }
+    // The Chain article is attached to the owner's L3rdNa hand at spawn (itSeakChain_Spawn ->
+    // Item_8026AB54(gobj, parent_gobj, FtPart_L3rdNa)), so its root rides that joint's transform every
+    // frame rather than holding the world-space spawn point. (it_802BCFC4 is only the x1C+1 transition
+    // that seeds the initial tail velocity; the accessory/link update path derives the per-frame
+    // targets from the attached item/link matrices, not from a re-call of it_802BCFC4.) This sim
+    // equivalent re-anchors the root to the same L3rdNa joint each frame so it tracks the fighter,
+    // matching the replay-observed constant Chain-root-to-owner offset. Modeling the swung tail /
+    // per-link hitbox geometry from that attachment is the deferred segment subsystem.
+    // refs/melee/src/melee/it/items/itseakchain.c::{itSeakChain_Spawn,it_802BCFC4}
+    // refs/melee/src/melee/it/item.c::Item_8026AB54 (attach to FtPart_L3rdNa)
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain (FtPart_L3rdNa)
+    float anchor_x = 0.0f;
+    float anchor_y = 0.0f;
+    if (sheik_article_spawn_anchor_position(batch, msl_idx_player(bi, owner),
+                                            ap->sheik_chain_spawn_part_id, &anchor_x,
+                                            &anchor_y) != 0u) {
+      batch->state.item_pos_x[ii] = anchor_x;
+      batch->state.item_pos_y[ii] = anchor_y;
     }
   }
   if (needs_sort != 0u) {
