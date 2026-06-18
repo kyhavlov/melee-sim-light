@@ -7062,6 +7062,14 @@ int msl_batch_debug_combat_resolve(MslBatch* batch) {
   return 0;
 }
 
+int msl_batch_debug_run_item_collision_phase(MslBatch* batch) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  items_update_collision_phase(batch);
+  return 0;
+}
+
 int msl_batch_debug_combat_select_body_hits(MslBatch* batch, int batch_index,
                                             MslDebugCombatContact* out_contacts,
                                             uint16_t max_contacts, uint16_t* out_count) {

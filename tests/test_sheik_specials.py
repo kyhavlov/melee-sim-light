@@ -1914,47 +1914,436 @@ def test_sheik_thrown_needle_body_hits_unguarded_defender_positive() -> None:
     assert float(out["percent"][1]) == pytest.approx(pct0 + 3.0, abs=0.01)
 
 
-def test_sheik_thrown_needle_yields_body_to_active_shield_negative() -> None:
-    # Negative (deferred ShieldDesc): ftColl_8007925C resolves the defender shield contact before
-    # BODY hurtcaps. With the SAME overlap geometry as the positive control, a defender holding an
-    # active shield (Guard action + 221B_b0 ShieldDesc + held trigger -> live shield bubble) must NOT
-    # take the Needle BODY hit -- the deferred HitShield owns the contact. The Needle stays state-0
-    # (no BODY hit, no bounce).
-    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80076CBC}
+def test_sheik_thrown_needle_dmgdealt_bounce_destroy_under_synthetic_rng() -> None:
+    # it_2725_Logic109_DmgDealt post-hit fate under the sim's DETERMINISTIC synthetic gameplay RNG.
+    # The thrown-Needle BODY hit runs HSD_Randi(3): ==0 -> bounce (item_state 4, lifeTimer from
+    # attr->x4 == needle_bounce_lifetime_frames, vel_x 0, visible y velocity
+    # ABS(it_803F7020[Randi(8)]) drawn from the MSLITAR1 needle_bounce_min_vel_y table); else ->
+    # destroy (item cleared). The 3-damage BODY hit lands in BOTH outcomes.
+    #
+    # The replay-EXACT bounce-vs-destroy choice is owned by HSD visual particle-generator draws the
+    # headless sim intentionally does not model: the RNGFRAME trace proves the Needle Randi(3) reads a
+    # seed past a per-frame particle storm whose 65536-multiple gap scrambles exactly the high bits
+    # Randi(3) consumes (>>16). So this locks the post-hit-fate STRUCTURE + behavior under the synthetic
+    # stream -- NOT replay byte parity, which is documented out-of-scope (no fixed/row-local offset).
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_2725_Logic109_DmgDealt,
+    #   itSeakNeedleThrown_SetupBounce}
+    import msl_binding
+
+    article = msl_binding.item_article_params(7)
+    bounce_vels = [abs(float(v)) for v in article["needle_bounce_min_vel_y"]]
+    bounce_lifetime = float(article["needle_bounce_lifetime_frames"])
+
+    saw_bounce = False
+    saw_destroy = False
+    for hw in range(0, 24):
+        seed = _seed_needle_over_fox_defender()
+        seed["frame_pre_random_seed"][0] = np.uint32(hw << 16)
+        pct0 = float(seed["percent"][0, 1])
+        out = _run(seed, [_mk_inputs()])[0]
+        # BODY damage lands regardless of the post-hit fate.
+        assert float(out["percent"][1]) == pytest.approx(pct0 + 3.0, abs=0.01)
+        if int(out["items"]["exists"][0]) == 0:
+            saw_destroy = True
+            continue
+        # Survivor is a bounced (state 4) Needle with a data-table-owned upward velocity.
+        assert int(out["items"]["state"][0]) == 4
+        assert float(out["items"]["vel_x"][0]) == pytest.approx(0.0)
+        assert float(out["items"]["timer"][0]) == pytest.approx(bounce_lifetime)
+        assert any(
+            float(out["items"]["vel_y"][0]) == pytest.approx(v) for v in bounce_vels
+        ), float(out["items"]["vel_y"][0])
+        saw_bounce = True
+    assert saw_bounce, "no synthetic seed produced a Needle bounce (state 4)"
+    assert saw_destroy, "no synthetic seed produced a Needle destroy"
+
+
+def test_sheik_thrown_needle_dmgdealt_fate_is_deterministic_in_synthetic_rng() -> None:
+    # The post-hit fate is a pure function of the deterministic synthetic gameplay RNG stream: the same
+    # synthetic seed yields an identical bounce/destroy outcome and bounce velocity across runs (no
+    # hidden nondeterminism). This is what "correct given the synthetic stream" means once replay-exact
+    # parity is conceded to the unmodelled particle RNG.
+    for hw in (0, 2):
+        outcomes = []
+        for _ in range(2):
+            seed = _seed_needle_over_fox_defender()
+            seed["frame_pre_random_seed"][0] = np.uint32(hw << 16)
+            out = _run(seed, [_mk_inputs()])[0]
+            outcomes.append(
+                (
+                    int(out["items"]["exists"][0]),
+                    int(out["items"]["state"][0]),
+                    round(float(out["items"]["vel_y"][0]), 4),
+                )
+            )
+        assert outcomes[0] == outcomes[1]
+
+
+def _seed_needle_over_shielding_fox_defender(*, needle_x: float = 20.0, needle_y: float = 8.0):
+    # Active-ShieldDesc defender (Guard + 221B_b0) with the Needle positioned over the shield bubble.
     seed = _seed_needle_over_fox_defender()
     seed["action_id"][0, 1] = np.uint16(ACT_GUARD)
     seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
     seed["state_flags"][0, 1, 2] = np.uint8(0x80)  # 221B_b0 ShieldDesc active
+    seed["items"]["pos_x"][0, 0] = np.float32(needle_x)
+    seed["items"]["pos_y"][0, 0] = np.float32(needle_y)
+    return seed
+
+
+def test_sheik_thrown_needle_hits_active_shielddesc_positive() -> None:
+    # Positive Needle-vs-ShieldDesc contact (source order ReflectDesc -> ShieldDesc -> BODY): a defender
+    # holding an active ShieldDesc resolves the Needle HitCapsule against the shield bubble before the
+    # BODY hurtcaps. The shield ABSORBS the BODY (no fighter percent damage), takes the Needle shield
+    # damage (shield_hp drops well below the hold-only decay), and the Needle runs it_2725_Logic109_
+    # HitShield -- HSD_Randi(3)==0 bounce (state 4) else destroy. The bounce/destroy CHOICE is the same
+    # particle-RNG-owned/out-of-scope fate as DmgDealt, so this scans the synthetic RNG and only requires
+    # that the Needle HitShielded (NOT the stale fly-through state-0), that both branches are reachable,
+    # and that the shield took damage in every case.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688,ftColl_80076CBC}
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_HitShield
+    hold_only_hp = float(
+        _run(_seed_needle_over_shielding_fox_defender(needle_x=200.0, needle_y=200.0),
+             [_inputs_defender_holds_shield()])[0]["shield_hp"][1]
+    )
+    saw_bounce = False
+    saw_destroy = False
+    for hw in range(0, 16):
+        seed = _seed_needle_over_shielding_fox_defender()
+        seed["frame_pre_random_seed"][0] = np.uint32(hw << 16)
+        pct0 = float(seed["percent"][0, 1])
+        out = _run(seed, [_inputs_defender_holds_shield()])[0]
+        # Shield absorbs the BODY: no fighter percent damage.
+        assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)
+        # Shield took the Needle shield damage (clearly past the shield-hold decay floor).
+        assert float(out["shield_hp"][1]) < hold_only_hp - 1.0
+        # Needle HitShielded: bounced (state 4, survives) or destroyed (cleared) -- never fly-through.
+        if int(out["items"]["exists"][0]) == 0:
+            saw_destroy = True
+            continue
+        assert int(out["items"]["state"][0]) == 4
+        saw_bounce = True
+    assert saw_bounce, "no synthetic seed produced a Needle shield bounce (state 4)"
+    assert saw_destroy, "no synthetic seed produced a Needle shield destroy"
+
+
+def test_sheik_thrown_needle_misses_shield_bubble_flies_past_negative() -> None:
+    # Adjacent no-contact negative: with the SAME active ShieldDesc but the Needle positioned OUTSIDE the
+    # shield bubble, there is no HitShield contact -- the Needle travels past unchanged (state 0,
+    # survives), the shield takes NO Needle damage (shield_hp matches the hold-only decay), and the
+    # fighter takes no BODY damage. This keeps the positive above non-vacuous (the contact is geometry-
+    # gated, not "any active shield bounces the Needle").
+    hold_only_hp = float(
+        _run(_seed_needle_over_shielding_fox_defender(needle_x=200.0, needle_y=200.0),
+             [_inputs_defender_holds_shield()])[0]["shield_hp"][1]
+    )
+    seed = _seed_needle_over_shielding_fox_defender(needle_x=20.0, needle_y=120.0)
     pct0 = float(seed["percent"][0, 1])
     out = _run(seed, [_inputs_defender_holds_shield()])[0]
     assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)
     assert int(out["items"]["exists"][0]) == 1
-    assert int(out["items"]["state"][0]) == 0  # Needle did not BODY-hit/bounce
+    assert int(out["items"]["state"][0]) == 0  # Needle missed the shield bubble: no HitShield
+    assert float(out["shield_hp"][1]) == pytest.approx(hold_only_hp, abs=0.01)  # no Needle shield dmg
 
 
-def test_sheik_thrown_needle_yields_body_to_reflectdesc_negative() -> None:
-    # Negative (deferred ReflectDesc, source order reflect-before-BODY): ftColl_8007925C resolves
-    # `fp->reflecting` (fp+0x2218 REFLECTING) before ShieldDesc and BODY hurtcaps, and ReflectDesc is
-    # live INDEPENDENTLY of ShieldDesc (GuardReflect clears 221B_b0 while keeping reflect live). With
-    # the SAME overlap geometry as the positive control, a defender that is reflect-only -- 2218
-    # REFLECTING set, 221B_b0 ShieldDesc CLEARED, no held shield so shield_radius stays 0 -- must NOT
-    # take the Needle BODY hit; the deferred Reflected owns the contact and the Needle stays state-0.
+def _seed_needle_over_reflecting_fox_defender(*, needle_x: float = 20.0, needle_y: float = 8.0):
+    # Reflect-only defender: GuardOn pose (the GuardReflect submotion ftCo_MS_GuardReflect uses the
+    # GuardOn row, so item_guard_reflect_center_xyz resolves a real pose shield-bone center) + 2218
+    # REFLECTING set + 221B_b0 ShieldDesc cleared. The Needle starts over the reflect bubble.
+    seed = _seed_needle_over_fox_defender()
+    seed["action_id"][0, 1] = np.uint16(ACT_GUARD_ON)
+    seed["state_flags"][0, 1, 0] = np.uint8(0x10)  # fp+0x2218 REFLECTING
+    seed["state_flags"][0, 1, 2] = np.uint8(0x00)  # 221B_b0 ShieldDesc cleared (reflect-only)
+    seed["items"]["pos_x"][0, 0] = np.float32(needle_x)
+    seed["items"]["pos_y"][0, 0] = np.float32(needle_y)
+    seed["items"]["vel_x"][0, 0] = np.float32(0.2)
+    seed["items"]["vel_y"][0, 0] = np.float32(0.0)
+    seed["items"]["direction"][0, 0] = np.float32(1.0)
+    return seed
+
+
+def test_sheik_thrown_needle_reflected_by_reflectdesc_positive() -> None:
+    # Positive Needle-vs-ReflectDesc (source order ReflectDesc -> ShieldDesc -> BODY): an active
+    # reflector resolves the Needle HitCapsule against the ReflectDesc bubble before ShieldDesc/BODY.
+    # ftColl_80077464 transfers the article to the reflector; it_2725_Logic109_Reflected (no RNG)
+    # reverses the constant-speed state-0 Needle (vel -> -vel), flips facing, and halves the life
+    # (lifeTimer = halfLifeTimer = spawn_life * ItemCommonData::x4C_float = 0.5). No BODY damage and no
+    # shield damage. The reflect center comes from the same pose/part path the runtime uses
+    # (item_guard_reflect_center_xyz over the GuardOn shield-bone), not a constant.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077464}
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_Reflected
+    import msl_binding
+
+    half_life = float(msl_binding.item_article_params(7)["needle_lifetime_frames"]) * 0.5
+    seed = _seed_needle_over_reflecting_fox_defender(needle_y=8.0)
+    seed["items"]["timer"][0, 0] = np.float32(30.0)
+    pct0 = float(seed["percent"][0, 1])
+    shp0 = float(seed["shield_hp"][0, 1])
+    out = _run(seed, [_inputs_defender_holds_shield()])[0]
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["owner"][0]) == 1  # ownership transferred to the reflector
+    assert float(out["items"]["vel_x"][0]) == pytest.approx(-0.2, abs=1e-4)  # velocity reversed
+    assert float(out["items"]["direction"][0]) == pytest.approx(-1.0)  # facing flipped
+    assert float(out["items"]["timer"][0]) == pytest.approx(half_life, abs=0.01)  # life halved
+    assert int(out["items"]["state"][0]) == 0  # not bounced/destroyed -- reflected, survives
+    assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)  # no BODY damage
+    # No Needle shield damage (reflect owns the contact before ShieldDesc): only the GuardOn hold decay.
+    assert float(out["shield_hp"][1]) >= shp0 - 0.2
+
+
+def test_sheik_thrown_needle_misses_reflect_bubble_flies_past_negative() -> None:
+    # Adjacent no-contact negative: SAME active reflector pose, but the Needle is positioned OUTSIDE the
+    # ReflectDesc bubble -> no reflect contact. Ownership is NOT transferred, velocity is unchanged, and
+    # there is no BODY/shield damage. This keeps the positive non-vacuous (the reflect is geometry-gated
+    # by the real pose center/descriptor radius, not "any 2218 bit reverses the Needle").
+    seed = _seed_needle_over_reflecting_fox_defender(needle_y=120.0)
+    pct0 = float(seed["percent"][0, 1])
+    out = _run(seed, [_inputs_defender_holds_shield()])[0]
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["owner"][0]) == 0  # no reflect: still owned by the thrower
+    assert float(out["items"]["vel_x"][0]) == pytest.approx(0.2, abs=1e-4)  # velocity unchanged
+    assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)
+
+
+def test_sheik_thrown_needle_reflect_bit_without_pose_center_falls_through_to_body() -> None:
+    # Reflect MISS fallthrough (source order ReflectDesc -> ShieldDesc -> clank -> BODY): the bare
+    # fp+0x2218 REFLECTING bit on a NON-guard action exposes no ReflectDesc pose center
+    # (item_guard_reflect_center_xyz returns 0 outside GUARD/GUARD_ON/GUARD_REFLECT), so the Needle
+    # cannot reflect. ftColl_8007925C only skips ShieldDesc/BODY on a reflect HIT (lbColl_80007BCC
+    # reflect_hit overlap); a miss falls through. With 221B cleared and no shield, the Needle therefore
+    # takes the ordinary BODY hit (3 dmg) and bounces/destroys -- the reflect bit alone does NOT
+    # suppress BODY without a ReflectDesc overlap.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
     seed = _seed_needle_over_fox_defender()
     seed["state_flags"][0, 1, 0] = np.uint8(0x10)  # fp+0x2218 REFLECTING; 221B byte left cleared
     pct0 = float(seed["percent"][0, 1])
     out = _run(seed, [_mk_inputs()])[0]  # no shield input -> shield_radius stays 0
-    assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)
+    assert float(out["percent"][1]) == pytest.approx(pct0 + 3.0, abs=0.01)  # BODY hit (fell through)
+    assert int(out["items"]["owner"][0]) == 0  # not reflected (no pose center)
+    assert int(out["items"]["exists"][0]) == 0 or int(out["items"]["state"][0]) == 4  # bounced/destroyed
+
+
+def test_sheik_thrown_needle_reflect_miss_falls_through_to_shielddesc() -> None:
+    # Reviewer control: a defender with BOTH fp+0x2218 REFLECTING and an active ShieldDesc, where the
+    # ReflectDesc bubble MISSES but the ShieldDesc bubble OVERLAPS. ftColl_8007925C only skips later
+    # owners (continue) on a reflect HIT, so the reflect miss FALLS THROUGH to ShieldDesc, which
+    # HitShields (shield damage + bounce/destroy). The reflect bit does NOT suppress ShieldDesc on a
+    # reflect miss. Geometry: the ReflectDesc bubble sits on the guard shield-bone (~y9); a Needle below
+    # it (y=0) misses reflect but the larger shield bubble still covers the body. Contrast: inside the
+    # reflect bubble (y=8) ReflectDesc wins (source-prior).
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    def _run_combined(ndl_y: float):
+        seed = _seed_needle_over_fox_defender()
+        seed["action_id"][0, 1] = np.uint16(ACT_GUARD_ON)
+        seed["state_flags"][0, 1, 0] = np.uint8(0x10)  # fp+0x2218 REFLECTING
+        seed["state_flags"][0, 1, 2] = np.uint8(0x80)  # fp+0x221B_b0 ShieldDesc active
+        seed["items"]["pos_x"][0, 0] = np.float32(20.0)
+        seed["items"]["pos_y"][0, 0] = np.float32(ndl_y)
+        seed["items"]["vel_x"][0, 0] = np.float32(0.2)
+        shp0 = float(seed["shield_hp"][0, 1])
+        pct0 = float(seed["percent"][0, 1])
+        return _run(seed, [_inputs_defender_holds_shield()])[0], shp0, pct0
+
+    # Reflect MISS (below the reflect bubble) -> ShieldDesc HitShields, NOT suppressed by the reflect bit.
+    out, shp0, pct0 = _run_combined(0.0)
+    assert int(out["items"]["owner"][0]) == 0  # not reflected
+    assert int(out["items"]["exists"][0]) == 0 or int(out["items"]["state"][0]) == 4  # HitShield fate
+    assert float(out["shield_hp"][1]) < shp0 - 1.0  # shield took the Needle shield damage
+    assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)  # no BODY damage
+    # Reflect HIT (inside the reflect bubble) -> ReflectDesc wins (source-prior to ShieldDesc).
+    out2, _, _ = _run_combined(8.0)
+    assert int(out2["items"]["owner"][0]) == 1  # reflected
+
+
+# Fighter attack-HitCapsule flags used to construct a source-shaped clank setup.
+_HITBOX_FLAG_ITEM_HIT_INTERACTION = 1 << 11  # MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION
+_HITBOX_FLAG_CLANK = 1 << 14  # MSL_HITBOX_FLAG_CLANK
+
+
+def _run_needle_item_collision(
+    seed: np.ndarray,
+    *,
+    clank_hitbox: bool = False,
+    overlap: bool = True,
+    flags: int = _HITBOX_FLAG_CLANK | _HITBOX_FLAG_ITEM_HIT_INTERACTION,
+    element: int = 0,  # MSL_HIT_ELEMENT_NORMAL
+    clear_hurtcaps: bool = True,
+) -> np.void:
+    # Run ONLY items_update_collision_phase (the Needle update/collision) on a reseeded handle, so a
+    # defender attack HitCapsule can be injected with real source flags (a full step re-derives/clears
+    # hitboxes from the action script, so the clank must be set on the item-collision phase directly).
+    # debug_set_hitbox_* uses the same hitbox lanes the runtime reads; geometry/flags are not faked.
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    comp = int(sizes["compare"])
+    out_bytes = np.zeros((1, comp), dtype=np.uint8)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.debug_refresh_combat_geometry(handle)
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 1)
+        if clear_hurtcaps:
+            msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        if clank_hitbox:
+            # Co-locate the fighter attack HitCapsule with the Needle (overlap) or place it far away.
+            nx = float(seed["items"]["pos_x"][0, 0])
+            ny = float(seed["items"]["pos_y"][0, 0])
+            hx = nx if overlap else nx + 200.0
+            msl_binding.debug_set_hitbox_world(handle, 0, 1, 0, hx, ny, 0.0, 2.0, 5.0, 1)
+            msl_binding.debug_set_hitbox_flags(handle, 0, 1, 0, int(flags))
+            msl_binding.debug_set_hitbox_element(handle, 0, 1, 0, int(element))
+            msl_binding.debug_set_hitbox_kb_params(handle, 0, 1, 0, 90, 100, 0, 20)
+        msl_binding.debug_run_item_collision_phase(handle)
+        msl_binding.write_compare(handle, out_bytes)
+    finally:
+        msl_binding.destroy(handle)
+    return out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+
+
+def _clank_seed(rng_hw: int = 0) -> np.ndarray:
+    seed = _seed_needle_over_fox_defender()
+    seed["frame_pre_random_seed"][0] = np.uint32(rng_hw << 16)
+    seed["items"]["pos_x"][0, 0] = np.float32(20.0)
+    seed["items"]["pos_y"][0, 0] = np.float32(8.0)
+    seed["items"]["vel_x"][0, 0] = np.float32(0.2)
+    seed["items"]["timer"][0, 0] = np.float32(30.0)
+    return seed
+
+
+def test_sheik_thrown_needle_clanks_attack_hitcapsule_positive() -> None:
+    # Positive Needle-vs-attack-HitCapsule clank (source order ReflectDesc -> ShieldDesc -> clank ->
+    # BODY). ftColl_80077970's item side (inlineItemA1 -> it_8026FAC4 -> it_2725_Logic109_Clanked) fires
+    # whenever the 3-dmg Needle overlaps an eligible fighter attack HitCapsule (MSL_HITBOX_FLAG_CLANK +
+    # MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION, non-CATCH/INERT), running the SAME bounce/destroy outcome as
+    # DmgDealt/HitShield via sheik_needle_bounce_or_destroy_callback. This isolated item-collision phase
+    # does not re-seed the per-frame RNG, so the clank takes its bounce branch here (state 4 with the
+    # data-table velocity + 120f bounce lifetime); the bounce-vs-destroy FATE is the shared callback,
+    # locked across synthetic RNG by test_sheik_thrown_needle_dmgdealt_bounce_destroy_under_synthetic_rng.
+    # The clank itself takes NO BODY damage (hurtcaps cleared to isolate the clank from BODY).
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970,inlineItemA1}
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_Clanked
+    import msl_binding
+
+    article = msl_binding.item_article_params(7)
+    bounce_vels = [abs(float(v)) for v in article["needle_bounce_min_vel_y"]]
+    bounce_lifetime = float(article["needle_bounce_lifetime_frames"])
+
+    pct0 = float(_clank_seed()["percent"][0, 1])
+    out = _run_needle_item_collision(_clank_seed(), clank_hitbox=True, overlap=True)
     assert int(out["items"]["exists"][0]) == 1
-    assert int(out["items"]["state"][0]) == 0
+    assert int(out["items"]["state"][0]) == 4  # clanked -> bounced (it_2725_Logic109_Clanked)
+    assert float(out["items"]["vel_x"][0]) == pytest.approx(0.0)
+    assert float(out["items"]["timer"][0]) == pytest.approx(bounce_lifetime)
+    assert any(float(out["items"]["vel_y"][0]) == pytest.approx(v) for v in bounce_vels)
+    assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)  # no BODY damage
+
+
+def test_sheik_thrown_needle_no_clank_without_eligible_overlap_negative() -> None:
+    # Adjacent no-clank negatives: the Needle does NOT clank when (a) no fighter attack HitCapsule is
+    # present, (b) the HitCapsule overlaps but lacks MSL_HITBOX_FLAG_CLANK, (c) it is CLANK-flagged but
+    # does not overlap, or (d) it is a CATCH-element grab box. In every case the Needle stays state-0
+    # (hurtcaps cleared, so no BODY confound). Keeps the positive non-vacuous and source-gated.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
+    assert int(_run_needle_item_collision(_clank_seed(), clank_hitbox=False)["items"]["state"][0]) == 0
+    assert (
+        int(
+            _run_needle_item_collision(
+                _clank_seed(), clank_hitbox=True, flags=_HITBOX_FLAG_ITEM_HIT_INTERACTION
+            )["items"]["state"][0]
+        )
+        == 0
+    )
+    assert (
+        int(
+            _run_needle_item_collision(_clank_seed(), clank_hitbox=True, overlap=False)["items"][
+                "state"
+            ][0]
+        )
+        == 0
+    )
+    assert (
+        int(
+            _run_needle_item_collision(_clank_seed(), clank_hitbox=True, element=8)["items"]["state"][
+                0
+            ]
+        )
+        == 0
+    )  # MSL_HIT_ELEMENT_CATCH
+
+
+def test_sheik_thrown_needle_reflectdesc_wins_over_clank() -> None:
+    # Precedence: ReflectDesc resolves before clank. With an active reflector pose AND an overlapping
+    # eligible clank HitCapsule, the Needle REFLECTS (owner -> reflector, velocity reversed) rather than
+    # clanking, and the result is identical to having no clank HitCapsule at all.
+    base = _run_needle_item_collision(
+        _seed_needle_over_reflecting_fox_defender(needle_y=8.0), clank_hitbox=False
+    )
+    withclank = _run_needle_item_collision(
+        _seed_needle_over_reflecting_fox_defender(needle_y=8.0), clank_hitbox=True
+    )
+    assert int(withclank["items"]["owner"][0]) == 1  # reflected, not clanked
+    assert float(withclank["items"]["vel_x"][0]) == pytest.approx(-0.2, abs=1e-4)
+    assert int(withclank["items"]["state"][0]) == int(base["items"]["state"][0])
+    assert int(withclank["items"]["owner"][0]) == int(base["items"]["owner"][0])
+
+
+def test_sheik_thrown_needle_shielddesc_overlap_wins_over_clank() -> None:
+    # Precedence: when ShieldDesc OVERLAPS, it resolves before clank (the shield branch HitShields and
+    # returns before the clank block). The Needle is placed on the debug shield-bubble center so the
+    # shield overlaps and HitShields; a co-located eligible clank HitCapsule is then a no-op -- the
+    # result (HitShield + shield damage) is identical with and without it. (A shield MISS instead falls
+    # through to clank/BODY, covered by the clank positive and the shield-miss->BODY test.)
+    sseed = _seed_needle_over_shielding_fox_defender()
+    sseed["items"]["pos_x"][0, 0] = np.float32(0.0)  # debug shield-bubble center (uninitialised shield_x)
+    sseed["items"]["pos_y"][0, 0] = np.float32(8.0)
+    sseed["items"]["vel_x"][0, 0] = np.float32(0.2)
+    base = _run_needle_item_collision(sseed.copy(), clank_hitbox=False)
+    withclank = _run_needle_item_collision(sseed.copy(), clank_hitbox=True)
+    assert float(base["shield_hp"][1]) < 59.0  # the shield actually HitShielded (took Needle damage)
+    assert int(withclank["items"]["owner"][0]) == 0  # not clank-transferred
+    assert int(withclank["items"]["state"][0]) == int(base["items"]["state"][0])
+    assert float(withclank["shield_hp"][1]) == pytest.approx(float(base["shield_hp"][1]), abs=0.01)
+
+
+def test_sheik_thrown_needle_shielddesc_miss_but_body_overlap_bodies() -> None:
+    # ShieldDesc MISS fallthrough to BODY (source ftColl_8007925C catch_path -> catch_elem_path on a
+    # shield miss): with an active ShieldDesc whose bubble is SHRUNK by a low shield_hp so it no longer
+    # encloses the lower body, a Needle below the shield bubble (y=0) misses the shield but overlaps the
+    # body hurtcap and deals the ordinary 3-dmg BODY hit (state 4 bounce), taking NO shield damage. A
+    # shielding defender CAN therefore be Needle-shield-poked/BODY-hit on a ShieldDesc miss; the shield
+    # bit does not blanket-suppress BODY. Contrast (y=8, inside the shrunk bubble): HitShield (shield
+    # damage, no BODY damage). Before the ShieldDesc-miss fallthrough fix the y=0 row deferred (state 0).
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    def _run_shrunk_shield(ndl_y: float):
+        seed = _seed_needle_over_fox_defender()
+        seed["action_id"][0, 1] = np.uint16(ACT_GUARD)
+        seed["state_flags"][0, 1, 2] = np.uint8(0x80)  # 221B_b0 ShieldDesc active
+        seed["shield_hp"][0, 1] = np.float32(10.0)  # shrink the shield bubble (hp ratio)
+        seed["items"]["pos_x"][0, 0] = np.float32(20.0)
+        seed["items"]["pos_y"][0, 0] = np.float32(ndl_y)
+        seed["items"]["vel_x"][0, 0] = np.float32(0.2)
+        shp0 = float(seed["shield_hp"][0, 1]); pct0 = float(seed["percent"][0, 1])
+        return _run(seed, [_inputs_defender_holds_shield()])[0], shp0, pct0
+
+    # Below the shrunk shield bubble: shield MISS, but BODY overlaps -> 3-dmg BODY hit + bounce.
+    out, shp0, pct0 = _run_shrunk_shield(0.0)
+    assert float(out["percent"][1]) == pytest.approx(pct0 + 3.0, abs=0.01)  # BODY damage (fell through)
+    assert int(out["items"]["exists"][0]) == 0 or int(out["items"]["state"][0]) == 4  # bounced/destroyed
+    assert float(out["shield_hp"][1]) > shp0 - 1.0  # no Needle shield damage (shield was missed)
+    # Inside the shrunk bubble: HitShield (shield damage, no BODY damage) -- shield still owns overlaps.
+    out2, shp0b, pct0b = _run_shrunk_shield(8.0)
+    assert float(out2["percent"][1]) == pytest.approx(pct0b, abs=0.01)  # no BODY damage
+    assert float(out2["shield_hp"][1]) < shp0b - 1.0  # shield took the Needle damage
 
 
 def test_sheik_thrown_needle_yields_body_to_guardreflect_shielddesc_negative() -> None:
-    # Negative (deferred ShieldDesc, GuardReflect action): a GuardReflect defender holding shield
-    # carries an active ShieldDesc (221B_b0 + live shield bubble), so BODY defers via the SAME shield
-    # path as Guard above -- this exercises the ShieldDesc skip for the GuardReflect action, NOT a
-    # separate ReflectDesc branch. The reflect-without-ShieldDesc powershield window and shine
-    # reflectors are owned by the deferred projectile-vs-shield/reflect project, not this packet.
+    # ShieldDesc path under the GuardReflect action: the sim's GuardReflect action update clears the
+    # manually-set fp+0x2218 REFLECTING bit, so this row exercises the ShieldDesc branch (221B_b0 + live
+    # shield bubble), NOT the ReflectDesc branch (which is covered by the GUARD_ON reflect tests above).
+    # The Needle misses the fresh-GuardReflect shield bubble and the shield encloses the body, so the
+    # contact resolves to no hit (state-0, no BODY damage). ReflectDesc precedence over ShieldDesc and
+    # the reflect-miss -> ShieldDesc fallthrough are locked separately above.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80076CBC}
     seed = _seed_needle_over_fox_defender()
     seed["action_id"][0, 1] = np.uint16(ACT_GUARD_REFLECT)

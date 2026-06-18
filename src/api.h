@@ -2735,6 +2735,11 @@ int msl_batch_debug_set_camera_mode(MslBatch* batch, int batch_index, uint8_t mo
 int msl_batch_debug_set_hit_status_override(MslBatch* batch, int batch_index, int player_index,
                                             int status);
 int msl_batch_debug_combat_resolve(MslBatch* batch);
+// DEBUG/TESTING ONLY. Runs the mutating items_update_collision_phase() in isolation. Intended only for
+// controlled, freshly-reseeded handles in tests (e.g. injecting a fighter HitCapsule then resolving the
+// item collision). MUST NOT be called as part of normal stepping -- doing so double-applies item
+// collision for the frame. Not part of the runtime/eval step path.
+int msl_batch_debug_run_item_collision_phase(MslBatch* batch);
 
 // Debug/testing only: run combat pass-1 BODY-hit selection (non-mutating) and return the chosen
 // contacts in deterministic order (at most 1 per attacker→defender per call).

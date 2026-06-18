@@ -41,6 +41,12 @@ def main() -> None:
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
         # refs/melee/src/melee/it/types.h::ItemCommonData::x78_float
         "item_damage_facing_velocity_threshold": float(_f32_be(buf, item_common_abs + 0x78)),
+        # it_80275158 sets item->xD48_halfLifeTimer = lifetime * it_804D6D28->x4C_float when an item's
+        # lifeTimer is (re)seeded. it_2725_Logic109_Reflected then assigns xD44_lifeTimer =
+        # xD48_halfLifeTimer, so a reflected Sheik Needle's remaining life becomes spawn_life * x4C.
+        # refs/melee/src/melee/it/it_2725.c::{it_80275158,it_2725_Logic109_Reflected}
+        # refs/melee/src/melee/it/types.h::ItemCommonData::x4C_float
+        "reflect_half_life_fraction": float(_f32_be(buf, item_common_abs + 0x4C)),
         # Item_8026B424 computes item hitlag as:
         #   (s32)(damage * it_804D6D28->xB8 + it_804D6D28->xBC)
         # refs/melee/src/melee/it/it_26B1.c::it_8026B424

@@ -1717,7 +1717,15 @@ Characters (Fox/Falco/Marth/Sheik):
   - Purpose:
     - Collect stable, named item/article constants for Fox/Falco blaster, laser,
       illusion/phantasm, Sheik thrown Needle, Sheik Chain/Vanish article publication fields,
-      item-common item-damage facing, and item-common shield bounce data.
+      item-common item-damage facing, item-common shield bounce data, and the item-common
+      reflect/half-life fraction.
+    - `data/items/item_common.json::reflect_half_life_fraction` = `ItemCommonData::x4C_float` (0.5).
+      `it_80275158` sets `xD48_halfLifeTimer = lifetime * x4C_float`; `it_2725_Logic109_Reflected`
+      then assigns `xD44_lifeTimer = xD48_halfLifeTimer`, so a reflected state-0 Sheik Needle's
+      remaining life becomes `needle_lifetime_frames * reflect_half_life_fraction`. The key is
+      RUNTIME-REQUIRED: `item_common_params_init()` hard-fails if it is missing, so the extractor
+      (`tools/extraction/extract_item_common_data.py`) and `data/items/item_common.json` must stay
+      in lockstep.
     - This is a known-field table only; it does not classify item behavior from replay observations.
     - The file name is a legacy path; the table is no longer limited to Fox/Falco records.
   - Sources:

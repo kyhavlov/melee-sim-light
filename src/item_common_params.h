@@ -25,6 +25,12 @@ typedef struct MslItemCommonParams {
   // refs/melee/src/melee/it/types.h::ItemCommonData::{xB8,xBC}
   float item_hitlag_damage_mul;
   float item_hitlag_base;
+  // it_80275158 sets xD48_halfLifeTimer = lifetime * ItemCommonData::x4C_float; the Needle
+  // it_2725_Logic109_Reflected callback then assigns xD44_lifeTimer = xD48_halfLifeTimer, so a
+  // reflected state-0 Needle's remaining life becomes spawn_life * this fraction.
+  // refs/melee/src/melee/it/it_2725.c::{it_80275158,it_2725_Logic109_Reflected}
+  // refs/melee/src/melee/it/types.h::ItemCommonData::x4C_float
+  float reflect_half_life_fraction;
 } MslItemCommonParams;
 
 int item_common_params_init(void);

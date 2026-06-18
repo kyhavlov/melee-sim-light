@@ -122,6 +122,10 @@ int item_common_params_init(void) {
     alloc_free(buf);
     return -1;
   }
+  if (json_get_f32(buf, "reflect_half_life_fraction", &g_params.reflect_half_life_fraction) != 0) {
+    alloc_free(buf);
+    return -1;
+  }
   g_params.shield_bounce_threshold_radians =
       ((90.0f + g_params.shield_bounce_extra_degrees) * MSL_PI_F) / 180.0f;
 

@@ -644,6 +644,11 @@ def test_item_common_data_exports_shield_bounce_threshold_source() -> None:
     # it_8027518C overwrites several spawned item lifetimes from ItemCommonData->xF8; Sheik
     # Vanish smoke uses this post-setup xD44 lifetime instead of the earlier local 60.0f seed.
     assert data["default_spawn_lifetime_frames"] == pytest.approx(80.0)
+    # it_80275158 sets xD48_halfLifeTimer = lifetime * ItemCommonData->x4C_float; it_2725_Logic109_
+    # Reflected then assigns xD44_lifeTimer = xD48_halfLifeTimer, so a reflected state-0 Sheik Needle's
+    # remaining life is needle_lifetime_frames * this fraction. Runtime-required: item_common_params_init
+    # hard-fails without it, so the extracted key must stay present and source-valued.
+    assert data["reflect_half_life_fraction"] == pytest.approx(0.5)
 
 
 def test_ft_common_data_exports_magnify_damage_source_constants() -> None:

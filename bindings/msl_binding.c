@@ -5913,6 +5913,24 @@ static PyObject* msl_debug_combat_resolve_py(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_run_item_collision_phase_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  if (!PyArg_ParseTuple(args, "O", &handle_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_run_item_collision_phase(h->batch);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_run_item_collision_phase failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_set_hitlag_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -7811,6 +7829,11 @@ static PyMethodDef methods[] = {
      "debug_set_hurtcap_enabled(handle, batch_index, player_index, hurtcap_id, enabled=0/1)"},
     {"debug_combat_resolve", msl_debug_combat_resolve_py, METH_VARARGS,
      "debug_combat_resolve(handle) -> run combat_resolve() only"},
+    {"debug_run_item_collision_phase", msl_debug_run_item_collision_phase_py, METH_VARARGS,
+     "debug_run_item_collision_phase(handle) -> run items_update_collision_phase() only. "
+     "DEBUG/TESTING ONLY: mutating phase; use only on a controlled, freshly-reseeded handle (not "
+     "as "
+     "part of normal stepping -- it double-applies item collision otherwise)."},
     {"debug_set_hitlag", msl_debug_set_hitlag_py, METH_VARARGS,
      "debug_set_hitlag(handle, batch_index, player_index, hitlag_frames_u16)"},
     {"debug_set_sheik_vanish_smoke_accessory_pending",
