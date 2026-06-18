@@ -27,6 +27,9 @@ from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 # v24 invalidates datasets generated before Sheik Needle count/timer seed lanes.
 # v23 invalidates datasets generated before CommonFall hidden blend seed lanes.
 # v21 invalidates datasets generated before FoD visible-choice scheduler seed lanes.
+# v30 invalidates datasets generated before throw-swing-hit seed reconstruction: the thrower's
+# per-hitbox hitlist is now seeded for the grabbed victim during the active throw-swing hitbox window
+# (msl_derive_combat_hitlist_seed_fields), so one-step reseed no longer re-applies the throw-swing hit.
 # v19 invalidates datasets generated before FoD hidden-return scheduler timer seed lanes.
 # v18 invalidates same-record-size FoD grounded KneeBend severe-airborne DamageFlyRoll seed-lane
 # reconstruction.
@@ -34,7 +37,7 @@ from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 # reconstructed floor_sweep_prev_pos from callback-visible CollData.cur_pos instead of the older
 # public replay row before the seed.
 # Record-size checks alone cannot detect this semantic.
-_CACHE_VERSION = 29
+_CACHE_VERSION = 30
 _SOURCE_INPUT_PY_TREES = ("tools/slippi",)
 _SOURCE_INPUT_FILES = ("tools/eval/dataset.py", "bindings/msl_preprocess_native.c")
 

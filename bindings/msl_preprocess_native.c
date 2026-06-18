@@ -6845,6 +6845,9 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   uint16_t sim_hitlag[MSL_MAX_PLAYERS] = {0};
   uint8_t prev_group_active[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS] = {{0}};
   uint8_t prev_hb_active[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0}};
+  // Throw-swing-hit reconstruction running state: set once the grabbed victim's percent rises during
+  // the thrower's active throw-swing hitbox window, held until the throw/thrown pairing ends.
+  uint8_t throw_swing_hit[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS] = {{0}};
   uint8_t prev_hb_group[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0}};
   float prev_hb_x[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0.0f}};
   float prev_hb_y[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0.0f}};
@@ -7493,6 +7496,70 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
           }
           if (did_hit) {
             break;
+          }
+        }
+      }
+    }
+
+    // Throw-swing-hit seed reconstruction (validation/reseed completeness; NOT a runtime change).
+    // A throw-swing create_hitbox (e.g. Sheik ThrowLw f31, 5%) hits the grabbed victim once, but the
+    // per-frame overlap reconstruction above computes the victim's hurtcaps from their OWN thrown-state
+    // pose while the source position is thrower-attachment-driven, so the overlap is missed and the
+    // thrower's hitlist is never seeded. One-step reseed inside the still-active hitbox window then
+    // re-applies the (staled) hit. Reconstruct the seed from the ground-truth replay-prefix signal: the
+    // grabbed victim's percent rose during the thrower's active single-hit (rehit==0) throw-swing
+    // hitbox. General across throws/characters; no row-id or character branch.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c (throw-swing create_hitbox vs grabbed victim)
+    if (percent_p != NULL) {
+      for (int a = 0; a < num_players; a++) {
+        const npy_intp a_pi = fi * width + a;
+        const uint8_t a_in_throw = (action_p[a_pi] >= (uint16_t)MSL_ACT_THROW_F &&
+                                    action_p[a_pi] <= (uint16_t)MSL_ACT_THROW_LW)
+                                       ? 1u
+                                       : 0u;
+        for (int d = 0; d < num_players; d++) {
+          if (d == a) {
+            continue;
+          }
+          const npy_intp d_pi = fi * width + d;
+          const uint8_t d_thrown = (action_p[d_pi] >= (uint16_t)MSL_ACT_THROWN_F &&
+                                    action_p[d_pi] <= (uint16_t)MSL_ACT_THROWN_LW_WOMEN)
+                                       ? 1u
+                                       : 0u;
+          if (!a_in_throw || !d_thrown) {
+            throw_swing_hit[a][d] = 0u;
+            continue;
+          }
+          // Pairing: the thrown victim's instance_hit_by MUST be the thrower's current (grab/throw)
+          // instance. This is the standard hit-attribution and is the whole safety argument for the
+          // reconstruction, so a missing or mismatched pairing is NOT acceptable: clear the latch and
+          // skip even while both players are still in Throw/Thrown states. The port-level last_hit_by is
+          // not updated by the throw-swing hit and so cannot stand in for it. The latch is held only
+          // while the Throw/Thrown pairing remains valid; it (re-)latches on the ground-truth percent
+          // edge and keeps seeding on later hold frames (no further rise) while the hitbox stays active.
+          if (instance_hit_by_p == NULL || instance_hit_by_p[d_pi] != instance_id_p[a_pi]) {
+            throw_swing_hit[a][d] = 0u;
+            continue;
+          }
+          if (fi > 0 && percent_p[d_pi] > percent_p[(fi - 1) * width + d]) {
+            throw_swing_hit[a][d] = 1u;
+          }
+          if (!throw_swing_hit[a][d]) {
+            continue;
+          }
+          // Seed every active single-hit throw-swing hitbox's per-hitbox (authoritative) list as
+          // already-hit so a one-step reseed inside the active window does not re-apply the hit. Both
+          // same-group swing hitboxes are seeded individually, so the dense group list is not seeded
+          // here -- that keeps the seed scoped to the active-hitbox window (the per-hitbox list resets
+          // when the hitbox deactivates, while the dense group list would persist past the throw).
+          for (int reg = 0; reg < MSL_MAX_HITBOXES; reg++) {
+            MslPyHbPrim* hb = &hitboxes[a][reg];
+            if (!hb->valid || !(hb->damage > 0.0f) || hb->rehit != 0u) {
+              continue;
+            }
+            hitlist_hb_cd[a][reg][d] = 0xFFFFu;
+            hitlist_hb_iid[a][reg][d] = instance_id_p[d_pi];
+            hitlist_hb_authoritative[a][reg] = 1u;
           }
         }
       }
