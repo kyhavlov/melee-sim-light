@@ -48,7 +48,7 @@ Source checkouts also fall back to `data/` when `.msl/` is absent. The resolved
 data directory is process-global native runtime state, so choose it before
 creating simulator batches.
 
-## Minimal Step Loop
+## Examples
 
 ### Python
 
