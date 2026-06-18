@@ -1745,9 +1745,9 @@ Characters (Fox/Falco/Marth/Sheik):
     - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
   - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
     the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
-  - Binary layout: `MSLITAR1` v11
+  - Binary layout: `MSLITAR1` v12
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 11`
+    - `u32 version = 12`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
@@ -1812,6 +1812,20 @@ Characters (Fox/Falco/Marth/Sheik):
       `x40_vel.x` during state-4 physics (`itSeakneedlethrown_UnkMotion4_Phys`); the dropped state
       uses xDD8 = 0. `src/items.c` keeps no local literal copy. Previously this table was only
       RNG-advanced (bounced Needles fell straight down); v11 makes the horizontal drift source-exact.
+    - v12 adds the Sheik Side-B Chain `itSeakChain_Attrs` Verlet-solver block (PlSk.dat article
+      `ftData.x48_items[3]->x4_specialAttributes`): `sheik_chain_link_count` (field 200, the
+      `attrs->x0` ItemLink node count = 20) plus the 20 f32 solver attrs in struct order (fields
+      201..220): segment length (x4), the two static-friction clamps (x10/x14), gravity (x18),
+      velocity decay (x34), wall-bounce reflection (x58), and the extend/whip/retract tuning
+      (x1c..x60). The Chain article has NO scripted article hitboxes (`xC_itemStates == data_base`);
+      its 4 damage capsules are FIGHTER `HitCapsule fp->x914[4]` created by the SpecialS subaction
+      (moveset `specials_by_msid` 303/306) and repositioned along the solved links by
+      `ftSk_SpecialS_UpdateHitboxes` (`it_802BCB88` stride map). The loader requires all 21 fields
+      (`sheik_chain_attr_fields_seen` complete) and rejects link_count outside [2,64] or a
+      non-positive segment length / gravity. Runtime uses these in `src/items.c::sheik_chain_solve_links`
+      (the it_802BBB0C core Verlet solve over runtime-only per-item link state). Source:
+      `refs/melee/src/melee/it/itCharItems.h::itSeakChain_Attrs`,
+      `refs/melee/src/melee/it/items/itseakchain.c::{it_802BAF2C,it_802BBB0C}`.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:

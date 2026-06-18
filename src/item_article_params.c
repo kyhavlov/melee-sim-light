@@ -10,7 +10,7 @@
 #include "alloc.h"
 
 enum {
-  MSLITAR1_VERSION = 11,
+  MSLITAR1_VERSION = 12,
   MSLITAR1_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1,
   MSLITAR1_VALUE_U16 = 1,
   MSLITAR1_VALUE_U32 = 2,
@@ -94,6 +94,17 @@ enum {
   MSLITAR1_FIELD_VANISH_HITBOX_LAST = MSLITAR1_FIELD_VANISH_HITBOX_REMOVE_FRAME,
   MSLITAR1_FIELD_VANISH_HITBOX_REQUIRED_MASK =
       (1u << (MSLITAR1_FIELD_VANISH_HITBOX_LAST - MSLITAR1_FIELD_VANISH_HITBOX_FIRST + 1u)) - 1u,
+  // Side-B Chain itSeakChain_Attrs (MSLITAR1 v12). field_id 200 = link count (U16); 201..220 = the
+  // 20 f32 solver attrs in struct order (segment/friction/gravity/decay/wall-bounce + tuning).
+  MSLITAR1_FIELD_SHEIK_CHAIN_LINK_COUNT = 200,
+  MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_FIRST = 201,
+  MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_LAST = 220,
+  MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_FIRST = MSLITAR1_FIELD_SHEIK_CHAIN_LINK_COUNT,
+  MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_LAST = MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_LAST,
+  MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_COUNT =
+      MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_LAST - MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_FIRST + 1u,
+  MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_REQUIRED_MASK =
+      (1u << MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_COUNT) - 1u,
 };
 
 typedef struct ItemArticleTable {
@@ -103,6 +114,7 @@ typedef struct ItemArticleTable {
   uint32_t sheik_special_article_fields_seen;
   uint32_t sheik_vanish_hitbox_fields_seen;
   uint64_t sheik_needle_drop_bounce_fields_seen;
+  uint32_t sheik_chain_attr_fields_seen;
   uint8_t loaded;
 } ItemArticleTable;
 
@@ -200,6 +212,38 @@ static uint8_t needle_drop_table_index(uint16_t field_id, uint16_t base_field_id
           field_id < (uint16_t)(base_field_id + MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN))
              ? (uint8_t)(field_id - base_field_id)
              : 0xFFu;
+}
+
+// Resolve a Chain itSeakChain_Attrs f32 field_id (201..220) to its struct member. The order matches
+// the SHEIK_CHAIN_ATTR_FIELDS extractor tuple and the struct declaration order in the header.
+static float* sheik_chain_attr_f32_member(MslItemArticleParams* rec, uint16_t field_id) {
+  float* const members[] = {
+      &rec->sheik_chain_segment_length,   // 201
+      &rec->sheik_chain_friction_x10,     // 202
+      &rec->sheik_chain_friction_x14,     // 203
+      &rec->sheik_chain_gravity,          // 204
+      &rec->sheik_chain_attr_x1c,         // 205
+      &rec->sheik_chain_attr_x20,         // 206
+      &rec->sheik_chain_attr_x24,         // 207
+      &rec->sheik_chain_attr_x28,         // 208
+      &rec->sheik_chain_attr_x2c,         // 209
+      &rec->sheik_chain_attr_x30,         // 210
+      &rec->sheik_chain_decay_x34,        // 211
+      &rec->sheik_chain_attr_x38,         // 212
+      &rec->sheik_chain_attr_x3c,         // 213
+      &rec->sheik_chain_attr_x40,         // 214
+      &rec->sheik_chain_attr_x44,         // 215
+      &rec->sheik_chain_attr_x48,         // 216
+      &rec->sheik_chain_attr_x54,         // 217
+      &rec->sheik_chain_wall_bounce_x58,  // 218
+      &rec->sheik_chain_attr_x5c,         // 219
+      &rec->sheik_chain_attr_x60,         // 220
+  };
+  if (field_id < MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_FIRST ||
+      field_id > MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_LAST) {
+    return NULL;
+  }
+  return members[field_id - MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_FIRST];
 }
 
 static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id, uint32_t u32_value,
@@ -523,6 +567,18 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
           break;
         }
       }
+      if (field_id == MSLITAR1_FIELD_SHEIK_CHAIN_LINK_COUNT) {
+        if (value_type != MSLITAR1_VALUE_U16) return -1;
+        rec->sheik_chain_link_count = (uint16_t)u32_value;
+        break;
+      }
+      if (field_id >= MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_FIRST &&
+          field_id <= MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_LAST) {
+        float* member = sheik_chain_attr_f32_member(rec, field_id);
+        if (member == NULL || value_type != MSLITAR1_VALUE_F32) return -1;
+        *member = f32_value;
+        break;
+      }
       break;
   }
   const uint8_t needle_bit = needle_required_bit_for_field(field_id);
@@ -542,6 +598,11 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
       field_id <= MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_LAST) {
     g_tbl.sheik_needle_drop_bounce_fields_seen |=
         (uint64_t)1ull << (uint64_t)(field_id - MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_FIRST);
+  }
+  if (char_id == 7u && field_id >= MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_FIRST &&
+      field_id <= MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_LAST) {
+    g_tbl.sheik_chain_attr_fields_seen |=
+        (uint32_t)1u << (uint32_t)(field_id - MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_FIRST);
   }
   return 0;
 }
@@ -686,7 +747,13 @@ int item_article_params_init(void) {
       g_tbl.by_char[7].vanish_hitbox_size_keyframe_count < 2u ||
       !(g_tbl.by_char[7].vanish_hitbox_size_keyframe_value[0] > 0.0f) ||
       !(g_tbl.by_char[7].vanish_hitbox_size_keyframe_value[1] > 0.0f) ||
-      g_tbl.by_char[7].vanish_hitbox_remove_frame == 0u) {
+      g_tbl.by_char[7].vanish_hitbox_remove_frame == 0u ||
+      g_tbl.sheik_chain_attr_fields_seen !=
+          (uint32_t)MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_REQUIRED_MASK ||
+      g_tbl.by_char[7].sheik_chain_link_count < 2u ||
+      g_tbl.by_char[7].sheik_chain_link_count > 64u ||
+      !(g_tbl.by_char[7].sheik_chain_segment_length > 0.0f) ||
+      !(g_tbl.by_char[7].sheik_chain_gravity > 0.0f)) {
     return -1;
   }
   g_tbl.loaded = 1u;

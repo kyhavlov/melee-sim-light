@@ -534,6 +534,68 @@ def _extract_mars_sword_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
     return out
 
 
+def _extract_seak_chain_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
+    """Extract Sheik Side-B Chain article Verlet-solver attributes.
+
+    The Chain article is ftData.x48_items[3]; its x4_specialAttributes block is an
+    `itSeakChain_Attrs` (0x6C bytes, struct in it/itCharItems.h). The Chain has NO
+    scripted article hitboxes (xC_itemStates == data_base); the 4 collision capsules
+    live on the FIGHTER (fp->x914[]) and are positioned along the solved links by
+    `ftSk_SpecialS_UpdateHitboxes`. So only the solver attrs come from here.
+
+    Field semantics from the solver (refs/melee/src/melee/it/items/itseakchain.c):
+    - x0  : link count (s32) -- it_802BAF2C spawns `attrs->x0` ItemLink nodes.
+    - x4  : segment length -- max per-link separation constraint (it_802BBB0C).
+    - x10/x14 : static-friction clamp magnitudes on link vel.x
+              (itSeakChain_clamp_x10 / _x14).
+    - x18 : per-link gravity (prev->vel.y -= sa->x18).
+    - x1C..x48 : extend/whip/retract decay + activation tuning.
+    - x54 : retract clamp scale (it_802BC94C, fn_802BB784).
+    - x58 : wall-bounce vel.x reflection factor (link->vel.x *= -sa->x58).
+    - x5C/x60 : extend/retract solver tuning.
+    """
+    items_abs = arc.ptr32(ftdata_abs + 0x48)
+    if items_abs == arc.data_base:
+        return {}
+    article_abs = arc.ptr32(items_abs + 0x0C)  # x48_items[3]
+    if article_abs == arc.data_base:
+        return {}
+    special_abs = arc.ptr32(article_abs + 0x04)
+    if special_abs == arc.data_base or special_abs + 0x6C > len(pl_buf):
+        return {}
+
+    link_count = _i32_be(pl_buf, special_abs + 0x00)
+    if link_count <= 0 or link_count > 64:
+        return {}
+
+    def af(off: int) -> float:
+        return float(_f32_be(pl_buf, special_abs + off))
+
+    return {
+        "sheik_chain_link_count": int(link_count),
+        "sheik_chain_segment_length": af(0x04),
+        "sheik_chain_friction_x10": af(0x10),
+        "sheik_chain_friction_x14": af(0x14),
+        "sheik_chain_gravity": af(0x18),
+        "sheik_chain_attr_x1c": af(0x1C),
+        "sheik_chain_attr_x20": af(0x20),
+        "sheik_chain_attr_x24": af(0x24),
+        "sheik_chain_attr_x28": af(0x28),
+        "sheik_chain_attr_x2c": af(0x2C),
+        "sheik_chain_attr_x30": af(0x30),
+        "sheik_chain_decay_x34": af(0x34),
+        "sheik_chain_attr_x38": af(0x38),
+        "sheik_chain_attr_x3c": af(0x3C),
+        "sheik_chain_attr_x40": af(0x40),
+        "sheik_chain_attr_x44": af(0x44),
+        "sheik_chain_attr_x48": af(0x48),
+        "sheik_chain_attr_x54": af(0x54),
+        "sheik_chain_wall_bounce_x58": af(0x58),
+        "sheik_chain_attr_x5c": af(0x5C),
+        "sheik_chain_attr_x60": af(0x60),
+    }
+
+
 def _extract_seak_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
     """Extract Sheik's ftData.x4 ftSeakAttributes block.
 
@@ -794,6 +856,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out.update(_extract_seak_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
         out.update(_extract_seak_needle_article(buf, arc, ftdata_abs=ftdata_abs))
         out.update(_extract_seak_vanish_article(buf, arc, ftdata_abs=ftdata_abs))
+        out.update(_extract_seak_chain_article(buf, arc, ftdata_abs=ftdata_abs))
     if extract_fox_blaster:
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)

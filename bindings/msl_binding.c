@@ -28,6 +28,8 @@
 #include "../src/hitlist.h"
 #include "../src/input_axis.h"
 #include "../src/item_article_params.h"
+#include "../src/items.h"
+#include "../src/ids.h"
 #include "../src/move_tables.h"
 #include "../src/motion_state_owners.h"
 #include "../src/mpcoll_bounding.h"
@@ -4669,9 +4671,79 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
   MSL_SET_DICT_FLOAT_TABLE("needle_bounce_gravity", p->needle_bounce_gravity);
   MSL_SET_DICT_FLOAT_TABLE("needle_bounce_x_vel", p->needle_bounce_x_vel);
 #undef MSL_SET_DICT_FLOAT_TABLE
+  MSL_SET_DICT_LONG("sheik_chain_link_count", p->sheik_chain_link_count);
+  MSL_SET_DICT_FLOAT("sheik_chain_segment_length", p->sheik_chain_segment_length);
+  MSL_SET_DICT_FLOAT("sheik_chain_friction_x10", p->sheik_chain_friction_x10);
+  MSL_SET_DICT_FLOAT("sheik_chain_friction_x14", p->sheik_chain_friction_x14);
+  MSL_SET_DICT_FLOAT("sheik_chain_gravity", p->sheik_chain_gravity);
+  MSL_SET_DICT_FLOAT("sheik_chain_decay_x34", p->sheik_chain_decay_x34);
+  MSL_SET_DICT_FLOAT("sheik_chain_wall_bounce_x58", p->sheik_chain_wall_bounce_x58);
+  MSL_SET_DICT_FLOAT("sheik_chain_attr_x54", p->sheik_chain_attr_x54);
 #undef MSL_SET_DICT_LONG
 #undef MSL_SET_DICT_FLOAT
   return out;
+}
+
+// Test-only inspector for the Sheik Chain solved Verlet geometry. Returns the live solved link
+// world positions and the 4 fighter-HitCapsule world positions (it_802BCB88 stride map) for a given
+// batch/player's Chain article, or None if no live solved Chain is present.
+static PyObject* msl_sheik_chain_debug_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  if (!PyArg_ParseTuple(args, "O|ii", &handle_obj, &batch_index, &player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (batch_index < 0 || batch_index >= h->batch->batch_size || player_index < 0 ||
+      player_index >= MSL_MAX_PLAYERS) {
+    PyErr_SetString(PyExc_ValueError, "batch_index/player_index out of range");
+    return NULL;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || ap->sheik_chain_itkind == 0u) {
+    Py_RETURN_NONE;
+  }
+  int found = -1;
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = (size_t)batch_index * (size_t)MSL_MAX_ITEMS + (size_t)it;
+    if (h->batch->state.item_exists[ii] != 0u &&
+        h->batch->state.item_type[ii] == ap->sheik_chain_itkind &&
+        (int)h->batch->state.item_owner[ii] == player_index &&
+        h->batch->state.item_sheik_chain_links_valid[ii] != 0u) {
+      found = it;
+      break;
+    }
+  }
+  if (found < 0) {
+    Py_RETURN_NONE;
+  }
+  const size_t ii = (size_t)batch_index * (size_t)MSL_MAX_ITEMS + (size_t)found;
+  int n = (int)ap->sheik_chain_link_count;
+  if (n > MSL_SHEIK_CHAIN_MAX_LINKS) {
+    n = MSL_SHEIK_CHAIN_MAX_LINKS;
+  }
+  const size_t base = ii * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
+  PyObject* links = PyList_New(n);
+  for (int i = 0; i < n; i++) {
+    PyList_SET_ITEM(
+        links, i,
+        Py_BuildValue("dd", (double)h->batch->state.item_sheik_chain_link_pos_x[base + (size_t)i],
+                      (double)h->batch->state.item_sheik_chain_link_pos_y[base + (size_t)i]));
+  }
+  const size_t fidx = (size_t)batch_index * (size_t)MSL_MAX_PLAYERS + (size_t)player_index;
+  PyObject* hbs = PyList_New(MSL_MAX_HITBOXES);
+  for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+    float hx = 0.0f;
+    float hy = 0.0f;
+    const uint8_t ok = sheik_chain_hitbox_world_pos(h->batch, fidx, (uint8_t)hb, &hx, &hy);
+    PyList_SET_ITEM(hbs, hb, Py_BuildValue("ddi", (double)hx, (double)hy, (int)ok));
+  }
+  return Py_BuildValue("{s:N,s:N}", "links", links, "hitboxes", hbs);
 }
 
 static PyObject* msl_stage_floor_segment_py(PyObject* self, PyObject* args) {
@@ -7409,6 +7481,10 @@ static PyMethodDef methods[] = {
      "char_params_part_anchors(char_id) -> dict of runtime part anchors from character data."},
     {"item_article_params", msl_item_article_params_py, METH_VARARGS,
      "item_article_params(char_id) -> dict loaded from MSLITAR1."},
+    {"sheik_chain_debug", msl_sheik_chain_debug_py, METH_VARARGS,
+     "[DEBUG/TEST-ONLY, not stable API] sheik_chain_debug(handle, batch_index=0, player_index=0) "
+     "-> "
+     "{links, hitboxes} solved Chain geometry for tests/inspection, or None."},
     {"stage_floor_segment", msl_stage_floor_segment_py, METH_VARARGS,
      "stage_floor_segment(stage_id, segment_i) -> dict from runtime stage collision tables."},
     {"stage_topology_flags", msl_stage_topology_flags_py, METH_VARARGS,

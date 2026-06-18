@@ -15,6 +15,14 @@ enum { MSL_MAX_PLAYERS = 4 };
 enum { MSL_MAX_ITEMS = 15 };
 enum { MSL_MAX_HURTCAPS = 32 };
 enum { MSL_MAX_HITBOXES = 4 };
+// Fixed capacity for Sheik Side-B Chain Verlet links (itSeakChain_Attrs x0 link count == 20; the
+// solver runs over a fixed per-item-slot link array, no heap). refs/melee/src/melee/it/items/
+// itseakchain.c::it_802BAF2C
+enum { MSL_SHEIK_CHAIN_MAX_LINKS = 24 };
+// Sheik Chain stick-history trail length (itSeakChain itemVar `history[0xF]`), consumed by the
+// it_802BC080 whip solve to propagate stick-driven impulses down the chain.
+// refs/melee/src/melee/it/items/itseakchain.c::it_802BC080
+enum { MSL_SHEIK_CHAIN_HISTORY_LEN = 15 };
 // Current target-domain fighter dynamic chains. Fox's ftData.x2C chain has four nodes; Falco has
 // no fighter dynamics in the extracted target data. Keep fixed capacity for allocation-free
 // runtime ownership while leaving the data loader schema able to reject larger unsupported chains.

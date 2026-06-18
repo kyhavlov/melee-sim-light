@@ -582,6 +582,23 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] = 0.0f;
   batch->state.item_sheik_needle_hidden_drop_gravity[ii] = 0.0f;
   batch->state.item_sheik_needle_hidden_drop_vel_x[ii] = 0.0f;
+  batch->state.item_sheik_chain_links_valid[ii] = 0u;
+  {
+    const size_t link_base = ii * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
+    for (size_t li = 0; li < (size_t)MSL_SHEIK_CHAIN_MAX_LINKS; li++) {
+      batch->state.item_sheik_chain_link_pos_x[link_base + li] = 0.0f;
+      batch->state.item_sheik_chain_link_pos_y[link_base + li] = 0.0f;
+      batch->state.item_sheik_chain_link_vel_x[link_base + li] = 0.0f;
+      batch->state.item_sheik_chain_link_vel_y[link_base + li] = 0.0f;
+    }
+    const size_t hist_base = ii * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN;
+    for (size_t hi = 0; hi < (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN; hi++) {
+      batch->state.item_sheik_chain_history_x[hist_base + hi] = 0.0f;
+      batch->state.item_sheik_chain_history_y[hist_base + hi] = 0.0f;
+    }
+  }
+  batch->state.item_sheik_chain_prev_stick_x[ii] = 0.0f;
+  batch->state.item_sheik_chain_prev_stick_y[ii] = 0.0f;
   batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
   batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
   batch->state.item_shyguy_dyn_y_phase[ii] = 0u;
@@ -666,6 +683,9 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_min_vel_y);
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_gravity);
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_vel_x);
+  SWAP(uint8_t, batch->state.item_sheik_chain_links_valid);
+  SWAP(float, batch->state.item_sheik_chain_prev_stick_x);
+  SWAP(float, batch->state.item_sheik_chain_prev_stick_y);
   SWAP(float, batch->state.item_shyguy_prev_vel_y);
   SWAP(uint8_t, batch->state.item_shyguy_prev_vel_y_valid);
   SWAP(uint8_t, batch->state.item_shyguy_dyn_y_phase);
@@ -686,6 +706,41 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
       const MslHitlistCapsule tmp = batch->state.item_hitlist[a_base + hb];
       batch->state.item_hitlist[a_base + hb] = batch->state.item_hitlist[b_base + hb];
       batch->state.item_hitlist[b_base + hb] = tmp;
+    }
+  }
+
+  // Swap the per-item Sheik Chain Verlet link arrays to preserve item ordering invariants.
+  {
+    const size_t a_base = a * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
+    const size_t b_base = b * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
+    for (size_t li = 0; li < (size_t)MSL_SHEIK_CHAIN_MAX_LINKS; li++) {
+#define SWAP_LINK(ARR, TY)                                         \
+  do {                                                             \
+    const TY t__ = batch->state.ARR[a_base + li];                  \
+    batch->state.ARR[a_base + li] = batch->state.ARR[b_base + li]; \
+    batch->state.ARR[b_base + li] = t__;                           \
+  } while (0)
+      SWAP_LINK(item_sheik_chain_link_pos_x, float);
+      SWAP_LINK(item_sheik_chain_link_pos_y, float);
+      SWAP_LINK(item_sheik_chain_link_vel_x, float);
+      SWAP_LINK(item_sheik_chain_link_vel_y, float);
+#undef SWAP_LINK
+    }
+  }
+
+  // Swap the per-item Sheik Chain stick-history trail.
+  {
+    const size_t a_base = a * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN;
+    const size_t b_base = b * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN;
+    for (size_t hi = 0; hi < (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN; hi++) {
+      const float tx = batch->state.item_sheik_chain_history_x[a_base + hi];
+      batch->state.item_sheik_chain_history_x[a_base + hi] =
+          batch->state.item_sheik_chain_history_x[b_base + hi];
+      batch->state.item_sheik_chain_history_x[b_base + hi] = tx;
+      const float ty = batch->state.item_sheik_chain_history_y[a_base + hi];
+      batch->state.item_sheik_chain_history_y[a_base + hi] =
+          batch->state.item_sheik_chain_history_y[b_base + hi];
+      batch->state.item_sheik_chain_history_y[b_base + hi] = ty;
     }
   }
 }
@@ -2144,6 +2199,230 @@ static inline uint8_t sheik_chain_owner_still_in_specials(const MslBatch* batch,
                    action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END);
 }
 
+// Constrain link i to within one segment length of its more-headward neighbour i-1 (it_802A3C98 dir
+// + clamp). Link index 0 is the head (nearest the hand); increasing index runs toward the tail, which
+// is the article's ->prev direction in itseakchain.c.
+static inline void sheik_chain_constrain_to(float* px, float* py, int i, float ax, float ay,
+                                            float seg) {
+  const float dx = px[i] - ax;
+  const float dy = py[i] - ay;
+  const float d = sqrtf(dx * dx + dy * dy);
+  if (d > seg && d > 0.0f) {
+    const float inv = seg / d;
+    px[i] = ax + dx * inv;
+    py[i] = ay + dy * inv;
+  }
+}
+
+// 2D held-S whip solve for the active Chain geometry -- the air-swing core of it_802BC080 (the held-S
+// driver fn_802BB694 -> it_802BC080), not a byte-exact full port. The head link is constrained to the
+// hand `target`; the owner's lstick delta seeds a stick-force history trail (attrs x38/x3c facing-
+// signed x, x40/x44 sign-signed y, gated by deadzone x48) that injects per-link velocity impulses
+// (history * x1C/x20) propagating down the chain with a geometric decay scale (x34). Each link is
+// integrated, friction-clamped (x10, scaled), velocity-capped (x24/x2C, scaled), gravity-banded (x18
+// with deadzone x28), and segment-constrained (x4). This produces the horizontal whip-out toward the
+// swing direction (not just a gravity hang), which is what positions the 4 fighter hitboxes.
+//
+// Omitted source branches (residual, non-dominant for the air swing that covers the held-S window):
+// - per-link environment collision (it_802BB938/mpColl, gated by counter>mode and the x18 hitlag
+//   flag): env_flags stays 0, so the x5C/x60 wall-bounce and x30 hitlag-velocity-scale branches that
+//   only fire on a stage hit are not modeled;
+// - active-link propagation (it_802BBD64/it_802BBED0 extend activation, the x2C_b0 bit): all links are
+//   treated as active, valid once the chain is fully deployed in the held swing but skipping the
+//   link-by-link extend/retract shape.
+// Fixed-capacity, no heap, deterministic. Link state is runtime-only SoA (reset on reseed).
+// refs/melee/src/melee/it/items/itseakchain.c::{it_802BC080,it_802A4420,itSeakChain_clamp_x10}
+static void sheik_chain_solve_links(MslBatch* batch, size_t ii, const MslItemArticleParams* ap,
+                                    size_t owner_idx, float hand_x, float hand_y) {
+  int n = (int)ap->sheik_chain_link_count;
+  if (n < 2) {
+    return;
+  }
+  if (n > MSL_SHEIK_CHAIN_MAX_LINKS) {
+    n = MSL_SHEIK_CHAIN_MAX_LINKS;
+  }
+  const float seg = ap->sheik_chain_segment_length;
+  const float x10 = ap->sheik_chain_friction_x10;
+  const float x18 = ap->sheik_chain_gravity;
+  const float x1c = ap->sheik_chain_attr_x1c;
+  const float x20 = ap->sheik_chain_attr_x20;
+  const float x24 = ap->sheik_chain_attr_x24;
+  const float x28 = ap->sheik_chain_attr_x28;
+  const float x2c = ap->sheik_chain_attr_x2c;
+  const float x34 = ap->sheik_chain_decay_x34;
+  const float x38 = ap->sheik_chain_attr_x38;
+  const float x3c = ap->sheik_chain_attr_x3c;
+  const float x40 = ap->sheik_chain_attr_x40;
+  const float x44 = ap->sheik_chain_attr_x44;
+  const float x48 = ap->sheik_chain_attr_x48;
+  const size_t base = ii * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
+  float* px = &batch->state.item_sheik_chain_link_pos_x[base];
+  float* py = &batch->state.item_sheik_chain_link_pos_y[base];
+  float* vx = &batch->state.item_sheik_chain_link_vel_x[base];
+  float* vy = &batch->state.item_sheik_chain_link_vel_y[base];
+  const size_t hbase = ii * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN;
+  float* hx = &batch->state.item_sheik_chain_history_x[hbase];
+  float* hy = &batch->state.item_sheik_chain_history_y[hbase];
+
+  const int first_frame = (batch->state.item_sheik_chain_links_valid[ii] == 0u);
+  if (first_frame) {
+    // it_802BAF2C zero-inits the links; seed them hanging straight down from the hand so the first
+    // solve starts from a plausible pose rather than collapsed at the origin.
+    for (int i = 0; i < MSL_SHEIK_CHAIN_MAX_LINKS; i++) {
+      px[i] = hand_x;
+      py[i] = hand_y - seg * (float)i;
+      vx[i] = 0.0f;
+      vy[i] = 0.0f;
+    }
+    batch->state.item_sheik_chain_links_valid[ii] = 1u;
+  }
+
+  // Owner lstick delta (fp->fv.sk.lstick_delta = lstick - lstick1). In the sim's phase model the
+  // callback-visible "current" stick at the item phase is prev_input_main_* (see the Vanish callback
+  // precedent in sheik_specials.c); the prior frame's value is retained in the per-chain prev-stick
+  // lane so the delta is the true frame-to-frame stick change. Analog = legalized -80..80 stick / 80.
+  const float inv80 = 1.0f / 80.0f;
+  const float lstick_x = (float)batch->state.prev_input_main_x[owner_idx] * inv80;
+  const float lstick_y = (float)batch->state.prev_input_main_y[owner_idx] * inv80;
+  float dl_x = lstick_x - batch->state.item_sheik_chain_prev_stick_x[ii];
+  float dl_y = lstick_y - batch->state.item_sheik_chain_prev_stick_y[ii];
+  if (first_frame) {
+    // No prior stick on the spawn frame: avoid a spurious whip impulse from the 0-initialised lane.
+    dl_x = 0.0f;
+    dl_y = 0.0f;
+  }
+  batch->state.item_sheik_chain_prev_stick_x[ii] = lstick_x;
+  batch->state.item_sheik_chain_prev_stick_y[ii] = lstick_y;
+  const float facing = (batch->state.item_direction[ii] >= 0.0f) ? 1.0f : -1.0f;
+
+  // Shift the stick-history trail (history[last_idx-i] = history[last_idx-1-i]) and seed entry 0 from
+  // the lstick delta with facing/sign-dependent gains, gated by the deadzone x48.
+  const int last_idx = (int)(0.5f * (float)ap->sheik_chain_link_count - 1.0f);
+  for (int i = 0; i < last_idx && (last_idx - i) < MSL_SHEIK_CHAIN_HISTORY_LEN; i++) {
+    hx[last_idx - i] = hx[last_idx - 1 - i];
+    hy[last_idx - i] = hy[last_idx - 1 - i];
+  }
+  if (fabsf(dl_x) > x48) {
+    const float sign = (dl_x < 0.0f) ? -1.0f : 1.0f;
+    hx[0] = (facing == sign) ? dl_x * x38 : dl_x * x3c;
+  } else {
+    hx[0] = 0.0f;
+  }
+  if (fabsf(dl_y) > x48) {
+    hy[0] = (dl_y > 0.0f) ? dl_y * x40 : dl_y * x44;
+  } else {
+    hy[0] = 0.0f;
+  }
+
+  // Head link (cur): stick force + friction + caps + gravity band + integrate + constrain to hand.
+  vx[0] += hx[0] * x1c;
+  vy[0] += hy[0] * x20;
+  if (vx[0] > x10) {
+    vx[0] -= x10;
+  } else if (vx[0] < -x10) {
+    vx[0] += x10;
+  } else {
+    vx[0] = 0.0f;
+  }
+  if (fabsf(vx[0]) > x24) {
+    vx[0] = (vx[0] > 0.0f) ? x24 : -x24;
+  }
+  if (vy[0] > x18 - x28) {
+    vy[0] -= x18;
+  } else if (vy[0] < -x18 - x28) {
+    vy[0] += x18;
+  }
+  if (fabsf(vy[0]) > x2c) {
+    vy[0] = (vy[0] > 0.0f) ? x2c : -x2c;
+  }
+  px[0] += vx[0];
+  py[0] += vy[0];
+  sheik_chain_constrain_to(px, py, 0, hand_x, hand_y, seg);
+
+  // Remaining links toward the tail: scaled stick impulse from the history trail, scaled friction/
+  // caps/gravity, integrate, segment-constrain to the previous link. scale decays by x34 per link.
+  float scale = 1.0f * x34;
+  int counter = 0;
+  for (int i = 1; i < n; i++) {
+    const int idx = (int)(0.5f * (float)(counter + 1));
+    const int cidx = (idx < MSL_SHEIK_CHAIN_HISTORY_LEN) ? idx : (MSL_SHEIK_CHAIN_HISTORY_LEN - 1);
+    vx[i] += scale * (hx[cidx] * x1c);
+    vy[i] += scale * (hy[cidx] * x20);
+    const float lim = x10 * scale;
+    if (vx[i] > lim) {
+      vx[i] -= lim;
+    } else if (vx[i] < -lim) {
+      vx[i] += lim;
+    } else {
+      vx[i] = 0.0f;
+    }
+    if (fabsf(vx[i]) > x24 * scale) {
+      vx[i] = (vx[i] > 0.0f) ? x24 * scale : -x24 * scale;
+    }
+    const float vy_lim = x18 * scale;
+    if (vy[i] > vy_lim - x28) {
+      vy[i] -= vy_lim;
+    } else if (vy[i] < -x18 * scale - x28) {
+      vy[i] += vy_lim;
+    }
+    if (fabsf(vy[i]) > x2c * scale) {
+      vy[i] = (vy[i] > 0.0f) ? x2c * scale : -x2c * scale;
+    }
+    counter++;
+    scale *= x34;
+    px[i] += vx[i];
+    py[i] += vy[i];
+    sheik_chain_constrain_to(px, py, i, px[i - 1], py[i - 1], seg);
+  }
+}
+
+uint8_t sheik_chain_hitbox_world_pos(const MslBatch* batch, size_t fighter_idx, uint8_t hitbox_id,
+                                     float* out_x, float* out_y) {
+  if (batch == NULL || out_x == NULL || out_y == NULL || hitbox_id >= (uint8_t)MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || ap->sheik_chain_itkind == 0u || ap->sheik_chain_link_count < 2u) {
+    return 0u;
+  }
+  const int bi = (int)(fighter_idx / (size_t)MSL_MAX_PLAYERS);
+  const int port = (int)(fighter_idx % (size_t)MSL_MAX_PLAYERS);
+  // Locate the live Chain article owned by this fighter.
+  size_t chain_ii = (size_t)-1;
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] != 0u &&
+        batch->state.item_type[ii] == ap->sheik_chain_itkind &&
+        (int)batch->state.item_owner[ii] == port &&
+        batch->state.item_sheik_chain_links_valid[ii] != 0u) {
+      chain_ii = ii;
+      break;
+    }
+  }
+  if (chain_ii == (size_t)-1) {
+    return 0u;
+  }
+  int n = (int)ap->sheik_chain_link_count;
+  if (n > MSL_SHEIK_CHAIN_MAX_LINKS) {
+    n = MSL_SHEIK_CHAIN_MAX_LINKS;
+  }
+  // it_802BCB88 maps the 4 fighter HitCapsules along the solved links by stride x0/3: hitbox h sits at
+  // link h*stride for h<3, and hitbox 3 at the tail (the last link). refs/melee/src/melee/it/items/
+  // itseakchain.c::it_802BCB88
+  const int stride = (int)ap->sheik_chain_link_count / 3;
+  int link_idx = (hitbox_id < 3u) ? ((int)hitbox_id * stride) : (n - 1);
+  if (link_idx > n - 1) {
+    link_idx = n - 1;
+  }
+  if (link_idx < 0) {
+    link_idx = 0;
+  }
+  const size_t base = chain_ii * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
+  *out_x = batch->state.item_sheik_chain_link_pos_x[base + (size_t)link_idx];
+  *out_y = batch->state.item_sheik_chain_link_pos_y[base + (size_t)link_idx];
+  return 1u;
+}
+
 static void sheik_chain_items_update_anim_phase(MslBatch* batch, int bi) {
   if (batch == NULL) {
     return;
@@ -2187,6 +2466,10 @@ static void sheik_chain_items_update_anim_phase(MslBatch* batch, int bi) {
                                             &anchor_y) != 0u) {
       batch->state.item_pos_x[ii] = anchor_x;
       batch->state.item_pos_y[ii] = anchor_y;
+      // Run the it_802BC080 whip solve from the hand each frame so the chain segments swing toward the
+      // stick (not just hang) and track the owner. The solved link positions feed the fighter-side
+      // chain hitbox positions (ftSk_SpecialS_UpdateHitboxes via it_802BCB88).
+      sheik_chain_solve_links(batch, ii, ap, msl_idx_player(bi, owner), anchor_x, anchor_y);
     }
   }
   if (needs_sort != 0u) {

@@ -12,7 +12,9 @@ PART_MAGIC = b"MSLPART1"
 PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
 # v11 (2026-06-17): adds Sheik needle_bounce_x_vel[8] (it_803F7000) for SetupBounce xDD8 drift.
-ITEM_ARTICLE_VERSION = 11
+# v12 (2026-06-18): adds Sheik Side-B Chain itSeakChain_Attrs[21] (link count + Verlet solver
+#   segment/gravity/friction/decay/wall-bounce tuning, field_ids 200..220) for the live chain solve.
+ITEM_ARTICLE_VERSION = 12
 ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1
 # Historical compatibility alias. The stored values are Slippi/CSS external character ids, not
 # GALE01 internal FighterKind ids.

@@ -82,6 +82,30 @@ typedef struct MslItemArticleParams {
   float needle_bounce_min_vel_y[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
   float needle_bounce_gravity[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
   float needle_bounce_x_vel[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
+  // Side-B Chain article itSeakChain_Attrs (Verlet solver data, PlSk.dat-extracted, MSLITAR1 v12).
+  // refs/melee/src/melee/it/itCharItems.h::itSeakChain_Attrs
+  // refs/melee/src/melee/it/items/itseakchain.c
+  uint16_t sheik_chain_link_count;    // attr x0  (it_802BAF2C ItemLink node count)
+  float sheik_chain_segment_length;   // attr x4  (per-link separation constraint)
+  float sheik_chain_friction_x10;     // attr x10 (static-friction clamp on vel.x)
+  float sheik_chain_friction_x14;     // attr x14 (static-friction clamp on vel.x)
+  float sheik_chain_gravity;          // attr x18 (prev->vel.y -= x18)
+  float sheik_chain_attr_x1c;         // attr x1c
+  float sheik_chain_attr_x20;         // attr x20
+  float sheik_chain_attr_x24;         // attr x24
+  float sheik_chain_attr_x28;         // attr x28
+  float sheik_chain_attr_x2c;         // attr x2c
+  float sheik_chain_attr_x30;         // attr x30
+  float sheik_chain_decay_x34;        // attr x34 (velocity decay)
+  float sheik_chain_attr_x38;         // attr x38
+  float sheik_chain_attr_x3c;         // attr x3c
+  float sheik_chain_attr_x40;         // attr x40
+  float sheik_chain_attr_x44;         // attr x44
+  float sheik_chain_attr_x48;         // attr x48
+  float sheik_chain_attr_x54;         // attr x54 (retract clamp scale)
+  float sheik_chain_wall_bounce_x58;  // attr x58 (vel.x *= -x58 on wall hit)
+  float sheik_chain_attr_x5c;         // attr x5c
+  float sheik_chain_attr_x60;         // attr x60
 } MslItemArticleParams;
 
 // Init-time loader for MSLITAR1 known item/article constants. May perform IO/allocation; call only

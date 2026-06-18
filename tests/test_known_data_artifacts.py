@@ -17,11 +17,15 @@ from tools.extraction.extract_item_articles import (
     SHEIK_NEEDLE_FIELD_NAMES,
     SHEIK_SPECIAL_ARTICLE_FIELD_NAMES,
     SHEIK_VANISH_HITBOX_FIELD_NAMES,
+    UNIT_COUNT,
     UNIT_DEGREES,
     UNIT_FRAMES,
     UNIT_FLAGS,
     UNIT_ITEM_KIND,
     UNIT_PART_ID,
+    UNIT_SCALAR,
+    UNIT_SIZE,
+    UNIT_VELOCITY,
 )
 from tools.slippi.item_article_data import (
     SIM_CHAR_TO_SLIPPI_EXTERNAL_ID,
@@ -723,6 +727,25 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         assert f"needle_bounce_x_vel_{i}" in fields
     assert manifest["char_domain"]["name"] == "Slippi/CSS external character id"
 
+    # MSLITAR1 v12: Sheik Side-B Chain itSeakChain_Attrs (Verlet solver). The artifact and manifest are
+    # v12, the scalar unit (11) is declared, and the chain solver fields are present.
+    assert ITEM_ARTICLE_VERSION == 12
+    assert manifest["version"] == 12
+    units = {row["id"]: row["name"] for row in manifest["units"]}
+    assert units.get(11) == "scalar"
+    chain_fields = [
+        "sheik_chain_link_count",
+        "sheik_chain_segment_length",
+        "sheik_chain_friction_x10",
+        "sheik_chain_friction_x14",
+        "sheik_chain_gravity",
+        "sheik_chain_decay_x34",
+        "sheik_chain_wall_bounce_x58",
+        "sheik_chain_attr_x60",
+    ]
+    for name in chain_fields:
+        assert name in fields, name
+
     def rec(char_id: int, field_name: str):
         field_id = FIELD_SPECS[field_name].field_id
         matches = [r for r in table.records if r.char_id == char_id and r.field_id == field_id]
@@ -857,6 +880,28 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
             assert vanish_rec.f32_value == pytest.approx(float(expected))
         else:
             assert vanish_rec.u32_value == int(expected)
+    # MSLITAR1 v12: Sheik Chain itSeakChain_Attrs records (link count is a count u16; the solver attrs
+    # are scalar-unit f32). refs/melee/src/melee/it/itCharItems.h::itSeakChain_Attrs
+    sheik_chain_link_count_rec = rec(19, "sheik_chain_link_count")
+    assert sheik_chain_link_count_rec.value_type == ITEM_ARTICLE_VALUE_U16
+    assert sheik_chain_link_count_rec.unit_id == UNIT_COUNT
+    assert sheik_chain_link_count_rec.u32_value == 20
+    sheik_chain_attr_expected = {
+        "sheik_chain_segment_length": (1.5, UNIT_SIZE),
+        "sheik_chain_friction_x10": (0.09, UNIT_SCALAR),
+        "sheik_chain_friction_x14": (0.2, UNIT_SCALAR),
+        "sheik_chain_gravity": (0.16, UNIT_VELOCITY),
+        "sheik_chain_decay_x34": (0.98, UNIT_SCALAR),
+        "sheik_chain_wall_bounce_x58": (0.5, UNIT_SCALAR),
+        "sheik_chain_attr_x54": (3.0, UNIT_SCALAR),
+        "sheik_chain_attr_x60": (1.0, UNIT_SCALAR),
+    }
+    for field_name, (expected, unit) in sheik_chain_attr_expected.items():
+        chain_rec = rec(19, field_name)
+        assert chain_rec.value_type == ITEM_ARTICLE_VALUE_F32
+        assert chain_rec.unit_id == unit
+        assert chain_rec.f32_value == pytest.approx(float(expected))
+
     fox_illusion_kind = rec(2, "side_special_illusion_itkind")
     assert fox_illusion_kind.value_type == ITEM_ARTICLE_VALUE_U16
     assert fox_illusion_kind.unit_id == UNIT_ITEM_KIND

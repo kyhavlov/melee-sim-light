@@ -1466,6 +1466,17 @@ typedef struct MslStateSoA {
   float* item_sheik_needle_hidden_drop_min_vel_y;  // [batch * MSL_MAX_ITEMS]
   float* item_sheik_needle_hidden_drop_gravity;    // [batch * MSL_MAX_ITEMS]
   float* item_sheik_needle_hidden_drop_vel_x;      // [batch * MSL_MAX_ITEMS]
+  // Sheik Side-B Chain Verlet link state (runtime-only, not serialized; reset on reseed).
+  // refs/melee/src/melee/it/items/itseakchain.c::it_802BAF2C
+  uint8_t* item_sheik_chain_links_valid;  // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_chain_link_pos_x;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_pos_y;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_vel_x;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_vel_y;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_history_x;      // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_HISTORY_LEN]
+  float* item_sheik_chain_history_y;      // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_HISTORY_LEN]
+  float* item_sheik_chain_prev_stick_x;   // [batch * MSL_MAX_ITEMS] (owner lstick1 analogue)
+  float* item_sheik_chain_prev_stick_y;   // [batch * MSL_MAX_ITEMS]
   // Prefix-causal Shy Guy dynamic-bone velocity scratch.
   // refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
   float* item_shyguy_prev_vel_y;           // [batch * MSL_MAX_ITEMS]

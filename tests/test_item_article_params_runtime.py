@@ -85,6 +85,16 @@ def test_runtime_item_article_params_known_values() -> None:
     # MSLITAR1 v11: SetupBounce xDD8 horizontal-drift magnitude table (it_803F7000), non-negative,
     # signed at runtime by Randi(2). refs/melee/src/melee/it/items/itseakneedlethrown.c::it_803F7000
     assert sheik["needle_bounce_x_vel"] == pytest.approx([0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4])
+    # MSLITAR1 v12: Side-B Chain itSeakChain_Attrs (PlSk.dat article x4_specialAttributes), used by the
+    # Verlet link solver. refs/melee/src/melee/it/itCharItems.h::itSeakChain_Attrs
+    assert sheik["sheik_chain_link_count"] == 20
+    assert sheik["sheik_chain_segment_length"] == pytest.approx(1.5)
+    assert sheik["sheik_chain_friction_x10"] == pytest.approx(0.09)
+    assert sheik["sheik_chain_friction_x14"] == pytest.approx(0.2)
+    assert sheik["sheik_chain_gravity"] == pytest.approx(0.16)
+    assert sheik["sheik_chain_decay_x34"] == pytest.approx(0.98)
+    assert sheik["sheik_chain_wall_bounce_x58"] == pytest.approx(0.5)
+    assert sheik["sheik_chain_attr_x54"] == pytest.approx(3.0)
 
 
 def test_runtime_item_article_params_rejects_missing_sheik_needle_drop_record(
@@ -99,7 +109,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_needle_drop_record(
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 11
+    assert version == 12
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -137,7 +147,7 @@ def test_runtime_item_article_params_rejects_non_negative_sheik_needle_gravity(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 11
+    assert version == 12
     record_size = 24
     patched = False
     for i in range(count):
@@ -196,7 +206,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_needle_record(tmp_pat
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 11
+    assert version == 12
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -233,7 +243,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_hitbox_record(
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 11
+    assert version == 12
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -270,7 +280,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_active_window_
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 11
+    assert version == 12
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -306,7 +316,7 @@ def test_runtime_item_article_params_rejects_zero_sheik_chain_spawn_part_id(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 11
+    assert version == 12
     record_size = 24
     patched = False
     for i in range(count):
@@ -333,6 +343,46 @@ raise SystemExit(1)
     assert proc.returncode == 0, proc.stderr + proc.stdout
 
 
+def test_runtime_item_article_params_rejects_missing_sheik_chain_attr_record(
+    tmp_path: Path,
+) -> None:
+    # Drop the Chain gravity attr (field_id 204) and prove the loader rejects the whole artifact:
+    # the itSeakChain_Attrs required-mask must be complete or the Verlet solver would run on a zeroed
+    # gravity. refs/melee/src/melee/it/itCharItems.h::itSeakChain_Attrs
+    data_dir = tmp_path / "data"
+    dst = data_dir / "items" / "articles" / "fox_falco.bin"
+    dst.parent.mkdir(parents=True)
+    src = Path("data/items/articles/fox_falco.bin").read_bytes()
+
+    header = bytearray(src[:16])
+    version, count = struct.unpack_from("<II", header, 8)
+    assert version == 12
+    record_size = 24
+    records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
+
+    def is_sheik_chain_gravity(rec: bytes) -> bool:
+        char_id, char_domain, value_type, field_id = struct.unpack_from("<HBBH", rec, 0)
+        return (char_id, char_domain, value_type, field_id) == (19, 1, 3, 204)
+
+    kept = [rec for rec in records if not is_sheik_chain_gravity(rec)]
+    assert len(kept) == len(records) - 1
+    struct.pack_into("<I", header, 12, len(kept))
+    dst.write_bytes(bytes(header) + b"".join(kept))
+
+    code = """
+import msl_binding
+try:
+    msl_binding.item_article_params(7)
+except RuntimeError:
+    raise SystemExit(0)
+raise SystemExit(1)
+"""
+    env = dict(os.environ)
+    env["MSL_DATA_DIR"] = str(data_dir)
+    proc = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
 def test_runtime_item_article_params_rejects_zero_sheik_vanish_spawn_part_id(
     tmp_path: Path,
 ) -> None:
@@ -342,7 +392,7 @@ def test_runtime_item_article_params_rejects_zero_sheik_vanish_spawn_part_id(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 11
+    assert version == 12
     record_size = 24
     patched = False
     for i in range(count):

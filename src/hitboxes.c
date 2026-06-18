@@ -15,6 +15,9 @@
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
+#include "ids.h"
+#include "items.h"
+#include "sheik_specials.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
 #include "msl_math.h"
@@ -1229,6 +1232,25 @@ static inline uint8_t hitboxes_event_world_capsule(const MslBatch* batch, size_t
   *out_x = batch->state.pos_x[idx] + facing_dir * cz;
   *out_y = batch->state.pos_y[idx] + cy;
   *out_z = batch->state.pos_z[idx] - facing_dir * cx;
+
+  // Sheik Side-B Chain: the 4 fighter HitCapsules are not posed from a static bone -- they are
+  // repositioned each frame along the solved Verlet chain links (ftSk_SpecialS_UpdateHitboxes via the
+  // it_802BCB88 stride map). Override the bone-pose world position with the solved link position while
+  // the owner is in the chain swing family and a live, solved Chain article exists (the cmd_vars[0]
+  // active-window proxy). refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_UpdateHitboxes
+  if (char_id == (uint8_t)MSL_CHAR_ID_SHEIK) {
+    const uint16_t act = batch->state.action_id[idx];
+    if (act >= (uint16_t)MSL_ACT_SK_SPECIAL_S_START &&
+        act <= (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
+      float lx = 0.0f;
+      float ly = 0.0f;
+      if (sheik_chain_hitbox_world_pos(batch, idx, ev->hitbox_id, &lx, &ly) != 0u) {
+        *out_x = lx;
+        *out_y = ly;
+        *out_z = batch->state.pos_z[idx];
+      }
+    }
+  }
 
   float radius = ev->radius;
   if (!msl_hitbox_ignore_fighter_scale(ev->u16_6)) {

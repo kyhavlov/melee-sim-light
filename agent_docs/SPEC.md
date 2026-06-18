@@ -419,6 +419,27 @@ Sheik Up-B Vanish (disappear smoke explosion) — gameplay behavior (full contra
   clankable and never bounces/destroys (`itSeakVanish_Logic42_DmgDealt` returns false) — it persists for
   its full lifetime. During the teleport travel Sheik is intangible (`hurtbox_state != 0`).
 
+Sheik Side-B Chain (multi-hit whip) — gameplay behavior (full contract in `DATA_CONTRACT.md`):
+- The `It_Kind_Seak_Chain` article is a 20-link Verlet chain (`itSeakChain_Attrs`, MSLITAR1 v12) whose
+  head is pinned to Sheik's L3rdNa hand each frame. `src/items.c::sheik_chain_solve_links` is a 2D
+  held-S whip solve modelling the air-swing core of `it_802BC080`: the owner's lstick delta seeds a
+  stick-force history trail that injects per-link impulses (decaying by `x34` down the chain) on top of
+  gravity (`x18`), friction (`x10`), velocity caps (`x24`/`x2C`) and segment-length constraints (`x4`).
+  With the stick steady the chain hangs and lags (pendulum); flicking the stick whips the tail out
+  toward the input. It deliberately omits the non-dominant source branches: per-link environment
+  collision (`it_802BB938`/mpColl) with its `x5C`/`x60` wall-bounce + `x30` hitlag-scale branches, and
+  the link-by-link extend/retract activation (`it_802BBD64`, the `x2C_b0` bit) — all links are treated
+  as active for the deployed held swing.
+- The move's damage tool is 4 fighter HitCapsules (`fp->x914[4]`), created by the SpecialS subaction
+  (moveset) and repositioned each frame to the solved link positions by `ftSk_SpecialS_UpdateHitboxes`
+  via the `it_802BCB88` stride map (stride = `link_count/3`; hitboxes 0/1/2 at links 0/6/12, hitbox 3 at
+  the tail). The sim publishes this through the normal fighter-hitbox combat path
+  (`hitboxes_event_world_capsule` override, gated on the chain action family + a live solved article).
+- The chain link geometry is hidden accumulating state (not in the one-step seed), so the chain hitbox
+  positions are free-run behavior, not one-step-reconstructible; damage/hit outcomes match.
+- "Logic54" (`it_2725_Logic54_PickedUp`) is the chain's own retract-completion (returns to the hand at
+  the end of `it_802BC94C`), NOT an opponent grab — Sheik's chain has no grab/tether mechanic.
+
 ## Simulation Model
 
 ### Coordinate system and units

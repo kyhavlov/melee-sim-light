@@ -2901,12 +2901,18 @@ def test_sheik_vanish_explosion_shield_miss_falls_through_to_body() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Sheik Side-B Chain — free-run lifecycle + owner-tracking. The state machine / article lifecycle /
-# states / death cleanup are the replay-reconstructible behavior; the swung-tail link IK + 4 fighter
-# hitboxes + aim/length are the deferred segment subsystem (see chain_source_surface_checklist.md).
+# Sheik Side-B Chain — free-run lifecycle + owner-tracking + live whip geometry + hitbox damage.
+# Implemented: state machine / article lifecycle / states / death cleanup; the it_802BC080 stick-driven
+# whip link solve (src/items.c::sheik_chain_solve_links); the 4 fighter HitCapsules repositioned along
+# the solved links via the it_802BCB88 stride map and published through the normal combat path
+# (src/hitboxes.c override). "Logic54" is the chain's retract-completion, NOT an opponent grab (Sheik's
+# Chain has no grab mechanic). The only remaining caveat is that the chain link geometry is hidden
+# accumulating state, so the chain hitbox POSITIONS are free-run behavior, not one-step-reconstructible
+# (damage/hit outcomes match). See chain_source_surface_checklist.md.
 # Grounded Side-B needs a diagonal (B + main_x + main_y); pure horizontal routes to Dash. Aerial Side-B
 # is B + main_x (a diagonal-up would route to Up-B).
 # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c
+# refs/melee/src/melee/it/items/itseakchain.c::{it_802BC080,it_802BCB88}
 # ---------------------------------------------------------------------------
 
 
@@ -2985,3 +2991,112 @@ def test_sheik_chain_aerial_entry_freerun() -> None:
     assert ACT_SK_SPECIAL_AIR_S_START in acts, acts[:3]
     assert ACT_SK_SPECIAL_AIR_S in acts  # reached the aerial held swing state
     assert any(_chain_slots(o) for o in outs), "aerial chain article never spawned"
+
+
+def _chain_whip_frames():
+    # Grounded Side-B, then oscillate the stick to drive the it_802BC080 whip so the chain hitboxes
+    # (repositioned along the solved links by the it_802BCB88 stride map) sweep through the swing arc.
+    frames = [_mk_inputs(buttons=B, main_x=80, main_y=80)]
+    for k in range(50):
+        sy = 80 if (k // 3) % 2 == 0 else -80
+        frames.append(_mk_inputs(buttons=B, main_x=80, main_y=sy))
+    return frames
+
+
+def test_sheik_chain_whip_hits_near_opponent_freerun() -> None:
+    # Positive free-run lock: the live Chain whip (solved Verlet links published as the 4 fighter
+    # HitCapsules) damages an opponent standing inside the swing arc just in front of/below Sheik.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_UpdateHitboxes
+    seed = _seed_base("sheik")
+    seed["pos_x"][0, 1] = np.float32(8.0)
+    seed["pos_y"][0, 1] = np.float32(0.0)
+    outs = _run(seed, _chain_whip_frames())
+    acts = {int(o["action_id"][0]) for o in outs}
+    assert ACT_SK_SPECIAL_S in acts, "never reached the held chain swing"
+    assert any(_chain_slots(o) for o in outs), "chain article never present"
+    max_pct = max(float(o["percent"][1]) for o in outs)
+    assert max_pct > 0.0, "chain whip never damaged the in-arc opponent"
+
+
+def test_sheik_chain_whip_misses_distant_opponent_negative() -> None:
+    # Adjacent-negative free-run lock: an opponent beyond the chain's reach (~link_count*segment from
+    # the hand) is NOT hit by the same swing, so the published hitboxes are the bounded solved-link
+    # geometry rather than a stage-wide stack. Pairs with the positive lock above.
+    seed = _seed_base("sheik")
+    seed["pos_x"][0, 1] = np.float32(60.0)
+    seed["pos_y"][0, 1] = np.float32(0.0)
+    outs = _run(seed, _chain_whip_frames())
+    acts = {int(o["action_id"][0]) for o in outs}
+    assert ACT_SK_SPECIAL_S in acts, "never reached the held chain swing"
+    assert any(_chain_slots(o) for o in outs), "chain article never present"
+    max_pct = max(float(o["percent"][1]) for o in outs)
+    assert max_pct == 0.0, f"chain whip falsely hit a far ({60.0}) opponent for {max_pct}%"
+
+
+def _chain_geometry_series(flick: bool):
+    # Drive grounded Side-B and sample the solved Chain geometry each frame via the test-only getter
+    # msl_binding.sheik_chain_debug -> {"links": [(x,y)...], "hitboxes": [(x,y,active)...]}.
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base("sheik")
+        seed["pos_x"][0, 1] = np.float32(400.0)
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        prev = _mk_inputs()
+        frames = [_mk_inputs(buttons=B, main_x=80, main_y=80)]
+        for k in range(45):
+            sy = (80 if (k // 3) % 2 == 0 else -80) if flick else 20
+            frames.append(_mk_inputs(buttons=B, main_x=80, main_y=sy))
+        series = []
+        for inp in frames:
+            msl_binding.step_input(handle, prev, inp)
+            prev = inp
+            d = msl_binding.sheik_chain_debug(handle, 0, 0)
+            if d is not None:
+                series.append(d)
+        return series
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_sheik_chain_solved_geometry_is_stick_driven_and_respects_segment_bounds() -> None:
+    # Direct geometry lock: prove the published Chain hitboxes ride the it_802BC080 solved whip, not a
+    # static bone pose. (1) Adjacent links stay within one segment length (the x4 constraint). (2) The
+    # tail swings FAR more when the stick is flicked (stick-history impulses) than when held steady
+    # (only the hand pendulum). (3) Each fighter HitCapsule sits exactly on the link the it_802BCB88
+    # stride map assigns it. refs/melee/src/melee/it/items/itseakchain.c::{it_802BC080,it_802BCB88}
+    flick = _chain_geometry_series(flick=True)
+    steady = _chain_geometry_series(flick=False)
+    assert len(flick) >= 8 and len(steady) >= 8, (len(flick), len(steady))
+
+    seg = 1.5  # sheik_chain_segment_length (attr x4)
+    for d in flick:
+        links = d["links"]
+        assert len(links) == 20  # sheik_chain_link_count
+        for a, b in zip(links, links[1:]):
+            dist = ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+            assert dist <= seg * 1.05, dist  # post-constraint adjacency never exceeds a segment
+
+    def tail_y_range(series):
+        ys = [d["links"][-1][1] for d in series]
+        return max(ys) - min(ys)
+
+    flick_range = tail_y_range(flick)
+    steady_range = tail_y_range(steady)
+    assert flick_range > 20.0, flick_range
+    assert flick_range > 3.0 * steady_range, (flick_range, steady_range)
+
+    # The 4 fighter HitCapsules track the solved links via the stride map (stride = 20//3 = 6:
+    # hb0/1/2 -> links 0/6/12, hb3 -> tail). Each published hitbox equals its mapped link, proving the
+    # combat path consumes the solved whip geometry rather than the static script position.
+    stride = 20 // 3
+    for d in flick:
+        links = d["links"]
+        mapping = {0: 0, 1: stride, 2: 2 * stride, 3: len(links) - 1}
+        for hb_id, link_idx in mapping.items():
+            hx, hy, active = d["hitboxes"][hb_id]
+            assert active == 1, hb_id
+            lx, ly = links[link_idx]
+            assert abs(hx - lx) < 1e-3 and abs(hy - ly) < 1e-3, (hb_id, (hx, hy), (lx, ly))

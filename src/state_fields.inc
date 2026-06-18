@@ -568,6 +568,24 @@ MSL_STATE_FIELD(item_sheik_needle_hidden_drop_valid, uint8_t, bi, (size_t)MSL_MA
 MSL_STATE_FIELD(item_sheik_needle_hidden_drop_min_vel_y, float, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_sheik_needle_hidden_drop_gravity, float, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_sheik_needle_hidden_drop_vel_x, float, bi, (size_t)MSL_MAX_ITEMS)
+// Sheik Side-B Chain Verlet link state (runtime-only, NOT serialized; reset on reseed, free-run
+// accumulation like the needle hidden lanes). Per item slot: a fixed array of MSL_SHEIK_CHAIN_MAX_LINKS
+// links {pos,vel} plus a per-slot validity/initialized flag. (The held-S solve treats all links as
+// active, so no per-link activation bit is stored.) refs/melee/src/melee/it/items/itseakchain.c::it_802BAF2C
+MSL_STATE_FIELD(item_sheik_chain_links_valid, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_link_pos_x, float, bi * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS)
+MSL_STATE_FIELD(item_sheik_chain_link_pos_y, float, bi * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS)
+MSL_STATE_FIELD(item_sheik_chain_link_vel_x, float, bi * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS)
+MSL_STATE_FIELD(item_sheik_chain_link_vel_y, float, bi * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS)
+// Sheik Chain stick-history trail (itemVar history[0xF]); the it_802BC080 whip solve shifts it each
+// frame and seeds entry 0 from the owner's lstick delta. refs/melee/src/melee/it/items/itseakchain.c
+MSL_STATE_FIELD(item_sheik_chain_history_x, float, bi * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN)
+MSL_STATE_FIELD(item_sheik_chain_history_y, float, bi * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN)
+// Previous-frame owner lstick for the Chain (fp->input.lstick1 analogue): the it_802BC080 stick-delta
+// (fp->fv.sk.lstick_delta) needs the prior frame's callback-visible stick, which the sim's per-frame
+// input lanes do not retain into the item phase. refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c
+MSL_STATE_FIELD(item_sheik_chain_prev_stick_x, float, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_prev_stick_y, float, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_shyguy_prev_vel_y, float, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_shyguy_prev_vel_y_valid, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_shyguy_dyn_y_phase, uint8_t, bi, (size_t)MSL_MAX_ITEMS)

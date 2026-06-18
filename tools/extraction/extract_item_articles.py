@@ -60,6 +60,7 @@ UNIT_VELOCITY = 7
 UNIT_COUNT = 8
 UNIT_BONE_ID = 9
 UNIT_FLAGS = 10
+UNIT_SCALAR = 11
 
 
 @dataclass(frozen=True)
@@ -202,6 +203,41 @@ for _base_name, (_base_id, _values) in SHEIK_NEEDLE_DROP_BOUNCE_TABLES.items():
         FIELD_SPECS[_key] = FieldSpec(_base_id + _i, ITEM_ARTICLE_VALUE_F32, UNIT_VELOCITY)
         SHEIK_SPECIAL_ARTICLE_CONSTANTS[_key] = _v
 
+# Sheik Side-B Chain article `itSeakChain_Attrs` (Verlet solver data, ISO-extracted into
+# data/characters/sheik.json by extract_character_attrs._extract_seak_chain_article). Unlike the
+# chain kind/spawn-part/lifetime (injected source constants above), these are PlSk.dat article data:
+# they are read from the character attrs JSON via the generic `key in attrs` path in `_records`.
+# field_id base 200 (the 1..141 range is taken by the explicit specs + needle drop/bounce tables).
+# refs/melee/src/melee/it/itCharItems.h::itSeakChain_Attrs
+# refs/melee/src/melee/it/items/itseakchain.c (it_802BAF2C link count; it_802BBB0C gravity/segment;
+#   itSeakChain_clamp_x10/_x14 friction; it_802BC94C/fn_802BB44C decay/wall-bounce)
+SHEIK_CHAIN_ATTR_FIELDS = (
+    ("sheik_chain_link_count", ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    ("sheik_chain_segment_length", ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    ("sheik_chain_friction_x10", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_friction_x14", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_gravity", ITEM_ARTICLE_VALUE_F32, UNIT_VELOCITY),
+    ("sheik_chain_attr_x1c", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x20", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x24", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x28", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x2c", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x30", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_decay_x34", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x38", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x3c", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x40", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x44", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x48", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x54", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_wall_bounce_x58", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x5c", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x60", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+)
+for _i, (_key, _vt, _unit) in enumerate(SHEIK_CHAIN_ATTR_FIELDS):
+    FIELD_SPECS[_key] = FieldSpec(200 + _i, _vt, _unit)
+SHEIK_CHAIN_ATTR_FIELD_NAMES = tuple(name for name, _vt, _unit in SHEIK_CHAIN_ATTR_FIELDS)
+
 
 def _f32(v: float) -> float:
     return struct.unpack("<f", struct.pack("<f", float(v)))[0]
@@ -278,6 +314,9 @@ def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple
                     if not isinstance(vals, list) or len(vals) < 2:
                         missing.append("vanish_hitbox_size_keyframe_value")
                     continue
+                if key not in attrs:
+                    missing.append(key)
+            for key in SHEIK_CHAIN_ATTR_FIELD_NAMES:
                 if key not in attrs:
                     missing.append(key)
             if missing:
@@ -381,6 +420,7 @@ def main() -> None:
                 {"id": UNIT_COUNT, "name": "count"},
                 {"id": UNIT_BONE_ID, "name": "bone_id"},
                 {"id": UNIT_FLAGS, "name": "flags"},
+                {"id": UNIT_SCALAR, "name": "scalar"},
             ],
             "value_types": [
                 {"id": ITEM_ARTICLE_VALUE_U16, "name": "u16"},
