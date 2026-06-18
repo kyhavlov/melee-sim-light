@@ -440,6 +440,25 @@ Sheik Side-B Chain (multi-hit whip) — gameplay behavior (full contract in `DAT
 - "Logic54" (`it_2725_Logic54_PickedUp`) is the chain's own retract-completion (returns to the hand at
   the end of `it_802BC94C`), NOT an opponent grab — Sheik's chain has no grab/tether mechanic.
 
+Sheik Down-B / Transform — Stage-0 Zelda policy (source-shaped, minimal):
+- Down-B enters the transform-start action (grounded `MSL_ACT_SK_SPECIAL_LW` 361 / aerial
+  `…_AIR_LW` 363), halving self/ground velocity by attr `x60`/`x64` (divisor 2.0) per
+  `ftSk_SpecialLw_Enter`. The start is non-interruptible (`ftSk_SpecialLw_IASA` is empty) and carries a
+  bounded, animation-data-driven intangibility window (no whole-move invulnerability; vulnerable on the
+  entry frame). Aerial uses common-fall gravity/terminal (attr `x68`/`x6C`).
+- Ground↔air transitions during the transform swap between the grounded and aerial start/finish states
+  at the preserved anim frame (`ftSk_SpecialLw_Coll` / `…AirLw_Coll`), wired through `locomotion.c`.
+- Transform boundary: in the source, when the start anim ends `fn_8011412C` calls
+  `ftCommon_8007EFC8(gobj, &ftZd_SpecialLw_…)` — a TWIN-ENTITY swap to a second Zelda fighter the player
+  owns (`Player_GetEntityAtIndex(player_id, 1)`), handing control to Zelda. The sim has one fighter per
+  player and no Zelda registry character, so this swap is out of Stage-0 scope. The policy substitutes
+  Sheik's own private finish state (`ftSk_SpecialLw_80114758` AS_SheikFinishTransformation,
+  `…_LW_2` 362 / `…_AIR_LW_2` 364) at attr `x70` and keeps the fighter as Sheik; the finish resolves to
+  Wait (ground) / Fall (air). The transform therefore NEVER produces a Zelda action id or a swapped
+  entity — the unsupported boundary is explicit and safe (it always resolves inside Sheik's action
+  space). Match-start character selection does not depend on transform: Zelda is not a registry
+  character, so a player never starts as, or switches to, Zelda.
+
 ## Simulation Model
 
 ### Coordinate system and units

@@ -850,8 +850,19 @@ static void sk_update_speciallw(MslBatch* batch, const MslCharParams* ch, size_t
     case MSL_ACT_SK_SPECIAL_LW:
     case MSL_ACT_SK_SPECIAL_AIR_LW:
       if (sk_anim_finished(batch, idx, a)) {
-        // Minimal Stage-0 Zelda policy: model the source transform finish action boundary using
-        // Sheik's private finish states, without exposing Zelda as a public registry character.
+        // Stage-0 Zelda/Transform boundary. In the source, when the transform-start anim ends
+        // `ftSk_SpecialLw_Anim` installs `fn_8011412C`, which calls
+        // `ftCommon_8007EFC8(gobj, &ftZd_SpecialLw_8013B4D8)` -- a TWIN-ENTITY swap: the player owns a
+        // second (Zelda) fighter via `Player_GetEntityAtIndex(player_id, 1)`, and the switch copies
+        // pos/percent/vel/input onto it and hands control to Zelda's SpecialLw. The sim has one fighter
+        // per player and no Zelda registry character, so that swap is not feasible at Stage-0. The
+        // policy instead substitutes Sheik's own private finish state (`ftSk_SpecialLw_80114758`
+        // AS_SheikFinishTransformation) at `attr->x70` and keeps the fighter as Sheik. The transform
+        // therefore never produces a Zelda action id or a swapped entity -- it always resolves inside
+        // Sheik's action space (finish -> Wait/Fall below), which is the explicit, safe unsupported
+        // boundary. refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::{ftSk_SpecialLw_Anim,
+        //   fn_8011412C,ftSk_SpecialLw_80114758}
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
         sk_enter(batch, idx,
                  a == (uint16_t)MSL_ACT_SK_SPECIAL_LW ? (uint16_t)MSL_ACT_SK_SPECIAL_LW_2
                                                       : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_LW_2,

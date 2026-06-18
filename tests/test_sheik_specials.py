@@ -69,7 +69,9 @@ ACT_SK_SPECIAL_AIR_HI_START_0 = 358
 ACT_SK_SPECIAL_AIR_HI_START_1 = 359
 ACT_SK_SPECIAL_AIR_HI = 360
 ACT_SK_SPECIAL_LW = 361
+ACT_SK_SPECIAL_LW_2 = 362
 ACT_SK_SPECIAL_AIR_LW = 363
+ACT_SK_SPECIAL_AIR_LW_2 = 364
 ACT_CLIFF_CATCH = 252
 
 SM_LANDING = 35
@@ -1084,6 +1086,105 @@ def test_sheik_transform_entry_enters_private_sheik_start_state() -> None:
     out = _run(seed, [_mk_inputs(buttons=B, main_y=-80)])[0]
     assert int(out["action_id"][0]) == ACT_SK_SPECIAL_AIR_LW
     assert int(out["animation_index"][0]) == 315
+
+
+# Sheik Down-B / Transform (Stage-0 Zelda policy). The source switches to a twin Zelda fighter via
+# ftCommon_8007EFC8 when the start anim ends; that twin-entity swap + full Zelda are out of Stage-0
+# scope, so the policy keeps the fighter as Sheik and substitutes Sheik's own finish states. These
+# locks pin the source-shaped progression and prove the unsupported Zelda boundary is explicit/safe:
+# the transform never leaves Sheik's action space and never yields a Zelda/undefined action id.
+# refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c ; refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
+_SHEIK_ACTION_ID_MIN = 341  # ftSk_MS_* private action-id base (Sheik specials/transform live above this)
+_SHEIK_ACTION_ID_MAX = 364
+
+
+def test_sheik_transform_grounded_full_progression_freerun() -> None:
+    # Grounded Down-B: start (361) -> finish (362) -> Wait. No character swap; stays Sheik throughout.
+    seed = _seed_base("sheik")
+    outs = _run(seed, [_mk_inputs(buttons=B, main_y=-80)] + [_mk_inputs() for _ in range(120)])
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_SK_SPECIAL_LW
+    assert ACT_SK_SPECIAL_LW_2 in acts, acts[:5]
+    assert acts[-1] == ACT_WAIT
+    # Start precedes finish precedes Wait, contiguous and ordered.
+    first_finish = acts.index(ACT_SK_SPECIAL_LW_2)
+    assert all(a == ACT_SK_SPECIAL_LW for a in acts[:first_finish])
+    assert acts[-1] == ACT_WAIT
+
+
+def test_sheik_transform_aerial_full_progression_freerun() -> None:
+    # Aerial Down-B (high enough to finish before landing): start (363) -> finish (364) -> Fall.
+    seed = _seed_base("sheik", grounded=False, pos_y=140.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(ACT_FALL)
+    outs = _run(seed, [_mk_inputs(buttons=B, main_y=-80)] + [_mk_inputs() for _ in range(80)])
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_SK_SPECIAL_AIR_LW
+    assert ACT_SK_SPECIAL_AIR_LW_2 in acts, acts[:5]
+    assert ACT_FALL in acts  # aerial finish ends into Fall (ftSk_SpecialAirLw2_Anim -> ftCo_Fall_Enter)
+    first_finish = acts.index(ACT_SK_SPECIAL_AIR_LW_2)
+    assert all(a == ACT_SK_SPECIAL_AIR_LW for a in acts[:first_finish])
+
+
+def test_sheik_transform_velocity_divisor_and_bounded_intangibility() -> None:
+    # Entry halves velocity by attr x60/x64 (divisor 2.0). The transform start carries a BOUNDED
+    # intangibility window driven by the animation's body-state track (data-driven, not a transform-
+    # specific code hack): Sheik becomes intangible mid-start and is vulnerable on the entry frame, so
+    # the window is real but not whole-move invulnerability.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::ftSk_SpecialLw_Enter
+    seed = _seed_base("sheik")
+    seed["speed_ground_x_self"][0, 0] = np.float32(2.4)
+    outs = _run(seed, [_mk_inputs(buttons=B, main_y=-80)] + [_mk_inputs() for _ in range(40)])
+    assert float(outs[0]["speed_ground_x_self"][0]) == pytest.approx(1.2, abs=1e-4)
+    hurts = [int(o["hurtbox_state"][0]) for o in outs]
+    assert hurts[0] == 0  # vulnerable on the entry frame (no instant invuln from the C callback)
+    assert any(h != 0 for h in hurts)  # a real (data-driven) intangibility window exists
+    assert any(h == 0 for h in hurts[1:])  # but it is bounded, not the whole move
+
+
+def test_sheik_transform_is_not_interruptible() -> None:
+    # ftSk_SpecialLw_IASA / ftSk_SpecialAirLw_IASA are empty: the transform cannot be cancelled into
+    # another action by holding jump/special. It stays in the transform until the anim resolves it.
+    seed = _seed_base("sheik")
+    frames = [_mk_inputs(buttons=B, main_y=-80)] + [_mk_inputs(buttons=B, main_y=-80) for _ in range(6)]
+    outs = _run(seed, frames)
+    assert all(int(o["action_id"][0]) == ACT_SK_SPECIAL_LW for o in outs)
+
+
+def test_sheik_transform_aerial_lands_swaps_to_grounded_transform() -> None:
+    # ftSk_SpecialAirLw_Coll: landing during the aerial transform swaps to the grounded transform
+    # start (0x169) at the preserved anim frame, not a random/undefined action.
+    seed = _seed_base("sheik", grounded=False, pos_y=6.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(ACT_FALL)
+    outs = _run(seed, [_mk_inputs(buttons=B, main_y=-80)] + [_mk_inputs() for _ in range(30)])
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_SK_SPECIAL_AIR_LW
+    assert ACT_SK_SPECIAL_LW in acts, acts  # landed -> grounded transform
+
+
+def test_sheik_transform_never_leaves_sheik_action_space_safe_zelda_boundary() -> None:
+    # Explicit unsupported-Zelda boundary: across the full grounded AND aerial transform, every action
+    # id is either a valid Sheik private action (<=364) or a shared common action (Wait/Fall/Landing).
+    # The transform NEVER produces a Zelda action id or drifts into an undefined state -- the twin-entity
+    # ftCommon_8007EFC8 swap is replaced by a safe in-Sheik resolution.
+    shared_common = {ACT_WAIT, ACT_FALL, ACT_FALL_SPECIAL, ACT_LANDING, ACT_LANDING_FALL_SPECIAL}
+
+    def all_acts(seed, frames):
+        return {int(o["action_id"][0]) for o in _run(seed, frames)}
+
+    g = _seed_base("sheik")
+    g_acts = all_acts(g, [_mk_inputs(buttons=B, main_y=-80)] + [_mk_inputs() for _ in range(120)])
+    a = _seed_base("sheik", grounded=False, pos_y=140.0)
+    a["action_id"][0, 0] = np.uint16(ACT_FALL)
+    a["animation_index"][0, 0] = np.uint32(ACT_FALL)
+    a_acts = all_acts(a, [_mk_inputs(buttons=B, main_y=-80)] + [_mk_inputs() for _ in range(120)])
+    for act in g_acts | a_acts:
+        ok = (_SHEIK_ACTION_ID_MIN <= act <= _SHEIK_ACTION_ID_MAX) or act in shared_common
+        assert ok, f"transform produced out-of-policy action id {act}"
+    # And it actually completes (returns to a neutral common action), never hanging in transform.
+    assert g_acts & {ACT_WAIT}
+    assert a_acts & {ACT_FALL, ACT_LANDING, ACT_WAIT}
 
 
 def test_sheik_neutral_b_release_enters_end_instead_of_looping_forever() -> None:
