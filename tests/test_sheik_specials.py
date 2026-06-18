@@ -2729,3 +2729,172 @@ def test_sheik_needle_hits_non_owner_not_owner_post_reflect_targeting() -> None:
     assert max(p1_other) == pytest.approx(3.0), p1_other  # other-owned Needle hits port 0
     assert owners_other == {1}, owners_other  # owner stays the reflector across the flight
     assert max(p1_self) == pytest.approx(0.0), p1_self  # own Needle never self-damages
+
+
+# ---------------------------------------------------------------------------
+# Sheik Up-B Vanish explosion (disappear smoke article BODY hitbox). The smoke spawned at the
+# disappear point carries a state-0 HitCapsule (vanish_hitbox: 12 dmg, angle 90, kbg 60, bkb 80,
+# elem 1) sized by vanish_hitbox_size animated through the size keyframes, active for the article's
+# first vanish_hitbox_remove_frame anim frames, hitting each non-owner once and persisting after.
+# refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40,itSeakVanish_Logic42_DmgDealt}
+# ---------------------------------------------------------------------------
+
+
+def _install_vanish_smoke(seed, *, pos_x, pos_y, timer, owner=0):
+    seed["items"]["exists"][0, 0] = np.uint8(1)
+    seed["items"]["type"][0, 0] = np.uint16(ITEM_SHEIK_VANISH)
+    seed["items"]["state"][0, 0] = np.uint8(0)
+    seed["items"]["owner"][0, 0] = np.int8(owner)
+    seed["items"]["instance_id"][0, 0] = np.uint16(701)
+    seed["items"]["spawn_id"][0, 0] = np.uint32(71)
+    seed["items"]["direction"][0, 0] = np.float32(1.0)
+    seed["items"]["timer"][0, 0] = np.float32(timer)
+    seed["items"]["pos_x"][0, 0] = np.float32(pos_x)
+    seed["items"]["pos_y"][0, 0] = np.float32(pos_y)
+
+
+def test_sheik_vanish_explosion_damages_non_owner_once_active_window() -> None:
+    # A smoke article overlapping a non-owner fighter during its active window deals vanish_hitbox_damage
+    # (12) exactly once (hitlist), launching them; the owner is never self-hit.
+    import msl_binding
+
+    dmg = float(msl_binding.item_article_params(7)["vanish_hitbox_damage"])
+    seed = _seed_base("sheik")
+    seed["pos_x"][0, 0] = np.float32(400.0)  # owner (Sheik) far away
+    seed["pos_x"][0, 1] = np.float32(0.0)
+    seed["pos_y"][0, 1] = np.float32(0.0)
+    seed["on_ground"][0, 1] = np.uint8(1)
+    seed["percent"][0, 1] = np.float32(0.0)
+    _install_vanish_smoke(seed, pos_x=2.0, pos_y=4.0, timer=80.0, owner=0)
+    outs = _run(seed, [_mk_inputs() for _ in range(8)])
+    p2 = [round(float(o["percent"][1]), 1) for o in outs]
+    assert max(p2) == pytest.approx(dmg), p2  # 12% dealt
+    assert p2[-1] == pytest.approx(dmg), p2  # hit exactly once (no re-hit accumulation)
+    assert int(outs[1]["hitstun"][1]) > 0, "vanish explosion must apply hitstun"
+    # owner (Sheik, port 0) is never self-hit
+    assert all(round(float(o["percent"][0]), 1) == 0.0 for o in outs), "owner self-hit"
+
+
+def test_sheik_vanish_explosion_inactive_after_remove_frame() -> None:
+    # Past vanish_hitbox_remove_frame the HitCapsule is gone: a smoke whose article age exceeds the
+    # remove frame deals no damage even while overlapping the opponent (still visually present).
+    import msl_binding
+
+    ap = msl_binding.item_article_params(7)
+    lifetime = int(ap["sheik_vanish_lifetime_frames"])
+    remove = int(ap["vanish_hitbox_remove_frame"])
+    seed = _seed_base("sheik")
+    seed["pos_x"][0, 0] = np.float32(400.0)
+    seed["pos_x"][0, 1] = np.float32(0.0)
+    seed["pos_y"][0, 1] = np.float32(0.0)
+    seed["on_ground"][0, 1] = np.uint8(1)
+    seed["percent"][0, 1] = np.float32(0.0)
+    # timer corresponding to age = remove + 4 (well past the active window)
+    _install_vanish_smoke(seed, pos_x=2.0, pos_y=4.0, timer=float(lifetime - remove - 4), owner=0)
+    outs = _run(seed, [_mk_inputs() for _ in range(6)])
+    assert all(round(float(o["percent"][1]), 1) == 0.0 for o in outs), "hit past remove frame"
+
+
+def test_sheik_vanish_explosion_freerun_grounded_upb_damages_adjacent_opponent() -> None:
+    # Entry-path: a grounded Up-B (B + up) next to a grounded opponent disappears and the explosion
+    # deals vanish_hitbox_damage, driven entirely by real inputs (no injected item or seeded percent).
+    import msl_binding
+
+    dmg = float(msl_binding.item_article_params(7)["vanish_hitbox_damage"])
+    seed = _seed_base("sheik")  # default grounded
+    seed["pos_x"][0, 0] = np.float32(0.0)
+    seed["pos_x"][0, 1] = np.float32(7.0)
+    seed["on_ground"][0, 1] = np.uint8(1)
+    seed["percent"][0, 1] = np.float32(0.0)
+    frames = [_mk_inputs(buttons=B, main_y=100)] + [_mk_inputs(main_y=100) for _ in range(45)]
+    outs = _run(seed, frames)
+    # Sheik actually entered Vanish (Hi states) and the opponent took the explosion damage.
+    assert any(355 <= int(o["action_id"][0]) <= 360 for o in outs), "never entered Vanish"
+    assert max(round(float(o["percent"][1]), 1) for o in outs) == pytest.approx(dmg), [
+        round(float(o["percent"][1]), 1) for o in outs
+    ]
+
+
+def test_sheik_vanish_explosion_never_hits_owner_when_overlapping() -> None:
+    # Owner-skip proof: the smoke's OWNER (Sheik, port 0) is placed directly on the smoke so the
+    # explosion sphere encloses the owner's hurtcaps, yet the owner takes zero damage (def == owner is
+    # skipped). The non-owner is moved far away so the assertion is unambiguous.
+    seed = _seed_base("sheik")
+    seed["pos_x"][0, 0] = np.float32(0.0)  # owner overlaps the smoke
+    seed["pos_y"][0, 0] = np.float32(0.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["percent"][0, 0] = np.float32(0.0)
+    seed["pos_x"][0, 1] = np.float32(400.0)  # non-owner far away
+    _install_vanish_smoke(seed, pos_x=2.0, pos_y=4.0, timer=80.0, owner=0)
+    outs = _run(seed, [_mk_inputs() for _ in range(6)])
+    assert all(round(float(o["percent"][0]), 1) == 0.0 for o in outs), [
+        round(float(o["percent"][0]), 1) for o in outs
+    ]
+
+
+def _seed_vanish_smoke_over_shielding_defender(*, smoke_y=8.0, timer=80.0, shield_hp=60.0):
+    # Owner (Sheik, port 0) far away; the smoke is owned by port 0 and placed on the shielding
+    # non-owner (Fox, port 1) holding an active ShieldDesc (Guard + 221B_b0).
+    seed = _seed_base("sheik")
+    seed["pos_x"][0, 0] = np.float32(400.0)
+    seed["pos_x"][0, 1] = np.float32(20.0)
+    seed["pos_y"][0, 1] = np.float32(0.0)
+    seed["on_ground"][0, 1] = np.uint8(1)
+    seed["action_id"][0, 1] = np.uint16(ACT_GUARD)
+    seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
+    seed["state_flags"][0, 1, 2] = np.uint8(0x80)  # 221B_b0 ShieldDesc active
+    seed["shield_hp"][0, 1] = np.float32(shield_hp)
+    seed["percent"][0, 1] = np.float32(0.0)
+    _install_vanish_smoke(seed, pos_x=20.0, pos_y=smoke_y, timer=timer, owner=0)
+    return seed
+
+
+def _vanish_smoke_on_shielded_body_seed(*, shield_hp):
+    # An age-4 explosion sphere placed on the shielding defender's body hurtcap (x~8, the injected Fox's
+    # hurtcaps sit left of its x=20 root). Shield bubble center is ~(22.6, 8.6): at full shield_hp the
+    # bubble reaches the body and overlaps the explosion; shrunk it does not. Pose is held identical
+    # (Guard + animation_index 0xFFFFFFFF) across both so ONLY the shield size differs.
+    import msl_binding
+
+    ap = msl_binding.item_article_params(7)
+    # Age 4 sits on the create-size -> first-keyframe ramp (~size 6.6): big enough to reach the body
+    # hurtcap from outside a shrunk shield, small enough that a full shield bubble cleanly encloses it.
+    age = 4
+    seed = _seed_vanish_smoke_over_shielding_defender(
+        smoke_y=0.0, timer=float(int(ap["sheik_vanish_lifetime_frames"]) - age), shield_hp=shield_hp
+    )
+    seed["items"]["pos_x"][0, 0] = np.float32(8.0)
+    return seed
+
+
+def test_sheik_vanish_explosion_active_shield_overlap_absorbs_body() -> None:
+    # ShieldDesc contact: a FULL shield bubble overlapping the explosion ABSORBS it -- no fighter percent
+    # damage. Non-vacuous: the SHRUNK-shield control (same pose/position) misses the bubble and the body
+    # takes the full 12, proving the body is reachable and the full shield is what blocked it.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    import msl_binding
+
+    dmg = float(msl_binding.item_article_params(7)["vanish_hitbox_damage"])
+    absorbed = _run(
+        _vanish_smoke_on_shielded_body_seed(shield_hp=60.0), [_inputs_defender_holds_shield()]
+    )[0]
+    assert float(absorbed["percent"][1]) == pytest.approx(0.0)  # full shield absorbs the BODY
+    control = _run(
+        _vanish_smoke_on_shielded_body_seed(shield_hp=8.0), [_inputs_defender_holds_shield()]
+    )[0]
+    assert float(control["percent"][1]) == pytest.approx(dmg)  # body IS reachable when shield misses
+
+
+def test_sheik_vanish_explosion_shield_miss_falls_through_to_body() -> None:
+    # ShieldDesc MISS -> BODY fallthrough (source item-vs-fighter contact order): with the shield bubble
+    # SHRUNK by a low shield_hp so it no longer reaches the body, the same explosion sphere misses the
+    # shield but overlaps the body hurtcap and deals BODY damage (the shield-hit `continue` is inside the
+    # overlap branch only, so a shield miss does not suppress BODY).
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    import msl_binding
+
+    dmg = float(msl_binding.item_article_params(7)["vanish_hitbox_damage"])
+    out = _run(
+        _vanish_smoke_on_shielded_body_seed(shield_hp=8.0), [_inputs_defender_holds_shield()]
+    )[0]
+    assert float(out["percent"][1]) == pytest.approx(dmg)  # shrunk shield missed -> BODY hit

@@ -4952,6 +4952,173 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
   }
 }
 
+// Sheik Vanish explosion hitbox size at article anim-frame `age`: the create size (vanish_hitbox_size)
+// animated through the two size keyframes (frame7 -> 4.0, frame11 -> 2.0), held after the last.
+static float sheik_vanish_smoke_hitbox_size(const MslItemArticleParams* ap, float age) {
+  if (ap->vanish_hitbox_size_keyframe_count < 2u) {
+    return ap->vanish_hitbox_size;
+  }
+  const float f0 = (float)ap->vanish_hitbox_size_keyframe_frame[0];
+  const float v0 = ap->vanish_hitbox_size_keyframe_value[0];
+  const float f1 = (float)ap->vanish_hitbox_size_keyframe_frame[1];
+  const float v1 = ap->vanish_hitbox_size_keyframe_value[1];
+  if (age <= 0.0f) {
+    return ap->vanish_hitbox_size;
+  }
+  if (age < f0 && f0 > 0.0f) {
+    return ap->vanish_hitbox_size + (v0 - ap->vanish_hitbox_size) * (age / f0);
+  }
+  if (age < f1 && f1 > f0) {
+    return v0 + (v1 - v0) * ((age - f0) / (f1 - f0));
+  }
+  return v1;
+}
+
+// Sheik Vanish explosion (disappear smoke article BODY hit). it_802B1C60 spawns It_Kind_Seak_Vanish at
+// the HipN disappear point; its state-0 script creates a HitCapsule (vanish_hitbox: 12 dmg, angle 90,
+// kbg 60, bkb 80, elem 1, shield -128) sized by vanish_hitbox_size and animated by the size keyframes,
+// removed at vanish_hitbox_remove_frame (anim-frame relative). it_2725 resolves item-vs-fighter
+// ShieldDesc -> BODY; the smoke is NOT a reflectable/clankable projectile and itSeakVanish_Logic42_-
+// DmgDealt returns false, so it neither reflects/clanks nor bounces/destroys on a hit -- it persists
+// for its full lifeTimer. Hits each non-owner fighter once.
+// refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40,itSeakVanish_Logic42_DmgDealt}
+// refs/melee/src/melee/it/it_2725.c::it_8027518C
+static uint8_t sheik_vanish_smoke_try_hit_fighter(MslBatch* batch, int bi, int item_slot,
+                                                  const MslItemArticleParams* ap) {
+  if (batch == NULL || ap == NULL || ap->vanish_hitbox_count == 0u ||
+      !(ap->vanish_hitbox_damage > 0.0f) || ap->sheik_vanish_lifetime_frames == 0u) {
+    return 0u;
+  }
+  const size_t ii = msl_idx_item(bi, item_slot);
+  if (batch->state.item_exists[ii] == 0u || batch->state.item_type[ii] != ap->sheik_vanish_itkind) {
+    return 0u;
+  }
+  // Article anim-frame age. The smoke timer counts down from sheik_vanish_lifetime_frames; this
+  // collide runs before the per-frame lifetime decrement, so age == the article anim frame and the
+  // size keyframes / remove frame line up 0-based.
+  const float age = (float)ap->sheik_vanish_lifetime_frames - batch->state.item_timer[ii];
+  if (!(age >= 0.0f) || age >= (float)ap->vanish_hitbox_remove_frame) {
+    return 0u;
+  }
+  const float hbr = sheik_vanish_smoke_hitbox_size(ap, age);
+  if (!(hbr > 0.0f)) {
+    return 0u;
+  }
+  const int owner = (int)batch->state.item_owner[ii];
+  const float hx = batch->state.item_pos_x[ii] + ap->vanish_hitbox_x_offset;
+  const float hy = batch->state.item_pos_y[ii] + ap->vanish_hitbox_y_offset;
+  const float hz = ap->vanish_hitbox_z_offset;
+  const MslCommonParams* common = msl_common_params();
+  uint8_t any = 0u;
+  for (int def = 0; def < (int)batch->config.num_players; def++) {
+    if (def == owner) {
+      continue;
+    }
+    const size_t d_idx = msl_idx_player(bi, def);
+    if (batch->state.hurtbox_state[d_idx] != 0u) {
+      continue;  // intangible/invincible defender
+    }
+    const uint16_t def_iid = batch->state.instance_id[d_idx];
+    if (!hitlist_allows_item_hitbox_fighter(batch, bi, item_slot, 0, def, def_iid)) {
+      continue;
+    }
+    const uint8_t def_grounded = (uint8_t)(batch->state.on_ground[d_idx] != 0u);
+    if (def_grounded ? ((ap->vanish_hitbox_flags & 0x1u) == 0u)
+                     : ((ap->vanish_hitbox_flags & 0x2u) == 0u)) {
+      continue;
+    }
+    // ShieldDesc -> shield hit (an active shield bubble blocks the explosion); a shield MISS falls
+    // through to the BODY hurtcaps, matching the source item-vs-fighter contact order.
+    const uint8_t flags_221b = batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                                        (size_t)MSL_STATE_FLAGS_221B_INDEX];
+    const uint8_t shield_active =
+        (flags_221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u ||
+        batch->state.shield_radius[d_idx] > 0.0f;
+    if (shield_active) {
+      float shr = batch->state.shield_radius[d_idx];
+      if (!(shr > 0.0f)) {
+        shr = item_guard_shield_radius_from_state(batch, common, d_idx);
+      }
+      if (shr > 0.0f) {
+        float shx = batch->state.shield_x[d_idx];
+        float shy = batch->state.shield_y[d_idx];
+        float shz = batch->state.shield_z[d_idx];
+        if (!isfinite(shx) || !isfinite(shy) || !isfinite(shz)) {
+          shx = batch->state.pos_x[d_idx];
+          shy = batch->state.pos_y[d_idx];
+          shz = batch->state.pos_z[d_idx];
+        }
+        float shield_desc_world_r = 1.0f;
+        if (batch->state.fighter_scale_y[d_idx] > 0.0f) {
+          shield_desc_world_r *= batch->state.fighter_scale_y[d_idx];
+        }
+        if (item_swept_sphere_sphere_intersects_3d(hx, hy, hz, hx, hy, hz, hbr, shx, shy, shz,
+                                                   shr + shield_desc_world_r)) {
+          combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+                                       batch->state.item_attack_instance[ii],
+                                       ap->vanish_hitbox_damage, ap->vanish_hitbox_shield_damage,
+                                       ap->vanish_hitbox_element, batch->state.item_pos_x[ii]);
+          hitlist_register_item_fighter(batch, bi, item_slot, def, def_iid,
+                                        (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
+          any = 1u;
+          continue;
+        }
+      }
+    }
+    // BODY hurtcap overlap -> vanish_hitbox_damage body hit.
+    const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
+    uint8_t hurt_height = 0u;
+    uint8_t hit = 0u;
+    for (uint8_t ci = 0; ci < cap_n; ci++) {
+      float overlap = 0.0f;
+      uint8_t cap_height = 0u;
+      if (item_swept_sphere_capsule_overlap_amount(batch, bi, def, hx, hy, hx, hy, hbr, (int)ci,
+                                                   &cap_height, &overlap, 0u, 1.0f)) {
+        hurt_height = cap_height;
+        hit = 1u;
+        break;
+      }
+    }
+    if (hit == 0u) {
+      continue;
+    }
+    if (hurt_height > 2u) {
+      hurt_height = 1u;
+    }
+    const MslItemHitResult res = combat_apply_item_hit(
+        batch, bi, owner, def, batch->state.item_attack_id[ii],
+        batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
+        batch->state.item_type[ii], 0u, ap->vanish_hitbox_damage, ap->vanish_hitbox_angle,
+        ap->vanish_hitbox_kbg, ap->vanish_hitbox_wsk, ap->vanish_hitbox_bkb, hurt_height,
+        ap->vanish_hitbox_element, -1.0f, hx, hy, hbr, 0.0f, 0u);
+    if (res == MSL_ITEM_HIT_NONE) {
+      continue;
+    }
+    hitlist_register_item_fighter(batch, bi, item_slot, def, def_iid,
+                                  (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+    any = 1u;
+  }
+  return any;  // smoke persists regardless of a hit (Logic42_DmgDealt returns false)
+}
+
+static void sheik_vanish_smoke_collide(MslBatch* batch, int bi) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || ap->sheik_vanish_itkind == 0u || ap->vanish_hitbox_count == 0u) {
+    return;
+  }
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] == 0u ||
+        batch->state.item_type[ii] != ap->sheik_vanish_itkind) {
+      continue;
+    }
+    (void)sheik_vanish_smoke_try_hit_fighter(batch, bi, it, ap);
+  }
+}
+
 static inline uint8_t illusion_item_hit_params_from_state(const MslCharParams* chp,
                                                           uint8_t item_state,
                                                           MslIllusionItemHitParams* out) {
@@ -10984,7 +11151,10 @@ void items_update_collision_phase(MslBatch* batch) {
       // Fighter HitCapsule -> Sheik thrown-Needle item hurtbox damage/callback.
       sheik_needles_update_and_collide(batch, bi);
 
-      // Sheik Vanish smoke article lifetime.
+      // Sheik Vanish disappear-smoke explosion hitbox (BODY/shield), then lifetime. Collide runs
+      // before the lifetime decrement so the article age == anim frame for the size-keyframe/remove
+      // window.
+      sheik_vanish_smoke_collide(batch, bi);
       sheik_vanish_smoke_items_update(batch, bi);
 
       // Motion + collision/hit apply for existing lasers.

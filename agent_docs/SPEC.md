@@ -408,6 +408,17 @@ Sheik Neutral-B Needle (thrown article) — extracted-data notes (full contract 
   and replays it as `x40_vel.x` during state-4 physics (`itSeakneedlethrown_UnkMotion4_Phys`).
 - Dropped state (1) uses xDD8 = 0 (falls straight down); bounced state (4) uses the table value.
 
+Sheik Up-B Vanish (disappear smoke explosion) — gameplay behavior (full contract in `DATA_CONTRACT.md`):
+- At the disappear point the windup accessory spawns the `It_Kind_Seak_Vanish` smoke article, which
+  carries an active state-0 HitCapsule (the explosion) — the move's damage tool, not just a visual.
+- The hitbox is live for the article's first `vanish_hitbox_remove_frame` anim frames; its size is the
+  create size animated through the two size keyframes. Runtime derives the age from the smoke timer
+  (`sheik_vanish_lifetime_frames` - timer) BEFORE the per-frame lifetime decrement so age == anim frame.
+- It deals `vanish_hitbox_damage` (12) at angle 90 / kbg 60 / bkb 80 / element 1, resolving
+  ShieldDesc -> BODY against each non-owner once (the owner is never self-hit). It is NOT reflectable or
+  clankable and never bounces/destroys (`itSeakVanish_Logic42_DmgDealt` returns false) — it persists for
+  its full lifetime. During the teleport travel Sheik is intangible (`hurtbox_state != 0`).
+
 ## Simulation Model
 
 ### Coordinate system and units

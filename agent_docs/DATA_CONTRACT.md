@@ -1768,8 +1768,17 @@ Characters (Fox/Falco/Marth/Sheik):
       hitboxes and must not inherit state-0 BODY admission.
     - v6 adds Sheik Vanish state-0 item HitCapsule fields extracted from the article state script:
       count, damage, size, offsets, angle, knockback, element, shield damage, and grounded/aerial
-      target flags. These fields describe the source-authored damage surface; runtime Vanish BODY
-      contact still requires a bounded item-collision/update-phase owner before it is enabled.
+      target flags. These fields describe the source-authored damage surface. The runtime Vanish BODY
+      contact owner is now CLOSED (2026-06-17): the disappear smoke article (It_Kind_Seak_Vanish)
+      carries an active state-0 HitCapsule that damages opponents. `sheik_vanish_smoke_collide` in
+      `src/items.c` resolves the active window from the article age (`sheik_vanish_lifetime_frames` -
+      item timer, evaluated BEFORE the per-frame lifetime decrement so age == anim frame), gates it to
+      `[0, vanish_hitbox_remove_frame)`, sizes it with `sheik_vanish_smoke_hitbox_size`
+      (create size animated through the size keyframes), and applies ShieldDesc -> BODY contact via the
+      shared item hitlist + `combat_apply_item_shield_hit` / `combat_apply_item_hit`. Reflect and clank
+      are intentionally NOT modeled: the smoke is not a reflectable/clankable projectile and
+      `itSeakVanish_Logic42_DmgDealt` returns false (it persists, never bounces/destroys/reflects).
+      Hits each non-owner once; the owner is never self-hit.
     - v7 adds Sheik Vanish state-0 HitCapsule active-window fields extracted from the same item
       state script: size keyframes at frames 7 and 11, plus the remove frame at 13. The visual
       article lifetime is the replay-visible post-`it_8027518C` `xD44_lifeTimer` value from
@@ -1781,9 +1790,9 @@ Characters (Fox/Falco/Marth/Sheik):
       article publication must use this generated part id and live pose sampling rather than
       spawning at fighter root or embedding a local part literal in `src/items.c`.
     - v9 adds `vanish_spawn_part_id`, the `FtPart_HipN` source spawn anchor sampled by
-      `ftSk_SpecialHi_80112F48` with `lb_8000B1CC` before `it_802B1C60`. This only owns Vanish
-      smoke article publication. Vanish smoke BODY damage still requires the item callback/contact
-      phase to be bounded separately.
+      `ftSk_SpecialHi_80112F48` with `lb_8000B1CC` before `it_802B1C60`. This owns Vanish smoke article
+      publication (the spawn anchor). Vanish smoke BODY damage is now ALSO closed (see the v6 note
+      above): the published smoke's state-0 HitCapsule is live via `sheik_vanish_smoke_collide`.
     - v10 adds the thrown-Needle dropped/bounced motion RNG tables as four 8-entry f32 arrays
       transcribed by source symbol: `needle_drop_min_vel_y` (`it_803F6FA0`), `needle_drop_gravity`
       (`it_803F6FC0`), `needle_bounce_min_vel_y` (`it_803F7020`), `needle_bounce_gravity`
