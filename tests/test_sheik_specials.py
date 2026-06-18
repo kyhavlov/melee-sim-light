@@ -2529,3 +2529,203 @@ def test_sheik_needle_charge_accumulates_through_real_loop_freerun() -> None:
     assert max(counts) <= 6, counts
     nonzero = [c for c in counts if c > 0]
     assert all(b >= a for a, b in zip(nonzero, nonzero[1:])), counts  # never decreases while charging
+
+
+# ---------------------------------------------------------------------------
+# Edge sweep: thrown-Needle stage-line stick directionality across floor / soft platform /
+# ceiling / wall. The source CheckGroundHit -> it_8026EA20 -> mpCheckAllRemap admits a horizontal
+# floor only on downward motion and a horizontal ceiling only on upward motion (walls are
+# bidirectional), so soft platforms stick from above and pass through from below, exactly like any
+# floor. Battlefield collision geometry is the raw stage DAT scaled by unit_scale = 0.8: the left
+# side platform is y=27.2, x in [-57.6, -20.0]; the flat lower ceiling is y=-31.3, x in [-10.3, 10.3];
+# a near-vertical lower right_wall is x ~ -10.3, y in [-40, -31.3].
+# refs/melee/src/melee/mp/mplib.c::{mpCheckAllRemap,mpCheckFloorRemap,mpCheckCeilingRemap}
+# refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakNeedleThrown_CheckGroundHit
+# ---------------------------------------------------------------------------
+
+STAGE_BATTLEFIELD = 31
+
+
+def _battlefield_injected_needle(px, py, vx, vy, nframes=14):
+    seed = _seed_base("sheik")
+    seed["stage_id"][0] = np.uint32(STAGE_BATTLEFIELD)
+    seed["pos_x"][0, 1] = np.float32(400.0)  # defender far away
+    _install_sheik_item(
+        seed, item_type=ITEM_SHEIK_NEEDLE_THROWN, state=0, timer=80.0,
+        pos_x=px, pos_y=py, vel_x=vx, vel_y=vy,
+    )
+    outs = _run(seed, [_mk_inputs() for _ in range(nframes)])
+    traj = []
+    for o in outs:
+        for s in range(8):
+            if int(o["items"]["exists"][s]) == 1 and int(o["items"]["type"][s]) == ITEM_SHEIK_NEEDLE_THROWN:
+                traj.append((int(o["items"]["state"][s]), float(o["items"]["pos_x"][s]), float(o["items"]["pos_y"][s])))
+                break
+        else:
+            traj.append((-1, 0.0, 0.0))
+    return traj
+
+
+def test_sheik_needle_sticks_to_soft_platform_top_only_battlefield() -> None:
+    # Down onto the scaled left platform (y=27.2) -> stick (state 2) just below the surface, like any
+    # floor; the same x/y moving UP passes straight through (soft platforms are one-directional).
+    down = _battlefield_injected_needle(-38.0, 40.0, 0.0, -3.0)
+    settled = [st for (st, _x, _y) in down if st in (2, 4)]
+    assert settled, f"needle never stuck descending onto the platform: {down}"
+    st_end, _x_end, y_end = down[-1]
+    assert st_end == 2, f"needle should rest stuck on platform top, got {down[-6:]}"
+    assert 23.0 < y_end < 28.0, f"stuck y {y_end} not at the scaled platform (~27.2)"
+    # A flying Needle must never be deep below the platform while still state 0 (no pass-through bug).
+    assert not any(st == 0 and y < 23.0 for (st, _x, y) in down), down
+
+    up = _battlefield_injected_needle(-38.0, 15.0, 0.0, 3.0)
+    assert all(st == 0 for (st, _x, _y) in up), f"upward needle wrongly stuck under platform: {up}"
+    assert up[-1][2] > 45.0, f"upward needle should pass through and keep rising: {up}"
+
+
+def test_sheik_needle_sticks_to_ceiling_upward_only_battlefield() -> None:
+    # Upward into the scaled flat lower ceiling (y=-31.3) -> stick (state 2).
+    up = _battlefield_injected_needle(0.0, -38.0, 0.0, 3.0)
+    assert up[-1][0] == 2, f"needle should stick to ceiling moving up: {up}"
+    assert -33.0 < up[-1][2] < -28.0, f"ceiling stick y {up[-1][2]} not at the scaled ceiling (~-31.3)"
+
+
+def test_sheik_needle_sticks_to_wall_battlefield() -> None:
+    # Horizontal into the scaled near-vertical lower wall (x ~ -10.3) -> stick (state 2).
+    left = _battlefield_injected_needle(-6.0, -35.0, -3.0, 0.0)
+    assert left[-1][0] == 2, f"needle should stick to wall moving left: {left}"
+    assert -13.5 < left[-1][1] < -9.0, f"wall stick x {left[-1][1]} not at the scaled wall (~-10.3)"
+
+
+def test_sheik_needle_charge_air_to_ground_transition_preserves_count_and_article() -> None:
+    # Edge: ground/air transition mid-charge. Aerial Neutral-B (SpecialAirNLoop) that lands converts to
+    # the grounded SpecialNLoop via ftSk_SpecialAirNLoop_Coll (doColl), preserving the stored count
+    # (fv.sk.x0) and the held Needle article (fv.sk.x4); charging then continues on the ground. The
+    # symmetric ground->air conversion (SpecialNLoop_Coll) is the same source path but is not reachable
+    # in free-run because a charging Sheik is stationary and never walks off a ledge.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{ftSk_SpecialAirNLoop_Coll,doColl}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    stride = int(sizes["seed"])
+    seed = _seed_base("sheik")
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["pos_y"][0, 0] = np.float32(28.0)
+    seed["action_id"][0, 0] = np.uint16(29)  # Fall (airborne) so the B-press enters SpecialAirN
+    seed["pos_x"][0, 1] = np.float32(400.0)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(0)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    rows = []
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, stride)))
+        prev = _mk_inputs()
+        for i in range(70):
+            f = _mk_inputs() if i == 0 else _mk_inputs(buttons=B)
+            msl_binding.step_input(handle, prev, f)
+            prev = f
+            c = int(msl_binding.debug_get_sheik_needle_count(handle, 0, 0))
+            ob = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+            msl_binding.write_compare(handle, ob)
+            r = ob.view(COMPARE_DTYPE).reshape((1,))[0]
+            held = any(
+                int(r["items"]["exists"][s]) == 1
+                and int(r["items"]["type"][s]) == ITEM_SHEIK_NEEDLE_HELD
+                for s in range(8)
+            )
+            rows.append((int(r["action_id"][0]), int(r["on_ground"][0]), c, held))
+    finally:
+        msl_binding.destroy(handle)
+
+    # Charged aerially (SpecialAirNLoop) while airborne, holding the visual article.
+    air_loop = [i for i, (a, g, _c, h) in enumerate(rows) if a == ACT_SK_SPECIAL_AIR_N_LOOP and g == 0 and h]
+    assert air_loop, f"never reached aerial charge loop with held article: {rows[:10]}"
+    # Landed and converted to the GROUNDED SpecialNLoop.
+    gnd_loop = [i for i, (a, g, _c, _h) in enumerate(rows) if a == ACT_SK_SPECIAL_N_LOOP and g == 1]
+    assert gnd_loop, f"aerial charge never converted to grounded loop on landing: {rows}"
+    convert = gnd_loop[0]
+    assert convert > air_loop[0], "ground loop must come after the aerial loop"
+    # Count + held article survive the air->ground conversion, and charging continues on the ground.
+    assert rows[convert][2] >= 1, f"count lost across transition: {rows[convert]}"
+    assert rows[convert][3], f"held article lost across transition: {rows[convert]}"
+    assert max(c for (_a, _g, c, _h) in rows) >= 3, f"charge did not keep accumulating: {rows}"
+
+
+def _sheik_needle_volley_vel_x(face: int, turn_mid_charge: bool = False) -> list[float]:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    stride = int(sizes["seed"])
+    seed = _seed_base("sheik")
+    seed["pos_x"][0, 1] = np.float32(400.0)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(0)
+    seed["facing"][0, 0] = np.uint8(face)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    vels: dict[int, float] = {}
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, stride)))
+        prev = _mk_inputs()
+        for i in range(150):
+            if i < 100:
+                mx = -100 if (turn_mid_charge and 30 < i < 60) else 0
+                f = _mk_inputs(buttons=B, main_x=mx)
+            else:
+                f = _mk_inputs()
+            msl_binding.step_input(handle, prev, f)
+            prev = f
+            ob = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+            msl_binding.write_compare(handle, ob)
+            r = ob.view(COMPARE_DTYPE).reshape((1,))[0]
+            for s in range(8):
+                if int(r["items"]["exists"][s]) == 1 and int(r["items"]["type"][s]) == ITEM_SHEIK_NEEDLE_THROWN:
+                    vels[int(r["items"]["spawn_id"][s])] = round(float(r["items"]["vel_x"][s]), 2)
+    finally:
+        msl_binding.destroy(handle)
+    return sorted(set(vels.values()))
+
+
+def test_sheik_needle_volley_direction_follows_entry_facing() -> None:
+    # shootNeedles spawns each Needle along fp->facing_dir; the SpecialNLoop/End IASA only handle B and
+    # LR (no turn), so the whole volley follows the facing at entry and a charge-time stick input cannot
+    # flip it mid-charge. Direction ownership is the entry facing.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{shootNeedles,doIasa}
+    assert _sheik_needle_volley_vel_x(1) == [pytest.approx(4.0)]  # facing right -> all needles right
+    assert _sheik_needle_volley_vel_x(0) == [pytest.approx(-4.0)]  # facing left -> all needles left
+    # A stick-left input during the charge does NOT turn Sheik, so a right-facing volley stays right.
+    assert _sheik_needle_volley_vel_x(1, turn_mid_charge=True) == [pytest.approx(4.0)]
+
+
+def test_sheik_needle_hits_non_owner_not_owner_post_reflect_targeting() -> None:
+    # A thrown Needle damages any fighter EXCEPT its current owner. The shared item-reflect path swaps
+    # item_owner to the reflector (tested in the reflect-precedence cases), so this owner-based BODY
+    # targeting is what lets a REFLECTED Needle fly back and hit the original thrower: with owner = the
+    # other port the Needle damages port 0, while an own-port Needle passes through harmlessly. This
+    # also covers post-reflect multi-frame coherence (the owner stays put and the Needle keeps flying).
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt
+    # refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C} (owner skip)
+    def run_owned(owner_port: int):
+        seed = _seed_base("sheik")
+        seed["pos_x"][0, 0] = np.float32(0.0)
+        seed["pos_x"][0, 1] = np.float32(60.0)
+        seed["percent"][0, 0] = np.float32(0.0)
+        _install_sheik_item(
+            seed, item_type=ITEM_SHEIK_NEEDLE_THROWN, state=0, timer=40.0,
+            pos_x=18.0, pos_y=4.0, vel_x=-4.0, vel_y=0.0,
+        )
+        seed["items"]["owner"][0, 0] = np.int8(owner_port)
+        seed["items"]["instance_id"][0, 0] = np.uint16(900)
+        outs = _run(seed, [_mk_inputs() for _ in range(10)])
+        p1 = [round(float(o["percent"][0]), 1) for o in outs]
+        owners = {
+            int(o["items"]["owner"][s])
+            for o in outs
+            for s in range(8)
+            if int(o["items"]["exists"][s]) == 1 and int(o["items"]["type"][s]) == ITEM_SHEIK_NEEDLE_THROWN
+        }
+        return p1, owners
+
+    p1_other, owners_other = run_owned(1)
+    p1_self, _owners_self = run_owned(0)
+    assert max(p1_other) == pytest.approx(3.0), p1_other  # other-owned Needle hits port 0
+    assert owners_other == {1}, owners_other  # owner stays the reflector across the flight
+    assert max(p1_self) == pytest.approx(0.0), p1_self  # own Needle never self-damages
