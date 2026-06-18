@@ -11,7 +11,8 @@ STAGE_VERSION = 10
 PART_MAGIC = b"MSLPART1"
 PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
-ITEM_ARTICLE_VERSION = 10
+# v11 (2026-06-17): adds Sheik needle_bounce_x_vel[8] (it_803F7000) for SetupBounce xDD8 drift.
+ITEM_ARTICLE_VERSION = 11
 ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1
 # Historical compatibility alias. The stored values are Slippi/CSS external character ids, not
 # GALE01 internal FighterKind ids.

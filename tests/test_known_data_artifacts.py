@@ -718,6 +718,9 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
     assert "vanish_lifetime_frames" in fields
     assert "vanish_hitbox_damage" in fields
     assert "vanish_hitbox_flags" in fields
+    # MSLITAR1 v11: SetupBounce horizontal-drift table it_803F7000 (needle_bounce_x_vel[0..7]).
+    for i in range(8):
+        assert f"needle_bounce_x_vel_{i}" in fields
     assert manifest["char_domain"]["name"] == "Slippi/CSS external character id"
 
     def rec(char_id: int, field_name: str):

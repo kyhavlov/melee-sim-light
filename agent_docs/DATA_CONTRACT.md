@@ -1745,9 +1745,9 @@ Characters (Fox/Falco/Marth/Sheik):
     - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
   - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
     the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
-  - Binary layout: `MSLITAR1` v10
+  - Binary layout: `MSLITAR1` v11
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 10`
+    - `u32 version = 11`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
@@ -1792,8 +1792,17 @@ Characters (Fox/Falco/Marth/Sheik):
       take-damage drop callback and `sheik_needle_motion_step` consume them through
       `item_article_params_get(MSL_CHAR_ID_SHEIK)`, and `src/items.c` keeps no local literal copies.
       `src/item_article_params.c` rejects a Sheik row missing any entry or with a non-negative
-      velocity/gravity value. The cosmetic rotation tables (`it_803F6FE0`/`it_803F7000`/`it_803F7060`)
-      are RNG-advancement only and are not materialized.
+      velocity/gravity value. The cosmetic rotation tables (`it_803F6FE0`/`it_803F7060`) are
+      RNG-advancement only and are not materialized.
+    - v11 adds `needle_bounce_x_vel` (`it_803F7000`), the fifth 8-entry f32 table: the SetupBounce
+      xDD8 horizontal-drift magnitude selected by `HSD_Randi(8)` and signed by a separate
+      `HSD_Randi(2)`. Unlike the four strictly-negative velocity/gravity tables this one is
+      non-negative (first entry 0.0), so the loader validates it as `>= 0` and finite rather than
+      `< 0`. Runtime-required for Sheik: on entering bounce state 4 the thrown-Needle stores the
+      signed value into the hidden lane `item_sheik_needle_hidden_drop_vel_x` and replays it as
+      `x40_vel.x` during state-4 physics (`itSeakneedlethrown_UnkMotion4_Phys`); the dropped state
+      uses xDD8 = 0. `src/items.c` keeps no local literal copy. Previously this table was only
+      RNG-advanced (bounced Needles fell straight down); v11 makes the horizontal drift source-exact.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:

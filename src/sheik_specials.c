@@ -237,6 +237,8 @@ static void sk_enter_specialn(MslBatch* batch, size_t idx, uint8_t ground) {
   batch->state.special_cmd2[idx] = 0u;
   batch->state.sheik_special_timer[idx] = 0u;
   batch->state.sheik_special_latch[idx] = 0u;
+  // Loop-charge cycle tracker (consumed by the SpecialN(Air)Loop charge incrementer below).
+  batch->state.specialn_charge_frames[idx] = 0u;
   if (batch->state.sheik_needle_count[idx] == 0u) {
     batch->state.sheik_needle_count[idx] = 1u;
   }
@@ -552,9 +554,20 @@ static void sk_update_specialn(MslBatch* batch, const MslCommonParams* c, const 
       }
       break;
     case MSL_ACT_SK_SPECIAL_N_LOOP:
-    case MSL_ACT_SK_SPECIAL_AIR_N_LOOP:
+    case MSL_ACT_SK_SPECIAL_AIR_N_LOOP: {
+      // Charge (Sheik_ChargeNeedlesIncrementer): the SpecialN(Air)Loop subaction loops; source adds one
+      // stored Needle each loop cycle (cur_anim_frame == 0), capped at 6, while B is held. Detect the
+      // cycle start from the looping anim frame and increment once per cycle.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{ftSk_SpecialNLoop_Anim,
+      //   ftSk_SpecialAirNLoop_Anim}
+      const int af_floor = (int)msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+      const uint16_t prev_plus1 = batch->state.specialn_charge_frames[idx];
+      if (af_floor == 0 && prev_plus1 != 1u && batch->state.sheik_needle_count[idx] < 6u) {
+        batch->state.sheik_needle_count[idx]++;
+      }
+      batch->state.specialn_charge_frames[idx] = (uint16_t)(af_floor + 1);
       sk_update_specialn_loop_iasa(batch, c, idx, a);
-      break;
+    } break;
     case MSL_ACT_SK_SPECIAL_N_CANCEL:
       if (sk_anim_finished(batch, idx, a)) {
         sk_enter_wait(batch, idx);

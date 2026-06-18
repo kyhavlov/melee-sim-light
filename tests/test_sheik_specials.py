@@ -1917,9 +1917,10 @@ def test_sheik_thrown_needle_body_hits_unguarded_defender_positive() -> None:
 def test_sheik_thrown_needle_dmgdealt_bounce_destroy_under_synthetic_rng() -> None:
     # it_2725_Logic109_DmgDealt post-hit fate under the sim's DETERMINISTIC synthetic gameplay RNG.
     # The thrown-Needle BODY hit runs HSD_Randi(3): ==0 -> bounce (item_state 4, lifeTimer from
-    # attr->x4 == needle_bounce_lifetime_frames, vel_x 0, visible y velocity
-    # ABS(it_803F7020[Randi(8)]) drawn from the MSLITAR1 needle_bounce_min_vel_y table); else ->
-    # destroy (item cleared). The 3-damage BODY hit lands in BOTH outcomes.
+    # attr->x4 == needle_bounce_lifetime_frames, horizontal drift vel_x = SetupBounce xDD8 =
+    # needle_bounce_x_vel[Randi(8)] signed by Randi(2), visible y velocity ABS(it_803F7020[Randi(8)])
+    # drawn from the MSLITAR1 needle_bounce_min_vel_y table); else -> destroy (item cleared). The
+    # 3-damage BODY hit lands in BOTH outcomes.
     #
     # The replay-EXACT bounce-vs-destroy choice is owned by HSD visual particle-generator draws the
     # headless sim intentionally does not model: the RNGFRAME trace proves the Needle Randi(3) reads a
@@ -1932,6 +1933,7 @@ def test_sheik_thrown_needle_dmgdealt_bounce_destroy_under_synthetic_rng() -> No
 
     article = msl_binding.item_article_params(7)
     bounce_vels = [abs(float(v)) for v in article["needle_bounce_min_vel_y"]]
+    bounce_x_vels = [abs(float(v)) for v in article["needle_bounce_x_vel"]]
     bounce_lifetime = float(article["needle_bounce_lifetime_frames"])
 
     saw_bounce = False
@@ -1946,9 +1948,11 @@ def test_sheik_thrown_needle_dmgdealt_bounce_destroy_under_synthetic_rng() -> No
         if int(out["items"]["exists"][0]) == 0:
             saw_destroy = True
             continue
-        # Survivor is a bounced (state 4) Needle with a data-table-owned upward velocity.
+        # Survivor is a bounced (state 4) Needle with data-table-owned upward velocity + horizontal drift.
         assert int(out["items"]["state"][0]) == 4
-        assert float(out["items"]["vel_x"][0]) == pytest.approx(0.0)
+        assert any(
+            abs(float(out["items"]["vel_x"][0])) == pytest.approx(v) for v in bounce_x_vels
+        ), float(out["items"]["vel_x"][0])
         assert float(out["items"]["timer"][0]) == pytest.approx(bounce_lifetime)
         assert any(
             float(out["items"]["vel_y"][0]) == pytest.approx(v) for v in bounce_vels
@@ -2227,13 +2231,17 @@ def test_sheik_thrown_needle_clanks_attack_hitcapsule_positive() -> None:
 
     article = msl_binding.item_article_params(7)
     bounce_vels = [abs(float(v)) for v in article["needle_bounce_min_vel_y"]]
+    bounce_x_vels = [abs(float(v)) for v in article["needle_bounce_x_vel"]]
     bounce_lifetime = float(article["needle_bounce_lifetime_frames"])
 
     pct0 = float(_clank_seed()["percent"][0, 1])
     out = _run_needle_item_collision(_clank_seed(), clank_hitbox=True, overlap=True)
     assert int(out["items"]["exists"][0]) == 1
     assert int(out["items"]["state"][0]) == 4  # clanked -> bounced (it_2725_Logic109_Clanked)
-    assert float(out["items"]["vel_x"][0]) == pytest.approx(0.0)
+    # Bounce installs SetupBounce horizontal drift xDD8 = needle_bounce_x_vel signed by Randi(2).
+    assert any(
+        abs(float(out["items"]["vel_x"][0])) == pytest.approx(v) for v in bounce_x_vels
+    ), float(out["items"]["vel_x"][0])
     assert float(out["items"]["timer"][0]) == pytest.approx(bounce_lifetime)
     assert any(float(out["items"]["vel_y"][0]) == pytest.approx(v) for v in bounce_vels)
     assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)  # no BODY damage
@@ -2382,3 +2390,142 @@ def test_sheik_vanish_airhistart0_windup_drift_matches_source_common_drift_repla
     assert abs(float(ref["pos_x"][0]) - float(seed["pos_x"][0])) > 1.0
     out = _run_sample_row(samples, record)
     assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=0.05)
+
+
+# ---------------------------------------------------------------------------
+# Entry-path + data-contract coverage for the thrown-Needle stage-bounce trajectory
+# (SetupBounce xDD8 horizontal drift). These free-run the real aerial-throw -> descend ->
+# stage-hit pipeline instead of seeding a state-4 item directly, so the live drift/stick
+# lifecycle is exercised. See reports/triage/newchar_sheik/needle_source_surface_checklist.md.
+# ---------------------------------------------------------------------------
+
+
+def _aerial_needle_throw_seed(seed_hw: int, *, pos_y: float = 12.0) -> np.ndarray:
+    seed = _seed_base("sheik")
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["pos_y"][0, 0] = np.float32(pos_y)
+    seed["pos_x"][0, 1] = np.float32(500.0)  # defender far away: no contact
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_AIR_N_END)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(1)
+    seed["frame_pre_random_seed"][0] = np.uint32(0x1000 + seed_hw * 7919)
+    return seed
+
+
+def _first_needle(row) -> tuple[int, float, float, float] | None:
+    for s in range(8):
+        if int(row["items"]["exists"][s]) == 1 and int(row["items"]["type"][s]) == ITEM_SHEIK_NEEDLE_THROWN:
+            return (
+                int(row["items"]["state"][s]),
+                float(row["items"]["vel_x"][s]),
+                float(row["items"]["pos_x"][s]),
+                float(row["items"]["pos_y"][s]),
+            )
+    return None
+
+
+def test_sheik_needle_bounce_x_vel_table_matches_source_it_803f7000() -> None:
+    # Data contract: the bounce horizontal-drift table is it_803F7000 transcribed by source symbol,
+    # routed through MSLITAR1 (no local literal copy in src/items.c). |xDD8| is selected by Randi(8)
+    # and signed by Randi(2); the table is non-negative with a 0.0 first entry.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_803F7000,itSeakNeedleThrown_SetupBounce}
+    import msl_binding
+
+    table = [float(v) for v in msl_binding.item_article_params(7)["needle_bounce_x_vel"]]
+    assert table == pytest.approx([0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4])
+
+
+def test_sheik_aerial_thrown_needle_sticks_or_bounces_at_floor_freerun() -> None:
+    # Free-run the real aerial throw: the Needle is launched 45-deg down (state 0 flying), descends,
+    # and on crossing the stage floor either sticks (state 2, vel 0, lingers) or bounces (state 4).
+    # This is the end-to-end pass-through-floor regression, driven through the live entry path rather
+    # than by injecting a state-2/4 item.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{itSeakneedlethrown_UnkMotion0_Coll,
+    #   itSeakNeedleThrown_CheckGroundHit}
+    saw_stick = False
+    for hw in range(40):
+        outs = _run(_aerial_needle_throw_seed(hw), [_mk_inputs() for _ in range(36)])
+        settled = False
+        for row in outs:
+            n = _first_needle(row)
+            if n is None:
+                continue
+            state, _vx, _px, py = n
+            # The pre-fix bug let the flying (state 0) Needle sink far below the floor (y -> -48). A
+            # flying Needle may sit one motion-step above/at the floor, but must never be deep below it:
+            # crossing the stage line transitions it to stuck (2) or bounced (4) on that frame.
+            assert not (state == 0 and py < -3.5), f"hw={hw}: flying Needle at y={py} (passed through floor)"
+            if state in (2, 4):
+                settled = True
+            if state == 2:
+                saw_stick = True
+        assert settled, f"hw={hw}: Needle never settled (stuck/bounced) at the floor"
+    assert saw_stick, "no seed produced a stuck (state 2) Needle"
+
+
+def test_sheik_aerial_thrown_needle_bounce_drifts_horizontally_freerun() -> None:
+    # Free-run regression for the SetupBounce xDD8 horizontal drift: a bounced (state 4) Needle must
+    # carry vel_x equal to a signed needle_bounce_x_vel table entry and actually move in x while bounced
+    # (the pre-fix sim forced vel_x = 0 so bounced Needles fell straight down).
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{itSeakneedlethrown_UnkMotion4_Phys,
+    #   itSeakNeedleThrown_SetupBounce,it_803F7000}
+    import msl_binding
+
+    x_vels = [abs(float(v)) for v in msl_binding.item_article_params(7)["needle_bounce_x_vel"]]
+    saw_bounce = False
+    saw_nonzero_drift = False
+    for hw in range(60):
+        outs = _run(_aerial_needle_throw_seed(hw), [_mk_inputs() for _ in range(36)])
+        bounce_seen_x = None
+        for row in outs:
+            n = _first_needle(row)
+            if n is None:
+                continue
+            state, vx, px, _py = n
+            if state == 4:
+                saw_bounce = True
+                # vel_x must be a signed entry of the source bounce x-vel table.
+                assert any(abs(vx) == pytest.approx(v) for v in x_vels), vx
+                if bounce_seen_x is None:
+                    bounce_seen_x = px
+                elif abs(px - bounce_seen_x) > 0.5:
+                    saw_nonzero_drift = True
+    assert saw_bounce, "no seed produced a bounced (state 4) Needle"
+    assert saw_nonzero_drift, "bounced Needles never drifted horizontally (xDD8 not applied)"
+
+
+def test_sheik_needle_charge_accumulates_through_real_loop_freerun() -> None:
+    # Entry-path charge accumulation: enter Neutral-B from neutral (press B), then HOLD B and free-run.
+    # doEnter floors the stored count at 1; SpecialNLoop_Anim's Sheik_ChargeNeedlesIncrementer then adds
+    # +1 each loop-anim cycle, climbing 1 -> 2 -> 3 ... capped at 6. The count is NEVER seeded directly,
+    # so this is the live-accumulation path the prior (count-injected) tests could not exercise -- the
+    # exact bug ("charge does not store more needles") that one-step reseed validation was blind to.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{doEnter,ftSk_SpecialNLoop_Anim}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    seed = _seed_base("sheik")  # grounded neutral Wait
+    seed["pos_x"][0, 1] = np.float32(0.0)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(0)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        prev = _mk_inputs()
+        held_b = _mk_inputs(buttons=B)
+        # Press+hold B from neutral: B-press enters SpecialN (doEnter floors count to 1); holding B
+        # charges through Start -> Loop. Run long enough to cross multiple loop cycles.
+        counts = []
+        for _ in range(90):
+            msl_binding.step_input(handle, prev, held_b)
+            prev = held_b
+            counts.append(int(msl_binding.debug_get_sheik_needle_count(handle, 0, 0)))
+    finally:
+        msl_binding.destroy(handle)
+
+    # Monotonic non-decreasing climb from the tap floor of 1 up to (and capped at) 6 through the loop.
+    assert counts[0] == 1, counts[:5]
+    assert max(counts) >= 3, f"charge never accumulated past 2 through the real loop: {counts}"
+    assert max(counts) <= 6, counts
+    nonzero = [c for c in counts if c > 0]
+    assert all(b >= a for a, b in zip(nonzero, nonzero[1:])), counts  # never decreases while charging

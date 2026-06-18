@@ -10,7 +10,7 @@
 #include "alloc.h"
 
 enum {
-  MSLITAR1_VERSION = 10,
+  MSLITAR1_VERSION = 11,
   MSLITAR1_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1,
   MSLITAR1_VALUE_U16 = 1,
   MSLITAR1_VALUE_U32 = 2,
@@ -83,8 +83,9 @@ enum {
   MSLITAR1_FIELD_NEEDLE_DROP_GRAVITY_0 = 110,
   MSLITAR1_FIELD_NEEDLE_BOUNCE_MIN_VEL_Y_0 = 118,
   MSLITAR1_FIELD_NEEDLE_BOUNCE_GRAVITY_0 = 126,
+  MSLITAR1_FIELD_NEEDLE_BOUNCE_X_VEL_0 = 134,
   MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_FIRST = MSLITAR1_FIELD_NEEDLE_DROP_MIN_VEL_Y_0,
-  MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_LAST = MSLITAR1_FIELD_NEEDLE_BOUNCE_GRAVITY_0 + 7,
+  MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_LAST = MSLITAR1_FIELD_NEEDLE_BOUNCE_X_VEL_0 + 7,
   MSLITAR1_FIELD_NEEDLE_FIRST = MSLITAR1_FIELD_NEEDLE_THROW_ITKIND,
   MSLITAR1_FIELD_SHEIK_SPECIAL_FIRST = MSLITAR1_FIELD_SHEIK_CHAIN_ITKIND,
   MSLITAR1_FIELD_SHEIK_SPECIAL_LAST = MSLITAR1_FIELD_SHEIK_VANISH_SPAWN_PART_ID,
@@ -101,7 +102,7 @@ typedef struct ItemArticleTable {
   uint64_t sheik_needle_fields_seen;
   uint32_t sheik_special_article_fields_seen;
   uint32_t sheik_vanish_hitbox_fields_seen;
-  uint32_t sheik_needle_drop_bounce_fields_seen;
+  uint64_t sheik_needle_drop_bounce_fields_seen;
   uint8_t loaded;
 } ItemArticleTable;
 
@@ -515,6 +516,12 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
           rec->needle_bounce_gravity[idx] = f32_value;
           break;
         }
+        idx = needle_drop_table_index(field_id, MSLITAR1_FIELD_NEEDLE_BOUNCE_X_VEL_0);
+        if (idx != 0xFFu) {
+          if (value_type != MSLITAR1_VALUE_F32) return -1;
+          rec->needle_bounce_x_vel[idx] = f32_value;
+          break;
+        }
       }
       break;
   }
@@ -534,18 +541,24 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
   if (char_id == 7u && field_id >= MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_FIRST &&
       field_id <= MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_LAST) {
     g_tbl.sheik_needle_drop_bounce_fields_seen |=
-        (uint32_t)1u << (uint32_t)(field_id - MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_FIRST);
+        (uint64_t)1ull << (uint64_t)(field_id - MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_FIRST);
   }
   return 0;
 }
 
 static uint8_t sheik_needle_drop_bounce_tables_valid(const MslItemArticleParams* p) {
   // SetupDrop/SetupBounce terminal velocities and gravities are strictly negative; reject any zero
-  // or non-negative entry so a stale/partial artifact cannot silently zero the drop recurrence.
-  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_803F6FA0,it_803F6FC0,it_803F7020,it_803F7040}
+  // or non-negative entry so a stale/partial artifact cannot silently zero the drop recurrence. The
+  // bounce x-vel table (it_803F7000) is the magnitude of a Randi(2)-signed horizontal drift, so it is
+  // non-negative (its first entry is exactly 0.0f) and only needs a finite/in-range guard.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   it_803F6FA0,it_803F6FC0,it_803F7020,it_803F7040,it_803F7000}
   for (int i = 0; i < MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN; i++) {
     if (!(p->needle_drop_min_vel_y[i] < 0.0f) || !(p->needle_drop_gravity[i] < 0.0f) ||
         !(p->needle_bounce_min_vel_y[i] < 0.0f) || !(p->needle_bounce_gravity[i] < 0.0f)) {
+      return 0u;
+    }
+    if (!(p->needle_bounce_x_vel[i] >= 0.0f) || !(p->needle_bounce_x_vel[i] < 100.0f)) {
       return 0u;
     }
   }
@@ -649,7 +662,8 @@ int item_article_params_init(void) {
           (uint32_t)MSLITAR1_FIELD_SHEIK_SPECIAL_REQUIRED_MASK ||
       g_tbl.sheik_vanish_hitbox_fields_seen !=
           (uint32_t)MSLITAR1_FIELD_VANISH_HITBOX_REQUIRED_MASK ||
-      g_tbl.sheik_needle_drop_bounce_fields_seen != 0xFFFFFFFFu ||
+      g_tbl.sheik_needle_drop_bounce_fields_seen !=
+          (((uint64_t)1ull << (5u * MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN)) - 1ull) ||
       !sheik_needle_drop_bounce_tables_valid(&g_tbl.by_char[7]) ||
       g_tbl.by_char[7].needle_throw_itkind == 0u || g_tbl.by_char[7].needle_hurtbox_count == 0u ||
       g_tbl.by_char[7].needle_hitbox_count == 0u ||

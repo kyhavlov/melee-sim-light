@@ -42,7 +42,10 @@ enum {
   MSL_RNG_SITE_SHEIK_NEEDLE_DROP_ROT_SIGN2 = 36,
   MSL_RNG_SITE_SHEIK_NEEDLE_DROP_YVEL_MIN8 = 37,
   MSL_RNG_SITE_SHEIK_NEEDLE_DROP_GRAVITY8 = 38,
-  MSL_RNG_SITE_COUNT = 39,
+  // itSeakneedlethrown_UnkMotion0_Coll stage-hit fate: HSD_Randi(5) -> 0/1/2 stick (state 2),
+  // 3/4 bounce (state 4). The bounce's vel-y + SetupBounce reuse the DAMAGE_CALLBACK_BOUNCE_* sites.
+  MSL_RNG_SITE_SHEIK_NEEDLE_GROUND_HIT5 = 39,
+  MSL_RNG_SITE_COUNT = 40,
 };
 
 enum {

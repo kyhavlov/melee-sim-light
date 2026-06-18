@@ -400,6 +400,14 @@ Extraction scripts must be deterministic and reproducible:
 - Same ISO inputs → same extracted outputs (byte-for-byte) for a given extractor.
 - If an extractor changes, regenerate the corresponding artifacts; avoid mixing gameplay changes and extraction changes in a single review step.
 
+Sheik Neutral-B Needle (thrown article) — extracted-data notes (full contract in `DATA_CONTRACT.md`,
+`MSLITAR1` v11):
+- `itSeakNeedleThrown_SetupBounce` samples the horizontal-drift magnitude xDD8 from `it_803F7000`
+  (`needle_bounce_x_vel`, an 8-entry non-negative f32 table), signed by `HSD_Randi(2)`.
+- On entering bounce state 4, runtime stores the signed value in `item_sheik_needle_hidden_drop_vel_x`
+  and replays it as `x40_vel.x` during state-4 physics (`itSeakneedlethrown_UnkMotion4_Phys`).
+- Dropped state (1) uses xDD8 = 0 (falls straight down); bounced state (4) uses the table value.
+
 ## Simulation Model
 
 ### Coordinate system and units

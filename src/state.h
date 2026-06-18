@@ -1465,6 +1465,7 @@ typedef struct MslStateSoA {
   uint8_t* item_sheik_needle_hidden_drop_valid;    // [batch * MSL_MAX_ITEMS]
   float* item_sheik_needle_hidden_drop_min_vel_y;  // [batch * MSL_MAX_ITEMS]
   float* item_sheik_needle_hidden_drop_gravity;    // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_needle_hidden_drop_vel_x;      // [batch * MSL_MAX_ITEMS]
   // Prefix-causal Shy Guy dynamic-bone velocity scratch.
   // refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
   float* item_shyguy_prev_vel_y;           // [batch * MSL_MAX_ITEMS]

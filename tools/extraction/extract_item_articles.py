@@ -192,6 +192,9 @@ SHEIK_NEEDLE_DROP_BOUNCE_TABLES = {
     "needle_drop_gravity": (110, (-0.1, -0.12, -0.14, -0.18, -0.2, -0.22, -0.24, -0.26)),  # it_803F6FC0
     "needle_bounce_min_vel_y": (118, (-2.0, -2.1, -2.2, -2.3, -2.4, -2.5, -2.6, -2.7)),  # it_803F7020
     "needle_bounce_gravity": (126, (-0.1, -0.12, -0.14, -0.18, -0.2, -0.22, -0.24, -0.26)),  # it_803F7040
+    # SetupBounce xDD8 horizontal drift table; the |value| is selected by HSD_Randi(8) and signed by a
+    # separate HSD_Randi(2). Unlike the strictly-negative velocity/gravity tables, this one is >= 0.
+    "needle_bounce_x_vel": (134, (0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4)),  # it_803F7000
 }
 for _base_name, (_base_id, _values) in SHEIK_NEEDLE_DROP_BOUNCE_TABLES.items():
     for _i, _v in enumerate(_values):

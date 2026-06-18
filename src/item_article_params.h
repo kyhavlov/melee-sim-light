@@ -76,10 +76,12 @@ typedef struct MslItemArticleParams {
   // - needle_drop_gravity      <- it_803F6FC0 (SetupDrop xDE0 gravity)
   // - needle_bounce_min_vel_y  <- it_803F7020 (DmgReceived x40_vel.y = ABS(...))
   // - needle_bounce_gravity    <- it_803F7040 (SetupBounce xDE0 gravity)
+  // - needle_bounce_x_vel      <- it_803F7000 (SetupBounce xDD8 horizontal drift, signed by Randi(2))
   float needle_drop_min_vel_y[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
   float needle_drop_gravity[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
   float needle_bounce_min_vel_y[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
   float needle_bounce_gravity[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
+  float needle_bounce_x_vel[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
 } MslItemArticleParams;
 
 // Init-time loader for MSLITAR1 known item/article constants. May perform IO/allocation; call only

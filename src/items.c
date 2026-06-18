@@ -581,6 +581,7 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_sheik_needle_hidden_drop_valid[ii] = 0u;
   batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] = 0.0f;
   batch->state.item_sheik_needle_hidden_drop_gravity[ii] = 0.0f;
+  batch->state.item_sheik_needle_hidden_drop_vel_x[ii] = 0.0f;
   batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
   batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
   batch->state.item_shyguy_dyn_y_phase[ii] = 0u;
@@ -664,6 +665,7 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint8_t, batch->state.item_sheik_needle_hidden_drop_valid);
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_min_vel_y);
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_gravity);
+  SWAP(float, batch->state.item_sheik_needle_hidden_drop_vel_x);
   SWAP(float, batch->state.item_shyguy_prev_vel_y);
   SWAP(uint8_t, batch->state.item_shyguy_prev_vel_y_valid);
   SWAP(uint8_t, batch->state.item_shyguy_dyn_y_phase);
@@ -4222,6 +4224,8 @@ static inline void sheik_needle_set_drop_hidden_lanes(MslBatch* batch, int bi, s
       combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DROP_GRAVITY8, 8);
   batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] = ap->needle_drop_min_vel_y[min_idx & 7];
   batch->state.item_sheik_needle_hidden_drop_gravity[ii] = ap->needle_drop_gravity[grav_idx & 7];
+  // SetupDrop leaves xDD8 = 0 (dropped Needles fall straight down; only bounced state-4 drifts).
+  batch->state.item_sheik_needle_hidden_drop_vel_x[ii] = 0.0f;
   batch->state.item_sheik_needle_hidden_drop_valid[ii] = 1u;
 }
 
@@ -4242,7 +4246,9 @@ static inline void sheik_needle_motion_step(MslBatch* batch, size_t ii) {
     //   itSeakNeedleThrown_SetupDrop,itSeakneedlethrown_UnkMotion1_Phys,
     //   itSeakneedlethrown_UnkMotion4_Phys}
     if (batch->state.item_sheik_needle_hidden_drop_valid[ii] != 0u) {
-      batch->state.item_vel_x[ii] = 0.0f;
+      // Source UnkMotion{1,4}_Phys re-sets x40_vel.x to the (constant) hidden drift each frame: drop
+      // lanes store xDD8 = 0, bounce lanes store the SetupBounce xDD8 horizontal drift.
+      batch->state.item_vel_x[ii] = batch->state.item_sheik_needle_hidden_drop_vel_x[ii];
       batch->state.item_vel_y[ii] += batch->state.item_sheik_needle_hidden_drop_gravity[ii];
       if (batch->state.item_vel_y[ii] < batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii]) {
         batch->state.item_vel_y[ii] = batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii];
@@ -4284,14 +4290,67 @@ static inline uint8_t sheik_needle_item_common_hitlag_frames(int damage_i) {
   return (item_hitlag > 0.0f) ? (uint8_t)item_hitlag : 0u;
 }
 
+// itSeakNeedleThrown_SetupBounce hidden samples: rotation sign/rate, xvel sign/mag, min-y, gravity.
+// Shared by the it_2725_Logic109 hit-bounce callback and the UnkMotion{0,1}_Coll stage-hit bounce.
+// refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakNeedleThrown_SetupBounce
+// Capture the SetupBounce hidden motion lanes for a Needle entering bounce state 4. Source
+// itSeakNeedleThrown_SetupBounce draws, in order: a Randi(2) sign + Randi(8) rotation rate (cosmetic
+// child-JObj spin, unmodeled), a Randi(2) sign + Randi(8) horizontal-drift magnitude
+// (xDD8 = needle_bounce_x_vel), a Randi(8) terminal-y (xDDC = needle_bounce_min_vel_y) and a Randi(8)
+// gravity (xDE0 = needle_bounce_gravity). itSeakneedlethrown_UnkMotion4_Phys then runs vel.x = xDD8,
+// vel.y += xDE0 clamped to xDDC every frame; sheik_needle_motion_step replays that from these lanes.
+// Live free-run bounces carry the exact xDD8/xDDC/xDE0; replay-reseeded state-4 items lose the lanes
+// each frame and fall back to the visible-velocity gravity recovery in sheik_needle_motion_step.
+// refs/melee/src/melee/it/items/itseakneedlethrown.c::{itSeakNeedleThrown_SetupBounce,
+//   itSeakneedlethrown_UnkMotion4_Phys}
+static inline void sheik_needle_setup_bounce_hidden_lanes(MslBatch* batch, int bi, size_t ii,
+                                                          const MslItemArticleParams* params) {
+  (void)combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_ROT_SIGN2, 2);
+  (void)combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_ROT_RATE8, 8);
+  const int xvel_sign = combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_XVEL_SIGN2, 2);
+  const int xvel_idx = combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_XVEL8, 8);
+  const int ymin_idx = combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_YVEL_MIN8, 8);
+  const int grav_idx = combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_GRAVITY8, 8);
+  float vel_x = 0.0f, min_vel_y = 0.0f, gravity = 0.0f;
+  if (params != NULL) {
+    vel_x = params->needle_bounce_x_vel[xvel_idx & 7] * ((xvel_sign == 0) ? 1.0f : -1.0f);
+    min_vel_y = params->needle_bounce_min_vel_y[ymin_idx & 7];
+    gravity = params->needle_bounce_gravity[grav_idx & 7];
+  }
+  batch->state.item_sheik_needle_hidden_drop_vel_x[ii] = vel_x;
+  batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] = min_vel_y;
+  batch->state.item_sheik_needle_hidden_drop_gravity[ii] = gravity;
+  batch->state.item_sheik_needle_hidden_drop_valid[ii] = 1u;
+  batch->state.item_vel_x[ii] = vel_x;
+}
+
+// Stuck-in-ground state (it_802762BC + itResetVelocity + lifeTimer attr->x4 + Item_80268E5C(2)).
+// The Needle stops and lingers as a stuck article for needle_bounce_lifetime_frames.
+// refs/melee/src/melee/it/items/itseakneedlethrown.c::{itSeakneedlethrown_UnkMotion0_Coll,
+//   itSeakneedlethrown_UnkMotion4_Coll,itSeakneedlethrown_UnkMotion2_Anim}
+static inline void sheik_needle_enter_stuck_state(MslBatch* batch, size_t ii,
+                                                  const MslItemArticleParams* params) {
+  batch->state.item_state[ii] = 2u;
+  batch->state.item_vel_x[ii] = 0.0f;
+  batch->state.item_vel_y[ii] = 0.0f;
+  batch->state.item_timer[ii] =
+      (params != NULL) ? (float)params->needle_bounce_lifetime_frames : 0.0f;
+}
+
 static inline void sheik_needle_bounce_or_destroy_callback(MslBatch* batch, int bi, size_t ii,
                                                            const MslItemArticleParams* params,
                                                            int hitlag_damage_i) {
   // Shared it_2725_Logic109 outcome for DmgDealt, Clanked, DmgReceived, and HitShield: destroy the
   // Needle unless HSD_Randi(3)==0, in which case enter bounce state 4, set lifeTimer from attr->x4,
-  // sample ABS(it_803F7020[Randi(8)]) for the visible y velocity (data-owned needle_bounce_min_vel_y),
-  // then consume the hidden SetupBounce rotation/xvel/min-y/gravity samples (gravity recovered from
-  // the visible y velocity in sheik_needle_motion_step).
+  // sample ABS(it_803F7020[Randi(8)]) for the initial upward y velocity (data-owned
+  // needle_bounce_min_vel_y), then capture the SetupBounce horizontal-drift (xDD8)/terminal (xDDC)/
+  // gravity (xDE0) hidden lanes driving the state-4 trajectory.
   // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
   //   it_2725_Logic109_DmgDealt,it_2725_Logic109_Clanked,it_2725_Logic109_DmgReceived,
   //   it_2725_Logic109_HitShield,itSeakNeedleThrown_SetupBounce}
@@ -4306,21 +4365,10 @@ static inline void sheik_needle_bounce_or_destroy_callback(MslBatch* batch, int 
   batch->state.item_state[ii] = 4u;
   batch->state.item_timer[ii] =
       (params != NULL) ? (float)params->needle_bounce_lifetime_frames : 0.0f;
-  batch->state.item_vel_x[ii] = 0.0f;
   batch->state.item_vel_y[ii] =
       (params != NULL) ? fabsf(params->needle_bounce_min_vel_y[y_idx & 7]) : 0.0f;
-  (void)combat_rng_consume_randi_site(
-      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_ROT_SIGN2, 2);
-  (void)combat_rng_consume_randi_site(
-      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_ROT_RATE8, 8);
-  (void)combat_rng_consume_randi_site(
-      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_XVEL_SIGN2, 2);
-  (void)combat_rng_consume_randi_site(batch, bi,
-                                      MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_XVEL8, 8);
-  (void)combat_rng_consume_randi_site(
-      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_YVEL_MIN8, 8);
-  (void)combat_rng_consume_randi_site(batch, bi,
-                                      MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_GRAVITY8, 8);
+  // Capture the SetupBounce horizontal-drift/terminal/gravity lanes (sets item_vel_x = xDD8).
+  sheik_needle_setup_bounce_hidden_lanes(batch, bi, ii, params);
   sheik_needle_apply_item_hitlag(batch, ii, hitlag_damage_i);
 }
 
@@ -4766,6 +4814,65 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
   return 0u;
 }
 
+// Stage-hit / ground collision for the live thrown Needle. Source: the per-state Coll callbacks run
+// itSeakNeedleThrown_CheckGroundHit on the swept segment (frame-start xDE4 -> current pos) and, on a
+// stage-line crossing, transition the article:
+//   - flying  (state 0): HSD_Randi(5) -> 0/1/2 STICK (state 2), 3/4 BOUNCE (state 4, vel.y from the
+//                        it_803F7020 table + SetupBounce);
+//   - dropped (state 1): BOUNCE (state 4, vel.y = ABS(current vel.y) + SetupBounce);
+//   - bounced (state 4): STICK (state 2).
+// The stuck/bounced article lifeTimer is set to attr->x4 (needle_bounce_lifetime_frames), so it lingers.
+// (The earlier reseed-slice TODO that deferred "stage-hit and hidden SetupBounce RNG lanes" is resolved
+// here; exact stick-vs-bounce fate shares the particle-RNG-owned out-of-scope boundary of the hit fate.)
+// refs/melee/src/melee/it/items/itseakneedlethrown.c::{itSeakneedlethrown_UnkMotion0_Coll,
+//   itSeakneedlethrown_UnkMotion1_Coll,itSeakneedlethrown_UnkMotion4_Coll,
+//   itSeakNeedleThrown_CheckGroundHit,itSeakNeedleThrown_SetupBounce}
+static uint8_t sheik_needle_ground_hit_step(MslBatch* batch, int bi, size_t ii,
+                                            const MslItemArticleParams* params, uint32_t stage_id) {
+  if (params == NULL) {
+    return 0u;
+  }
+  const uint8_t state = batch->state.item_state[ii];
+  if (state != 0u && state != 1u && state != 4u) {
+    return 0u;  // only the moving (flying/dropped/bounced) states test the stage; state 2 is stuck
+  }
+  const float vx = batch->state.item_vel_x[ii];
+  const float vy = batch->state.item_vel_y[ii];
+  const float cur_x = batch->state.item_pos_x[ii];
+  const float cur_y = batch->state.item_pos_y[ii];
+  // The frame-start position (source xDE4, reset to pos each Anim before this frame's motion).
+  const float old_x = cur_x - vx;
+  const float old_y = cur_y - vy;
+  if (!stage_collision_item_line_hits_floor(stage_id, old_x, old_y, cur_x, cur_y)) {
+    return 0u;
+  }
+  if (state == 4u) {
+    sheik_needle_enter_stuck_state(batch, ii, params);
+    return 1u;
+  }
+  if (state == 1u) {
+    // UnkMotion1_Coll: vel.y = ABS(vel.y), then SetupBounce installs the state-4 drift/terminal/gravity.
+    batch->state.item_state[ii] = 4u;
+    batch->state.item_timer[ii] = (float)params->needle_bounce_lifetime_frames;
+    batch->state.item_vel_y[ii] = fabsf(vy);
+    sheik_needle_setup_bounce_hidden_lanes(batch, bi, ii, params);
+    return 1u;
+  }
+  // state 0: HSD_Randi(5) -> 0/1/2 stick, 3/4 bounce.
+  const int r = combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_GROUND_HIT5, 5);
+  if (r < 3) {
+    sheik_needle_enter_stuck_state(batch, ii, params);
+    return 1u;
+  }
+  const int y_idx = combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_VEL_Y8, 8);
+  batch->state.item_state[ii] = 4u;
+  batch->state.item_timer[ii] = (float)params->needle_bounce_lifetime_frames;
+  batch->state.item_vel_y[ii] = fabsf(params->needle_bounce_min_vel_y[y_idx & 7]);
+  sheik_needle_setup_bounce_hidden_lanes(batch, bi, ii, params);
+  return 1u;
+}
+
 static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
   if (batch == NULL) {
     return;
@@ -4809,8 +4916,9 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
         // Slippi does not expose Item.xCBC_hitlagFrames. A replay reseed of a Needle that just
         // bounced from DmgReceived can carry state4/damage/timer while the victim deal-hitlag is
         // still active; source Item_802697D4 freezes item anim/phys/lifetime until item hitlag
-        // drains. Full free-running Needle state collision stays outside this reseed slice until
-        // the stage-hit and hidden SetupBounce RNG lanes are modeled.
+        // drains. That hidden item-hitlag count is the only remaining reseed-slice gap here: the
+        // free-running stage-hit stick/bounce state machine and the SetupBounce drift/terminal/
+        // gravity (xDD8/xDDC/xDE0) lanes are now modeled.
         // refs/melee/src/melee/it/item.c::{checkHitLag,Item_802697D4}
         // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgReceived
         continue;
@@ -4826,6 +4934,12 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
     }
     sheik_needle_motion_step(batch, ii);
     if (sheik_needle_try_body_hit_fighter(batch, bi, it, params) != 0u) {
+      needs_sort = 1u;
+      continue;
+    }
+    // Source-ordered after the item-vs-fighter Coll: itSeakneedlethrown_UnkMotion{0,1,4}_Coll then
+    // test the stage line and stick/bounce the article so thrown Needles stop at the ground.
+    if (sheik_needle_ground_hit_step(batch, bi, ii, params, batch->state.stage_id[bi]) != 0u) {
       needs_sort = 1u;
       continue;
     }

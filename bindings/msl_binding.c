@@ -4667,6 +4667,7 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
   MSL_SET_DICT_FLOAT_TABLE("needle_drop_gravity", p->needle_drop_gravity);
   MSL_SET_DICT_FLOAT_TABLE("needle_bounce_min_vel_y", p->needle_bounce_min_vel_y);
   MSL_SET_DICT_FLOAT_TABLE("needle_bounce_gravity", p->needle_bounce_gravity);
+  MSL_SET_DICT_FLOAT_TABLE("needle_bounce_x_vel", p->needle_bounce_x_vel);
 #undef MSL_SET_DICT_FLOAT_TABLE
 #undef MSL_SET_DICT_LONG
 #undef MSL_SET_DICT_FLOAT
