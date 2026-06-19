@@ -152,6 +152,48 @@ def test_sheik_demo_thrown_needle_body_lbcoll_keeps_next_frame_hit() -> None:
 
 
 @pytest.mark.integration
+def test_sheik_demo_rec739_thrown_needle_jobj_body_contact_stays_quiet_adjacent_negative() -> None:
+    # Official Sheik demo adjacent negative for the rec740 fix: the flying Needle has advanced into
+    # the source JObj-backed BODY path, but the child-JObj HitCapsule segment still misses Marth's
+    # live hurtcaps this frame. This prevents broad "current visible item path" fixes from admitting
+    # the hit early.
+    # refs/melee/src/melee/it/itanimlist.c::it_802790C0
+    # refs/melee/src/melee/it/itcoll.c::it_8027137C
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Coll
+    seed, ref, out = _run_row(739, dataset=DEMO_DATASET)
+
+    assert int(seed["items"]["type"][3]) == ITEM_NEEDLE_THROWN
+    assert int(seed["items"]["state"][3]) == 0
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 14
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 0
+    assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
+    assert float(out["percent"][P_MARTH]) == pytest.approx(21.0)
+
+
+@pytest.mark.integration
+def test_sheik_demo_rec740_thrown_needle_jobj_body_contact_hits_source_frame() -> None:
+    # rec740 was a one-frame-late miss when Needle BODY contact used only the replay-visible item
+    # root segment. Source command 11 attaches hitbox 0 to article bone 1, and it_8027137C publishes
+    # x58->x4C from that JObj before ftColl_8007925C reaches BODY. The generated MSLITAR1 JObj
+    # offset places the hitcap on the source segment and closes the victim lanes.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    # refs/melee/src/melee/it/itanimlist.c::it_802790C0
+    # refs/melee/src/melee/it/itcoll.c::it_8027137C
+    seed, ref, out = _run_row(740, dataset=DEMO_DATASET)
+
+    assert int(seed["items"]["type"][3]) == ITEM_NEEDLE_THROWN
+    assert int(seed["items"]["state"][3]) == 0
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 79
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 3
+    assert int(out["hitstun"][P_MARTH]) == int(ref["hitstun"][P_MARTH]) == 13
+    assert int(out["instance_hit_by"][P_MARTH]) == int(ref["instance_hit_by"][P_MARTH]) == 47
+    assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
+    assert float(out["percent"][P_MARTH]) == pytest.approx(23.76)
+
+
+@pytest.mark.integration
 def test_sheik_demo_thrown_needle_active_hitlag_body_uses_frozen_low_hurtcap() -> None:
     # The second flying Needle BODY-hits Marth while Marth is still in damage hitlag from the first
     # Needle. Fighter_8006A360 skips Anim/IASA/Phys during hitlag, but Fighter_8006CB94 still runs

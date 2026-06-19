@@ -644,6 +644,8 @@ def test_sheik_overlay_masks_survive_fresh_character_attr_extraction(tmp_path: P
     assert int(attrs["needle_hitbox_count"]) == 4
     assert attrs["needle_hitbox_size"] == pytest.approx([1.953, 1.953, 1.953, 1.953])
     assert attrs["needle_hitbox_flags"] == [5, 6, 6, 6]
+    assert attrs["needle_hitbox_bone_id"] == [1, 1, 0, 0]
+    assert attrs["needle_hitbox_jobj_z_offset"] == pytest.approx([-1.5, -1.5, 0.0, 0.0])
     assert int(attrs["vanish_hitbox_count"]) == 1
     assert float(attrs["vanish_hitbox_size"]) == pytest.approx(10.155599594116211)
     assert int(attrs["vanish_hitbox_size_keyframe_count"]) == 2
@@ -675,6 +677,8 @@ def test_sheik_overlay_masks_survive_fresh_character_attr_extraction(tmp_path: P
         for name in (
             "needle_hitbox_size_0",
             "needle_hitbox_flags_3",
+            "needle_hitbox_bone_id_0",
+            "needle_hitbox_jobj_z_offset_1",
             "vanish_hitbox_size_keyframe_frame_0",
             "vanish_hitbox_size_keyframe_value_1",
             "vanish_hitbox_remove_frame",
@@ -727,10 +731,10 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         assert f"needle_bounce_x_vel_{i}" in fields
     assert manifest["char_domain"]["name"] == "Slippi/CSS external character id"
 
-    # MSLITAR1 v14: v13's contact flags remain present, and Chain attrs now include x4C/x50 for the
-    # active-frontier launch/hitcap publication path.
-    assert ITEM_ARTICLE_VERSION == 14
-    assert manifest["version"] == 14
+    # MSLITAR1 v15: v14's Chain x4C/x50 attrs remain present, and thrown-Needle command-11
+    # hitbox/JObj publication fields now close the source BODY contact point.
+    assert ITEM_ARTICLE_VERSION == 15
+    assert manifest["version"] == 15
     units = {row["id"]: row["name"] for row in manifest["units"]}
     assert units.get(11) == "scalar"
     chain_fields = [
@@ -787,6 +791,22 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         "needle_hitbox_damage_by_id_1": 3.0,
         "needle_hitbox_damage_by_id_2": 3.0,
         "needle_hitbox_damage_by_id_3": 3.0,
+        "needle_hitbox_bone_id_0": 1,
+        "needle_hitbox_bone_id_1": 1,
+        "needle_hitbox_bone_id_2": 0,
+        "needle_hitbox_bone_id_3": 0,
+        "needle_hitbox_jobj_x_offset_0": 0.0,
+        "needle_hitbox_jobj_x_offset_1": 0.0,
+        "needle_hitbox_jobj_x_offset_2": 0.0,
+        "needle_hitbox_jobj_x_offset_3": 0.0,
+        "needle_hitbox_jobj_y_offset_0": 0.0,
+        "needle_hitbox_jobj_y_offset_1": 0.0,
+        "needle_hitbox_jobj_y_offset_2": 0.0,
+        "needle_hitbox_jobj_y_offset_3": 0.0,
+        "needle_hitbox_jobj_z_offset_0": -1.5,
+        "needle_hitbox_jobj_z_offset_1": -1.5,
+        "needle_hitbox_jobj_z_offset_2": 0.0,
+        "needle_hitbox_jobj_z_offset_3": 0.0,
         "needle_hitbox_size_0": 1.9529999494552612,
         "needle_hitbox_size_1": 1.9529999494552612,
         "needle_hitbox_size_2": 1.9529999494552612,

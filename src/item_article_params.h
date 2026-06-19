@@ -44,6 +44,10 @@ typedef struct MslItemArticleParams {
   float needle_hurtbox_scale;
   float needle_hitbox_damage;
   float needle_hitbox_damage_by_id[MSL_ITEM_ARTICLE_MAX_HITBOXES];
+  uint16_t needle_hitbox_bone_id[MSL_ITEM_ARTICLE_MAX_HITBOXES];
+  float needle_hitbox_jobj_x_offset[MSL_ITEM_ARTICLE_MAX_HITBOXES];
+  float needle_hitbox_jobj_y_offset[MSL_ITEM_ARTICLE_MAX_HITBOXES];
+  float needle_hitbox_jobj_z_offset[MSL_ITEM_ARTICLE_MAX_HITBOXES];
   float needle_hitbox_size[MSL_ITEM_ARTICLE_MAX_HITBOXES];
   float needle_hitbox_x_offset[MSL_ITEM_ARTICLE_MAX_HITBOXES];
   float needle_hitbox_y_offset[MSL_ITEM_ARTICLE_MAX_HITBOXES];

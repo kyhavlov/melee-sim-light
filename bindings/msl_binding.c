@@ -4628,6 +4628,46 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
     }                                                    \
     Py_DECREF(v__);                                      \
   } while (0)
+#define MSL_SET_DICT_HITBOX_U16_TABLE(KEY, ARR)                         \
+  do {                                                                  \
+    PyObject* lst__ = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);        \
+    if (lst__ == NULL) {                                                \
+      Py_DECREF(out);                                                   \
+      return NULL;                                                      \
+    }                                                                   \
+    for (int hi__ = 0; hi__ < MSL_ITEM_ARTICLE_MAX_HITBOXES; hi__++) {  \
+      PyList_SET_ITEM(lst__, hi__, PyLong_FromLong((long)(ARR)[hi__])); \
+    }                                                                   \
+    if (PyDict_SetItemString(out, (KEY), lst__) != 0) {                 \
+      Py_DECREF(lst__);                                                 \
+      Py_DECREF(out);                                                   \
+      return NULL;                                                      \
+    }                                                                   \
+    Py_DECREF(lst__);                                                   \
+  } while (0)
+#define MSL_SET_DICT_HITBOX_FLOAT_TABLE(KEY, ARR)                            \
+  do {                                                                       \
+    PyObject* lst__ = PyList_New(MSL_ITEM_ARTICLE_MAX_HITBOXES);             \
+    if (lst__ == NULL) {                                                     \
+      Py_DECREF(out);                                                        \
+      return NULL;                                                           \
+    }                                                                        \
+    for (int hi__ = 0; hi__ < MSL_ITEM_ARTICLE_MAX_HITBOXES; hi__++) {       \
+      PyList_SET_ITEM(lst__, hi__, PyFloat_FromDouble((double)(ARR)[hi__])); \
+    }                                                                        \
+    if (PyDict_SetItemString(out, (KEY), lst__) != 0) {                      \
+      Py_DECREF(lst__);                                                      \
+      Py_DECREF(out);                                                        \
+      return NULL;                                                           \
+    }                                                                        \
+    Py_DECREF(lst__);                                                        \
+  } while (0)
+  MSL_SET_DICT_HITBOX_U16_TABLE("needle_hitbox_bone_id", p->needle_hitbox_bone_id);
+  MSL_SET_DICT_HITBOX_FLOAT_TABLE("needle_hitbox_jobj_x_offset", p->needle_hitbox_jobj_x_offset);
+  MSL_SET_DICT_HITBOX_FLOAT_TABLE("needle_hitbox_jobj_y_offset", p->needle_hitbox_jobj_y_offset);
+  MSL_SET_DICT_HITBOX_FLOAT_TABLE("needle_hitbox_jobj_z_offset", p->needle_hitbox_jobj_z_offset);
+#undef MSL_SET_DICT_HITBOX_FLOAT_TABLE
+#undef MSL_SET_DICT_HITBOX_U16_TABLE
   MSL_SET_DICT_LONG("vanish_hitbox_count", p->vanish_hitbox_count);
   MSL_SET_DICT_FLOAT("vanish_hitbox_damage", p->vanish_hitbox_damage);
   MSL_SET_DICT_FLOAT("vanish_hitbox_size", p->vanish_hitbox_size);

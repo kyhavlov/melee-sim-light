@@ -203,6 +203,29 @@ for _base_name, (_base_id, _values) in SHEIK_NEEDLE_DROP_BOUNCE_TABLES.items():
         FIELD_SPECS[_key] = FieldSpec(_base_id + _i, ITEM_ARTICLE_VALUE_F32, UNIT_VELOCITY)
         SHEIK_SPECIAL_ARTICLE_CONSTANTS[_key] = _v
 
+# Sheik thrown-Needle command-11 HitCapsule publication fields. `needle_hitbox_bone_id` is decoded
+# from the item script command; the JObj offsets come from Article::x10_modelDesc and model the
+# source `it_8027137C -> lb_8000B1CC` endpoint publication used by ftColl_8007925C BODY contact.
+for _i in range(4):
+    FIELD_SPECS[f"needle_hitbox_bone_id_{_i}"] = FieldSpec(
+        142 + _i, ITEM_ARTICLE_VALUE_U16, UNIT_BONE_ID
+    )
+    FIELD_SPECS[f"needle_hitbox_jobj_x_offset_{_i}"] = FieldSpec(
+        146 + _i, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE
+    )
+    FIELD_SPECS[f"needle_hitbox_jobj_y_offset_{_i}"] = FieldSpec(
+        150 + _i, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE
+    )
+    FIELD_SPECS[f"needle_hitbox_jobj_z_offset_{_i}"] = FieldSpec(
+        154 + _i, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE
+    )
+SHEIK_NEEDLE_FIELD_NAMES = tuple(
+    name
+    for name in FIELD_SPECS
+    if name.startswith("needle_")
+    and not any(name.startswith(f"{base_name}_") for base_name in SHEIK_NEEDLE_DROP_BOUNCE_TABLES)
+)
+
 # Sheik Side-B Chain article `itSeakChain_Attrs` (Verlet solver data, ISO-extracted into
 # data/characters/sheik.json by extract_character_attrs._extract_seak_chain_article). Unlike the
 # chain kind/spawn-part/lifetime (injected source constants above), these are PlSk.dat article data:
@@ -292,6 +315,10 @@ def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple
                     missing.append(vec_key)
             for vec_key in (
                 "needle_hitbox_damage_by_id",
+                "needle_hitbox_bone_id",
+                "needle_hitbox_jobj_x_offset",
+                "needle_hitbox_jobj_y_offset",
+                "needle_hitbox_jobj_z_offset",
                 "needle_hitbox_size",
                 "needle_hitbox_x_offset",
                 "needle_hitbox_y_offset",

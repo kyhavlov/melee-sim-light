@@ -1745,9 +1745,9 @@ Characters (Fox/Falco/Marth/Sheik):
     - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
   - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
     the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
-  - Binary layout: `MSLITAR1` v14
+  - Binary layout: `MSLITAR1` v15
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 14`
+    - `u32 version = 15`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
@@ -1838,6 +1838,14 @@ Characters (Fox/Falco/Marth/Sheik):
       velocity copied into `vec0.x` by `ftSk_SpecialS_CheckInitChain` before `it_802BCFC4` activates
       the first Chain link. Runtime requires both fields for active-frontier Chain and keeps no
       fallback literals.
+    - v15 adds Sheik thrown-Needle command-11 HitCapsule publication fields:
+      `needle_hitbox_bone_id[0..3]` from `it_802790C0` and
+      `needle_hitbox_jobj_{x,y,z}_offset[0..3]` from `Article::x10_modelDesc`. Runtime rotates the
+      generated JObj Z offset by the state-0 Needle root facing (`HSD_JObjSetRotationY(jobj,
+      M_PI_2 * ip->facing_dir)`) before applying BODY contact, so item-vs-fighter Needle hits use
+      the source `it_8027137C -> lb_8000B1CC(hit->jobj, &offset)` endpoint instead of the
+      replay-visible item root path. Runtime requires these fields for Sheik and keeps no fallback
+      hitcap offset literal.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:

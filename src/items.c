@@ -5475,20 +5475,42 @@ static uint8_t sheik_needle_try_fighter_hitbox_damage(MslBatch* batch, int bi, i
 static inline uint8_t item_guard_reflect_center_xyz(const MslBatch* batch, size_t idx, float* out_x,
                                                     float* out_y, float* out_z);
 
+static inline void sheik_needle_hitbox_segment_xy(const MslItemArticleParams* params, uint8_t hb,
+                                                  float contact_x0, float contact_y0,
+                                                  float contact_x1, float contact_y1, float dirx,
+                                                  float diry, float item_facing_dir, float* sx0,
+                                                  float* sy0, float* sx1, float* sy1) {
+  const float script_x = params->needle_hitbox_x_offset[hb];
+  // State-0 Needle root JObj is rotated by M_PI_2 * ip->facing_dir, so the article child JObj's
+  // extracted root-space Z offset contributes to world X. The local X component rotates into Z and
+  // is not used by this XY BODY sweep.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_802AFF08,itSeakneedlethrown_UnkMotion0_Coll}
+  const float jobj_x = item_facing_dir * params->needle_hitbox_jobj_z_offset[hb];
+  const float jobj_y = params->needle_hitbox_jobj_y_offset[hb];
+  *sx0 = contact_x0 + jobj_x + script_x * dirx;
+  *sy0 = contact_y0 + jobj_y + script_x * diry;
+  *sx1 = contact_x1 + jobj_x + script_x * dirx;
+  *sy1 = contact_y1 + jobj_y + script_x * diry;
+}
+
 static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int item_slot,
                                                  const MslItemArticleParams* params) {
   // Thrown Needle BODY damage (Needle as attacker). Only the state-0 flying Needle carries an active
   // HitCapsule; the state-1..4 scripts clear hitboxes. On a fighter-hurtbox contact the source runs
   // OnGiveDamage then it_2725_Logic109_DmgDealt (HSD_Randi(3)==0 bounce, else destroy) -- the same
   // bounce/destroy outcome as DmgReceived. State-0 Needles travel in a straight line at the constant
-  // throw velocity. Source fighter/item contact runs from Fighter_procMap priority 6, before the
-  // item HitCapsule refresh at Item_80269B60 priority 11, so ftColl_8007925C consumes the previous
-  // frame's `x58 -> x4C` HitCapsule segment even though item physics/JObj translation already ran.
+  // throw velocity. Source priority order moves the article, refreshes item HitCapsule x58/x4C via
+  // it_8027137C, then ftColl_8007925C tests item-vs-fighter BODY. Command 11 binds each HitCapsule
+  // to an article JObj; MSLITAR1 v15 carries the script bone and model-derived JObj XYZ offset, so
+  // the straight-line Needle segment below is the just-advanced frame-start -> current item path
+  // plus the source `lb_8000B1CC(hit->jobj, &offset)` publication point.
   // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
   //   ItemStateTable,it_802AFF08,itSeakneedlethrown_UnkMotion0_Coll,it_2725_Logic109_DmgDealt}
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_procMap,Fighter_8006CB94}
   // refs/melee/src/melee/it/item.c::{Item_802697D4,Item_80269978,Item_80269B60}
   // refs/melee/src/melee/it/itcoll.c::it_8027137C
+  // refs/melee/src/melee/it/itanimlist.c::it_802790C0
+  // data/items/articles/fox_falco.bin::MSLITAR1 needle_hitbox_{bone_id,jobj_x_offset,jobj_y_offset,jobj_z_offset}
   // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C}
   // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
   if (batch == NULL || params == NULL || params->needle_hitbox_count == 0u) {
@@ -5507,10 +5529,11 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
   const float cur_y = batch->state.item_pos_y[ii];
   const float vx = batch->state.item_vel_x[ii];
   const float vy = batch->state.item_vel_y[ii];
-  const float contact_x1 = cur_x - vx;
-  const float contact_y1 = cur_y - vy;
-  const float contact_x0 = contact_x1 - vx;
-  const float contact_y0 = contact_y1 - vy;
+  const float item_facing_dir = (batch->state.item_direction[ii] < 0.0f) ? -1.0f : 1.0f;
+  const float contact_x1 = cur_x;
+  const float contact_y1 = cur_y;
+  const float contact_x0 = cur_x - vx;
+  const float contact_y0 = cur_y - vy;
   const float v2 = vx * vx + vy * vy;
   float dirx = 1.0f;
   float diry = 0.0f;
@@ -5587,11 +5610,9 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
           if (!hitlist_allows_item_hitbox_fighter(batch, bi, item_slot, (int)hb, def, def_iid)) {
             continue;
           }
-          const float ox = params->needle_hitbox_x_offset[hb];
-          const float sx0 = contact_x0 + ox * dirx;
-          const float sy0 = contact_y0 + ox * diry;
-          const float sx1 = contact_x1 + ox * dirx;
-          const float sy1 = contact_y1 + ox * diry;
+          float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f;
+          sheik_needle_hitbox_segment_xy(params, hb, contact_x0, contact_y0, contact_x1, contact_y1,
+                                         dirx, diry, item_facing_dir, &sx0, &sy0, &sx1, &sy1);
           if (!item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx1, sy1, 0.0f, hbr, rx, ry,
                                                       0.0f, reflect_r)) {
             continue;
@@ -5675,11 +5696,9 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
           if (!hitlist_allows_item_hitbox_fighter(batch, bi, item_slot, (int)hb, def, def_iid)) {
             continue;
           }
-          const float ox = params->needle_hitbox_x_offset[hb];
-          const float sx0 = contact_x0 + ox * dirx;
-          const float sy0 = contact_y0 + ox * diry;
-          const float sx1 = contact_x1 + ox * dirx;
-          const float sy1 = contact_y1 + ox * diry;
+          float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f;
+          sheik_needle_hitbox_segment_xy(params, hb, contact_x0, contact_y0, contact_x1, contact_y1,
+                                         dirx, diry, item_facing_dir, &sx0, &sy0, &sx1, &sy1);
           if (!item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx1, sy1, 0.0f, hbr, shx, shy,
                                                       shz, shr + shield_desc_world_r)) {
             continue;
@@ -5722,11 +5741,9 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
       if (!hitlist_allows_item_hitbox_fighter(batch, bi, item_slot, (int)hb, def, def_iid)) {
         continue;
       }
-      const float ox = params->needle_hitbox_x_offset[hb];
-      const float sx0 = contact_x0 + ox * dirx;
-      const float sy0 = contact_y0 + ox * diry;
-      const float sx1 = contact_x1 + ox * dirx;
-      const float sy1 = contact_y1 + ox * diry;
+      float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f;
+      sheik_needle_hitbox_segment_xy(params, hb, contact_x0, contact_y0, contact_x1, contact_y1,
+                                     dirx, diry, item_facing_dir, &sx0, &sy0, &sx1, &sy1);
       for (int fhb = 0; fhb < MSL_MAX_HITBOXES; fhb++) {
         const size_t fhb_i = idx_hitbox(bi, def, fhb);
         if (!batch->state.hitbox_enabled[fhb_i]) {
@@ -5762,7 +5779,6 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
         continue;
       }
       const uint32_t hb_flags = params->needle_hitbox_flags[hb];
-      const float ox = params->needle_hitbox_x_offset[hb];
       const float damage = params->needle_hitbox_damage_by_id[hb];
 
       // BODY damage path: item HitCapsule target bits, swept HitCapsule vs hurtcap.
@@ -5774,14 +5790,9 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
       const uint8_t use_frozen_hitlag_hurtcaps =
           (batch->state.hitlag[d_idx] != 0u || batch->state.hitlag_pre_timer[d_idx] != 0u) ? 1u
                                                                                            : 0u;
-      const float hit_contact_x0 = use_frozen_hitlag_hurtcaps ? contact_x1 : contact_x0;
-      const float hit_contact_y0 = use_frozen_hitlag_hurtcaps ? contact_y1 : contact_y0;
-      const float hit_contact_x1 = use_frozen_hitlag_hurtcaps ? cur_x : contact_x1;
-      const float hit_contact_y1 = use_frozen_hitlag_hurtcaps ? cur_y : contact_y1;
-      const float sx0 = hit_contact_x0 + ox * dirx;
-      const float sy0 = hit_contact_y0 + ox * diry;
-      const float sx1 = hit_contact_x1 + ox * dirx;
-      const float sy1 = hit_contact_y1 + ox * diry;
+      float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f;
+      sheik_needle_hitbox_segment_xy(params, hb, contact_x0, contact_y0, contact_x1, contact_y1,
+                                     dirx, diry, item_facing_dir, &sx0, &sy0, &sx1, &sy1);
       uint8_t hurt_height = 0u;
       uint8_t hit = 0u;
       float best_frozen_overlap = -1.0f;

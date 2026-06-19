@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import struct
 from pathlib import Path
 
@@ -13,6 +14,13 @@ ARTICLE_HITBOX_FLAG_TARGET_GROUNDED = 1
 ARTICLE_HITBOX_FLAG_TARGET_AERIAL = 2
 ARTICLE_HITBOX_FLAG_BODY_ENABLED = 4
 ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY = 8
+
+
+def _ptr32_or_none(arc, abs_off: int) -> int | None:
+    ptr = _u32_be(arc.buf, abs_off)
+    if ptr == 0:
+        return None
+    return arc.data_base + ptr
 
 
 def _u32_be(buf: bytes, off: int) -> int:
@@ -29,6 +37,65 @@ def _s16_be(buf: bytes, off: int) -> int:
 
 def _f32_be(buf: bytes, off: int) -> float:
     return struct.unpack(">f", buf[off : off + 4])[0]
+
+
+def _rot_xyz_mul_vec(rx: float, ry: float, rz: float, x: float, y: float, z: float) -> tuple[float, float, float]:
+    cx, sx = math.cos(rx), math.sin(rx)
+    cy, sy = math.cos(ry), math.sin(ry)
+    cz, sz = math.cos(rz), math.sin(rz)
+
+    y, z = y * cx - z * sx, y * sx + z * cx
+    x, z = x * cy + z * sy, -x * sy + z * cy
+    x, y = x * cz - y * sz, x * sz + y * cz
+    return (float(x), float(y), float(z))
+
+
+def _extract_article_jobj_root_offsets(pl_buf: bytes, arc, model_desc_abs: int) -> list[tuple[float, float, float]]:
+    """Return pre-order item-JObj root-space XYZ offsets for an Article::x10_modelDesc tree.
+
+    `it_802790C0` binds item command-11 hitboxes to dynamic-bone JObjs. For source BODY contact,
+    `it_8027137C -> lb_8000B1CC` publishes HitCapsule x58/x4C from that JObj, not the item root.
+    The root JObj translation is the item position, so bone 0 has no root-space offset; child bones
+    are their parent-rotated HSD_Joint positions.
+    refs/melee/src/melee/it/types.h::{Article,ItemModelDesc}
+    refs/melee/src/melee/it/itanimlist.c::it_802790C0
+    refs/melee/src/melee/it/itcoll.c::it_8027137C
+    """
+    root_abs = _ptr32_or_none(arc, model_desc_abs + 0x00)
+    if root_abs is None:
+        return []
+    out: list[tuple[float, float, float]] = []
+    stack: list[tuple[int, tuple[float, float, float], tuple[float, float, float]]] = [
+        (root_abs, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+    ]
+    while stack and len(out) < 64:
+        node_abs, parent_pos, parent_rot = stack.pop()
+        local_pos = (
+            float(_f32_be(pl_buf, node_abs + 0x2C)),
+            float(_f32_be(pl_buf, node_abs + 0x30)),
+            float(_f32_be(pl_buf, node_abs + 0x34)),
+        )
+        if out:
+            px, py, pz = _rot_xyz_mul_vec(
+                parent_rot[0], parent_rot[1], parent_rot[2], local_pos[0], local_pos[1], local_pos[2]
+            )
+            pos = (parent_pos[0] + px, parent_pos[1] + py, parent_pos[2] + pz)
+        else:
+            pos = (0.0, 0.0, 0.0)
+        local_rot = (
+            float(_f32_be(pl_buf, node_abs + 0x14)),
+            float(_f32_be(pl_buf, node_abs + 0x18)),
+            float(_f32_be(pl_buf, node_abs + 0x1C)),
+        )
+        rot = (parent_rot[0] + local_rot[0], parent_rot[1] + local_rot[1], parent_rot[2] + local_rot[2])
+        out.append((float(pos[0]), float(pos[1]), float(pos[2])))
+        next_abs = _ptr32_or_none(arc, node_abs + 0x0C)
+        child_abs = _ptr32_or_none(arc, node_abs + 0x08)
+        if next_abs is not None:
+            stack.append((next_abs, parent_pos, parent_rot))
+        if child_abs is not None:
+            stack.append((child_abs, pos, rot))
+    return out
 
 
 def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
@@ -257,6 +324,7 @@ def _extract_seak_needle_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
     special_abs = arc.ptr32(article_abs + 0x04)
     hurt_abs = arc.ptr32(article_abs + 0x08)
     states_abs = arc.ptr32(article_abs + 0x0C)
+    model_desc_abs = arc.ptr32(article_abs + 0x10)
     if special_abs == arc.data_base or hurt_abs == arc.data_base:
         return {}
 
@@ -302,10 +370,29 @@ def _extract_seak_needle_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
                 if isinstance(hb, dict):
                     hitboxes.append(hb)
             if hitboxes:
+                jobj_offsets = (
+                    _extract_article_jobj_root_offsets(pl_buf, arc, model_desc_abs)
+                    if model_desc_abs != arc.data_base
+                    else []
+                )
+                hitbox_bones = [int(hb.get("bone", 0)) for hb in hitboxes[:4]]
                 out["needle_hitbox_count"] = int(min(4, len(hitboxes)))
                 out["needle_hitbox_damage"] = float(hitboxes[0].get("damage", 0.0))
                 out["needle_hitbox_damage_by_id"] = [
                     float(hb.get("damage", 0.0)) for hb in hitboxes[:4]
+                ]
+                out["needle_hitbox_bone_id"] = hitbox_bones
+                out["needle_hitbox_jobj_x_offset"] = [
+                    float(jobj_offsets[bone][0]) if 0 <= bone < len(jobj_offsets) else 0.0
+                    for bone in hitbox_bones
+                ]
+                out["needle_hitbox_jobj_y_offset"] = [
+                    float(jobj_offsets[bone][1]) if 0 <= bone < len(jobj_offsets) else 0.0
+                    for bone in hitbox_bones
+                ]
+                out["needle_hitbox_jobj_z_offset"] = [
+                    float(jobj_offsets[bone][2]) if 0 <= bone < len(jobj_offsets) else 0.0
+                    for bone in hitbox_bones
                 ]
                 out["needle_hitbox_size"] = [float(hb.get("size", 0.0)) for hb in hitboxes[:4]]
                 out["needle_hitbox_x_offset"] = [
@@ -1189,6 +1276,10 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "needle_hitbox_damage",
         "needle_hitbox_count",
         "needle_hitbox_damage_by_id",
+        "needle_hitbox_bone_id",
+        "needle_hitbox_jobj_x_offset",
+        "needle_hitbox_jobj_y_offset",
+        "needle_hitbox_jobj_z_offset",
         "needle_hitbox_size",
         "needle_hitbox_x_offset",
         "needle_hitbox_y_offset",

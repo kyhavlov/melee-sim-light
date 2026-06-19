@@ -18,7 +18,9 @@ ITEM_ARTICLE_MAGIC = b"MSLITAR1"
 #   decoded from command 11's sixth word in it_802790C0.
 # v14 (2026-06-19): extends Sheik Chain itSeakChain_Attrs with x4C/x50 so runtime can model source
 #   hitbox reactivation threshold and it_802BCFC4 launch velocity instead of local literals.
-ITEM_ARTICLE_VERSION = 14
+# v15 (2026-06-19): adds Sheik thrown-Needle command-11 hitbox bone ids and article-JObj
+#   root-space XYZ offsets so BODY contact uses the source HitCapsule publication point.
+ITEM_ARTICLE_VERSION = 15
 ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1
 # Historical compatibility alias. The stored values are Slippi/CSS external character ids, not
 # GALE01 internal FighterKind ids.

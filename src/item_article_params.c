@@ -11,7 +11,7 @@
 #include "alloc.h"
 
 enum {
-  MSLITAR1_VERSION = 14,
+  MSLITAR1_VERSION = 15,
   MSLITAR1_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1,
   MSLITAR1_VALUE_U16 = 1,
   MSLITAR1_VALUE_U32 = 2,
@@ -87,6 +87,16 @@ enum {
   MSLITAR1_FIELD_NEEDLE_BOUNCE_X_VEL_0 = 134,
   MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_FIRST = MSLITAR1_FIELD_NEEDLE_DROP_MIN_VEL_Y_0,
   MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_LAST = MSLITAR1_FIELD_NEEDLE_BOUNCE_X_VEL_0 + 7,
+  MSLITAR1_FIELD_NEEDLE_HITBOX_BONE_ID_0 = 142,
+  MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_X_OFFSET_0 = 146,
+  MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_Y_OFFSET_0 = 150,
+  MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_Z_OFFSET_0 = 154,
+  MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_FIRST = MSLITAR1_FIELD_NEEDLE_HITBOX_BONE_ID_0,
+  MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_LAST = MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_Z_OFFSET_0 + 3,
+  MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_REQUIRED_MASK =
+      (1u << (MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_LAST - MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_FIRST +
+              1u)) -
+      1u,
   MSLITAR1_FIELD_NEEDLE_FIRST = MSLITAR1_FIELD_NEEDLE_THROW_ITKIND,
   MSLITAR1_FIELD_SHEIK_SPECIAL_FIRST = MSLITAR1_FIELD_SHEIK_CHAIN_ITKIND,
   MSLITAR1_FIELD_SHEIK_SPECIAL_LAST = MSLITAR1_FIELD_SHEIK_VANISH_SPAWN_PART_ID,
@@ -112,6 +122,7 @@ typedef struct ItemArticleTable {
   MslItemArticleParams by_char[256];
   uint8_t have_char[256];
   uint64_t sheik_needle_fields_seen;
+  uint32_t sheik_needle_hitbox_jobj_fields_seen;
   uint32_t sheik_special_article_fields_seen;
   uint32_t sheik_vanish_hitbox_fields_seen;
   uint64_t sheik_needle_drop_bounce_fields_seen;
@@ -570,6 +581,33 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
           break;
         }
       }
+      if (field_id >= MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_FIRST &&
+          field_id <= MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_LAST) {
+        uint8_t idx = needle_hitbox_field_index(field_id, MSLITAR1_FIELD_NEEDLE_HITBOX_BONE_ID_0);
+        if (idx != 0xFFu) {
+          if (value_type != MSLITAR1_VALUE_U16) return -1;
+          rec->needle_hitbox_bone_id[idx] = (uint16_t)u32_value;
+          break;
+        }
+        idx = needle_hitbox_field_index(field_id, MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_X_OFFSET_0);
+        if (idx != 0xFFu) {
+          if (value_type != MSLITAR1_VALUE_F32) return -1;
+          rec->needle_hitbox_jobj_x_offset[idx] = f32_value;
+          break;
+        }
+        idx = needle_hitbox_field_index(field_id, MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_Y_OFFSET_0);
+        if (idx != 0xFFu) {
+          if (value_type != MSLITAR1_VALUE_F32) return -1;
+          rec->needle_hitbox_jobj_y_offset[idx] = f32_value;
+          break;
+        }
+        idx = needle_hitbox_field_index(field_id, MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_Z_OFFSET_0);
+        if (idx != 0xFFu) {
+          if (value_type != MSLITAR1_VALUE_F32) return -1;
+          rec->needle_hitbox_jobj_z_offset[idx] = f32_value;
+          break;
+        }
+      }
       if (field_id == MSLITAR1_FIELD_SHEIK_CHAIN_LINK_COUNT) {
         if (value_type != MSLITAR1_VALUE_U16) return -1;
         rec->sheik_chain_link_count = (uint16_t)u32_value;
@@ -601,6 +639,11 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
       field_id <= MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_LAST) {
     g_tbl.sheik_needle_drop_bounce_fields_seen |=
         (uint64_t)1ull << (uint64_t)(field_id - MSLITAR1_FIELD_NEEDLE_DROP_BOUNCE_FIRST);
+  }
+  if (char_id == 7u && field_id >= MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_FIRST &&
+      field_id <= MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_LAST) {
+    g_tbl.sheik_needle_hitbox_jobj_fields_seen |=
+        (uint32_t)1u << (uint32_t)(field_id - MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_FIRST);
   }
   if (char_id == 7u && field_id >= MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_FIRST &&
       field_id <= MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_LAST) {
@@ -728,6 +771,8 @@ int item_article_params_init(void) {
           (uint32_t)MSLITAR1_FIELD_VANISH_HITBOX_REQUIRED_MASK ||
       g_tbl.sheik_needle_drop_bounce_fields_seen !=
           (((uint64_t)1ull << (5u * MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN)) - 1ull) ||
+      g_tbl.sheik_needle_hitbox_jobj_fields_seen !=
+          (uint32_t)MSLITAR1_FIELD_NEEDLE_HITBOX_JOBJ_REQUIRED_MASK ||
       !sheik_needle_drop_bounce_tables_valid(&g_tbl.by_char[7]) ||
       g_tbl.by_char[7].needle_throw_itkind == 0u || g_tbl.by_char[7].needle_hurtbox_count == 0u ||
       g_tbl.by_char[7].needle_hitbox_count == 0u ||
