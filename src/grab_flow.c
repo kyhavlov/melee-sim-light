@@ -1014,6 +1014,15 @@ void grab_flow_enter_catchdash_from_attackdash_pregate(MslBatch* batch, size_t i
   // AttackDash IASA pre-gate consumes into CatchDash via ftCo_800D8C54(msid=0xD6).
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_800D8AE0,ftCo_800D8C54}
   enter_catch_motion_state(batch, idx, (uint16_t)MSL_ACT_CATCH_DASH, (uint32_t)MSL_SM_CATCH_DASH);
+  // Like the Dash_IASA -> CatchDash path, ftCo_800D8C54's Fighter_ChangeMotionState clamps gr_vel to
+  // co_attrs.dash_run_terminal_velocity because the previous root-motion AttackDash motion exits into
+  // the non-root-motion CatchDash. Without it the full AttackDash ground speed carries into CatchDash
+  // (CatchDash_Phys then only sheds x64*gr_friction per frame), so the fighter slides far past the
+  // source and accumulates rollout position drift.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D8C54,ftCo_CatchDash_Phys}
+  dash_iasa_apply_root_motion_exit_gr_vel_clamp(
+      batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
 }
 
 static inline uint32_t throw_owner_submotion(uint16_t throw_action) {

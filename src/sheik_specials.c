@@ -53,6 +53,11 @@ static void sk_arm_vanish_smoke_accessory(MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{inlineA0,ftSk_SpecialHi_80113324,ftSk_SpecialHi_80113390}
   // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procMap,Fighter_8006C80C}
   batch->state.sheik_vanish_smoke_accessory_pending[idx] = 1u;
+  // The same Up-B travel/liftoff commit that installs fn_80112ED8 also spends Sheik's jumps:
+  // inlineA0 (AS_SheikUpBTravelGround) sets fp->x1968_jumpsUsed = max_jumps, i.e. jumps_left -> 0, so
+  // she cannot double-jump out of the recovery. Mirror it at the same commit point.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::inlineA0
+  batch->state.jumps_left[idx] = 0u;
 }
 
 static void sk_enter(MslBatch* batch, size_t idx, uint16_t action_id, float start_frame,
@@ -145,9 +150,15 @@ static void sk_enter_landing(MslBatch* batch, size_t idx) {
 static void sk_enter_landing_fallspecial(MslBatch* batch, const MslCharParams* ch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING_FALL_SPECIAL;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  batch->state.fallspecial_landing_lag[idx] =
-      (ch != NULL) ? ch->sheik_vanish_landing_lag_frames : 0.0f;
+  // ftCo_LandingFallSpecial_Enter -> ftCo_Landing_Enter plays the fixed LandingFallSpecial
+  // submotion at anim_speed = (0.1 + x2EC)/landing_lag so it spans the full Vanish landing lag.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{ftCo_LandingFallSpecial_Enter,ftCo_Landing_Enter}
+  const float _ef =
+      msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
+  const float _lag = (ch != NULL) ? ch->sheik_vanish_landing_lag_frames : 0.0f;
+  msl_anim_timebase_enter(batch, idx, 0.0f,
+                          (_lag > 0.0f && _ef > 0.0f) ? ((_ef + 0.1f) / _lag) : 1.0f);
+  batch->state.fallspecial_landing_lag[idx] = _lag;
   batch->state.landing_fallspecial_allow_interrupt[idx] = 0u;
 }
 

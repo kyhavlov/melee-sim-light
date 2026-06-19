@@ -1217,8 +1217,22 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // re-derivation would clobber it with the common default because prev_action_id is
       // already self by the time this runs. Spacie rows keep the original re-derivation
       // unconditionally (validated lock behavior: reseeds carry replay rates).
+      // Sheik/Zelda Vanish landing writes the source-correct stretched rate in
+      // sk_enter_landing_fallspecial; by the af==0 re-derivation prev_action is already
+      // LandingFallSpecial, so the source cannot be recovered and the common default would shorten
+      // the 30-frame submotion to ~9 frames. Preserve the live rate like Marth's Dolphin Slash, but
+      // scope it strictly to LandingFallSpecial: the only Sheik/Zelda source that owns this stretched
+      // rate is Vanish -> LandingFallSpecial, so other Sheik/Zelda landing actions (e.g. LandingAir*)
+      // must keep the ordinary entry-rate re-derivation.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Coll
+      const uint8_t vanish_landing_fall_special_rate_preserve =
+          (a == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL && ch != NULL &&
+           ch->sheik_vanish_landing_lag_frames > 0.0f)
+              ? 1u
+              : 0u;
       const uint8_t skip_rederive_live_entry =
-          (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+          ((batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH ||
+            vanish_landing_fall_special_rate_preserve) &&
            batch->state.frame_speed_mul_fp_q16_16[idx] != msl_q16_16_from_f32(1.0f))
               ? 1u
               : 0u;

@@ -2249,7 +2249,15 @@ static inline uint8_t grounded_attack_update(MslBatch* batch, const MslCommonPar
         }
       }
       const MslJumpInput j_in = jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
-      if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+      // KneeBend (the grounded jumpsquat) is the ground jump: ftCo_Jump_CheckInput enters
+      // ftCo_KneeBend_Enter on any jump input with NO jump-count gate -- only the air jump
+      // (ftCo_JumpAerial) checks x1968_jumpsUsed against max_jumps. So a grounded actionable
+      // fighter must always be able to ground-jump even with jumps_left==0 (e.g. after a Vanish
+      // recovery that spent both jumps and then landed). Keep jumps_left>0 only as the airborne
+      // fallback for any context where on_ground is momentarily clear (the air jump gate).
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
+      if (j_in != MSL_JUMP_INPUT_NONE &&
+          (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
         batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -2311,7 +2319,8 @@ static inline uint8_t grounded_attack_try_iasa_subset(MslBatch* batch, const Msl
     //   ftCo_AttackLw3_Anim,ftCo_AttackLw3_IASA}
     // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_AttackLw3.s::ftCo_AttackLw3_IASA
     const MslJumpInput j_in = jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
-    if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+    if (j_in != MSL_JUMP_INPUT_NONE &&
+        (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
       batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
       batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
       msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -2384,7 +2393,8 @@ static inline uint8_t wait_iasa_locomotion_subset_try_enter(
   //   Jump -> Dash -> Squat -> Turn -> Walk.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
   const MslJumpInput j_in = jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
-  if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+  if (j_in != MSL_JUMP_INPUT_NONE &&
+      (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
     msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -4500,7 +4510,8 @@ void locomotion_update_pre(MslBatch* batch) {
 
             const MslJumpInput j_in =
                 jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
-            if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+            if (j_in != MSL_JUMP_INPUT_NONE &&
+                (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -5624,7 +5635,8 @@ void locomotion_update_pre(MslBatch* batch) {
         if (action_id == (uint16_t)MSL_ACT_OTTOTTO || action_id == (uint16_t)MSL_ACT_OTTOTTO_WAIT) {
           const MslJumpInput j_in =
               jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
-          if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+          if (j_in != MSL_JUMP_INPUT_NONE &&
+              (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -5805,7 +5817,8 @@ void locomotion_update_pre(MslBatch* batch) {
             }
             const MslJumpInput j_in =
                 jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
-            if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+            if (j_in != MSL_JUMP_INPUT_NONE &&
+                (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -5929,7 +5942,8 @@ void locomotion_update_pre(MslBatch* batch) {
             }
             const MslJumpInput j_in =
                 jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
-            if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+            if (j_in != MSL_JUMP_INPUT_NONE &&
+                (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -6065,7 +6079,8 @@ void locomotion_update_pre(MslBatch* batch) {
         if (action_id == MSL_ACT_TURN_RUN && action_id_start == MSL_ACT_TURN_RUN) {
           const MslJumpInput j_in =
               jump_input_from_fn_800CAF78(c, buttons_pressed, stick_y, tilt_timer_y);
-          if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+          if (j_in != MSL_JUMP_INPUT_NONE &&
+              (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -6092,7 +6107,8 @@ void locomotion_update_pre(MslBatch* batch) {
           } else {
             const MslJumpInput j_in =
                 jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
-            if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+            if (j_in != MSL_JUMP_INPUT_NONE &&
+                (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -6199,7 +6215,8 @@ void locomotion_update_pre(MslBatch* batch) {
           } else {
             const MslJumpInput j_in =
                 jump_input_from_fn_800CAF78(c, buttons_pressed, stick_y, tilt_timer_y);
-            if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+            if (j_in != MSL_JUMP_INPUT_NONE &&
+                (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -6263,7 +6280,8 @@ void locomotion_update_pre(MslBatch* batch) {
           const float cur_anim_frame = batch->state.anim_frame_f32[idx];
           const MslJumpInput j_in =
               jump_input_from_fn_800CAF78(c, buttons_pressed, stick_y, tilt_timer_y);
-          if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+          if (j_in != MSL_JUMP_INPUT_NONE &&
+              (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -6372,7 +6390,8 @@ void locomotion_update_pre(MslBatch* batch) {
             }
             const MslJumpInput j_in =
                 jump_input_from_fn_800CAF78(c, buttons_pressed, stick_y, tilt_timer_y);
-            if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+            if (j_in != MSL_JUMP_INPUT_NONE &&
+                (batch->state.jumps_left[idx] > 0 || batch->state.on_ground[idx])) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);

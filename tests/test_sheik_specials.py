@@ -1187,6 +1187,38 @@ def test_sheik_transform_never_leaves_sheik_action_space_safe_zelda_boundary() -
     assert a_acts & {ACT_FALL, ACT_LANDING, ACT_WAIT}
 
 
+def test_sheik_vanish_consumes_jumps_freerun() -> None:
+    # Up-B (Vanish) commits Sheik's jumps: at the travel/liftoff the source AS_SheikUpBTravelGround
+    # (inlineA0) sets fp->x1968_jumpsUsed = max_jumps, i.e. jumps_left -> 0, so she cannot double-jump
+    # out of the recovery. refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::inlineA0
+    seed = _seed_base("sheik")
+    outs = _run(
+        seed,
+        [_mk_inputs(buttons=B, main_y=80)] + [_mk_inputs(main_y=80) for _ in range(44)],
+    )
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_SK_SPECIAL_HI_START_0 in acts, acts[:4]  # entered Vanish
+    # Once she reaches the airborne/travel Vanish phases (past the grounded windup), jumps_left == 0.
+    vanish_committed = [
+        o for o in outs if int(o["action_id"][0]) in (357, 358, 359, 360)
+    ]
+    assert vanish_committed, acts
+    assert all(int(o["jumps_left"][0]) == 0 for o in vanish_committed)
+
+
+def test_sheik_normal_jump_does_not_zero_jumps_adjacent_negative() -> None:
+    # Adjacent negative: a normal grounded jump only spends the ground jump (jumps_left -> max-1 >= 1 of
+    # midair jumps remain); it is NOT forced to 0. The zeroing is specific to the Up-B commit, not any
+    # ground->air transition.
+    seed = _seed_base("sheik")
+    outs = _run(seed, [_mk_inputs(buttons=0x0400)] + [_mk_inputs() for _ in range(8)])  # X = jump
+    airborne = [
+        o for o in outs if int(o["on_ground"][0]) == 0 and int(o["action_id"][0]) in (25, 29, 32)
+    ]
+    assert airborne, [int(o["action_id"][0]) for o in outs]
+    assert all(int(o["jumps_left"][0]) >= 1 for o in airborne)
+
+
 def test_sheik_neutral_b_release_enters_end_instead_of_looping_forever() -> None:
     seed = _seed_base("sheik")
     seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_LOOP)
