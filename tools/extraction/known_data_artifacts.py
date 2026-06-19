@@ -14,7 +14,11 @@ ITEM_ARTICLE_MAGIC = b"MSLITAR1"
 # v11 (2026-06-17): adds Sheik needle_bounce_x_vel[8] (it_803F7000) for SetupBounce xDD8 drift.
 # v12 (2026-06-18): adds Sheik Side-B Chain itSeakChain_Attrs[21] (link count + Verlet solver
 #   segment/gravity/friction/decay/wall-bounce tuning, field_ids 200..220) for the live chain solve.
-ITEM_ARTICLE_VERSION = 12
+# v13 (2026-06-19): extends article hitbox flags with item-script x42_b5/x42_b6 contact gates,
+#   decoded from command 11's sixth word in it_802790C0.
+# v14 (2026-06-19): extends Sheik Chain itSeakChain_Attrs with x4C/x50 so runtime can model source
+#   hitbox reactivation threshold and it_802BCFC4 launch velocity instead of local literals.
+ITEM_ARTICLE_VERSION = 14
 ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1
 # Historical compatibility alias. The stored values are Slippi/CSS external character ids, not
 # GALE01 internal FighterKind ids.
@@ -771,6 +775,8 @@ _SCRIPT_CREATE_HITBOX_FLAG_NAMES = {
     1 << 7: "ignore_thrown_fighters",
     1 << 8: "only_hit_grabbed",
     1 << 9: "item_match_start_x138",
+    1 << 10: "item_body_enabled",
+    1 << 11: "item_grabbable_only",
 }
 
 

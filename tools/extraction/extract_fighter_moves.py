@@ -84,6 +84,8 @@ class Hitbox:
     ignore_fighter_scale: bool
     clank: bool
     rebound: bool
+    item_body_enabled: bool
+    item_grabbable_only: bool
     item_match_start_x138: bool
 
 
@@ -94,22 +96,35 @@ class Event:
     data: dict
 
 
-def _decode_create_hitbox(words: list[int]) -> Hitbox:
+def _decode_create_hitbox(words: list[int], *, item_hitbox_layout: bool = False) -> Hitbox:
     # Decomp shape: ftAction_8007121C reads spawn_hitbox_0..spawn_hitbox_5 while configuring fp->x914.
     # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
     # refs/melee/src/melee/lb/types.h::spawn_hitbox_{0..5}
     if len(words) not in (5, 6):
         raise ValueError(f"create_hitbox expects 5 or 6 words, got {len(words)}")
+    if item_hitbox_layout and len(words) != 6:
+        raise ValueError("item create_hitbox expects 6 words")
     w0, w1, w2, w3, w4 = words[:5]
     w5 = words[5] if len(words) == 6 else None
 
     # `spawn_hitbox_0`: opcode is top 6 bits; remaining fields are MSB→LSB packed.
     hitbox_id = (w0 >> 23) & 0x7
     hit_group = (w0 >> 20) & 0x7
-    only_hit_grabbed = bool((w0 >> 19) & 0x1)
-    bone = (w0 >> 11) & 0xFF
-    use_common_bone_ids = bool((w0 >> 10) & 0x1)
-    damage = float(w0 & 0x3FF)
+    if item_hitbox_layout:
+        # Item command 11 has its own first/fourth-word packing and always consumes the sixth
+        # flag word in it_802790C0. The shared fighter command table lists opcode 11 as five words;
+        # article scripts rely on the item dispatcher, not ftAction_8007121C.
+        # refs/melee/src/melee/it/itanimlist.c::it_802790C0
+        # refs/melee/src/melee/lb/types.h::{it_create_hitbox_0,it_create_hitbox_4,spawn_hitbox_5}
+        only_hit_grabbed = False
+        bone = (w0 >> 13) & 0x7F
+        use_common_bone_ids = False
+        damage = float(w0 & 0x1FFF)
+    else:
+        only_hit_grabbed = bool((w0 >> 19) & 0x1)
+        bone = (w0 >> 11) & 0xFF
+        use_common_bone_ids = bool((w0 >> 10) & 0x1)
+        damage = float(w0 & 0x3FF)
 
     size = _ftaction_scaled_i16((w1 >> 16) & 0xFFFF)
     z_offset = _ftaction_scaled_i16(_s16(w1))
@@ -130,17 +145,30 @@ def _decode_create_hitbox(words: list[int]) -> Hitbox:
         # Item command ownership: it_802790C0 copies cmd->x8_bits->x2_b5 into
         # item->x5D4_hitboxes[id].x138. ftColl_8007925C consults this bit under
         # gm_8016B1C4() before item-vs-fighter reflect/shield/BODY checks.
-        # refs/melee/src/melee/it/it_2725.c::it_802790C0
+        # refs/melee/src/melee/it/itanimlist.c::it_802790C0
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
-        item_match_start_x138 = bool((w5 >> 13) & 0x1)
+        item_match_start_x138 = bool((w5 >> 10) & 0x1)
 
     bkb = (w4 >> 23) & 0x1FF
     element = (w4 >> 18) & 0x1F
-    shield_damage = _s8((w4 >> 10) & 0xFF)
-    sfx_severity = (w4 >> 7) & 0x7
-    sfx_kind = (w4 >> 2) & 0x1F
-    hit_grounded = bool((w4 >> 1) & 0x1)
-    hit_aerial = bool(w4 & 0x1)
+    if item_hitbox_layout:
+        shield_damage = _s8((w4 >> 9) & 0xFF)
+        sfx_severity = (w4 >> 6) & 0x7
+        sfx_kind = (w4 >> 2) & 0xF
+        hit_grounded = bool((w4 >> 1) & 0x1)
+        hit_aerial = bool(w4 & 0x1)
+    else:
+        shield_damage = _s8((w4 >> 10) & 0xFF)
+        sfx_severity = (w4 >> 7) & 0x7
+        sfx_kind = (w4 >> 2) & 0x1F
+        hit_grounded = bool((w4 >> 1) & 0x1)
+        hit_aerial = bool(w4 & 0x1)
+
+    item_body_enabled = False
+    item_grabbable_only = False
+    if w5 is not None:
+        item_body_enabled = bool((w5 >> 14) & 0x1)
+        item_grabbable_only = bool((w5 >> 13) & 0x1)
 
     # Rehit rate (frames) used by HitCapsule hitlists:
     # - lbColl_80008688 stores the per-victim timer from HitCapsule.x40_b4
@@ -182,6 +210,8 @@ def _decode_create_hitbox(words: list[int]) -> Hitbox:
         ignore_fighter_scale=ignore_fighter_scale,
         clank=clank,
         rebound=rebound,
+        item_body_enabled=item_body_enabled,
+        item_grabbable_only=item_grabbable_only,
         item_match_start_x138=item_match_start_x138,
     )
 
@@ -275,6 +305,7 @@ def _parse_subaction_events(
     *,
     max_frames: int,
     max_steps_per_frame: int,
+    item_hitbox_layout: bool = False,
 ) -> list[Event]:
     pc: int | None = subaction_abs_off
     timer: float = 0.0
@@ -369,8 +400,9 @@ def _parse_subaction_events(
             # Fighter events (>=10): parse subset we care about, otherwise skip.
             n_words = _cmd_len_words(op)
             if op == 11:
-                words = _read_words(archive, pc, _cmd_len_words(op))
-                hb = _decode_create_hitbox(words)
+                n_words = 6 if item_hitbox_layout else _cmd_len_words(op)
+                words = _read_words(archive, pc, n_words)
+                hb = _decode_create_hitbox(words, item_hitbox_layout=item_hitbox_layout)
                 out.append(
                     Event(
                         frame=frame,

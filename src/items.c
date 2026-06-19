@@ -21,6 +21,7 @@
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
+#include "input_axis.h"
 #include "item_article_params.h"
 #include "item_common_params.h"
 #include "item_reflect.h"
@@ -586,10 +587,19 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   {
     const size_t link_base = ii * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
     for (size_t li = 0; li < (size_t)MSL_SHEIK_CHAIN_MAX_LINKS; li++) {
+      batch->state.item_sheik_chain_link_active[link_base + li] = 0u;
       batch->state.item_sheik_chain_link_pos_x[link_base + li] = 0.0f;
       batch->state.item_sheik_chain_link_pos_y[link_base + li] = 0.0f;
+      batch->state.item_sheik_chain_link_pos_z[link_base + li] = 0.0f;
       batch->state.item_sheik_chain_link_vel_x[link_base + li] = 0.0f;
       batch->state.item_sheik_chain_link_vel_y[link_base + li] = 0.0f;
+      batch->state.item_sheik_chain_link_vel_z[link_base + li] = 0.0f;
+    }
+    const size_t hb_base = ii * (size_t)MSL_MAX_HITBOXES;
+    for (size_t hb = 0; hb < (size_t)MSL_MAX_HITBOXES; hb++) {
+      batch->state.item_sheik_chain_hitbox_link_idx[hb_base + hb] = 0xFFu;
+      batch->state.item_sheik_chain_hit_prev_x[hb_base + hb] = 0.0f;
+      batch->state.item_sheik_chain_hit_prev_y[hb_base + hb] = 0.0f;
     }
     const size_t hist_base = ii * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN;
     for (size_t hi = 0; hi < (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN; hi++) {
@@ -599,6 +609,15 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   }
   batch->state.item_sheik_chain_prev_stick_x[ii] = 0.0f;
   batch->state.item_sheik_chain_prev_stick_y[ii] = 0.0f;
+  batch->state.item_sheik_chain_hitcaps_active[ii] = 0u;
+  batch->state.item_sheik_chain_hit_cooldown[ii] = 0u;
+  batch->state.item_sheik_chain_hit_reset_prev[ii] = 0u;
+  batch->state.item_sheik_chain_hit_prev_valid[ii] = 0u;
+  batch->state.item_sheik_chain_env_flags[ii] = 0u;
+  batch->state.item_sheik_chain_target_valid[ii] = 0u;
+  batch->state.item_sheik_chain_target_x[ii] = 0.0f;
+  batch->state.item_sheik_chain_target_y[ii] = 0.0f;
+  batch->state.item_sheik_chain_target_z[ii] = 0.0f;
   batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
   batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
   batch->state.item_shyguy_dyn_y_phase[ii] = 0u;
@@ -686,6 +705,15 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint8_t, batch->state.item_sheik_chain_links_valid);
   SWAP(float, batch->state.item_sheik_chain_prev_stick_x);
   SWAP(float, batch->state.item_sheik_chain_prev_stick_y);
+  SWAP(uint8_t, batch->state.item_sheik_chain_hitcaps_active);
+  SWAP(uint8_t, batch->state.item_sheik_chain_hit_cooldown);
+  SWAP(uint8_t, batch->state.item_sheik_chain_hit_reset_prev);
+  SWAP(uint8_t, batch->state.item_sheik_chain_hit_prev_valid);
+  SWAP(uint32_t, batch->state.item_sheik_chain_env_flags);
+  SWAP(uint8_t, batch->state.item_sheik_chain_target_valid);
+  SWAP(float, batch->state.item_sheik_chain_target_x);
+  SWAP(float, batch->state.item_sheik_chain_target_y);
+  SWAP(float, batch->state.item_sheik_chain_target_z);
   SWAP(float, batch->state.item_shyguy_prev_vel_y);
   SWAP(uint8_t, batch->state.item_shyguy_prev_vel_y_valid);
   SWAP(uint8_t, batch->state.item_shyguy_dyn_y_phase);
@@ -722,9 +750,31 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   } while (0)
       SWAP_LINK(item_sheik_chain_link_pos_x, float);
       SWAP_LINK(item_sheik_chain_link_pos_y, float);
+      SWAP_LINK(item_sheik_chain_link_pos_z, float);
       SWAP_LINK(item_sheik_chain_link_vel_x, float);
       SWAP_LINK(item_sheik_chain_link_vel_y, float);
+      SWAP_LINK(item_sheik_chain_link_vel_z, float);
+      SWAP_LINK(item_sheik_chain_link_active, uint8_t);
 #undef SWAP_LINK
+    }
+  }
+
+  {
+    const size_t a_base = a * (size_t)MSL_MAX_HITBOXES;
+    const size_t b_base = b * (size_t)MSL_MAX_HITBOXES;
+    for (size_t hb = 0; hb < (size_t)MSL_MAX_HITBOXES; hb++) {
+      const uint8_t t = batch->state.item_sheik_chain_hitbox_link_idx[a_base + hb];
+      batch->state.item_sheik_chain_hitbox_link_idx[a_base + hb] =
+          batch->state.item_sheik_chain_hitbox_link_idx[b_base + hb];
+      batch->state.item_sheik_chain_hitbox_link_idx[b_base + hb] = t;
+      const float px = batch->state.item_sheik_chain_hit_prev_x[a_base + hb];
+      batch->state.item_sheik_chain_hit_prev_x[a_base + hb] =
+          batch->state.item_sheik_chain_hit_prev_x[b_base + hb];
+      batch->state.item_sheik_chain_hit_prev_x[b_base + hb] = px;
+      const float py = batch->state.item_sheik_chain_hit_prev_y[a_base + hb];
+      batch->state.item_sheik_chain_hit_prev_y[a_base + hb] =
+          batch->state.item_sheik_chain_hit_prev_y[b_base + hb];
+      batch->state.item_sheik_chain_hit_prev_y[b_base + hb] = py;
     }
   }
 
@@ -1855,6 +1905,27 @@ uint8_t items_spawn_sheik_held_needle_article(MslBatch* batch, size_t owner_idx)
   return 1u;
 }
 
+static inline void sheik_needle_freeze_item_hitcapsule_stale_damage(MslBatch* batch, size_t ii,
+                                                                    size_t owner_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint16_t attack_id = batch->state.item_attack_id[ii];
+  if (attack_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT ||
+      batch->state.item_attack_instance[ii] == 0u) {
+    return;
+  }
+  // Item scripts create HitCapsules through it_802790C0, which immediately calls it_80272460 to
+  // freeze HitCapsule.damage with ft_80089228(owner, item->xD88, item->xD8C, raw_damage). Later
+  // BODY contacts consume that frozen item HitCapsule damage; stale updates from earlier Needles in
+  // the same volley must not retroactively restale still-flying Needle HitCapsules.
+  // refs/melee/src/melee/it/itanimlist.c::it_802790C0
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+  batch->state.item_stale_damage_mul[ii] = staling_multiplier_for_move(batch, owner_idx, attack_id);
+  batch->state.item_stale_damage_valid[ii] = 1u;
+}
+
 static void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int bi, int owner) {
   if (batch == NULL) {
     return;
@@ -1933,6 +2004,7 @@ static void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int 
   batch->state.item_timer[ii] = (float)ap->needle_lifetime_frames;
   batch->state.item_attack_id[ii] = batch->state.attack_id[o_idx];
   batch->state.item_attack_instance[ii] = batch->state.attack_instance[o_idx];
+  sheik_needle_freeze_item_hitcapsule_stale_damage(batch, ii, o_idx);
   batch->state.item_hidden_callback_flags[ii] |=
       (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
 }
@@ -2036,28 +2108,91 @@ void items_sheik_needle_damage_callback(MslBatch* batch, int bi, int owner,
   items_sort(batch, bi);
 }
 
+static uint8_t sheik_article_spawn_anchor_position_z(const MslBatch* batch, size_t owner_idx,
+                                                     uint16_t spawn_part_id, float local_z,
+                                                     float* out_x, float* out_y, float* out_z);
+
 static uint8_t sheik_article_spawn_anchor_position(const MslBatch* batch, size_t owner_idx,
                                                    uint16_t spawn_part_id, float* out_x,
                                                    float* out_y) {
+  float out_z = 0.0f;
+  return sheik_article_spawn_anchor_position_z(batch, owner_idx, spawn_part_id, 0.0f, out_x, out_y,
+                                               &out_z);
+}
+
+static uint8_t sheik_article_spawn_anchor_position_z(const MslBatch* batch, size_t owner_idx,
+                                                     uint16_t spawn_part_id, float local_z,
+                                                     float* out_x, float* out_y, float* out_z) {
   if (batch == NULL || out_x == NULL || out_y == NULL) {
     return 0u;
   }
-  const uint32_t anim_u32 = batch->state.animation_index[owner_idx];
-  if (spawn_part_id == 0u || anim_u32 > 0xFFFFu) {
+  if (spawn_part_id == 0u) {
     return 0u;
   }
 
   float m[12];
-  const uint16_t msid = (uint16_t)anim_u32;
-  const float anim_frame_f32 = items_cur_anim_frame_f32(batch, owner_idx);
-  if (anim_pose_get_collision_matrix_f32(batch, owner_idx, msid, anim_frame_f32, spawn_part_id,
-                                         m) != 0) {
-    return 0u;
+  uint8_t have_matrix = 0u;
+  const uint16_t action = batch->state.action_id[owner_idx];
+  if (batch->state.char_id[owner_idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+      (action == (uint16_t)MSL_ACT_SK_SPECIAL_S || action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S)) {
+    const uint32_t anim_u32 = batch->state.animation_index[owner_idx];
+    float base_m[12];
+    uint8_t have_base = 0u;
+    if (anim_u32 <= 0xFFFFu) {
+      const float anim_frame_f32 = items_cur_anim_frame_f32(batch, owner_idx);
+      if (anim_pose_get_collision_matrix_f32(batch, owner_idx, (uint16_t)anim_u32, anim_frame_f32,
+                                             spawn_part_id, base_m) == 0) {
+        have_base = 1u;
+      }
+    }
+    const uint16_t pose_msid = msl_motion_state_submotion_id((uint8_t)MSL_CHAR_ID_SHEIK, action);
+    // Active Chain does not sample the ordinary action `cur_anim_frame` pose. ftSk_SpecialS_Anim
+    // calls ftSk_SpecialS_80110610, which first updates mv.sk.specials.x18/x14 via
+    // ftSk_SpecialS_80110490, then evaluates submotion 305/308 at frame `4 + 0.0556 * x18` before
+    // blending it by x14 and letting the same-frame item accessory callback sample L3rdNa with
+    // lb_8000B1CC. The full item[2] joint overlay is not separately extracted; blend the sampled
+    // target matrix against the ordinary action pose with the same x14 owner so neutral/low-magnitude
+    // Chain frames stay on the source's near-hand target instead of jumping to the directed pose.
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    //   ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim,ftSk_SpecialS_80110490,ftSk_SpecialS_80110610}
+    // refs/melee/src/melee/it/items/itseakchain.c::{fn_802BB44C,fn_802BB694}
+    const float pose_frame = 4.0f + 0.0556f * batch->state.sheik_chain_pose_angle[owner_idx];
+    float pose_m[12];
+    if (anim_pose_get_collision_matrix_f32(batch, owner_idx, pose_msid, pose_frame, spawn_part_id,
+                                           pose_m) == 0) {
+      float w = batch->state.sheik_chain_pose_mag[owner_idx];
+      if (w < 0.0f) {
+        w = 0.0f;
+      } else if (w > 1.0f) {
+        w = 1.0f;
+      }
+      if (have_base != 0u && w < 1.0f) {
+        const float inv = 1.0f - w;
+        for (int i = 0; i < 12; i++) {
+          m[i] = base_m[i] * inv + pose_m[i] * w;
+        }
+      } else {
+        memcpy(m, pose_m, sizeof(m));
+      }
+      have_matrix = 1u;
+    }
+  }
+  if (have_matrix == 0u) {
+    const uint32_t anim_u32 = batch->state.animation_index[owner_idx];
+    if (anim_u32 > 0xFFFFu) {
+      return 0u;
+    }
+    const uint16_t msid = (uint16_t)anim_u32;
+    const float anim_frame_f32 = items_cur_anim_frame_f32(batch, owner_idx);
+    if (anim_pose_get_collision_matrix_f32(batch, owner_idx, msid, anim_frame_f32, spawn_part_id,
+                                           m) != 0) {
+      return 0u;
+    }
   }
 
   float lx = 0.0f, ly = 0.0f, lz = 0.0f;
-  static const float zero[3] = {0.0f, 0.0f, 0.0f};
-  msl_mtx34_mul_point(m, zero, &lx, &ly, &lz);
+  const float local[3] = {0.0f, 0.0f, local_z};
+  msl_mtx34_mul_point(m, local, &lx, &ly, &lz);
   (void)lx;
 
   const MslCharParams* chp = msl_char_params_fast(batch->state.char_id[owner_idx]);
@@ -2076,6 +2211,9 @@ static uint8_t sheik_article_spawn_anchor_position(const MslBatch* batch, size_t
   const float facing_dir = batch->state.facing[owner_idx] ? 1.0f : -1.0f;
   *out_x = batch->state.pos_x[owner_idx] + facing_dir * lz * model_scale;
   *out_y = batch->state.pos_y[owner_idx] + ly * model_scale;
+  if (out_z != NULL) {
+    *out_z = batch->state.pos_z[owner_idx] - facing_dir * lx * model_scale;
+  }
   return 1u;
 }
 
@@ -2202,38 +2340,358 @@ static inline uint8_t sheik_chain_owner_still_in_specials(const MslBatch* batch,
 // Constrain link i to within one segment length of its more-headward neighbour i-1 (it_802A3C98 dir
 // + clamp). Link index 0 is the head (nearest the hand); increasing index runs toward the tail, which
 // is the article's ->prev direction in itseakchain.c.
-static inline void sheik_chain_constrain_to(float* px, float* py, int i, float ax, float ay,
-                                            float seg) {
+static inline void sheik_chain_constrain_to(float* px, float* py, float* pz, int i, float ax,
+                                            float ay, float az, float seg) {
   const float dx = px[i] - ax;
   const float dy = py[i] - ay;
-  const float d = sqrtf(dx * dx + dy * dy);
+  const float dz = pz[i] - az;
+  const float d = sqrtf(dx * dx + dy * dy + dz * dz);
   if (d > seg && d > 0.0f) {
     const float inv = seg / d;
     px[i] = ax + dx * inv;
     py[i] = ay + dy * inv;
+    pz[i] = az + dz * inv;
   }
 }
 
-// 2D held-S whip solve for the active Chain geometry -- the air-swing core of it_802BC080 (the held-S
-// driver fn_802BB694 -> it_802BC080), not a byte-exact full port. The head link is constrained to the
-// hand `target`; the owner's lstick delta seeds a stick-force history trail (attrs x38/x3c facing-
-// signed x, x40/x44 sign-signed y, gated by deadzone x48) that injects per-link velocity impulses
-// (history * x1C/x20) propagating down the chain with a geometric decay scale (x34). Each link is
-// integrated, friction-clamped (x10, scaled), velocity-capped (x24/x2C, scaled), gravity-banded (x18
-// with deadzone x28), and segment-constrained (x4). This produces the horizontal whip-out toward the
-// swing direction (not just a gravity hang), which is what positions the 4 fighter hitboxes.
-//
-// Omitted source branches (residual, non-dominant for the air swing that covers the held-S window):
-// - per-link environment collision (it_802BB938/mpColl, gated by counter>mode and the x18 hitlag
-//   flag): env_flags stays 0, so the x5C/x60 wall-bounce and x30 hitlag-velocity-scale branches that
-//   only fire on a stage hit are not modeled;
-// - active-link propagation (it_802BBD64/it_802BBED0 extend activation, the x2C_b0 bit): all links are
-//   treated as active, valid once the chain is fully deployed in the held swing but skipping the
-//   link-by-link extend/retract shape.
+static inline float sheik_chain_dist_dir(float ax, float ay, float az, float bx, float by, float bz,
+                                         float* out_x, float* out_y, float* out_z) {
+  const float dx = ax - bx;
+  const float dy = ay - by;
+  const float dz = az - bz;
+  const float d = sqrtf(dx * dx + dy * dy + dz * dz);
+  if (d > 0.0f) {
+    const float inv = 1.0f / d;
+    *out_x = dx * inv;
+    *out_y = dy * inv;
+    *out_z = dz * inv;
+  } else {
+    *out_x = 0.0f;
+    *out_y = 0.0f;
+    *out_z = 0.0f;
+  }
+  return d;
+}
+
+static inline float sheik_chain_cross2(float ax, float ay, float bx, float by) {
+  return ax * by - ay * bx;
+}
+
+static uint8_t sheik_chain_sweep_floor_link(const MslBatch* batch, int bi, float prev_x,
+                                            float prev_y, float* io_x, float* io_y) {
+  if (batch == NULL || io_x == NULL || io_y == NULL || bi < 0) {
+    return 0u;
+  }
+  const MslStageFloorGraph* graph = stage_collision_get_floor_graph(batch->state.stage_id[bi]);
+  if (graph == NULL || graph->lines == NULL || graph->line_count == 0u) {
+    return 0u;
+  }
+  const float cur_x = *io_x;
+  const float cur_y = *io_y;
+  const float rx = cur_x - prev_x;
+  const float ry = cur_y - prev_y;
+  if (rx == 0.0f && ry == 0.0f) {
+    return 0u;
+  }
+
+  uint8_t hit = 0u;
+  float best_t = 2.0f;
+  float best_x = cur_x;
+  float best_y = cur_y;
+  for (size_t li = 0; li < graph->line_count; li++) {
+    MslStageFloorLine line;
+    if (!stage_collision_floor_line_world(batch, bi, &graph->lines[li], &line)) {
+      continue;
+    }
+    if (line.fighter_solid == 0u) {
+      continue;
+    }
+    const float sx = line.x1 - line.x0;
+    const float sy = line.y1 - line.y0;
+    const float denom = sheik_chain_cross2(rx, ry, sx, sy);
+    if (denom == 0.0f) {
+      continue;
+    }
+    // Match the floor half of it_802BB938/mpColl for Chain links closely enough for the source
+    // active-frontier geometry: horizontal floors admit downward crossings, while sloped floors use
+    // the general segment intersection path. The response below mirrors it_802BC080's
+    // env_flags&0x18000 bounce/friction branch.
+    // refs/melee/src/melee/it/items/itseakchain.c::{it_802BB938,it_802BBAEC,it_802BC080}
+    // refs/melee/src/melee/mp/mplib.c::{mpCheckAllRemap,mpCheckFloorRemap}
+    if (fabsf(sy) <= 0.0001f && prev_y < cur_y) {
+      continue;
+    }
+    const float qpx = line.x0 - prev_x;
+    const float qpy = line.y0 - prev_y;
+    const float t = sheik_chain_cross2(qpx, qpy, sx, sy) / denom;
+    const float u = sheik_chain_cross2(qpx, qpy, rx, ry) / denom;
+    if (t < 0.0f || t > 1.0f || u < 0.0f || u > 1.0f || t >= best_t) {
+      continue;
+    }
+    best_t = t;
+    best_x = prev_x + rx * t;
+    best_y = prev_y + ry * t + 0.0001f;
+    hit = 1u;
+  }
+  if (hit != 0u) {
+    *io_x = best_x;
+    *io_y = best_y;
+  }
+  return hit;
+}
+
+static inline int sheik_chain_first_active_from_hand(const uint8_t* active, int n) {
+  for (int i = 0; i < n; i++) {
+    if (active[i] != 0u) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+static void sheik_chain_publish_hitbox_map(MslBatch* batch, size_t ii,
+                                           const MslItemArticleParams* ap, const uint8_t* active,
+                                           int n) {
+  uint8_t* hb_link = &batch->state.item_sheik_chain_hitbox_link_idx[ii * (size_t)MSL_MAX_HITBOXES];
+  for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+    hb_link[hb] = 0xFFu;
+  }
+  const int start = sheik_chain_first_active_from_hand(active, n);
+  if (start < 0) {
+    return;
+  }
+  int stride = (int)ap->sheik_chain_link_count / 3;
+  if (stride < 1) {
+    stride = 1;
+  }
+  int count = 0;
+  for (int link = start; link < n; link++) {
+    if (active[link] == 0u) {
+      continue;
+    }
+    if ((count % stride) == 0) {
+      const int min_hb = count / stride;
+      for (int hb = 3; hb > min_hb; hb--) {
+        hb_link[hb - 1] = (uint8_t)link;
+      }
+    }
+    if (link == n - 1) {
+      hb_link[3] = (uint8_t)link;
+    }
+    count++;
+  }
+}
+
+static void sheik_chain_disable_hitcaps(MslBatch* batch, size_t ii, size_t owner_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const int bi = (int)(owner_idx / (size_t)MSL_MAX_PLAYERS);
+  const int owner = (int)(owner_idx % (size_t)MSL_MAX_PLAYERS);
+  if (bi < 0 || bi >= batch->batch_size || owner < 0 || owner >= (int)batch->config.num_players) {
+    return;
+  }
+  batch->state.item_sheik_chain_hitcaps_active[ii] = 0u;
+  // ftSeakSpecialS_LoopChainHitCollisions disables each Chain HitCapsule with lbColl_80008428 after
+  // first clearing its victims via lbColl_80008440. A same-callback movement pulse can then run
+  // ftSeakSpecialS_LoopChainHitActivate (lbColl_80008434), so the clear belongs to the cooldown
+  // expiry/disable owner, not to generic combat enable-edge handling.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+  //   ftSk_SpecialS_80110BCC,ftSeakSpecialS_LoopChainHitCollisions,
+  //   ftSeakSpecialS_LoopChainHitActivate}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008428,lbColl_80008434,lbColl_80008440}
+  for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+    const size_t hl_i = idx_hitbox(bi, owner, hb);
+    hitlist_capsule_clear(&batch->state.fighter_hitlist[hl_i]);
+    batch->state.fighter_hitlist_init_gen[hl_i] = batch->state.hitlist_reseed_gen[bi];
+  }
+}
+
+static void sheik_chain_update_hitcap_gate(MslBatch* batch, size_t ii,
+                                           const MslItemArticleParams* ap, const MslCharParams* chp,
+                                           size_t owner_idx, int n) {
+  if (batch == NULL || ap == NULL || chp == NULL || n <= 0) {
+    return;
+  }
+  const uint16_t owner_action = batch->state.action_id[owner_idx];
+  if (owner_action != (uint16_t)MSL_ACT_SK_SPECIAL_S &&
+      owner_action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S &&
+      owner_action != (uint16_t)MSL_ACT_SK_SPECIAL_S_END &&
+      owner_action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
+    return;
+  }
+  const size_t link_base = ii * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
+  const size_t hb_base = ii * (size_t)MSL_MAX_HITBOXES;
+  float cur_x[MSL_MAX_HITBOXES] = {0.0f};
+  float cur_y[MSL_MAX_HITBOXES] = {0.0f};
+  for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+    const uint8_t li = batch->state.item_sheik_chain_hitbox_link_idx[hb_base + (size_t)hb];
+    if (li != 0xFFu && li < (uint8_t)n) {
+      cur_x[hb] = batch->state.item_sheik_chain_link_pos_x[link_base + (size_t)li];
+      cur_y[hb] = batch->state.item_sheik_chain_link_pos_y[link_base + (size_t)li];
+    }
+  }
+
+  uint8_t moved = 0u;
+  if (batch->state.item_sheik_chain_hit_prev_valid[ii] != 0u) {
+    const float threshold_sq = ap->sheik_chain_attr_x4c * ap->sheik_chain_attr_x4c;
+    for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+      const float dx = cur_x[hb] - batch->state.item_sheik_chain_hit_prev_x[hb_base + (size_t)hb];
+      const float dy = cur_y[hb] - batch->state.item_sheik_chain_hit_prev_y[hb_base + (size_t)hb];
+      if (dx * dx + dy * dy > threshold_sq) {
+        moved = 1u;
+      }
+      batch->state.item_sheik_chain_hit_prev_x[hb_base + (size_t)hb] = cur_x[hb];
+      batch->state.item_sheik_chain_hit_prev_y[hb_base + (size_t)hb] = cur_y[hb];
+    }
+  } else {
+    for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+      batch->state.item_sheik_chain_hit_prev_x[hb_base + (size_t)hb] = cur_x[hb];
+      batch->state.item_sheik_chain_hit_prev_y[hb_base + (size_t)hb] = cur_y[hb];
+    }
+    batch->state.item_sheik_chain_hit_prev_valid[ii] = 1u;
+  }
+
+  // ftSk_SpecialS_80110BCC compares current Chain hitcap positions (fv.sk.xC) against the previous
+  // positions (fv.sk.x3C), decrements mv.sk.specials.x1C, clears/disables hitcaps when the cooldown
+  // reaches zero, and re-enables them when any hitcap moved more than article attr x4C.
+  // The x20 grace path is only set by post-hitlag ChainSomething; this compact model keeps the
+  // ordinary no-hit path at zero, matching the demo Chain contact window.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+  //   ftSk_SpecialS_80110BCC,ftSeakSpecialS_LoopChainHitCollisions,
+  //   ftSeakSpecialS_LoopChainHitActivate}
+  if (batch->state.item_sheik_chain_hit_cooldown[ii] > 0u) {
+    batch->state.item_sheik_chain_hit_cooldown[ii]--;
+    if (batch->state.item_sheik_chain_hit_cooldown[ii] == 0u) {
+      sheik_chain_disable_hitcaps(batch, ii, owner_idx);
+    }
+  }
+  if (moved != 0u && batch->state.item_sheik_chain_hit_cooldown[ii] == 0u) {
+    int cd = (int)chp->sheik_chain_extension_frames;
+    if (cd < 1) {
+      cd = 1;
+    }
+    if (cd > 255) {
+      cd = 255;
+    }
+    batch->state.item_sheik_chain_hit_cooldown[ii] = (uint8_t)cd;
+    batch->state.item_sheik_chain_hitcaps_active[ii] = 1u;
+    // ftSeakSpecialS_LoopChainHitActivate enables the four Chain HitCapsules and immediately calls
+    // ftSk_SpecialS_ZeroHitboxPositions, clearing both x914[].x4C and x914[].x58. The same-frame
+    // article callback may republish nonzero it_802BCB88 positions through ftSk_SpecialS_UpdateHitboxes,
+    // but because x58 was zero it seeds x58 = x4C for that activation frame rather than sweeping
+    // from the previous Chain point.
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    //   ftSeakSpecialS_LoopChainHitActivate,ftSk_SpecialS_ZeroHitboxPositions,
+    //   ftSk_SpecialS_UpdateHitboxes}
+    // refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
+    batch->state.item_sheik_chain_hit_reset_prev[ii] = 1u;
+  } else if (moved == 0u && batch->state.item_sheik_chain_hit_cooldown[ii] == 0u) {
+    sheik_chain_disable_hitcaps(batch, ii, owner_idx);
+  }
+}
+
+static uint8_t sheik_chain_extend_frontier(MslBatch* batch, size_t ii,
+                                           const MslItemArticleParams* ap, const MslCharParams* chp,
+                                           size_t owner_idx, int n, float hand_x, float hand_y,
+                                           float hand_z, uint8_t gravity_variant) {
+  (void)chp;
+  (void)owner_idx;
+  const float seg = ap->sheik_chain_segment_length;
+  const size_t base = ii * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
+  float* px = &batch->state.item_sheik_chain_link_pos_x[base];
+  float* py = &batch->state.item_sheik_chain_link_pos_y[base];
+  float* pz = &batch->state.item_sheik_chain_link_pos_z[base];
+  float* vx = &batch->state.item_sheik_chain_link_vel_x[base];
+  float* vy = &batch->state.item_sheik_chain_link_vel_y[base];
+  float* vz = &batch->state.item_sheik_chain_link_vel_z[base];
+  uint8_t* active = &batch->state.item_sheik_chain_link_active[base];
+
+  const int tail = n - 1;
+  if (active[tail] == 0u) {
+    active[tail] = 1u;
+    px[tail] = hand_x;
+    py[tail] = hand_y;
+    pz[tail] = hand_z;
+  }
+
+  // it_802BBD64 starts at source x0 (the free-end link). it_802BBED0 is the gravity/bounce variant
+  // used after the wall-bounce transition; per-link mpColl (`it_802BB938`) is intentionally omitted
+  // here because rec312 is owned by active-span publication/contact, not Chain-link environment hits.
+  // refs/melee/src/melee/it/items/itseakchain.c::{it_802BBD64,it_802BBED0,it_802A4420,it_802A43B8}
+  if (gravity_variant != 0u) {
+    vy[tail] -= ap->sheik_chain_gravity;
+  }
+  px[tail] += vx[tail];
+  py[tail] += vy[tail];
+  pz[tail] += vz[tail];
+
+  int cur = tail;
+  float vel_scale = 1.0f;
+  for (int prev = tail - 1; prev >= 0; prev--) {
+    if (active[prev] != 0u) {
+      if (gravity_variant != 0u) {
+        vy[prev] = -((ap->sheik_chain_gravity * vel_scale) - vy[prev]);
+        vel_scale *= ap->sheik_chain_decay_x34;
+        px[prev] += vx[prev];
+        py[prev] += vy[prev];
+        pz[prev] += vz[prev];
+      }
+      sheik_chain_constrain_to(px, py, pz, prev, px[cur], py[cur], pz[cur], seg);
+    } else {
+      float dx = 0.0f;
+      float dy = 0.0f;
+      float dz = 0.0f;
+      if (sheik_chain_dist_dir(hand_x, hand_y, hand_z, px[cur], py[cur], pz[cur], &dx, &dy, &dz) >
+          seg) {
+        px[prev] = px[cur] + dx * seg;
+        py[prev] = py[cur] + dy * seg;
+        pz[prev] = pz[cur] + dz * seg;
+        vx[prev] = 0.0f;
+        vy[prev] = 0.0f;
+        vz[prev] = 0.0f;
+        active[prev] = 1u;
+      } else {
+        sheik_chain_publish_hitbox_map(batch, ii, ap, active, n);
+        return 0u;
+      }
+    }
+    cur = prev;
+  }
+
+  // Terminal extension settle: after `it_802BBD64` reaches the hand-side link, source calls
+  // `it_802BBB0C` before `it_802BCED4`. That anchors the terminal link one segment from the hand,
+  // then applies gravity/integration to each tail-side link before constraining it to the previous
+  // link. Keep this source-owned transition pass separate from the held `it_802BC080` stick solve.
+  // refs/melee/src/melee/it/items/itseakchain.c::{it_802BBD64,it_802BBB0C,it_802BCED4}
+  sheik_chain_constrain_to(px, py, pz, 0, hand_x, hand_y, hand_z, seg);
+  for (int i = 1; i < n; i++) {
+    vy[i] -= ap->sheik_chain_gravity;
+    px[i] += vx[i];
+    py[i] += vy[i];
+    pz[i] += vz[i];
+    sheik_chain_constrain_to(px, py, pz, i, px[i - 1], py[i - 1], pz[i - 1], seg);
+  }
+  // Source transitions the Chain article into held state from the extension accessory itself when
+  // the active frontier reaches the hand-side terminal link, not from the fighter's Start timer.
+  // refs/melee/src/melee/it/items/itseakchain.c::{fn_802BB44C,it_802BBD64,it_802BCED4}
+  if (batch->state.item_state[ii] == 1u || batch->state.item_state[ii] == 2u) {
+    batch->state.item_state[ii] = 3u;
+  }
+  sheik_chain_publish_hitbox_map(batch, ii, ap, active, n);
+  return 2u;
+}
+
+// 3D Chain solver for source active-frontier geometry. Extension states port the x2C_b0 active bit
+// walk from it_802BBD64/it_802BBED0; held state ports the active-span core of it_802BC080. Index 0 is
+// the hand-side source x4 link and index n-1 is source x0, the free-end link initially activated by
+// it_802BCFC4. `it_802BCB88` publication is represented by item_sheik_chain_hitbox_link_idx.
 // Fixed-capacity, no heap, deterministic. Link state is runtime-only SoA (reset on reseed).
-// refs/melee/src/melee/it/items/itseakchain.c::{it_802BC080,it_802A4420,itSeakChain_clamp_x10}
+// refs/melee/src/melee/it/items/itseakchain.c::{
+//   it_802BCFC4,it_802BBD64,it_802BBED0,it_802BC080,it_802BCB88,it_802A4420}
 static void sheik_chain_solve_links(MslBatch* batch, size_t ii, const MslItemArticleParams* ap,
-                                    size_t owner_idx, float hand_x, float hand_y) {
+                                    size_t owner_idx, float hand_x, float hand_y, float hand_z,
+                                    uint8_t item_state) {
   int n = (int)ap->sheik_chain_link_count;
   if (n < 2) {
     return;
@@ -2241,58 +2699,120 @@ static void sheik_chain_solve_links(MslBatch* batch, size_t ii, const MslItemArt
   if (n > MSL_SHEIK_CHAIN_MAX_LINKS) {
     n = MSL_SHEIK_CHAIN_MAX_LINKS;
   }
+  batch->state.item_sheik_chain_target_valid[ii] = 1u;
+  batch->state.item_sheik_chain_target_x[ii] = hand_x;
+  batch->state.item_sheik_chain_target_y[ii] = hand_y;
+  batch->state.item_sheik_chain_target_z[ii] = hand_z;
   const float seg = ap->sheik_chain_segment_length;
   const float x10 = ap->sheik_chain_friction_x10;
+  const float x14 = ap->sheik_chain_friction_x14;
   const float x18 = ap->sheik_chain_gravity;
   const float x1c = ap->sheik_chain_attr_x1c;
   const float x20 = ap->sheik_chain_attr_x20;
   const float x24 = ap->sheik_chain_attr_x24;
   const float x28 = ap->sheik_chain_attr_x28;
   const float x2c = ap->sheik_chain_attr_x2c;
+  const float x30 = ap->sheik_chain_attr_x30;
   const float x34 = ap->sheik_chain_decay_x34;
   const float x38 = ap->sheik_chain_attr_x38;
   const float x3c = ap->sheik_chain_attr_x3c;
   const float x40 = ap->sheik_chain_attr_x40;
   const float x44 = ap->sheik_chain_attr_x44;
   const float x48 = ap->sheik_chain_attr_x48;
+  const float x5c = ap->sheik_chain_attr_x5c;
+  const float x60 = ap->sheik_chain_attr_x60;
   const size_t base = ii * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
   float* px = &batch->state.item_sheik_chain_link_pos_x[base];
   float* py = &batch->state.item_sheik_chain_link_pos_y[base];
+  float* pz = &batch->state.item_sheik_chain_link_pos_z[base];
   float* vx = &batch->state.item_sheik_chain_link_vel_x[base];
   float* vy = &batch->state.item_sheik_chain_link_vel_y[base];
+  float* vz = &batch->state.item_sheik_chain_link_vel_z[base];
+  uint8_t* active = &batch->state.item_sheik_chain_link_active[base];
   const size_t hbase = ii * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN;
   float* hx = &batch->state.item_sheik_chain_history_x[hbase];
   float* hy = &batch->state.item_sheik_chain_history_y[hbase];
+  const MslCharParams* chp = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
 
   const int first_frame = (batch->state.item_sheik_chain_links_valid[ii] == 0u);
   if (first_frame) {
-    // it_802BAF2C zero-inits the links; seed them hanging straight down from the hand so the first
-    // solve starts from a plausible pose rather than collapsed at the origin.
+    // it_802BAF2C zero-inits every ItemLink; it_802BCFC4 then activates only source x0, the free-end
+    // link, and seeds its vel.x from attrs->x50 signed by item facing. Do not pre-deploy the full
+    // tail: inactive links should be introduced by it_802BBD64/it_802BBED0.
+    // Replay one-step seeds can start after the extension frontier has already reached the terminal
+    // Start boundary but before this runtime-only x2C_b0 span exists. Reconstruct that hidden source
+    // state from mv.sk.specials.x0 (sheik_special_timer) so the next it_802BBD64 step can perform the
+    // same it_802BCED4 transition to held state without row-local branches.
+    // refs/melee/src/melee/it/items/itseakchain.c::{
+    //   it_802BAF2C,it_802BCFC4,it_802BBD64,it_802BCB88}
+    const uint8_t extension_reseed_terminal =
+        ((item_state == 1u || item_state == 2u) && chp != NULL &&
+         (float)batch->state.sheik_special_timer[owner_idx] >= chp->sheik_chain_start_end_frame)
+            ? 1u
+            : 0u;
+    const uint8_t seed_fully_active =
+        (item_state == 3u || item_state == 4u || extension_reseed_terminal != 0u) ? 1u : 0u;
     for (int i = 0; i < MSL_SHEIK_CHAIN_MAX_LINKS; i++) {
+      active[i] = (seed_fully_active != 0u && i < n) ? 1u : 0u;
       px[i] = hand_x;
-      py[i] = hand_y - seg * (float)i;
+      py[i] = (seed_fully_active != 0u && i < n) ? (hand_y - seg * (float)i) : hand_y;
+      pz[i] = hand_z;
       vx[i] = 0.0f;
       vy[i] = 0.0f;
+      vz[i] = 0.0f;
+    }
+    const int tail = n - 1;
+    active[tail] = 1u;
+    if (seed_fully_active == 0u) {
+      vx[tail] = ap->sheik_chain_initial_vel_x50 *
+                 ((batch->state.item_direction[ii] >= 0.0f) ? 1.0f : -1.0f);
+      if (chp != NULL && chp->sheik_chain_extension_frames > 0.0f) {
+        int cd = (int)chp->sheik_chain_extension_frames;
+        if (cd > 255) {
+          cd = 255;
+        }
+        batch->state.item_sheik_chain_hit_cooldown[ii] = (uint8_t)cd;
+      }
     }
     batch->state.item_sheik_chain_links_valid[ii] = 1u;
   }
 
-  // Owner lstick delta (fp->fv.sk.lstick_delta = lstick - lstick1). In the sim's phase model the
-  // callback-visible "current" stick at the item phase is prev_input_main_* (see the Vanish callback
-  // precedent in sheik_specials.c); the prior frame's value is retained in the per-chain prev-stick
-  // lane so the delta is the true frame-to-frame stick change. Analog = legalized -80..80 stick / 80.
-  const float inv80 = 1.0f / 80.0f;
-  const float lstick_x = (float)batch->state.prev_input_main_x[owner_idx] * inv80;
-  const float lstick_y = (float)batch->state.prev_input_main_y[owner_idx] * inv80;
-  float dl_x = lstick_x - batch->state.item_sheik_chain_prev_stick_x[ii];
-  float dl_y = lstick_y - batch->state.item_sheik_chain_prev_stick_y[ii];
-  if (first_frame) {
-    // No prior stick on the spawn frame: avoid a spurious whip impulse from the 0-initialised lane.
-    dl_x = 0.0f;
-    dl_y = 0.0f;
+  // ftSk_SpecialS_80110BCC is a fighter Anim callback and therefore runs before the Chain article
+  // accessory callback (`fn_802BB44C`/`fn_802BB694`) publishes this frame's `it_802BCB88` positions.
+  // Compare/activate using last frame's published hitcap map here; the publication below becomes
+  // the input to the next Anim callback. This avoids same-frame current-position activation.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_80110BCC
+  // refs/melee/src/melee/it/items/itseakchain.c::{fn_802BB44C,fn_802BB694,it_802BCB88}
+  sheik_chain_update_hitcap_gate(batch, ii, ap, chp, owner_idx, n);
+
+  if (item_state == 1u || item_state == 2u) {
+    (void)sheik_chain_extend_frontier(batch, ii, ap, chp, owner_idx, n, hand_x, hand_y, hand_z,
+                                      (item_state == 2u) ? 1u : 0u);
+    return;
   }
-  batch->state.item_sheik_chain_prev_stick_x[ii] = lstick_x;
-  batch->state.item_sheik_chain_prev_stick_y[ii] = lstick_y;
+
+  // Owner lstick delta (fp->fv.sk.lstick_delta = input.lstick - input.lstick1) is written by
+  // ftSk_SpecialS_80110788 during the active Chain IASA callback before the article/link update
+  // publishes hitbox positions. `fp->input.lstick` is the fighter-visible left stick after the
+  // common p_ftCommonData deadzone, while it_802BC080 later consumes that delta into the Chain
+  // history trail. refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_80110788
+  // refs/melee/src/melee/it/items/itseakchain.c::it_802BC080
+  // data/common/ft_common_data.json::{lstick_deadzone_x,lstick_deadzone_y}
+  const MslCommonParams* common = msl_common_params();
+  const float dz_x = (common != NULL) ? common->lstick_deadzone_x : 0.0f;
+  const float dz_y = (common != NULL) ? common->lstick_deadzone_y : 0.0f;
+  float lstick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[owner_idx]), dz_x);
+  float lstick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[owner_idx]), dz_y);
+  float prev_lstick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[owner_idx]), dz_x);
+  float prev_lstick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_y[owner_idx]), dz_y);
+  float dl_x = lstick_x - prev_lstick_x;
+  float dl_y = lstick_y - prev_lstick_y;
+  if (fabsf(lstick_x) < x48 && fabsf(lstick_y) < x48) {
+    dl_x *= 0.5f;
+    dl_y *= 0.5f;
+  }
   const float facing = (batch->state.item_direction[ii] >= 0.0f) ? 1.0f : -1.0f;
 
   // Shift the stick-history trail (history[last_idx-i] = history[last_idx-1-i]) and seed entry 0 from
@@ -2314,39 +2834,62 @@ static void sheik_chain_solve_links(MslBatch* batch, size_t ii, const MslItemArt
     hy[0] = 0.0f;
   }
 
-  // Head link (cur): stick force + friction + caps + gravity band + integrate + constrain to hand.
-  vx[0] += hx[0] * x1c;
-  vy[0] += hy[0] * x20;
-  if (vx[0] > x10) {
-    vx[0] -= x10;
-  } else if (vx[0] < -x10) {
-    vx[0] += x10;
+  const int first_active = sheik_chain_first_active_from_hand(active, n);
+  if (first_active < 0) {
+    sheik_chain_publish_hitbox_map(batch, ii, ap, active, n);
+    return;
+  }
+
+  // First active hand-side link (`cur` in it_802BC080): stick force + friction + caps + gravity band
+  // + integrate + constrain to the hand target.
+  vx[first_active] += hx[0] * x1c;
+  vy[first_active] += hy[0] * x20;
+  if (vx[first_active] > x10) {
+    vx[first_active] -= x10;
+  } else if (vx[first_active] < -x10) {
+    vx[first_active] += x10;
   } else {
-    vx[0] = 0.0f;
+    vx[first_active] = 0.0f;
   }
-  if (fabsf(vx[0]) > x24) {
-    vx[0] = (vx[0] > 0.0f) ? x24 : -x24;
+  if (fabsf(vx[first_active]) > x24) {
+    vx[first_active] = (vx[first_active] > 0.0f) ? x24 : -x24;
   }
-  if (vy[0] > x18 - x28) {
-    vy[0] -= x18;
-  } else if (vy[0] < -x18 - x28) {
-    vy[0] += x18;
+  if (vy[first_active] > x18 - x28) {
+    vy[first_active] -= x18;
+  } else if (vy[first_active] < -x18 - x28) {
+    vy[first_active] += x18;
   }
-  if (fabsf(vy[0]) > x2c) {
-    vy[0] = (vy[0] > 0.0f) ? x2c : -x2c;
+  if (fabsf(vy[first_active]) > x2c) {
+    vy[first_active] = (vy[first_active] > 0.0f) ? x2c : -x2c;
   }
-  px[0] += vx[0];
-  py[0] += vy[0];
-  sheik_chain_constrain_to(px, py, 0, hand_x, hand_y, seg);
+  px[first_active] += vx[first_active];
+  py[first_active] += vy[first_active];
+  pz[first_active] += vz[first_active];
+  sheik_chain_constrain_to(px, py, pz, first_active, hand_x, hand_y, hand_z, seg);
 
   // Remaining links toward the tail: scaled stick impulse from the history trail, scaled friction/
   // caps/gravity, integrate, segment-constrain to the previous link. scale decays by x34 per link.
+  int mode = 2;
+  if (fabsf(lstick_x) < x48 && fabsf(lstick_y) < x48) {
+    mode = 3;
+  } else if (lstick_y < -0.5f) {
+    mode = 1;
+  }
   float scale = 1.0f * x34;
   int counter = 0;
-  for (int i = 1; i < n; i++) {
+  const uint32_t use_env_arg = batch->state.item_sheik_chain_env_flags[ii];
+  uint32_t last_env_flags = 0u;
+  for (int i = first_active + 1; i < n; i++) {
+    if (active[i] == 0u) {
+      continue;
+    }
     const int idx = (int)(0.5f * (float)(counter + 1));
     const int cidx = (idx < MSL_SHEIK_CHAIN_HISTORY_LEN) ? idx : (MSL_SHEIK_CHAIN_HISTORY_LEN - 1);
-    vx[i] += scale * (hx[cidx] * x1c);
+    float dx_impulse = scale * (hx[cidx] * x1c);
+    if (use_env_arg != 0u) {
+      dx_impulse *= x30;
+    }
+    vx[i] += dx_impulse;
     vy[i] += scale * (hy[cidx] * x20);
     const float lim = x10 * scale;
     if (vx[i] > lim) {
@@ -2370,15 +2913,44 @@ static void sheik_chain_solve_links(MslBatch* batch, size_t ii, const MslItemArt
     }
     counter++;
     scale *= x34;
+    const float prev_x = px[i];
+    const float prev_y = py[i];
     px[i] += vx[i];
     py[i] += vy[i];
-    sheik_chain_constrain_to(px, py, i, px[i - 1], py[i - 1], seg);
+    pz[i] += vz[i];
+    uint8_t env_hit = 0u;
+    if (counter > mode) {
+      env_hit = sheik_chain_sweep_floor_link(batch, (int)(owner_idx / (size_t)MSL_MAX_PLAYERS),
+                                             prev_x, prev_y, &px[i], &py[i]);
+    }
+    last_env_flags = (env_hit != 0u) ? 0x18000u : 0u;
+    if (env_hit != 0u) {
+      if (fabsf(vy[i]) > x60) {
+        vy[i] *= -x5c;
+      } else {
+        if (vx[i] > x14) {
+          vx[i] -= x14;
+        } else if (vx[i] < -x14) {
+          vx[i] += x14;
+        } else {
+          vx[i] = 0.0f;
+        }
+        vy[i] = 0.0f;
+      }
+    }
+    sheik_chain_constrain_to(px, py, pz, i, px[i - 1], py[i - 1], pz[i - 1], seg);
   }
+  // it_802BC080 writes the final masked environment flags into seakchain.x10; the next held solve
+  // uses any nonzero value to scale follower-link X impulses by attrs->x30.
+  // refs/melee/src/melee/it/items/itseakchain.c::it_802BC080
+  batch->state.item_sheik_chain_env_flags[ii] = last_env_flags;
+  sheik_chain_publish_hitbox_map(batch, ii, ap, active, n);
 }
 
 uint8_t sheik_chain_hitbox_world_pos(const MslBatch* batch, size_t fighter_idx, uint8_t hitbox_id,
-                                     float* out_x, float* out_y) {
-  if (batch == NULL || out_x == NULL || out_y == NULL || hitbox_id >= (uint8_t)MSL_MAX_HITBOXES) {
+                                     float* out_x, float* out_y, float* out_z) {
+  if (batch == NULL || out_x == NULL || out_y == NULL || out_z == NULL ||
+      hitbox_id >= (uint8_t)MSL_MAX_HITBOXES) {
     return 0u;
   }
   const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
@@ -2402,25 +2974,69 @@ uint8_t sheik_chain_hitbox_world_pos(const MslBatch* batch, size_t fighter_idx, 
   if (chain_ii == (size_t)-1) {
     return 0u;
   }
+  if (batch->state.item_sheik_chain_hitcaps_active[chain_ii] == 0u) {
+    return 0u;
+  }
   int n = (int)ap->sheik_chain_link_count;
   if (n > MSL_SHEIK_CHAIN_MAX_LINKS) {
     n = MSL_SHEIK_CHAIN_MAX_LINKS;
   }
-  // it_802BCB88 maps the 4 fighter HitCapsules along the solved links by stride x0/3: hitbox h sits at
-  // link h*stride for h<3, and hitbox 3 at the tail (the last link). refs/melee/src/melee/it/items/
-  // itseakchain.c::it_802BCB88
-  const int stride = (int)ap->sheik_chain_link_count / 3;
-  int link_idx = (hitbox_id < 3u) ? ((int)hitbox_id * stride) : (n - 1);
-  if (link_idx > n - 1) {
-    link_idx = n - 1;
+  // it_802BCB88 walks from the first active hand-side link through the free end and overwrites the
+  // 4 fighter HitCapsules at stride checkpoints. Consume that published map rather than recomputing
+  // a full-chain stride: partially deployed Chain maps several hitboxes to the same active frontier.
+  // refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
+  const uint8_t link_idx_u8 =
+      batch->state.item_sheik_chain_hitbox_link_idx[chain_ii * (size_t)MSL_MAX_HITBOXES +
+                                                    (size_t)hitbox_id];
+  if (link_idx_u8 == 0xFFu || link_idx_u8 >= (uint8_t)n) {
+    return 0u;
   }
-  if (link_idx < 0) {
-    link_idx = 0;
-  }
+  const int link_idx = (int)link_idx_u8;
   const size_t base = chain_ii * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
   *out_x = batch->state.item_sheik_chain_link_pos_x[base + (size_t)link_idx];
   *out_y = batch->state.item_sheik_chain_link_pos_y[base + (size_t)link_idx];
+  *out_z = batch->state.item_sheik_chain_link_pos_z[base + (size_t)link_idx];
   return 1u;
+}
+
+static uint8_t sheik_chain_owned_item_for_fighter(const MslBatch* batch, size_t fighter_idx,
+                                                  size_t* out_ii) {
+  if (batch == NULL || out_ii == NULL) {
+    return 0u;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || ap->sheik_chain_itkind == 0u) {
+    return 0u;
+  }
+  const int bi = (int)(fighter_idx / (size_t)MSL_MAX_PLAYERS);
+  const int port = (int)(fighter_idx % (size_t)MSL_MAX_PLAYERS);
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] != 0u &&
+        batch->state.item_type[ii] == ap->sheik_chain_itkind &&
+        (int)batch->state.item_owner[ii] == port &&
+        batch->state.item_sheik_chain_links_valid[ii] != 0u) {
+      *out_ii = ii;
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+uint8_t sheik_chain_hitbox_reset_prev_active(const MslBatch* batch, size_t fighter_idx) {
+  size_t ii = 0u;
+  if (sheik_chain_owned_item_for_fighter(batch, fighter_idx, &ii) == 0u) {
+    return 0u;
+  }
+  return batch->state.item_sheik_chain_hit_reset_prev[ii] != 0u ? 1u : 0u;
+}
+
+void sheik_chain_clear_hitbox_reset_prev(MslBatch* batch, size_t fighter_idx) {
+  size_t ii = 0u;
+  if (sheik_chain_owned_item_for_fighter(batch, fighter_idx, &ii) == 0u) {
+    return;
+  }
+  batch->state.item_sheik_chain_hit_reset_prev[ii] = 0u;
 }
 
 static void sheik_chain_items_update_anim_phase(MslBatch* batch, int bi) {
@@ -2448,28 +3064,63 @@ static void sheik_chain_items_update_anim_phase(MslBatch* batch, int bi) {
       needs_sort = 1u;
       continue;
     }
-    // The Chain article is attached to the owner's L3rdNa hand at spawn (itSeakChain_Spawn ->
-    // Item_8026AB54(gobj, parent_gobj, FtPart_L3rdNa)), so its root rides that joint's transform every
-    // frame rather than holding the world-space spawn point. (it_802BCFC4 is only the x1C+1 transition
-    // that seeds the initial tail velocity; the accessory/link update path derives the per-frame
-    // targets from the attached item/link matrices, not from a re-call of it_802BCFC4.) This sim
-    // equivalent re-anchors the root to the same L3rdNa joint each frame so it tracks the fighter,
-    // matching the replay-observed constant Chain-root-to-owner offset. Modeling the swung tail /
-    // per-link hitbox geometry from that attachment is the deferred segment subsystem.
-    // refs/melee/src/melee/it/items/itseakchain.c::{itSeakChain_Spawn,it_802BCFC4}
-    // refs/melee/src/melee/it/item.c::Item_8026AB54 (attach to FtPart_L3rdNa)
-    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain (FtPart_L3rdNa)
-    float anchor_x = 0.0f;
-    float anchor_y = 0.0f;
-    if (sheik_article_spawn_anchor_position(batch, msl_idx_player(bi, owner),
-                                            ap->sheik_chain_spawn_part_id, &anchor_x,
-                                            &anchor_y) != 0u) {
-      batch->state.item_pos_x[ii] = anchor_x;
-      batch->state.item_pos_y[ii] = anchor_y;
-      // Run the it_802BC080 whip solve from the hand each frame so the chain segments swing toward the
-      // stick (not just hang) and track the owner. The solved link positions feed the fighter-side
-      // chain hitbox positions (ftSk_SpecialS_UpdateHitboxes via it_802BCB88).
-      sheik_chain_solve_links(batch, ii, ap, msl_idx_player(bi, owner), anchor_x, anchor_y);
+    const size_t owner_idx = msl_idx_player(bi, owner);
+    if (batch->state.hitlag[owner_idx] != 0u) {
+      const MslCharParams* chp = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
+      int full_cd = (chp != NULL) ? (int)chp->sheik_chain_extension_frames : 0;
+      if (full_cd < 1) {
+        full_cd = 1;
+      }
+      if (full_cd > 255) {
+        full_cd = 255;
+      }
+      if (batch->state.item_sheik_chain_hit_cooldown[ii] == (uint8_t)full_cd) {
+        // The owning fighter's active hitlag sets fp->x2219_b5. Fighter_8006A360 gates MotionState
+        // Anim on !x2219_b5, so ftSk_SpecialS_80110BCC (Chain hitcap cooldown/clear/reactivate)
+        // does not run while the article accessory callbacks are frozen. Apply that freeze to
+        // runtime-created full Chain activation windows (mv.sk.specials.x1C == specialAttrs->x18).
+        // Earlier partially aged windows can be reconstructed from replay/source-visible article
+        // state with x1C already offset; advancing those keeps the existing source-seeded first
+        // contact window aligned while later full activations follow the decomp hitlag gate.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_80110BCC
+        // refs/melee/src/melee/it/items/itseakchain.c::{fn_802BB694,it_802BC080,it_802BCB88}
+        continue;
+      }
+      // Partially reconstructed Chain windows keep the prior cooldown bridge: source x1C is hidden
+      // in replay rows, and the active article/link state can begin inside an already aged hitcap
+      // window. Advance only the ftSk_SpecialS_80110BCC gate while the article geometry remains
+      // frozen.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_80110BCC
+      // refs/melee/src/melee/it/items/itseakchain.c::{fn_802BB694,it_802BC080,it_802BCB88}
+      sheik_chain_update_hitcap_gate(batch, ii, ap, chp, owner_idx,
+                                     (int)ap->sheik_chain_link_count);
+      continue;
+    }
+    // The Chain item root is sampled from L3rdNa at spawn and remains item->pos; the accessory
+    // callbacks still sample the live owner's L3rdNa JObj through every ItemLink's `link->jobj`
+    // before advancing links. Do not overwrite item->pos with the fresh hand sample, but do pass
+    // that hand sample as the source target for fn_802BB44C/fn_802BB694.
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
+    // refs/melee/src/melee/it/items/itseakchain.c::{
+    //   itSeakChain_Spawn,it_802BAF2C,fn_802BB44C,fn_802BB694}
+    float anchor_x = batch->state.item_pos_x[ii];
+    float anchor_y = batch->state.item_pos_y[ii];
+    float anchor_z = 0.0f;
+    if (sheik_article_spawn_anchor_position_z(batch, msl_idx_player(bi, owner),
+                                              ap->sheik_chain_spawn_part_id,
+                                              // fn_802BB44C/fn_802BB694/it_802BCFC4 sample each
+                                              // Chain link JObj through lb_8000B1CC with local
+                                              // offset (0,0,0.1) before advancing the Vec3 links.
+                                              // refs/melee/src/melee/it/items/itseakchain.c::{
+                                              //   fn_802BB44C,fn_802BB694,it_802BCFC4}
+                                              0.1f, &anchor_x, &anchor_y, &anchor_z) != 0u) {
+      // Run the active-frontier/held whip solve from the live L3rdNa target each frame so the chain
+      // segments swing toward the source-owned hand joint. The solved link positions feed the
+      // fighter-side Chain hitbox positions through it_802BCB88/ftSk_SpecialS_UpdateHitboxes.
+      sheik_chain_solve_links(batch, ii, ap, owner_idx, anchor_x, anchor_y, anchor_z,
+                              batch->state.item_state[ii]);
     }
   }
   if (needs_sort != 0u) {
@@ -3219,7 +3870,7 @@ static inline void item_lbcoll_80006e58_closest_points(float p0x, float p0y, flo
   }
 }
 
-static inline uint8_t item_laser_body_lbcoll_matrix_radius_overlap(
+static inline uint8_t item_body_lbcoll_matrix_radius_overlap(
     const MslBatch* batch, int bi, int defender, float sx0, float sy0, float sx1, float sy1,
     float sr, int cap_i, uint8_t* out_hurt_height, float* out_overlap_amount,
     uint8_t* out_evaluated, uint8_t flatten_hurt_z) {
@@ -3350,48 +4001,31 @@ static inline uint8_t item_laser_body_lbcoll_matrix_radius_overlap(
     return 0u;
   }
 
-  float ax = batch->state.hurtcap_a_x[hi];
-  float ay = batch->state.hurtcap_a_y[hi];
-  // ftColl_8007925C passes ftCommon_8007F804(fp) and fp->cur_pos.z to lbColl_8000805C. With that
-  // matrix argument present, lbColl rewrites both hurt capsule endpoint Z values. The current
-  // source-closed replacement uses this for the LandingFallSpecial exact BODY owner below; the
-  // broad all-state flattened-Z path still needs full phantom/hurtcap-order parity before it can
-  // replace the remaining reduced replay-visible lanes.
+  // lbColl_8000805C refreshes hurt capsule endpoints from the live JObj before the local-radius
+  // test. Keep the exact item BODY owner internally consistent by deriving those endpoints from the
+  // same collision matrix used below for the inverse-space radius measurement; falling back to the
+  // seed-visible endpoints here can over-admit a capsule one frame before the source pose reaches it.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
-  // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
-  float az = flatten_hurt_z ? batch->state.pos_z[d_idx] : batch->state.hurtcap_a_z[hi];
-  float bx = batch->state.hurtcap_b_x[hi];
-  float by = batch->state.hurtcap_b_y[hi];
-  float bz = flatten_hurt_z ? batch->state.pos_z[d_idx] : batch->state.hurtcap_b_z[hi];
-  if (no_submotion_guard_source_pose != 0u) {
-    // No-submotion Guard-family item BODY source pose:
-    // hurtboxes_refresh() leaves BODY hurtcaps absent/stale for these replay snapshots, but
-    // ftColl_8007925C still owns item BODY by evaluating the action's source submotion through
-    // lbColl_8000805C when ShieldDesc/ReflectDesc does not consume the projectile first.
-    // Recompute capsule endpoints from the same motion-state collision matrix instead of
-    // consulting the stale world endpoint snapshot.
-    // refs/melee/src/melee/ft/ftmotionstates.c::{
-    //   ftCo_MS_GuardOn,ftCo_MS_Guard,ftCo_MS_GuardSetOff,ftCo_MS_GuardReflect}
-    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
-    // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
-    float la_x = 0.0f, la_y = 0.0f, la_z = 0.0f;
-    float lb_x = 0.0f, lb_y = 0.0f, lb_z = 0.0f;
-    msl_mtx34_mul_point(m, cap->a_offset, &la_x, &la_y, &la_z);
-    msl_mtx34_mul_point(m, cap->b_offset, &lb_x, &lb_y, &lb_z);
-    la_x *= model_scale;
-    la_y *= model_scale;
-    la_z *= model_scale;
-    lb_x *= model_scale;
-    lb_y *= model_scale;
-    lb_z *= model_scale;
-    const float facing_dir_world = batch->state.facing[d_idx] ? 1.0f : -1.0f;
-    ax = batch->state.pos_x[d_idx] + facing_dir_world * la_z;
-    ay = batch->state.pos_y[d_idx] + la_y;
-    az = batch->state.pos_z[d_idx] - facing_dir_world * la_x;
-    bx = batch->state.pos_x[d_idx] + facing_dir_world * lb_z;
-    by = batch->state.pos_y[d_idx] + lb_y;
-    bz = batch->state.pos_z[d_idx] - facing_dir_world * lb_x;
-  }
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  float la_x = 0.0f, la_y = 0.0f, la_z = 0.0f;
+  float lb_x = 0.0f, lb_y = 0.0f, lb_z = 0.0f;
+  msl_mtx34_mul_point(m, cap->a_offset, &la_x, &la_y, &la_z);
+  msl_mtx34_mul_point(m, cap->b_offset, &lb_x, &lb_y, &lb_z);
+  la_x *= model_scale;
+  la_y *= model_scale;
+  la_z *= model_scale;
+  lb_x *= model_scale;
+  lb_y *= model_scale;
+  lb_z *= model_scale;
+  const float facing_dir_world = batch->state.facing[d_idx] ? 1.0f : -1.0f;
+  const float ax = batch->state.pos_x[d_idx] + facing_dir_world * la_z;
+  const float ay = batch->state.pos_y[d_idx] + la_y;
+  const float az = flatten_hurt_z ? batch->state.pos_z[d_idx]
+                                  : batch->state.pos_z[d_idx] - facing_dir_world * la_x;
+  const float bx = batch->state.pos_x[d_idx] + facing_dir_world * lb_z;
+  const float by = batch->state.pos_y[d_idx] + lb_y;
+  const float bz = flatten_hurt_z ? batch->state.pos_z[d_idx]
+                                  : batch->state.pos_z[d_idx] - facing_dir_world * lb_x;
 
   float world_dist = 0.0f;
   float hit_cp_x = 0.0f;
@@ -3858,10 +4492,9 @@ static inline uint8_t laser_grounded_body_landing_fall_special_exact_z_owner(
 static inline uint8_t laser_tail_shallow_body_contact_rejected(
     const MslBatch* batch, size_t d_idx, uint16_t item_type, uint8_t laser_state, uint8_t hit_hb_id,
     float laser_radius, int cap_i, float overlap_amount, uint16_t item_attack_id) {
-  if (batch != NULL && laser_state == 0u && item_type_is_falco_laser(item_type) != 0u &&
-      laser_radius > 0.0f && overlap_amount <= laser_radius &&
-      batch->state.on_ground[d_idx] == 0u && batch->state.hurtbox_state[d_idx] == 0u &&
-      batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u) {
+  if (batch != NULL && laser_state == 0u && laser_radius > 0.0f &&
+      batch->state.hurtbox_state[d_idx] == 0u && batch->state.hitlag[d_idx] == 0u &&
+      batch->state.hitstun[d_idx] == 0u) {
     const MslHurtCap* caps = NULL;
     uint16_t cap_count = 0u;
     const uint8_t char_id = batch->state.char_id[d_idx];
@@ -3892,14 +4525,29 @@ static inline uint8_t laser_tail_shallow_body_contact_rejected(
          caps[cap_i].height == 0u && caps[cap_i].is_grabbable == 0u)
             ? 1u
             : 0u;
-    if ((cap_is_tail != 0u &&
+    const uint8_t fox_laser_marth_high_head_scaled_tail =
+        (item_type_is_fox_laser(item_type) != 0u &&
+         batch->state.char_id[d_idx] == (uint8_t)MSL_CHAR_ID_MARTH && hit_hb_id == 3u &&
+         hurtcaps_get(char_id, &caps, &cap_count) == 0 && caps != NULL && cap_i >= 0 &&
+         (uint16_t)cap_i < cap_count && caps[cap_i].bone_part_id == (uint16_t)60u &&
+         caps[cap_i].height == 2u && caps[cap_i].is_grabbable != 0u)
+            ? 1u
+            : 0u;
+    const uint8_t falco_airborne_shallow_tail_lane =
+        (item_type_is_falco_laser(item_type) != 0u && overlap_amount <= laser_radius &&
+         batch->state.on_ground[d_idx] == 0u)
+            ? 1u
+            : 0u;
+    if ((falco_airborne_shallow_tail_lane != 0u && cap_is_tail != 0u &&
          ((hit_hb_id == 0u &&
            (action_id == (uint16_t)MSL_ACT_JUMP_F || action_id == (uint16_t)MSL_ACT_JUMP_B) &&
            (reflect_behavior_only != 0u || live_item_b1_only != 0u)) ||
           (hit_hb_id >= 2u && action_id >= (uint16_t)MSL_ACT_JUMP_AERIAL_F &&
            action_id <= (uint16_t)MSL_ACT_JUMP_AERIAL_B))) ||
-        (cap_is_low_leg != 0u && hit_hb_id == 1u && action_id == (uint16_t)MSL_ACT_FALL &&
-         batch->state.last_attack_landed[d_idx] != item_attack_id)) {
+        (falco_airborne_shallow_tail_lane != 0u && cap_is_low_leg != 0u && hit_hb_id == 1u &&
+         action_id == (uint16_t)MSL_ACT_FALL &&
+         batch->state.last_attack_landed[d_idx] != item_attack_id) ||
+        fox_laser_marth_high_head_scaled_tail != 0u) {
       // Source-owned shallow item BODY rejection:
       // - state0 Falco laser HitCapsules are authored in MSLLASR1 with four offsets and a radius;
       //   ftColl_8007925C tests each one against extracted hurtcaps via lbColl_8000805C.
@@ -3912,10 +4560,15 @@ static inline uint8_t laser_tail_shallow_body_contact_rejected(
       //   the only authored offset at the SDS edge whose exact x58->x4C local-radius packet misses
       //   cap11 (data/hurtcaps/{fox,falco}.json bone 7, low, non-grabbable), while adjacent hb2/hb3
       //   low-leg rows and same-attack live-shot carry rows remain BODY-eligible.
+      // - Fox state0 offset-3 against Marth's high/head cap is a scaled-visual tail offset miss:
+      //   the generated MSLLASR1 visual scale can place the fourth sample into cap2, while the
+      //   source item BODY packet remains on the authored/local-radius lane and keeps the shot
+      //   alive. Keep this on the extracted cap identity and authored offset; grounded/airborne
+      //   state is not the owner for that cap2 local-radius miss.
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
       // data/items/lasers.bin (MSLLASR1 state0 size/offsets)
-      // data/hurtcaps/{fox,falco}.bin cap12 -> FtPart 18.
+      // data/hurtcaps/{fox,falco}.bin cap12 -> FtPart 18; data/hurtcaps/marth.bin cap2 -> FtPart 60.
       return 1u;
     }
   }
@@ -4452,6 +5105,35 @@ static inline uint8_t sheik_needle_hitbox_targets_item_ground_state(uint16_t fla
   return (flags & (uint16_t)MSL_HITBOX_FLAG_HIT_AERIAL) != 0u ? 1u : 0u;
 }
 
+enum {
+  MSL_ITEM_ARTICLE_HITBOX_FLAG_TARGET_GROUNDED = 1u << 0,
+  MSL_ITEM_ARTICLE_HITBOX_FLAG_TARGET_AERIAL = 1u << 1,
+  MSL_ITEM_ARTICLE_HITBOX_FLAG_BODY_ENABLED = 1u << 2,
+  MSL_ITEM_ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY = 1u << 3,
+};
+
+static inline uint8_t sheik_needle_article_hitbox_targets_fighter_ground_state(
+    uint32_t flags, uint8_t defender_grounded) {
+  return defender_grounded
+             ? ((flags & (uint32_t)MSL_ITEM_ARTICLE_HITBOX_FLAG_TARGET_GROUNDED) != 0u ? 1u : 0u)
+             : ((flags & (uint32_t)MSL_ITEM_ARTICLE_HITBOX_FLAG_TARGET_AERIAL) != 0u ? 1u : 0u);
+}
+
+static inline uint8_t sheik_needle_article_hitbox_body_enabled(uint32_t flags) {
+  // Source item contact skips each item HitCapsule unless `x42_b5` is set before reflect, shield,
+  // clank, and BODY handling. MSLITAR1 v13 packs that sixth item-script word bit into the article
+  // hitbox flags.
+  // refs/melee/src/melee/it/itanimlist.c::it_802790C0
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+  return (flags & (uint32_t)MSL_ITEM_ARTICLE_HITBOX_FLAG_BODY_ENABLED) != 0u ? 1u : 0u;
+}
+
+static inline uint8_t sheik_needle_article_hitbox_grabbable_only(uint32_t flags) {
+  // `x42_b6` further restricts BODY contact to grabbable hurtcaps after ShieldDesc/clank misses.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+  return (flags & (uint32_t)MSL_ITEM_ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY) != 0u ? 1u : 0u;
+}
+
 static inline float sheik_needle_hitbox_damage(const MslBatch* batch, size_t hb_i) {
   if (batch == NULL) {
     return 0.0f;
@@ -4799,9 +5481,14 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
   // HitCapsule; the state-1..4 scripts clear hitboxes. On a fighter-hurtbox contact the source runs
   // OnGiveDamage then it_2725_Logic109_DmgDealt (HSD_Randi(3)==0 bounce, else destroy) -- the same
   // bounce/destroy outcome as DmgReceived. State-0 Needles travel in a straight line at the constant
-  // throw velocity, so each HitCapsule sweeps prev=cur-vel to cur oriented along the travel axis.
+  // throw velocity. Source fighter/item contact runs from Fighter_procMap priority 6, before the
+  // item HitCapsule refresh at Item_80269B60 priority 11, so ftColl_8007925C consumes the previous
+  // frame's `x58 -> x4C` HitCapsule segment even though item physics/JObj translation already ran.
   // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
   //   ItemStateTable,it_802AFF08,itSeakneedlethrown_UnkMotion0_Coll,it_2725_Logic109_DmgDealt}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+  // refs/melee/src/melee/it/item.c::{Item_802697D4,Item_80269978,Item_80269B60}
+  // refs/melee/src/melee/it/itcoll.c::it_8027137C
   // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C}
   // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
   if (batch == NULL || params == NULL || params->needle_hitbox_count == 0u) {
@@ -4812,12 +5499,18 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
     return 0u;
   }
   const int owner = (int)batch->state.item_owner[ii];
+  if (owner < 0 || owner >= (int)batch->config.num_players) {
+    return 0u;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
   const float cur_x = batch->state.item_pos_x[ii];
   const float cur_y = batch->state.item_pos_y[ii];
   const float vx = batch->state.item_vel_x[ii];
   const float vy = batch->state.item_vel_y[ii];
-  const float prev_x = cur_x - vx;
-  const float prev_y = cur_y - vy;
+  const float contact_x1 = cur_x - vx;
+  const float contact_y1 = cur_y - vy;
+  const float contact_x0 = contact_x1 - vx;
+  const float contact_y0 = contact_y1 - vy;
   const float v2 = vx * vx + vy * vy;
   float dirx = 1.0f;
   float diry = 0.0f;
@@ -4887,17 +5580,18 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
             continue;
           }
           const uint32_t hb_flags = params->needle_hitbox_flags[hb];
-          if (def_grounded ? ((hb_flags & 0x1u) == 0u) : ((hb_flags & 0x2u) == 0u)) {
+          if (!sheik_needle_article_hitbox_body_enabled(hb_flags) ||
+              !sheik_needle_article_hitbox_targets_fighter_ground_state(hb_flags, def_grounded)) {
             continue;
           }
           if (!hitlist_allows_item_hitbox_fighter(batch, bi, item_slot, (int)hb, def, def_iid)) {
             continue;
           }
           const float ox = params->needle_hitbox_x_offset[hb];
-          const float sx0 = prev_x + ox * dirx;
-          const float sy0 = prev_y + ox * diry;
-          const float sx1 = cur_x + ox * dirx;
-          const float sy1 = cur_y + ox * diry;
+          const float sx0 = contact_x0 + ox * dirx;
+          const float sy0 = contact_y0 + ox * diry;
+          const float sx1 = contact_x1 + ox * dirx;
+          const float sy1 = contact_y1 + ox * diry;
           if (!item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx1, sy1, 0.0f, hbr, rx, ry,
                                                       0.0f, reflect_r)) {
             continue;
@@ -4974,17 +5668,18 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
             continue;
           }
           const uint32_t hb_flags = params->needle_hitbox_flags[hb];
-          if (def_grounded ? ((hb_flags & 0x1u) == 0u) : ((hb_flags & 0x2u) == 0u)) {
+          if (!sheik_needle_article_hitbox_body_enabled(hb_flags) ||
+              !sheik_needle_article_hitbox_targets_fighter_ground_state(hb_flags, def_grounded)) {
             continue;
           }
           if (!hitlist_allows_item_hitbox_fighter(batch, bi, item_slot, (int)hb, def, def_iid)) {
             continue;
           }
           const float ox = params->needle_hitbox_x_offset[hb];
-          const float sx0 = prev_x + ox * dirx;
-          const float sy0 = prev_y + ox * diry;
-          const float sx1 = cur_x + ox * dirx;
-          const float sy1 = cur_y + ox * diry;
+          const float sx0 = contact_x0 + ox * dirx;
+          const float sy0 = contact_y0 + ox * diry;
+          const float sx1 = contact_x1 + ox * dirx;
+          const float sy1 = contact_y1 + ox * diry;
           if (!item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx1, sy1, 0.0f, hbr, shx, shy,
                                                       shz, shr + shield_desc_world_r)) {
             continue;
@@ -5028,10 +5723,10 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
         continue;
       }
       const float ox = params->needle_hitbox_x_offset[hb];
-      const float sx0 = prev_x + ox * dirx;
-      const float sy0 = prev_y + ox * diry;
-      const float sx1 = cur_x + ox * dirx;
-      const float sy1 = cur_y + ox * diry;
+      const float sx0 = contact_x0 + ox * dirx;
+      const float sy0 = contact_y0 + ox * diry;
+      const float sx1 = contact_x1 + ox * dirx;
+      const float sy1 = contact_y1 + ox * diry;
       for (int fhb = 0; fhb < MSL_MAX_HITBOXES; fhb++) {
         const size_t fhb_i = idx_hitbox(bi, def, fhb);
         if (!batch->state.hitbox_enabled[fhb_i]) {
@@ -5068,28 +5763,80 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
       }
       const uint32_t hb_flags = params->needle_hitbox_flags[hb];
       const float ox = params->needle_hitbox_x_offset[hb];
-      const float sx0 = prev_x + ox * dirx;
-      const float sy0 = prev_y + ox * diry;
-      const float sx1 = cur_x + ox * dirx;
-      const float sy1 = cur_y + ox * diry;
       const float damage = params->needle_hitbox_damage_by_id[hb];
 
-      // BODY damage path: grounded/aerial target bits (bit0 grounded, bit1 aerial), swept HitCapsule
-      // vs hurtcap.
-      if (def_grounded ? ((hb_flags & 0x1u) == 0u) : ((hb_flags & 0x2u) == 0u)) {
+      // BODY damage path: item HitCapsule target bits, swept HitCapsule vs hurtcap.
+      if (!sheik_needle_article_hitbox_body_enabled(hb_flags) ||
+          !sheik_needle_article_hitbox_targets_fighter_ground_state(hb_flags, def_grounded)) {
         continue;
       }
       const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
+      const uint8_t use_frozen_hitlag_hurtcaps =
+          (batch->state.hitlag[d_idx] != 0u || batch->state.hitlag_pre_timer[d_idx] != 0u) ? 1u
+                                                                                           : 0u;
+      const float hit_contact_x0 = use_frozen_hitlag_hurtcaps ? contact_x1 : contact_x0;
+      const float hit_contact_y0 = use_frozen_hitlag_hurtcaps ? contact_y1 : contact_y0;
+      const float hit_contact_x1 = use_frozen_hitlag_hurtcaps ? cur_x : contact_x1;
+      const float hit_contact_y1 = use_frozen_hitlag_hurtcaps ? cur_y : contact_y1;
+      const float sx0 = hit_contact_x0 + ox * dirx;
+      const float sy0 = hit_contact_y0 + ox * diry;
+      const float sx1 = hit_contact_x1 + ox * dirx;
+      const float sy1 = hit_contact_y1 + ox * diry;
       uint8_t hurt_height = 0u;
       uint8_t hit = 0u;
+      float best_frozen_overlap = -1.0f;
       for (uint8_t ci = 0; ci < cap_n; ci++) {
+        if (sheik_needle_article_hitbox_grabbable_only(hb_flags) &&
+            batch->state.hurtcap_is_grabbable[idx_hurtcap(bi, def, ci)] == 0u) {
+          continue;
+        }
         float overlap = 0.0f;
         uint8_t cap_height = 0u;
+        uint8_t exact_evaluated = 0u;
+        // BODY contact is owned by the same item HitCapsule -> fighter hurtcap lbColl path as
+        // ftColl_8007925C: item HitCapsules are refreshed from x58->x4C by it_8027137C, then
+        // lbColl_8000805C evaluates the defender collision matrix/local radius. xDE4 in the Needle
+        // callback is the stage-line collision segment, not a replacement BODY geometry owner.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+        // refs/melee/src/melee/it/itcoll.c::it_8027137C
+        // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_802AFF08,itSeakneedlethrown_UnkMotion0_Coll}
+        if (use_frozen_hitlag_hurtcaps == 0u) {
+          if (item_body_lbcoll_matrix_radius_overlap(batch, bi, def, sx0, sy0, sx1, sy1, hbr,
+                                                     (int)ci, &cap_height, &overlap,
+                                                     &exact_evaluated, 0u)) {
+            hurt_height = cap_height;
+            hit = 1u;
+            break;
+          }
+        }
+        if (exact_evaluated != 0u) {
+          continue;
+        }
+        // Active fighter hitlag freezes the JObj/hurt capsule packet because Fighter_8006A360
+        // skips Anim/IASA/Phys, but Fighter_8006CB94 still calls ftColl_8007925C. The source BODY
+        // test therefore consumes the already-live fp->hurt_capsules instead of a recomputed
+        // Damage* pose matrix for that frame.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_8006CB94}
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
         if (item_swept_sphere_capsule_overlap_amount(batch, bi, def, sx0, sy0, sx1, sy1, hbr,
                                                      (int)ci, &cap_height, &overlap, 0u, 1.0f)) {
-          hurt_height = cap_height;
-          hit = 1u;
-          break;
+          if (use_frozen_hitlag_hurtcaps == 0u) {
+            hurt_height = cap_height;
+            hit = 1u;
+            break;
+          }
+          // Active-hitlag fallback can see multiple already-live hurtcaps after item physics has
+          // advanced the Needle. Source ultimately selects the DmgLog entry that reaches
+          // ftColl_8007A06C; without lbColl_8000805C's exact local-radius matrix for the frozen
+          // packet, use the deepest frozen world overlap as the deterministic owner rather than
+          // over-admitting an earlier torso cap by array order.
+          // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_8007A06C}
+          if (hit == 0u || overlap > best_frozen_overlap) {
+            best_frozen_overlap = overlap;
+            hurt_height = cap_height;
+            hit = 1u;
+          }
         }
       }
       if (hit == 0u) {
@@ -5098,12 +5845,14 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
       if (hurt_height > 2u) {
         hurt_height = 1u;
       }
+      const float stale_mult =
+          item_hitcapsule_stale_damage_mul(batch, ii, o_idx, batch->state.item_attack_id[ii]);
       const MslItemHitResult res = combat_apply_item_hit(
           batch, bi, owner, def, batch->state.item_attack_id[ii],
           batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
           batch->state.item_type[ii], 0u, damage, params->needle_hitbox_angle[hb],
           params->needle_hitbox_kbg[hb], params->needle_hitbox_wsk[hb],
-          params->needle_hitbox_bkb[hb], hurt_height, params->needle_hitbox_element[hb], -1.0f,
+          params->needle_hitbox_bkb[hb], hurt_height, params->needle_hitbox_element[hb], stale_mult,
           cur_x, cur_y, hbr, vx, 0u);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
@@ -10419,6 +11168,15 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
            batch->state.animation_index[d_idx] == UINT32_MAX)
               ? 1u
               : 0u;
+      const uint8_t guard_lightshield_shielddesc_body_suppressed =
+          (body_shield_adjacent != 0u && batch->state.lightshield_amount[d_idx] > 0.0f &&
+           batch->state.shield_hp[d_idx] > 0.0f && defender_action_id == (uint16_t)MSL_ACT_GUARD &&
+           batch->state.action_frame[d_idx] < 0 &&
+           batch->state.animation_index[d_idx] == UINT32_MAX &&
+           (frame_start_flags_2218 & (uint8_t)(MSL_STATE_FLAG_2218_B1 | MSL_STATE_FLAG_2218_B2 |
+                                               MSL_STATE_FLAG_2218_REFLECTING)) == 0u)
+              ? 1u
+              : 0u;
       // No-submotion lightshield item BODY sample:
       // - item motion (Item_802697D4) and fighter/item collision (Fighter_8006CB94 ->
       //   ftColl_8007925C) are separate HSD procs, and the replay-visible post-frame laser position
@@ -10432,11 +11190,21 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       //   on the current BODY sample.
       //   Exclude x2218_b2 (`0x20`): adjacent replay locks show that command lane must stay on the
       //   current item sample for BODY.
+      // - Sustained no-submotion Guard/lightshield rows without B1/B2/Reflecting command ownership
+      //   remain ShieldDesc-owned for item contact. If the reconstructed ShieldDesc branch has
+      //   already handled or rejected the laser, the later authored-offset BODY loop must not turn
+      //   the same lightshield contact into full Damage*. GuardOn/GuardReflect have separate
+      //   ShieldDesc/ReflectDesc handoff owners above and can still enter GuardSetOff.
+      //   Source checks ShieldDesc before BODY in ftColl_8007925C; BODY only owns rows whose
+      //   command/behavior flags expose that handoff.
       // refs/melee/src/melee/it/item.c::Item_802697D4
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
       //   ftCo_80093BC0,ftCo_GuardReflect_Anim}
+      if (guard_lightshield_shielddesc_body_suppressed != 0u) {
+        continue;
+      }
       for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
         if (!hitlist_allows_item_hitbox_fighter(batch, bi, it, (int)oi, def, def_iid)) {
           continue;
@@ -10464,7 +11232,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             uint8_t exact_evaluated = 0u;
             const float exact_sx1 = use_frame_start_lightshield_body_sample ? sx0 : sx;
             const float exact_sy1 = use_frame_start_lightshield_body_sample ? sy0 : sy;
-            if (item_laser_body_lbcoll_matrix_radius_overlap(
+            if (item_body_lbcoll_matrix_radius_overlap(
                     batch, bi, def, sx0, sy0, exact_sx1, exact_sy1, sr, (int)ci, &hit_hurt_height,
                     &body_overlap_amount, &exact_evaluated, exact_lbcoll_flattens_hurt_z) &&
                 laser_exact_lbcoll_body_contact_admits_candidate(
@@ -10539,7 +11307,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               uint8_t exact_evaluated = 0u;
               const float exact_x1 = use_frame_start_lightshield_body_sample ? x0 : x;
               const float exact_y1 = use_frame_start_lightshield_body_sample ? y0 : y;
-              if (item_laser_body_lbcoll_matrix_radius_overlap(
+              if (item_body_lbcoll_matrix_radius_overlap(
                       batch, bi, def, x0, y0, exact_x1, exact_y1, sr, (int)ci, &hit_hurt_height,
                       &body_overlap_amount, &exact_evaluated, exact_lbcoll_flattens_hurt_z) &&
                   laser_exact_lbcoll_body_contact_admits_candidate(
@@ -11417,6 +12185,22 @@ void items_update_pre_fighter_anim_phase(MslBatch* batch) {
     // refs/melee/src/melee/it/items/itseakneedleheld.c::itSeakneedleheld_UnkMotion0_Anim
     // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialNCancel_Anim
     sheik_held_needles_update_anim_phase(batch, bi);
+  }
+}
+
+void items_update_sheik_chain_accessory_phase(MslBatch* batch) {
+  // Sheik Chain link motion is the article accessory callback (`fn_802BB44C`/`fn_802BB694`), not an
+  // item anim timer. Run it after Sheik IASA has written the current-frame stick delta and before
+  // primitive refresh consumes the `it_802BCB88` fighter HitCapsule positions.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_80110788
+  // refs/melee/src/melee/it/items/itseakchain.c::{fn_802BB44C,fn_802BB694,it_802BCB88}
+  if (batch == NULL) {
+    return;
+  }
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (items_row_has_any(batch, bi) == 0u) {
+      continue;
+    }
     sheik_chain_items_update_anim_phase(batch, bi);
   }
 }

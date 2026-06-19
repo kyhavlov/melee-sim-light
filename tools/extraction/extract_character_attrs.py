@@ -9,6 +9,11 @@ from melee_sim.hsd_archive import parse_hsd_archive
 from melee_sim.iso import extract_file, find_files, list_files
 from tools.extraction.extract_fighter_moves import _parse_subaction_events
 
+ARTICLE_HITBOX_FLAG_TARGET_GROUNDED = 1
+ARTICLE_HITBOX_FLAG_TARGET_AERIAL = 2
+ARTICLE_HITBOX_FLAG_BODY_ENABLED = 4
+ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY = 8
+
 
 def _u32_be(buf: bytes, off: int) -> int:
     return int.from_bytes(buf[off : off + 4], "big", signed=False)
@@ -63,7 +68,9 @@ def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
         script_abs = arc.ptr32(states_abs + 0x0C + int(state_index) * 0x10)
         if script_abs == arc.data_base:
             return None
-        events = _parse_subaction_events(arc, script_abs, max_frames=80, max_steps_per_frame=500)
+        events = _parse_subaction_events(
+            arc, script_abs, max_frames=80, max_steps_per_frame=500, item_hitbox_layout=True
+        )
         hitboxes: list[dict] = []
         for ev in events:
             if ev.kind == "create_hitbox":
@@ -182,7 +189,9 @@ def _extract_fox_falco_illusion_item(pl_buf: bytes, arc, *, ftdata_abs: int) -> 
         script_abs = arc.ptr32(states_abs + 0x0C + int(state_index) * 0x10)
         if script_abs == arc.data_base:
             return None
-        events = _parse_subaction_events(arc, script_abs, max_frames=8, max_steps_per_frame=500)
+        events = _parse_subaction_events(
+            arc, script_abs, max_frames=8, max_steps_per_frame=500, item_hitbox_layout=True
+        )
         for ev in events:
             if ev.kind == "create_hitbox":
                 hb = ev.data.get("hitbox")
@@ -282,7 +291,9 @@ def _extract_seak_needle_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
     if states_abs != arc.data_base:
         script_abs = arc.ptr32(states_abs + 0x0C)
         if script_abs != arc.data_base:
-            events = _parse_subaction_events(arc, script_abs, max_frames=8, max_steps_per_frame=500)
+            events = _parse_subaction_events(
+                arc, script_abs, max_frames=8, max_steps_per_frame=500, item_hitbox_layout=True
+            )
             hitboxes: list[dict] = []
             for ev in events:
                 if ev.kind != "create_hitbox":
@@ -317,8 +328,10 @@ def _extract_seak_needle_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
                     int(hb.get("shield_damage", 0)) for hb in hitboxes[:4]
                 ]
                 out["needle_hitbox_flags"] = [
-                    (1 if bool(hb.get("hit_grounded", False)) else 0)
-                    | (2 if bool(hb.get("hit_aerial", False)) else 0)
+                    (ARTICLE_HITBOX_FLAG_TARGET_GROUNDED if bool(hb.get("hit_grounded", False)) else 0)
+                    | (ARTICLE_HITBOX_FLAG_TARGET_AERIAL if bool(hb.get("hit_aerial", False)) else 0)
+                    | (ARTICLE_HITBOX_FLAG_BODY_ENABLED if bool(hb.get("item_body_enabled", False)) else 0)
+                    | (ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY if bool(hb.get("item_grabbable_only", False)) else 0)
                     for hb in hitboxes[:4]
                 ]
     return out
@@ -344,7 +357,9 @@ def _extract_seak_vanish_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
     if script_abs == arc.data_base:
         return {}
 
-    events = _parse_subaction_events(arc, script_abs, max_frames=80, max_steps_per_frame=500)
+    events = _parse_subaction_events(
+        arc, script_abs, max_frames=80, max_steps_per_frame=500, item_hitbox_layout=True
+    )
     hitboxes: list[dict] = []
     size_keyframes: list[tuple[int, float]] = []
     remove_frame: int | None = None
@@ -377,8 +392,12 @@ def _extract_seak_vanish_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
         "vanish_hitbox_bkb": int(hb0.get("bkb", 0)),
         "vanish_hitbox_element": int(hb0.get("element", 0)),
         "vanish_hitbox_shield_damage": int(hb0.get("shield_damage", 0)),
-        "vanish_hitbox_flags": (1 if bool(hb0.get("hit_grounded", False)) else 0)
-        | (2 if bool(hb0.get("hit_aerial", False)) else 0),
+        "vanish_hitbox_flags": (
+            ARTICLE_HITBOX_FLAG_TARGET_GROUNDED if bool(hb0.get("hit_grounded", False)) else 0
+        )
+        | (ARTICLE_HITBOX_FLAG_TARGET_AERIAL if bool(hb0.get("hit_aerial", False)) else 0)
+        | (ARTICLE_HITBOX_FLAG_BODY_ENABLED if bool(hb0.get("item_body_enabled", False)) else 0)
+        | (ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY if bool(hb0.get("item_grabbable_only", False)) else 0),
         "vanish_hitbox_size_keyframe_count": len(size_keyframes),
         "vanish_hitbox_size_keyframe_frame": [int(frame) for frame, _size in size_keyframes],
         "vanish_hitbox_size_keyframe_value": [float(size) for _frame, size in size_keyframes],
@@ -550,6 +569,8 @@ def _extract_seak_chain_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
               (itSeakChain_clamp_x10 / _x14).
     - x18 : per-link gravity (prev->vel.y -= sa->x18).
     - x1C..x48 : extend/whip/retract decay + activation tuning.
+    - x4C : hitbox reactivation movement threshold (ftSk_SpecialS_80110BCC).
+    - x50 : initial extension velocity (ftSk_SpecialS_CheckInitChain -> it_802BCFC4).
     - x54 : retract clamp scale (it_802BC94C, fn_802BB784).
     - x58 : wall-bounce vel.x reflection factor (link->vel.x *= -sa->x58).
     - x5C/x60 : extend/retract solver tuning.
@@ -589,6 +610,8 @@ def _extract_seak_chain_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
         "sheik_chain_attr_x40": af(0x40),
         "sheik_chain_attr_x44": af(0x44),
         "sheik_chain_attr_x48": af(0x48),
+        "sheik_chain_attr_x4c": af(0x4C),
+        "sheik_chain_initial_vel_x50": af(0x50),
         "sheik_chain_attr_x54": af(0x54),
         "sheik_chain_wall_bounce_x58": af(0x58),
         "sheik_chain_attr_x5c": af(0x5C),

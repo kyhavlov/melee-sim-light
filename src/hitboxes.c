@@ -431,6 +431,35 @@ static inline uint8_t hitboxes_motion_state_entry_preserves_hitcapsules(
   return 1u;
 }
 
+static inline uint8_t hitboxes_sheik_chain_active_hitcapsule_script_msid(const MslBatch* batch,
+                                                                         size_t idx,
+                                                                         uint16_t action_id,
+                                                                         uint16_t* out_msid) {
+  if (batch == NULL || out_msid == NULL ||
+      batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
+      batch->state.special_cmd0[idx] == 0u) {
+    return 0u;
+  }
+  float chain_x = 0.0f;
+  float chain_y = 0.0f;
+  float chain_z = 0.0f;
+  if (sheik_chain_hitbox_world_pos(batch, idx, 0u, &chain_x, &chain_y, &chain_z) == 0u) {
+    return 0u;
+  }
+  switch (action_id) {
+    case MSL_ACT_SK_SPECIAL_S:
+      *out_msid = msl_motion_state_submotion_id((uint8_t)MSL_CHAR_ID_SHEIK,
+                                                (uint16_t)MSL_ACT_SK_SPECIAL_S_START);
+      return *out_msid != 0xFFFFu ? 1u : 0u;
+    case MSL_ACT_SK_SPECIAL_AIR_S:
+      *out_msid = msl_motion_state_submotion_id((uint8_t)MSL_CHAR_ID_SHEIK,
+                                                (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START);
+      return *out_msid != 0xFFFFu ? 1u : 0u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t hitboxes_downed_entry_defers_frame0_hitbox_script(
     const MslBatch* batch, size_t idx, uint16_t action_id, uint8_t motion_entered_this_frame) {
   if (batch == NULL || motion_entered_this_frame == 0u) {
@@ -1244,10 +1273,11 @@ static inline uint8_t hitboxes_event_world_capsule(const MslBatch* batch, size_t
         act <= (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
       float lx = 0.0f;
       float ly = 0.0f;
-      if (sheik_chain_hitbox_world_pos(batch, idx, ev->hitbox_id, &lx, &ly) != 0u) {
+      float lz = 0.0f;
+      if (sheik_chain_hitbox_world_pos(batch, idx, ev->hitbox_id, &lx, &ly, &lz) != 0u) {
         *out_x = lx;
         *out_y = ly;
-        *out_z = batch->state.pos_z[idx];
+        *out_z = lz;
       }
     }
   }
@@ -1922,14 +1952,32 @@ void hitboxes_refresh(MslBatch* batch) {
       }
 
       const uint32_t anim_u32 = batch->state.animation_index[idx];
+      uint16_t hitbox_event_msid = anim_u32 <= 0xFFFFu ? (uint16_t)anim_u32 : 0xFFFFu;
       const MslHitboxEvent* events = NULL;
       uint16_t event_count = 0;
-      const uint8_t have_hitbox_events =
+      uint8_t have_hitbox_events =
           (anim_u32 <= 0xFFFFu &&
-           hitboxes_get_events(char_id, (uint16_t)anim_u32, &events, &event_count) == 0 &&
+           hitboxes_get_events(char_id, hitbox_event_msid, &events, &event_count) == 0 &&
            events != NULL && event_count != 0u)
               ? 1u
               : 0u;
+      if (have_hitbox_events == 0u && hitboxes_sheik_chain_active_hitcapsule_script_msid(
+                                          batch, idx, action_id, &hitbox_event_msid) != 0u) {
+        // Active Chain's visible pose msids (305/308) have no create_hitbox script. Source creates
+        // the four x914 HitCapsules in the Start scripts, enters active Chain with
+        // Fighter_ChangeMotionState(..., flags=8), then ftSk_SpecialS_80110AEC reactivates those
+        // preserved capsules while it_802BCB88/ftSk_SpecialS_UpdateHitboxes move their centers.
+        // The generated motion-state row cannot express this call-site transition flag, so use the
+        // source script msid that created the capsules and keep the live active pose/action for
+        // everything else.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+        //   ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_80110AEC,
+        //   ftSk_SpecialS_UpdateHitboxes}
+        if (hitboxes_get_events(char_id, hitbox_event_msid, &events, &event_count) == 0 &&
+            events != NULL && event_count != 0u) {
+          have_hitbox_events = 1u;
+        }
+      }
       if (batch->state.hitbox_count[idx] == 0u && batch->state.hitbox_prev_bootstrap[idx] == 0u &&
           motion_entered_this_frame == 0u && motion_preserves_hitcapsules == 0u &&
           preserve_frozen_hitlag_hitboxes == 0u && have_hitbox_events == 0u) {
@@ -2797,7 +2845,6 @@ void hitboxes_refresh(MslBatch* batch) {
           }
         }
       }
-
       // Hitlist clear-on-enable (per hit_group).
       //
       // Decomp:
@@ -2910,6 +2957,27 @@ void hitboxes_refresh(MslBatch* batch) {
         cy += pos_y;
         cz += pos_z;
 
+        uint8_t sheik_chain_reset_prev = 0u;
+        if (char_id == (uint8_t)MSL_CHAR_ID_SHEIK &&
+            action_id >= (uint16_t)MSL_ACT_SK_SPECIAL_S_START &&
+            action_id <= (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END &&
+            batch->state.special_cmd0[idx] != 0u) {
+          float lx = 0.0f;
+          float ly = 0.0f;
+          float lz = 0.0f;
+          if (sheik_chain_hitbox_world_pos(batch, idx, (uint8_t)hi, &lx, &ly, &lz) != 0u) {
+            // Chain x914 positions are not ordinary bone-pose attachments. The item accessory
+            // update maps solved Chain links into fighter HitCapsules with it_802BCB88, and
+            // ftSk_SpecialS_UpdateHitboxes writes that full Vec3 into fp->x914[hitbox_id].
+            // refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
+            // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_UpdateHitboxes
+            cx = lx;
+            cy = ly;
+            cz = lz;
+            sheik_chain_reset_prev = sheik_chain_hitbox_reset_prev_active(batch, idx);
+          }
+        }
+
         float radius = def[hi].radius;
         // Decomp (radius scaling): Hitbox size does not get `co_attrs.model_scaling` applied at
         // creation time (ftAction_8007121C assigns hitbox->scale directly from the movescript).
@@ -2989,6 +3057,18 @@ void hitboxes_refresh(MslBatch* batch) {
         // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
         // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
         batch->state.hitbox_x43_b2[oi] = x43_b2_cur[hi];
+        if (sheik_chain_reset_prev != 0u) {
+          // ftSeakSpecialS_LoopChainHitActivate zeroes x914[].x58/x4C before the same-frame
+          // it_802BCB88 publication. ftSk_SpecialS_UpdateHitboxes then copies x58=x4C on that
+          // activation edge, so BODY collision must not sweep from the previous Chain point.
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+          //   ftSeakSpecialS_LoopChainHitActivate,ftSk_SpecialS_ZeroHitboxPositions,
+          //   ftSk_SpecialS_UpdateHitboxes}
+          batch->state.hitbox_prev_enabled[oi] = 1u;
+          batch->state.hitbox_prev_x[oi] = batch->state.hitbox_x[oi];
+          batch->state.hitbox_prev_y[oi] = batch->state.hitbox_y[oi];
+          batch->state.hitbox_prev_z[oi] = batch->state.hitbox_z[oi];
+        }
         out_count++;
       }
 
@@ -3175,6 +3255,11 @@ void hitboxes_refresh(MslBatch* batch) {
           }
         }
         batch->state.hitbox_prev_bootstrap[idx] = 0u;
+      }
+      if (char_id == (uint8_t)MSL_CHAR_ID_SHEIK &&
+          action_id >= (uint16_t)MSL_ACT_SK_SPECIAL_S_START &&
+          action_id <= (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
+        sheik_chain_clear_hitbox_reset_prev(batch, idx);
       }
     }
   }

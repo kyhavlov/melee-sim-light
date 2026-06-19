@@ -42,6 +42,7 @@
 #include "mpcoll_ecb_points.h"
 #include "shielddesc_geometry.h"
 #include "shield_tilt_table.h"
+#include "sheik_specials.h"
 #include "special_msids.h"
 #include "stage_collision.h"
 #include "staling.h"
@@ -1175,6 +1176,124 @@ static inline uint8_t combat_attackairhi_attackdash_tail_allow_interrupt_rejects
   return 1u;
 }
 
+static inline uint8_t combat_marth_aerial_static_spacie_tail_rejects_body_contact(
+    const MslBatch* batch, size_t hb_i, size_t a_idx, size_t d_idx, uint8_t hb_id,
+    const MslHurtCap* cap) {
+  if (batch == NULL || cap == NULL) {
+    return 0u;
+  }
+  const uint8_t defender_char = batch->state.char_id[d_idx];
+  if (batch->state.char_id[a_idx] != (uint8_t)MSL_CHAR_ID_MARTH ||
+      (defender_char != (uint8_t)MSL_CHAR_ID_FOX && defender_char != (uint8_t)MSL_CHAR_ID_FALCO) ||
+      combat_hurtcap_is_extracted_fox_falco_tail_part(cap) == 0u ||
+      batch->state.dynamic_pose_apply_collision_matrix[d_idx] != 0u) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[a_idx];
+  const float damage = batch->state.hitbox_damage[hb_i];
+  const int int_dmg = (damage == 0.0f) ? 0 : (((int)damage != 0) ? (int)damage : 1);
+  const uint8_t marth_fair_tip =
+      (uint8_t)(action_id == (uint16_t)MSL_ACT_ATTACK_AIR_F && hb_id == 3u && int_dmg == 13);
+  const uint8_t marth_uair_sustained_root =
+      (uint8_t)(action_id == (uint16_t)MSL_ACT_ATTACK_AIR_HI && hb_id == 0u && int_dmg == 13 &&
+                batch->state.hitbox_enable_edge[hb_i] == 0u);
+  const uint8_t marth_uair_upper = (uint8_t)(action_id == (uint16_t)MSL_ACT_ATTACK_AIR_HI &&
+                                             hb_id == 2u && (int_dmg == 13 || int_dmg == 9));
+  if (marth_fair_tip == 0u && marth_uair_sustained_root == 0u && marth_uair_upper == 0u) {
+    return 0u;
+  }
+  // Fox/Falco cap12 is the ftData.x2C dynamic tail-chain part (FtPart 18). A static SSANIM matrix
+  // overlap against that slot is not sufficient BODY proof for Marth Fair tip / UpAir upper-slot
+  // contacts; source-owned dynamic tail contacts are admitted only when SSDYNN01 marks the defender
+  // submotion as a collision owner (for example EscapeAir). UpAir hb0 stays on the ordinary BODY
+  // path on its ftAction_8007121C enable edge: its extracted 13-damage payload is the primary
+  // body/arc HitCapsule and replay-visible SDW rec5404 shows source ProcessHit selecting it over
+  // later 10-damage UpAir contacts. Sustained hb0 tail-only overlap is not enough; DHH rec9861
+  // remains in JumpAerialF with no BODY DmgLog.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+  // data/anims/fox.dyn.bin::SSDYNN01 collision_motion_state_ids
+  // data/hurtcaps/{fox,falco}.json cap12 -> FtPart 18
+  // data/moves/marth.json::moves.{ftCo_SM_AttackAirF,ftCo_SM_AttackAirHi}.events.create_hitbox
+  return 1u;
+}
+
+static inline uint8_t combat_marth_attackairn_spacie_guard_static_pose_rejects_body_contact(
+    const MslBatch* batch, size_t hb_i, size_t a_idx, size_t d_idx, uint8_t hb_id, uint8_t cap_id,
+    const MslHurtCap* cap) {
+  if (batch == NULL || cap == NULL) {
+    return 0u;
+  }
+  (void)cap_id;
+  if (batch->state.char_id[a_idx] != (uint8_t)MSL_CHAR_ID_MARTH ||
+      batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_N || hb_id != 0u ||
+      batch->state.hitbox_damage[hb_i] != 10.0f) {
+    return 0u;
+  }
+  const uint8_t defender_char = batch->state.char_id[d_idx];
+  if ((defender_char != (uint8_t)MSL_CHAR_ID_FOX && defender_char != (uint8_t)MSL_CHAR_ID_FALCO) ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD ||
+      batch->state.animation_index[d_idx] <= 0xFFFFu || batch->state.action_frame[d_idx] >= 0 ||
+      batch->state.dynamic_pose_apply_collision_matrix[d_idx] != 0u ||
+      !(batch->state.lightshield_amount[d_idx] > 0.0f) || !(batch->state.shield_hp[d_idx] > 0.0f)) {
+    return 0u;
+  }
+  // No-submotion spacie Guard rows with live lightshield expose ShieldDesc state but no source
+  // hurtcap packet. Rebuilding fallback BODY caps from the static Guard submotion over-admits
+  // Marth AttackAirN hb0 pokes; source ftColl consumes the live Guard JObj/ShieldDesc packet
+  // instead. Falco/Fox aerial shield-pokes and non-spacie Guard fallback positives stay on the
+  // existing source-pose path.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_Guard_Anim,ftCo_80091E78}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  // data/moves/marth.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+  // data/hurtcaps/{fox,falco}.json static Guard fallback capsules
+  return 1u;
+}
+
+static inline uint8_t combat_spacie_bair_static_extremity_rejects_body_contact(
+    const MslBatch* batch, size_t hb_i, size_t a_idx, size_t d_idx, uint8_t hb_id,
+    const MslHurtCap* cap) {
+  if (batch == NULL || cap == NULL) {
+    return 0u;
+  }
+  const uint8_t attacker_char = batch->state.char_id[a_idx];
+  if ((attacker_char != (uint8_t)MSL_CHAR_ID_FOX && attacker_char != (uint8_t)MSL_CHAR_ID_FALCO) ||
+      batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B ||
+      batch->state.dynamic_pose_apply_collision_matrix[d_idx] != 0u) {
+    return 0u;
+  }
+  const float damage = batch->state.hitbox_damage[hb_i];
+  const int int_dmg = (damage == 0.0f) ? 0 : (((int)damage != 0) ? (int)damage : 1);
+  if (!((hb_id <= 1u && int_dmg == 15) || (hb_id <= 1u && int_dmg == 9))) {
+    return 0u;
+  }
+
+  const uint8_t defender_char = batch->state.char_id[d_idx];
+  const uint8_t marth_attack_s4_static_limb =
+      (uint8_t)(defender_char == (uint8_t)MSL_CHAR_ID_MARTH &&
+                batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_ATTACK_S4_S &&
+                (cap->bone_part_id == 6u || cap->bone_part_id == 7u || cap->bone_part_id == 29u));
+  if (marth_attack_s4_static_limb == 0u) {
+    return 0u;
+  }
+  // Static extremity BODY fallback:
+  // - Fox/Falco AttackAirB's extracted hb0/hb1 strong/late payloads are ordinary ftColl
+  //   HitCapsules, but source BODY geometry consumes the defender's live JObj/collision packet.
+  // - When no SSDYNN01 collision-matrix owner is active, static fallback capsules for Marth
+  //   AttackS4 arm/leg extremity parts over-admit edge-only BODY contacts. Keep dynamic-pose rows
+  //   and central/root capsules on the normal path; Fox/Falco tail BODY remains admitted because
+  //   adjacent primary-rollout rows prove real BAir tail hits need that source path.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  // data/hurtcaps/marth.json FtParts 6/7/29
+  return 1u;
+}
+
 static inline uint8_t combat_attackhi4_damageflytop_xrotn_rejects_body_contact(
     const MslBatch* batch, size_t hb_i, size_t a_idx, size_t d_idx, uint8_t hb_id, uint8_t cap_id) {
   return msl_damage_owner_attackhi4_damageflytop_xrotn_rejects_body(batch, hb_i, a_idx, d_idx,
@@ -1405,7 +1524,23 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_subset_allows(const Ms
   if (batch == NULL) {
     return 0u;
   }
-  (void)hb_i;
+  const size_t a_idx = hb_i / (size_t)MSL_MAX_HITBOXES;
+  if (batch->state.char_id[a_idx] == (uint8_t)MSL_CHAR_ID_SHEIK) {
+    const uint16_t action_id = batch->state.action_id[a_idx];
+    if (action_id == (uint16_t)MSL_ACT_SK_SPECIAL_S ||
+        action_id == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S ||
+        action_id == (uint16_t)MSL_ACT_SK_SPECIAL_S_END ||
+        action_id == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
+      // Sheik Chain manually moves preserved fighter HitCapsules by writing a Vec3 through
+      // ftColl_8007B8A8, then BODY collision consumes the resulting x58->x4C segment through
+      // ftColl_80078C70/lbColl_8000805C. This source-owned path applies even for grounded defenders;
+      // keep the generic grounded-victim rejection below for ordinary posed hitboxes.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_UpdateHitboxes
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B8A8,ftColl_80078C70}
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+      return 1u;
+    }
+  }
   // ftColl_800768A0 clear/copy ownership runs on HitCapsule enable/group edges.
   // Enable this lane through edge transitions to exercise lbColl_8000805C/80006E58 continuity
   // using x58/x4C carried by ftColl_8007AD18.
@@ -13559,6 +13694,31 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                               batch, bi, hb_i, a_idx, d_idx, attacker, defender)) {
             overlaps = 0u;
           }
+          if (overlaps && combat_marth_aerial_static_spacie_tail_rejects_body_contact(
+                              batch, hb_i, a_idx, d_idx, (uint8_t)hb_id,
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
+                                      cap_id >= defender_cap_count_u16
+                                  ? NULL
+                                  : &defender_caps[cap_id])) {
+            overlaps = 0u;
+          }
+          if (overlaps && combat_marth_attackairn_spacie_guard_static_pose_rejects_body_contact(
+                              batch, hb_i, a_idx, d_idx, (uint8_t)hb_id, (uint8_t)cap_id,
+                              use_guard_family_body_fallback_caps
+                                  ? &body_fallback_caps[cap_id]
+                                  : (defender_caps == NULL || cap_id >= defender_cap_count_u16
+                                         ? NULL
+                                         : &defender_caps[cap_id]))) {
+            overlaps = 0u;
+          }
+          if (overlaps && combat_spacie_bair_static_extremity_rejects_body_contact(
+                              batch, hb_i, a_idx, d_idx, (uint8_t)hb_id,
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
+                                      cap_id >= defender_cap_count_u16
+                                  ? NULL
+                                  : &defender_caps[cap_id])) {
+            overlaps = 0u;
+          }
           if (!overlaps && !lbcoll_overlap_evaluated) {
             if (combat_body_overlap_lbColl_80006E58_subset_allows(batch, hb_i, d_idx)) {
               overlaps = combat_body_overlap_lbColl_80006E58_scaffold(
@@ -13599,6 +13759,31 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             overlaps = combat_pstadium_x44_gap_allows_body_contact(
                 batch, bi, attacker, (uint8_t)hb_id, a_idx, d_idx, (uint8_t)cap_id, source_cap,
                 lbcoll_overlap_amount, lbcoll_overlap_evaluated, shield_active);
+          }
+          if (overlaps && combat_marth_aerial_static_spacie_tail_rejects_body_contact(
+                              batch, hb_i, a_idx, d_idx, (uint8_t)hb_id,
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
+                                      cap_id >= defender_cap_count_u16
+                                  ? NULL
+                                  : &defender_caps[cap_id])) {
+            overlaps = 0u;
+          }
+          if (overlaps && combat_marth_attackairn_spacie_guard_static_pose_rejects_body_contact(
+                              batch, hb_i, a_idx, d_idx, (uint8_t)hb_id, (uint8_t)cap_id,
+                              use_guard_family_body_fallback_caps
+                                  ? &body_fallback_caps[cap_id]
+                                  : (defender_caps == NULL || cap_id >= defender_cap_count_u16
+                                         ? NULL
+                                         : &defender_caps[cap_id]))) {
+            overlaps = 0u;
+          }
+          if (overlaps && combat_spacie_bair_static_extremity_rejects_body_contact(
+                              batch, hb_i, a_idx, d_idx, (uint8_t)hb_id,
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
+                                      cap_id >= defender_cap_count_u16
+                                  ? NULL
+                                  : &defender_caps[cap_id])) {
+            overlaps = 0u;
           }
           if (!overlaps) {
             continue;
@@ -13891,6 +14076,9 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
       const uint16_t defender_iid = batch->state.instance_id[d_idx];
 
       uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
+      const MslHurtCap* defender_caps = NULL;
+      uint16_t defender_cap_count_u16 = 0u;
+      (void)hurtcaps_get(batch->state.char_id[d_idx], &defender_caps, &defender_cap_count_u16);
       const MslHurtCap* body_fallback_caps = NULL;
       uint16_t body_fallback_count_u16 = 0u;
       uint8_t use_guard_family_body_fallback_caps = 0u;
@@ -14042,6 +14230,31 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
                   batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az, bx,
                   by, bz, NULL);
             }
+          }
+          if (overlaps && combat_marth_aerial_static_spacie_tail_rejects_body_contact(
+                              batch, hb_i, a_idx, d_idx, (uint8_t)hb_id,
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
+                                      cap_id >= defender_cap_count_u16
+                                  ? NULL
+                                  : &defender_caps[cap_id])) {
+            overlaps = 0u;
+          }
+          if (overlaps && combat_marth_attackairn_spacie_guard_static_pose_rejects_body_contact(
+                              batch, hb_i, a_idx, d_idx, (uint8_t)hb_id, (uint8_t)cap_id,
+                              use_guard_family_body_fallback_caps
+                                  ? &body_fallback_caps[cap_id]
+                                  : (defender_caps == NULL || cap_id >= defender_cap_count_u16
+                                         ? NULL
+                                         : &defender_caps[cap_id]))) {
+            overlaps = 0u;
+          }
+          if (overlaps && combat_spacie_bair_static_extremity_rejects_body_contact(
+                              batch, hb_i, a_idx, d_idx, (uint8_t)hb_id,
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
+                                      cap_id >= defender_cap_count_u16
+                                  ? NULL
+                                  : &defender_caps[cap_id])) {
+            overlaps = 0u;
           }
           if (!overlaps) {
             continue;

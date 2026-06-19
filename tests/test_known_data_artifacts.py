@@ -643,7 +643,7 @@ def test_sheik_overlay_masks_survive_fresh_character_attr_extraction(tmp_path: P
     assert int(attrs["common_fall_blended_ecb_seed_mask"]) == (1 << 0)
     assert int(attrs["needle_hitbox_count"]) == 4
     assert attrs["needle_hitbox_size"] == pytest.approx([1.953, 1.953, 1.953, 1.953])
-    assert attrs["needle_hitbox_flags"] == [1, 2, 2, 2]
+    assert attrs["needle_hitbox_flags"] == [5, 6, 6, 6]
     assert int(attrs["vanish_hitbox_count"]) == 1
     assert float(attrs["vanish_hitbox_size"]) == pytest.approx(10.155599594116211)
     assert int(attrs["vanish_hitbox_size_keyframe_count"]) == 2
@@ -727,10 +727,10 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         assert f"needle_bounce_x_vel_{i}" in fields
     assert manifest["char_domain"]["name"] == "Slippi/CSS external character id"
 
-    # MSLITAR1 v12: Sheik Side-B Chain itSeakChain_Attrs (Verlet solver). The artifact and manifest are
-    # v12, the scalar unit (11) is declared, and the chain solver fields are present.
-    assert ITEM_ARTICLE_VERSION == 12
-    assert manifest["version"] == 12
+    # MSLITAR1 v14: v13's contact flags remain present, and Chain attrs now include x4C/x50 for the
+    # active-frontier launch/hitcap publication path.
+    assert ITEM_ARTICLE_VERSION == 14
+    assert manifest["version"] == 14
     units = {row["id"]: row["name"] for row in manifest["units"]}
     assert units.get(11) == "scalar"
     chain_fields = [
@@ -741,6 +741,8 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         "sheik_chain_gravity",
         "sheik_chain_decay_x34",
         "sheik_chain_wall_bounce_x58",
+        "sheik_chain_attr_x4c",
+        "sheik_chain_initial_vel_x50",
         "sheik_chain_attr_x60",
     ]
     for name in chain_fields:
@@ -825,10 +827,10 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         "needle_hitbox_shield_damage_1": 0,
         "needle_hitbox_shield_damage_2": 0,
         "needle_hitbox_shield_damage_3": 0,
-        "needle_hitbox_flags_0": 1,
-        "needle_hitbox_flags_1": 2,
-        "needle_hitbox_flags_2": 2,
-        "needle_hitbox_flags_3": 2,
+        "needle_hitbox_flags_0": 5,
+        "needle_hitbox_flags_1": 6,
+        "needle_hitbox_flags_2": 6,
+        "needle_hitbox_flags_3": 6,
     }
     assert set(SHEIK_NEEDLE_FIELD_NAMES) == set(sheik_expected)
     for field_name, expected in sheik_expected.items():
@@ -863,8 +865,8 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         "vanish_hitbox_wsk": 0,
         "vanish_hitbox_bkb": 80,
         "vanish_hitbox_element": 1,
-        "vanish_hitbox_shield_damage": 0xFFFFFF80,
-        "vanish_hitbox_flags": 3,
+        "vanish_hitbox_shield_damage": 0,
+        "vanish_hitbox_flags": 7,
         "vanish_hitbox_size_keyframe_count": 2,
         "vanish_hitbox_size_keyframe_frame_0": 7,
         "vanish_hitbox_size_keyframe_value_0": 3.999743938446045,
@@ -893,6 +895,8 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         "sheik_chain_gravity": (0.16, UNIT_VELOCITY),
         "sheik_chain_decay_x34": (0.98, UNIT_SCALAR),
         "sheik_chain_wall_bounce_x58": (0.5, UNIT_SCALAR),
+        "sheik_chain_attr_x4c": (0.75, UNIT_SIZE),
+        "sheik_chain_initial_vel_x50": (3.0, UNIT_VELOCITY),
         "sheik_chain_attr_x54": (3.0, UNIT_SCALAR),
         "sheik_chain_attr_x60": (1.0, UNIT_SCALAR),
     }
@@ -970,7 +974,7 @@ def test_item_article_exporter_rejects_partial_sheik_needle_attrs(tmp_path: Path
         "needle_hitbox_bkb": [24, 24, 24, 24],
         "needle_hitbox_element": [3, 3, 3, 3],
         "needle_hitbox_shield_damage": [0, 0, 0, 0],
-        "needle_hitbox_flags": [1, 2, 2, 2],
+        "needle_hitbox_flags": [5, 6, 6, 6],
     }
     (attrs_dir / "sheik.json").write_text(json.dumps(sheik), encoding="utf-8")
 

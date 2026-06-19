@@ -24,21 +24,24 @@ pytest.importorskip("msl_binding")
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset  # noqa: E402
 
 DATASET = Path("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+DEMO_DATASET = Path("datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl")
 P_MARTH = 1
 ITEM_NEEDLE_THROWN = 79
 ITEM_NEEDLE_HELD = 80
 
 
-def _require_dataset() -> None:
-    if not DATASET.exists():
-        pytest.skip(f"missing generated dataset {DATASET}")
+def _require_dataset(dataset: Path = DATASET) -> None:
+    if not dataset.exists():
+        pytest.skip(f"missing generated dataset {dataset}")
 
 
-def _run_row(record: int, *, mutate_item0_type: int | None = None) -> tuple[np.void, np.void, np.void]:
+def _run_row(
+    record: int, *, dataset: Path = DATASET, mutate_item0_type: int | None = None
+) -> tuple[np.void, np.void, np.void]:
     import msl_binding
 
-    _require_dataset()
-    ds = read_dataset(str(DATASET))
+    _require_dataset(dataset)
+    ds = read_dataset(str(dataset))
     row = ds.samples[record : record + 1].copy()
     if mutate_item0_type is not None:
         row["seed_t"]["items"]["type"][0, 0] = np.uint16(mutate_item0_type)
@@ -113,6 +116,64 @@ def test_sheik_thrown_needle_body_hit_deals_damage_replay_real() -> None:
     assert int(out2["items"]["exists"][0]) == int(out["items"]["exists"][0])
     assert int(out2["items"]["state"][0]) == int(out["items"]["state"][0])
     assert not (int(out["items"]["exists"][0]) == 1 and int(out["items"]["state"][0]) == 0)
+
+
+@pytest.mark.integration
+def test_sheik_demo_thrown_needle_body_lbcoll_rejects_marth_cap5_before_source_hit() -> None:
+    # Adjacent negative from the official Sheik demo rollout: the reduced world-space capsule path
+    # admitted Marth cap5 one frame early. Source BODY contact uses ftColl_8007925C ->
+    # lbColl_8000805C matrix/local-radius geometry for the item HitCapsule x58->x4C segment.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    # refs/melee/src/melee/it/itcoll.c::it_8027137C
+    seed, ref, out = _run_row(134, dataset=DEMO_DATASET)
+
+    assert int(seed["items"]["type"][0]) == ITEM_NEEDLE_THROWN
+    assert int(seed["items"]["state"][0]) == 0
+    assert int(seed["action_id"][P_MARTH]) == 14
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 14
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 0
+    assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
+    assert float(out["percent"][P_MARTH]) == pytest.approx(0.0)
+
+
+@pytest.mark.integration
+def test_sheik_demo_thrown_needle_body_lbcoll_keeps_next_frame_hit() -> None:
+    seed, ref, out = _run_row(135, dataset=DEMO_DATASET)
+
+    assert int(seed["items"]["type"][0]) == ITEM_NEEDLE_THROWN
+    assert int(seed["items"]["state"][0]) == 0
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 79
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 4
+    assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
+    assert float(out["percent"][P_MARTH]) == pytest.approx(3.0)
+
+
+@pytest.mark.integration
+def test_sheik_demo_thrown_needle_active_hitlag_body_uses_frozen_low_hurtcap() -> None:
+    # The second flying Needle BODY-hits Marth while Marth is still in damage hitlag from the first
+    # Needle. Fighter_8006A360 skips Anim/IASA/Phys during hitlag, but Fighter_8006CB94 still runs
+    # ftColl_8007925C item BODY contact. The victim lanes assert the source-owned result: the live
+    # frozen hurtcap packet selects the low DamageLw2 reaction, and the seeded item HitCapsule keeps
+    # its pre-hit stale damage so the packet deals a full 3 additional percent.
+    # The Needle's own post-hit fate is deliberately not asserted here: it_2725_Logic109_DmgDealt
+    # samples HSD_Randi(3) to bounce or destroy after the victim damage owner has already resolved.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_8006CB94}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_8007A06C}
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt
+    seed, ref, out = _run_row(138, dataset=DEMO_DATASET)
+
+    assert int(seed["items"]["type"][1]) == ITEM_NEEDLE_THROWN
+    assert int(seed["items"]["state"][1]) == 0
+    assert int(seed["hitlag"][P_MARTH]) == 2
+    assert int(seed["action_id"][P_MARTH]) == 79
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 82
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 4
+    assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
+    assert float(out["percent"][P_MARTH]) == pytest.approx(6.0)
 
 
 @pytest.mark.integration

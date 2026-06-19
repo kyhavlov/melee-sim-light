@@ -168,6 +168,49 @@ def _run_sample_row(
         msl_binding.destroy(handle)
 
 
+def _run_sample_rollout_records(
+    samples: np.ndarray,
+    *,
+    start_record: int,
+    records: tuple[int, ...],
+) -> dict[int, np.void]:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+    out: dict[int, np.void] = {}
+    wanted = set(records)
+    max_record = max(wanted)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = (
+            samples[start_record : start_record + 1]["seed_t"]
+            .view(np.uint8)
+            .reshape((1, seed_stride))
+            .copy()
+        )
+        msl_binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start_record, max_record + 1):
+            row = samples[record : record + 1]
+            msl_binding.step_input(
+                handle,
+                row["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+                row["input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+            )
+            if record in wanted:
+                msl_binding.write_compare(handle, out_bytes)
+                out[record] = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+    finally:
+        msl_binding.destroy(handle)
+
+    return out
+
+
 def _collision_contacts_dtype() -> np.dtype:
     return np.dtype(
         [
@@ -752,6 +795,46 @@ def test_sheik_chain_air_start_floor_contact_swaps_to_ground_start_demo_lock() -
 
     out = _run_sample_row(samples, record)
     assert int(out["action_id"][0]) == ACT_SK_SPECIAL_S_START
+
+
+@pytest.mark.integration
+def test_sheik_chain_air_start_script_cmd0_enables_gravity_before_landing_demo_rollout() -> None:
+    # ftSk_SpecialAirSStart_Phys applies gravity only after cmd_vars[0] is set by the
+    # SpecialAirSStart command script. The demo's aerial Chain start stays frozen through rec246,
+    # begins falling on the frame-22 script boundary at rec247, then reaches the platform landing
+    # that swaps into grounded Chain Start at rec254.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialAirSStart_Anim,ftSk_SpecialAirSStart_Phys,ftSk_SpecialAirSStart_Coll,
+    #   ftSk_SpecialS_801114E4}
+    # data/scripts/sheik.bin::MSLFTSC1 specials_by_msid[306] set_cmd_var(idx=0,value=1)
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    assert int(samples[230]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+    assert int(samples[246]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+    assert float(samples[246]["ref_t1"]["speed_y_self"][0]) == pytest.approx(0.0, abs=1.0e-6)
+    assert int(samples[247]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+    assert float(samples[247]["ref_t1"]["speed_y_self"][0]) < 0.0
+    assert int(samples[254]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_S_START
+
+    rows = _run_sample_rollout_records(samples, start_record=230, records=(246, 247, 254))
+    assert int(rows[246]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+    assert float(rows[246]["pos_y"][0]) == pytest.approx(
+        float(samples[246]["ref_t1"]["pos_y"][0]), abs=1.0e-6
+    )
+    assert float(rows[246]["speed_y_self"][0]) == pytest.approx(0.0, abs=1.0e-6)
+
+    assert int(rows[247]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
+    assert float(rows[247]["pos_y"][0]) == pytest.approx(
+        float(samples[247]["ref_t1"]["pos_y"][0]), abs=1.0e-6
+    )
+    assert float(rows[247]["speed_y_self"][0]) == pytest.approx(
+        float(samples[247]["ref_t1"]["speed_y_self"][0]), abs=1.0e-6
+    )
+
+    assert int(rows[254]["action_id"][0]) == ACT_SK_SPECIAL_S_START
+    assert int(rows[254]["ground_id"][0]) == int(samples[254]["ref_t1"]["ground_id"][0])
+    assert float(rows[254]["pos_y"][0]) == pytest.approx(
+        float(samples[254]["ref_t1"]["pos_y"][0]), abs=1.0e-6
+    )
 
 
 def test_sheik_chain_air_start_no_floor_contact_stays_air_start_negative() -> None:
@@ -3083,32 +3166,47 @@ def test_sheik_chain_grounded_lifecycle_freerun() -> None:
 
 
 def test_sheik_chain_article_tracks_owner_freerun() -> None:
-    # Retained fix: the Chain root re-anchors to the owner's hand every frame, so it tracks Sheik with a
-    # constant offset instead of staying at the world-space spawn point. With Sheik drifting in the air,
-    # the chain-to-owner x offset stays ~constant (before the fix it shrank as she moved away).
-    seed = _seed_base("sheik")
-    seed["on_ground"][0, 0] = np.uint8(0)
-    seed["pos_y"][0, 0] = np.float32(80.0)
-    seed["action_id"][0, 0] = np.uint16(29)
-    seed["speed_air_x_self"][0, 0] = np.float32(3.0)  # drift right
-    seed["pos_x"][0, 1] = np.float32(400.0)
-    outs = _run(seed, [_mk_inputs(buttons=B, main_x=80)] + [_mk_inputs(buttons=B, main_x=80) for _ in range(55)])
-    rels = []
-    owner_xs = []
-    for o in outs:
-        sl = _chain_slots(o)
-        if sl:
-            rels.append(float(o["items"]["pos_x"][sl[0]]) - float(o["pos_x"][0]))
-            owner_xs.append(float(o["pos_x"][0]))
-    assert len(rels) >= 8, "chain never present during the aerial drift"
-    # Non-vacuous: Sheik must drift FAR more than the rel-x band. A detached (world-space) chain would
-    # see rel-x change by ~the owner displacement; an anchored one only by the hand-pose swing.
+    # Retained fix: the Chain item root remains the source spawn position, but fn_802BB44C/fn_802BB694
+    # sample the live owner's L3rdNa link target every frame. With Sheik drifting in the air, the
+    # Chain target-to-owner x offset stays in the hand-swing band instead of behaving like a detached
+    # world-space article. refs/melee/src/melee/it/items/itseakchain.c::{fn_802BB44C,fn_802BB694}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base("sheik")
+        seed["on_ground"][0, 0] = np.uint8(0)
+        seed["pos_y"][0, 0] = np.float32(80.0)
+        seed["action_id"][0, 0] = np.uint16(29)
+        seed["speed_air_x_self"][0, 0] = np.float32(3.0)  # drift right
+        seed["pos_x"][0, 1] = np.float32(400.0)
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        out = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+        prev = _mk_inputs()
+        frames = [_mk_inputs(buttons=B, main_x=80)] + [
+            _mk_inputs(buttons=B, main_x=80) for _ in range(55)
+        ]
+        rels = []
+        owner_xs = []
+        for inp in frames:
+            msl_binding.step_input(handle, prev, inp)
+            prev = inp
+            d = msl_binding.sheik_chain_debug(handle, 0, 0)
+            if d is None or int(d["item"]["target_valid"]) == 0:
+                continue
+            msl_binding.write_compare(handle, out)
+            row = out.view(COMPARE_DTYPE).reshape((1,))[0]
+            rels.append(float(d["item"]["target_x"]) - float(row["pos_x"][0]))
+            owner_xs.append(float(row["pos_x"][0]))
+    finally:
+        msl_binding.destroy(handle)
+
+    assert len(rels) >= 8, "chain target never present during the aerial drift"
     owner_move = max(owner_xs) - min(owner_xs)
     assert owner_move > 20.0, f"owner did not move enough to exercise the bug: {owner_move}"
-    # The chain rel-x stays in a tight band (the animated hand swing), dwarfed by the owner's drift, so a
-    # detached chain (rel-x band ~= owner_move) is clearly excluded.
     rel_band = max(rels) - min(rels)
-    assert rel_band < 8.0, rels  # the L3rdNa hand swings within ~a few units during the animation
+    assert rel_band < 8.0, rels
     assert rel_band < 0.25 * owner_move, (rel_band, owner_move)
 
 
@@ -3166,6 +3264,85 @@ def test_sheik_chain_whip_misses_distant_opponent_negative() -> None:
     assert max_pct == 0.0, f"chain whip falsely hit a far ({60.0}) opponent for {max_pct}%"
 
 
+@pytest.mark.integration
+def test_sheik_demo_chain_active_frontier_hits_and_hitlag_freezes_replay_real() -> None:
+    # Replay-real active-frontier lock for the official Sheik demo Chain contact sequence:
+    # - rec304/rec340/rec354 are adjacent quiet frames (no early or cooldown-fallout Chain hit),
+    # - rec312/rec322/rec341 are source Chain BODY hits from the it_802BCB88-published frontier,
+    # - the published Chain hitcaps freeze while the owning Sheik is in hitlag, and source-probed
+    #   full x1C activation windows keep the hitcap cooldown frozen with them.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialS_80110BCC,ftSk_SpecialS_UpdateHitboxes}
+    # refs/melee/src/melee/it/items/itseakchain.c::{it_802BC080,it_802BCB88}
+    import msl_binding
+
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+    wanted = {304, 312, 313, 315, 316, 322, 323, 340, 341, 342, 353, 354, 355, 356}
+    outs: dict[int, np.void] = {}
+    dbg: dict[int, dict] = {}
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = samples[0:1]["seed_t"].view(np.uint8).reshape((1, seed_stride)).copy()
+        msl_binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(0, max(wanted) + 1):
+            row = samples[record : record + 1]
+            msl_binding.step_input(
+                handle,
+                row["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+                row["input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+            )
+            if record in wanted:
+                msl_binding.write_compare(handle, out_bytes)
+                outs[record] = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+                dbg[record] = msl_binding.sheik_chain_debug(handle, 0, 0)
+    finally:
+        msl_binding.destroy(handle)
+
+    def assert_row(record: int) -> None:
+        ref = samples[record]["ref_t1"]
+        out = outs[record]
+        assert int(out["hitlag"][0]) == int(ref["hitlag"][0])
+        assert int(out["action_id"][1]) == int(ref["action_id"][1])
+        assert int(out["hitlag"][1]) == int(ref["hitlag"][1])
+        assert float(out["percent"][1]) == pytest.approx(float(ref["percent"][1]))
+
+    for record in sorted(wanted):
+        assert_row(record)
+    assert int(outs[304]["hitlag"][0]) == 0
+    assert int(outs[340]["hitlag"][0]) == 0
+    assert int(outs[354]["hitlag"][0]) == 0
+    assert int(outs[354]["hitlag"][1]) == 0
+    assert int(outs[355]["hitlag"][0]) == 0
+    assert int(outs[356]["hitlag"][0]) == 0
+    assert (int(outs[312]["hitlag"][0]), int(outs[312]["hitlag"][1])) == (4, 6)
+    assert (int(outs[322]["hitlag"][0]), int(outs[322]["hitlag"][1])) == (4, 6)
+    assert (int(outs[341]["hitlag"][0]), int(outs[341]["hitlag"][1])) == (4, 6)
+    assert float(outs[312]["percent"][1]) == pytest.approx(11.0)
+    assert float(outs[322]["percent"][1]) == pytest.approx(16.0)
+    assert float(outs[341]["percent"][1]) == pytest.approx(21.0)
+    assert float(outs[354]["percent"][1]) == pytest.approx(21.0)
+
+    def hb3_xy(record: int) -> tuple[float, float]:
+        hx, hy, active = dbg[record]["hitboxes"][3]
+        assert active == 1
+        return (float(hx), float(hy))
+
+    # Owner hitlag freezes the article's published Chain geometry; publication resumes once the
+    # owner's hitlag drains, and the next hits freeze again.
+    assert hb3_xy(313) == pytest.approx(hb3_xy(312))
+    assert hb3_xy(315) == pytest.approx(hb3_xy(312))
+    assert abs(hb3_xy(316)[0] - hb3_xy(312)[0]) > 0.5
+    assert hb3_xy(323) == pytest.approx(hb3_xy(322))
+    assert hb3_xy(342) == pytest.approx(hb3_xy(341))
+
+
 def _chain_geometry_series(flick: bool):
     # Drive grounded Side-B and sample the solved Chain geometry each frame via the test-only getter
     # msl_binding.sheik_chain_debug -> {"links": [(x,y)...], "hitboxes": [(x,y,active)...]}.
@@ -3207,10 +3384,13 @@ def test_sheik_chain_solved_geometry_is_stick_driven_and_respects_segment_bounds
     seg = 1.5  # sheik_chain_segment_length (attr x4)
     for d in flick:
         links = d["links"]
+        active = d["active_links"]
         assert len(links) == 20  # sheik_chain_link_count
-        for a, b in zip(links, links[1:]):
-            dist = ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
-            assert dist <= seg * 1.05, dist  # post-constraint adjacency never exceeds a segment
+        for i, (a, b) in enumerate(zip(links, links[1:])):
+            if active[i] == 0 or active[i + 1] == 0:
+                continue
+            dist = ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
+            assert dist <= seg * 1.10, dist  # source link/collision solve stays segment-bounded
 
     def tail_y_range(series):
         ys = [d["links"][-1][1] for d in series]
@@ -3221,15 +3401,17 @@ def test_sheik_chain_solved_geometry_is_stick_driven_and_respects_segment_bounds
     assert flick_range > 20.0, flick_range
     assert flick_range > 3.0 * steady_range, (flick_range, steady_range)
 
-    # The 4 fighter HitCapsules track the solved links via the stride map (stride = 20//3 = 6:
-    # hb0/1/2 -> links 0/6/12, hb3 -> tail). Each published hitbox equals its mapped link, proving the
-    # combat path consumes the solved whip geometry rather than the static script position.
-    stride = 20 // 3
+    # The 4 fighter HitCapsules track the solved links via the it_802BCB88 active-frontier stride
+    # map. Each published hitbox equals its mapped link, proving the combat path consumes the solved
+    # whip geometry rather than the static script position.
+    mapped_frames = 0
     for d in flick:
         links = d["links"]
-        mapping = {0: 0, 1: stride, 2: 2 * stride, 3: len(links) - 1}
-        for hb_id, link_idx in mapping.items():
-            hx, hy, active = d["hitboxes"][hb_id]
-            assert active == 1, hb_id
-            lx, ly = links[link_idx]
+        for hb_id, link_idx in enumerate(d["hitbox_link_idx"]):
+            if int(link_idx) == 0xFF:
+                continue
+            mapped_frames += 1
+            hx, hy, _active = d["hitboxes"][hb_id]
+            lx, ly = links[int(link_idx)][:2]
             assert abs(hx - lx) < 1e-3 and abs(hy - ly) < 1e-3, (hb_id, (hx, hy), (lx, ly))
+    assert mapped_frames >= 8

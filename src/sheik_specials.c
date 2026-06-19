@@ -35,6 +35,17 @@ static uint16_t sk_submotion(uint16_t action_id) {
   return msl_motion_state_submotion_id((uint8_t)MSL_CHAR_ID_SHEIK, action_id);
 }
 
+static uint16_t sk_chain_hitbox_script_msid(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_SK_SPECIAL_S:
+      return sk_submotion((uint16_t)MSL_ACT_SK_SPECIAL_S_START);
+    case MSL_ACT_SK_SPECIAL_AIR_S:
+      return sk_submotion((uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START);
+    default:
+      return sk_submotion(action_id);
+  }
+}
+
 static uint8_t sk_anim_finished(const MslBatch* batch, size_t idx, uint16_t action_id) {
   const uint16_t msid = sk_submotion(action_id);
   const float end = msl_anim_end_frame((uint8_t)MSL_CHAR_ID_SHEIK, msid);
@@ -44,6 +55,50 @@ static uint8_t sk_anim_finished(const MslBatch* batch, size_t idx, uint16_t acti
 
 static uint8_t sk_timer_saturating_inc(uint8_t x) {
   return x == UINT8_MAX ? UINT8_MAX : (uint8_t)(x + 1u);
+}
+
+static void sk_update_chain_pose_filter(MslBatch* batch, const MslCommonParams* c, size_t idx) {
+  const float dz_x = (c != NULL) ? c->lstick_deadzone_x : 0.0f;
+  const float dz_y = (c != NULL) ? c->lstick_deadzone_y : 0.0f;
+  // Fighter Anim callbacks run before the current frame's IASA/input-owner update that
+  // `it_802BC080` later consumes for `fv.sk.lstick_delta`. Source therefore lets the Chain link
+  // history see the current stick while `ftSk_SpecialS_80110610` still poses L3rdNa from the
+  // callback-visible previous stick.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+  //   ftSk_SpecialS_Anim,ftSk_SpecialS_IASA,ftSk_SpecialS_80110490,ftSk_SpecialS_80110788}
+  const float sx = sk_deadzone(sk_stick_unit(batch->state.prev_input_main_x[idx]), dz_x);
+  const float sy = sk_deadzone(sk_stick_unit(batch->state.prev_input_main_y[idx]), dz_y);
+  const float facing_dir = sk_facing_dir(batch, idx);
+  float radians = atan2f(sy, sx * facing_dir);
+  if (radians < 0.0f) {
+    radians += 6.2831853071795864769f;
+  }
+  float degrees = radians * 57.2957795130823208768f;
+  if (degrees < 0.0f) {
+    degrees = 0.0f;
+  } else if (degrees > 359.0f) {
+    degrees = 359.0f;
+  }
+
+  float delta = degrees - batch->state.sheik_chain_pose_angle[idx];
+  if (delta > 180.0f) {
+    delta -= 360.0f;
+  } else if (delta < -180.0f) {
+    delta += 360.0f;
+  }
+  const float lerp = (c != NULL) ? c->guard_stick_lerp_x44c : 0.5f;
+  float angle = batch->state.sheik_chain_pose_angle[idx] + delta * lerp;
+  if (angle > 360.0f) {
+    angle -= 360.0f;
+  } else if (angle < 0.0f) {
+    angle += 360.0f;
+  }
+  float mag = sqrtf(sx * sx + sy * sy);
+  if (mag > 1.0f) {
+    mag = 1.0f;
+  }
+  batch->state.sheik_chain_pose_angle[idx] = angle;
+  batch->state.sheik_chain_pose_mag[idx] += lerp * (mag - batch->state.sheik_chain_pose_mag[idx]);
 }
 
 static void sk_arm_vanish_smoke_accessory(MslBatch* batch, size_t idx) {
@@ -271,6 +326,13 @@ static void sk_enter_specials(MslBatch* batch, size_t idx, uint8_t ground, float
   batch->state.special_cmd0[idx] = 0u;
   batch->state.sheik_special_timer[idx] = 0u;
   batch->state.sheik_special_latch[idx] = 0u;
+  // ftSk_SpecialS_80110F70 initializes mv.sk.specials.x18 = 4 and x14 = 0; active Chain then calls
+  // ftSk_SpecialS_80110610, which updates these via ftSk_SpecialS_80110490 before item accessory
+  // callbacks sample L3rdNa.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+  //   ftSk_SpecialS_80110F70,ftSk_SpecialS_80110490,ftSk_SpecialS_80110610}
+  batch->state.sheik_chain_pose_angle[idx] = 4.0f;
+  batch->state.sheik_chain_pose_mag[idx] = 0.0f;
   sk_enter(batch, idx,
            ground ? (uint16_t)MSL_ACT_SK_SPECIAL_S_START : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START,
            0.0f, 1.0f);
@@ -622,6 +684,16 @@ static void sk_update_specials(MslBatch* batch, const MslCommonParams* c, const 
   switch (a) {
     case MSL_ACT_SK_SPECIAL_S_START:
     case MSL_ACT_SK_SPECIAL_AIR_S_START: {
+      if (a == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START) {
+        // Chain aerial start gravity is script-gated: ftSk_SpecialAirSStart_Phys applies common
+        // fall only after cmd_vars[0] is set by the SpecialAirSStart script. Slippi does not expose
+        // cmd_vars, so refresh the hidden lane from extracted MSLFTSC1 before Phys consumes it.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+        //   ftSk_SpecialAirSStart_Anim,ftSk_SpecialAirSStart_Phys}
+        // data/scripts/sheik.bin::MSLFTSC1 specials_by_msid[306] set_cmd_var(idx=0,value=1)
+        batch->state.special_cmd0[idx] = move_tables_special_cmd_var_value_at_frame(
+            batch->state.char_id[idx], sk_submotion(a), 0u, batch->state.anim_frame_f32[idx]);
+      }
       // Source `mv.sk.specials.x0` is an int; the lite runtime stores only the threshold-relevant
       // byte, so saturate instead of wrapping during long held Chain sequences.
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
@@ -633,19 +705,40 @@ static void sk_update_specials(MslBatch* batch, const MslCommonParams* c, const 
       if ((float)t == ch->sheik_chain_spawn_frame + 1.0f) {
         (void)items_set_sheik_chain_article_state(batch, idx, 1u);
       }
-      if ((float)t == ch->sheik_chain_start_end_frame) {
-        (void)items_set_sheik_chain_article_state(batch, idx, 3u);
-      }
+      // The fighter action leaves Start on x20, but Chain article state 3 is not fighter-timer
+      // owned: `fn_802BB44C` calls `it_802BCED4` only when `it_802BBD64` advances the active
+      // frontier through the terminal link. Keep state-3 publication in the article solver so
+      // `it_802BC080` cannot consume an incomplete x2C_b0 span.
+      // refs/melee/src/melee/it/items/itseakchain.c::{fn_802BB44C,it_802BBD64,it_802BCED4}
       if ((float)t > ch->sheik_chain_start_end_frame) {
         sk_enter(batch, idx,
                  a == (uint16_t)MSL_ACT_SK_SPECIAL_S_START ? (uint16_t)MSL_ACT_SK_SPECIAL_S
                                                            : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S,
                  0.0f, 1.0f);
+        // ftSk_SpecialS_80111830/80111988 call ftSk_SpecialS_80110610 immediately after
+        // Fighter_ChangeMotionState, before the same-frame accessory callback.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+        //   ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_80110610}
+        sk_update_chain_pose_filter(batch, c, idx);
         batch->state.sheik_special_timer[idx] = 0u;
       }
     } break;
     case MSL_ACT_SK_SPECIAL_S:
     case MSL_ACT_SK_SPECIAL_AIR_S: {
+      // Active Chain hitbox publication is script-gated: it_802BCB88 calls
+      // ftSk_SpecialS_UpdateHitboxes, which returns unless cmd_vars[0] is set. The active swing
+      // pose msids (305/308) do not carry the create/cmd script; source preserves the capsules
+      // created by the start scripts (303/306) across Fighter_ChangeMotionState(..., flags=8).
+      // Slippi does not expose cmd_vars, so keep this hidden lane table-backed from that source
+      // script rather than from the active pose msid.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+      //   ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_UpdateHitboxes,
+      //   ftSk_SpecialS_80110BCC}
+      // refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
+      // data/scripts/sheik.bin::MSLFTSC1 specials_by_msid[303] set_cmd_var(idx=0,value=1)
+      batch->state.special_cmd0[idx] = move_tables_special_cmd_var_value_at_frame(
+          batch->state.char_id[idx], sk_chain_hitbox_script_msid(a), 0u,
+          batch->state.anim_frame_f32[idx]);
       // Source `mv.sk.specials.x0` continues past the release threshold while B is held. Preserve
       // the threshold state in the compact runtime lane without uint8 wraparound.
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
@@ -666,6 +759,13 @@ static void sk_update_specials(MslBatch* batch, const MslCommonParams* c, const 
         // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
         //   ftSk_SpecialS_Anim,ftSk_SpecialS_IASA,ftSk_SpecialAirS_Anim,ftSk_SpecialAirS_IASA}
         batch->state.sheik_special_latch[idx] = 1u;
+      }
+      if (batch->state.action_id[idx] == a) {
+        // Active Chain Anim callbacks call ftSk_SpecialS_80110610 after the release/End gate; the
+        // updated x18/x14 pose filter is then consumed by the Chain article accessory callback.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+        //   ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim,ftSk_SpecialS_80110610}
+        sk_update_chain_pose_filter(batch, c, idx);
       }
     } break;
     case MSL_ACT_SK_SPECIAL_S_END: {
@@ -932,6 +1032,7 @@ void sheik_specials_update_accessory4_phase(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
+  items_update_sheik_chain_accessory_phase(batch);
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
@@ -1071,7 +1172,17 @@ uint8_t sheik_specials_phys(MslBatch* batch, size_t idx) {
       return 1u;
     case MSL_ACT_SK_SPECIAL_AIR_S_START:
       if (batch->state.special_cmd0[idx] != 0u) {
-        sk_apply_common_fall(batch, ch, idx, ch->grav, ch->terminal_vel);
+        // ftSk_SpecialAirSStart_Phys gates only vertical ftCommon_Fall on cmd_vars[0], then always
+        // applies ftCommon_ApplyFrictionAir. It does not call the common-air drift helper
+        // ftCommon_8007D268, so live side-stick must not re-accelerate Chain startup after the
+        // source friction step has brought self_vel.x to zero.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialAirSStart_Phys
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_Fall,ftCommon_ApplyFrictionAir}
+        float vy = batch->state.speed_y_self[idx] - ch->grav;
+        if (vy < -ch->terminal_vel) {
+          vy = -ch->terminal_vel;
+        }
+        batch->state.speed_y_self[idx] = vy;
       }
       batch->state.speed_air_x_self[idx] =
           sk_apply_air_friction(batch->state.speed_air_x_self[idx], ch->aerial_friction);

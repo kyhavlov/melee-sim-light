@@ -531,6 +531,45 @@ static inline uint8_t reseed_seeded_laser_stale_damage_owner(const MslBatch* bat
   return 1u;
 }
 
+static inline uint8_t reseed_seeded_sheik_needle_stale_damage_owner(const MslBatch* batch, int bi,
+                                                                    const MslItem* item,
+                                                                    uint16_t item_attack_id,
+                                                                    float* out_stale_mul) {
+  if (out_stale_mul != NULL) {
+    *out_stale_mul = 1.0f;
+  }
+  if (batch == NULL || item == NULL || out_stale_mul == NULL || item->exists == 0u ||
+      item->owner < 0 || item->owner >= (int8_t)batch->config.num_players ||
+      item_attack_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT || item->attack_instance == 0u) {
+    return 0u;
+  }
+  const MslItemArticleParams* ap = item_article_params_for_sheik_needle_throw_item_type(item->type);
+  if (ap == NULL || item->type != ap->needle_throw_itkind || item->state != 0u) {
+    return 0u;
+  }
+
+  const int owner = (int)item->owner;
+  const size_t owner_idx = msl_idx_player(bi, owner);
+  uint8_t valid = 0u;
+  const float mul = reseed_staling_multiplier_before_latest_instance(
+      batch, owner_idx, item_attack_id, item->attack_instance, &valid);
+  if (valid == 0u || !(mul > 0.0f)) {
+    return 0u;
+  }
+  // Seeded live thrown-Needle HitCapsule.damage:
+  // - it_802790C0 / item script create calls it_80272460, which stores HitCapsule.damage after
+  //   ft_80089228 has applied the owner's stale table at create time.
+  // - Slippi seed rows expose live item xD88/xD8C and the owner's stale table, but not the already
+  //   frozen HitCapsule.damage float. If the latest stale-table entry is this Needle's item
+  //   instance, rewinding exactly that post-hit insertion reconstructs the pre-hit frozen damage.
+  // refs/melee/src/melee/it/itanimlist.c::it_802790C0
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+  // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+  *out_stale_mul = mul;
+  return 1u;
+}
+
 static inline uint16_t colanim_timer_remaining_from_action_frame(uint16_t init_frames,
                                                                  int16_t action_frame) {
   if (init_frames == 0u) {
@@ -3436,12 +3475,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.item_damage[ii] = item->damage;
       batch->state.item_stale_damage_valid[ii] = 0u;
       batch->state.item_stale_damage_mul[ii] = 1.0f;
-      float seeded_laser_stale_mul = 1.0f;
+      float seeded_item_stale_mul = 1.0f;
       if (reseed_seeded_laser_stale_damage_owner(batch, bi, seed, item,
                                                  batch->state.item_attack_id[ii],
-                                                 &seeded_laser_stale_mul) != 0u) {
+                                                 &seeded_item_stale_mul) != 0u ||
+          reseed_seeded_sheik_needle_stale_damage_owner(
+              batch, bi, item, batch->state.item_attack_id[ii], &seeded_item_stale_mul) != 0u) {
         batch->state.item_stale_damage_valid[ii] = 1u;
-        batch->state.item_stale_damage_mul[ii] = seeded_laser_stale_mul;
+        batch->state.item_stale_damage_mul[ii] = seeded_item_stale_mul;
       }
       float reflect_mul = seed->item_reflect_damage_mul[it];
       if (!(reflect_mul > 0.0f)) {

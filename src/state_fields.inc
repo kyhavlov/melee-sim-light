@@ -322,6 +322,11 @@ MSL_STATE_FIELD(sheik_needle_count, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(sheik_special_timer, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(sheik_special_latch, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(sheik_vanish_smoke_accessory_pending, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+// Sheik Chain pose filter (`mv.sk.specials.x18` angle and x14 magnitude) used by
+// ftSk_SpecialS_80110610 to rebuild the L3rdNa Chain target from a stick-directed pose frame.
+// refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{ftSk_SpecialS_80110490,ftSk_SpecialS_80110610}
+MSL_STATE_FIELD(sheik_chain_pose_angle, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(sheik_chain_pose_mag, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(special_stick_angle, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(specials_air_used, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(fallspecial_mobility_mul, float, bp, (size_t)MSL_MAX_PLAYERS)
@@ -337,6 +342,8 @@ MSL_STATE_FIELD(ledge_drop_floor_skip_segment_id, uint16_t, bp, (size_t)MSL_MAX_
 MSL_STATE_FIELD(cliff_ledge_floor_segment_id, uint16_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(cliff_ledge_floor_segment_seeded, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(cliff_option_stick_latch_x8, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(cliff_wait_timer_x4, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(cliff_wait_timer_x4_runtime_valid, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(fallspecial_xc, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(fallspecial_landing_lag, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(landing_fallspecial_allow_interrupt, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
@@ -570,13 +577,37 @@ MSL_STATE_FIELD(item_sheik_needle_hidden_drop_gravity, float, bi, (size_t)MSL_MA
 MSL_STATE_FIELD(item_sheik_needle_hidden_drop_vel_x, float, bi, (size_t)MSL_MAX_ITEMS)
 // Sheik Side-B Chain Verlet link state (runtime-only, NOT serialized; reset on reseed, free-run
 // accumulation like the needle hidden lanes). Per item slot: a fixed array of MSL_SHEIK_CHAIN_MAX_LINKS
-// links {pos,vel} plus a per-slot validity/initialized flag. (The held-S solve treats all links as
-// active, so no per-link activation bit is stored.) refs/melee/src/melee/it/items/itseakchain.c::it_802BAF2C
+// links {x2C_b0 active,pos,vel} plus a per-slot validity/initialized flag. Index 0 is the
+// hand-side link (source x4 direction); index n-1 is the initially active free-end link (source x0).
+// refs/melee/src/melee/it/items/itseakchain.c::{it_802BAF2C,it_802BCFC4,it_802BBD64,it_802BCB88}
 MSL_STATE_FIELD(item_sheik_chain_links_valid, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_link_active, uint8_t, bi * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS)
+MSL_STATE_FIELD(item_sheik_chain_hitbox_link_idx, uint8_t, bi * (size_t)MSL_MAX_HITBOXES, (size_t)MSL_MAX_ITEMS * (size_t)MSL_MAX_HITBOXES)
+// Fighter-side Chain HitCapsule gate (`mv.sk.specials.x1C` and `fv.sk.x3C[4]`) from
+// ftSk_SpecialS_80110BCC. This is article-owned runtime hidden state because Slippi exposes only
+// the item article, not fp->fv.sk.x3C or the HitCapsule enabled bit.
+// refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_80110BCC
+MSL_STATE_FIELD(item_sheik_chain_hitcaps_active, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_hit_cooldown, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_hit_reset_prev, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_hit_prev_valid, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_env_flags, uint32_t, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_hit_prev_x, float, bi * (size_t)MSL_MAX_HITBOXES, (size_t)MSL_MAX_ITEMS * (size_t)MSL_MAX_HITBOXES)
+MSL_STATE_FIELD(item_sheik_chain_hit_prev_y, float, bi * (size_t)MSL_MAX_HITBOXES, (size_t)MSL_MAX_ITEMS * (size_t)MSL_MAX_HITBOXES)
+// Last Chain target sampled from the owner's L3rdNa joint. Source it_802BAF2C stores that fighter
+// JObj on every ItemLink; fn_802BB44C/fn_802BB694 sample link->jobj->mtx * (0,0,0.1) before solving.
+// This lane is fixed-capacity article-owned runtime state for replay/debug visibility.
+// refs/melee/src/melee/it/items/itseakchain.c::{it_802BAF2C,fn_802BB44C,fn_802BB694}
+MSL_STATE_FIELD(item_sheik_chain_target_valid, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_target_x, float, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_target_y, float, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_target_z, float, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_sheik_chain_link_pos_x, float, bi * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS)
 MSL_STATE_FIELD(item_sheik_chain_link_pos_y, float, bi * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS)
+MSL_STATE_FIELD(item_sheik_chain_link_pos_z, float, bi * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS)
 MSL_STATE_FIELD(item_sheik_chain_link_vel_x, float, bi * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS)
 MSL_STATE_FIELD(item_sheik_chain_link_vel_y, float, bi * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS)
+MSL_STATE_FIELD(item_sheik_chain_link_vel_z, float, bi * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS)
 // Sheik Chain stick-history trail (itemVar history[0xF]); the it_802BC080 whip solve shifts it each
 // frame and seeds entry 0 from the owner's lstick delta. refs/melee/src/melee/it/items/itseakchain.c
 MSL_STATE_FIELD(item_sheik_chain_history_x, float, bi * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN, (size_t)MSL_MAX_ITEMS * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN)

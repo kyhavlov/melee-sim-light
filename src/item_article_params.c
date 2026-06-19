@@ -1,6 +1,7 @@
 #include "item_article_params.h"
 #include "data_dir.h"
 
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -10,7 +11,7 @@
 #include "alloc.h"
 
 enum {
-  MSLITAR1_VERSION = 12,
+  MSLITAR1_VERSION = 14,
   MSLITAR1_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1,
   MSLITAR1_VALUE_U16 = 1,
   MSLITAR1_VALUE_U32 = 2,
@@ -94,11 +95,11 @@ enum {
   MSLITAR1_FIELD_VANISH_HITBOX_LAST = MSLITAR1_FIELD_VANISH_HITBOX_REMOVE_FRAME,
   MSLITAR1_FIELD_VANISH_HITBOX_REQUIRED_MASK =
       (1u << (MSLITAR1_FIELD_VANISH_HITBOX_LAST - MSLITAR1_FIELD_VANISH_HITBOX_FIRST + 1u)) - 1u,
-  // Side-B Chain itSeakChain_Attrs (MSLITAR1 v12). field_id 200 = link count (U16); 201..220 = the
-  // 20 f32 solver attrs in struct order (segment/friction/gravity/decay/wall-bounce + tuning).
+  // Side-B Chain itSeakChain_Attrs (MSLITAR1 v14). field_id 200 = link count (U16); 201..222 = the
+  // 22 f32 attrs in struct order (segment/friction/gravity/decay/hitcap/launch/wall-bounce + tuning).
   MSLITAR1_FIELD_SHEIK_CHAIN_LINK_COUNT = 200,
   MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_FIRST = 201,
-  MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_LAST = 220,
+  MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_LAST = 222,
   MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_FIRST = MSLITAR1_FIELD_SHEIK_CHAIN_LINK_COUNT,
   MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_LAST = MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_LAST,
   MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_COUNT =
@@ -214,7 +215,7 @@ static uint8_t needle_drop_table_index(uint16_t field_id, uint16_t base_field_id
              : 0xFFu;
 }
 
-// Resolve a Chain itSeakChain_Attrs f32 field_id (201..220) to its struct member. The order matches
+// Resolve a Chain itSeakChain_Attrs f32 field_id (201..222) to its struct member. The order matches
 // the SHEIK_CHAIN_ATTR_FIELDS extractor tuple and the struct declaration order in the header.
 static float* sheik_chain_attr_f32_member(MslItemArticleParams* rec, uint16_t field_id) {
   float* const members[] = {
@@ -234,10 +235,12 @@ static float* sheik_chain_attr_f32_member(MslItemArticleParams* rec, uint16_t fi
       &rec->sheik_chain_attr_x40,         // 214
       &rec->sheik_chain_attr_x44,         // 215
       &rec->sheik_chain_attr_x48,         // 216
-      &rec->sheik_chain_attr_x54,         // 217
-      &rec->sheik_chain_wall_bounce_x58,  // 218
-      &rec->sheik_chain_attr_x5c,         // 219
-      &rec->sheik_chain_attr_x60,         // 220
+      &rec->sheik_chain_attr_x4c,         // 217
+      &rec->sheik_chain_initial_vel_x50,  // 218
+      &rec->sheik_chain_attr_x54,         // 219
+      &rec->sheik_chain_wall_bounce_x58,  // 220
+      &rec->sheik_chain_attr_x5c,         // 221
+      &rec->sheik_chain_attr_x60,         // 222
   };
   if (field_id < MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_FIRST ||
       field_id > MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_F32_LAST) {
@@ -753,6 +756,8 @@ int item_article_params_init(void) {
       g_tbl.by_char[7].sheik_chain_link_count < 2u ||
       g_tbl.by_char[7].sheik_chain_link_count > 64u ||
       !(g_tbl.by_char[7].sheik_chain_segment_length > 0.0f) ||
+      !(g_tbl.by_char[7].sheik_chain_attr_x4c > 0.0f) ||
+      !isfinite(g_tbl.by_char[7].sheik_chain_initial_vel_x50) ||
       !(g_tbl.by_char[7].sheik_chain_gravity > 0.0f)) {
     return -1;
   }

@@ -82,7 +82,7 @@ typedef struct MslItemArticleParams {
   float needle_bounce_min_vel_y[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
   float needle_bounce_gravity[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
   float needle_bounce_x_vel[MSL_ITEM_ARTICLE_NEEDLE_DROP_TABLE_LEN];
-  // Side-B Chain article itSeakChain_Attrs (Verlet solver data, PlSk.dat-extracted, MSLITAR1 v12).
+  // Side-B Chain article itSeakChain_Attrs (Verlet solver data, PlSk.dat-extracted, MSLITAR1 v12+).
   // refs/melee/src/melee/it/itCharItems.h::itSeakChain_Attrs
   // refs/melee/src/melee/it/items/itseakchain.c
   uint16_t sheik_chain_link_count;    // attr x0  (it_802BAF2C ItemLink node count)
@@ -102,6 +102,8 @@ typedef struct MslItemArticleParams {
   float sheik_chain_attr_x40;         // attr x40
   float sheik_chain_attr_x44;         // attr x44
   float sheik_chain_attr_x48;         // attr x48
+  float sheik_chain_attr_x4c;         // attr x4c (hitbox reactivation movement threshold)
+  float sheik_chain_initial_vel_x50;  // attr x50 (it_802BCFC4 launch vel.x magnitude)
   float sheik_chain_attr_x54;         // attr x54 (retract clamp scale)
   float sheik_chain_wall_bounce_x58;  // attr x58 (vel.x *= -x58 on wall hit)
   float sheik_chain_attr_x5c;         // attr x5c

@@ -1745,9 +1745,9 @@ Characters (Fox/Falco/Marth/Sheik):
     - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
   - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
     the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
-  - Binary layout: `MSLITAR1` v12
+  - Binary layout: `MSLITAR1` v14
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 12`
+    - `u32 version = 14`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
@@ -1823,9 +1823,21 @@ Characters (Fox/Falco/Marth/Sheik):
       `ftSk_SpecialS_UpdateHitboxes` (`it_802BCB88` stride map). The loader requires all 21 fields
       (`sheik_chain_attr_fields_seen` complete) and rejects link_count outside [2,64] or a
       non-positive segment length / gravity. Runtime uses these in `src/items.c::sheik_chain_solve_links`
+    - v13 extends existing article hitbox flag fields with the item-script command 11 sixth-word
+      contact gates decoded by `it_802790C0`: bit 2 stores HitCapsule `x42_b5` (source contact
+      enabled before reflect, shield, clank, and BODY), and bit 3 stores `x42_b6` (BODY hurtcap must
+      be grabbable). Bits 0/1 remain the semantic target-grounded/target-aerial flags derived from
+      item `x40_b3`/`x40_b2`. Runtime-required for Sheik Needle BODY/contact: old v12 flags lack the
+      `x42_b5` gate and must be rejected by the loader version check.
       (the it_802BBB0C core Verlet solve over runtime-only per-item link state). Source:
       `refs/melee/src/melee/it/itCharItems.h::itSeakChain_Attrs`,
       `refs/melee/src/melee/it/items/itseakchain.c::{it_802BAF2C,it_802BBB0C}`.
+    - v14 extends the Sheik Chain `itSeakChain_Attrs` block with `x4C` and `x50` in struct order:
+      `sheik_chain_attr_x4c` is the movement threshold consumed by `ftSk_SpecialS_80110BCC` before
+      reactivating fighter Chain hitcapsules, and `sheik_chain_initial_vel_x50` is the launch
+      velocity copied into `vec0.x` by `ftSk_SpecialS_CheckInitChain` before `it_802BCFC4` activates
+      the first Chain link. Runtime requires both fields for active-frontier Chain and keeps no
+      fallback literals.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:

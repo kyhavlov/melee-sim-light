@@ -845,6 +845,8 @@ typedef struct MslStateSoA {
   uint8_t* sheik_special_timer;  // mv.sk.special{n,s,hi}.x0 compact timer
   uint8_t* sheik_special_latch;  // release / per-action latch
   uint8_t* sheik_vanish_smoke_accessory_pending;
+  float* sheik_chain_pose_angle;  // mv.sk.specials.x18 (ftSk_SpecialS_80110490)
+  float* sheik_chain_pose_mag;    // mv.sk.specials.x14 (ftSk_SpecialS_80110490)
   // fp->lstick_angle for special launch tilt (Dolphin Slash); ftMars_FighterVars.x222C
   // air-side-special freshness; FallSpecial mobility/lag overrides from ftCo_80096900 args
   // (0 = use defaults); Counter intercept window (script cmd1; 2 = armed descriptor).
@@ -899,6 +901,15 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A804
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::{ftCo_8009AA0C,ftCo_8009AAFC}
   uint8_t* cliff_option_stick_latch_x8;  // [batch * players], 0/1
+  // Runtime-only CliffWait hang timer (decomp: fp->mv.co.cliff.x4).
+  // - ftCo_8009A804 initializes x4 from p_ftCommonData->x48C/x490 on live CliffWait entry.
+  // - ftCo_CliffWait_Anim decrements it once per frame before CliffWait_IASA can route timeout.
+  // - Direct replay reseeds inside CliffWait do not expose this mv union field, so
+  //   cliff_wait_timer_x4_runtime_valid remains 0 until runtime observes a real CliffWait entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::{
+  //   ftCo_8009A804,ftCo_CliffWait_Anim,ftCo_8009A9AC}
+  float* cliff_wait_timer_x4;                  // [batch * players]
+  uint8_t* cliff_wait_timer_x4_runtime_valid;  // [batch * players], 0/1
   // FallSpecial internals (seeded/derived).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
   uint8_t* fallspecial_xc;  // fp->mv.co.fallspecial.xC (arg1 to ftCo_80096900)
@@ -1468,15 +1479,30 @@ typedef struct MslStateSoA {
   float* item_sheik_needle_hidden_drop_vel_x;      // [batch * MSL_MAX_ITEMS]
   // Sheik Side-B Chain Verlet link state (runtime-only, not serialized; reset on reseed).
   // refs/melee/src/melee/it/items/itseakchain.c::it_802BAF2C
-  uint8_t* item_sheik_chain_links_valid;  // [batch * MSL_MAX_ITEMS]
-  float* item_sheik_chain_link_pos_x;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
-  float* item_sheik_chain_link_pos_y;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
-  float* item_sheik_chain_link_vel_x;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
-  float* item_sheik_chain_link_vel_y;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
-  float* item_sheik_chain_history_x;      // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_HISTORY_LEN]
-  float* item_sheik_chain_history_y;      // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_HISTORY_LEN]
-  float* item_sheik_chain_prev_stick_x;   // [batch * MSL_MAX_ITEMS] (owner lstick1 analogue)
-  float* item_sheik_chain_prev_stick_y;   // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_chain_links_valid;      // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_chain_link_active;      // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  uint8_t* item_sheik_chain_hitbox_link_idx;  // [batch * MSL_MAX_ITEMS * MSL_MAX_HITBOXES]
+  uint8_t* item_sheik_chain_hitcaps_active;   // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_chain_hit_cooldown;     // [batch * MSL_MAX_ITEMS] (mv.sk.specials.x1C)
+  uint8_t* item_sheik_chain_hit_reset_prev;   // [batch * MSL_MAX_ITEMS] (ZeroHitboxPositions edge)
+  uint8_t* item_sheik_chain_hit_prev_valid;   // [batch * MSL_MAX_ITEMS]
+  uint32_t* item_sheik_chain_env_flags;       // [batch * MSL_MAX_ITEMS] (seakchain.x10)
+  float* item_sheik_chain_hit_prev_x;         // [batch * MSL_MAX_ITEMS * MSL_MAX_HITBOXES]
+  float* item_sheik_chain_hit_prev_y;         // [batch * MSL_MAX_ITEMS * MSL_MAX_HITBOXES]
+  uint8_t* item_sheik_chain_target_valid;     // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_chain_target_x;           // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_chain_target_y;           // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_chain_target_z;           // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_chain_link_pos_x;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_pos_y;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_pos_z;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_vel_x;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_vel_y;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_vel_z;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_history_x;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_HISTORY_LEN]
+  float* item_sheik_chain_history_y;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_HISTORY_LEN]
+  float* item_sheik_chain_prev_stick_x;  // [batch * MSL_MAX_ITEMS] (owner lstick1 analogue)
+  float* item_sheik_chain_prev_stick_y;  // [batch * MSL_MAX_ITEMS]
   // Prefix-causal Shy Guy dynamic-bone velocity scratch.
   // refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
   float* item_shyguy_prev_vel_y;           // [batch * MSL_MAX_ITEMS]

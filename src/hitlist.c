@@ -8,6 +8,7 @@
 #include "damage_source.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
+#include "sheik_specials.h"
 
 static inline size_t idx_fighter_hitlist(int bi, int p, int hb_id) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
@@ -123,6 +124,28 @@ static inline uint8_t hitlist_attackair_create_phase_runtime_clear_owns_empty_hi
           ? 1u
           : 0u;
   return (first_band_runtime_clear || attackairn_post_clear_empty_owner) ? 1u : 0u;
+}
+
+static inline uint8_t hitlist_sheik_chain_runtime_clear_owns_empty_hitcapsule(const MslBatch* batch,
+                                                                              size_t idx) {
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  // Sheik Chain refreshes its four fighter HitCapsules outside normal script create edges:
+  // ftSk_SpecialS_80110BCC runs ftSeakSpecialS_LoopChainHitCollisions
+  // (lbColl_80008440 + lbColl_80008428) when mv.sk.specials.x1C reaches zero, then can immediately
+  // run ftSeakSpecialS_LoopChainHitActivate (lbColl_80008434) in the same callback if movement exceeds
+  // attr x4C. That empty victims_1 list is source-owned and must not be backfilled from previous
+  // same-source BODY attribution.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+  //   ftSk_SpecialS_80110BCC,ftSeakSpecialS_LoopChainHitCollisions,
+  //   ftSeakSpecialS_LoopChainHitActivate}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008428,lbColl_80008434,lbColl_80008440}
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_SK_SPECIAL_S ||
+                   action_id == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S ||
+                   action_id == (uint16_t)MSL_ACT_SK_SPECIAL_S_END ||
+                   action_id == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END);
 }
 
 uint8_t hitlist_rollout_dense_seed_same_object_rebind_applies(const MslBatch* batch, int bi,
@@ -515,7 +538,8 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
                       batch->state.hitlist_reseed_gen[bi] &&
                   (hitlist_grounded_attack_runtime_clear_owns_empty_hitcapsule(batch, a_idx) ||
                    hitlist_attackair_create_phase_runtime_clear_owns_empty_hitcapsule(batch,
-                                                                                      a_idx)));
+                                                                                      a_idx) ||
+                   hitlist_sheik_chain_runtime_clear_owns_empty_hitcapsule(batch, a_idx)));
     const uint8_t attackairn_same_source_damagefly_tail =
         (uint8_t)(same_source_body_attribution &&
                   batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_N &&

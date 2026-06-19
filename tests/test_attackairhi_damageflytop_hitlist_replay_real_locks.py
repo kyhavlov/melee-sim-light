@@ -68,6 +68,14 @@ def _aggregate_hvg_dataset_path(root: Path) -> Path:
     return dataset_path
 
 
+def _aggregate_sdw_dataset_path(root: Path) -> Path:
+    dataset_rel = "datasets/aggregate_recent/replays/validation/marth/StiffDraftyWalrus.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
 def _create_hitbox_frames(root: Path, char_name: str, move_name: str) -> list[int]:
     move_data = json.loads((root / "data" / "moves" / f"{char_name}.json").read_text())
     events = move_data["moves"][move_name]["events"]
@@ -190,6 +198,37 @@ def test_attackairhi_create_frame_keeps_same_source_damageflytop_dense_latch_tbk
     assert int(out_without_latch["action_id"][victim]) == ACT_DAMAGE_AIR_2
     assert int(out_without_latch["hitlag"][victim]) > 0
     assert float(out_without_latch["percent"][victim]) > float(ref["percent"][victim])
+
+
+@pytest.mark.integration
+def test_marth_attackairhi_hb0_spacie_tail_contact_stays_full_body_sdw_5404() -> None:
+    # Replay-real lock for SDW rec5404:
+    # - p0 Marth UpAir hb0 overlaps p1 Falco cap12 and source ProcessHit selects that 13-damage
+    #   primary BODY hit before later 10-damage UpAir contacts.
+    # - The static spacie-tail rejection is narrower: Fair tip / UpAir hb2 can be matrix-only
+    #   false positives, but UpAir hb0 must stay on the ordinary ftColl BODY path.
+    #
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8,ftColl_8007A06C}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    # data/moves/marth.json::moves.ftCo_SM_AttackAirHi.events.create_hitbox
+    # data/hurtcaps/falco.json cap12 -> FtPart 18
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _aggregate_sdw_dataset_path(root)
+    ds = read_dataset(str(dataset_path))
+
+    attacker = 0
+    victim = 1
+    record = 5404
+    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    assert int(seed[0]["action_id"][attacker]) == ACT_ATTACK_AIR_HI
+    assert int(seed[0]["action_id"][victim]) == ACT_ATTACK_AIR_HI
+
+    out, ref = _step_row_with_seed(dataset_path, record, seed)
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 7
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 7
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim]) == 52
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]), abs=1.0e-6)
 
 
 @pytest.mark.integration

@@ -52,6 +52,8 @@ _CREATE_HITBOX_FLAGS = {
     "ignore_thrown_fighters": 1 << 7,
     "only_hit_grabbed": 1 << 8,
     "item_match_start_x138": 1 << 9,
+    "item_body_enabled": 1 << 10,
+    "item_grabbable_only": 1 << 11,
 }
 
 RUNTIME_OWNER_EVENT_KINDS = {

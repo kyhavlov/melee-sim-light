@@ -16,6 +16,7 @@
 
 #include "../src/alloc.h"
 #include "../src/api.h"
+#include "../src/anim_frame.h"
 #include "../src/anim_table.h"
 #include "../src/anim_pose.h"
 #include "../src/attack_id_tables.h"
@@ -4678,6 +4679,8 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
   MSL_SET_DICT_FLOAT("sheik_chain_gravity", p->sheik_chain_gravity);
   MSL_SET_DICT_FLOAT("sheik_chain_decay_x34", p->sheik_chain_decay_x34);
   MSL_SET_DICT_FLOAT("sheik_chain_wall_bounce_x58", p->sheik_chain_wall_bounce_x58);
+  MSL_SET_DICT_FLOAT("sheik_chain_attr_x4c", p->sheik_chain_attr_x4c);
+  MSL_SET_DICT_FLOAT("sheik_chain_initial_vel_x50", p->sheik_chain_initial_vel_x50);
   MSL_SET_DICT_FLOAT("sheik_chain_attr_x54", p->sheik_chain_attr_x54);
 #undef MSL_SET_DICT_LONG
 #undef MSL_SET_DICT_FLOAT
@@ -4729,21 +4732,84 @@ static PyObject* msl_sheik_chain_debug_py(PyObject* self, PyObject* args) {
   }
   const size_t base = ii * (size_t)MSL_SHEIK_CHAIN_MAX_LINKS;
   PyObject* links = PyList_New(n);
+  PyObject* velocities = PyList_New(n);
+  PyObject* active_links = PyList_New(n);
   for (int i = 0; i < n; i++) {
     PyList_SET_ITEM(
         links, i,
-        Py_BuildValue("dd", (double)h->batch->state.item_sheik_chain_link_pos_x[base + (size_t)i],
-                      (double)h->batch->state.item_sheik_chain_link_pos_y[base + (size_t)i]));
+        Py_BuildValue("ddd", (double)h->batch->state.item_sheik_chain_link_pos_x[base + (size_t)i],
+                      (double)h->batch->state.item_sheik_chain_link_pos_y[base + (size_t)i],
+                      (double)h->batch->state.item_sheik_chain_link_pos_z[base + (size_t)i]));
+    PyList_SET_ITEM(
+        velocities, i,
+        Py_BuildValue("ddd", (double)h->batch->state.item_sheik_chain_link_vel_x[base + (size_t)i],
+                      (double)h->batch->state.item_sheik_chain_link_vel_y[base + (size_t)i],
+                      (double)h->batch->state.item_sheik_chain_link_vel_z[base + (size_t)i]));
+    PyList_SET_ITEM(
+        active_links, i,
+        PyLong_FromLong((long)h->batch->state.item_sheik_chain_link_active[base + (size_t)i]));
+  }
+  const size_t hist_base = ii * (size_t)MSL_SHEIK_CHAIN_HISTORY_LEN;
+  PyObject* history = PyList_New(MSL_SHEIK_CHAIN_HISTORY_LEN);
+  for (int i = 0; i < MSL_SHEIK_CHAIN_HISTORY_LEN; i++) {
+    PyList_SET_ITEM(
+        history, i,
+        Py_BuildValue("dd",
+                      (double)h->batch->state.item_sheik_chain_history_x[hist_base + (size_t)i],
+                      (double)h->batch->state.item_sheik_chain_history_y[hist_base + (size_t)i]));
   }
   const size_t fidx = (size_t)batch_index * (size_t)MSL_MAX_PLAYERS + (size_t)player_index;
   PyObject* hbs = PyList_New(MSL_MAX_HITBOXES);
+  PyObject* hb_links = PyList_New(MSL_MAX_HITBOXES);
   for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
     float hx = 0.0f;
     float hy = 0.0f;
-    const uint8_t ok = sheik_chain_hitbox_world_pos(h->batch, fidx, (uint8_t)hb, &hx, &hy);
+    const uint8_t link_idx =
+        h->batch->state
+            .item_sheik_chain_hitbox_link_idx[ii * (size_t)MSL_MAX_HITBOXES + (size_t)hb];
+    uint8_t ok = 0u;
+    if (link_idx != 0xFFu && link_idx < (uint8_t)n) {
+      hx = h->batch->state.item_sheik_chain_link_pos_x[base + (size_t)link_idx];
+      hy = h->batch->state.item_sheik_chain_link_pos_y[base + (size_t)link_idx];
+      ok = h->batch->state.item_sheik_chain_hitcaps_active[ii] ? 1u : 0u;
+    }
     PyList_SET_ITEM(hbs, hb, Py_BuildValue("ddi", (double)hx, (double)hy, (int)ok));
+    PyList_SET_ITEM(hb_links, hb, PyLong_FromLong((long)link_idx));
   }
-  return Py_BuildValue("{s:N,s:N}", "links", links, "hitboxes", hbs);
+  PyObject* input_main = Py_BuildValue(
+      "{s:i,s:i,s:i,s:i,s:d,s:d,s:d,s:d,s:d,s:d}", "x", (int)h->batch->state.input_main_x[fidx],
+      "y", (int)h->batch->state.input_main_y[fidx], "prev_x",
+      (int)h->batch->state.prev_input_main_x[fidx], "prev_y",
+      (int)h->batch->state.prev_input_main_y[fidx], "unit_x",
+      (double)stick_i8_to_unit(h->batch->state.input_main_x[fidx]), "unit_y",
+      (double)stick_i8_to_unit(h->batch->state.input_main_y[fidx]), "prev_unit_x",
+      (double)stick_i8_to_unit(h->batch->state.prev_input_main_x[fidx]), "prev_unit_y",
+      (double)stick_i8_to_unit(h->batch->state.prev_input_main_y[fidx]), "chain_prev_unit_x",
+      (double)h->batch->state.item_sheik_chain_prev_stick_x[ii], "chain_prev_unit_y",
+      (double)h->batch->state.item_sheik_chain_prev_stick_y[ii]);
+  PyObject* item_state = Py_BuildValue(
+      "{s:i,s:d,s:d,s:d,s:d,s:d,s:d,s:d,s:i,s:d,s:d,s:d,s:i,s:d,s:d,s:d}", "state",
+      (int)h->batch->state.item_state[ii], "item_x", (double)h->batch->state.item_pos_x[ii],
+      "item_y", (double)h->batch->state.item_pos_y[ii], "owner_x",
+      (double)h->batch->state.pos_x[fidx], "owner_y", (double)h->batch->state.pos_y[fidx],
+      "owner_z", (double)h->batch->state.pos_z[fidx], "facing",
+      h->batch->state.facing[fidx] ? 1.0 : -1.0, "action_frame",
+      (double)h->batch->state.action_frame[fidx], "target_valid",
+      (int)h->batch->state.item_sheik_chain_target_valid[ii], "target_x",
+      (double)h->batch->state.item_sheik_chain_target_x[ii], "target_y",
+      (double)h->batch->state.item_sheik_chain_target_y[ii], "target_z",
+      (double)h->batch->state.item_sheik_chain_target_z[ii], "animation_index",
+      (int)h->batch->state.animation_index[fidx], "anim_frame",
+      (double)h->batch->state.anim_frame_f32[fidx], "chain_pose_angle",
+      (double)h->batch->state.sheik_chain_pose_angle[fidx], "chain_pose_mag",
+      (double)h->batch->state.sheik_chain_pose_mag[fidx]);
+  return Py_BuildValue("{s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:N,s:i,s:i,s:i}", "links", links,
+                       "velocities", velocities, "active_links", active_links, "history", history,
+                       "hitboxes", hbs, "hitbox_link_idx", hb_links, "input", input_main, "item",
+                       item_state, "hitcaps_active",
+                       (int)h->batch->state.item_sheik_chain_hitcaps_active[ii], "hit_cooldown",
+                       (int)h->batch->state.item_sheik_chain_hit_cooldown[ii], "sheik_chain_x0",
+                       (int)h->batch->state.sheik_special_timer[fidx]);
 }
 
 static PyObject* msl_stage_floor_segment_py(PyObject* self, PyObject* args) {

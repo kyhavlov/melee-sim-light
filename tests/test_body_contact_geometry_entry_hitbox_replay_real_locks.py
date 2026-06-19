@@ -3132,6 +3132,75 @@ def test_forensic_optional_attackairb_source_clear_landing_latch_suppresses_fals
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "defender"),
+    [
+        ("DraftyHealthyHare.msl", 482, 1),
+        ("DraftyHealthyHare.msl", 9768, 1),
+        ("DraftyHealthyHare.msl", 9861, 1),
+        ("LoudDullGoat.msl", 5270, 0),
+    ],
+)
+def test_marth_aerial_static_spacie_tail_cap12_stays_suppressed(
+    dataset_name: str, record: int, defender: int
+) -> None:
+    # Static Fox/Falco cap12 is the dynamic tail-chain slot (FtPart 18). Marth aerials must not
+    # treat a regenerated static SSANIM overlap with that slot as full BODY damage unless SSDYNN01
+    # marks the defender submotion as a live collision owner. Existing EscapeAir/Catch tests above
+    # keep the dynamic positives intact.
+    # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+    # data/anims/fox.dyn.bin::SSDYNN01 collision_motion_state_ids
+    # data/hurtcaps/{fox,falco}.json cap12 -> FtPart 18
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth" / dataset_name
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, record)
+    attacker = 1 - defender
+    assert int(seed["char_id"][attacker]) == 18  # Marth.
+    assert int(seed["char_id"][defender]) in (1, 22)  # Fox/Falco.
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [1747, 4086])
+def test_marth_attackairn_no_submotion_lightshield_guard_static_pose_stays_quiet_bme(
+    record: int,
+) -> None:
+    # Falco no-submotion Guard/lightshield rows expose ShieldDesc ownership but no live source
+    # hurtcap packet. Rebuilding fallback BODY caps from the static Guard submotion over-admits
+    # Marth NAir hb0 pokes; source keeps the row in Guard with no BODY damage. Falco/Fox aerial
+    # shield-poke positives stay outside this Marth-specific boundary.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_Guard_Anim,ftCo_80091E78}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # data/moves/marth.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+    # data/hurtcaps/falco.json static Guard fallback capsules
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/BreakableMundaneElephant.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, record)
+    defender = 0
+    assert int(seed["char_id"][defender]) == 22  # Falco.
+    assert int(seed["action_id"][defender]) == 179  # Guard.
+    assert int(seed["animation_index"][defender]) == 0xFFFFFFFF
+    assert float(seed["lightshield_amount"][defender]) > 0.0
+    assert int(seed["char_id"][1 - defender]) == 18  # Marth.
+    assert int(seed["action_id"][1 - defender]) == 65  # AttackAirN.
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_forensic_optional_attackairb_source_clear_landing_latch_requires_dense_hitcapsule_seed_selfplay() -> None:
     # Optional replay-forensic negative for the BAir Landing source-clear owner. Package coverage
     # for this dense-HitCapsule boundary is the committed synthetic guard below.

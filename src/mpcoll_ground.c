@@ -1097,6 +1097,46 @@ static inline float mpcoll_action_pose_ecb_bottom_rel_y(uint8_t char_id, uint16_
   return msl_ecb_bottom_rel_y(char_id, smid, (int)frame);
 }
 
+static inline uint8_t mpcoll_replay_rollout_advanced_past_reseed(const MslBatch* batch, int bi) {
+  if (batch == NULL || batch->replay_rollout_reseeded == NULL ||
+      batch->replay_rollout_reseeded[bi] == 0u || batch->replay_rollout_seed_frame_id == NULL) {
+    return 0u;
+  }
+  return (batch->state.frame_id[bi] != batch->replay_rollout_seed_frame_id[bi]) ? 1u : 0u;
+}
+
+static inline uint8_t mpcoll_common_fall_blended_ecb_seed_bit(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_FALL:
+    case MSL_ACT_FALL_F:
+    case MSL_ACT_FALL_B:
+      return 1u << 0;
+    case MSL_ACT_FALL_AERIAL:
+    case MSL_ACT_FALL_AERIAL_F:
+    case MSL_ACT_FALL_AERIAL_B:
+      return 1u << 1;
+    case MSL_ACT_FALL_SPECIAL:
+    case MSL_ACT_FALL_SPECIAL_F:
+    case MSL_ACT_FALL_SPECIAL_B:
+      return 1u << 2;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t mpcoll_common_fall_blended_ecb_live_owner(const MslBatch* batch, size_t idx,
+                                                                uint16_t action_id) {
+  if (batch == NULL || batch->state.common_fall_blend_x4[idx] == 0.0f) {
+    return 0u;
+  }
+  const uint8_t bit = mpcoll_common_fall_blended_ecb_seed_bit(action_id);
+  if (bit == 0u) {
+    return 0u;
+  }
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+  return (ch != NULL && (ch->common_fall_blended_ecb_seed_mask & bit) != 0u) ? 1u : 0u;
+}
+
 static inline uint8_t mpcoll_common_fall_blended_ecb_points(MslEcbWorldPoints* out,
                                                             const MslBatch* batch, size_t idx,
                                                             uint8_t char_id, uint16_t msid,
@@ -8491,15 +8531,24 @@ void mpcoll_ground_apply(MslBatch* batch) {
       uint16_t common_fall_neutral_msid = 0u;
       uint16_t common_fall_forward_msid = 0u;
       uint16_t common_fall_backward_msid = 0u;
+      const uint8_t common_fall_blended_action =
+          msl_action_common_fall_blend_msids(action_id, &common_fall_neutral_msid,
+                                             &common_fall_forward_msid, &common_fall_backward_msid);
       const uint8_t common_fall_blended_seed_ecb_consumer =
           (batch->state.coll_common_fall_blended_ecb_seed_valid[idx] != 0u && have_state_cur_ecb &&
-           have_state_desired_ecb &&
-           msl_action_common_fall_blend_msids(action_id, &common_fall_neutral_msid,
-                                              &common_fall_forward_msid,
-                                              &common_fall_backward_msid) &&
+           have_state_desired_ecb && common_fall_blended_action &&
            batch->state.common_fall_blend_x4[idx] != 0.0f)
               ? 1u
               : 0u;
+      const uint8_t common_fall_blended_live_ecb_consumer =
+          (!lock_bottom_to_zero && mpcoll_replay_rollout_advanced_past_reseed(batch, bi) != 0u &&
+           common_fall_blended_action &&
+           mpcoll_common_fall_blended_ecb_live_owner(batch, idx, action_id) != 0u)
+              ? 1u
+              : 0u;
+      const uint8_t common_fall_blended_ecb_consumer =
+          (common_fall_blended_seed_ecb_consumer || common_fall_blended_live_ecb_consumer) ? 1u
+                                                                                           : 0u;
       MslEcbWorldPoints squeeze_restore_ecb_points = {0};
       const uint8_t have_squeeze_restore_ecb = mpcoll_state_squeeze_restore_ecb_points(
           batch, idx, &squeeze_restore_ecb_points, prev_x, prev_y, ecb_frame_prev);
@@ -8596,7 +8645,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
           (have_state_cur_ecb && !lock_bottom_to_zero &&
            (jumpaerial_entry_ecb_consumer || damage_entry_attackair_ecb_consumer ||
             damage_entry_escapeair_ecb_consumer || active_damage_hitlag_ecb_consumer ||
-            common_fall_blended_seed_ecb_consumer))
+            common_fall_blended_ecb_consumer))
               ? 1u
               : ((escapeair_jumpaerial_prev_ecb_lifetime ||
                   escapeair_no_lock_entry_prev_ecb_lifetime) &&
@@ -8620,7 +8669,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                           : pre_entry_prev_ecb_rel;
       MslEcbWorldPoints common_fall_blended_current_ecb_points = {0};
       const uint8_t have_common_fall_blended_current_ecb =
-          (common_fall_blended_seed_ecb_consumer &&
+          (common_fall_blended_ecb_consumer &&
            mpcoll_common_fall_blended_ecb_points(&common_fall_blended_current_ecb_points, batch,
                                                  idx, char_id, common_fall_neutral_msid,
                                                  ecb_frame_cur, facing_dir_for_ecb, x, y))
@@ -8630,7 +8679,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
           have_common_fall_blended_current_ecb ? common_fall_blended_current_ecb_points.bottom_rel_y
                                                : desired_ecb_rel;
       const float hidden_current_ecb_rel = active_damage_hitlag_ecb_consumer ? state_cur_ecb_rel
-                                           : common_fall_blended_seed_ecb_consumer
+                                           : common_fall_blended_ecb_consumer
                                                ? common_fall_blended_current_ecb_rel
                                                : desired_ecb_rel;
       const float prev_ecb_rel =
@@ -8647,7 +8696,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       if (use_hidden_ecb_lifetime) {
         mpcoll_bottom_world_point_from_rel(&cur_bot, x, y, hidden_current_ecb_rel, ecb_frame_cur);
         mpcoll_bottom_world_point_from_rel(&prev_bot, prev_x, prev_y, prev_ecb_rel, ecb_frame_prev);
-        if (common_fall_blended_seed_ecb_consumer) {
+        if (common_fall_blended_ecb_consumer) {
           batch->state.coll_common_fall_blended_ecb_seed_valid[idx] = 0u;
         }
       } else {
@@ -8666,13 +8715,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
       MslEcbWorldPoints prev_ecb_points = {0};
       if (use_hidden_ecb_lifetime && have_state_cur_ecb) {
         prev_ecb_points = state_cur_ecb_points;
-        if (common_fall_blended_seed_ecb_consumer) {
+        if (common_fall_blended_ecb_consumer) {
           // Source CommonFall collision order:
           // mpCollInterpolateECB first promotes the previous callback's blended current ECB into
           // prev_ecb, then ftCo_Fall_Anim_Inner's selected submotion/blend publishes the current
-          // ECB consumed by mpColl_80044628_Floor. Reseeded one-step rows only receive a hidden
-          // seed for the previous callback's CollData; current must follow the live post-Anim
-          // CommonFall blend, not the raw neutral Fall/FallAerial/FallSpecial pose.
+          // ECB consumed by mpColl_80044628_Floor. Direct one-step reseed rows may only use this
+          // lane when seed generation published the previous callback's CollData; after a replay
+          // rollout advances past its reseed frame, the same live
+          // mv.co.{fall,fallaerial,fallspecial}.x4/smid state is runtime-owned and must also
+          // publish the blended current/desired ECB instead of the raw neutral
+          // Fall/FallAerial/FallSpecial pose.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
           //   ftCo_Fall_Anim_Inner,ftCo_Fall_Coll}
           // refs/melee/src/melee/mp/mpcoll.c::{
@@ -15803,15 +15855,22 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // previous and current callback roots are already below a static one-way platform has
             // not produced that source floor hit. If CollData is also carrying that same stale
             // one-way platform id, final root projection must not treat the carried id as a fresh
-            // acceptance and snap upward to the platform. True above->platform crossings with no
-            // same-platform carry keep the ordinary publication path. Fastfall rows also keep the
-            // ordinary bottom-sweep path; source Fall_Coll has a stronger downward sweep and the
-            // existing Fall stale-platform owners do not borrow non-fastfall guards for fastfall.
+            // acceptance and snap upward to the platform. True above->platform crossings are owned
+            // by the callback-local ECB bottom interval: that can be CommonFall's live blended-JObj
+            // ECB after Fall_Anim has selected/blended the collision pose, or the ordinary neutral
+            // Fall ECB when no source-owned blend is active. If the seed proves a nonzero
+            // CommonFall blend but extracted character/action data says that blend is not a source
+            // ECB owner, the static platform root-below guard still applies.
+            // Fastfall rows also keep the ordinary bottom-sweep path; source Fall_Coll has a
+            // stronger downward sweep and the existing Fall stale-platform owners do not borrow
+            // non-fastfall guards for fastfall.
             // FoD height platforms remain on the transformed-platform owners above.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+            //   ftCo_Fall_Anim_Inner,ftCo_Fall_Coll}
             // refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
             // refs/melee/src/melee/mp/mpcoll.c::{
-            //   mpColl_80044628_Floor,mpColl_80044838_Floor}
+            //   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor,
+            //   mpColl_80044838_Floor}
             // data/stages/bin/*.bin::MSLSTG01 floor flags
             (action_id == (uint16_t)MSL_ACT_FALL &&
              batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_FALL &&
@@ -15820,7 +15879,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
              g->lines[(size_t)final_ground_line_idx].is_platform &&
              !resolved_line_has_platform_transform && batch->state.fall_fast[idx] == 0u &&
              batch->state.speed_y_self[idx] < 0.0f && prev_y < (contact_y - k_floor_y_bias) &&
-             y < (contact_y - k_floor_y_bias))
+             y < (contact_y - k_floor_y_bias) &&
+             !(prev_bottom_y > (contact_y + k_floor_y_bias) &&
+               cur_bottom_y < (contact_y - k_floor_y_bias) &&
+               (common_fall_blended_ecb_consumer != 0u ||
+                batch->state.common_fall_blend_x4[idx] == 0.0f)))
                 ? 1u
                 : 0u;
         const uint8_t suppress_fall_attackair_entry_transformed_platform_root_only_land =
@@ -17089,6 +17152,13 @@ void mpcoll_ground_apply(MslBatch* batch) {
           eff = mpcoll_pose_ecb_bottom_rel_y(
               char_id, batch->state.animation_index[idx],
               msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]), 0u);
+          if (common_fall_blended_ecb_consumer && have_common_fall_blended_current_ecb) {
+            // The same ftCo_Fall_Anim_Inner-selected JObj pose consumed by this callback becomes
+            // the frame-end current ECB packet observed by the next mpColl pass.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+            eff = common_fall_blended_current_ecb_points.bottom_rel_y;
+          }
           if (batch->state.ecb_lock_timer[idx] != 0u) {
             // Same use_locked/lock_bottom_to_zero split as the validated consumers: an
             // owner-held lock preserves the explicit lane; a ground-departure lock holds the

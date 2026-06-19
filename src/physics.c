@@ -420,6 +420,18 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint8_t char
                        (fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_LW_START &&
                         fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_LW_TURN));
     }
+    if (char_id == (uint8_t)MSL_CHAR_ID_SHEIK) {
+      // Grounded Sheik Chain Phys is the common ground-friction helper for Start/held/End.
+      // Keep this source-owned motion-state slice here so seeded gr_vel decays instead of dragging
+      // the attached Chain article during the held whip.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+      //   ftSk_SpecialSStart_Phys,ftSk_SpecialS_Phys,ftSk_SpecialSEnd_Phys}
+      if (action_id == (uint16_t)MSL_ACT_SK_SPECIAL_S_START ||
+          action_id == (uint16_t)MSL_ACT_SK_SPECIAL_S ||
+          action_id == (uint16_t)MSL_ACT_SK_SPECIAL_S_END) {
+        return 1u;
+      }
+    }
     if (action_id >= 341u) {
       return 0u;
     }
@@ -869,8 +881,16 @@ static inline uint8_t physics_damagefall_source_fastfall_latch(const MslBatch* b
   return 1u;
 }
 
+static inline uint8_t physics_replay_rollout_advanced_past_reseed(const MslBatch* batch, int bi) {
+  if (batch == NULL || batch->replay_rollout_reseeded == NULL ||
+      batch->replay_rollout_reseeded[bi] == 0u || batch->replay_rollout_seed_frame_id == NULL) {
+    return 0u;
+  }
+  return (batch->state.frame_id[bi] != batch->replay_rollout_seed_frame_id[bi]) ? 1u : 0u;
+}
+
 static inline uint8_t physics_action_use_pre_integration_common_air_gravity(const MslBatch* batch,
-                                                                            size_t idx,
+                                                                            int bi, size_t idx,
                                                                             uint16_t action_id) {
   // Decomp: many common airborne action states call `ft_80084DB0` from their phys callbacks, which
   // runs `ftCommon_CheckFallFast` + `ftCommon_Fall/FallFast` (mutating `self_vel.y`) before
@@ -905,6 +925,14 @@ static inline uint8_t physics_action_use_pre_integration_common_air_gravity(cons
                      action_id == (uint16_t)MSL_ACT_CAPTURE_JUMP);
   }
   if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL) {
+    // Direct teacher-forced seeds may still need the legacy seed-displacement bridge above, but
+    // once a replay rollout has advanced past the exact reseed row, DamageFall is live runtime
+    // state again and its Phys callback owns source-order gravity before position integration.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Phys
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+    if (physics_replay_rollout_advanced_past_reseed(batch, bi)) {
+      return 1u;
+    }
     return (uint8_t)(physics_damagefall_seed_allow_interrupt(batch, idx) ||
                      physics_damagefall_source_fastfall_latch(batch, msl_common_params(), idx));
   }
@@ -924,13 +952,17 @@ static inline uint8_t physics_damagefall_entry_uses_pre_integration_phys(uint16_
                                                                          uint16_t prev_action_id,
                                                                          int16_t action_frame) {
   // DamageFly_Anim can enter DamageFall via ftCo_80090780 before the same Fighter_procUpdate
-  // reaches Phys. The destination DamageFall_Phys calls ft_80084DB0, so gravity mutates
-  // self_vel.y before Fighter_procUpdate integrates cur_pos on that entry frame.
+  // reaches Phys. CliffWait timeout uses the same ftCo_80090780 destination path from IASA after
+  // CliffWait_Anim decrements mv.co.cliff.x4 to zero. The destination DamageFall_Phys calls
+  // ft_80084DB0, so gravity mutates self_vel.y before Fighter_procUpdate integrates cur_pos on
+  // that entry frame.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::{ftCo_CliffWait_Anim,ftCo_8009A9AC}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::{ftCo_80090780,ftCo_DamageFall_Phys}
   // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
   return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FALL && action_frame <= 0 &&
-                   physics_action_is_damage_fly(prev_action_id));
+                   (physics_action_is_damage_fly(prev_action_id) ||
+                    prev_action_id == (uint16_t)MSL_ACT_CLIFF_WAIT));
 }
 
 static inline uint8_t physics_action_is_guardsetoff_turnover_owner(uint16_t action_id,
@@ -2197,7 +2229,7 @@ void physics_integrate(MslBatch* batch) {
                       batch->state.speed_air_x_self[idx], phys->aerial_friction);
                 }
               }
-            } else if (physics_action_use_pre_integration_common_air_gravity(batch, idx,
+            } else if (physics_action_use_pre_integration_common_air_gravity(batch, bi, idx,
                                                                              action_id) ||
                        physics_damagefall_entry_uses_pre_integration_phys(
                            action_id, batch->state.prev_action_id[idx], action_frame) ||
@@ -2938,6 +2970,7 @@ void physics_integrate(MslBatch* batch) {
       // frame displacement (notably DamageFall; see helper docs above).
       if (!on_ground && !physics_is_match_flow_airborne(action_id) &&
           physics_action_use_post_integration_common_air_gravity(batch, idx, action_id) &&
+          !physics_action_use_pre_integration_common_air_gravity(batch, bi, idx, action_id) &&
           !physics_damagefall_entry_uses_pre_integration_phys(
               action_id, batch->state.prev_action_id[idx], action_frame)) {
         const MslCharParams* phys = msl_char_params_fast(batch->state.char_id[idx]);

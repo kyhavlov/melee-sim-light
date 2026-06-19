@@ -291,6 +291,8 @@ static inline void enter_fall(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
   }
+  batch->state.cliff_wait_timer_x4_runtime_valid[idx] = 0u;
+  batch->state.cliff_wait_timer_x4[idx] = 0.0f;
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
   batch->state.on_ground[idx] = 0;
@@ -302,6 +304,8 @@ static inline void enter_fall_keep_fastfall(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
   }
+  batch->state.cliff_wait_timer_x4_runtime_valid[idx] = 0u;
+  batch->state.cliff_wait_timer_x4[idx] = 0.0f;
   const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
@@ -311,6 +315,38 @@ static inline void enter_fall_keep_fastfall(MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Anim
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
   // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside Fighter_ChangeMotionState)
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.fall_fast[idx] = keep_fastfall;
+}
+
+static inline void enter_damage_fall_from_cliff_wait_timeout(MslBatch* batch,
+                                                             const MslCharParams* ch, size_t idx) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+  batch->state.cliff_wait_timer_x4_runtime_valid[idx] = 0u;
+  batch->state.cliff_wait_timer_x4[idx] = 0.0f;
+
+  // Decomp: CliffWait timeout calls ftCo_8009A9AC, which sets ledge cooldown and exits through
+  // ftCo_80090780. That helper forces GA_Air if needed, enters DamageFall, keeps fastfall, then
+  // clamps horizontal air drift through ftCommon_ClampAirDrift.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_80090780
+  if (batch->state.on_ground[idx]) {
+    batch->state.on_ground[idx] = 0u;
+    batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+    batch->state.speed_ground_x_self[idx] = 0.0f;
+    batch->state.jumps_left[idx] = ch->max_jumps > 0u ? (uint8_t)(ch->max_jumps - 1u) : 0u;
+  }
+  if (batch->state.speed_air_x_self[idx] > ch->air_max_horizontal_velocity) {
+    batch->state.speed_air_x_self[idx] = ch->air_max_horizontal_velocity;
+  } else if (batch->state.speed_air_x_self[idx] < -ch->air_max_horizontal_velocity) {
+    batch->state.speed_air_x_self[idx] = -ch->air_max_horizontal_velocity;
+  }
+
+  const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_DAMAGE_FALL;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_DAMAGE_FALL;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.fall_fast[idx] = keep_fastfall;
 }
@@ -557,15 +593,27 @@ static inline void enter_cliff_wait(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
   }
+  const MslCommonParams* c = msl_common_params();
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_CLIFF_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_WAIT;
   batch->state.on_ground[idx] = 0;
   batch->state.fall_fast[idx] = 0;
-  // Decomp: ftCo_8009A804 initializes mv.co.cliff.x8=0. The later CliffClimb/drop IASA owner
-  // requires a neutral stick/c-stick callback to latch x8 before a stick option can be consumed.
+  // Decomp: ftCo_8009A804 initializes mv.co.cliff.x8=0 and mv.co.cliff.x4 from
+  // p_ftCommonData->x48C/x490. The later CliffClimb/drop IASA owner requires a neutral
+  // stick/c-stick callback to latch x8 before a stick option can be consumed.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A804
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
   batch->state.cliff_option_stick_latch_x8[idx] = 0u;
+  if (c != NULL) {
+    batch->state.cliff_wait_timer_x4[idx] =
+        (batch->state.percent[idx] < c->cliff_wait_percent_threshold)
+            ? c->cliff_wait_frames_low_percent
+            : c->cliff_wait_frames_high_percent;
+    batch->state.cliff_wait_timer_x4_runtime_valid[idx] = 1u;
+  } else {
+    batch->state.cliff_wait_timer_x4[idx] = 0.0f;
+    batch->state.cliff_wait_timer_x4_runtime_valid[idx] = 0u;
+  }
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
@@ -579,6 +627,8 @@ static inline uint8_t enter_cliff_option(MslBatch* batch, int bi, int p, uint16_
   batch->state.animation_index[idx] = (uint32_t)smid;
   batch->state.on_ground[idx] = 0;
   batch->state.fall_fast[idx] = 0;
+  batch->state.cliff_wait_timer_x4_runtime_valid[idx] = 0u;
+  batch->state.cliff_wait_timer_x4[idx] = 0.0f;
   // Decomp: cliff option entries immediately tick the new motion in the same proc
   // (Fighter_ChangeMotionState -> ftAnim_8006EBA4).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AB9C
@@ -962,6 +1012,8 @@ void ledge_update_pre_physics(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       uint16_t a = batch->state.action_id[idx];
       if (!is_cliff_action_any(a)) {
+        batch->state.cliff_wait_timer_x4_runtime_valid[idx] = 0u;
+        batch->state.cliff_wait_timer_x4[idx] = 0.0f;
         continue;
       }
 
@@ -984,11 +1036,21 @@ void ledge_update_pre_physics(MslBatch* batch) {
             cliff_hold_phys_snap(batch, bi, idx, (uint16_t)MSL_SM_CLIFF_CATCH);
           }
         } else if (a == (uint16_t)MSL_ACT_CLIFF_WAIT) {
-          // Decomp: CliffWait_Phys is a direct call-through to ftCo_CliffCatch_Phys and therefore
-          // keeps the fighter snapped to ledge_point + TransNPos on every CliffWait frame.
+          // Decomp callback order is Anim -> IASA -> Phys. If the live x4 timer will expire in
+          // this Anim/IASA slice, ftCo_8009A9AC enters DamageFall before CliffWait_Phys can run,
+          // so the terminal timeout frame must not apply the ledge snap.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::{
+          //   ftCo_CliffWait_Anim,ftCo_8009A9AC,ftCo_CliffWait_Phys}
+          const uint8_t terminal_timeout =
+              (uint8_t)(batch->state.cliff_wait_timer_x4_runtime_valid[idx] != 0u &&
+                        batch->state.cliff_wait_timer_x4[idx] <= 1.0f);
+          // Otherwise CliffWait_Phys is a direct call-through to ftCo_CliffCatch_Phys and keeps the
+          // fighter snapped to ledge_point + TransNPos on every CliffWait frame.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_CliffWait_Phys
           // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
-          cliff_hold_phys_snap(batch, bi, idx, (uint16_t)MSL_SM_CLIFF_WAIT);
+          if (terminal_timeout == 0u) {
+            cliff_hold_phys_snap(batch, bi, idx, (uint16_t)MSL_SM_CLIFF_WAIT);
+          }
         } else if (a == (uint16_t)MSL_ACT_CLIFF_JUMP_SLOW1 ||
                    a == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK1) {
           const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], smid);
@@ -1047,6 +1109,14 @@ void ledge_update_pre_physics(MslBatch* batch) {
           a = batch->state.action_id[idx];
         }
       } else if (a == (uint16_t)MSL_ACT_CLIFF_WAIT) {
+        // Decomp: Fighter_procUpdate runs CliffWait_Anim before CliffWait_IASA. x4 is a hidden
+        // runtime mv.co.cliff field, so only live CliffWait entries own this countdown.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::{
+        //   ftCo_CliffWait_Anim,ftCo_CliffWait_IASA}
+        if (batch->state.cliff_wait_timer_x4_runtime_valid[idx] != 0u &&
+            batch->state.cliff_wait_timer_x4[idx] > 0.0f) {
+          batch->state.cliff_wait_timer_x4[idx] -= 1.0f;
+        }
         // CliffWait IASA ordering is decomp-defined.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_CliffWait_IASA
         if (ledge_wait_try_attack(batch, bi, p) || ledge_wait_try_escape(batch, c, bi, p) ||
@@ -1054,21 +1124,19 @@ void ledge_update_pre_physics(MslBatch* batch) {
           // State changed; position snap for new hold option is handled by enter helpers.
           a = batch->state.action_id[idx];
         } else {
-          // CliffWait hang time expires -> fall.
-          // Decomp: ftCo_8009A9AC.
+          // CliffWait hang time expires through ftCo_8009A9AC -> ftCo_80090780 (DamageFall).
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
-          const float percent = batch->state.percent[idx];
-          const float wait_frames = (percent < c->cliff_wait_percent_threshold)
-                                        ? c->cliff_wait_frames_low_percent
-                                        : c->cliff_wait_frames_high_percent;
-          if (wait_frames > 0.0f && (float)batch->state.action_frame[idx] >= wait_frames) {
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_80090780
+          if (batch->state.cliff_wait_timer_x4_runtime_valid[idx] != 0u &&
+              batch->state.cliff_wait_timer_x4[idx] <= 0.0f) {
             // Decomp: CliffWait auto-release sets fp->x2064_ledgeCooldown.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
             const uint16_t cd = c->ledge_cooldown_frames;
             batch->state.ledge_cooldown[idx] = (cd > 0xFFu) ? 0xFFu : (uint8_t)cd;
             mark_stale_floor_skip_for_ledge_flow(batch, bi, idx);
             batch->state.ledge_side[idx] = -1;
-            enter_fall(batch, idx);
+            enter_damage_fall_from_cliff_wait_timeout(
+                batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
             a = batch->state.action_id[idx];
           }
         }

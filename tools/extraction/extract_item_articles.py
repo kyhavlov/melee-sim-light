@@ -209,8 +209,10 @@ for _base_name, (_base_id, _values) in SHEIK_NEEDLE_DROP_BOUNCE_TABLES.items():
 # they are read from the character attrs JSON via the generic `key in attrs` path in `_records`.
 # field_id base 200 (the 1..141 range is taken by the explicit specs + needle drop/bounce tables).
 # refs/melee/src/melee/it/itCharItems.h::itSeakChain_Attrs
-# refs/melee/src/melee/it/items/itseakchain.c (it_802BAF2C link count; it_802BBB0C gravity/segment;
-#   itSeakChain_clamp_x10/_x14 friction; it_802BC94C/fn_802BB44C decay/wall-bounce)
+# refs/melee/src/melee/it/items/itseakchain.c (it_802BAF2C link count; it_802BCFC4 launch;
+#   it_802BBB0C gravity/segment; itSeakChain_clamp_x10/_x14 friction;
+#   it_802BC94C/fn_802BB44C decay/wall-bounce)
+# refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_80110BCC
 SHEIK_CHAIN_ATTR_FIELDS = (
     ("sheik_chain_link_count", ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
     ("sheik_chain_segment_length", ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
@@ -229,6 +231,8 @@ SHEIK_CHAIN_ATTR_FIELDS = (
     ("sheik_chain_attr_x40", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
     ("sheik_chain_attr_x44", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
     ("sheik_chain_attr_x48", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    ("sheik_chain_attr_x4c", ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    ("sheik_chain_initial_vel_x50", ITEM_ARTICLE_VALUE_F32, UNIT_VELOCITY),
     ("sheik_chain_attr_x54", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
     ("sheik_chain_wall_bounce_x58", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
     ("sheik_chain_attr_x5c", ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
