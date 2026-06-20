@@ -166,7 +166,8 @@ function currentViewerFrame(frameNumber, controllers) {
     frameNumber,
     controllers,
     sim.stageStateView(),
-    sim.shieldBubblesView()
+    sim.shieldBubblesView(),
+    sim.hitboxesView()
   );
 }
 

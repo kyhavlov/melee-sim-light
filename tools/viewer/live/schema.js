@@ -30,6 +30,11 @@ export const INPUT_SIZE = 32;
 export const COMPARE_SIZE = 1022;
 export const STAGE_STATE_SIZE = 38;
 export const SHIELD_BUBBLES_SIZE = 64;
+export const MAX_PLAYERS = 4;
+export const MAX_HITBOXES = 4;
+export const HITBOX_SIZE = 40;
+export const HITBOX_PLAYER_SIZE = 160;
+export const HITBOXES_SIZE = 640;
 export const ITEM_SIZE = 48;
 
 export const BUTTONS = {
@@ -118,6 +123,19 @@ export const itemOffsets = {
   misc0: 44,
   misc1: 45,
   misc2: 46,
+};
+
+export const hitboxOffsets = {
+  x: 0,
+  y: 4,
+  z: 8,
+  radius: 12,
+  damage: 16,
+  u16_0: 20,
+  u16_1: 24,
+  u16_3: 28,
+  bonePartId: 32,
+  enabled: 36,
 };
 
 export const stageStateOffsets = {

@@ -98,6 +98,26 @@ def test_live_viewer_stage_state_schema_matches_native_binding() -> None:
     assert _js_object_int(schema, "stageStateOffsets", "randallY") == 34
 
 
+def test_live_viewer_hitbox_display_schema_matches_native_debug_rows() -> None:
+    # Webplay renders Sheik Chain from msl_batch_debug_hitboxes_world rows:
+    # [x, y, z, radius, damage, u16_0, u16_1, u16_3, bone_part_id, enabled].
+    root = Path(__file__).resolve().parents[1]
+    schema = (root / "tools/viewer/live/schema.js").read_text()
+    build_wasm = (root / "tools/viewer/live/build_wasm.sh").read_text()
+
+    assert _js_export_int(schema, "MAX_PLAYERS") == 4
+    assert _js_export_int(schema, "MAX_HITBOXES") == 4
+    assert _js_export_int(schema, "HITBOX_SIZE") == 40
+    assert _js_export_int(schema, "HITBOX_PLAYER_SIZE") == 160
+    assert _js_export_int(schema, "HITBOXES_SIZE") == 640
+    assert _js_object_int(schema, "hitboxOffsets", "x") == 0
+    assert _js_object_int(schema, "hitboxOffsets", "radius") == 12
+    assert _js_object_int(schema, "hitboxOffsets", "damage") == 16
+    assert _js_object_int(schema, "hitboxOffsets", "bonePartId") == 32
+    assert _js_object_int(schema, "hitboxOffsets", "enabled") == 36
+    assert "_msl_batch_debug_hitboxes_world" in build_wasm
+
+
 def test_live_viewer_supported_characters_have_packaged_animation_zips() -> None:
     root = Path(__file__).resolve().parents[1]
     schema = (root / "tools/viewer/live/schema.js").read_text()

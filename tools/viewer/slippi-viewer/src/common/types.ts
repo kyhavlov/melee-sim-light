@@ -53,12 +53,12 @@ export type SpectateData = {
 
 export type NonReactiveState = {
   payloadSizes?: CommandPayloadSizes;
-  replayFormatVersion?: string,
+  replayFormatVersion?: string;
   /**
    * Player control starts at 84. Timer starts at 123.
    */
   gameFrames: Frame[];
-  firstKnownFrame?: number,
+  firstKnownFrame?: number;
   latestFinalizedFrame?: number;
   stageStateOnLoad: StageStateOnLoad;
 };
@@ -73,41 +73,50 @@ export interface CommandPayloadSizes {
 
 export type PreFrameUpdateEvent = PlayerInputs;
 export type PostFrameUpdateEvent = PlayerState;
-export type FrameStartEvent = { frameNumber: number, randomSeed: number };
+export type FrameStartEvent = { frameNumber: number; randomSeed: number };
 export type ItemUpdateEvent = ItemUpdate;
 export type GameEndEvent = GameEnding;
 export type GameStartEvent = GameSettings;
-export type FrameBookendEvent = FrameBookend
-export type FodPlatformsEvent = FodPlatforms
+export type FrameBookendEvent = FrameBookend;
+export type FodPlatformsEvent = FodPlatforms;
 
-export type GameEvent = {
-  type: "pre_frame_update",
-  data: PreFrameUpdateEvent
-} | {
-  type: "post_frame_update",
-  data: PostFrameUpdateEvent
-} | {
-  type: "frame_start",
-  data: FrameStartEvent
-} | {
-  type: "item_update",
-  data: ItemUpdate
-} | {
-  type: "game_end",
-  data: GameEndEvent
-} | {
-  type: "event_payloads",
-  data: null
-} | {
-  type: "game_start",
-  data: GameStartEvent
-} | {
-  type: "frame_bookend",
-  data: FrameBookendEvent
-} | {
-  type: "fod_platforms",
-  data: FodPlatformsEvent
-};
+export type GameEvent =
+  | {
+      type: "pre_frame_update";
+      data: PreFrameUpdateEvent;
+    }
+  | {
+      type: "post_frame_update";
+      data: PostFrameUpdateEvent;
+    }
+  | {
+      type: "frame_start";
+      data: FrameStartEvent;
+    }
+  | {
+      type: "item_update";
+      data: ItemUpdate;
+    }
+  | {
+      type: "game_end";
+      data: GameEndEvent;
+    }
+  | {
+      type: "event_payloads";
+      data: null;
+    }
+  | {
+      type: "game_start";
+      data: GameStartEvent;
+    }
+  | {
+      type: "frame_bookend";
+      data: FrameBookendEvent;
+    }
+  | {
+      type: "fod_platforms";
+      data: FodPlatformsEvent;
+    };
 
 export interface GameSettings {
   /**
@@ -286,6 +295,7 @@ export interface PlayerState {
   readonly attackBasedYSpeed: number;
   readonly selfInducedGroundXSpeed: number;
   readonly hitlagRemaining: number;
+  readonly hitboxes?: HitboxUpdate[];
   readonly isReflectActive: boolean;
   readonly isFastfalling: boolean;
   readonly isShieldActive: boolean;
@@ -294,6 +304,16 @@ export interface PlayerState {
   readonly isPowershieldActive: boolean;
   readonly isDead: boolean;
   readonly isOffscreen: boolean;
+}
+
+export interface HitboxUpdate {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly radius: number;
+  readonly damage: number;
+  readonly bonePartId: number;
 }
 
 export interface ItemUpdate {

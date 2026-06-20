@@ -1,4 +1,13 @@
-import { BUTTONS, ITEM_SIZE, compareOffsets, itemOffsets, stageStateOffsets } from "./schema.js";
+import {
+  BUTTONS,
+  HITBOX_PLAYER_SIZE,
+  HITBOX_SIZE,
+  ITEM_SIZE,
+  compareOffsets,
+  hitboxOffsets,
+  itemOffsets,
+  stageStateOffsets,
+} from "./schema.js";
 
 const HURTBOX_STATES = ["vulnerable", "invulnerable", "intangible"];
 
@@ -165,7 +174,8 @@ export function viewerFrameFromCompare(
   frameNumber,
   controllersByPlayer,
   stageState = null,
-  shieldBubbles = null
+  shieldBubbles = null,
+  hitboxes = null
 ) {
   const numPlayers = u8(compare, compareOffsets.numPlayers);
   const players = [];
@@ -215,6 +225,7 @@ export function viewerFrameFromCompare(
         attackBasedYSpeed: arrF32(compare, compareOffsets.speedYAttack, idx),
         selfInducedGroundXSpeed: arrF32(compare, compareOffsets.speedGroundXSelf, idx),
         hitlagRemaining: arrU16(compare, compareOffsets.hitlag, idx),
+        hitboxes: playerHitboxes(hitboxes, idx),
         isReflectActive: Boolean(flags2218 & 0x10),
         isFastfalling: Boolean(flags221a & 0x08),
         isShieldActive: Boolean(flags221b & 0x80),
@@ -280,4 +291,30 @@ export function viewerFrameFromCompare(
           : undefined,
     },
   };
+}
+
+function playerHitboxes(hitboxes, playerIndex) {
+  if (!hitboxes) {
+    return [];
+  }
+  const out = [];
+  const base = playerIndex * HITBOX_PLAYER_SIZE;
+  for (let hb = 0; hb < 4; hb += 1) {
+    const off = base + hb * HITBOX_SIZE;
+    const enabled = f32(hitboxes, off + hitboxOffsets.enabled) !== 0;
+    const radius = f32(hitboxes, off + hitboxOffsets.radius);
+    if (!enabled || !(radius > 0)) {
+      continue;
+    }
+    out.push({
+      id: hb,
+      x: f32(hitboxes, off + hitboxOffsets.x),
+      y: f32(hitboxes, off + hitboxOffsets.y),
+      z: f32(hitboxes, off + hitboxOffsets.z),
+      radius,
+      damage: f32(hitboxes, off + hitboxOffsets.damage),
+      bonePartId: f32(hitboxes, off + hitboxOffsets.bonePartId),
+    });
+  }
+  return out;
 }

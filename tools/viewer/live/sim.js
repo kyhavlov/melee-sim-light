@@ -3,8 +3,11 @@ import {
   CHAR_FALCO,
   CHAR_FOX,
   COMPARE_SIZE,
+  HITBOXES_SIZE,
+  HITBOX_PLAYER_SIZE,
   INPUT_SIZE,
   MATCH_CONFIG_SIZE,
+  MAX_PLAYERS,
   SHIELD_BUBBLES_SIZE,
   STAGE_STATE_SIZE,
   STAGE_FINAL_DESTINATION,
@@ -47,13 +50,17 @@ export class MslWasmSim {
     this.comparePtr = module._malloc(COMPARE_SIZE);
     this.stageStatePtr = module._malloc(STAGE_STATE_SIZE);
     this.shieldBubblesPtr = module._malloc(SHIELD_BUBBLES_SIZE);
+    this.hitboxesPtr = module._malloc(HITBOXES_SIZE);
+    this.hitboxCountPtr = module._malloc(4);
     if (
       !this.matchPtr ||
       !this.prevInputPtr ||
       !this.inputPtr ||
       !this.comparePtr ||
       !this.stageStatePtr ||
-      !this.shieldBubblesPtr
+      !this.shieldBubblesPtr ||
+      !this.hitboxesPtr ||
+      !this.hitboxCountPtr
     ) {
       throw new Error("failed to allocate WASM IO buffers");
     }
@@ -78,6 +85,8 @@ export class MslWasmSim {
       this.comparePtr,
       this.stageStatePtr,
       this.shieldBubblesPtr,
+      this.hitboxesPtr,
+      this.hitboxCountPtr,
     ]) {
       if (ptr) this.module._free(ptr);
     }
@@ -113,6 +122,7 @@ export class MslWasmSim {
     this.#writeCompare();
     this.#writeStageState();
     this.#writeShieldBubbles();
+    this.#writeHitboxes();
     return this.compareView();
   }
 
@@ -146,6 +156,7 @@ export class MslWasmSim {
     this.#writeCompare();
     this.#writeStageState();
     this.#writeShieldBubbles();
+    this.#writeHitboxes();
     const writeCompareMs = performance.now() - writeCompareStartMs;
     this.displayFrame += 1;
     this.lastTimings.inputMs = inputMs;
@@ -165,6 +176,10 @@ export class MslWasmSim {
 
   shieldBubblesView() {
     return new DataView(this.module.HEAPU8.buffer, this.shieldBubblesPtr, SHIELD_BUBBLES_SIZE);
+  }
+
+  hitboxesView() {
+    return new DataView(this.module.HEAPU8.buffer, this.hitboxesPtr, HITBOXES_SIZE);
   }
 
   #writeCompare() {
@@ -201,6 +216,26 @@ export class MslWasmSim {
     );
     if (err !== 0) {
       throw new Error(`msl_batch_debug_shield_display_bubbles_world failed: ${err}`);
+    }
+  }
+
+  #writeHitboxes() {
+    if (typeof this.module._msl_batch_debug_hitboxes_world !== "function") {
+      this.module.HEAPU8.fill(0, this.hitboxesPtr, this.hitboxesPtr + HITBOXES_SIZE);
+      return;
+    }
+    this.module.HEAPU8.fill(0, this.hitboxesPtr, this.hitboxesPtr + HITBOXES_SIZE);
+    for (let playerIndex = 0; playerIndex < MAX_PLAYERS; playerIndex += 1) {
+      const err = this.module._msl_batch_debug_hitboxes_world(
+        this.handle,
+        0,
+        playerIndex,
+        this.hitboxesPtr + playerIndex * HITBOX_PLAYER_SIZE,
+        this.hitboxCountPtr
+      );
+      if (err !== 0) {
+        throw new Error(`msl_batch_debug_hitboxes_world failed: ${err}`);
+      }
     }
   }
 

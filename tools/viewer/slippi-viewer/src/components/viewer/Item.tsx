@@ -1,6 +1,11 @@
 import { createMemo, For, Match, Switch } from "solid-js";
 import { itemNamesById } from "~/common/ids";
-import { ItemUpdate, PlayerUpdate, NonReactiveState } from "~/common/types";
+import {
+  HitboxUpdate,
+  ItemUpdate,
+  PlayerUpdate,
+  NonReactiveState,
+} from "~/common/types";
 import { access } from "~/state/accessor";
 
 // TODO: characters projectiles
@@ -13,6 +18,9 @@ export function Item(props: { item: ItemUpdate }) {
     <Switch>
       <Match when={itemName() === "Needle(thrown)"}>
         <Needle item={props.item} />
+      </Match>
+      <Match when={itemName() === "Sheik's chain"}>
+        <SheikChain item={props.item} />
       </Match>
       <Match when={itemName() === "Fox's Laser"}>
         <FoxLaser item={props.item} />
@@ -171,6 +179,47 @@ function Needle(props: { item: ItemUpdate }) {
         r={500 / 256}
         fill="darkgray"
       />
+    </>
+  );
+}
+
+function SheikChain(props: { item: ItemUpdate }) {
+  const frame = createMemo(() => access("frames")[props.item.frameNumber]);
+  const owner = createMemo(() => {
+    const ownerIndex = props.item.owner;
+    return ownerIndex >= 0 ? frame()?.players[ownerIndex] : undefined;
+  });
+  const hitboxes = createMemo<HitboxUpdate[]>(
+    () => owner()?.state.hitboxes ?? []
+  );
+  const pointString = createMemo(() =>
+    hitboxes()
+      .map((hitbox) => `${hitbox.x},${hitbox.y}`)
+      .join(" ")
+  );
+  return (
+    <>
+      <polyline
+        points={pointString()}
+        fill="none"
+        stroke="#4b5563"
+        stroke-width={1.35}
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <For each={hitboxes()}>
+        {(hitbox) => (
+          <circle
+            cx={hitbox.x}
+            cy={hitbox.y}
+            r={hitbox.radius}
+            fill="#f59e0b"
+            fill-opacity={0.28}
+            stroke="#b45309"
+            stroke-width={0.8}
+          />
+        )}
+      </For>
     </>
   );
 }
