@@ -850,6 +850,12 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         # Decomp: ftCo_DatAttrs.run_animation_scaling (ft/types.h +0x2C), used by `ftCo_Run_Anim`:
         #   anim_rate = ABS(vel) / fp->co_attrs.run_animation_scaling
         "run_animation_scaling": f(0x2C),
+        # Decomp: ftCo_RunBrake_Enter initializes mv.co.runbrake.frames from
+        # ftCo_DatAttrs.max_run_brake_frames (ft/types.h +0x30), and ftCo_RunBrake_Anim keeps the
+        # state alive while both the AObj and this hidden timer have frames remaining.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
+        #   ftCo_RunBrake_Enter,ftCo_RunBrake_Anim}
+        "max_run_brake_frames": f(0x30),
         "ground_max_horizontal_velocity": f(0x34),
         "jump_startup_frames": int(max(1, jump_startup_frames)),
         "jump_h_initial_velocity": f(0x3C),
@@ -1179,6 +1185,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "dash_run_acceleration_b",
         "dash_run_terminal_velocity",
         "run_animation_scaling",
+        "max_run_brake_frames",
         "weight",
         "weight_independent_throws_mask",
         "model_scaling",

@@ -2613,6 +2613,11 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.attack100_x4[idx] = 0u;
       batch->state.run_x0[idx] = seed->run_x0[p];
       batch->state.runbrake_cmd0[idx] = seed->runbrake_cmd0[p] ? 1u : 0u;
+      batch->state.runbrake_freeze_x0[idx] =
+          (uint8_t)(seed->action_id[p] == (uint16_t)MSL_ACT_RUN_BRAKE &&
+                    seed->frame_speed_mul_f32[p] == 0.0f &&
+                    move_tables_runbrake_cmd1_active(seed->char_id[p], seed->anim_frame_f32[p]) !=
+                        0u);
       batch->state.dash_x4[idx] = seed->dash_x4[p];
       batch->state.shine_release_lag[idx] = seed->shine_release_lag[p];
       batch->state.shine_is_release[idx] = seed->shine_is_release[p];

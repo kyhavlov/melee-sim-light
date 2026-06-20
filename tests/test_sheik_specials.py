@@ -36,6 +36,7 @@ B = 0x0200
 
 ACT_WAIT = 0x000E
 ACT_TURN = 0x0012
+ACT_RUN_BRAKE = 0x0017
 ACT_FALL = 0x001D
 ACT_FALL_SPECIAL = 0x0023
 ACT_KNEE_BEND = 0x0018
@@ -43,9 +44,12 @@ ACT_SQUAT = 0x0027
 ACT_JUMP_F = 0x0019
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
+ACT_ATTACK_AIR_B = 0x0043
+ACT_ATTACK_100_START = 0x002F
 ACT_LANDING_AIR_N = 0x0046
 ACT_DAMAGE_N_1 = 0x004E
 ACT_DAMAGE_N_3 = 0x0050
+ACT_DAMAGE_LW_2 = 0x0052
 ACT_GUARD_ON = 0x00B2
 ACT_FX_SPECIAL_N_START = 0x0155
 ACT_SK_SPECIAL_N_START = 341
@@ -173,6 +177,7 @@ def _run_sample_rollout_records(
     *,
     start_record: int,
     records: tuple[int, ...],
+    replay_frame_rng: bool = False,
 ) -> dict[int, np.void]:
     import msl_binding
 
@@ -197,11 +202,15 @@ def _run_sample_rollout_records(
         msl_binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, max_record + 1):
             row = samples[record : record + 1]
-            msl_binding.step_input(
-                handle,
-                row["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
-                row["input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
-            )
+            prev_input_bytes = row["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy()
+            input_bytes = row["input_t"].view(np.uint8).reshape((1, input_stride)).copy()
+            if replay_frame_rng:
+                frame_seed_bytes = row["seed_t"].view(np.uint8).reshape((1, seed_stride)).copy()
+                msl_binding.step_input_replay_frame_rng(
+                    handle, frame_seed_bytes, prev_input_bytes, input_bytes
+                )
+            else:
+                msl_binding.step_input(handle, prev_input_bytes, input_bytes)
             if record in wanted:
                 msl_binding.write_compare(handle, out_bytes)
                 out[record] = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
@@ -595,6 +604,11 @@ def test_sheik_vanish_travel_entry_spawns_smoke_article_demo_locks(
 
     out = _run_sample_row(samples, record)
     assert int(out["action_id"][0]) == int(samples[record]["ref_t1"]["action_id"][0])
+    if record == 1262:
+        assert float(out["speed_air_x_self"][0]) == pytest.approx(
+            float(samples[record]["ref_t1"]["speed_air_x_self"][0]), abs=1.0e-6
+        )
+        assert float(out["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=1.0e-6)
     assert _item_type_present(out, ITEM_SHEIK_VANISH)
     ref_slot = _item_slot_for_type(samples[record]["ref_t1"], ITEM_SHEIK_VANISH)
     out_slot = _item_slot_for_type(out, ITEM_SHEIK_VANISH)
@@ -982,6 +996,74 @@ def test_sheik_chain_start_hidden_x0_hitlag_freeze_delays_active_demo_lock() -> 
 
 
 @pytest.mark.integration
+def test_sheik_demo_chain_start_terminal_frontier_payload_and_hitlag_freeze_rollout() -> None:
+    # SpecialAirSStart creates Chain fighter hitcaps from script frame 22, before the held-chain
+    # x1C movement gate runs. The source article publisher can put hb2 and hb3 on the same terminal
+    # frontier link; the terminal hb3 payload owns the BODY damage log, then owner hitlag freezes
+    # `mv.sk.specials.x0` before Start can enter active Chain.
+    # refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialS_UpdateHitboxes,ftSk_SpecialS_CheckInitChain}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=4261,
+        records=(4623, 4624, 4625, 4630, 4633, 4640),
+    )
+
+    assert int(rows[4623]["hitlag"][0]) == 0
+    assert int(rows[4623]["action_id"][1]) == ACT_WAIT
+    assert float(rows[4623]["percent"][1]) == 0.0
+
+    hit = rows[4624]
+    ref_hit = samples[4624]["ref_t1"]
+    assert int(hit["hitlag"][0]) == int(ref_hit["hitlag"][0]) == 4
+    assert int(hit["action_id"][1]) == int(ref_hit["action_id"][1]) == ACT_DAMAGE_LW_2
+    assert int(hit["hitlag"][1]) == int(ref_hit["hitlag"][1]) == 6
+    assert float(hit["percent"][1]) == pytest.approx(float(ref_hit["percent"][1]))
+
+    assert int(rows[4625]["hitlag"][0]) == int(samples[4625]["ref_t1"]["hitlag"][0]) == 3
+    assert int(rows[4630]["action_id"][0]) == int(samples[4630]["ref_t1"]["action_id"][0])
+    assert int(rows[4633]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S
+    assert int(rows[4640]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_END
+
+
+@pytest.mark.integration
+def test_sheik_demo_chain_retract_landing_and_flag_tail_rollout() -> None:
+    # Follow-on lock for the official demo after the rec4624 Chain contact:
+    # - active SpecialAirS floor contact enters aerial retract without publishing grounded state,
+    # - later AttackAirB -> Landing carries the source interrupt-allowed state flag,
+    # - Attack12 -> Attack100Start carries the source set_jab_rapid flag into rapid-jab start.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialAirS_Coll,ftSk_SpecialS_80111EB4,ftSk_SpecialAirSEnd_Coll}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+    #   ftCo_Landing_Enter,ftCo_Landing_Enter_Basic}
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80071B28
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Start_IASA
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=4261,
+        records=(4640, 4641, 5072, 5448, 5976),
+    )
+
+    assert int(rows[4640]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_END
+    assert int(rows[4640]["on_ground"][0]) == 0
+    assert float(rows[4641]["pos_y"][0]) == pytest.approx(
+        float(samples[4641]["ref_t1"]["pos_y"][0])
+    )
+
+    assert int(rows[5072]["action_id"][0]) == ACT_LANDING
+    assert int(rows[5072]["state_flags"][0][0]) == int(samples[5072]["ref_t1"]["state_flags"][0][0])
+
+    assert int(rows[5448]["action_id"][0]) == ACT_ATTACK_100_START
+    assert int(rows[5448]["state_flags"][0][0]) == int(samples[5448]["ref_t1"]["state_flags"][0][0])
+    assert int(rows[5976]["action_id"][0]) == ACT_ATTACK_100_START
+    assert int(rows[5976]["state_flags"][0][0]) == int(samples[5976]["ref_t1"]["state_flags"][0][0])
+
+
+@pytest.mark.integration
 def test_sheik_chain_active_release_latch_exits_one_frame_after_b_release_demo_lock() -> None:
     # Active Chain checks the existing release latch in Anim, then IASA sets x4 from the current
     # B-held state. Therefore the B release at row 465 is not consumed until row 466.
@@ -1050,6 +1132,102 @@ def test_sheik_vanish_air_end_floor_landing_does_not_steal_cliffcatch_negative()
 
     out = _run_sample_row(samples, record)
     assert int(out["action_id"][0]) == ACT_CLIFF_CATCH
+
+
+@pytest.mark.integration
+def test_sheik_demo_grounded_vanish_air_travel_and_end_friction_rollout_lock() -> None:
+    # ftSk_SpecialAirHiStart_0_Coll can enter airborne travel from grounded Start0 through
+    # ftSk_SpecialHi_80113390 / ftSk_SpecialHi_80113A30; the entry frame publishes horizontal
+    # travel velocity while vertical root displacement remains floor-owned until the next frame.
+    # When the hidden x0 timer expires, ftSk_SpecialHi_80113F68 multiplies the current travel
+    # self_vel by ftSeakAttributes::x54, and ftSk_SpecialAirHi_Phys then applies
+    # ftCommon_8007CEF4 aerial friction via Fighter_procUpdate.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+    #   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialHi_80113390,ftSk_SpecialHi_80113A30,
+    #   ftSk_SpecialAirHiStart_1_Anim,ftSk_SpecialHi_80113F68,ftSk_SpecialAirHi_Phys}
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CEF4
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    samples = _sheik_validation_samples(
+        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+    )
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=1566,
+        records=(1710, 1730, 1737, 1740),
+        replay_frame_rng=True,
+    )
+
+    assert int(rows[1710]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert float(rows[1710]["pos_y"][0]) == pytest.approx(
+        float(samples[1710]["ref_t1"]["pos_y"][0]), abs=1.0e-5
+    )
+    assert int(rows[1730]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI
+    assert float(rows[1730]["speed_air_x_self"][0]) == pytest.approx(
+        float(samples[1730]["ref_t1"]["speed_air_x_self"][0]), abs=1.0e-6
+    )
+    assert float(rows[1730]["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=1.0e-6)
+    assert float(rows[1737]["speed_air_x_self"][0]) == pytest.approx(
+        float(samples[1737]["ref_t1"]["speed_air_x_self"][0]), abs=1.0e-6
+    )
+    assert int(rows[1740]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI
+    assert float(rows[1740]["pos_x"][0]) == pytest.approx(
+        float(samples[1740]["ref_t1"]["pos_x"][0]), abs=1.0e-5
+    )
+
+
+@pytest.mark.integration
+def test_sheik_demo_main_floor_vanish_air_travel_integrates_vertical_immediately_lock() -> None:
+    # Adjacent ground-line discriminator for the Start0 -> AirHiStart1 handoff: the soft-platform
+    # entry above defers vertical displacement for one frame, but main-floor upward travel applies
+    # the freshly computed self_vel.y immediately.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+    #   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialHi_80113390,ftSk_SpecialHi_80113A30}
+    # data/stages/*.bin::MSLSTG01 floor line platform flags
+    samples = _sheik_validation_samples(
+        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+    )
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=1928,
+        records=(2089, 2090, 2147),
+        replay_frame_rng=True,
+    )
+
+    assert int(rows[2089]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert float(rows[2089]["pos_y"][0]) == pytest.approx(
+        float(samples[2089]["ref_t1"]["pos_y"][0]), abs=1.0e-5
+    )
+    assert float(rows[2090]["pos_y"][0]) == pytest.approx(
+        float(samples[2090]["ref_t1"]["pos_y"][0]), abs=1.0e-5
+    )
+    assert int(rows[2147]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI
+    assert int(samples[2147]["ref_t1"]["on_ground"][0]) == 0
+    assert int(rows[2147]["on_ground"][0]) == 0
+
+
+@pytest.mark.integration
+def test_sheik_demo_air_vanish_start0_low_stick_deadzone_keeps_x_static_rollout() -> None:
+    # SpecialAirHiStart_0_Phys calls ftCommon_8007D268, which consumes the common preprocessed
+    # stick. Low raw X values inside p_ftCommonData's deadzone must not introduce horizontal drift
+    # during Vanish startup; rec8253/8255 are after the Wait-RNG row but prove this float owner.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHiStart_0_Phys
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D268,ftCommon_8007D174}
+    # data/common/ft_common_data.json::lstick_deadzone_x
+    samples = _sheik_validation_samples(
+        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+    )
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=8227,
+        records=(8248, 8253, 8255),
+        replay_frame_rng=True,
+    )
+
+    for rec in (8248, 8253, 8255):
+        ref = samples[rec]["ref_t1"]
+        assert int(rows[rec]["action_id"][0]) == int(ref["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_0
+        assert float(rows[rec]["speed_air_x_self"][0]) == pytest.approx(0.0, abs=1e-6)
+        assert float(rows[rec]["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=1e-6)
 
 
 @pytest.mark.integration
@@ -1397,16 +1575,33 @@ def test_sheik_ground_needle_end_anim_end_runs_destination_wait_tail_synthetic()
 @pytest.mark.integration
 def test_sheik_ground_vanish_end_anim_end_turns_from_destination_wait_demo_lock() -> None:
     # ftSk_SpecialHi_Anim ends through ft_8008A2BC. The destination Wait_IASA tail can immediately
-    # enter Turn when the stick crosses the turn threshold.
-    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialHi_Anim
+    # enter Turn when the stick crosses the turn threshold. During the grounded end, ftSk_SpecialHi_Phys
+    # applies ft_80084F3C ground friction so the launch gr_vel decays to zero before the anim end.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+    #   ftSk_SpecialHi_Phys,ftSk_SpecialHi_Anim}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
     # refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
-    record = 1880
-    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_HI
-    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_TURN
+    samples = _sheik_validation_samples(
+        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+    )
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=1840,
+        records=(1841, 1850, 1880),
+        replay_frame_rng=True,
+    )
 
-    out = _run_sample_row(samples, record)
-    assert int(out["action_id"][0]) == ACT_TURN
+    assert int(rows[1841]["action_id"][0]) == ACT_SK_SPECIAL_HI
+    assert float(rows[1841]["speed_ground_x_self"][0]) == pytest.approx(
+        float(samples[1841]["ref_t1"]["speed_ground_x_self"][0]), abs=1.0e-6
+    )
+    assert float(rows[1850]["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=1.0e-6)
+    assert int(samples[1880]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_HI
+    assert int(samples[1880]["ref_t1"]["action_id"][0]) == ACT_TURN
+    assert int(rows[1880]["action_id"][0]) == ACT_TURN
+    assert float(rows[1880]["pos_x"][0]) == pytest.approx(
+        float(samples[1880]["ref_t1"]["pos_x"][0]), abs=1.0e-5
+    )
 
 
 @pytest.mark.integration
@@ -1615,6 +1810,189 @@ def test_sheik_demo_needle_shoot_plain_step_does_not_pull_replay_frame_rng_negat
     assert int(out["items"]["exists"][1]) == 1
     assert int(out["items"]["type"][1]) == ITEM_SHEIK_NEEDLE_THROWN
     assert float(out["items"]["pos_y"][1]) != pytest.approx(float(ref["items"]["pos_y"][1]))
+
+
+@pytest.mark.integration
+def test_sheik_demo_air_needle_end_uses_ft80084eec_no_stick_drift_rollout() -> None:
+    # Aerial Needle end Phys is ft_80084EEC: gravity + horizontal air friction, with no
+    # ftCommon_8007D268 stick drift. In this demo, live stick X on rec776/777 used to move Sheik
+    # after self_vel.x had decayed to zero; that upstream X error made rec872 miss the third
+    # DownWait pushbox nudge and rec888 choose DamageFlyN instead of source DamageFlyLw.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialAirNEnd_Phys
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC
+    samples = _sheik_validation_samples(
+        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+    )
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=582,
+        records=(775, 776, 777, 778, 872, 888),
+        replay_frame_rng=True,
+    )
+
+    for rec in (775, 776, 777):
+        ref = samples[rec]["ref_t1"]
+        out = rows[rec]
+        assert int(out["action_id"][0]) == int(ref["action_id"][0]) == ACT_SK_SPECIAL_AIR_N_END
+        assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=1e-6)
+
+    ref_landing = samples[778]["ref_t1"]
+    assert int(rows[778]["action_id"][0]) == int(ref_landing["action_id"][0]) == ACT_LANDING
+    assert float(rows[778]["pos_x"][0]) == pytest.approx(float(ref_landing["pos_x"][0]), abs=1e-6)
+
+    ref_nudge = samples[872]["ref_t1"]
+    assert float(rows[872]["pos_x"][1]) == pytest.approx(float(ref_nudge["pos_x"][1]), abs=1e-6)
+
+    ref_hit = samples[888]["ref_t1"]
+    assert int(rows[888]["action_id"][1]) == int(ref_hit["action_id"][1]) == 89  # DamageFlyLw
+    assert int(rows[888]["hitlag"][1]) == int(ref_hit["hitlag"][1]) == 7
+    assert int(rows[888]["hitstun"][1]) == int(ref_hit["hitstun"][1]) == 32
+    assert float(rows[888]["percent"][1]) == pytest.approx(float(ref_hit["percent"][1]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_sheik_demo_ground_chain_start_damps_run_velocity_rollout_float_lock() -> None:
+    # Grounded Side-B entry runs the common ftCo_SpecialS doEnter bundle before Sheik's Chain enter:
+    # gr_vel is damped by co_attrs.xB8, then SpecialSStart_Phys applies ft_80084F3C ground friction
+    # on the same frame. This closes the rec1369 float-only divergence and its rec1474 pos_x tail.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialS_Enter,ftSk_SpecialSStart_Phys}
+    # data/characters/sheik.json::side_special_ground_entry_vel_mul
+    samples = _sheik_validation_samples(
+        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+    )
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=582,
+        records=(1368, 1369, 1372, 1474),
+        replay_frame_rng=True,
+    )
+
+    ref_pre = samples[1368]["ref_t1"]
+    assert int(rows[1368]["action_id"][0]) == int(ref_pre["action_id"][0]) == 21
+    assert float(rows[1368]["speed_ground_x_self"][0]) == pytest.approx(
+        float(ref_pre["speed_ground_x_self"][0]), abs=1e-6
+    )
+
+    ref_entry = samples[1369]["ref_t1"]
+    assert int(rows[1369]["action_id"][0]) == int(ref_entry["action_id"][0]) == ACT_SK_SPECIAL_S_START
+    assert float(rows[1369]["speed_ground_x_self"][0]) == pytest.approx(
+        float(ref_entry["speed_ground_x_self"][0]), abs=1e-6
+    )
+    assert float(rows[1369]["speed_air_x_self"][0]) == pytest.approx(
+        float(ref_entry["speed_air_x_self"][0]), abs=1e-6
+    )
+    assert float(rows[1369]["pos_x"][0]) == pytest.approx(float(ref_entry["pos_x"][0]), abs=1e-6)
+
+    ref_stop = samples[1372]["ref_t1"]
+    assert float(rows[1372]["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=1e-6)
+    assert float(rows[1372]["pos_x"][0]) == pytest.approx(float(ref_stop["pos_x"][0]), abs=1e-6)
+
+    ref_tail = samples[1474]["ref_t1"]
+    assert int(rows[1474]["action_id"][0]) == int(ref_tail["action_id"][0]) == ACT_TURN
+    assert float(rows[1474]["pos_x"][0]) == pytest.approx(float(ref_tail["pos_x"][0]), abs=1e-5)
+
+
+@pytest.mark.integration
+def test_sheik_demo_runbrake_freeze_latch_resumes_one_aobj_tick_later_rollout() -> None:
+    # RunBrake's cmd_vars[1] freeze is not a stateless speed predicate:
+    # ftCo_RunBrake_Anim sets mv.co.runbrake.x0 when |gr_vel| >= x42C, keeps the AObj frozen
+    # through the first <= x42C callback frame, then resumes on the next AObj tick. In the Sheik
+    # demo this keeps rec3156 frozen, resumes on rec3157, and exits to Wait on rec3163.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
+    #   ftCo_RunBrake_Enter,ftCo_RunBrake_Anim}
+    # data/scripts/sheik.bin::MSLFTSC1 ftCo_SM_RunBrake set_cmd_var(idx=1,value=1)
+    # data/common/ft_common_data.json::runbrake_anim_freeze_speed_threshold
+    samples = _sheik_validation_samples(
+        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+    )
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=3100,
+        records=(3153, 3155, 3156, 3157, 3162, 3163),
+        replay_frame_rng=True,
+    )
+
+    for rec in (3153, 3155, 3156):
+        ref = samples[rec]["ref_t1"]
+        assert int(rows[rec]["action_id"][0]) == int(ref["action_id"][0]) == ACT_RUN_BRAKE
+        assert int(rows[rec]["action_frame"][0]) == int(ref["action_frame"][0]) == 11
+
+    ref_resume = samples[3157]["ref_t1"]
+    assert int(rows[3157]["action_id"][0]) == int(ref_resume["action_id"][0]) == ACT_RUN_BRAKE
+    assert int(rows[3157]["action_frame"][0]) == int(ref_resume["action_frame"][0]) == 12
+
+    ref_tail = samples[3162]["ref_t1"]
+    assert int(rows[3162]["action_id"][0]) == int(ref_tail["action_id"][0]) == ACT_RUN_BRAKE
+    assert int(rows[3162]["action_frame"][0]) == int(ref_tail["action_frame"][0]) == 17
+
+    ref_wait = samples[3163]["ref_t1"]
+    assert int(rows[3163]["action_id"][0]) == int(ref_wait["action_id"][0]) == ACT_WAIT
+    assert int(rows[3163]["action_frame"][0]) == int(ref_wait["action_frame"][0]) == 0
+
+
+@pytest.mark.integration
+def test_sheik_demo_kneebend_escapeair_landing_fallspecial_publishes_substep_root() -> None:
+    # Fresh KneeBend -> Jump -> EscapeAir reaches EscapeAir_Coll in the same fighter proc. The
+    # floor hit enters LandingFallSpecial and publishes the mpColl_800471F8 first-substep root on
+    # the entry row; the full EscapeAir self velocity remains the post-frame velocity.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044838_Floor}
+    samples = _sheik_validation_samples(
+        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+    )
+
+    out = _run_sample_row(samples, 3497)
+    ref = samples[3497]["ref_t1"]
+    assert int(out["action_id"][0]) == int(ref["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["action_frame"][0]) == int(ref["action_frame"][0]) == 0
+    assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=1e-6)
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(
+        float(ref["speed_ground_x_self"][0]), abs=1e-6
+    )
+
+    stale_prev_history = _run_sample_row(
+        samples,
+        3497,
+        mutate_seed={"seed_prev_action_id": ACT_WAIT},
+    )
+    assert int(stale_prev_history["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert float(stale_prev_history["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=1e-6)
+
+    no_frame_start_kneebend = _run_sample_row(
+        samples,
+        3497,
+        mutate_seed={"action_id": ACT_FALL},
+    )
+    assert int(no_frame_start_kneebend["action_id"][0]) != ACT_LANDING_FALL_SPECIAL
+    assert float(no_frame_start_kneebend["pos_x"][0]) != pytest.approx(
+        float(ref["pos_x"][0]), abs=1e-3
+    )
+
+
+@pytest.mark.integration
+def test_sheik_demo_kneebend_escapeair_substep_root_keeps_later_landing_rollout() -> None:
+    samples = _sheik_validation_samples(
+        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+    )
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=3008,
+        records=(3497, 3971, 4088, 4089),
+        replay_frame_rng=False,
+    )
+
+    for rec in (3497, 3971, 4088, 4089):
+        ref = samples[rec]["ref_t1"]
+        out = rows[rec]
+        assert int(out["action_id"][0]) == int(ref["action_id"][0]), rec
+        assert int(out["action_frame"][0]) == int(ref["action_frame"][0]), rec
+        assert int(out["on_ground"][0]) == int(ref["on_ground"][0]), rec
+        assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=1e-5)
 
 
 def test_sheik_needle_start_without_hidden_count_does_not_spawn_held_article_negative() -> None:
@@ -2991,6 +3369,32 @@ def test_sheik_vanish_explosion_damages_non_owner_once_active_window() -> None:
     assert all(round(float(o["percent"][0]), 1) == 0.0 for o in outs), "owner self-hit"
 
 
+@pytest.mark.integration
+def test_sheik_demo_vanish_smoke_spawn_frame_body_hit_and_no_hitlag_rehit_lock() -> None:
+    # Vanish smoke state 0 publishes an item BODY HitCapsule immediately after the accessory spawn
+    # path. That live item demands fighter hurtcap endpoint geometry before item collision; the
+    # following frame must not reapply while the victim is still in hitlag.
+    # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
+    # refs/melee/src/melee/it/it_2725.c::it_8027518C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,Fighter_ProcessHit_8006D1EC}
+    samples = _sheik_validation_samples(
+        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+    )
+
+    out = _run_sample_row(samples, 1927)
+    assert int(out["action_id"][1]) == int(samples[1927]["ref_t1"]["action_id"][1]) == 90
+    assert int(out["hitlag"][1]) == int(samples[1927]["ref_t1"]["hitlag"][1]) == 7
+    assert float(out["percent"][1]) == pytest.approx(
+        float(samples[1927]["ref_t1"]["percent"][1]), abs=1.0e-5
+    )
+
+    out = _run_sample_row(samples, 1928)
+    assert int(out["hitlag"][1]) == int(samples[1928]["ref_t1"]["hitlag"][1]) == 6
+    assert float(out["percent"][1]) == pytest.approx(
+        float(samples[1928]["ref_t1"]["percent"][1]), abs=1.0e-5
+    )
+
+
 def test_sheik_vanish_explosion_inactive_after_remove_frame() -> None:
     # Past vanish_hitbox_remove_frame the HitCapsule is gone: a smoke whose article age exceeds the
     # remove frame deals no damage even while overlapping the opponent (still visually present).
@@ -3066,10 +3470,10 @@ def _seed_vanish_smoke_over_shielding_defender(*, smoke_y=8.0, timer=80.0, shiel
 
 
 def _vanish_smoke_on_shielded_body_seed(*, shield_hp):
-    # An age-4 explosion sphere placed on the shielding defender's body hurtcap (x~8, the injected Fox's
-    # hurtcaps sit left of its x=20 root). Shield bubble center is ~(22.6, 8.6): at full shield_hp the
-    # bubble reaches the body and overlaps the explosion; shrunk it does not. Pose is held identical
-    # (Guard + animation_index 0xFFFFFFFF) across both so ONLY the shield size differs.
+    # An age-4 explosion sphere placed on the shielding defender's refreshed Guard body hurtcap.
+    # Shield bubble center is ~(22.6, 8.6): at full shield_hp the bubble reaches the body and overlaps
+    # the explosion; shrunk it does not. Pose is held identical (Guard + animation_index 0xFFFFFFFF)
+    # across both so ONLY the shield size differs.
     import msl_binding
 
     ap = msl_binding.item_article_params(7)
@@ -3079,7 +3483,7 @@ def _vanish_smoke_on_shielded_body_seed(*, shield_hp):
     seed = _seed_vanish_smoke_over_shielding_defender(
         smoke_y=0.0, timer=float(int(ap["sheik_vanish_lifetime_frames"]) - age), shield_hp=shield_hp
     )
-    seed["items"]["pos_x"][0, 0] = np.float32(8.0)
+    seed["items"]["pos_x"][0, 0] = np.float32(12.0)
     return seed
 
 

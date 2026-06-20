@@ -994,6 +994,10 @@ uint8_t move_tables_runbrake_cmd0_active(uint8_t char_id, float cur_anim_frame_f
   return cmd_var_active(char_id, (uint16_t)MSL_SM_RUN_BRAKE, 0u, 1u, cur_anim_frame_f32);
 }
 
+uint8_t move_tables_runbrake_cmd1_active(uint8_t char_id, float cur_anim_frame_f32) {
+  return cmd_var_active(char_id, (uint16_t)MSL_SM_RUN_BRAKE, 1u, 1u, cur_anim_frame_f32);
+}
+
 uint8_t move_tables_turnrun_cmd1_active(uint8_t char_id, float cur_anim_frame_f32) {
   return cmd_var_active(char_id, (uint16_t)MSL_SM_TURN_RUN, 1u, 1u, cur_anim_frame_f32);
 }

@@ -4,6 +4,30 @@
   ],
   "rollout_float_annotations": [
     {
+      "dataset": "sheik_demo_game.msl",
+      "record": 2452,
+      "player": 0,
+      "field": "pos_x",
+      "category": "open_mpcoll_cliff_projection_float_order",
+      "reason": "Official Sheik demo residual: Dream Land segment-5 airborne Fall/cliff projection differs by 0.000534 with matching discrete state and velocity; source owner is exact mpColl/PPC projection rounding, not RNG."
+    },
+    {
+      "dataset": "sheik_demo_game.msl",
+      "record": 4078,
+      "player": 1,
+      "field": "pos_y",
+      "category": "open_f32_integration_order",
+      "reason": "Official Sheik demo residual: Marth vertical position differs by 6.1e-05 with matching Turn/Fall discrete state; source owner is f32/PPC gravity/integration order, not RNG."
+    },
+    {
+      "dataset": "sheik_demo_game.msl",
+      "record": 4077,
+      "player": 1,
+      "field": "speed_y_self",
+      "category": "open_f32_integration_order",
+      "reason": "Official Sheik demo residual: Marth vertical self velocity differs by 4.1e-06 with matching discrete state; source owner is f32/PPC gravity/integration order, not RNG."
+    },
+    {
       "dataset": "Game_20260514T181413.msl",
       "record": 2463,
       "player": 0,

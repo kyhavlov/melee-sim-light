@@ -46,6 +46,13 @@ typedef struct MslCharParams {
   float dash_run_terminal_velocity;
 
   float run_animation_scaling;
+  // Hidden RunBrake lifetime timer (`mv.co.runbrake.frames`).
+  //
+  // Decomp: ftCo_RunBrake_Enter copies `fp->co_attrs.max_run_brake_frames`, and
+  // ftCo_RunBrake_Anim decrements it alongside the AObj remaining-frame gate.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
+  //   ftCo_RunBrake_Enter,ftCo_RunBrake_Anim}
+  float max_run_brake_frames;
 
   // Turn / jump
   uint8_t turn_frames;

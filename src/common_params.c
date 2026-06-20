@@ -467,6 +467,8 @@ int common_params_init(void) {
       json_get_f32(buf, "ground_kb_friction_mul", &g_params.ground_kb_friction_mul) != 0 ||
       json_get_f32(buf, "knockback_frame_decay", &g_params.knockback_frame_decay) != 0 ||
       json_get_f32(buf, "air_drift_overmax_friction", &g_params.air_drift_overmax_friction) != 0 ||
+      json_get_f32(buf, "runbrake_anim_freeze_speed_threshold",
+                   &g_params.runbrake_anim_freeze_speed_threshold) != 0 ||
       json_get_f32(buf, "kb_weight_mul", &g_params.kb_weight_mul) != 0 ||
       json_get_f32(buf, "kb_weight_mul2", &g_params.kb_weight_mul2) != 0 ||
       json_get_f32(buf, "kb_applied_max", &g_params.kb_applied_max) != 0 ||

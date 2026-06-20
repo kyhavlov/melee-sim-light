@@ -3172,6 +3172,97 @@ static inline uint8_t combat_primary_phantom_tiplog_allows_later_same_group_body
   return 0u;
 }
 
+static inline uint8_t combat_sheik_chain_same_frontier_later_hitbox_owns_body(
+    const MslBatch* batch, size_t a_idx, int bi, int attacker, int hb_id, uint8_t hit_group,
+    int defender, int cap_id, uint8_t defender_on_ground, float ax, float ay, float az, float bx,
+    float by, float bz, float cr) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= (int)MSL_MAX_HITBOXES || defender < 0 ||
+      defender >= (int)batch->config.num_players || cap_id < 0 || cap_id >= MSL_MAX_HURTCAPS) {
+    return 0u;
+  }
+  if (batch->state.char_id[a_idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[a_idx];
+  if (action != (uint16_t)MSL_ACT_SK_SPECIAL_S_START &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_S && action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_S_END &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
+    return 0u;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (ap == NULL || ap->sheik_chain_itkind == 0u) {
+    return 0u;
+  }
+  size_t chain_ii = (size_t)-1;
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] != 0u &&
+        batch->state.item_type[ii] == ap->sheik_chain_itkind &&
+        (int)batch->state.item_owner[ii] == attacker &&
+        batch->state.item_sheik_chain_links_valid[ii] != 0u) {
+      chain_ii = ii;
+      break;
+    }
+  }
+  if (chain_ii == (size_t)-1) {
+    return 0u;
+  }
+
+  const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+  const size_t map_base = chain_ii * (size_t)MSL_MAX_HITBOXES;
+  const uint8_t link_idx = batch->state.item_sheik_chain_hitbox_link_idx[map_base + (size_t)hb_id];
+  if (link_idx == 0xFFu) {
+    return 0u;
+  }
+  const float damage = batch->state.hitbox_damage[hb_i];
+  if (!(damage > 0.0f)) {
+    return 0u;
+  }
+
+  for (int other = hb_id + 1; other < MSL_MAX_HITBOXES; other++) {
+    const size_t other_i = idx_hitbox(bi, attacker, other);
+    if (batch->state.hitbox_enabled[other_i] == 0u) {
+      continue;
+    }
+    if (batch->state.item_sheik_chain_hitbox_link_idx[map_base + (size_t)other] != link_idx) {
+      continue;
+    }
+    if (hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[other_i]) != hit_group) {
+      continue;
+    }
+    const uint16_t other_flags = batch->state.hitbox_flags[other_i];
+    if (defender_on_ground != 0u) {
+      if ((other_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0u) {
+        continue;
+      }
+    } else if ((other_flags & MSL_HITBOX_FLAG_HIT_AERIAL) == 0u) {
+      continue;
+    }
+    if (batch->state.hitbox_damage[other_i] > damage) {
+      if (!combat_body_overlap_lbColl_80006E58_scaffold(
+              batch, bi, attacker, other, batch->state.hitbox_x[other_i],
+              batch->state.hitbox_y[other_i], batch->state.hitbox_z[other_i],
+              batch->state.hitbox_radius[other_i], ax, ay, az, bx, by, bz, cr,
+              batch->state.fighter_scale_y[msl_idx_player(bi, defender)])) {
+        continue;
+      }
+      // it_802BCB88 can publish the terminal Chain frontier into more than one fighter
+      // HitCapsule on the same frame: the stride write updates hb2, then the terminal-link write
+      // updates hb3 to that exact source link. Let the later/higher-damage source HitCapsule own the
+      // BODY DmgLog only when it also overlaps this defender hurtcap; otherwise an unrelated later
+      // same-link map must not suppress the earlier BODY owner.
+      // refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_UpdateHitboxes
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8,ftColl_8007A06C}
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static inline uint8_t combat_replay_rollout_advanced_past_reseed(const MslBatch* batch, int bi) {
   if (batch == NULL || bi < 0) {
     return 0u;
@@ -13804,6 +13895,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             // must not bypass a same-pass source registration from an earlier HitCapsule.
             // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80076CBC}
             // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+            continue;
+          }
+          if (combat_sheik_chain_same_frontier_later_hitbox_owns_body(
+                  batch, a_idx, bi, attacker, hb_id, hit_group, defender, (int)cap_id,
+                  defender_on_ground, ax, ay, az, bx, by, bz, cr)) {
             continue;
           }
           int16_t attackair_second_create_frame = -1;

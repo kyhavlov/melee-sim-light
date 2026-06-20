@@ -206,6 +206,7 @@
   "run_friction_mul": 1.0,
   "run_stick_x_threshold": 0.625,
   "run_x0_init_x430": 10.0,
+  "runbrake_anim_freeze_speed_threshold": 0.0,
   "sakurai_air_radians": 0.7853981852531433,
   "sakurai_ground_deg_max": 44.0,
   "sakurai_kb_max": 32.099998474121094,

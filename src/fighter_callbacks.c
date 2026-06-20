@@ -302,6 +302,7 @@ static inline void sync_runbrake_cmd0_post_frame(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_RUN_BRAKE) {
         batch->state.runbrake_cmd0[idx] = 0u;
+        batch->state.runbrake_freeze_x0[idx] = 0u;
         continue;
       }
       // Decomp: RunBrake cmd_vars[0] is owned by the common RunBrake action script and consumed by

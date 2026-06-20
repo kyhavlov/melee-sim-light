@@ -2950,7 +2950,26 @@ void physics_integrate(MslBatch* batch) {
       const float vy_kb = batch->state.speed_y_attack[idx];
       const uint8_t damagefly_terminal_ledge_endpoint_owner =
           physics_damagefly_hitlag_exit_terminal_ledge_endpoint_owner(batch, idx);
-
+      const uint8_t sheik_vanish_start1_platform_entry =
+          (uint8_t)(batch->state.ground_id[idx] != 0xFFFFu &&
+                    stage_collision_floor_line_is_platform(batch->state.stage_id[bi],
+                                                           batch->state.ground_id[idx]) != 0u);
+      // Sheik grounded Vanish Start0 -> AirHiStart1 soft-platform source handoff:
+      // ftSk_SpecialAirHiStart_0_Coll can enter travel from a ground/platform callback through
+      // ftSk_SpecialHi_80113390 / ftSk_SpecialHi_80113A30. The entry frame publishes the newly
+      // computed travel self_vel and applies horizontal displacement, while platform floor-loss
+      // keeps the vertical root on the callback floor until the following travel frame. Main-floor
+      // upward travel integrates vertical displacement immediately.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+      //   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialHi_80113390,ftSk_SpecialHi_80113A30}
+      // data/stages/*.bin::MSLSTG01 floor line platform flags
+      const uint8_t sheik_vanish_ground_start_to_air_travel_vertical_defer =
+          (uint8_t)(batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+                    action_id == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1 &&
+                    batch->state.frame_start_action_id[idx] ==
+                        (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_0 &&
+                    batch->state.frame_start_on_ground[idx] != 0u &&
+                    sheik_vanish_start1_platform_entry != 0u);
       // Position integration uses the (possibly-updated) self velocity plus the separate knockback
       // velocity term, matching GALE01 `Fighter_procUpdate` integration shape.
       // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
@@ -2958,8 +2977,11 @@ void physics_integrate(MslBatch* batch) {
       if (!damagefly_terminal_ledge_endpoint_owner) {
         batch->state.pos_x[idx] += vx_kb;
       }
-      batch->state.pos_y[idx] += vy_self;
-      if (!damagefly_terminal_ledge_endpoint_owner) {
+      if (!sheik_vanish_ground_start_to_air_travel_vertical_defer) {
+        batch->state.pos_y[idx] += vy_self;
+      }
+      if (!damagefly_terminal_ledge_endpoint_owner &&
+          !sheik_vanish_ground_start_to_air_travel_vertical_defer) {
         batch->state.pos_y[idx] += vy_kb;
       }
       batch->state.pos_x[idx] += atk_shield_kb_x;

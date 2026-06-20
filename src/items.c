@@ -2975,7 +2975,23 @@ uint8_t sheik_chain_hitbox_world_pos(const MslBatch* batch, size_t fighter_idx, 
     return 0u;
   }
   if (batch->state.item_sheik_chain_hitcaps_active[chain_ii] == 0u) {
-    return 0u;
+    const uint16_t owner_action = batch->state.action_id[fighter_idx];
+    // Start actions use the script-created Chain HitCapsules directly: SpecialSStart/AirSStart
+    // create all four hitcaps at script frame 22 and set cmd_var0, while the x1C movement gate
+    // (`ftSk_SpecialS_80110BCC`) is only called by held/end Chain Anim callbacks.
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    //   ftSk_SpecialSStart_Anim,ftSk_SpecialAirSStart_Anim,ftSk_SpecialS_UpdateHitboxes,
+    //   ftSk_SpecialS_80110BCC}
+    // data/scripts/sheik.bin::MSLFTSC1 SpecialSStart/SpecialAirSStart frame-22 create_hitbox
+    const uint8_t start_script_hitcaps =
+        (batch->state.special_cmd0[fighter_idx] != 0u &&
+         (owner_action == (uint16_t)MSL_ACT_SK_SPECIAL_S_START ||
+          owner_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START))
+            ? 1u
+            : 0u;
+    if (start_script_hitcaps == 0u) {
+      return 0u;
+    }
   }
   int n = (int)ap->sheik_chain_link_count;
   if (n > MSL_SHEIK_CHAIN_MAX_LINKS) {
@@ -5020,6 +5036,7 @@ uint8_t items_row_has_fighter_collision_demand(const MslBatch* batch, int bi) {
   if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
     return 0u;
   }
+  const MslItemArticleParams* sk_ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
     const size_t ii = msl_idx_item(bi, it);
     if (batch->state.item_exists[ii] == 0u) {
@@ -5027,7 +5044,13 @@ uint8_t items_row_has_fighter_collision_demand(const MslBatch* batch, int bi) {
     }
     const uint16_t type = batch->state.item_type[ii];
     if (laser_params_for_item_type(type) != NULL || item_type_is_spacie_illusion(type) != 0u ||
-        item_article_params_for_sheik_needle_throw_item_type(type) != NULL) {
+        item_article_params_for_sheik_needle_throw_item_type(type) != NULL ||
+        // Sheik Vanish smoke state 0 owns an item BODY HitCapsule published by it_802B1D40 ->
+        // it_8027518C. It therefore demands fighter hurtcap endpoint geometry just like lasers and
+        // thrown Needles before the item collision phase consumes BODY overlap.
+        // refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1D40,itSeakvanish_UnkMotion0_Anim}
+        // refs/melee/src/melee/it/it_2725.c::it_8027518C
+        (sk_ap != NULL && type == sk_ap->sheik_vanish_itkind)) {
       return 1u;
     }
   }
@@ -6078,6 +6101,12 @@ static uint8_t sheik_vanish_smoke_try_hit_fighter(MslBatch* batch, int bi, int i
       continue;
     }
     const size_t d_idx = msl_idx_player(bi, def);
+    // Item BODY collision follows fighter contact eligibility: a victim already in hitlag is not a
+    // same-frame candidate for a second BODY apply.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,Fighter_ProcessHit_8006D1EC}
+    if (batch->state.hitlag[d_idx] != 0u) {
+      continue;
+    }
     if (batch->state.hurtbox_state[d_idx] != 0u) {
       continue;  // intangible/invincible defender
     }

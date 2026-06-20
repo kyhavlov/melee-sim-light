@@ -234,7 +234,11 @@ static void sk_enter_vanish_air_end(MslBatch* batch, const MslCharParams* ch, si
   const float vy = batch->state.speed_y_self[idx];
   const float mul = (ch != NULL) ? ch->sheik_vanish_end_vel_mul : 0.0f;
   batch->state.speed_air_x_self[idx] = vx * mul;
-  batch->state.speed_ground_x_self[idx] = vx * mul;
+  // ftSk_SpecialHi_80113F68 enters airborne Vanish end from SpecialAirHiStart_1. Source scales
+  // self_vel but does not publish a grounded gr_vel lane for the airborne action.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+  //   ftSk_SpecialAirHiStart_1_Anim,ftSk_SpecialHi_80113F68}
+  batch->state.speed_ground_x_self[idx] = 0.0f;
   batch->state.speed_y_self[idx] = vy * mul;
   sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI, 0.0f, 1.0f);
   msl_anim_timebase_tick_once(batch, idx);
@@ -319,6 +323,18 @@ static void sk_enter_specials(MslBatch* batch, size_t idx, uint8_t ground, float
     if ((stick_x > 0.0f) != (batch->state.facing[idx] != 0u)) {
       batch->state.facing[idx] = (uint8_t)(stick_x > 0.0f);
       batch->state.facing_dir1[idx] = batch->state.facing[idx] ? 1 : -1;
+    }
+    const MslCharParams* ch = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
+    if (ch != NULL) {
+      // Shared grounded Side-B entry damps current gr_vel by co_attrs.xB8 before the
+      // character-specific Sheik Chain enter runs; SpecialSStart_Phys then applies ordinary
+      // ft_80084F3C ground friction on the same frame.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+      //   ftSk_SpecialS_Enter,ftSk_SpecialSStart_Phys}
+      // data/characters/sheik.json::side_special_ground_entry_vel_mul
+      batch->state.speed_ground_x_self[idx] *= ch->side_special_ground_entry_vel_mul;
+      batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
     }
   } else {
     batch->state.speed_y_self[idx] = 0.0f;
@@ -825,6 +841,10 @@ static void sk_update_specialhi(MslBatch* batch, const MslCommonParams* c, const
           batch->state.speed_air_x_self[idx] = vx * ch->sheik_vanish_end_vel_mul;
           batch->state.speed_y_self[idx] = vy * ch->sheik_vanish_end_vel_mul;
           sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_HI, 0.0f, 1.0f);
+          // ftSk_SpecialHi_80113EAC enters grounded Vanish end and immediately advances the
+          // motion once via ftAnim_8006EBA4 before preserving/scaling the launch velocity.
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialHi_80113EAC
+          msl_anim_timebase_tick_once(batch, idx);
         } else {
           sk_enter_vanish_air_end(batch, ch, idx);
         }
@@ -1012,6 +1032,15 @@ void sheik_specials_update_pre_physics(MslBatch* batch) {
       if (ch == NULL || c == NULL) {
         continue;
       }
+      if (batch->state.hitlag[idx] != 0u) {
+        // Sheik special timers and script-owned transitions below model Anim-callback work. Source
+        // Fighter_8006A360 skips that callback phase while hitlag is active, so Chain x0, Needle
+        // charge/release timers, and Vanish/Transform countdowns must freeze here rather than only
+        // freezing visible animation time.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
+        continue;
+      }
       const uint16_t a = batch->state.action_id[idx];
       if (!sheik_action_is_special(a)) {
         if (sk_try_enter_b_special(batch, c, ch, idx, batch->state.on_ground[idx] ? 1u : 0u)) {
@@ -1067,18 +1096,23 @@ static void sk_apply_common_fall(MslBatch* batch, const MslCharParams* ch, size_
     vy = -terminal;
   }
   batch->state.speed_y_self[idx] = vy;
-  const float stick_x = sk_stick_unit(batch->state.input_main_x[idx]);
+  const MslCommonParams* c = msl_common_params();
+  const float stick_x = sk_deadzone(sk_stick_unit(batch->state.input_main_x[idx]),
+                                    c != NULL ? c->lstick_deadzone_x : 0.0f);
   const float target = stick_x * ch->air_drift_max;
   const float accel = stick_x * ch->air_drift_stick_mul +
                       ((stick_x >= 0.0f) ? ch->aerial_drift_base : -ch->aerial_drift_base);
   float vx = batch->state.speed_air_x_self[idx];
   // Shared Sheik common-fall helper horizontal drift = the engine common air drift
   // ftCommon_8007D268 -> ftCommon_8007D174 (NOT a Vanish-specific rule; this helper backs the Sheik
-  // common-fall special states: Vanish windup, Transform, SpecialAirN/S, SpecialAirLw). Once the
+  // common-fall special states: Vanish windup and Transform). Once the
   // accel would carry the velocity past the stick target, source decelerates by aerial_friction
   // toward the target (capped at air_max_horizontal_velocity) instead of hard-clamping to it; the
   // prior hand-rolled hard-clamp under-drifted these air states by ~0.8/frame.
+  // The stick lane is the common preprocessed input, so values inside the extracted deadzone do not
+  // create drift.
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D268,ftCommon_8007D174}
+  // data/common/ft_common_data.json::lstick_deadzone_x
   if (target == 0.0f) {
     vx = sk_apply_air_friction(vx, ch->aerial_friction);
   } else {
@@ -1109,6 +1143,24 @@ static void sk_apply_common_fall(MslBatch* batch, const MslCharParams* ch, size_
     vx += a;
   }
   batch->state.speed_air_x_self[idx] = vx;
+}
+
+static void sk_apply_air_fall_friction_eec(MslBatch* batch, const MslCharParams* ch, size_t idx) {
+  // ft_80084EEC applies ordinary fall gravity plus horizontal air friction, without the
+  // ftCommon_8007D268 stick-drift helper used by ft_80084DB0.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+  //   ftSk_SpecialAirNStart_Phys,ftSk_SpecialAirNLoop_Phys,ftSk_SpecialAirNCancel_Phys,
+  //   ftSk_SpecialAirNEnd_Phys}
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+  //   ftSk_SpecialAirS_Phys,ftSk_SpecialAirSEnd_Phys}
+  float vy = batch->state.speed_y_self[idx] - ch->grav;
+  if (vy < -ch->terminal_vel) {
+    vy = -ch->terminal_vel;
+  }
+  batch->state.speed_y_self[idx] = vy;
+  batch->state.speed_air_x_self[idx] =
+      sk_apply_air_friction(batch->state.speed_air_x_self[idx], ch->aerial_friction);
 }
 
 static void sk_apply_ground_friction_f3c(MslBatch* batch, const MslCharParams* ch, size_t idx) {
@@ -1146,13 +1198,30 @@ uint8_t sheik_specials_phys(MslBatch* batch, size_t idx) {
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialHiStart_0_Phys
       sk_apply_ground_friction_f3c(batch, ch, idx);
       return 1u;
+    case MSL_ACT_SK_SPECIAL_HI:
+      // ftSk_SpecialHi_Phys: grounded Vanish end uses ordinary ft_80084F3C ground friction. This
+      // is separate from the aerial end's ftSk_SpecialAirHi_Phys cmd0/fall-friction branches.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialHi_Phys
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
+      sk_apply_ground_friction_f3c(batch, ch, idx);
+      return 1u;
     case MSL_ACT_SK_SPECIAL_AIR_HI_START_0:
       sk_apply_common_fall(batch, ch, idx, ch->sheik_vanish_start_air_gravity,
                            ch->sheik_vanish_start_air_terminal_vel);
       return 1u;
     case MSL_ACT_SK_SPECIAL_AIR_HI:
       if (batch->state.special_cmd0[idx] != 0u) {
-        sk_apply_common_fall(batch, ch, idx, ch->grav, ch->terminal_vel);
+        // ftSk_SpecialAirHi_Phys cmd0 branch:
+        //   ftCommon_FallBasic(fp);
+        //   ftCommon_ClampSelfVelX(fp, ftSeakAttributes::x4C * co_attrs.air_drift_max);
+        // It does not call ftCommon_8007D268, so live stick must not accelerate or friction-decay
+        // self_vel.x during Vanish end.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Phys
+        float vy = batch->state.speed_y_self[idx] - ch->grav;
+        if (vy < -ch->terminal_vel) {
+          vy = -ch->terminal_vel;
+        }
+        batch->state.speed_y_self[idx] = vy;
         const float max_x = ch->sheik_vanish_air_end_drift_mul * ch->air_drift_max;
         if (batch->state.speed_air_x_self[idx] > max_x) {
           batch->state.speed_air_x_self[idx] = max_x;
@@ -1160,6 +1229,14 @@ uint8_t sheik_specials_phys(MslBatch* batch, size_t idx) {
           batch->state.speed_air_x_self[idx] = -max_x;
         }
       } else {
+        // ftSk_SpecialAirHi_Phys pre-cmd0 branch:
+        //   self_vel.y -= self_vel.y / 10; ftCommon_8007CEF4(fp)
+        // ftCommon_8007CEF4 writes aerial friction to x74_anim_vel.x; Fighter_procUpdate folds that
+        // lane into self_vel before publishing the frame state, so the lite runtime applies the
+        // same friction step directly to speed_air_x_self.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Phys
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CEF4
+        // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
         batch->state.speed_y_self[idx] -= batch->state.speed_y_self[idx] * 0.1f;
         batch->state.speed_air_x_self[idx] =
             sk_apply_air_friction(batch->state.speed_air_x_self[idx], ch->aerial_friction);
@@ -1193,7 +1270,7 @@ uint8_t sheik_specials_phys(MslBatch* batch, size_t idx) {
     case MSL_ACT_SK_SPECIAL_AIR_N_END:
     case MSL_ACT_SK_SPECIAL_AIR_S:
     case MSL_ACT_SK_SPECIAL_AIR_S_END:
-      sk_apply_common_fall(batch, ch, idx, ch->grav, ch->terminal_vel);
+      sk_apply_air_fall_friction_eec(batch, ch, idx);
       return 1u;
     default:
       return 0u;
@@ -1204,31 +1281,31 @@ uint8_t sheik_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
   if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;
   }
+#define SK_GROUND_TO_AIR_SWAP_ENTER(action, frame, rate)       \
+  do {                                                         \
+    sk_enter(batch, idx, (uint16_t)(action), (frame), (rate)); \
+    return 1u;                                                 \
+  } while (0)
   const uint16_t a = batch->state.action_id[idx];
   switch (a) {
     case MSL_ACT_SK_SPECIAL_N_START:
-      sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_START,
-               batch->state.anim_frame_f32[idx], 1.0f);
-      return 1u;
+      SK_GROUND_TO_AIR_SWAP_ENTER(MSL_ACT_SK_SPECIAL_AIR_N_START, batch->state.anim_frame_f32[idx],
+                                  1.0f);
     case MSL_ACT_SK_SPECIAL_N_LOOP:
-      sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_LOOP,
-               batch->state.anim_frame_f32[idx], 1.0f);
-      return 1u;
+      SK_GROUND_TO_AIR_SWAP_ENTER(MSL_ACT_SK_SPECIAL_AIR_N_LOOP, batch->state.anim_frame_f32[idx],
+                                  1.0f);
     case MSL_ACT_SK_SPECIAL_S_START:
-      sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START,
-               batch->state.anim_frame_f32[idx], 1.0f);
-      return 1u;
+      SK_GROUND_TO_AIR_SWAP_ENTER(MSL_ACT_SK_SPECIAL_AIR_S_START, batch->state.anim_frame_f32[idx],
+                                  1.0f);
     case MSL_ACT_SK_SPECIAL_S:
       // ftSk_SpecialS_Coll calls ft_800827A0; on floor loss it enters grounded retract
       // (`ftSk_SpecialS_80111DF8`) rather than swapping to active aerial Chain.
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
       //   ftSk_SpecialS_Coll,ftSk_SpecialS_80111DF8}
-      sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_S_END, 0.0f, 1.0f);
-      return 1u;
+      SK_GROUND_TO_AIR_SWAP_ENTER(MSL_ACT_SK_SPECIAL_S_END, 0.0f, 1.0f);
     case MSL_ACT_SK_SPECIAL_S_END:
-      sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END, batch->state.anim_frame_f32[idx],
-               1.0f);
-      return 1u;
+      SK_GROUND_TO_AIR_SWAP_ENTER(MSL_ACT_SK_SPECIAL_AIR_S_END, batch->state.anim_frame_f32[idx],
+                                  1.0f);
     case MSL_ACT_SK_SPECIAL_HI_START_0:
       sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_0,
                batch->state.anim_frame_f32[idx], 1.0f);
@@ -1240,24 +1317,21 @@ uint8_t sheik_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
       sk_arm_vanish_smoke_accessory(batch, idx);
       return 1u;
     case MSL_ACT_SK_SPECIAL_HI_START_1:
-      sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1,
-               batch->state.anim_frame_f32[idx], 0.0f);
-      return 1u;
+      SK_GROUND_TO_AIR_SWAP_ENTER(MSL_ACT_SK_SPECIAL_AIR_HI_START_1,
+                                  batch->state.anim_frame_f32[idx], 0.0f);
     case MSL_ACT_SK_SPECIAL_HI:
-      sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI, batch->state.anim_frame_f32[idx],
-               1.0f);
-      return 1u;
+      SK_GROUND_TO_AIR_SWAP_ENTER(MSL_ACT_SK_SPECIAL_AIR_HI, batch->state.anim_frame_f32[idx],
+                                  1.0f);
     case MSL_ACT_SK_SPECIAL_LW:
-      sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_LW, batch->state.anim_frame_f32[idx],
-               1.0f);
-      return 1u;
+      SK_GROUND_TO_AIR_SWAP_ENTER(MSL_ACT_SK_SPECIAL_AIR_LW, batch->state.anim_frame_f32[idx],
+                                  1.0f);
     case MSL_ACT_SK_SPECIAL_LW_2:
-      sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_AIR_LW_2, batch->state.anim_frame_f32[idx],
-               1.0f);
-      return 1u;
+      SK_GROUND_TO_AIR_SWAP_ENTER(MSL_ACT_SK_SPECIAL_AIR_LW_2, batch->state.anim_frame_f32[idx],
+                                  1.0f);
     default:
       return 0u;
   }
+#undef SK_GROUND_TO_AIR_SWAP_ENTER
 }
 
 uint8_t sheik_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {

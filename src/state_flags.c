@@ -839,6 +839,25 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
       }
       const uint16_t prev_action_2218 = batch->state.prev_action_id[idx];
+      if (action_id == (uint16_t)MSL_ACT_LANDING && action_id != prev_action_2218 &&
+          batch->state.prev_action_frame[idx] >= 0 &&
+          state_flags_2218_allow_interrupt_attackair_action(prev_action_2218)) {
+        // AttackAir -> Landing command-bit carry:
+        // AttackAir's script may set fp+0x2218_b0 before the Coll callback enters Landing in the
+        // same fighter proc. Landing entry does not synthesize this bit; publish the source script
+        // result for the interrupted AttackAir frame instead of stale replay seed history.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+        // data/scripts/{fox,falco,sheik}.bin AttackAir* events allow_interrupt
+        const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);
+        if (move_tables_attackair_allow_interrupt(batch->state.char_id[idx], prev_action_2218,
+                                                  source_frame)) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+        } else {
+          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+        }
+      }
       // Jab command ownership (fp+0x2218 x2218_b1/x2218_b2):
       // - ftAction_80071AE8 sets x2218_b1 from set_jab_combo script commands.
       // - ftAction_80071B28 sets x2218_b2 from set_jab_rapid script commands.
@@ -862,6 +881,22 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f2218 |= (uint8_t)MSL_STATE_FLAG_2218_B2;
         } else {
           f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B2;
+        }
+      } else if (action_id == (uint16_t)MSL_ACT_ATTACK_100_START &&
+                 prev_action_2218 == (uint16_t)MSL_ACT_ATTACK_12 &&
+                 batch->state.prev_action_frame[idx] >= 0) {
+        // Attack12_Anim can set x2218_b2 from the extracted set_jab_rapid command before
+        // Attack12_IASA enters Attack100Start in the same fighter proc. Attack100Start itself does
+        // not author that command bit, so carry only the live Attack12 script result.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071B28
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{
+        //   ftCo_Attack12_Anim,ftCo_Attack12_IASA}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Start_IASA
+        // data/scripts/{fox,falco,sheik}.bin ftCo_SM_Attack12 events set_jab_rapid
+        const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);
+        if (move_tables_jab_rapid_active(batch->state.char_id[idx], prev_action_2218,
+                                         source_frame)) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_B2;
         }
       }
       const uint8_t shine_start_kind =

@@ -261,6 +261,12 @@ typedef struct MslCommonParams {
 
   // Run friction multiplier (used in dash/run ground acceleration; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c)
   float run_friction_mul;  // p_ftCommonData->run_friction_mul (0x60)
+  // RunBrake animation freeze speed threshold.
+  //
+  // Decomp: ftCo_RunBrake_Anim freezes the AObj while cmd_vars[1] is set and
+  // ABS(gr_vel) >= p_ftCommonData->x42C, then resumes once speed drops below it.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
+  float runbrake_anim_freeze_speed_threshold;  // p_ftCommonData->x42C
 
   // Powershield / GuardReflect (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c and fighter.c)
   float powershield_reflect_trigger_min;      // p_ftCommonData->x18

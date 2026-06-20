@@ -4099,6 +4099,22 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
     batch->state.pos_y[idx] =
         landing_root_y_from_mpcoll_contact(batch, idx, bi, preserve_fall_basic_dd90_order);
   }
+  if (source_act == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+      land_act == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL &&
+      batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+      batch->state.frame_start_action_id[idx] == (uint16_t)MSL_ACT_KNEE_BEND &&
+      batch->state.coll_floor_result_valid[idx] != 0u) {
+    // The official Sheik demo proves a same-proc KneeBend -> Jump -> EscapeAir floor hit where
+    // LandingFallSpecial publishes the first mpColl substep root, not the fully integrated airborne
+    // root. Keep this on the live frame-start KneeBend owner: replay seed history is too stale and
+    // falsely catches ordinary Fox/Falco EscapeAir landing tails in aggregate validation.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044838_Floor}
+    batch->state.pos_x[idx] = 0.5f * (batch->state.prev_pos_x[idx] + batch->state.pos_x[idx]);
+  }
 
   batch->state.fall_fast[idx] = 0;
   // Decomp: grounding transitions clear ECB lock via ftCommon_UnlockECB.
@@ -6263,6 +6279,7 @@ void locomotion_update_pre(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_CheckInput
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_RUN_BRAKE;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_RUN_BRAKE;
+          batch->state.runbrake_freeze_x0[idx] = 0u;
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           action_id = (uint16_t)MSL_ACT_RUN_BRAKE;
         }
@@ -6684,18 +6701,28 @@ void locomotion_update_pre(MslBatch* batch) {
         if (action_id == MSL_ACT_RUN_BRAKE) {
           const uint32_t anim = batch->state.animation_index[idx];
           if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
-            if (anim_finished(batch->state.char_id[idx], (uint16_t)anim,
-                              batch->state.anim_frame_f32[idx])) {
+            const uint8_t anim_has_frames = (uint8_t)(!anim_finished(
+                batch->state.char_id[idx], (uint16_t)anim, batch->state.anim_frame_f32[idx]));
+            const uint8_t timer_has_frames =
+                (uint8_t)(ch != NULL && ch->max_run_brake_frames > 0.0f &&
+                          ((float)batch->state.action_frame[idx] + 1.0f) <
+                              ch->max_run_brake_frames);
+            if (!(anim_has_frames != 0u && timer_has_frames != 0u)) {
               // RunBrake_Anim resolves through ft_8008A2BC when the motion has no frames remaining.
+              // Source checks both ftAnim_IsFramesRemaining and the hidden
+              // mv.co.runbrake.frames timer initialized from co_attrs.max_run_brake_frames.
               // The destination Wait input callback can then run in the same fighter proc; run the
               // Wait-owned guard gate before the existing locomotion tail so GuardOn keeps source
               // priority over Jump/Dash/Squat/Turn/Walk.
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
+              //   ftCo_RunBrake_Enter,ftCo_RunBrake_Anim}
+              // data/characters/<char>.json::max_run_brake_frames
               // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+              batch->state.runbrake_freeze_x0[idx] = 0u;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               guard_update_grounded(batch, c, idx, 1u);
               if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT) {
@@ -7594,13 +7621,19 @@ void locomotion_update_post_collision(MslBatch* batch) {
         batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
         continue;
       }
-      if (was_ground && !now_ground && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
-          sheik_special_try_ground_to_air_swap(batch, idx)) {
-        // Sheik grounded special floor loss swaps to source air variants at preserved animation
-        // frame, matching the ftSk Coll callbacks' ftCommon_8007D5D4 bundle.
-        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
-        batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
-        continue;
+      if (was_ground && !now_ground && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK) {
+        const float floor_loss_self_x = batch->state.speed_ground_x_self[idx];
+        if (sheik_special_try_ground_to_air_swap(batch, idx)) {
+          // Sheik grounded special floor loss swaps to source air variants at preserved animation
+          // frame, matching the ftSk Coll callbacks' ftCommon_8007D5D4 bundle.
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
+          batch->state.speed_air_x_self[idx] = floor_loss_self_x;
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.on_ground[idx] = 0u;
+          batch->state.ground_id[idx] = 0xFFFFu;
+          batch->state.speed_y_self[idx] = 0.0f;
+          continue;
+        }
       }
 
       if (was_ground && !now_ground && action_is_catch_start_floor_loss(a)) {
@@ -7765,6 +7798,21 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.jumps_left[idx] = ch->max_jumps;
           batch->state.fall_fast[idx] = 0u;
           batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+          batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+          continue;
+        } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+                   a == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S &&
+                   sheik_special_try_air_to_ground_swap(batch, idx)) {
+          // Active Sheik Chain's air collision uses a floor hit only as the trigger to enter aerial
+          // retract; the actual grounding bundle belongs to the later SpecialAirSEnd_Coll path.
+          // Keep the collision-corrected root but do not publish on_ground/jump reset or zero
+          // vertical velocity on this frame.
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+          //   ftSk_SpecialAirS_Coll,ftSk_SpecialS_80111EB4,ftSk_SpecialAirSEnd_Coll,
+          //   ftSk_SpecialS_80111D54}
+          batch->state.on_ground[idx] = 0u;
+          batch->state.ground_id[idx] = 0xFFFFu;
+          batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
           continue;
         } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&

@@ -481,6 +481,11 @@ def main() -> None:
         "dash_iasa_x4c": float(_f32_be(buf, ft_common_abs + 0x4C)),
         "run_accel_scale_mul": float(_f32_be(buf, ft_common_abs + 0x5C)),
         "run_friction_mul": float(_f32_be(buf, ft_common_abs + 0x60)),
+        # RunBrake animation freeze threshold.
+        # ftCo_RunBrake_Anim sets anim rate to 0 while cmd_vars[1] is active and
+        # ABS(gr_vel) >= p_ftCommonData->x42C, then resumes when speed drops below it.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
+        "runbrake_anim_freeze_speed_threshold": float(_f32_be(buf, ft_common_abs + 0x42C)),
         # Catch / CatchDash ground friction multiplier (ftCo_Attack100.s: ftCo_Catch_Phys / ftCo_CatchDash_Phys):
         #   ftCommon_ApplyFrictionGround(fp, x64 * fp->co_attrs.gr_friction)
         "catch_friction_mul": float(_f32_be(buf, ft_common_abs + 0x64)),

@@ -376,6 +376,16 @@ uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 // Source of truth: data/scripts/<char>.bin (MSLFTSC1) moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
 uint8_t move_tables_runbrake_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 
+// Returns whether cmd_var[1] is set at the given cur_anim_frame for RunBrake.
+//
+// Decomp:
+// - ftCo_RunBrake_Anim freezes the animation while cmd_vars[1] is active and gr_vel is above
+//   p_ftCommonData->x42C.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
+//
+// Source of truth: data/scripts/<char>.bin (MSLFTSC1) moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=1).
+uint8_t move_tables_runbrake_cmd1_active(uint8_t char_id, float cur_anim_frame_f32);
+
 // Returns whether cmd_var[1] is set at the given cur_anim_frame for TurnRun.
 //
 // Decomp:
