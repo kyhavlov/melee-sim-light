@@ -42,8 +42,14 @@ def _ptr32(arc: HsdArchive, abs_off: int) -> int:
 
 
 def _audit_stage_dat_path(path: Path) -> str:
+    cwd = Path.cwd()
+    if path.is_absolute():
+        try:
+            return path.relative_to(cwd).as_posix()
+        except ValueError:
+            pass
     try:
-        return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
+        return path.resolve().relative_to(cwd.resolve()).as_posix()
     except ValueError:
         return path.as_posix()
 

@@ -524,6 +524,7 @@ enum {
 #define MSL_MPCOLL_REJECT_FALL_SHALLOW_TERMINAL_HARD_FLOOR (UINT64_C(1) << 32)
 #define MSL_MPCOLL_REJECT_ESCAPEAIR_JUMPAERIAL_SOFT_OWNER_EARLY_DIRECT_LAND (UINT64_C(1) << 33)
 #define MSL_MPCOLL_REJECT_SHEIK_VANISH_START1_PLATFORM_PASS (UINT64_C(1) << 39)
+#define MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_STATIC_PLATFORM_LOCK (UINT64_C(1) << 40)
 typedef enum MslMpcollFloorRejectRestore {
   MSL_MPCOLL_FLOOR_REJECT_RESTORE_NONE = 0u,
   MSL_MPCOLL_FLOOR_REJECT_RESTORE_KEEP_CURRENT = 1u,
@@ -1723,6 +1724,9 @@ static inline void mpcoll_floor_reject_add_escapeair_final_owners(
       MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u, phase);
   mpcoll_floor_reject_add_if_state(packet, owners->kneebend_ledge_missing_owner,
                                    MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE,
+                                   MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u, phase);
+  mpcoll_floor_reject_add_if_state(packet, owners->kneebend_static_platform_lock,
+                                   MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_STATIC_PLATFORM_LOCK,
                                    MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u, phase);
   mpcoll_floor_reject_add_if_state(packet, owners->jumpaerial_high_lift_ledge,
                                    MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_HIGH_LIFT_LEDGE,
@@ -16432,6 +16436,32 @@ void mpcoll_ground_apply(MslBatch* batch) {
              !carried_cliff_ledge_floor_source_authority && !locked_desired_bottom_final_sweep_hit)
                 ? 1u
                 : 0u;
+        const uint8_t suppress_kneebend_escapeair_static_platform_lock_land =
+            // Ground-jump -> EscapeAir static-platform lock:
+            // `KneeBend_Anim` may enter Jump, then `Jump_IASA` may immediately enter EscapeAir
+            // before `Fighter_procMap`. The same map callback reaches EscapeAir_Coll while
+            // ftCommon_8007D5D4's CollData_X130 lock still names the launch platform. A shallow
+            // zero-bottom projection onto that same static platform is therefore the jump-launch
+            // handoff for the remaining CollData_X130 lock lifetime, not a new LandingFallSpecial
+            // floor publication. Deeper bottom/root crossings continue through the normal
+            // EscapeAir_Coll floor owner.
+            //
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::{ftCo_Jump_Enter,ftCo_Jump_IASA}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
+            //   ftCo_80099A58,ftCo_EscapeAir_Coll}
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+            (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed != 0u &&
+             ground_id == seed_ground_id &&
+             stage_collision_floor_line_is_platform(stage_id, ground_id) &&
+             !stage_collision_floor_line_has_platform_transform(stage_id, ground_id) &&
+             final_landing_lift <= k_floor_y_bias &&
+             (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_KNEE_BEND ||
+              (escapeair_episode.sustained && batch->state.jumps_left[idx] != 0u &&
+               ecb_lock_timer_seed > 1u)))
+                ? 1u
+                : 0u;
         const uint8_t suppress_cliff_ledge_locked_final_land =
             // Same source owner as the floor-sweep suppression above, kept as a final publication
             // guard because several mpColl result modes can accept the restored ledge floor.
@@ -16465,6 +16495,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 suppress_escapeair_jumpaerial_soft_owner_early_direct_land,
             .kneebend_ledge_missing_owner =
                 suppress_kneebend_escapeair_missing_ledge_owner_final_land,
+            .kneebend_static_platform_lock = suppress_kneebend_escapeair_static_platform_lock_land,
             .jumpaerial_high_lift_ledge = suppress_jumpaerial_escapeair_high_lift_ledge_final_land,
             .jumpaerial_static_platform_overstep =
                 suppress_jumpaerial_escapeair_static_platform_overstep_final_land ||

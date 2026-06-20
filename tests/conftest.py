@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import json
 import subprocess
 import sys
@@ -453,67 +454,76 @@ def _ensure_known_data_artifacts() -> None:
         (ROOT / "data" / "stages" / "bin" / "grop.bin", b"MSLSTG01", 10),
         (ROOT / "data" / "model_parts" / "fox.bin", b"MSLPART1", 1),
         (ROOT / "data" / "model_parts" / "falco.bin", b"MSLPART1", 1),
-        (ROOT / "data" / "items" / "articles" / "fox_falco.bin", b"MSLITAR1", 15),
+        (ROOT / "data" / "items" / "articles" / "fox_falco.bin", b"MSLITAR1", 16),
         (ROOT / "data" / "scripts" / "fox.bin", b"MSLFTSC1", 2),
         (ROOT / "data" / "scripts" / "falco.bin", b"MSLFTSC1", 2),
     ]
-    stale = False
-    for path, magic, version in expected:
-        if not path.exists():
-            stale = True
-            break
-        try:
-            with path.open("rb") as f:
-                got_magic = f.read(8)
-                got_version = int.from_bytes(f.read(4), "little", signed=False)
-            if got_magic != magic or got_version != version:
-                stale = True
-                break
-        except OSError:
-            stale = True
-            break
-    if not stale:
+
+    def artifacts_stale() -> bool:
+        for path, magic, version in expected:
+            if not path.exists():
+                return True
+            try:
+                with path.open("rb") as f:
+                    got_magic = f.read(8)
+                    got_version = int.from_bytes(f.read(4), "little", signed=False)
+                if got_magic != magic or got_version != version:
+                    return True
+            except OSError:
+                return True
+        return False
+
+    if not artifacts_stale():
         return
 
-    missing_iso = [
-        p
-        for p in (
-            ROOT / "_iso" / "GrNLa.dat",
-            ROOT / "_iso" / "GrNBa.dat",
-            ROOT / "_iso" / "GrIz.dat",
-            ROOT / "_iso" / "GrPs.dat",
-            ROOT / "_iso" / "GrSt.dat",
-            ROOT / "_iso" / "GrOp.dat",
-            ROOT / "_iso" / "PlCo.dat",
-            ROOT / "_iso" / "PlFx.dat",
-            ROOT / "_iso" / "PlFc.dat",
-            ROOT / "_iso" / "PlMs.dat",
-            ROOT / "_iso" / "PlSk.dat",
+    # xdist workers share the data tree; serialize regeneration so one worker cannot
+    # read a partially written JSON/bin artifact from another session-start rebuild.
+    lock_path = ROOT / "reports" / "triage" / ".known_data_artifacts.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("w", encoding="utf-8") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        if not artifacts_stale():
+            return
+
+        missing_iso = [
+            p
+            for p in (
+                ROOT / "_iso" / "GrNLa.dat",
+                ROOT / "_iso" / "GrNBa.dat",
+                ROOT / "_iso" / "GrIz.dat",
+                ROOT / "_iso" / "GrPs.dat",
+                ROOT / "_iso" / "GrSt.dat",
+                ROOT / "_iso" / "GrOp.dat",
+                ROOT / "_iso" / "PlCo.dat",
+                ROOT / "_iso" / "PlFx.dat",
+                ROOT / "_iso" / "PlFc.dat",
+                ROOT / "_iso" / "PlMs.dat",
+                ROOT / "_iso" / "PlSk.dat",
+            )
+            if not p.exists()
+        ]
+        if missing_iso:
+            raise RuntimeError(
+                "missing required known-data artifact(s), and cannot rebuild because _iso inputs are missing: "
+                f"{missing_iso}. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco,marth,sheik`"
+            )
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "tools.extraction.build_data",
+                "--iso-dir",
+                str(ROOT / "_iso"),
+                "--stages",
+                "grnla,grnba,griz,grps,grst,grop",
+                "--chars",
+                "fox,falco,marth,sheik",
+            ],
+            check=True,
         )
-        if not p.exists()
-    ]
-    if missing_iso:
-        raise RuntimeError(
-            "missing required known-data artifact(s), and cannot rebuild because _iso inputs are missing: "
-            f"{missing_iso}. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco,marth,sheik`"
-        )
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "tools.extraction.build_data",
-            "--iso-dir",
-            str(ROOT / "_iso"),
-            "--stages",
-            "grnla,grnba,griz,grps,grst,grop",
-            "--chars",
-            "fox,falco,marth,sheik",
-        ],
-        check=True,
-    )
-    for path, _magic, _version in expected:
-        if not path.exists():
-            raise RuntimeError(f"failed to generate required known-data artifact: {path}")
+        for path, _magic, _version in expected:
+            if not path.exists():
+                raise RuntimeError(f"failed to generate required known-data artifact: {path}")
 
 
 def pytest_sessionstart(session) -> None:  # type: ignore[no-untyped-def]

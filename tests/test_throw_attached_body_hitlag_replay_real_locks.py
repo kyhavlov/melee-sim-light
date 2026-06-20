@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import (
+    _assert_transition_lock_fields_match_ref,
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
@@ -16,6 +17,7 @@ ACT_THROW_LW = 222
 ACT_THROWN_LW = 242
 ACT_DAMAGE_FLY_TOP = 90
 ACT_DOWN_BOUND_U = 183
+STATE_FLAG_221C_B0 = 0x80
 
 
 def _field_bytes(samples, record: int, field: str, stride: int) -> np.ndarray:
@@ -89,7 +91,46 @@ def test_throw_owner_body_hitbox_damages_attached_victim_without_victim_hitlag()
     assert int(out["hitlag"][thrower]) == int(ref["hitlag"][thrower])
     assert int(out["hitlag"][victim]) == 0
     assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]))
+    assert int(out["state_flags"][victim, 3]) & STATE_FLAG_221C_B0
     assert int(out["last_attack_landed"][thrower]) == int(ref["last_attack_landed"][thrower])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("filename", "record", "thrower", "victim"),
+    [
+        ("MixedAllQuetzal.msl", 10097, 0, 1),
+        ("UnusedLivelyLouse.msl", 5224, 0, 1),
+        ("AttractiveAnyClam.msl", 176, 0, 1),
+        ("TornEnchantingGiraffe.msl", 8374, 0, 1),
+    ],
+)
+def test_sheik_attached_throw_body_no_hitlag_sets_x221c_b0(
+    filename: str, record: int, thrower: int, victim: int
+) -> None:
+    # Attached throw BODY percent pulses can leave the victim in Thrown* with no victim hitlag, but
+    # still publish fp+0x221C_b0 as the no-reaction damage lane. This locks the source split:
+    # accepted damage/bookkeeping is not the same owner as victim hitlag/x221A.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineB1
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007891C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik" / filename
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["grab_owner_port"][victim]) == thrower
+    assert int(row["seed_t"]["hitlag"][victim]) == 0
+    assert int(row["ref_t1"]["hitlag"][victim]) == 0
+    assert float(row["ref_t1"]["percent"][victim]) > float(row["seed_t"]["percent"][victim])
+    assert int(row["ref_t1"]["state_flags"][victim, 3]) & STATE_FLAG_221C_B0
+
+    _seed, ref, out = _run_one_step_row(dataset_path, record, victim)
+    _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=record, p=victim)
 
 
 @pytest.mark.integration

@@ -2153,8 +2153,56 @@ def test_sheik_bounced_needle_state4_anim_does_not_decrement_lifetime_negative()
     assert float(out["items"]["pos_y"][0]) > 20.0
 
 
+def test_sheik_bounced_needle_clears_on_generic_item_bottom_blast_bound() -> None:
+    # Generic item proc order for thrown Needles is Phys/integration, then Item_802696CC blast-bound
+    # destruction. Item creation enables side/bottom cleanup by default (xDCC_flag.b3=1, b4567=15),
+    # so a bounced state-4 Needle crossing FD's extracted bottom blast bound is cleared before any
+    # later item collision owner can preserve stale slots.
+    # refs/melee/src/melee/it/item.c::{Item_80268B18,Item_802697D4,Item_802696CC}
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    #   itSeakneedlethrown_UnkMotion4_Phys,it_802AFD8C}
+    # data/stages/final_destination.json:blast_bounds_world.bottom
+    seed = _seed_base("sheik")
+    _install_sheik_item(
+        seed,
+        item_type=ITEM_SHEIK_NEEDLE_THROWN,
+        state=4,
+        timer=120.0,
+        pos_x=0.0,
+        pos_y=-139.0,
+        vel_x=0.0,
+        vel_y=-1.0,
+    )
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 0
+
+
+def test_sheik_bounced_needle_inside_blast_bound_survives_negative() -> None:
+    # Adjacent negative: state 4 does not decrement its lifetime in Anim and must not be cleared while
+    # still inside the generic item blast bounds after Phys/integration.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion4_Anim
+    # refs/melee/src/melee/it/item.c::{Item_802697D4,Item_802696CC}
+    seed = _seed_base("sheik")
+    _install_sheik_item(
+        seed,
+        item_type=ITEM_SHEIK_NEEDLE_THROWN,
+        state=4,
+        timer=1.0,
+        pos_x=0.0,
+        pos_y=-130.0,
+        vel_x=0.0,
+        vel_y=2.0,
+    )
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == 4
+    assert float(out["items"]["timer"][0]) == pytest.approx(1.0)
+
+
 def test_sheik_held_needle_loop_keeps_article_but_cancel_destroys() -> None:
-    # Held Needle self-destructs when ftSk_SpecialS_80111F70 sees fp->fv.sk.x4 cleared.
+    # Held Needle self-destructs when its SpecialN owner pointer fp->fv.sk.x4 is cleared.
     # Loop keeps that pointer live; Cancel clears it in Anim.
     # refs/melee/src/melee/it/items/itseakneedleheld.c::itSeakneedleheld_UnkMotion0_Anim
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
@@ -2173,6 +2221,40 @@ def test_sheik_held_needle_loop_keeps_article_but_cancel_destroys() -> None:
     _install_sheik_item(cancel_seed, item_type=ITEM_SHEIK_NEEDLE_HELD, state=0, timer=1400.0)
     cancel_out = _run(cancel_seed, [_mk_inputs()])[0]
     assert int(cancel_out["items"]["exists"][0]) == 0
+
+
+def test_sheik_held_needle_common_action_keeps_replay_visible_owner_pointer() -> None:
+    # Replay-visible held Needle articles carry the item-local seakneedleheld.owner pointer even when
+    # the fighter has already left SpecialN. Item Anim only destroys when that internal pointer is
+    # NULL; common states do not imply that clear. Explicit owners such as Cancel_Anim / shootNeedles
+    # clear the pointer or slot separately.
+    # refs/melee/src/melee/it/items/itseakneedleheld.c::itSeakneedleheld_UnkMotion0_Anim
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    #   ftSk_SpecialNCancel_Anim,ftSk_SpecialNEnd_Anim,shootNeedles}
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
+    _install_sheik_item(seed, item_type=ITEM_SHEIK_NEEDLE_HELD, state=0, timer=1400.0)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_HELD
+
+
+def test_sheik_held_needle_end_non_latch_keeps_until_shoot_needles_owner() -> None:
+    # Item Anim runs before SpecialNEnd_Anim. A visible held article on an End non-latch frame keeps
+    # its item-local owner pointer through the pre-fighter item phase; only the later shootNeedles
+    # accessory/item owner clears the held slot on latch frames 2/5/8/11/14/17.
+    # refs/melee/src/melee/it/items/itseakneedleheld.c::itSeakneedleheld_UnkMotion0_Anim
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{ftSk_SpecialNEnd_Anim,shootNeedles}
+    seed = _seed_base("sheik")
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_END)
+    seed["sheik_needle_count_u8"][0, 0] = np.uint8(2)
+    seed["sheik_needle_specialn_timer_u8"][0, 0] = np.uint8(1)
+    _install_sheik_item(seed, item_type=ITEM_SHEIK_NEEDLE_HELD, state=0, timer=1400.0)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_HELD
 
 
 def _debug_sheik_needle_damage_callback(seed: np.ndarray) -> tuple[np.void, int]:
@@ -2765,6 +2847,7 @@ def _run_needle_item_collision(
     flags: int = _HITBOX_FLAG_CLANK | _HITBOX_FLAG_ITEM_HIT_INTERACTION,
     element: int = 0,  # MSL_HIT_ELEMENT_NORMAL
     clear_hurtcaps: bool = True,
+    override_hurtcap_under_needle: bool = False,
 ) -> np.void:
     # Run ONLY items_update_collision_phase (the Needle update/collision) on a reseeded handle, so a
     # defender attack HitCapsule can be injected with real source flags (a full step re-derives/clears
@@ -2783,6 +2866,13 @@ def _run_needle_item_collision(
         msl_binding.debug_clear_hitboxes_world(handle, 0, 1)
         if clear_hurtcaps:
             msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        if override_hurtcap_under_needle:
+            nx = float(seed["items"]["pos_x"][0, 0])
+            ny = float(seed["items"]["pos_y"][0, 0])
+            msl_binding.debug_set_hurtcap_world(
+                handle, 0, 1, 0, nx - 0.25, ny, 0.0, nx + 0.25, ny, 0.0, 0.5
+            )
+            msl_binding.debug_set_hurtcap_height(handle, 0, 1, 0, 1)
         if clank_hitbox:
             # Co-locate the fighter attack HitCapsule with the Needle (overlap) or place it far away.
             nx = float(seed["items"]["pos_x"][0, 0])
@@ -2809,35 +2899,18 @@ def _clank_seed(rng_hw: int = 0) -> np.ndarray:
     return seed
 
 
-def test_sheik_thrown_needle_clanks_attack_hitcapsule_positive() -> None:
-    # Positive Needle-vs-attack-HitCapsule clank (source order ReflectDesc -> ShieldDesc -> clank ->
-    # BODY). ftColl_80077970's item side (inlineItemA1 -> it_8026FAC4 -> it_2725_Logic109_Clanked) fires
-    # whenever the 3-dmg Needle overlaps an eligible fighter attack HitCapsule (MSL_HITBOX_FLAG_CLANK +
-    # MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION, non-CATCH/INERT), running the SAME bounce/destroy outcome as
-    # DmgDealt/HitShield via sheik_needle_bounce_or_destroy_callback. This isolated item-collision phase
-    # does not re-seed the per-frame RNG, so the clank takes its bounce branch here (state 4 with the
-    # data-table velocity + 120f bounce lifetime); the bounce-vs-destroy FATE is the shared callback,
-    # locked across synthetic RNG by test_sheik_thrown_needle_dmgdealt_bounce_destroy_under_synthetic_rng.
-    # The clank itself takes NO BODY damage (hurtcaps cleared to isolate the clank from BODY).
-    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970,inlineItemA1}
-    # refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_Clanked
-    import msl_binding
-
-    article = msl_binding.item_article_params(7)
-    bounce_vels = [abs(float(v)) for v in article["needle_bounce_min_vel_y"]]
-    bounce_x_vels = [abs(float(v)) for v in article["needle_bounce_x_vel"]]
-    bounce_lifetime = float(article["needle_bounce_lifetime_frames"])
-
+def test_sheik_thrown_needle_does_not_clank_without_article_clank_bit_negative() -> None:
+    # Adjacent no-clank negative for source order ReflectDesc -> ShieldDesc -> clank -> BODY. The
+    # defender's fighter HitCapsule is clank/item-interaction eligible and co-located with the Needle, but
+    # Sheik's thrown-Needle command-11 hitcaps have x40_b0 clear. ftColl_8007925C requires BOTH sides'
+    # x40_b0 bits before calling ftColl_80077970, so the Needle must not enter Logic109_Clanked here.
+    # Hurtcaps are cleared to isolate clank from BODY.
+    # refs/melee/src/melee/it/itanimlist.c::it_802790C0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
     pct0 = float(_clank_seed()["percent"][0, 1])
     out = _run_needle_item_collision(_clank_seed(), clank_hitbox=True, overlap=True)
     assert int(out["items"]["exists"][0]) == 1
-    assert int(out["items"]["state"][0]) == 4  # clanked -> bounced (it_2725_Logic109_Clanked)
-    # Bounce installs SetupBounce horizontal drift xDD8 = needle_bounce_x_vel signed by Randi(2).
-    assert any(
-        abs(float(out["items"]["vel_x"][0])) == pytest.approx(v) for v in bounce_x_vels
-    ), float(out["items"]["vel_x"][0])
-    assert float(out["items"]["timer"][0]) == pytest.approx(bounce_lifetime)
-    assert any(float(out["items"]["vel_y"][0]) == pytest.approx(v) for v in bounce_vels)
+    assert int(out["items"]["state"][0]) == 0
     assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)  # no BODY damage
 
 
@@ -2845,7 +2918,8 @@ def test_sheik_thrown_needle_no_clank_without_eligible_overlap_negative() -> Non
     # Adjacent no-clank negatives: the Needle does NOT clank when (a) no fighter attack HitCapsule is
     # present, (b) the HitCapsule overlaps but lacks MSL_HITBOX_FLAG_CLANK, (c) it is CLANK-flagged but
     # does not overlap, or (d) it is a CATCH-element grab box. In every case the Needle stays state-0
-    # (hurtcaps cleared, so no BODY confound). Keeps the positive non-vacuous and source-gated.
+    # (hurtcaps cleared, so no BODY confound). The co-located eligible-hitbox negative above covers the
+    # article-side x40_b0 gate.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
     assert int(_run_needle_item_collision(_clank_seed(), clank_hitbox=False)["items"]["state"][0]) == 0
     assert (
@@ -2872,6 +2946,40 @@ def test_sheik_thrown_needle_no_clank_without_eligible_overlap_negative() -> Non
         )
         == 0
     )  # MSL_HIT_ELEMENT_CATCH
+
+
+def test_sheik_thrown_needle_exact_body_reject_not_widened_by_unrelated_hitbox_negative() -> None:
+    # Exact lbColl BODY rejection remains authoritative even if the defender has unrelated live
+    # fighter HitCapsules. ftColl_8007925C handles clank through the earlier HitCapsule-vs-HitCapsule
+    # owner; a CATCH-element hitbox is not a source signal to ignore lbColl_8000805C's BODY no-hit and
+    # fall back to already-live hurtcaps. The debug hurtcap override leaves a live hurtcap overlapped by
+    # the Needle while the defender's source-pose matrix remains far below it, so the old broad "any
+    # live hitbox" fallback would deal BODY damage here. Lock both a co-located CATCH box and a normal
+    # hitbox that is live but geometrically unrelated to the Needle contact.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+    seed = _seed_needle_over_fox_defender()
+    seed["items"]["pos_y"][0, 0] = np.float32(50.0)
+    pct0 = float(seed["percent"][0, 1])
+    catch_out = _run_needle_item_collision(
+        seed,
+        clank_hitbox=True,
+        element=8,  # MSL_HIT_ELEMENT_CATCH
+        clear_hurtcaps=False,
+        override_hurtcap_under_needle=True,
+    )
+    far_out = _run_needle_item_collision(
+        seed,
+        clank_hitbox=True,
+        overlap=False,
+        clear_hurtcaps=False,
+        override_hurtcap_under_needle=True,
+    )
+    for out in (catch_out, far_out):
+        assert int(out["items"]["exists"][0]) == 1
+        assert int(out["items"]["state"][0]) == 0
+        assert int(out["hitlag"][1]) == 0
+        assert float(out["percent"][1]) == pytest.approx(pct0, abs=0.01)
 
 
 def test_sheik_thrown_needle_reflectdesc_wins_over_clank() -> None:

@@ -74,6 +74,7 @@ ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_HARD_FLOOR = 3
 MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY = 1 << 11
 MPCOLL_REJECT_MISSFOOT_ECB_LOCK_FIRST_FLOOR = 1 << 37
 MPCOLL_REJECT_FALL_ATTACKAIR_ENTRY_TRANSFORMED_PLATFORM_ROOT_ONLY = 1 << 38
+MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_STATIC_PLATFORM_LOCK = 1 << 40
 
 
 def _run_one_step(ds, record: int, *, seed_mutator=None, input_mutator=None) -> np.void:
@@ -5039,6 +5040,72 @@ def test_ground_jump_launch_does_not_borrow_slope_gr_vel_cnm_1268() -> None:
     ref = row["ref_t1"]
     assert int(out["action_id"][p]) == ACT_JUMP_B
     assert float(out["speed_air_x_self"][p]) - float(ref["speed_air_x_self"][p]) > 0.02
+
+
+@pytest.mark.integration
+def test_sheik_kneebend_escapeair_static_platform_lock_stays_airborne() -> None:
+    # KneeBend -> Jump -> EscapeAir static-platform handoff:
+    # `KneeBend_Anim` can enter Jump, then `Jump_IASA` can immediately enter EscapeAir before
+    # Fighter_procMap. EscapeAir_Coll then consumes ftCommon_8007D5D4's locked CollData lifetime;
+    # a shallow projection back onto the same launch platform is not a new LandingFallSpecial floor
+    # publication for the remaining CollData_X130 lock lifetime. The next row is an adjacent quiet
+    # callback with no floor result, the timer-expiry row no longer applies the lock rejection, and
+    # a deeper current-bottom crossing reopens the ordinary same-platform floor publication path.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::{ftCo_Jump_Enter,ftCo_Jump_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    for record in (4981, 4983, 4984, 4985, 4986, 4987, 4988, 4989):
+        row = ds.samples[record]
+        out, dbg = _run_one_step_with_colldata(ds, record)
+        ref = row["ref_t1"]
+        for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+            assert int(out[field][p]) == int(ref[field][p]), (record, field)
+        assert int(out["action_id"][p]) == ACT_ESCAPE_AIR
+        assert int(out["on_ground"][p]) == 0
+        assert (
+            int(dbg["floor_probe_reject_bits"][p])
+            & MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_STATIC_PLATFORM_LOCK
+        )
+
+    quiet_out, quiet_dbg = _run_one_step_with_colldata(ds, 4982)
+    quiet_ref = ds.samples[4982]["ref_t1"]
+    assert int(quiet_out["action_id"][p]) == int(quiet_ref["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(quiet_out["on_ground"][p]) == 0
+    assert (
+        int(quiet_dbg["floor_probe_reject_bits"][p])
+        & MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_STATIC_PLATFORM_LOCK
+    ) == 0
+
+    expired_out, expired_dbg = _run_one_step_with_colldata(ds, 4990)
+    expired_ref = ds.samples[4990]["ref_t1"]
+    assert int(ds.samples[4990]["seed_t"]["ecb_lock_timer"][p]) == 1
+    assert int(expired_out["action_id"][p]) == int(expired_ref["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(expired_out["on_ground"][p]) == 0
+    assert (
+        int(expired_dbg["floor_probe_reject_bits"][p])
+        & MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_STATIC_PLATFORM_LOCK
+    ) == 0
+
+    def deepen_current_bottom_crossing(seed: np.ndarray) -> None:
+        seed["pos_y"][0, p] = np.float32(float(seed["pos_y"][0, p]) - 0.01)
+
+    deeper = _run_one_step(ds, 4983, seed_mutator=deepen_current_bottom_crossing)
+    assert int(deeper["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(deeper["on_ground"][p]) == 1
+
+    sustained_deeper = _run_one_step(ds, 4987, seed_mutator=deepen_current_bottom_crossing)
+    assert int(sustained_deeper["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(sustained_deeper["on_ground"][p]) == 1
 
 
 @pytest.mark.integration

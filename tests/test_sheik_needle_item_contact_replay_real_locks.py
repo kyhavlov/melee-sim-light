@@ -25,6 +25,8 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset  # noqa: E402
 
 DATASET = Path("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
 DEMO_DATASET = Path("datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl")
+ZESTY_DATASET = Path("datasets/sheik/replays/validation/sheik/ZestyPreciousTurtle.msl")
+TENSE_DATASET = Path("datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl")
 P_MARTH = 1
 ITEM_NEEDLE_THROWN = 79
 ITEM_NEEDLE_HELD = 80
@@ -36,7 +38,11 @@ def _require_dataset(dataset: Path = DATASET) -> None:
 
 
 def _run_row(
-    record: int, *, dataset: Path = DATASET, mutate_item0_type: int | None = None
+    record: int,
+    *,
+    dataset: Path = DATASET,
+    mutate_item0_type: int | None = None,
+    mutate_input_r_p0: int | None = None,
 ) -> tuple[np.void, np.void, np.void]:
     import msl_binding
 
@@ -45,6 +51,8 @@ def _run_row(
     row = ds.samples[record : record + 1].copy()
     if mutate_item0_type is not None:
         row["seed_t"]["items"]["type"][0, 0] = np.uint16(mutate_item0_type)
+    if mutate_input_r_p0 is not None:
+        row["input_t"]["p"]["r"][0, 0] = np.uint8(mutate_input_r_p0)
 
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -116,6 +124,121 @@ def test_sheik_thrown_needle_body_hit_deals_damage_replay_real() -> None:
     assert int(out2["items"]["exists"][0]) == int(out["items"]["exists"][0])
     assert int(out2["items"]["state"][0]) == int(out["items"]["state"][0])
     assert not (int(out["items"]["exists"][0]) == 1 and int(out["items"]["state"][0]) == 0)
+
+
+@pytest.mark.integration
+def test_sheik_thrown_needle_fresh_attackdash_guardon_shielddesc_uses_model_scale_replay_real() -> None:
+    # BeautifulDistantWolverine:3510 has Sheik's thrown Needle reaching a Fox AttackDash defender
+    # on an allow-interrupt frame. AttackDash_IASA delegates to Wait_IASA, the current hard analog R
+    # enters GuardOn via ftCo_80091A4C -> ftCo_800924C0, and ftColl_8007925C then resolves the
+    # already-live Needle against ShieldDesc before BODY. The accepted boundary depends on the
+    # ShieldDesc.size=1 term passing through the defender's model-scale JObj matrix; using only
+    # fighter_scale_y misses by <0.001 world units and incorrectly BODY-hits.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    dataset = Path("datasets/sheik/replays/validation/sheik/BeautifulDistantWolverine.msl")
+    seed, ref, out = _run_row(3510, dataset=dataset)
+    defender = 0
+
+    assert int(seed["action_id"][defender]) == 50  # AttackDash
+    assert int(seed["items"]["type"][3]) == ITEM_NEEDLE_THROWN
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff
+
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 4
+    assert float(out["percent"][defender]) == pytest.approx(float(seed["percent"][defender]))
+    assert float(out["shield_hp"][defender]) < float(seed["shield_hp"][defender]) - 1.0
+
+    # Adjacent negative: with the same Needle/body geometry but no current trigger, Wait_IASA cannot
+    # publish ShieldDesc, so the item falls through to the ordinary BODY damage path.
+    _seed, _ref, no_shield = _run_row(3510, dataset=dataset, mutate_input_r_p0=0)
+    assert float(no_shield["percent"][defender]) == pytest.approx(
+        float(seed["percent"][defender]) + 3.0,
+        abs=0.01,
+    )
+    assert int(no_shield["action_id"][defender]) != 181
+
+
+@pytest.mark.integration
+def test_sheik_thrown_needle_root_bound_hitcap_stays_quiet_against_attackairlw_replay_real() -> None:
+    # ZestyPreciousTurtle:249 locks the adjacent quiet side of the root-bound Needle publication model.
+    # Hitboxes 2/3 are bound to the item root JObj, so command-11 x_offset rotates by item facing rather
+    # than by the live travel vector. The diagonal flying Needle therefore stays on the source side of
+    # the AttackAirLw defender this frame instead of BODY-hitting early.
+    # refs/melee/src/melee/it/itanimlist.c::it_802790C0
+    # refs/melee/src/melee/it/itcoll.c::it_8027137C
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Coll
+    seed, ref, out = _run_row(249, dataset=ZESTY_DATASET)
+
+    assert int(seed["items"]["type"][0]) == ITEM_NEEDLE_THROWN
+    assert int(seed["items"]["state"][0]) == 0
+    assert int(seed["action_id"][P_MARTH]) == 69  # AttackAirLw
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 69
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 0
+    assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
+    assert int(out["items"]["exists"][0]) == int(ref["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == int(ref["items"]["state"][0]) == 0
+
+
+@pytest.mark.integration
+def test_sheik_air_needle_same_frame_spawn_body_hits_after_attack_hitcap_fallthrough_replay_real() -> None:
+    # ZestyPreciousTurtle:1523 is a same-frame Air Needle spawn. The state-0 Needle hitcaps are BODY
+    # enabled but command-11 x40_b0 clank is clear, so the defender's live AttackAirLw hitcaps do not
+    # enter ftColl_80077970 and the source order falls through to BODY on the spawn frame.
+    # refs/melee/src/melee/it/itanimlist.c::it_802790C0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
+    seed, ref, out = _run_row(1523, dataset=ZESTY_DATASET)
+
+    assert int(seed["items"]["type"][0]) == ITEM_NEEDLE_HELD
+    assert int(seed["action_id"][P_MARTH]) == 69
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 85
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 4
+    assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
+    assert float(out["percent"][P_MARTH]) == pytest.approx(3.0)
+    assert int(out["items"]["exists"][0]) == int(ref["items"]["exists"][0]) == 0
+
+
+@pytest.mark.integration
+def test_sheik_ground_needle_same_frame_spawn_quiet_before_body_overlap_replay_real() -> None:
+    # TenseSameHummingbird:5729 is the adjacent negative for same-frame spawned Needle contact. The
+    # spawned ground Needle publishes this frame but has not reached BODY; because command-11 x40_b0 is
+    # clear, the defender's AttackAirLw hitcaps also must not clank/destroy it early.
+    # refs/melee/src/melee/it/itanimlist.c::it_802790C0
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    seed, ref, out = _run_row(5729, dataset=TENSE_DATASET)
+
+    assert int(seed["action_id"][P_MARTH]) == 69
+    assert int(ref["items"]["type"][0]) == ITEM_NEEDLE_THROWN
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 69
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 0
+    assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
+    assert int(out["items"]["exists"][0]) == int(ref["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == int(ref["items"]["state"][0]) == 0
+
+
+@pytest.mark.integration
+def test_sheik_ground_needle_active_attack_hitcaps_fall_through_to_body_replay_real() -> None:
+    # TenseSameHummingbird:5730 is the next frame positive: the same thrown Needle now reaches BODY
+    # while Marth's AttackAirLw hitcaps are still live. The article-side x40_b0 clank gate keeps those
+    # fighter hitcaps from preempting BODY.
+    # refs/melee/src/melee/it/itanimlist.c::it_802790C0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
+    seed, ref, out = _run_row(5730, dataset=TENSE_DATASET)
+
+    assert int(seed["items"]["type"][0]) == ITEM_NEEDLE_THROWN
+    assert int(seed["items"]["state"][0]) == 0
+    assert int(seed["action_id"][P_MARTH]) == 69
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 85
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 4
+    assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
+    assert float(out["percent"][P_MARTH]) == pytest.approx(3.0)
+    assert int(out["items"]["exists"][0]) == int(ref["items"]["exists"][0]) == 0
 
 
 @pytest.mark.integration

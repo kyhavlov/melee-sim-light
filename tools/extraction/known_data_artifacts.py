@@ -20,7 +20,8 @@ ITEM_ARTICLE_MAGIC = b"MSLITAR1"
 #   hitbox reactivation threshold and it_802BCFC4 launch velocity instead of local literals.
 # v15 (2026-06-19): adds Sheik thrown-Needle command-11 hitbox bone ids and article-JObj
 #   root-space XYZ offsets so BODY contact uses the source HitCapsule publication point.
-ITEM_ARTICLE_VERSION = 15
+# v16 (2026-06-19): extends article hitbox flags with command-11 x40_b0 clank eligibility.
+ITEM_ARTICLE_VERSION = 16
 ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1
 # Historical compatibility alias. The stored values are Slippi/CSS external character ids, not
 # GALE01 internal FighterKind ids.

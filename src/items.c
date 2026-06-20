@@ -1695,6 +1695,14 @@ static inline uint8_t action_is_sheik_needle_loop(uint8_t char_id, uint16_t acti
                    action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_LOOP);
 }
 
+static inline uint8_t action_is_sheik_needle_cancel(uint8_t char_id, uint16_t action_id_u16) {
+  if (char_id != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  return (uint8_t)(action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_N_CANCEL ||
+                   action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_CANCEL);
+}
+
 static inline uint8_t action_is_sheik_needle_end(uint8_t char_id, uint16_t action_id_u16) {
   if (char_id != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;
@@ -5081,16 +5089,23 @@ static inline uint8_t sheik_held_needle_owner_pointer_live(const MslBatch* batch
     return 0u;
   }
   const uint16_t action = batch->state.action_id[owner_idx];
-  // Held Needle item Anim destroys the article once fp->fv.sk.x4 is NULL. Source keeps that
-  // pointer live through Loop and through End until shootNeedles consumes the first firing latch;
-  // Cancel explicitly zeros it in its Anim callback. The runtime clears the held slot in
-  // shootNeedles' item-phase spawn helper, so End remains live here until that owner runs.
+  // Held Needle item Anim destroys the article once fp->fv.sk.x4 is NULL; otherwise it persists as
+  // a fighter-part-attached item and only updates model visibility/scale. Replay seeds do not expose
+  // fp->fv.sk.x4 directly, but a visible Sheik-owned held article is evidence that the item-local
+  // owner pointer is still live. Source item Anim runs before fighter Anim: SpecialNEnd firing
+  // subframes clear the held slot later through shootNeedles' item/accessory phase, not here. Cancel
+  // explicitly clears fp->fv.sk.x4 in its Anim callback, so a replay-seeded Cancel row owns the
+  // pre-fighter item self-destruction. Do not infer fp->fv.sk.x4=NULL from common action ids after
+  // air/ground transition; the item carries its internal seakneedleheld.owner across those states
+  // until an explicit clear/drop owner runs.
   // refs/melee/src/melee/it/items/itseakneedleheld.c::itSeakneedleheld_UnkMotion0_Anim
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
   //   ftSk_SpecialNCancel_Anim,ftSk_SpecialAirNCancel_Anim,ftSk_SpecialNEnd_Anim,
   //   ftSk_SpecialAirNEnd_Anim,shootNeedles}
-  return (uint8_t)(action_is_sheik_needle_loop((uint8_t)MSL_CHAR_ID_SHEIK, action) ||
-                   action_is_sheik_needle_end((uint8_t)MSL_CHAR_ID_SHEIK, action));
+  if (action_is_sheik_needle_cancel((uint8_t)MSL_CHAR_ID_SHEIK, action)) {
+    return 0u;
+  }
+  return 1u;
 }
 
 static void sheik_held_needles_update_anim_phase(MslBatch* batch, int bi) {
@@ -5133,6 +5148,7 @@ enum {
   MSL_ITEM_ARTICLE_HITBOX_FLAG_TARGET_AERIAL = 1u << 1,
   MSL_ITEM_ARTICLE_HITBOX_FLAG_BODY_ENABLED = 1u << 2,
   MSL_ITEM_ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY = 1u << 3,
+  MSL_ITEM_ARTICLE_HITBOX_FLAG_CLANK = 1u << 4,
 };
 
 static inline uint8_t sheik_needle_article_hitbox_targets_fighter_ground_state(
@@ -5155,6 +5171,16 @@ static inline uint8_t sheik_needle_article_hitbox_grabbable_only(uint32_t flags)
   // `x42_b6` further restricts BODY contact to grabbable hurtcaps after ShieldDesc/clank misses.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
   return (flags & (uint32_t)MSL_ITEM_ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY) != 0u ? 1u : 0u;
+}
+
+static inline uint8_t sheik_needle_article_hitbox_clank_enabled(uint32_t flags) {
+  // ftColl_8007925C only lets item HitCapsules enter ftColl_80077970 when both the item and fighter
+  // HitCapsules have x40_b0 set. MSLITAR1 v16 carries the article command-11 x40_b0 bit; Sheik's
+  // thrown-Needle state-0 hitboxes all have BODY enabled but clank disabled, so live fighter attacks
+  // fall through to the later BODY owner unless another source descriptor accepts first.
+  // refs/melee/src/melee/it/itanimlist.c::it_802790C0
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
+  return (flags & (uint32_t)MSL_ITEM_ARTICLE_HITBOX_FLAG_CLANK) != 0u ? 1u : 0u;
 }
 
 static inline float sheik_needle_hitbox_damage(const MslBatch* batch, size_t hb_i) {
@@ -5272,6 +5298,21 @@ static inline void sheik_needle_motion_step(MslBatch* batch, size_t ii) {
     batch->state.item_pos_x[ii] += batch->state.item_vel_x[ii];
     batch->state.item_pos_y[ii] += batch->state.item_vel_y[ii];
   }
+}
+
+static inline uint8_t sheik_needle_generic_blast_clear_after_motion(
+    const MslStageBounds* blast_bounds, float x, float y) {
+  if (blast_bounds == NULL) {
+    return 0u;
+  }
+  // Thrown Needles use the generic item post-Phys destroy gate installed by Item_80268B18
+  // (xDCC_flag.b3=1, b4567=15). Item_802697D4 integrates x40_vel+nudge, then Item_802696CC clears
+  // on side/bottom blast bounds; the enabled top bit is the source's 10000.0f sentinel, not the
+  // stage top blast bound.
+  // refs/melee/src/melee/it/item.c::{Item_80268B18,Item_802697D4,Item_802696CC}
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_802AFD8C,it_802AFF08,it_802B00F4}
+  return (uint8_t)(x > blast_bounds->right || x < blast_bounds->left || y < blast_bounds->bottom ||
+                   y > 10000.0f);
 }
 
 static inline void sheik_needle_apply_item_hitlag(MslBatch* batch, size_t ii, int damage_i) {
@@ -5504,27 +5545,60 @@ static inline void sheik_needle_hitbox_segment_xy(const MslItemArticleParams* pa
                                                   float diry, float item_facing_dir, float* sx0,
                                                   float* sy0, float* sx1, float* sy1) {
   const float script_x = params->needle_hitbox_x_offset[hb];
-  // State-0 Needle root JObj is rotated by M_PI_2 * ip->facing_dir, so the article child JObj's
-  // extracted root-space Z offset contributes to world X. The local X component rotates into Z and
-  // is not used by this XY BODY sweep.
+  const float script_y = params->needle_hitbox_y_offset[hb];
+  // it_802790C0 writes item command-11 offsets as HitCapsule.b_offset = {z, y, x}, then
+  // it_8027137C samples that point through the bound JObj. Bone-0 hitboxes bind to the item root,
+  // whose state-0 transform is just the M_PI_2 * facing_dir root rotation; child-bone hitboxes bind
+  // to the rotated Needle child JObj and therefore follow the live travel angle.
+  // refs/melee/src/melee/it/itanimlist.c::it_802790C0
+  // refs/melee/src/melee/it/itcoll.c::it_8027137C
   // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_802AFF08,itSeakneedlethrown_UnkMotion0_Coll}
   const float jobj_x = item_facing_dir * params->needle_hitbox_jobj_z_offset[hb];
   const float jobj_y = params->needle_hitbox_jobj_y_offset[hb];
-  *sx0 = contact_x0 + jobj_x + script_x * dirx;
-  *sy0 = contact_y0 + jobj_y + script_x * diry;
-  *sx1 = contact_x1 + jobj_x + script_x * dirx;
-  *sy1 = contact_y1 + jobj_y + script_x * diry;
+  const uint16_t bone_id = params->needle_hitbox_bone_id[hb];
+  const float script_world_x = (bone_id == 0u) ? (item_facing_dir * script_x) : (script_x * dirx);
+  const float script_world_y = (bone_id == 0u) ? script_y : (script_y + script_x * diry);
+  *sx0 = contact_x0 + jobj_x + script_world_x;
+  *sy0 = contact_y0 + jobj_y + script_world_y;
+  *sx1 = contact_x1 + jobj_x + script_world_x;
+  *sy1 = contact_y1 + jobj_y + script_world_y;
+}
+
+static inline uint8_t sheik_needle_body_fallback_hitcap_packet_owns_contact(const MslBatch* batch,
+                                                                            int bi, int defender,
+                                                                            float sx0, float sy0,
+                                                                            float sx1, float sy1,
+                                                                            float hbr) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  for (int fhb = 0; fhb < MSL_MAX_HITBOXES; fhb++) {
+    const size_t fhb_i = idx_hitbox(bi, defender, fhb);
+    if (!batch->state.hitbox_enabled[fhb_i]) {
+      continue;
+    }
+    const uint8_t felem = batch->state.hitbox_element[fhb_i];
+    if (felem == (uint8_t)MSL_HIT_ELEMENT_CATCH || felem == (uint8_t)MSL_HIT_ELEMENT_INERT) {
+      continue;
+    }
+    if (!item_laser_hitcapsule_overlaps_fighter_hitcapsule(batch, fhb_i, sx0, sy0, sx1, sy1, hbr)) {
+      continue;
+    }
+    return 1u;
+  }
+  return 0u;
 }
 
 static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int item_slot,
-                                                 const MslItemArticleParams* params) {
+                                                 const MslItemArticleParams* params,
+                                                 uint8_t spawned_this_frame) {
   // Thrown Needle BODY damage (Needle as attacker). Only the state-0 flying Needle carries an active
   // HitCapsule; the state-1..4 scripts clear hitboxes. On a fighter-hurtbox contact the source runs
   // OnGiveDamage then it_2725_Logic109_DmgDealt (HSD_Randi(3)==0 bounce, else destroy) -- the same
   // bounce/destroy outcome as DmgReceived. State-0 Needles travel in a straight line at the constant
   // throw velocity. Source priority order moves the article, refreshes item HitCapsule x58/x4C via
   // it_8027137C, then ftColl_8007925C tests item-vs-fighter BODY. Command 11 binds each HitCapsule
-  // to an article JObj; MSLITAR1 v15 carries the script bone and model-derived JObj XYZ offset, so
+  // to an article JObj; MSLITAR1 v16 carries the script bone and model-derived JObj XYZ offset, so
   // the straight-line Needle segment below is the just-advanced frame-start -> current item path
   // plus the source `lb_8000B1CC(hit->jobj, &offset)` publication point.
   // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
@@ -5533,7 +5607,8 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
   // refs/melee/src/melee/it/item.c::{Item_802697D4,Item_80269978,Item_80269B60}
   // refs/melee/src/melee/it/itcoll.c::it_8027137C
   // refs/melee/src/melee/it/itanimlist.c::it_802790C0
-  // data/items/articles/fox_falco.bin::MSLITAR1 needle_hitbox_{bone_id,jobj_x_offset,jobj_y_offset,jobj_z_offset}
+  // data/items/articles/fox_falco.bin::MSLITAR1
+  // needle_hitbox_{bone_id,jobj_x_offset,jobj_y_offset,jobj_z_offset}
   // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C}
   // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
   if (batch == NULL || params == NULL || params->needle_hitbox_count == 0u) {
@@ -5555,8 +5630,8 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
   const float item_facing_dir = (batch->state.item_direction[ii] < 0.0f) ? -1.0f : 1.0f;
   const float contact_x1 = cur_x;
   const float contact_y1 = cur_y;
-  const float contact_x0 = cur_x - vx;
-  const float contact_y0 = cur_y - vy;
+  const float contact_x0 = (spawned_this_frame != 0u) ? cur_x : (cur_x - vx);
+  const float contact_y0 = (spawned_this_frame != 0u) ? cur_y : (cur_y - vy);
   const float v2 = vx * vx + vy * vy;
   float dirx = 1.0f;
   float diry = 0.0f;
@@ -5680,10 +5755,13 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
       // misses the shield bubble but overlaps a hurtcap. The ShieldDesc bubble is the projectile-agnostic
       // shield sphere already modeled
       // and replay-witness-locked for the laser/illusion item path (shield center +
-      // item_guard_shield_radius_from_state radius + 1.0*scaleY ShieldDesc world radius); this reuses
-      // that geometry/shield-damage primitive only -- NOT the laser GuardReflect owner/keepalive
-      // heuristics. ReflectDesc stays source-prior (handled by the 2218 REFLECTING guard above).
+      // item_guard_shield_radius_from_state radius + ShieldDesc.size=1 through the fighter
+      // scale/model-scale JObj matrix); this reuses that geometry/shield-damage primitive only --
+      // NOT the laser GuardReflect owner/keepalive heuristics. ReflectDesc stays source-prior
+      // (handled by the 2218 REFLECTING guard above).
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688,ftColl_80076CBC}
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_GetModelScale
       // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_2725_Logic109_HitShield,
       //   itSeakNeedleThrown_SetupBounce}
       const MslCommonParams* common = msl_common_params();
@@ -5701,8 +5779,16 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
           shz = batch->state.pos_z[d_idx];
         }
         float shield_desc_world_r = 1.0f;
-        if (batch->state.fighter_scale_y[d_idx] > 0.0f) {
-          shield_desc_world_r *= batch->state.fighter_scale_y[d_idx];
+        {
+          const MslCharParams* def_ch = msl_char_params_fast(batch->state.char_id[d_idx]);
+          const float model_scale =
+              (def_ch != NULL && isfinite(def_ch->model_scaling) && def_ch->model_scaling > 0.0f)
+                  ? def_ch->model_scaling
+                  : 1.0f;
+          if (batch->state.fighter_scale_y[d_idx] > 0.0f) {
+            shield_desc_world_r *= batch->state.fighter_scale_y[d_idx];
+          }
+          shield_desc_world_r *= model_scale;
         }
         for (uint8_t hb = 0;
              hb < params->needle_hitbox_count && hb < (uint8_t)MSL_ITEM_ARTICLE_MAX_HITBOXES;
@@ -5744,21 +5830,22 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
     }
     // Clank: Needle item HitCapsule vs the defender's eligible attack HitCapsules. Source contact order
     // is ReflectDesc -> ShieldDesc -> clank/attack HitCapsule -> BODY; reflect and shield are resolved
-    // and returned/deferred above, so this runs only when neither owns the contact. ftColl_8007925C
-    // feeds overlapping item/fighter HitCapsules to ftColl_80077970, whose item side (inlineItemA1 ->
-    // it_8026FAC4 -> it_2725_Logic109_Clanked) fires when item_dmg - p_ftCommonData->x3CC < fighter_dmg;
-    // for the 3-dmg Needle that is always true, so any eligible overlapping fighter attack HitCapsule
-    // clanks the Needle into the shared bounce/destroy outcome (HSD_Randi(3)==0 bounce state 4 else
-    // destroy). No BODY/shield damage. Eligible fighter hitboxes = enabled + MSL_HITBOX_FLAG_CLANK +
-    // MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION + non-CATCH/INERT element (the source-backed item-interaction
-    // descriptor gate, NOT the laser zero-KB contact-mask/offset branches). Hitbox-vs-hitbox, so no
-    // grounded/aerial target-flag gate (that only governs hurtcap BODY targeting).
+    // and returned/deferred above, so this runs only when neither owns the contact. ftColl_8007925C only
+    // feeds a pair to ftColl_80077970 when BOTH hitcaps have x40_b0 set and lbColl_80007AFC accepts the
+    // hitbox-vs-hitbox overlap. MSLITAR1 v16 carries the item command-11 x40_b0 bit in
+    // needle_hitbox_flags; Sheik's state-0 Needle BODY hitboxes are not clank-enabled, so active fighter
+    // attack hitcaps do not preempt the later BODY hurtcap owner for this article.
     // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970,inlineItemA1}
+    // refs/melee/src/melee/it/itanimlist.c::it_802790C0
     // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_Clanked
     for (uint8_t hb = 0;
          hb < params->needle_hitbox_count && hb < (uint8_t)MSL_ITEM_ARTICLE_MAX_HITBOXES; hb++) {
       const float hbr = params->needle_hitbox_size[hb];
       if (!(hbr > 0.0f) || !(params->needle_hitbox_damage_by_id[hb] > 0.0f)) {
+        continue;
+      }
+      const uint32_t hb_flags = params->needle_hitbox_flags[hb];
+      if (!sheik_needle_article_hitbox_clank_enabled(hb_flags)) {
         continue;
       }
       if (!hitlist_allows_item_hitbox_fighter(batch, bi, item_slot, (int)hb, def, def_iid)) {
@@ -5844,13 +5931,18 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
             break;
           }
         }
-        if (exact_evaluated != 0u) {
+        if (exact_evaluated != 0u && !sheik_needle_body_fallback_hitcap_packet_owns_contact(
+                                         batch, bi, def, sx0, sy0, sx1, sy1, hbr)) {
           continue;
         }
-        // Active fighter hitlag freezes the JObj/hurt capsule packet because Fighter_8006A360
-        // skips Anim/IASA/Phys, but Fighter_8006CB94 still calls ftColl_8007925C. The source BODY
-        // test therefore consumes the already-live fp->hurt_capsules instead of a recomputed
-        // Damage* pose matrix for that frame.
+        // If the source-shaped lbColl matrix path evaluated and rejected, the miss is authoritative
+        // for ordinary BODY contact unless a concrete live fighter HitCapsule packet also overlaps
+        // this Needle HitCapsule. Unrelated/CATCH/inert hitboxes do not widen BODY admission: clank
+        // was already resolved above, and only an overlapping non-catch fighter HitCapsule proves the
+        // same live contact packet source is in play. Active fighter hitlag is the other narrow
+        // exception: Fighter_8006A360 freezes the JObj/hurt-capsule packet, so this loop skips the
+        // recomputed matrix owner and consumes the already-live fp->hurt_capsules while
+        // Fighter_8006CB94 still calls ftColl_8007925C.
         // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_8006CB94}
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
         if (item_swept_sphere_capsule_overlap_amount(batch, bi, def, sx0, sy0, sx1, sy1, hbr,
@@ -5967,6 +6059,9 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
       (batch->replay_reseed_frame_active != NULL && batch->replay_reseed_frame_active[bi] != 0u)
           ? 1u
           : 0u;
+  MslStageBounds blast_bounds = {0};
+  const uint8_t has_blast_bounds =
+      stage_collision_get_blast_bounds_world(batch->state.stage_id[bi], &blast_bounds);
   uint8_t needs_sort = 0u;
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
     const size_t ii = msl_idx_item(bi, it);
@@ -5980,13 +6075,19 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
     }
     if ((batch->state.item_hidden_callback_flags[ii] &
          (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME) != 0u) {
-      // it_802AFD8C-created Needles serialize at their spawn position/lifetime on the creation
-      // row. Their item motion/collision callback starts on the next item proc, unlike the
-      // special-cased throw-laser source paths that explicitly consume same-frame item motion.
+      // it_802AFD8C-created Needles serialize at their spawn position/lifetime on quiet creation
+      // rows, but the command-11 HitCapsules are already live before ftColl_8007925C's item BODY
+      // pass. Run only the stationary BODY contact owner here; a miss still publishes the spawn
+      // position/timer without same-frame motion.
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::shootNeedles
       // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_802AFD8C
+      // refs/melee/src/melee/it/itanimlist.c::it_802790C0
+      // refs/melee/src/melee/it/itcoll.c::it_8027137C
       batch->state.item_hidden_callback_flags[ii] &=
           (uint8_t)~MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME;
+      if (sheik_needle_try_body_hit_fighter(batch, bi, it, params, 1u) != 0u) {
+        needs_sort = 1u;
+      }
       continue;
     }
     if (replay_reseed != 0u && batch->state.item_state[ii] == 4u &&
@@ -6019,7 +6120,14 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
       continue;
     }
     sheik_needle_motion_step(batch, ii);
-    if (sheik_needle_try_body_hit_fighter(batch, bi, it, params) != 0u) {
+    if (has_blast_bounds != 0u &&
+        sheik_needle_generic_blast_clear_after_motion(&blast_bounds, batch->state.item_pos_x[ii],
+                                                      batch->state.item_pos_y[ii]) != 0u) {
+      item_slot_clear(batch, ii);
+      needs_sort = 1u;
+      continue;
+    }
+    if (sheik_needle_try_body_hit_fighter(batch, bi, it, params, 0u) != 0u) {
       needs_sort = 1u;
       continue;
     }

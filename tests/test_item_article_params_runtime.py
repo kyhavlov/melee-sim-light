@@ -41,13 +41,13 @@ def test_runtime_item_article_params_known_values() -> None:
     assert sheik["needle_hitbox_kbg"] == [34, 34, 34, 34]
     assert sheik["needle_hitbox_bkb"] == [24, 24, 24, 24]
     assert sheik["needle_hitbox_element"] == [3, 3, 3, 3]
-    # MSLITAR1 v15: command-11 hitbox JObj publication fields used by thrown-Needle BODY contact.
+    # MSLITAR1 v16: command-11 hitbox JObj publication fields used by thrown-Needle BODY contact.
     assert sheik["needle_hitbox_bone_id"] == [1, 1, 0, 0]
     assert sheik["needle_hitbox_jobj_x_offset"] == pytest.approx([0.0, 0.0, 0.0, 0.0])
     assert sheik["needle_hitbox_jobj_y_offset"] == pytest.approx([0.0, 0.0, 0.0, 0.0])
     assert sheik["needle_hitbox_jobj_z_offset"] == pytest.approx([-1.5, -1.5, 0.0, 0.0])
     # Extracted from state-0 item script command-11 target/contact bits:
-    # hb0 grounded+BODY, hb1-3 aerial+BODY.
+    # hb0 grounded+BODY, hb1-3 aerial+BODY; all four have x40_b0 clank clear.
     assert sheik["needle_hitbox_flags"] == [5, 6, 6, 6]
     assert sheik["sheik_chain_itkind"] == 97
     assert sheik["sheik_chain_spawn_part_id"] == 26
@@ -118,7 +118,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_needle_drop_record(
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 15
+    assert version == 16
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -156,7 +156,7 @@ def test_runtime_item_article_params_rejects_non_negative_sheik_needle_gravity(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 15
+    assert version == 16
     record_size = 24
     patched = False
     for i in range(count):
@@ -215,7 +215,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_needle_record(tmp_pat
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 15
+    assert version == 16
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -252,7 +252,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_hitbox_record(
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 15
+    assert version == 16
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -289,7 +289,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_active_window_
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 15
+    assert version == 16
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -325,7 +325,7 @@ def test_runtime_item_article_params_rejects_zero_sheik_chain_spawn_part_id(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 15
+    assert version == 16
     record_size = 24
     patched = False
     for i in range(count):
@@ -365,7 +365,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_chain_attr_record(
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 15
+    assert version == 16
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -401,7 +401,7 @@ def test_runtime_item_article_params_rejects_zero_sheik_vanish_spawn_part_id(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 15
+    assert version == 16
     record_size = 24
     patched = False
     for i in range(count):

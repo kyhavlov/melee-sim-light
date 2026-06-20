@@ -1745,9 +1745,9 @@ Characters (Fox/Falco/Marth/Sheik):
     - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
   - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
     the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
-  - Binary layout: `MSLITAR1` v15
+  - Binary layout: `MSLITAR1` v16
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 15`
+    - `u32 version = 16`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
@@ -1846,6 +1846,9 @@ Characters (Fox/Falco/Marth/Sheik):
       the source `it_8027137C -> lb_8000B1CC(hit->jobj, &offset)` endpoint instead of the
       replay-visible item root path. Runtime requires these fields for Sheik and keeps no fallback
       hitcap offset literal.
+    - v16 extends the article hitbox flags lane with command-11 `x40_b0` clank eligibility. This lets
+      runtime distinguish BODY-enabled item HitCapsules from item/fighter HitCapsules that may enter
+      `ftColl_80077970`; Sheik thrown-Needle state-0 hitboxes have BODY enabled but clank disabled.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:

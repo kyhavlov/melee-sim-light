@@ -14,6 +14,7 @@ ARTICLE_HITBOX_FLAG_TARGET_GROUNDED = 1
 ARTICLE_HITBOX_FLAG_TARGET_AERIAL = 2
 ARTICLE_HITBOX_FLAG_BODY_ENABLED = 4
 ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY = 8
+ARTICLE_HITBOX_FLAG_CLANK = 16
 
 
 def _ptr32_or_none(arc, abs_off: int) -> int | None:
@@ -419,6 +420,7 @@ def _extract_seak_needle_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
                     | (ARTICLE_HITBOX_FLAG_TARGET_AERIAL if bool(hb.get("hit_aerial", False)) else 0)
                     | (ARTICLE_HITBOX_FLAG_BODY_ENABLED if bool(hb.get("item_body_enabled", False)) else 0)
                     | (ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY if bool(hb.get("item_grabbable_only", False)) else 0)
+                    | (ARTICLE_HITBOX_FLAG_CLANK if bool(hb.get("clank", False)) else 0)
                     for hb in hitboxes[:4]
                 ]
     return out

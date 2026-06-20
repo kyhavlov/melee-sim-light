@@ -839,15 +839,18 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
       }
       const uint16_t prev_action_2218 = batch->state.prev_action_id[idx];
-      if (action_id == (uint16_t)MSL_ACT_LANDING && action_id != prev_action_2218 &&
-          batch->state.prev_action_frame[idx] >= 0 &&
+      if ((action_id == (uint16_t)MSL_ACT_LANDING || action_id == (uint16_t)MSL_ACT_FALL) &&
+          action_id != prev_action_2218 && batch->state.prev_action_frame[idx] >= 0 &&
           state_flags_2218_allow_interrupt_attackair_action(prev_action_2218)) {
-        // AttackAir -> Landing command-bit carry:
-        // AttackAir's script may set fp+0x2218_b0 before the Coll callback enters Landing in the
-        // same fighter proc. Landing entry does not synthesize this bit; publish the source script
+        // AttackAir -> Landing/Fall command-bit carry:
+        // AttackAir's script may set fp+0x2218_b0 before the same fighter proc leaves AttackAir.
+        // The Coll callback can enter Landing, while AttackAir_Anim can enter Fall when animation
+        // frames run out. Neither destination synthesizes this raw bit; publish the source script
         // result for the interrupted AttackAir frame instead of stale replay seed history.
         // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::{
+        //   ftCo_AttackAir_Anim,ftCo_AttackAir_Coll}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
         // data/scripts/{fox,falco,sheik}.bin AttackAir* events allow_interrupt
         const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);

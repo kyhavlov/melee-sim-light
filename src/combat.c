@@ -10645,6 +10645,15 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
       combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
       combat_state_flags_set_x221a_b3(batch, d_idx);
       combat_state_flags_set_x221c_b0(batch, d_idx);
+    } else {
+      // Pre-release attached throw BODY damage can take the no-reaction damage path without
+      // starting victim hitlag. Source still exposes fp->x221C_b0 for that accepted percent pulse;
+      // only the hitlag/x221A side effects above are gated on victim hitlag actually increasing.
+      //
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineB1
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007891C}
+      combat_state_flags_set_x221c_b0(batch, d_idx);
     }
     // Throw-state BODY hitboxes can strike the still-attached Thrown* victim before
     // set_throw_flags(0) releases them. For zero-direct-kb pre-release throw BODY pulses, source
