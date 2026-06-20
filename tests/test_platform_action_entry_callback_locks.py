@@ -32,6 +32,8 @@ ACT_KNEE_BEND = 24
 ACT_FALL = 29
 ACT_PASS = 244
 ACT_FX_SPECIAL_AIR_N_START = 344
+ACT_SK_SPECIAL_N_START = 341
+ACT_SK_SPECIAL_AIR_N_START = 345
 ACT_JUMP_F = 25
 ACT_ATTACK_AIR_N = 65
 ACT_ATTACK_AIR_F = 66
@@ -39,6 +41,7 @@ ACT_ATTACK_AIR_B = 67
 ACT_ATTACK_AIR_HI = 68
 ACT_ATTACK_AIR_LW = 69
 ACT_ATTACK_AIR_LW_TRUE = ACT_ATTACK_AIR_LW
+ACT_DAMAGE_LW_2 = 82
 ACT_DAMAGE_AIR_2 = 85
 ACT_LANDING_AIR_N = 70
 ACT_LANDING_AIR_B = 72
@@ -55,6 +58,7 @@ ACT_THROW_F = 219
 ACT_ESCAPE_N = 235
 ACT_MISS_FOOT = 251
 ACT_JUMP_B = 26
+ACT_DAMAGE_LW_1 = 81
 SM_ESCAPE_AIR = 44
 SM_LANDING_FALL_SPECIAL = 36
 SM_JUMP_AERIAL_F = 18
@@ -64,6 +68,7 @@ SM_ATTACK_AIR_F = 69
 SM_LANDING = 35
 SM_FALL_AERIAL = 23
 SM_FX_SPECIAL_AIR_N_START = 298
+SM_DAMAGE_LW_2 = 172
 CHAR_FOX = 1
 CHAR_FALCO = 22
 CHAR_MARTH = 18
@@ -75,6 +80,7 @@ MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY = 1 << 11
 MPCOLL_REJECT_MISSFOOT_ECB_LOCK_FIRST_FLOOR = 1 << 37
 MPCOLL_REJECT_FALL_ATTACKAIR_ENTRY_TRANSFORMED_PLATFORM_ROOT_ONLY = 1 << 38
 MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_STATIC_PLATFORM_LOCK = 1 << 40
+MPCOLL_REJECT_DAMAGE_SUSTAINED_PLATFORM_NO_BOTTOM_SWEEP = 1 << 41
 
 
 def _run_one_step(ds, record: int, *, seed_mutator=None, input_mutator=None) -> np.void:
@@ -1829,6 +1835,132 @@ def test_pass_specialairn_platform_floor_skip_handoff_requires_carried_platform(
     out = _run_one_step(ds, record, seed_mutator=remove_carried_platform)
     assert int(out["action_id"][p]) == ACT_WAIT
     assert int(out["on_ground"][p]) == 1
+
+
+@pytest.mark.integration
+def test_sheik_jump_specialairn_entry_platform_ecb_drop_lands_demo2_lock() -> None:
+    # Common JumpF IASA can enter SpecialAirNStart before Fighter_procMap. Source then runs the
+    # destination collision callback (`ftSk_SpecialAirNStart_Coll -> doColl -> ft_80081D0C`) with the
+    # pre-entry Jump CollData ECB as the previous bottom. On this Yoshi's side-platform row, the
+    # destination Needle pose lowers ECB.bottom through the platform and immediately converts to the
+    # grounded SpecialNStart via doColl.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    #   ftSk_SpecialAirNStart_Coll,doColl}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081D0C
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 5015
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["char_id"][p]) == CHAR_SHEIK
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_F
+    assert int(row["seed_t"]["on_ground"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_SK_SPECIAL_N_START
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out, dbg = _run_one_step_with_colldata(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert int(dbg["floor_result_valid"][p]) == 1
+    assert int(dbg["floor_result_mode"][p]) == 1
+    assert int(dbg["floor_result_segment_id"][p]) == int(ref["ground_id"][p]) == 4
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_sheik_jump_specialairn_entry_platform_ecb_drop_requires_platform_floor() -> None:
+    # Adjacent negative for the same source path: the B-special handoff still enters aerial Needle,
+    # but without a soft platform line under the entry ECB interval it must remain airborne. This
+    # prevents the entry-bottom helper from becoming a broad JumpF -> SpecialAirN ground snap.
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 5015
+    p = 0
+
+    def fd_stage(seed: np.ndarray) -> None:
+        seed["stage_id"][0] = np.uint32(STAGE_FD)
+        seed["ground_id"][0, p] = np.uint16(0xFFFF)
+
+    out, dbg = _run_one_step_with_colldata(ds, record, seed_mutator=fd_stage)
+    assert int(out["action_id"][p]) == ACT_SK_SPECIAL_AIR_N_START
+    assert int(out["on_ground"][p]) == 0
+    assert int(dbg["floor_result_valid"][p]) == 0
+
+
+@pytest.mark.integration
+def test_marth_terminal_hitstun_damage_lw_stale_platform_carry_needs_raw_sweep_demo2_lock() -> None:
+    # Replay-rollout lock for sustained DamageLw2's terminal-hitstun platform boundary. The
+    # preceding long-rollout frame still has hitstun and must keep the ordinary airborne Damage
+    # path. On rec8336 hitstun reaches zero, but the current `ftCo_Damage_Coll -> ft_80081DD4`
+    # callback has no raw `mpColl_80044628_Floor` bottom-sweep hit on Yoshi's soft platform, so the
+    # carried platform result remains airborne instead of snapping upward.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Anim,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_8004A45C_Floor}
+    # data/stages/bin/grst.bin::MSLSTG01 platform metadata
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    start_record = 7558
+    p = 1
+
+    quiet_record = 8335
+    quiet_row = ds.samples[quiet_record]
+    assert int(quiet_row["seed_t"]["char_id"][p]) == CHAR_MARTH
+    assert int(quiet_row["seed_t"]["action_id"][p]) == ACT_DAMAGE_LW_2
+    assert int(quiet_row["seed_t"]["hitstun"][p]) == 2
+    quiet_out = _run_rollout_to_record(ds, start_record, quiet_record)
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(quiet_out[field][p]) == int(quiet_row["ref_t1"][field][p]), field
+    assert float(quiet_out["pos_y"][p]) == pytest.approx(
+        float(quiet_row["ref_t1"]["pos_y"][p]), abs=3e-4
+    )
+
+    target_record = 8336
+    row = ds.samples[target_record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_LW_2
+    assert int(row["seed_t"]["hitstun"][p]) == 1
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_DAMAGE_LW_2
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out, dbg = _run_rollout_to_record_with_colldata(ds, start_record, target_record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=3e-4)
+    assert int(dbg["floor_probe_raw_bottom_sweep_hit"][p]) == 0
+    assert int(dbg["floor_probe_projection_hit"][p]) == 0
+    assert (
+        int(dbg["floor_probe_reject_bits"][p])
+        & MPCOLL_REJECT_DAMAGE_SUSTAINED_PLATFORM_NO_BOTTOM_SWEEP
+    )
 
 
 @pytest.mark.integration
@@ -5519,6 +5651,108 @@ def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
             int(colldata_after["floor_probe_reject_bits"][p])
             & MPCOLL_REJECT_FALL_ATTACKAIR_ENTRY_TRANSFORMED_PLATFORM_ROOT_ONLY
         )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [1534, 6362])
+def test_sheik_demo2_damage_lw2_soft_platform_bottom_sweep_lands(record: int) -> None:
+    # Adjacent positives for the sustained post-hitlag DamageLw2 platform guard: these rows have
+    # source bottom-sweep authority to publish the Battlefield soft-platform landing and refresh
+    # Marth's jumps. The edge-snap guard must not turn real platform contacts into pass-throughs.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    p = 1
+    assert int(row["seed_t"]["char_id"][p]) == CHAR_MARTH
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_LW_2
+    assert int(row["seed_t"]["animation_index"][p]) == SM_DAMAGE_LW_2
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "on_ground", "ground_id", "jumps_left"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_sheik_demo2_damage_lw2_post_hitlag_no_sweep_edge_snap_stays_airborne() -> None:
+    # rec8337: Marth is sustained airborne DamageLw2 after hitlag/hitstun ended. The seed still
+    # carries a source-owned previous mpColl root from the older Damage callback, but the current
+    # callback does not produce a platform bottom-sweep hit. Source stays airborne instead of
+    # edge-snapping up to Battlefield's left platform.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044948_Floor,
+    #   mpColl_8004A45C_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[8337]
+    p = 1
+    assert int(row["seed_t"]["char_id"][p]) == CHAR_MARTH
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_LW_2
+    assert int(row["seed_t"]["hitlag"][p]) == 0
+    assert int(row["seed_t"]["hitstun"][p]) == 0
+    assert int(row["seed_t"]["floor_sweep_prev_pos_valid_u8"][p]) == 1
+    assert float(row["seed_t"]["floor_sweep_prev_pos_y_f32"][p]) > float(
+        row["seed_t"]["pos_y"][p]
+    )
+
+    out = _run_one_step(ds, 8337)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "on_ground", "ground_id", "jumps_left"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-4)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_sheik_demo2_terminal_damagelw_soft_platform_without_bottom_authority_falls() -> None:
+    # rec1635: Damage_Anim enters Fall before map collision, but the carried Battlefield platform is
+    # only a stale root-below-floor candidate; the current DamageLw ECB bottom remains above the
+    # soft platform. Source stays airborne Fall instead of root-snapping upward to Wait.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Anim,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_Coll}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047F40,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[1635]
+    p = 1
+    assert int(row["seed_t"]["char_id"][p]) == CHAR_MARTH
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_LW_1
+    assert int(row["seed_t"]["hitlag"][p]) == 0
+    assert int(row["seed_t"]["hitstun"][p]) == 0
+    assert float(row["seed_t"]["pos_y"][p]) < 27.2002
+
+    out = _run_one_step(ds, 1635)
+    ref = row["ref_t1"]
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_FALL
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
 
 
 @pytest.mark.integration

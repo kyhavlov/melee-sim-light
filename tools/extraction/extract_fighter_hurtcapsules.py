@@ -29,6 +29,7 @@ def _fighter_prefix(character: str) -> str:
         "marth": "PlMs",
         "puff": "PlPr",
         "falcon": "PlCa",
+        "zelda": "PlZd",
     }[character]
 
 
@@ -41,6 +42,7 @@ def _ftdata_symbol(character: str) -> str:
         "marth": "ftDataMars",
         "puff": "ftDataPurin",
         "falcon": "ftDataCaptain",
+        "zelda": "ftDataZelda",
     }[character]
 
 
@@ -60,6 +62,7 @@ def _load_parts_num(character: str, iso_dir: Path) -> int:
         "marth": 0x12,
         "puff": 0x0F,
         "falcon": 0x02,
+        "zelda": 0x13,
     }[character]
     ft_parts_table_abs = plco.data_base + p_data[4]
     ft_parts_tbl_ptr = _u32_be(plco.buf, ft_parts_table_abs + ftkind * 4)
@@ -248,7 +251,7 @@ def main() -> None:
     parser.add_argument("--character", type=str, default=None)
     args = parser.parse_args()
 
-    chars = ["fox", "falco", "sheik", "peach", "marth", "puff", "falcon"]
+    chars = ["fox", "falco", "sheik", "peach", "marth", "puff", "falcon", "zelda"]
     if args.character is not None:
         if args.character not in chars:
             raise SystemExit(f"unknown character {args.character!r}")

@@ -199,6 +199,28 @@ def _derive_sheik_chain_seed_lanes(
     )
 
 
+def _derive_zelda_twin_state_flags_2218(
+    *,
+    char_id_u8: np.ndarray,
+    state_flags_u8: np.ndarray,
+    zelda_internal_id: int | None,
+) -> np.ndarray:
+    """Derive the hidden Zelda twin fp+0x2218 byte used by Sheik/Zelda transform handoff."""
+
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_zelda_twin_state_flags_2218 is required; run `make build`"
+        ) from exc
+    zelda_id = -1 if zelda_internal_id is None else int(zelda_internal_id)
+    return msl_binding.derive_zelda_twin_state_flags_2218(
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
+        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        zelda_id,
+    )
+
+
 MSL_MS_CLASS_ATTACK_AIR = 1 << 0
 
 # Keep preprocessing geometry constants named with the same source owners as the runtime mpcoll
@@ -3975,6 +3997,7 @@ def _main_impl(args) -> Dataset:
     char_walljump_setup_x_delta_threshold: dict[int, float] = {}
     char_active_shield_hit_int_damage: dict[int, dict[int, dict[int, int]]] = {}
     sheik_char_id: int | None = None
+    zelda_char_id: int | None = None
     sheik_vanish_travel_frames = 0
     sheik_vanish_ground_contact_min_frames = 0.0
     sheik_chain_release_min_frames = 0
@@ -4112,6 +4135,8 @@ def _main_impl(args) -> Dataset:
                 attrs.get("sheik_vanish_ground_contact_min_frames", 0.0)
             )
             sheik_chain_release_min_frames = int(attrs.get("sheik_chain_release_min_frames", 0))
+        elif key == "zelda":
+            zelda_char_id = int(cid)
         move_file = json.loads((data_root / "moves" / f"{key}.json").read_text())
         move_data = move_file["moves"]
         special_move_data = move_file.get("specials_by_msid", {})
@@ -5023,6 +5048,13 @@ def _main_impl(args) -> Dataset:
 
         samples["seed_t"]["state_flags"][:, slot, :] = state_flags[:-1, :]
         samples["ref_t1"]["state_flags"][:, slot, :] = state_flags[1:, :]
+        samples["seed_t"]["zelda_twin_state_flags_2218_u8"][:, slot] = (
+            _derive_zelda_twin_state_flags_2218(
+                char_id_u8=post_char,
+                state_flags_u8=state_flags,
+                zelda_internal_id=zelda_char_id,
+            )[:-1]
+        )
         samples["seed_t"]["speciallw_counter_hitlag_floor_active_u8"][:, slot] = (
             _derive_marth_counter_hitlag_floor_active(
                 char_id_u8=post_char,

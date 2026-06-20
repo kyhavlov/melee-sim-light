@@ -5359,6 +5359,48 @@ PyObject* msl_derive_sheik_chain_seed_lanes_py(PyObject* self, PyObject* args) {
   return Py_BuildValue("NN", out_x0, out_latch);
 }
 
+PyObject* msl_derive_zelda_twin_state_flags_2218_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* char_obj = NULL;
+  PyObject* state_flags_obj = NULL;
+  int zelda_internal_id = -1;
+  if (!PyArg_ParseTuple(args, "OOi", &char_obj, &state_flags_obj, &zelda_internal_id)) {
+    return NULL;
+  }
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
+  PyArrayObject* flags = require_contiguous_array(state_flags_obj, NPY_UINT8, 2, "state_flags_u8");
+  if (chr == NULL || flags == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(chr, 0);
+  if (PyArray_DIM(flags, 0) != n || PyArray_DIM(flags, 1) < 1) {
+    PyErr_SetString(PyExc_ValueError, "state_flags_u8 must have shape (n, >=1)");
+    return NULL;
+  }
+  npy_intp dims[1] = {n};
+  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  if (out == NULL) {
+    return NULL;
+  }
+  if (zelda_internal_id < 0 || zelda_internal_id > 255) {
+    return (PyObject*)out;
+  }
+
+  const uint8_t* ch = (const uint8_t*)PyArray_DATA(chr);
+  const uint8_t* state_flags = (const uint8_t*)PyArray_DATA(flags);
+  const npy_intp flag_stride = PyArray_DIM(flags, 1);
+  uint8_t* out_flags = (uint8_t*)PyArray_DATA(out);
+  const uint8_t zelda_id = (uint8_t)zelda_internal_id;
+  uint8_t cached = 0u;
+  for (npy_intp i = 0; i < n; i++) {
+    if (ch[i] == zelda_id) {
+      cached = state_flags[(i * flag_stride) + 0];
+    }
+    out_flags[i] = cached;
+  }
+  return (PyObject*)out;
+}
+
 static inline uint8_t msl_py_action_is_sheik_vanish_air_start1(uint16_t action) {
   return action == 359u;
 }

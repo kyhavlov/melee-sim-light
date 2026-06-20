@@ -35,7 +35,10 @@ A = 0x0100
 B = 0x0200
 
 ACT_WAIT = 0x000E
+ACT_WALK_SLOW = 0x000F
 ACT_TURN = 0x0012
+ACT_DASH = 0x0014
+ACT_RUN = 0x0015
 ACT_RUN_BRAKE = 0x0017
 ACT_FALL = 0x001D
 ACT_FALL_SPECIAL = 0x0023
@@ -76,7 +79,13 @@ ACT_SK_SPECIAL_LW = 361
 ACT_SK_SPECIAL_LW_2 = 362
 ACT_SK_SPECIAL_AIR_LW = 363
 ACT_SK_SPECIAL_AIR_LW_2 = 364
+ACT_ZD_SPECIAL_LW = 355
+ACT_ZD_SPECIAL_LW_2 = 356
+ACT_ZD_SPECIAL_AIR_LW = 357
+ACT_ZD_SPECIAL_AIR_LW_2 = 358
 ACT_CLIFF_CATCH = 252
+CHAR_SHEIK = 7
+CHAR_ZELDA = 19
 
 SM_LANDING = 35
 SM_LANDING_AIR_N = 73
@@ -377,6 +386,27 @@ def test_sheik_grounded_b_special_dispatch_order_is_source_ordered() -> None:
     for name, axes, expected in cases:
         out = _run(_seed_base("sheik"), [_mk_inputs(**axes)])[0]
         assert int(out["action_id"][0]) == expected, name
+
+
+def test_sheik_air_up_b_entry_clears_fastfall_state_flag() -> None:
+    # ftSk_SpecialAirHi_Enter enters Start_0 through Fighter_ChangeMotionState without
+    # Ft_MF_KeepFastFall, so a fastfalling Fall seed must clear fp->fall_fast / state_flags[1] 0x08
+    # on the Vanish entry row. An adjacent Fall-without-Up-B frame keeps the fastfall lane.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Enter
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    seed = _seed_base("sheik", grounded=False, pos_y=40.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(20)
+    seed["fall_fast"][0, 0] = np.uint8(1)
+    seed["state_flags"][0, 0, 1] = np.uint8(0x08)
+
+    fall = _run(seed.copy(), [_mk_inputs()])[0]
+    assert int(fall["action_id"][0]) == ACT_FALL
+    assert int(fall["state_flags"][0][1]) & 0x08
+
+    vanish = _run(seed, [_mk_inputs(buttons=B, main_y=80)])[0]
+    assert int(vanish["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_0
+    assert int(vanish["state_flags"][0][1]) & 0x08 == 0
 
 
 @pytest.mark.integration
@@ -1302,6 +1332,33 @@ def test_sheik_vanish_start1_early_platform_pass_writes_floor_skip_replay_real_l
 
 
 @pytest.mark.integration
+def test_sheik_demo2_vanish_start1_platform_remap_keeps_source_root_snap_lock() -> None:
+    # Same early-xC ftCo_8009A134 owner as rec1712 above, but this Battlefield contact resolves
+    # from the carried CollData floor to the adjacent platform segment. Source mpColl publishes the
+    # callback-current platform root while still rejecting the grounded SpecialHiStart_1 handoff.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHiStart_1_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    record = 3095
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert int(samples[record]["seed_t"]["ground_id"][0]) != int(
+        samples[record]["ref_t1"]["ground_id"][0]
+    )
+
+    out, colldata = _run_sample_row_with_colldata(samples, record)
+    ref = samples[record]["ref_t1"]
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == int(ref["ground_id"][0])
+    assert float(out["pos_y"][0]) == pytest.approx(float(ref["pos_y"][0]), abs=1e-6)
+    assert int(colldata["floor_skip_valid"][0]) == 1
+    assert int(colldata["floor_skip_segment_id"][0]) == int(ref["ground_id"][0])
+
+
+@pytest.mark.integration
 def test_sheik_vanish_start1_late_platform_contact_enters_grounded_negative() -> None:
     # Adjacent negative: after the xC >= ftSeakAttributes::x3C boundary, the same platform contact
     # must enter grounded SpecialHiStart_1 when no prior CollData.floor_skip is live. This prevents
@@ -1321,6 +1378,44 @@ def test_sheik_vanish_start1_late_platform_contact_enters_grounded_negative() ->
     )
     assert int(out["action_id"][0]) == ACT_SK_SPECIAL_HI_START_1
     assert int(out["on_ground"][0]) == 1
+
+
+@pytest.mark.integration
+def test_sheik_demo2_vanish_start1_late_ground_contact_clears_horizontal_velocity_lock() -> None:
+    # ftSk_SpecialAirHiStart_1_Coll late ground contact enters grounded travel through
+    # ftSk_SpecialHi_801137C8. The handoff preserves the vertical travel lane for the frozen
+    # grounded frame, but horizontal self/gr velocity is clear on the source row.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+    #   ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialHi_801137C8}
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    record = 6873
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_HI_START_1
+
+    out = _run_sample_row(samples, record)
+    ref = samples[record]["ref_t1"]
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_HI_START_1
+    assert int(out["on_ground"][0]) == 1
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(float(ref["speed_air_x_self"][0]), abs=1e-6)
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(
+        float(ref["speed_ground_x_self"][0]), abs=1e-6
+    )
+    assert float(out["speed_y_self"][0]) == pytest.approx(float(ref["speed_y_self"][0]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_sheik_vanish_start1_early_platform_pass_keeps_horizontal_travel_negative() -> None:
+    # Adjacent negative: early xC platform pass-through stays airborne in SpecialAirHiStart_1, so it
+    # must retain the travel horizontal velocity rather than applying the late grounded handoff clear.
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    record = 1712
+    out = _run_sample_row(samples, record)
+    ref = samples[record]["ref_t1"]
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert int(out["on_ground"][0]) == 0
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(float(ref["speed_air_x_self"][0]), abs=1e-6)
 
 
 @pytest.mark.integration
@@ -1349,41 +1444,46 @@ def test_sheik_transform_entry_enters_private_sheik_start_state() -> None:
     assert int(out["animation_index"][0]) == 315
 
 
-# Sheik Down-B / Transform (Stage-0 Zelda policy). The source switches to a twin Zelda fighter via
-# ftCommon_8007EFC8 when the start anim ends; that twin-entity swap + full Zelda are out of Stage-0
-# scope, so the policy keeps the fighter as Sheik and substitutes Sheik's own finish states. These
-# locks pin the source-shaped progression and prove the unsupported Zelda boundary is explicit/safe:
-# the transform never leaves Sheik's action space and never yields a Zelda/undefined action id.
-# refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c ; refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
-_SHEIK_ACTION_ID_MIN = 341  # ftSk_MS_* private action-id base (Sheik specials/transform live above this)
-_SHEIK_ACTION_ID_MAX = 364
+# Sheik Down-B / Transform. The source swaps between Sheik/Zelda twin entities via
+# ftCommon_8007EFC8 when transform-start ends. The runtime models the bounded demo2-visible
+# same-player char/action handoff without broad Zelda specials or a full hidden Sheik twin:
+# Sheik start -> Zelda finish and Zelda start -> Sheik finish, then grounded finish resolves
+# through ft_8008A2BC.
+# refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c
+# refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c
+# refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
 
 
-def test_sheik_transform_grounded_full_progression_freerun() -> None:
-    # Grounded Down-B: start (361) -> finish (362) -> Wait. No character swap; stays Sheik throughout.
+def test_sheik_transform_grounded_bounded_progression_freerun() -> None:
+    # Grounded Down-B: Sheik start (361) -> Zelda finish (356) -> Wait.
     seed = _seed_base("sheik")
     outs = _run(seed, [_mk_inputs(buttons=B, main_y=-80)] + [_mk_inputs() for _ in range(120)])
     acts = [int(o["action_id"][0]) for o in outs]
+    chars = [int(o["char_id"][0]) for o in outs]
     assert acts[0] == ACT_SK_SPECIAL_LW
-    assert ACT_SK_SPECIAL_LW_2 in acts, acts[:5]
+    assert chars[0] == CHAR_SHEIK
+    assert ACT_ZD_SPECIAL_LW_2 in acts, acts[:5]
+    first_finish = acts.index(ACT_ZD_SPECIAL_LW_2)
+    assert chars[first_finish] == CHAR_ZELDA
     assert acts[-1] == ACT_WAIT
-    # Start precedes finish precedes Wait, contiguous and ordered.
-    first_finish = acts.index(ACT_SK_SPECIAL_LW_2)
     assert all(a == ACT_SK_SPECIAL_LW for a in acts[:first_finish])
-    assert acts[-1] == ACT_WAIT
 
 
-def test_sheik_transform_aerial_full_progression_freerun() -> None:
-    # Aerial Down-B (high enough to finish before landing): start (363) -> finish (364) -> Fall.
+def test_sheik_transform_aerial_bounded_progression_freerun() -> None:
+    # Aerial Down-B (high enough to finish before landing): Sheik start (363) -> Zelda finish
+    # (358) -> Fall.
     seed = _seed_base("sheik", grounded=False, pos_y=140.0)
     seed["action_id"][0, 0] = np.uint16(ACT_FALL)
     seed["animation_index"][0, 0] = np.uint32(ACT_FALL)
     outs = _run(seed, [_mk_inputs(buttons=B, main_y=-80)] + [_mk_inputs() for _ in range(80)])
     acts = [int(o["action_id"][0]) for o in outs]
+    chars = [int(o["char_id"][0]) for o in outs]
     assert acts[0] == ACT_SK_SPECIAL_AIR_LW
-    assert ACT_SK_SPECIAL_AIR_LW_2 in acts, acts[:5]
-    assert ACT_FALL in acts  # aerial finish ends into Fall (ftSk_SpecialAirLw2_Anim -> ftCo_Fall_Enter)
-    first_finish = acts.index(ACT_SK_SPECIAL_AIR_LW_2)
+    assert chars[0] == CHAR_SHEIK
+    assert ACT_ZD_SPECIAL_AIR_LW_2 in acts, acts[:5]
+    assert ACT_FALL in acts  # aerial finish ends into Fall (ftZd_SpecialAirLw2_Anim -> ftCo_Fall_Enter)
+    first_finish = acts.index(ACT_ZD_SPECIAL_AIR_LW_2)
+    assert chars[first_finish] == CHAR_ZELDA
     assert all(a == ACT_SK_SPECIAL_AIR_LW for a in acts[:first_finish])
 
 
@@ -1424,12 +1524,116 @@ def test_sheik_transform_aerial_lands_swaps_to_grounded_transform() -> None:
     assert ACT_SK_SPECIAL_LW in acts, acts  # landed -> grounded transform
 
 
-def test_sheik_transform_never_leaves_sheik_action_space_safe_zelda_boundary() -> None:
-    # Explicit unsupported-Zelda boundary: across the full grounded AND aerial transform, every action
-    # id is either a valid Sheik private action (<=364) or a shared common action (Wait/Fall/Landing).
-    # The transform NEVER produces a Zelda action id or drifts into an undefined state -- the twin-entity
-    # ftCommon_8007EFC8 swap is replaced by a safe in-Sheik resolution.
-    shared_common = {ACT_WAIT, ACT_FALL, ACT_FALL_SPECIAL, ACT_LANDING, ACT_LANDING_FALL_SPECIAL}
+def test_zelda_down_b_requires_b_edge_not_held_negative() -> None:
+    # ftCo_Special{,Air}_CheckInput dispatches specials from the current-frame input edge. Holding B
+    # and then moving the stick down must not re-enter Zelda transform without a new B press.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_SpecialS_CheckInput
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    # refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_Enter
+    seed = _seed_base("zelda")
+    outs = _run(seed, [_mk_inputs(buttons=B), _mk_inputs(buttons=B, main_y=-80)])
+    assert int(outs[1]["action_id"][0]) not in (ACT_ZD_SPECIAL_LW, ACT_ZD_SPECIAL_AIR_LW)
+
+
+@pytest.mark.integration
+def test_sheik_demo2_transform_air_uses_friction_not_stick_drift_lock() -> None:
+    # ftSk_SpecialAirLw_Phys uses ftCommon_Fall with transform attrs followed by
+    # ftCommon_8007CEF4. It does not call ftCommon_8007D268, so the held side-stick in demo2 must
+    # not add common air drift while the transform decays x velocity to zero.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::ftSk_SpecialAirLw_Phys
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_Fall,ftCommon_8007CEF4}
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+
+    for record in (4538, 4540, 4545, 4554):
+        seed = samples[record]["seed_t"]
+        ref = samples[record]["ref_t1"]
+        assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_AIR_LW
+        assert int(ref["action_id"][0]) == ACT_SK_SPECIAL_AIR_LW
+        out = _run_sample_row(samples, record)
+        assert float(out["speed_air_x_self"][0]) == pytest.approx(
+            float(ref["speed_air_x_self"][0]), abs=1e-6
+        )
+        assert float(out["speed_y_self"][0]) == pytest.approx(float(ref["speed_y_self"][0]), abs=1e-6)
+
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=4538,
+        records=(4554, 5097),
+        replay_frame_rng=True,
+    )
+    assert int(rows[4554]["action_id"][0]) == ACT_SK_SPECIAL_AIR_LW
+    assert float(rows[4554]["speed_air_x_self"][0]) == pytest.approx(0.0, abs=1e-6)
+    assert int(rows[5097]["action_id"][0]) == int(samples[5097]["ref_t1"]["action_id"][0])
+
+
+def test_sheik_transform_air_friction_does_not_disable_vanish_windup_stick_drift_negative() -> None:
+    # Adjacent callback-family negative: Vanish windup remains ftCommon_8007D268 common-air drift.
+    # The transform friction path must not become a broad "all Sheik aerial specials ignore stick"
+    # rule.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHiStart_0_Phys
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D268,ftCommon_8007D174}
+    seed = _seed_base("sheik", grounded=False, pos_y=40.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_AIR_HI_START_0)
+    seed["animation_index"][0, 0] = np.uint32(311)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.22)
+    seed["speed_y_self"][0, 0] = np.float32(0.44)
+    out = _run(seed, [_mk_inputs(main_x=-80)])[0]
+    assert float(out["speed_air_x_self"][0]) < 0.18
+
+
+@pytest.mark.integration
+def test_sheik_demo2_grounded_needle_charge_uses_ground_friction_lock() -> None:
+    # ftSk_SpecialNStart/Loop grounded Phys callbacks use ft_80084F3C. Demo2 enters grounded
+    # Needle charge with a small carried run velocity; source friction decays that velocity to zero
+    # before the later platform run, preventing the rec5097 edge fall.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    #   ftSk_SpecialNStart_Phys,ftSk_SpecialNLoop_Phys}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+
+    for record in (5016, 5017):
+        seed = samples[record]["seed_t"]
+        ref = samples[record]["ref_t1"]
+        assert int(seed["action_id"][0]) in (ACT_SK_SPECIAL_N_START, ACT_SK_SPECIAL_N_LOOP)
+        out = _run_sample_row(samples, record)
+        assert int(out["action_id"][0]) == int(ref["action_id"][0])
+        assert float(out["speed_ground_x_self"][0]) == pytest.approx(
+            float(ref["speed_ground_x_self"][0]), abs=1e-6
+        )
+        assert float(out["speed_air_x_self"][0]) == pytest.approx(
+            float(ref["speed_air_x_self"][0]), abs=1e-6
+        )
+
+    rows = _run_sample_rollout_records(
+        samples,
+        start_record=4538,
+        records=(5017, 5097),
+        replay_frame_rng=True,
+    )
+    assert float(rows[5017]["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=1e-6)
+    assert int(rows[5097]["action_id"][0]) == int(samples[5097]["ref_t1"]["action_id"][0])
+    assert int(rows[5097]["on_ground"][0]) == int(samples[5097]["ref_t1"]["on_ground"][0])
+
+
+def test_sheik_transform_bounded_same_player_swap_action_space() -> None:
+    # Explicit Zelda scope boundary: the same-player transform may enter only the Zelda transform
+    # finish actions needed by this replay, then common terminal states. Other Zelda specials remain
+    # unsupported until a replay reaches them.
+    allowed = {
+        ACT_SK_SPECIAL_LW,
+        ACT_SK_SPECIAL_AIR_LW,
+        ACT_ZD_SPECIAL_LW_2,
+        ACT_ZD_SPECIAL_AIR_LW_2,
+        ACT_WAIT,
+        ACT_FALL,
+        ACT_FALL_SPECIAL,
+        ACT_LANDING,
+        ACT_LANDING_FALL_SPECIAL,
+    }
 
     def all_acts(seed, frames):
         return {int(o["action_id"][0]) for o in _run(seed, frames)}
@@ -1441,11 +1645,47 @@ def test_sheik_transform_never_leaves_sheik_action_space_safe_zelda_boundary() -
     a["animation_index"][0, 0] = np.uint32(ACT_FALL)
     a_acts = all_acts(a, [_mk_inputs(buttons=B, main_y=-80)] + [_mk_inputs() for _ in range(120)])
     for act in g_acts | a_acts:
-        ok = (_SHEIK_ACTION_ID_MIN <= act <= _SHEIK_ACTION_ID_MAX) or act in shared_common
-        assert ok, f"transform produced out-of-policy action id {act}"
-    # And it actually completes (returns to a neutral common action), never hanging in transform.
+        assert act in allowed, f"transform produced out-of-policy action id {act}"
     assert g_acts & {ACT_WAIT}
     assert a_acts & {ACT_FALL, ACT_LANDING, ACT_WAIT}
+
+
+@pytest.mark.integration
+def test_sheik_demo2_transform_swap_flags_and_wait_iasa_locks() -> None:
+    # Replay-real locks for the transform handoff that supports the second demo:
+    # - first Sheik start -> Zelda aerial finish uses a clear hidden Zelda twin fp+0x2218 byte.
+    # - later Sheik start -> Zelda aerial finish carries the prior hidden Zelda twin fp+0x2218_b0.
+    # - Zelda start -> Sheik grounded finish clears that bit.
+    # - grounded Sheik finish anim-end uses ft_8008A2BC -> Wait_IASA, so a held run stick enters Run
+    #   in the same fighter proc instead of serializing a bare Wait.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::{
+    #   ftSk_SpecialLw_Anim,ftSk_SpecialLw2_Anim,fn_8011412C}
+    # refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
+    #   ftZd_SpecialLw_Anim,ftZd_SpecialLw_8013AEAC,ftZd_SpecialLw_8013B4D8}
+    # refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+
+    first_zelda_finish = _run_sample_row(samples, 4070)
+    assert int(first_zelda_finish["char_id"][0]) == CHAR_ZELDA
+    assert int(first_zelda_finish["action_id"][0]) == ACT_ZD_SPECIAL_AIR_LW_2
+    assert int(first_zelda_finish["state_flags"][0][0]) == 0
+
+    zelda_finish = _run_sample_row(samples, 4570)
+    assert int(zelda_finish["char_id"][0]) == CHAR_ZELDA
+    assert int(zelda_finish["action_id"][0]) == ACT_ZD_SPECIAL_AIR_LW_2
+    assert int(zelda_finish["state_flags"][0][0]) == 0x80
+
+    sheik_finish = _run_sample_row(samples, 4679)
+    assert int(sheik_finish["char_id"][0]) == CHAR_SHEIK
+    assert int(sheik_finish["action_id"][0]) == ACT_SK_SPECIAL_LW_2
+    assert int(sheik_finish["state_flags"][0][0]) == 0
+
+    run_exit = _run_sample_row(samples, 4389)
+    assert int(run_exit["action_id"][0]) == ACT_WALK_SLOW
+    assert int(run_exit["action_frame"][0]) == 1
 
 
 def test_sheik_vanish_consumes_jumps_freerun() -> None:
@@ -1851,10 +2091,37 @@ def test_sheik_demo_air_needle_end_uses_ft80084eec_no_stick_drift_rollout() -> N
 
 
 @pytest.mark.integration
+def test_sheik_demo2_dash_sideb_entry_runs_dash_terminal_scalar_lock() -> None:
+    # Dash_IASA calls ftCo_SpecialS_CheckInput, then resumes after the Side-B motion-state entry and
+    # applies Dash's terminal velocity scalar before SpecialSStart_Phys applies ground friction.
+    # This rec329 deterministic float owner is before the first Wait animation RNG fork in demo2.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialS_Enter,ftSk_SpecialSStart_Phys}
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    out = _run_sample_row(samples, 329, replay_frame_rng=True)
+    ref = samples[329]["ref_t1"]
+
+    assert int(samples[329]["seed_t"]["action_id"][0]) == ACT_DASH
+    assert int(out["action_id"][0]) == int(ref["action_id"][0]) == ACT_SK_SPECIAL_S_START
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(
+        float(ref["speed_ground_x_self"][0]), abs=1e-6
+    )
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(
+        float(ref["speed_air_x_self"][0]), abs=1e-6
+    )
+    assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_sheik_demo_ground_chain_start_damps_run_velocity_rollout_float_lock() -> None:
     # Grounded Side-B entry runs the common ftCo_SpecialS doEnter bundle before Sheik's Chain enter:
     # gr_vel is damped by co_attrs.xB8, then SpecialSStart_Phys applies ft_80084F3C ground friction
-    # on the same frame. This closes the rec1369 float-only divergence and its rec1474 pos_x tail.
+    # on the same frame. This closes the rec1369 float-only divergence and its rec1474 pos_x tail,
+    # and remains an adjacent negative for Dash-only terminal-scalar continuation.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
     #   ftSk_SpecialS_Enter,ftSk_SpecialSStart_Phys}
@@ -1871,6 +2138,7 @@ def test_sheik_demo_ground_chain_start_damps_run_velocity_rollout_float_lock() -
 
     ref_pre = samples[1368]["ref_t1"]
     assert int(rows[1368]["action_id"][0]) == int(ref_pre["action_id"][0]) == 21
+    assert int(samples[1369]["seed_t"]["action_id"][0]) == ACT_RUN
     assert float(rows[1368]["speed_ground_x_self"][0]) == pytest.approx(
         float(ref_pre["speed_ground_x_self"][0]), abs=1e-6
     )
@@ -3779,7 +4047,7 @@ def test_sheik_chain_whip_misses_distant_opponent_negative() -> None:
 @pytest.mark.integration
 def test_sheik_demo_chain_active_frontier_hits_and_hitlag_freezes_replay_real() -> None:
     # Replay-real active-frontier lock for the official Sheik demo Chain contact sequence:
-    # - rec304/rec340/rec354 are adjacent quiet frames (no early or cooldown-fallout Chain hit),
+    # - rec304/rec330/rec340/rec354 are adjacent quiet frames (no early or cooldown-fallout Chain hit),
     # - rec312/rec322/rec341 are source Chain BODY hits from the it_802BCB88-published frontier,
     # - the published Chain hitcaps freeze while the owning Sheik is in hitlag, and source-probed
     #   full x1C activation windows keep the hitcap cooldown frozen with them.
@@ -3795,7 +4063,7 @@ def test_sheik_demo_chain_active_frontier_hits_and_hitlag_freezes_replay_real() 
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
     out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
-    wanted = {304, 312, 313, 315, 316, 322, 323, 340, 341, 342, 353, 354, 355, 356}
+    wanted = {304, 312, 313, 315, 316, 317, 322, 323, 330, 340, 341, 342, 353, 354, 355, 356}
     outs: dict[int, np.void] = {}
     dbg: dict[int, dict] = {}
 
@@ -3828,6 +4096,8 @@ def test_sheik_demo_chain_active_frontier_hits_and_hitlag_freezes_replay_real() 
     for record in sorted(wanted):
         assert_row(record)
     assert int(outs[304]["hitlag"][0]) == 0
+    assert int(outs[330]["hitlag"][0]) == 0
+    assert int(outs[330]["hitlag"][1]) == 0
     assert int(outs[340]["hitlag"][0]) == 0
     assert int(outs[354]["hitlag"][0]) == 0
     assert int(outs[354]["hitlag"][1]) == 0
@@ -3838,6 +4108,7 @@ def test_sheik_demo_chain_active_frontier_hits_and_hitlag_freezes_replay_real() 
     assert (int(outs[341]["hitlag"][0]), int(outs[341]["hitlag"][1])) == (4, 6)
     assert float(outs[312]["percent"][1]) == pytest.approx(11.0)
     assert float(outs[322]["percent"][1]) == pytest.approx(16.0)
+    assert float(outs[330]["percent"][1]) == pytest.approx(16.0)
     assert float(outs[341]["percent"][1]) == pytest.approx(21.0)
     assert float(outs[354]["percent"][1]) == pytest.approx(21.0)
 
@@ -3850,9 +4121,155 @@ def test_sheik_demo_chain_active_frontier_hits_and_hitlag_freezes_replay_real() 
     # owner's hitlag drains, and the next hits freeze again.
     assert hb3_xy(313) == pytest.approx(hb3_xy(312))
     assert hb3_xy(315) == pytest.approx(hb3_xy(312))
-    assert abs(hb3_xy(316)[0] - hb3_xy(312)[0]) > 0.5
+    assert hb3_xy(316) == pytest.approx(hb3_xy(312))
+    assert abs(hb3_xy(317)[0] - hb3_xy(312)[0]) > 0.5
     assert hb3_xy(323) == pytest.approx(hb3_xy(322))
     assert hb3_xy(342) == pytest.approx(hb3_xy(341))
+
+
+@pytest.mark.integration
+def test_sheik_demo2_chain_publication_freezes_stale_damage_replay_real() -> None:
+    # Demo2 Chain stale-damage lock:
+    # - the Chain hitcaps are published from it_802BCB88/ftSk_SpecialS_UpdateHitboxes after Start
+    #   script creation, and HitCapsule.damage is frozen with the stale table state at publication;
+    # - later same-attack Chain hits have already inserted the held Chain instance into the stale
+    #   queue, but must not retroactively restale the existing capsule at contact time.
+    # The mutated adjacent negative clears the pre-existing stale Chain entry at the rollout start;
+    # damage then rises, proving the lock follows the stale table rather than a replay-row constant.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007ABD0
+    # refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_UpdateHitboxes
+    import msl_binding
+
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+
+    def roll(start_record: int, wanted: tuple[int, ...], *, clear_chain_stale: bool = False):
+        handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=True, ucf_cardinals_1_0_enabled=True)
+        outs: dict[int, np.void] = {}
+        try:
+            seed_row = samples[start_record : start_record + 1]["seed_t"].copy()
+            if clear_chain_stale:
+                seed_row["stale_queue_index"][0, 0] = np.uint8(0)
+                seed_row["stale_move_id"][0, 0, :] = np.uint16(0)
+                seed_row["stale_attack_instance"][0, 0, :] = np.uint16(0)
+            msl_binding.reseed_seed_rollout(
+                handle, seed_row.view(np.uint8).reshape((1, seed_stride)).copy()
+            )
+            for record in range(start_record, max(wanted) + 1):
+                row = samples[record : record + 1]
+                msl_binding.step_input_replay_frame_rng(
+                    handle,
+                    row["seed_t"].view(np.uint8).reshape((1, seed_stride)).copy(),
+                    row["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+                    row["input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+                )
+                if record in wanted:
+                    msl_binding.write_compare(handle, out_bytes)
+                    outs[record] = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            return outs
+        finally:
+            msl_binding.destroy(handle)
+
+    rows = roll(2118, (2572, 2575, 2578, 2598))
+    for record, out in rows.items():
+        ref = samples[record]["ref_t1"]
+        assert int(out["action_id"][1]) == int(ref["action_id"][1])
+        assert int(out["hitlag"][1]) == int(ref["hitlag"][1])
+        assert float(out["percent"][1]) == pytest.approx(float(ref["percent"][1]), abs=1e-6)
+        assert float(out["speed_y_attack"][1]) == pytest.approx(
+            float(ref["speed_y_attack"][1]), abs=1e-6
+        )
+
+    unstaled = roll(2118, (2572,), clear_chain_stale=True)[2572]
+    assert float(unstaled["percent"][1]) > float(samples[2572]["ref_t1"]["percent"][1]) + 0.3
+
+
+@pytest.mark.integration
+def test_sheik_demo2_chain_reseed_clears_runtime_hitcap_frontier_negative() -> None:
+    # Replay-real negative for rollout locator retries: Sheik Chain ItemLink/x2C_b0 frontier state
+    # and the it_802BCB88-published fighter HitCapsule map are runtime-only article lanes. A reused
+    # rollout handle that just stepped an earlier seeded row must not carry those private hitcaps
+    # into a later seed whose public item snapshot does not contain a live Chain article.
+    # refs/melee/src/melee/it/items/itseakchain.c::{
+    #   it_802BAF2C,it_802BBD64,it_802BC080,it_802BCB88}
+    import msl_binding
+
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+
+    def step_normal(handle, record: int) -> np.void:
+        row = samples[record : record + 1]
+        msl_binding.step_input(
+            handle,
+            row["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+            row["input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+        )
+        msl_binding.write_compare(handle, out_bytes)
+        return out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+
+    def step_replay_rng(handle, record: int) -> np.void:
+        row = samples[record : record + 1]
+        msl_binding.step_input_replay_frame_rng(
+            handle,
+            row["seed_t"].view(np.uint8).reshape((1, seed_stride)).copy(),
+            row["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+            row["input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+        )
+        msl_binding.write_compare(handle, out_bytes)
+        return out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+
+    handle = msl_binding.init(
+        batch_size=1, num_players=2, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+    try:
+        msl_binding.reseed_seed_rollout(
+            handle,
+            samples[0:1]["seed_t"].view(np.uint8).reshape((1, seed_stride)).copy(),
+        )
+        cur = 0
+        for wait_record in (479, 1379):
+            for record in range(cur, wait_record + 1):
+                _ = step_normal(handle, record)
+            # Exercise the locator's same-handle seeded retry at proven Wait-RNG roots; the second
+            # retry used to leave Chain hitcaps active for the later rec1626 seed.
+            msl_binding.reseed_seed_rollout(
+                handle,
+                samples[wait_record : wait_record + 1]["seed_t"]
+                .view(np.uint8)
+                .reshape((1, seed_stride))
+                .copy(),
+            )
+            _ = step_replay_rng(handle, wait_record)
+            cur = wait_record + 1
+        for record in range(cur, 1626):
+            _ = step_normal(handle, record)
+        msl_binding.reseed_seed_rollout(
+            handle,
+            samples[1626:1627]["seed_t"].view(np.uint8).reshape((1, seed_stride)).copy(),
+        )
+        out = step_replay_rng(handle, 1626)
+    finally:
+        msl_binding.destroy(handle)
+
+    ref = samples[1626]["ref_t1"]
+    assert int(out["action_id"][1]) == int(ref["action_id"][1]) == 81
+    assert int(out["hitlag"][1]) == int(ref["hitlag"][1]) == 0
+    assert int(out["hitstun"][1]) == int(ref["hitstun"][1]) == 6
+    assert float(out["percent"][1]) == pytest.approx(float(ref["percent"][1]))
+    assert float(out["percent"][1]) == pytest.approx(8.0)
 
 
 def _chain_geometry_series(flick: bool):
@@ -3885,10 +4302,11 @@ def _chain_geometry_series(flick: bool):
 
 def test_sheik_chain_solved_geometry_is_stick_driven_and_respects_segment_bounds() -> None:
     # Direct geometry lock: prove the published Chain hitboxes ride the it_802BC080 solved whip, not a
-    # static bone pose. (1) Adjacent links stay within one segment length (the x4 constraint). (2) The
-    # tail swings FAR more when the stick is flicked (stick-history impulses) than when held steady
-    # (only the hand pendulum). (3) Each fighter HitCapsule sits exactly on the link the it_802BCB88
-    # stride map assigns it. refs/melee/src/melee/it/items/itseakchain.c::{it_802BC080,it_802BCB88}
+    # static bone pose. (1) Adjacent links stay within one segment length (the x4 constraint). (2)
+    # the stick-history impulses move the source target and the solved tail follows that higher
+    # target instead of staying on the held-stick baseline. (3) Each fighter HitCapsule sits exactly
+    # on the link the it_802BCB88 stride map assigns it.
+    # refs/melee/src/melee/it/items/itseakchain.c::{it_802BC080,it_802BCB88}
     flick = _chain_geometry_series(flick=True)
     steady = _chain_geometry_series(flick=False)
     assert len(flick) >= 8 and len(steady) >= 8, (len(flick), len(steady))
@@ -3904,14 +4322,18 @@ def test_sheik_chain_solved_geometry_is_stick_driven_and_respects_segment_bounds
             dist = ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
             assert dist <= seg * 1.10, dist  # source link/collision solve stays segment-bounded
 
-    def tail_y_range(series):
-        ys = [d["links"][-1][1] for d in series]
+    def y_range(series, selector):
+        ys = [selector(d) for d in series]
         return max(ys) - min(ys)
 
-    flick_range = tail_y_range(flick)
-    steady_range = tail_y_range(steady)
-    assert flick_range > 20.0, flick_range
-    assert flick_range > 3.0 * steady_range, (flick_range, steady_range)
+    flick_target_range = y_range(flick, lambda d: d["item"]["target_y"])
+    steady_target_range = y_range(steady, lambda d: d["item"]["target_y"])
+    assert flick_target_range > 2.0, flick_target_range
+    assert flick_target_range > 4.0 * steady_target_range, (
+        flick_target_range,
+        steady_target_range,
+    )
+    assert flick[-1]["links"][-1][1] > steady[-1]["links"][-1][1] + 5.0
 
     # The 4 fighter HitCapsules track the solved links via the it_802BCB88 active-frontier stride
     # map. Each published hitbox equals its mapped link, proving the combat path consumes the solved

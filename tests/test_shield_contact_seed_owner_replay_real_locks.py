@@ -337,6 +337,59 @@ def test_guard_shielddesc_seed_accepts_replay_proven_guardsetoff_contact() -> No
 
 
 @pytest.mark.integration
+def test_specialhi_frozen_guard_dense_seed_does_not_suppress_live_shield_hit_dhh() -> None:
+    # SpecialHi frozen-Guard dense seed boundary:
+    # - DHH:10432 starts from a neutral Guard no-submotion snapshot with only the legacy dense
+    #   hit_group victim seed. Marth Dolphin Slash hb0/hb1 live ShieldDesc overlap is source-owned
+    #   and enters GuardSetOff; the dense group fallback cannot prove this exact HitCapsule still
+    #   suppresses the shield hit.
+    # - The adjacent mutation installs an authoritative per-HitCapsule victim seed for hb0. That
+    #   concrete victims_1 provenance must still suppress the same live shield overlap.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80007BCC}
+    # data/motion_state/owners/marth.bin (MSLMSO01 SPECIALHI class on ftMs_SpecialAirHi)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/DraftyHealthyHare.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+    seed, ref, out = _run_one_step_row(dataset_path, 10432, defender)
+
+    assert int(seed["action_id"][attacker]) == 368  # Marth SpecialAirHi.
+    assert int(seed["action_id"][defender]) == 179  # Guard no-submotion.
+    assert int(seed["animation_index"][defender]) == 0xFFFFFFFF
+    assert int(seed["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
+    assert int(seed["combat_hitlist_victim_iid"][attacker, 0, defender]) == int(
+        seed["instance_id"][defender]
+    )
+    assert all(int(seed["combat_hitlist_hb_valid"][attacker, hb]) == 0 for hb in range(4))
+    assert all(int(seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 0 for hb in range(4))
+
+    assert int(ref["action_id"][defender]) == 181
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 5
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 5
+    assert np.isclose(float(out["shield_hp"][defender]), float(ref["shield_hp"][defender]))
+
+    def install_exact_hitcapsule_latch(seed_t: np.ndarray) -> None:
+        seed_t["combat_hitlist_hb_valid"][0, attacker, 0] = np.uint8(1)
+        seed_t["combat_hitlist_hb_cd"][0, attacker, 0, defender] = np.uint16(0xFFFF)
+        seed_t["combat_hitlist_hb_victim_iid"][0, attacker, 0, defender] = np.uint16(
+            int(seed_t["instance_id"][0, defender])
+        )
+
+    _seed, _ref, exact_out = _run_one_step_row(
+        dataset_path, 10432, defender, seed_mutator=install_exact_hitcapsule_latch
+    )
+    assert int(exact_out["action_id"][defender]) == int(seed["action_id"][defender])
+    assert int(exact_out["hitlag"][attacker]) == 0
+    assert int(exact_out["hitlag"][defender]) == 0
+
+
+@pytest.mark.integration
 def test_guard_shielddesc_seed_rejects_replay_proven_body_damage_contact() -> None:
     # Replay-visible BODY damage + attacker/defender hitlag proves the hidden ShieldDesc path did
     # not accept: `ftColl_80078C70` tests shield first, and accepted shield contact suppresses BODY.

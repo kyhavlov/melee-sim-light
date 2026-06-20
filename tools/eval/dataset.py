@@ -483,6 +483,11 @@ SEED_DTYPE = np.dtype(
         # replay-visible action_frame cannot reconstruct this at one-step reseed boundaries.
         ("sheik_chain_x0_u8", _arr("u1", MAX_PLAYERS)),
         ("sheik_chain_release_latch_u8", _arr("u1", MAX_PLAYERS)),
+        # Hidden Zelda twin fp+0x2218 byte for Sheik/Zelda transform handoff.
+        # Slippi exposes only the visible fighter; preprocessing updates this cache when Zelda is
+        # visible and carries it while Sheik is visible.
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
+        ("zelda_twin_state_flags_2218_u8", _arr("u1", MAX_PLAYERS)),
         # Hidden CommonFall/FallAerial/FallSpecial blend state (`mv.co.*.x4` + selected submotion).
         # Derived prefix-causally from replay-visible drift history; used only at reseed.
         ("common_fall_blend_valid_u8", _arr("u1", MAX_PLAYERS)),

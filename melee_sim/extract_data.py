@@ -26,6 +26,7 @@ _CHAR_GLOBS = {
     "falco": "*PlFc*.dat",
     "marth": "*PlMs*.dat",
     "sheik": "*PlSk*.dat",
+    "zelda": "*PlZd*.dat",
 }
 
 

@@ -335,7 +335,7 @@ def main() -> None:
     elif args.character:
         chars = [args.character]
     else:
-        chars = ["fox", "falco", "sheik", "peach", "marth", "puff", "falcon"]
+        chars = ["fox", "falco", "sheik", "peach", "marth", "puff", "falcon", "zelda"]
 
     extract_fighter_anims.ISO_DIR = Path(args.iso_dir)
     args.out_dir.mkdir(parents=True, exist_ok=True)

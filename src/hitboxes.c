@@ -101,6 +101,9 @@ static inline uint8_t hitboxes_source_hitcapsule_stale_damage_owner_applies(
   //   ftColl_8007ABD0.
   // - ftColl_8007ABD0 applies scale/smash-release damage, then stores ft_80089228's stale-adjusted
   //   float into HitCapsule.damage.
+  // - ft_80089228 receives fp->x206C_attack_instance, but its callee ft_80089118 only compares
+  //   move_id while walking the stale table; attack_instance is used by plStale duplicate
+  //   suppression, not by the damage scalar lookup.
   // - Later ProcessHit/shield collision consumes that frozen HitCapsule.damage. Same-action stale
   //   queue updates after this event must not retroactively restale an already-created capsule.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
@@ -436,8 +439,7 @@ static inline uint8_t hitboxes_sheik_chain_active_hitcapsule_script_msid(const M
                                                                          uint16_t action_id,
                                                                          uint16_t* out_msid) {
   if (batch == NULL || out_msid == NULL ||
-      batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
-      batch->state.special_cmd0[idx] == 0u) {
+      batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;
   }
   float chain_x = 0.0f;
@@ -1945,8 +1947,8 @@ void hitboxes_refresh(MslBatch* batch) {
       //   victim rings and allow illegal same-window re-hits on rehit=0 moves.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
       // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
-      if (batch->state.hitlag_started_frame[idx] != 0u && batch->state.hitbox_count[idx] != 0u &&
-          batch->state.hitbox_prev_bootstrap[idx] == 0u &&
+      if ((batch->state.hitlag_started_frame[idx] != 0u || batch->state.hitlag[idx] != 0u) &&
+          batch->state.hitbox_count[idx] != 0u && batch->state.hitbox_prev_bootstrap[idx] == 0u &&
           batch->state.action_id[idx] == batch->state.prev_action_id[idx]) {
         preserve_frozen_hitlag_hitboxes = 1u;
       }
@@ -1965,13 +1967,12 @@ void hitboxes_refresh(MslBatch* batch) {
                                           batch, idx, action_id, &hitbox_event_msid) != 0u) {
         // Active Chain's visible pose msids (305/308) have no create_hitbox script. Source creates
         // the four x914 HitCapsules in the Start scripts, enters active Chain with
-        // Fighter_ChangeMotionState(..., flags=8), then ftSk_SpecialS_80110AEC reactivates those
-        // preserved capsules while it_802BCB88/ftSk_SpecialS_UpdateHitboxes move their centers.
-        // The generated motion-state row cannot express this call-site transition flag, so use the
-        // source script msid that created the capsules and keep the live active pose/action for
-        // everything else.
+        // Fighter_ChangeMotionState(..., flags=8), and carries those preserved capsules until
+        // ftSk_SpecialS_80110BCC disables them. The active-entry init clears cmd_vars[0], so the
+        // source script msid supplies the capsule payload only while the item-side x914 publication
+        // model says a live Chain capsule exists.
         // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
-        //   ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_80110AEC,
+        //   ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_80110F70,
         //   ftSk_SpecialS_UpdateHitboxes}
         if (hitboxes_get_events(char_id, hitbox_event_msid, &events, &event_count) == 0 &&
             events != NULL && event_count != 0u) {
@@ -2961,16 +2962,19 @@ void hitboxes_refresh(MslBatch* batch) {
         if (char_id == (uint8_t)MSL_CHAR_ID_SHEIK &&
             action_id >= (uint16_t)MSL_ACT_SK_SPECIAL_S_START &&
             action_id <= (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END &&
-            batch->state.special_cmd0[idx] != 0u) {
+            action_id <= (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
           float lx = 0.0f;
           float ly = 0.0f;
           float lz = 0.0f;
           if (sheik_chain_hitbox_world_pos(batch, idx, (uint8_t)hi, &lx, &ly, &lz) != 0u) {
             // Chain x914 positions are not ordinary bone-pose attachments. The item accessory
             // update maps solved Chain links into fighter HitCapsules with it_802BCB88, and
-            // ftSk_SpecialS_UpdateHitboxes writes that full Vec3 into fp->x914[hitbox_id].
+            // ftSk_SpecialS_UpdateHitboxes writes that full Vec3 into fp->x914[hitbox_id] only for
+            // source-active Chain capsules. `sheik_chain_hitbox_world_pos` owns that active/frontier
+            // gate, including active-entry cmd_vars[0] clearing and the x1C disable window.
             // refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
-            // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_UpdateHitboxes
+            // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+            //   ftSk_SpecialS_80110F70,ftSk_SpecialS_80110BCC,ftSk_SpecialS_UpdateHitboxes}
             cx = lx;
             cy = ly;
             cz = lz;
@@ -3255,11 +3259,6 @@ void hitboxes_refresh(MslBatch* batch) {
           }
         }
         batch->state.hitbox_prev_bootstrap[idx] = 0u;
-      }
-      if (char_id == (uint8_t)MSL_CHAR_ID_SHEIK &&
-          action_id >= (uint16_t)MSL_ACT_SK_SPECIAL_S_START &&
-          action_id <= (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
-        sheik_chain_clear_hitbox_reset_prev(batch, idx);
       }
     }
   }

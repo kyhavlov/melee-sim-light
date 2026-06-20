@@ -1530,6 +1530,21 @@ typedef struct MslSeed {
   //   ftSk_SpecialS_IASA,ftSk_SpecialAirS_IASA}
   uint8_t sheik_chain_x0_u8[MSL_MAX_PLAYERS];
   uint8_t sheik_chain_release_latch_u8[MSL_MAX_PLAYERS];
+  // Hidden Zelda twin fp+0x2218 state for Sheik/Zelda transform handoff.
+  //
+  // Decomp owner:
+  // - ftSk_SpecialLw_Anim / ftZd_SpecialLw_Anim call ftCommon_8007EFC8, which activates the
+  //   same-player hidden twin entity (`Player_GetEntityAtIndex(player_id, 1)`) rather than copying
+  //   every raw fighter flag byte from the outgoing visible entity.
+  //
+  // Seed representation:
+  // - This is the replay-prefix Zelda twin's raw fp+0x2218 byte before a possible Sheik->Zelda
+  //   swap. When Zelda is visible, preprocessing updates the cache from Slippi state_flags[0];
+  //   when Sheik is visible, it carries the last visible Zelda value.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::fn_8011412C
+  // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013AEAC
+  uint8_t zelda_twin_state_flags_2218_u8[MSL_MAX_PLAYERS];
   // Hidden CommonFall/FallAerial/FallSpecial blend state (`mv.co.*.x4` + selected submotion).
   //
   // Decomp owner:

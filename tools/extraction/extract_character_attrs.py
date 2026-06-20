@@ -598,6 +598,15 @@ SEAK_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
 ]
 
 
+ZELDA_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
+    ("zelda_transform_vel_x_divisor", 0x70, "f32"),
+    ("zelda_transform_vel_y_divisor", 0x74, "f32"),
+    ("zelda_transform_air_gravity", 0x78, "f32"),
+    ("zelda_transform_air_terminal_vel", 0x7C, "f32"),
+    ("zelda_transform_finish_start_frame", 0x80, "f32"),
+]
+
+
 def _extract_mars_sword_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
     """Extract MarsAttributes (ftData.x4 ext block) for Marth-style sword characters.
 
@@ -727,6 +736,28 @@ def _extract_seak_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
         if kind == "i32":
             out[key] = int(_i32_be(buf, ext_abs + off))
         elif kind == "f32":
+            out[key] = float(_f32_be(buf, ext_abs + off))
+        else:  # pragma: no cover - layout table typo
+            raise ValueError(f"unknown layout kind {kind!r} for {key}")
+    return out
+
+
+def _extract_zelda_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
+    """Extract the bounded Zelda transform attrs needed for ftZd_SpecialLw.
+
+    Zelda's ftData.x4 block is `ftZelda_DatAttrs`. For this pass, only expose the Down-B
+    transform/fall fields consumed by `ftZd_SpecialLw_{Enter,Phys}` and the finish handoff; the rest
+    of Zelda's specials remain out of runtime scope until a replay requires them.
+    - refs/melee/src/melee/ft/chara/ftZelda/types.h::ftZelda_DatAttrs
+    - refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
+    -   ftZelda_SpecialLw_StartAction_Helper,ftZd_SpecialAirLw_Phys,ftZd_SpecialLw_8013B4D8}
+    """
+    out: dict = {}
+    ext_abs = arc.ptr32(ftdata_abs + 0x04)
+    if ext_abs == arc.data_base:
+        return out
+    for key, off, kind in ZELDA_SPECIAL_ATTRS_LAYOUT:
+        if kind == "f32":
             out[key] = float(_f32_be(buf, ext_abs + off))
         else:  # pragma: no cover - layout table typo
             raise ValueError(f"unknown layout kind {kind!r} for {key}")
@@ -975,6 +1006,8 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out.update(_extract_seak_needle_article(buf, arc, ftdata_abs=ftdata_abs))
         out.update(_extract_seak_vanish_article(buf, arc, ftdata_abs=ftdata_abs))
         out.update(_extract_seak_chain_article(buf, arc, ftdata_abs=ftdata_abs))
+    elif ext_attr_layout == "zelda_special":
+        out.update(_extract_zelda_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
     if extract_fox_blaster:
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
@@ -1350,9 +1383,10 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         elif k in existing:
             out[k] = existing[k]
     # Per-character special-attribute families (ext-attr layouts) use mechanic-position
-    # prefixes; carry every extracted special* / sheik_* key after the ordered common block.
+    # prefixes; carry every extracted special* / sheik_* / zelda_* key after the ordered common
+    # block.
     for k in sorted(extracted):
-        if (k.startswith("special") or k.startswith("sheik_")) and k not in out:
+        if (k.startswith("special") or k.startswith("sheik_") or k.startswith("zelda_")) and k not in out:
             out[k] = extracted[k]
     for k, v in existing.items():
         if k in drop_keys:
@@ -1374,7 +1408,7 @@ def main() -> None:
     ap.add_argument(
         "--chars",
         type=str,
-        default="fox,falco,sheik,peach,marth,puff,falcon",
+        default="fox,falco,sheik,zelda,peach,marth,puff,falcon",
         help="comma-separated character set to extract",
     )
     args = ap.parse_args()
@@ -1385,10 +1419,12 @@ def main() -> None:
     #   extract_fox_blaster flag path.
     # - "mars_sword": MarsAttributes (refs/melee/.../ftMars/types.h) - Marth (and Roy clone).
     # - "seak_special": ftSeakAttributes (refs/melee/.../ftSeak/types.h) - Sheik.
+    # - "zelda_special": ftZelda_DatAttrs (refs/melee/.../ftZelda/types.h) - Zelda.
     mapping = {
         "fox": ("PlFx.dat", "ftDataFox", True, None),
         "falco": ("PlFc.dat", "ftDataFalco", True, None),
         "sheik": ("PlSk.dat", "ftDataSeak", False, "seak_special"),
+        "zelda": ("PlZd.dat", "ftDataZelda", False, "zelda_special"),
         "peach": ("PlPe.dat", "ftDataPeach", False, None),
         "marth": ("PlMs.dat", "ftDataMars", False, "mars_sword"),
         "puff": ("PlPr.dat", "ftDataPurin", False, None),

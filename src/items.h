@@ -32,6 +32,7 @@ void items_sheik_needle_damage_callback(MslBatch* batch, int batch_index, int ow
                                         uint16_t pre_damage_action, uint8_t source_on_ground);
 uint8_t items_spawn_sheik_chain_article(MslBatch* batch, size_t owner_idx);
 uint8_t items_set_sheik_chain_article_state(MslBatch* batch, size_t owner_idx, uint8_t state);
+uint8_t items_activate_sheik_chain_hitcaps_on_entry(MslBatch* batch, size_t owner_idx);
 uint8_t items_destroy_sheik_chain_article(MslBatch* batch, size_t owner_idx);
 // World-space position of Sheik Chain fighter HitCapsule `hitbox_id` (0..3), taken from the solved
 // Verlet link the it_802BCB88 stride map assigns to it. Returns 1 and writes out_x/out_y/out_z if a
@@ -40,8 +41,11 @@ uint8_t items_destroy_sheik_chain_article(MslBatch* batch, size_t owner_idx);
 // refs/melee/src/melee/it/items/itseakchain.c::{it_802BC080,it_802BCB88}
 uint8_t sheik_chain_hitbox_world_pos(const MslBatch* batch, size_t fighter_idx, uint8_t hitbox_id,
                                      float* out_x, float* out_y, float* out_z);
+uint8_t sheik_chain_hitbox_stale_damage_mul(const MslBatch* batch, size_t fighter_idx,
+                                            float* out_mul);
 uint8_t sheik_chain_hitbox_reset_prev_active(const MslBatch* batch, size_t fighter_idx);
 void sheik_chain_clear_hitbox_reset_prev(MslBatch* batch, size_t fighter_idx);
+void items_reseed_clear_sheik_chain_hidden_slot(MslBatch* batch, size_t item_idx);
 uint8_t items_spawn_sheik_vanish_smoke_article(MslBatch* batch, size_t owner_idx);
 void items_update_collision_phase(MslBatch* batch);
 

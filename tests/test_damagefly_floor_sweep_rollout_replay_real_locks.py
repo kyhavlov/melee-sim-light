@@ -19,6 +19,8 @@ ACT_PASSIVE = 0x00C7
 ACT_PASSIVE_STAND_F = 0x00C8
 ACT_PASSIVE_STAND_B = 0x00C9
 ACT_GUARD_REFLECT = 0x00B6
+ACT_THROW_LW = 0x00DE
+ACT_THROWN_LW = 0x00F2
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -72,6 +74,16 @@ def _fod_dataset_path(root: Path, name: str) -> Path:
     return dataset_path
 
 
+def _sheik_demo2_dataset_path(root: Path) -> Path:
+    dataset_rel = (
+        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
 def _binding_sizes():
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -84,6 +96,47 @@ def _run_one_step(
     ds = read_dataset(str(dataset_path))
     row = ds.samples[record : record + 1]
     assert int(row.shape[0]) == 1
+
+    binding, seed_stride, input_stride, compare_stride = _binding_sizes()
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, seed_stride
+    )
+    prev_input_bytes = np.frombuffer(
+        row["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+    ).copy().reshape(1, input_stride)
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=ucf_cardinals_1_0_enabled,
+        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+    return row["seed_t"].reshape(-1)[0].copy(), row["ref_t1"].reshape(-1)[0].copy(), out
+
+
+def _run_one_step_mutated_seed(
+    dataset_path: Path,
+    record: int,
+    mutate,
+    *,
+    ucf_cardinals_1_0_enabled: bool = False,
+) -> tuple[np.void, np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1].copy()
+    assert int(row.shape[0]) == 1
+    mutate(row["seed_t"])
 
     binding, seed_stride, input_stride, compare_stride = _binding_sizes()
     seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
@@ -339,6 +392,42 @@ def test_throwlw_release_damageflytop_uses_pose_bottom_for_next_floor_handoff() 
     assert int(out_5648["hitstun"][p]) == int(ref_5648["hitstun"][p]) == 0
     assert float(out_5648["pos_x"][p]) == pytest.approx(float(ref_5648["pos_x"][p]), abs=2e-6)
     assert float(out_5648["pos_y"][p]) == pytest.approx(float(ref_5648["pos_y"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
+def test_sheik_throwlw_release_publishes_carried_platform_floor_demo2_lock() -> None:
+    # Replay-real lock for Sheik demo2 rec=5670 p1:
+    # - Sheik ThrowLw releases Marth from ThrownLw while CollData.floor still carries Battlefield
+    #   right platform segment 4.
+    # - ftCo_800DDDE4 places the released fighter through mpColl_800471F8 before damage entry; the
+    #   carried platform publication sets the release root to the platform y, then DamageFlyTop
+    #   integrates one airborne damage frame.
+    # - The adjacent negative below clears the carried floor id, proving this helper is not a broad
+    #   arbitrary platform snap.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _sheik_demo2_dataset_path(root)
+
+    p = 1
+    seed, ref, out = _run_one_step(dataset_path, 5670)
+    assert int(seed["action_id"][0]) == ACT_THROW_LW
+    assert int(seed["action_id"][p]) == ACT_THROWN_LW
+    assert int(seed["ground_id"][p]) == 4
+    assert int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 34
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6)
+    assert float(out["speed_y_attack"][p]) == pytest.approx(float(ref["speed_y_attack"][p]))
+
+    def clear_carried_platform(seed_t: np.ndarray) -> None:
+        seed_t["ground_id"][0, p] = np.uint16(0xFFFF)
+
+    _, _, no_carried_floor = _run_one_step_mutated_seed(dataset_path, 5670, clear_carried_platform)
+    assert int(no_carried_floor["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert float(no_carried_floor["pos_y"][p]) < float(ref["pos_y"][p]) - 6.0
 
 
 @pytest.mark.integration

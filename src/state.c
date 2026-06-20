@@ -199,7 +199,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->squat_pass_x4, 0, sizeof(uint8_t) * bp);
   memset(state->sheik_needle_count, 0, sizeof(uint8_t) * bp);
   memset(state->sheik_special_timer, 0, sizeof(uint8_t) * bp);
+  memset(state->sheik_special_timer_frame_start, 0, sizeof(uint8_t) * bp);
   memset(state->sheik_special_latch, 0, sizeof(uint8_t) * bp);
+  memset(state->zelda_twin_state_flags_2218, 0, sizeof(uint8_t) * bp);
   memset(state->walk_use_raw_input_once, 0, sizeof(uint8_t) * bp);
   memset(state->x2228_b7, 0, sizeof(uint8_t) * bp);
   memset(state->fallspecial_landing_lag, 0, sizeof(float) * bp);
@@ -230,6 +232,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   for (size_t i = 0; i < bi; i++) {
     state->item_stale_damage_valid[i] = 0u;
     state->item_stale_damage_mul[i] = 1.0f;
+    state->item_sheik_chain_stale_damage_valid[i] = 0u;
+    state->item_sheik_chain_stale_damage_mul[i] = 1.0f;
     state->item_hitlag[i] = 0u;
   }
   for (size_t i = 0; i < bi * (size_t)MSL_MAX_HITBOXES; i++) {

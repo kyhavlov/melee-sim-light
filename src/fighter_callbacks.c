@@ -335,6 +335,7 @@ static inline void cache_prev_action_state(MslBatch* batch) {
       batch->state.frame_start_attack_instance[idx] = batch->state.attack_instance[idx];
       batch->state.frame_start_instance_id[idx] = batch->state.instance_id[idx];
       batch->state.frame_start_on_ground[idx] = batch->state.on_ground[idx] ? 1u : 0u;
+      batch->state.sheik_special_timer_frame_start[idx] = batch->state.sheik_special_timer[idx];
       batch->state.fall_fast_frame_start[idx] =
           batch->state.fall_fast_seed_frame_start_valid[idx]
               ? (batch->state.fall_fast_seed_frame_start[idx] ? 1u : 0u)
@@ -736,6 +737,7 @@ static void fighter_callbacks_post_frame_phase(MslBatch* batch) {
   anim_timebase_apply_deferred_tick_once_post_combat(batch);
   sync_runbrake_cmd0_post_frame(batch);
   state_flags_refresh_post_frame(batch);
+  sheik_specials_cache_transform_twins_post_frame(batch);
   timers_update_magnify_damage_post_frame(batch);
   promote_floor_sweep_prev_pos_post_frame(batch);
   promote_seed_prev_action_snapshot_post_frame(batch);

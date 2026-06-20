@@ -6,7 +6,7 @@ fox/falco literals.
 
 Id spaces:
 - internal_id: Melee in-engine character kind (ft/types.h FighterKind order; Fox=1, Sheik=7,
-  Marth=18, Falco=22). This is the id the sim's seeds/binding use (char_id lanes).
+  Marth=18, Zelda=19, Falco=22). This is the id the sim's seeds/binding use (char_id lanes).
 - external_id: Slippi/CSS external character id (Fox=2, Marth=9, Sheik=19, Falco=20),
   what replay metadata carries.
 """
@@ -90,6 +90,20 @@ CHARS: dict[str, CharInfo] = {
         submotion_prefix="ftSk_SM_",
         has_articles=True,
         exports_item_article_constants=True,
+    ),
+    "zelda": CharInfo(
+        name="zelda",
+        internal_id=19,
+        external_id=18,
+        pl_dat="PlZd.dat",
+        aj_dat="PlZdAJ.dat",
+        ftdata_symbol="ftDataZelda",
+        decomp_dir="ftZelda",
+        decomp_prefix="ftZd_",
+        submotion_dir="ftZelda",
+        submotion_prefix="ftZd_SM_",
+        has_articles=True,
+        exports_item_article_constants=False,
     ),
 }
 

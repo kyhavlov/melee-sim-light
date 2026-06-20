@@ -321,8 +321,10 @@ MSL_STATE_FIELD(specialn_charge_frames, uint16_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_countered_damage, uint16_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(sheik_needle_count, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(sheik_special_timer, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(sheik_special_timer_frame_start, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(sheik_special_latch, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(sheik_vanish_smoke_accessory_pending, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(zelda_twin_state_flags_2218, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 // Sheik Chain pose filter (`mv.sk.specials.x18` angle and x14 magnitude) used by
 // ftSk_SpecialS_80110610 to rebuild the L3rdNa Chain target from a stick-directed pose frame.
 // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{ftSk_SpecialS_80110490,ftSk_SpecialS_80110610}
@@ -590,8 +592,11 @@ MSL_STATE_FIELD(item_sheik_chain_hitbox_link_idx, uint8_t, bi * (size_t)MSL_MAX_
 // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_80110BCC
 MSL_STATE_FIELD(item_sheik_chain_hitcaps_active, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_sheik_chain_hit_cooldown, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_hit_grace, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_sheik_chain_hit_reset_prev, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_sheik_chain_hit_prev_valid, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_stale_damage_valid, uint8_t, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_sheik_chain_stale_damage_mul, float, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_sheik_chain_env_flags, uint32_t, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_sheik_chain_hit_prev_x, float, bi * (size_t)MSL_MAX_HITBOXES, (size_t)MSL_MAX_ITEMS * (size_t)MSL_MAX_HITBOXES)
 MSL_STATE_FIELD(item_sheik_chain_hit_prev_y, float, bi * (size_t)MSL_MAX_HITBOXES, (size_t)MSL_MAX_ITEMS * (size_t)MSL_MAX_HITBOXES)

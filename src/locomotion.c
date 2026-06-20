@@ -4465,7 +4465,17 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Squat.c,ftCo_SquatWait.c,ftCo_SquatRv.c}
         if (action_id == MSL_ACT_SQUAT) {
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT;
-          if (anim_finished(cid, (uint16_t)MSL_SM_SQUAT, batch->state.anim_frame_f32[idx])) {
+          if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA &&
+              (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
+              stick_y <= -c->special_stick_y_threshold) {
+            // Zelda's grounded Down-B can preempt Squat's anim-end SquatWait publication in the
+            // same Fighter_8006A360 callback pass. Keep this bounded to Zelda transform.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_SpecialS_CheckInput
+            // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_Enter
+            zelda_special_enter_transform(batch, idx, 1u);
+            action_id = batch->state.action_id[idx];
+          } else if (anim_finished(cid, (uint16_t)MSL_SM_SQUAT, batch->state.anim_frame_f32[idx])) {
             enter_squat_wait_from_anim_end(batch, idx);
             action_id = (uint16_t)MSL_ACT_SQUAT_WAIT;
           }
@@ -4508,8 +4518,18 @@ void locomotion_update_pre(MslBatch* batch) {
                fabsf(stick_x) < c->special_stick_x_threshold_side)
                   ? 1u
                   : 0u;
-          if (action_id == MSL_ACT_SQUAT &&
-              blaster_try_enter_ground_from_wait_iasa(batch, c, idx)) {
+          if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA &&
+              zelda_special_try_transform_iasa(batch, idx, 1u)) {
+            // Squat/SquatWait IASA checks grounded special dispatch before attacks, guard, jump,
+            // platform pass, Dash, and SquatRv. This bounded Zelda path supports Down-B transform
+            // without enabling Zelda's other specials.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
+            // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
+            //   ftZd_SpecialLw_Enter,ftZd_SpecialAirLw_Enter}
+            action_id = batch->state.action_id[idx];
+          } else if (action_id == MSL_ACT_SQUAT &&
+                     blaster_try_enter_ground_from_wait_iasa(batch, c, idx)) {
             action_id = batch->state.action_id[idx];
           } else if (!speciallw_preempts_squat_iasa &&
                      grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
@@ -6961,6 +6981,16 @@ void locomotion_update_pre(MslBatch* batch) {
                 : 0;
         const uint8_t speciallw_preempts_common_air_iasa =
             spacie_speciallw_preempts_common_air_iasa(c, cid, buttons_pressed, stick_y);
+        if (!speciallw_preempts_common_air_iasa && sheik_special_try_air_iasa(batch, idx)) {
+          // Common air IASA dispatches character B-specials before item/aerial attack and
+          // JumpAerial checks. Entering Sheik SpecialAirN here lets the same frame's
+          // SpecialAirNStart_Coll consume ft_80081D0C/mpColl_800471F8 floor contact.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Fall,Jump,PassiveWall}.c
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+          //   ftSk_SpecialAirNStart_Coll,doColl}
+          continue;
+        }
         if (allow_escape_air && !speciallw_preempts_common_air_iasa &&
             escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
           continue;
@@ -7256,13 +7286,17 @@ void locomotion_update_post_collision(MslBatch* batch) {
       const uint8_t keep_sheik_vanish_start1_platform_pass_floor_skip =
           // Sheik Vanish Start1 can call `ftCo_8009A134 -> mpUpdateFloorSkip` during the early
           // xC < ftSeakAttributes::x3C platform branch while staying airborne in the same action.
-          // Preserve that hidden CollData.floor_skip through the next collision callback so the
-          // skipped platform is not immediately re-admitted.
+          // `mpClearFloorSkip` is not tied to that xC boundary; once the hidden skip is written,
+          // preserve it through the same airborne Start1 motion state so the skipped platform is
+          // not immediately re-admitted on later travel callbacks.
           // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHiStart_1_Coll
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+          // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
           (floor_skip_segment != 0xFFFFu && now_ground == 0u &&
            stage_collision_floor_line_is_platform(stage_id, floor_skip_segment) &&
-           sheik_special_vanish_air_start1_platform_pass_active(batch, idx))
+           batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+           a == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1 &&
+           batch->state.prev_action_id[idx] == a)
               ? 1u
               : 0u;
       if (batch->state.floor_skip_segment_id != NULL && floor_skip_segment != 0xFFFFu &&
@@ -7621,12 +7655,15 @@ void locomotion_update_post_collision(MslBatch* batch) {
         batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
         continue;
       }
-      if (was_ground && !now_ground && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK) {
+      if (was_ground && !now_ground &&
+          (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK ||
+           batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA)) {
         const float floor_loss_self_x = batch->state.speed_ground_x_self[idx];
         if (sheik_special_try_ground_to_air_swap(batch, idx)) {
-          // Sheik grounded special floor loss swaps to source air variants at preserved animation
-          // frame, matching the ftSk Coll callbacks' ftCommon_8007D5D4 bundle.
+          // Sheik/Zelda grounded transform-special floor loss swaps to source air variants at
+          // preserved animation frame, matching the Coll callbacks' ftCommon_8007D5D4 bundle.
           // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
+          // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c
           batch->state.speed_air_x_self[idx] = floor_loss_self_x;
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.on_ground[idx] = 0u;
@@ -7815,11 +7852,13 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
           continue;
-        } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+        } else if ((batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK ||
+                    batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA) &&
                    sheik_special_try_air_to_ground_swap(batch, idx)) {
-          // Sheik aerial special ground contact swaps to grounded variants or enters
-          // Landing/LandingFallSpecial from the source Coll callback.
+          // Sheik/Zelda aerial transform-special ground contact swaps to grounded variants or
+          // enters Landing/LandingFallSpecial from the source Coll callback.
           // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
+          // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c
           batch->state.jumps_left[idx] = ch->max_jumps;
           batch->state.fall_fast[idx] = 0u;
           batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];

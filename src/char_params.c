@@ -830,6 +830,28 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   }
 #undef MSL_GET_SHEIK_F32
 #undef MSL_GET_SHEIK_I32
+  // Zelda ftZelda_DatAttrs Down-B transform attrs. These are required only for Zelda: this pass
+  // supports Zelda through generic data plus ftZd_SpecialLw replay swaps, while unrelated
+  // characters keep zero defaults.
+  // refs/melee/src/melee/ft/chara/ftZelda/types.h::ftZelda_DatAttrs
+  // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
+  //   ftZelda_SpecialLw_StartAction_Helper,ftZd_SpecialAirLw_Phys,ftZd_SpecialLw_8013B4D8}
+  const uint8_t require_zelda_special_attrs = (uint8_t)(char_id == (uint8_t)MSL_CHAR_ID_ZELDA);
+#define MSL_GET_ZELDA_F32(key, field)                                 \
+  (require_zelda_special_attrs ? json_get_f32(buf, (key), &out.field) \
+                               : json_get_f32_or_default(buf, (key), 0.0f, &out.field))
+  if (MSL_GET_ZELDA_F32("zelda_transform_vel_x_divisor", zelda_transform_vel_x_divisor) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_transform_vel_y_divisor", zelda_transform_vel_y_divisor) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_transform_air_gravity", zelda_transform_air_gravity) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_transform_air_terminal_vel", zelda_transform_air_terminal_vel) !=
+          0 ||
+      MSL_GET_ZELDA_F32("zelda_transform_finish_start_frame", zelda_transform_finish_start_frame) !=
+          0) {
+    fprintf(stderr, "msl: char params Zelda special attr parse failed in %s\n", path);
+    alloc_free(buf);
+    return -1;
+  }
+#undef MSL_GET_ZELDA_F32
   out.reflector_offset_x = refl_off[0];
   out.reflector_offset_y = refl_off[1];
   out.reflector_offset_z = refl_off[2];

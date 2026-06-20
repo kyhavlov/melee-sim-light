@@ -761,7 +761,7 @@ def main() -> None:
     ap.add_argument(
         "--chars",
         type=str,
-        default="fox,falco,sheik,peach,marth,puff,falcon",
+        default="fox,falco,sheik,peach,marth,puff,falcon,zelda",
         help="comma-separated character set to extract",
     )
     ap.add_argument("--max_frames", type=int, default=240)
@@ -776,6 +776,7 @@ def main() -> None:
         "marth": ("PlMs.dat", "ftDataMars"),
         "puff": ("PlPr.dat", "ftDataPurin"),
         "falcon": ("PlCa.dat", "ftDataCaptain"),
+        "zelda": ("PlZd.dat", "ftDataZelda"),
     }
 
     enum_map = _parse_ftco_submotion_enum(args.melee_decomp)

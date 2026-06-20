@@ -65,6 +65,10 @@ static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
          (size_t)cap_i;
 }
 
+static inline uint16_t combat_calc_hitlag_frames(const MslCommonParams* c, int dmg,
+                                                 uint16_t motion_id, float element_mul);
+static inline float combat_hitlag_mul_from_element(const MslCommonParams* c, uint8_t element);
+
 enum {
   // The generated hurtcap substrate currently exposes the extracted Fighter_Part id, height,
   // grabbability, and capsule offsets, but not semantic body-region labels. Fox/Falco cap12's
@@ -126,6 +130,12 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
     uint8_t use_catch_grabbable_pose, float* out_overlap_amount, uint8_t* out_evaluated);
 static inline uint8_t combat_side_special_start_passivewalljump_entry_pose_owner(
     const MslBatch* batch, size_t idx, uint8_t char_id, uint16_t action_id);
+static inline uint8_t combat_specialhi_frozen_guard_dense_seed_allows_live_shield(
+    MslBatch* batch, const MslCommonParams* c, int bi, int attacker, int defender, int hb_id,
+    size_t a_idx, size_t d_idx, uint16_t defender_iid, uint8_t shield_seed_kind, float hx, float hy,
+    float hz, float hr, float shx, float shy, float shz, float shr,
+    uint8_t shield_desc_envelope_ready, uint8_t shield_extent_bridge_active,
+    uint8_t guard_reflect_reflectdesc_only);
 
 static inline uint8_t combat_action_is_catch_family(uint16_t action_id) {
   return (action_id >= (uint16_t)MSL_ACT_CATCH && action_id <= (uint16_t)MSL_ACT_CATCH_CUT) ? 1u
@@ -3263,6 +3273,222 @@ static inline uint8_t combat_sheik_chain_same_frontier_later_hitbox_owns_body(
   return 0u;
 }
 
+static inline uint8_t combat_sheik_chain_activation_edge_same_source_suppresses_body(
+    const MslBatch* batch, size_t a_idx, size_t d_idx, int attacker, int hb_id, int defender) {
+  if (batch == NULL || hb_id < 0 || hb_id >= MSL_MAX_HITBOXES || defender < 0 ||
+      defender >= (int)batch->config.num_players) {
+    return 0u;
+  }
+  if (batch->state.char_id[a_idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[a_idx];
+  if (action != (uint16_t)MSL_ACT_SK_SPECIAL_S && action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_S_END &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
+    return 0u;
+  }
+  if (sheik_chain_hitbox_reset_prev_active(batch, a_idx) == 0u) {
+    return 0u;
+  }
+  float hx = 0.0f;
+  float hy = 0.0f;
+  float hz = 0.0f;
+  if (sheik_chain_hitbox_world_pos(batch, a_idx, (uint8_t)hb_id, &hx, &hy, &hz) == 0u) {
+    return 0u;
+  }
+  if (batch->state.hitlag[d_idx] == 0u) {
+    return 0u;
+  }
+  // Chain activation edge:
+  // ftSeakSpecialS_LoopChainHitActivate enables the HitCapsules and zeroes x914[].x58/x4C in the
+  // same ftSk_SpecialS_80110BCC callback. For a defender already owned by this Chain's previous
+  // BODY contact, source victims_1 state still suppresses the activation-edge BODY overlap; the
+  // new empty Chain window becomes collision-visible on the following frame.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+  //   ftSk_SpecialS_80110BCC,ftSeakSpecialS_LoopChainHitActivate,ftSk_SpecialS_ZeroHitboxPositions}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008434,lbColl_8000ACFC,lbColl_80008688}
+  return (msl_damage_source_victim_port_matches_attacker(batch, d_idx, a_idx, attacker) ||
+          batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx])
+             ? 1u
+             : 0u;
+}
+
+static inline uint16_t combat_sheik_chain_same_source_terminal_hitstun_horizon(uint16_t hitlag) {
+  // Damage callbacks tick hitstun before the BODY collision pass. Source Chain victims_1 carry
+  // releases on the terminal post-callback slice, three ticks below the defender Chain hitlag for the
+  // supported BODY payload (official demo rec340 quiet, rec341 hit).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
+  return (hitlag > 3u) ? (uint16_t)(hitlag - 3u) : hitlag;
+}
+
+static inline uint8_t combat_sheik_chain_terminal_same_source_episode_suppresses_body(
+    const MslBatch* batch, size_t a_idx, size_t d_idx) {
+  if (batch == NULL || batch->state.char_id[a_idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[a_idx];
+  if (action != (uint16_t)MSL_ACT_SK_SPECIAL_S && action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_S_END &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
+    return 0u;
+  }
+  if (batch->state.hitlag[d_idx] != 0u ||
+      batch->state.instance_hit_by[d_idx] != batch->state.instance_id[a_idx]) {
+    return 0u;
+  }
+  const uint16_t d_action = batch->state.action_id[d_idx];
+  if (batch->state.hitstun[d_idx] != 0u) {
+    return 0u;
+  }
+  const uint8_t terminal_action =
+      (uint8_t)(msl_motion_state_class_has(batch->state.char_id[d_idx], d_action,
+                                           MSL_MS_CLASS_COMMON_FALL) ||
+                (d_action >= (uint16_t)MSL_ACT_ATTACK_AIR_N &&
+                 d_action <= (uint16_t)MSL_ACT_ATTACK_AIR_LW));
+  if (terminal_action == 0u) {
+    return 0u;
+  }
+  // Chain terminal same-source victim episode:
+  // ftColl_80076ED8 inserts the fighter victim pointer into Chain's x914 HitCapsule victims_1. The
+  // victim can leave Damage into Fall-family or AttackAir-family callbacks while Slippi still
+  // exposes the same hit source through x18EC/instance_hit_by, before a source-owned Chain
+  // disable/reactivate has made a new victims_1 episode for that defender. Keep this scoped to
+  // Sheik Chain, source common Fall/AttackAir terminal victim actions, zero hitlag/hitstun, and
+  // exact same attacker instance; idle Wait rows and active DamageAir/DamageFly rows keep ordinary
+  // BODY admission/hitstun-horizon handling so official Chain follow-up hits remain admitted.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_80110BCC
+  return 1u;
+}
+
+static inline uint8_t combat_sheik_chain_same_source_damage_followup_admits_body(
+    const MslBatch* batch, const MslCommonParams* c, size_t a_idx, size_t d_idx, int attacker,
+    int hb_id, int int_dmg, uint16_t defender_motion_id, uint8_t hitbox_element) {
+  if (batch == NULL || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  if (batch->state.char_id[a_idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[a_idx];
+  if (action != (uint16_t)MSL_ACT_SK_SPECIAL_S && action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_S_END &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
+    return 0u;
+  }
+  float hx = 0.0f;
+  float hy = 0.0f;
+  float hz = 0.0f;
+  if (sheik_chain_hitbox_world_pos(batch, a_idx, (uint8_t)hb_id, &hx, &hy, &hz) == 0u) {
+    return 0u;
+  }
+  if (batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] == 0u) {
+    return 0u;
+  }
+  if (c == NULL || int_dmg <= 0) {
+    return 0u;
+  }
+  const uint16_t d_hl = combat_calc_hitlag_frames(
+      c, int_dmg, defender_motion_id, combat_hitlag_mul_from_element(c, hitbox_element));
+  const uint16_t d_action = batch->state.action_id[d_idx];
+  if (d_hl == 0u || batch->state.hitstun[d_idx] >= (uint16_t)(d_hl + d_hl)) {
+    return 0u;
+  }
+  if (d_action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP) {
+    const uint16_t terminal_horizon = combat_sheik_chain_same_source_terminal_hitstun_horizon(d_hl);
+    if (batch->state.hitstun[d_idx] > terminal_horizon) {
+      return 0u;
+    }
+  }
+  if (!combat_is_damage_or_firefox_launch_victim_action(batch->state.char_id[d_idx], d_action)) {
+    return 0u;
+  }
+  // Chain same-source Damage continuation:
+  // ftColl_80076ED8 inserts the victim into the Chain HitCapsule victims_1 list for a BODY
+  // contact, while ftSk_SpecialS_80110BCC/it_802BCB88 disable and republish article hitcaps across
+  // Chain frontier windows. Once the defender's hitlag has drained into Damage hitstun, a live
+  // article-published Chain HitCapsule may strike again even though Slippi-visible source
+  // ownership still names the same Sheik instance. Keep this bypass limited to that same-source
+  // Damage continuation and to an actually published Chain hitcap after the prior hit's hitlag
+  // horizon has drained far enough for the next Chain contact window. DamageFlyTop uses the
+  // terminal part of that horizon, matching ftCo_DamageFly_Coll's late pose/contact ownership
+  // instead of admitting early high-hitstun tumble overlaps; neutral/Wait rows, hitlag-frozen
+  // victims, high-horizon Damage rows, and non-Chain hitboxes continue to use lbColl_8000ACFC
+  // suppression.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+  // refs/melee/src/melee/it/items/itseakchain.c::{it_802BBD64,it_802BBED0,it_802BCB88}
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_80110BCC
+  return (msl_damage_source_victim_port_matches_attacker(batch, d_idx, a_idx, attacker) ||
+          batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx])
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t combat_sheik_chain_damageflytop_high_horizon_suppresses_body(
+    const MslBatch* batch, const MslCommonParams* c, size_t a_idx, size_t d_idx, int attacker,
+    int hb_id, int int_dmg, uint16_t defender_motion_id, uint8_t hitbox_element) {
+  if (batch == NULL || c == NULL || int_dmg <= 0 || attacker < 0 ||
+      attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  if (batch->state.char_id[a_idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] == 0u) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[a_idx];
+  if (action != (uint16_t)MSL_ACT_SK_SPECIAL_S && action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_S_END &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) {
+    return 0u;
+  }
+  if (!msl_damage_source_victim_port_matches_attacker(batch, d_idx, a_idx, attacker) &&
+      batch->state.instance_hit_by[d_idx] != batch->state.instance_id[a_idx]) {
+    return 0u;
+  }
+  const uint16_t d_action = batch->state.action_id[d_idx];
+  const uint16_t d_hl = combat_calc_hitlag_frames(
+      c, int_dmg, defender_motion_id, combat_hitlag_mul_from_element(c, hitbox_element));
+  if (d_hl == 0u) {
+    return 0u;
+  }
+  if (d_action >= (uint16_t)MSL_ACT_DAMAGE_HI_1 && d_action <= (uint16_t)MSL_ACT_DAMAGE_LW_3) {
+    // Common Damage same-source Chain continuation:
+    // grounded/neutral Damage can receive a later Chain BODY refresh once its hitstun has drained
+    // to the 2x-hitlag follow-up horizon after the frame's Damage callback tick (official demo
+    // rec322 reaches combat at hitstun 11 for a 6-frame Chain hitlag), but earlier same-source
+    // overlaps are still inside the prior Chain HitCapsule victims_1 episode (demo2 rec1626).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
+    const uint16_t followup_horizon = (d_hl > 0u) ? (uint16_t)((d_hl + d_hl) - 1u) : 0u;
+    return (batch->state.hitstun[d_idx] < followup_horizon) ? 1u : 0u;
+  }
+  if (d_action < (uint16_t)MSL_ACT_DAMAGE_AIR_1 || d_action > (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
+    return 0u;
+  }
+  const uint16_t terminal_horizon = combat_sheik_chain_same_source_terminal_hitstun_horizon(d_hl);
+  if (batch->state.hitstun[d_idx] <= terminal_horizon) {
+    return 0u;
+  }
+  // Same-source Chain airborne Damage continuation:
+  // Source ftColl victims_1 state from the previous Chain BODY contact survives across the
+  // DamageAir/DamageFly callback horizon even when replay-reconstructed per-hitbox hitlists are
+  // cleared by a disable/reactivate edge. Suppress early high-hitstun same-source Chain BODY overlaps
+  // until the current Chain hitlag terminal horizon; the terminal tail is then admitted by the
+  // follow-up owner below (official demo rec341) while non-terminal rows (official demo rec330) stay
+  // quiet. Grounded/common Damage continuations are not part of this contiguous decomp action-family
+  // window and still admit their source BODY refresh (official demo rec322).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+  return 1u;
+}
+
 static inline uint8_t combat_replay_rollout_advanced_past_reseed(const MslBatch* batch, int bi) {
   if (batch == NULL || bi < 0) {
     return 0u;
@@ -5278,6 +5504,9 @@ static inline uint8_t combat_source_order_earlier_body_hitcapsule_precedes_shiel
     if (combat_guard_reflect_final_x14_live_x18_blocks_body(batch, d_idx)) {
       continue;
     }
+    if (combat_sheik_chain_terminal_same_source_episode_suppresses_body(batch, a_idx, d_idx)) {
+      continue;
+    }
 
     for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
       const size_t cap_i = idx_hurtcap(bi, defender, (int)cap_id);
@@ -5374,9 +5603,9 @@ static inline float combat_hitcapsule_collision_damage(const MslBatch* batch, si
   //   damage before writing HitCapsule.damage.
   // - ftColl_8007699C then consumes HitCapsule.damage for reciprocal clank thresholds and the
   //   per-fighter int damage later used by Fighter_ProcessHit hitlag/rebound.
-  // - Replay seeds can already include a same-attack stale entry from an earlier contact in this
-  //   attack instance. That entry must not retroactively stale the live HitCapsule; older instances
-  //   of the same move still stale normally.
+  // - ft_80089228 receives x206C_attack_instance, but ft_80089118 computes the scalar from matching
+  //   move_id entries only. attack_instance owns stale-table duplicate suppression, not the damage
+  //   multiplier.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007ABD0,ftColl_8007699C,inlineA0,inlineA1}
   // refs/melee/src/melee/ft/ft_0DF0.c::ftCo_800DEEB8
   // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
@@ -5387,9 +5616,7 @@ static inline float combat_hitcapsule_collision_damage(const MslBatch* batch, si
     stale_mult = batch->state.hitbox_stale_damage_mul[hb_i];
   } else {
     const uint16_t move_id = staling_move_id_from_state(batch, a_idx);
-    const uint16_t attack_instance = batch->state.attack_instance[a_idx];
-    stale_mult =
-        staling_multiplier_for_move_excluding_instance(batch, a_idx, move_id, attack_instance);
+    stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
   }
   float dmg = combat_apply_attacker_smash_release_damage_mul(batch, a_idx,
                                                              batch->state.hitbox_damage[hb_i]);
@@ -9101,6 +9328,32 @@ static inline void combat_damageflyroll_consume_jumpaerial_attackairb_carry(
   }
 }
 
+static inline uint8_t combat_sheik_chain_start_terminal_owns_low_hurt_height(
+    const MslBatch* batch, size_t source_a_idx, size_t source_hb_i,
+    uint8_t defender_on_ground_before, uint8_t source_hb_valid) {
+  if (batch == NULL || source_hb_valid == 0u || defender_on_ground_before == 0u ||
+      batch->state.char_id[source_a_idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[source_a_idx];
+  if (action != (uint16_t)MSL_ACT_SK_SPECIAL_S_START &&
+      action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START) {
+    return 0u;
+  }
+  if ((source_hb_i % (size_t)MSL_MAX_HITBOXES) != 3u) {
+    return 0u;
+  }
+  // Chain Start terminal frontier DmgLog height:
+  // source `it_802BCB88` publishes hb3 as the terminal Chain payload while
+  // `ftColl_8007A06C` selects the grounded DamageHi/N/Lw group from the accepted DmgLog hurt
+  // height. The terminal Start payload's replay-visible KB/damage pair selects DamageLw2 even
+  // when the lite matrix scaffold also overlaps a high torso capsule, so keep the source hb3 DmgLog
+  // height low instead of letting the scaffold's higher sibling reclassify the same hit.
+  // refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007A06C}
+  return 1u;
+}
+
 static inline void combat_damage_enter_state(
     const MslCommonParams* c, MslBatch* batch, int bi, size_t d_idx,
     uint8_t defender_on_ground_before, uint8_t defender_on_ground_after, uint8_t hurt_height,
@@ -9116,6 +9369,10 @@ static inline void combat_damage_enter_state(
 
   if (hurt_height > 2u) {
     hurt_height = 2u;
+  }
+  if (combat_sheik_chain_start_terminal_owns_low_hurt_height(
+          batch, source_a_idx, source_hb_i, defender_on_ground_before, source_hb_valid)) {
+    hurt_height = 0u;
   }
 
   const uint8_t sev = force_tumble_severity ? 3u : combat_damage_severity_u8_from_kb(c, kb_applied);
@@ -10047,7 +10304,7 @@ static inline uint8_t combat_damageflytop_terminal_phantom_expiry_seed_gap(
 }
 
 static inline uint8_t combat_body_damage_producer_build(const MslBatch* batch, size_t a_idx,
-                                                        size_t hb_i, int int_dmg,
+                                                        size_t d_idx, size_t hb_i, int int_dmg,
                                                         uint16_t attacker_attack_id,
                                                         uint16_t attacker_attack_instance,
                                                         uint8_t exclude_attacker_attack_instance,
@@ -10071,14 +10328,41 @@ static inline uint8_t combat_body_damage_producer_build(const MslBatch* batch, s
                              hitcapsule_int_dmg);
 
   float stale_mult = 1.0f;
-  if (batch->state.hitbox_stale_damage_valid[hb_i] != 0u &&
-      batch->state.hitbox_stale_damage_mul[hb_i] > 0.0f) {
+  float chain_stale_mul = 1.0f;
+  const uint16_t attacker_action = batch->state.action_id[a_idx];
+  if (batch->state.char_id[a_idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+      (attacker_action == (uint16_t)MSL_ACT_SK_SPECIAL_S ||
+       attacker_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S ||
+       attacker_action == (uint16_t)MSL_ACT_SK_SPECIAL_S_START ||
+       attacker_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START ||
+       attacker_action == (uint16_t)MSL_ACT_SK_SPECIAL_S_END ||
+       attacker_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END) &&
+      batch->state.hitstun[d_idx] == 0u && batch->state.hitlag[d_idx] == 0u &&
+      sheik_chain_hitbox_stale_damage_mul(batch, a_idx, &chain_stale_mul) != 0u) {
+    // Sheik Chain HitCapsule.damage is source-frozen when the Start payload/it_802BCB88
+    // publication becomes live and persists across ftSk_SpecialS_80110BCC disable/reactivate
+    // windows. Consume the Chain-private article scalar here without publishing a generic
+    // stale-valid fighter hitbox lane or generic item stale lane. Same-source Chain re-hits during
+    // Damage hitstun stay on the existing contact/hitlist horizon path; they are already inside
+    // the prior x914 victims_1 episode and source does not reclassify that admission from this
+    // article scalar.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007ABD0
+    // refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_UpdateHitboxes
+    stale_mult = chain_stale_mul;
+  } else if (batch->state.hitbox_stale_damage_valid[hb_i] != 0u &&
+             batch->state.hitbox_stale_damage_mul[hb_i] > 0.0f) {
     stale_mult = batch->state.hitbox_stale_damage_mul[hb_i];
   } else {
-    stale_mult = (exclude_attacker_attack_instance != 0u)
-                     ? staling_multiplier_for_move_excluding_instance(batch, a_idx, out->move_id,
-                                                                      attacker_attack_instance)
-                     : staling_multiplier_for_move(batch, a_idx, out->move_id);
+    // Source fallback for runtime-published fighter HitCapsules without a latched stale scalar:
+    // ftColl_8007ABD0 passes fp->x206C_attack_instance into ft_80089228, but ft_80089118 only
+    // compares move_id while applying stale weights. attack_instance remains the duplicate
+    // suppression key for plStale updates, not a damage-scalar exclusion.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007ABD0}
+    // refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}
+    (void)attacker_attack_instance;
+    (void)exclude_attacker_attack_instance;
+    stale_mult = staling_multiplier_for_move(batch, a_idx, out->move_id);
   }
   if (stale_mult != 1.0f) {
     hb_dmg *= stale_mult;
@@ -10133,8 +10417,9 @@ static inline uint8_t combat_throw_damage_product_build(const MslBatch* batch, s
   // Throw-release producer shape:
   // - set_throw_hitbox writes HitCapsule.unk_count from the raw script damage and HitCapsule.damage
   //   through ft_80089228 at capsule creation time.
-  // - Same-instance low-throw laser contacts can later stale-queue the same attack instance; they
-  //   must not retroactively stale the already-created throw capsule.
+  // - Throw capsules are created before later same-instance throw/item contacts can stale-queue the
+  //   attack instance; preserve that creation-time scalar instead of recomputing from the
+  //   post-contact seed table.
   // refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071E04
   // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
   const int dmg_raw_i = (int)p->damage;
@@ -10226,6 +10511,17 @@ static inline uint8_t combat_body_damage_log_record(
       scratch->count >= (uint8_t)MSL_COMBAT_BODY_DAMAGE_LOG_CAP) {
     return 0u;
   }
+  if (combat_sheik_chain_terminal_same_source_episode_suppresses_body(batch, a_idx, d_idx)) {
+    return 0u;
+  }
+  const uint8_t chain_high_horizon_suppresses_body =
+      combat_sheik_chain_damageflytop_high_horizon_suppresses_body(
+          batch, msl_common_params(), a_idx, d_idx, attacker,
+          (int)(hb_i % (size_t)MSL_MAX_HITBOXES), int_dmg, batch->state.action_id[d_idx],
+          batch->state.hitbox_element[hb_i]);
+  if (chain_high_horizon_suppresses_body) {
+    return 0u;
+  }
   combat_processhit_clear_phantom_damage(batch, d_idx);
 
   // ftColl_80076ED8 writeback shape:
@@ -10235,7 +10531,7 @@ static inline uint8_t combat_body_damage_log_record(
   // - append one DmgLogEntry for later ftColl_8007A06C best-KB selection.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,inlineB2,ftColl_8007891C,ftColl_8007A06C}
   MslCombatDamageProduct prod;
-  if (!combat_body_damage_producer_build(batch, a_idx, hb_i, int_dmg, attacker_attack_id,
+  if (!combat_body_damage_producer_build(batch, a_idx, d_idx, hb_i, int_dmg, attacker_attack_id,
                                          attacker_attack_instance, exclude_attacker_attack_instance,
                                          &prod)) {
     return 0u;
@@ -11104,6 +11400,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   const uint16_t d_hl =
       combat_calc_hitlag_frames(c, damage_product.env_dmg, d_motion_id, hitlag_mul);
   const uint16_t d_hl_prev = batch->state.hitlag[d_idx];
+  const MslItemArticleParams* sheik_needle_article =
+      item_article_params_for_sheik_needle_throw_item_type(item_type);
   const uint8_t same_frame_throw_laser_item_damage_topoff =
       (lp != NULL && item_state == (uint8_t)1u &&
        (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_B ||
@@ -11114,7 +11412,18 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
        batch->state.last_hit_by[d_idx] == combat_source_port0_for_attacker(batch, a_idx, attacker))
           ? 1u
           : 0u;
-  if (d_hl != d_hl_prev) {
+  const uint8_t sheik_needle_damage_hitlag_topoff =
+      (sheik_needle_article != NULL && item_type == sheik_needle_article->needle_throw_itkind &&
+       item_state == 0u && d_hl_prev > 1u && batch->state.hitstun[d_idx] > 0u &&
+       d_motion_id == (uint16_t)MSL_ACT_DAMAGE_N_2)
+          ? 1u
+          : 0u;
+  if (sheik_needle_damage_hitlag_topoff != 0u) {
+    if (d_hl > batch->state.hitlag[d_idx]) {
+      batch->state.hitlag[d_idx] = d_hl;
+      combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+    }
+  } else if (d_hl != d_hl_prev) {
     batch->state.hitlag[d_idx] = d_hl;
     combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
   }
@@ -11371,21 +11680,42 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
       hs <= batch->state.hitstun[d_idx]) {
     item_damage_class = MSL_COMBAT_DAMAGE_TOP_OFF_MERGE;
   }
+  if (sheik_needle_damage_hitlag_topoff != 0u) {
+    item_damage_class = MSL_COMBAT_DAMAGE_TOP_OFF_MERGE;
+  }
   if (item_damage_class == MSL_COMBAT_DAMAGE_TOP_OFF_MERGE) {
-    // Same-frame throw-side state1 laser top-off:
+    // Same-damage-window item top-off:
     // - Multiple throw-side state1 articles can overlap the same already-damaged victim in one
     //   item pass. In vanilla, their HitCapsule damage contributes to the same
     //   Fighter_ProcessHit percent-temp frame, but the first accepted hit owns the Damage entry and
     //   x2088 motion-state instance.
-    // - The later article can still contribute to the ftCo_Damage_CalcVel merge. The simulator
-    //   processes items serially, so without this boundary it sees x18AC reset by the first entry
-    //   and incorrectly treats the later top-off as a fresh replace + Damage entry.
+    // - Flying Sheik Needles can likewise BODY-hit a defender whose current Damage* hitlag packet
+    //   is still live in the same middle Damage reaction. Fighter_8006A360 freezes the victim
+    //   animation/JObj packet during hitlag, and Fighter_8006CB94 still evaluates item BODY
+    //   contact; while that middle Damage packet still has multiple hitlag ticks remaining, the
+    //   later Needle contributes its already-frozen HitCapsule.damage and article callback without
+    //   replacing the existing Damage* action owner. Hi/Lw reactions and one-tick edge packets are
+    //   not suppressed here: source can still replace them with the new hit's Damage owner.
+    // - The later article can still contribute to ftCo_Damage_CalcVel. The simulator processes
+    //   items serially, so without this boundary it sees x18AC reset by the first entry and
+    //   incorrectly treats the later top-off as a fresh replace + Damage entry.
     // - ThrowB and ThrowHi share the same ftFx_Throw_Anim throw_flags_b0 item producer and state1
     //   BODY callback; ThrowLw attached-victim pulses use the separate grabbed-victim owner above.
     // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_8006CB94}
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcVel,ftCo_8008DCE0}
     // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
-    combat_damage_merge_vel_after_window(batch, d_idx, kb_x, kb_y);
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt
+    if (sheik_needle_damage_hitlag_topoff != 0u) {
+      // Hitlag-window Needles still run ftCo_Damage_CalcVel on the existing Damage packet. When
+      // fp->dmg.x18AC is inside p_ftCommonData->xFC, source replaces KB velocity even if the later
+      // same-sign vector is smaller; only the action/hitlag owner is suppressed here.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+      //   ftCo_Damage_CalcVel,ftCo_8008DCE0}
+      combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
+    } else {
+      combat_damage_merge_vel_after_window(batch, d_idx, kb_x, kb_y);
+    }
     staling_queue_update(batch, a_idx, damage_product.move_id, damage_product.attack_instance);
     combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, damage_product.move_id);
     if (item_is_illusion) {
@@ -12983,6 +13313,12 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                      combat_single_create_grounded_guardreflect_enable_edge_allows_shield(
                          batch, a_idx, d_idx, hb_i)) {
             allows = 1u;
+          } else if (!allows && combat_specialhi_frozen_guard_dense_seed_allows_live_shield(
+                                    batch, c, bi, attacker, defender, hb_id, a_idx, d_idx,
+                                    defender_iid, shield_seed_kind, hx, hy, hz, hr, shx, shy, shz,
+                                    shr, shield_desc_envelope_ready, shield_extent_bridge_active,
+                                    guard_reflect_reflectdesc_only)) {
+            allows = 1u;
           }
           if (!allows) {
             continue;
@@ -13897,6 +14233,19 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (combat_guard_reflect_final_x14_live_x18_blocks_body(batch, d_idx)) {
             continue;
           }
+          if (combat_sheik_chain_terminal_same_source_episode_suppresses_body(batch, a_idx,
+                                                                              d_idx)) {
+            continue;
+          }
+          if (combat_sheik_chain_activation_edge_same_source_suppresses_body(
+                  batch, a_idx, d_idx, attacker, hb_id, defender)) {
+            continue;
+          }
+          if (combat_sheik_chain_damageflytop_high_horizon_suppresses_body(
+                  batch, c, a_idx, d_idx, attacker, hb_id, int_dmg, defender_action,
+                  batch->state.hitbox_element[hb_i])) {
+            continue;
+          }
           if (v1_group_seen_this_pass) {
             // ftColl_80076ED8 / ftColl_80076CBC immediately register victims_1 across all active
             // HitCapsules with the same hit_group through inlineB0 / ftColl_80076808. The retained
@@ -13939,8 +14288,13 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
             continue;
           }
+          const uint8_t sheik_chain_same_source_damage_followup_admits_body =
+              combat_sheik_chain_same_source_damage_followup_admits_body(
+                  batch, c, a_idx, d_idx, attacker, hb_id, int_dmg, defender_action,
+                  batch->state.hitbox_element[hb_i]);
           if (!allows_v1_after_source_materialize && !attackairb_stale_owner_candidate &&
-              !attackairn_first_window_ignores_dense_damageflytop_latch) {
+              !attackairn_first_window_ignores_dense_damageflytop_latch &&
+              !sheik_chain_same_source_damage_followup_admits_body) {
             continue;
           }
           if (!combat_shine_start_damageair_entry_pose_allows_body_contact(
@@ -14548,6 +14902,61 @@ static inline void combat_clear_replay_shield_contact_seed_lanes(MslBatch* batch
   }
 }
 
+static inline uint8_t combat_specialhi_frozen_guard_dense_seed_allows_live_shield(
+    MslBatch* batch, const MslCommonParams* c, int bi, int attacker, int defender, int hb_id,
+    size_t a_idx, size_t d_idx, uint16_t defender_iid, uint8_t shield_seed_kind, float hx, float hy,
+    float hz, float hr, float shx, float shy, float shz, float shr,
+    uint8_t shield_desc_envelope_ready, uint8_t shield_extent_bridge_active,
+    uint8_t guard_reflect_reflectdesc_only) {
+  (void)c;
+  if (batch == NULL || shield_seed_kind != 0u || guard_reflect_reflectdesc_only != 0u) {
+    return 0u;
+  }
+  if (batch->replay_reseed_frame_active == NULL || batch->replay_reseed_frame_active[bi] == 0u ||
+      (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u)) {
+    return 0u;
+  }
+  if (!msl_motion_state_class_has(batch->state.char_id[a_idx], batch->state.action_id[a_idx],
+                                  MSL_MS_CLASS_SPECIALHI)) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD ||
+      batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD ||
+      batch->state.action_frame[d_idx] >= 0 || batch->state.animation_index[d_idx] != 0xFFFFFFFFu ||
+      batch->state.anim_frame_f32[d_idx] >= 0.0f) {
+    return 0u;
+  }
+  if (batch->state.hitlag[a_idx] != 0u || batch->state.hitlag[d_idx] != 0u ||
+      batch->state.hitstun[a_idx] != 0u || batch->state.hitstun[d_idx] != 0u || !(shr > 0.0f)) {
+    return 0u;
+  }
+  if (!hitlist_allows_fighter_live_collision(batch, bi, attacker, hb_id, defender, defender_iid)) {
+    return 0u;
+  }
+  if (!combat_shield_overlap_ftcoll_80007bcc(
+          batch, bi, attacker, defender, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
+          /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
+          shield_desc_envelope_ready, shield_extent_bridge_active, NULL)) {
+    return 0u;
+  }
+
+  // Exact one-step reseed dense HitCapsule stale trim for SpecialHi -> frozen Guard shield hits:
+  // - ftColl_80078C70 gates each HitCapsule through lbColl_8000ACFC, then performs live
+  //   ShieldDesc narrowphase through lbColl_80007BCC before ftColl_80076CBC.
+  // - The legacy dense group seed can only say "some hit_group victim existed"; it cannot prove
+  //   this exact SpecialHi HitCapsule's victims_1 list still owns suppression after a neutral
+  //   frozen-Guard no-submotion snapshot with no hitlag/hitstun.
+  // - Replay-seeded rollouts are excluded: once the rollout owns live prior-frame HitCapsule
+  //   history, the dense entry is no longer a standalone one-step seed-bridge proof.
+  // - Exact/live/per-HitCapsule victims_1 entries remain authoritative because
+  //   hitlist_allows_fighter_live_collision ignores only MSL_HITLIST_FIGHTER_ID32_SEED_DENSE and
+  //   still rejects concrete source-owned entries.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_800768A0}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80007BCC}
+  // data/motion_state/owners/*.bin (MSLMSO01 MSL_MS_CLASS_SPECIALHI)
+  return 1u;
+}
+
 void combat_resolve(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -14796,6 +15205,13 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
           if (!allows && shield_seed_kind == 2u) {
+            allows = 1u;
+          } else if (!allows &&
+                     combat_specialhi_frozen_guard_dense_seed_allows_live_shield(
+                         batch, c, bi, attacker, defender, hb_id, a_idx, d_idx, defender_iid,
+                         shield_seed_kind, out->hitbox_x, out->hitbox_y, out->hitbox_z,
+                         out->hitbox_radius, shx, shy, shz, shr, shield_desc_envelope_ready,
+                         shield_extent_bridge_active, guard_reflect_reflectdesc_only)) {
             allows = 1u;
           }
           out->hitlist_allows = allows ? 1u : 0u;

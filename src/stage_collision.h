@@ -277,6 +277,8 @@ int stage_collision_fighter_floor_line_index(uint32_t stage_id, uint16_t segment
 uint8_t stage_collision_floor_line_caps(uint32_t stage_id, uint16_t segment_i,
                                         MslStageFloorLineCaps* out);
 uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segment_i);
+uint8_t stage_collision_floor_line_is_ledge(uint32_t stage_id, uint16_t segment_i);
+uint8_t stage_collision_floor_line_is_sloped(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_stage_object_support_kind(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_flat_between_sloped_ledges(uint32_t stage_id,

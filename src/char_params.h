@@ -423,6 +423,11 @@ typedef struct MslCharParams {
   float sheik_transform_air_gravity;
   float sheik_transform_air_terminal_vel;
   float sheik_transform_finish_start_frame;
+  float zelda_transform_vel_x_divisor;
+  float zelda_transform_vel_y_divisor;
+  float zelda_transform_air_gravity;
+  float zelda_transform_air_terminal_vel;
+  float zelda_transform_finish_start_frame;
 } MslCharParams;
 
 int char_params_init(void);

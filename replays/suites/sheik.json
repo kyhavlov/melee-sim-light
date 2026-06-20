@@ -1,6 +1,6 @@
 {
   "name": "sheik",
-  "notes": "Official Sheik training/eval suite from SlippiLab plus the local sheik_demo_game webplay specials fixture. Human singles, supported legal stages, UCF enabled, frozen Pokemon Stadium only, supported characters only, and no Zelda transform episodes under the Stage 0 policy.",
+  "notes": "Official Sheik training/eval suite from SlippiLab plus local Sheik demo webplay specials fixtures. Human singles, supported legal stages, UCF enabled, frozen Pokemon Stadium only, supported characters only. sheik_demo_game_2 includes bounded Sheik/Zelda transform spans for the demo-visible Down-B handoff.",
   "replays": [
     {
       "characters": {
@@ -228,6 +228,18 @@
         2
       ],
       "replay": "replays/validation/sheik/sheik_demo_game.slpz",
+      "stage_id": 31
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "2": "Marth"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/validation/sheik/sheik_demo_game_2.slpz",
       "stage_id": 31
     }
   ],

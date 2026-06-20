@@ -954,6 +954,7 @@ def _ftkind(character: str) -> int:
         "peach": 0x09,
         "marth": 0x12,
         "falco": 0x16,
+        "zelda": 0x13,
     }[character]
 
 
@@ -966,6 +967,7 @@ def _fighter_prefix(character: str) -> str:
         "marth": "PlMs",
         "puff": "PlPr",
         "falcon": "PlCa",
+        "zelda": "PlZd",
     }[character]
 
 
@@ -978,6 +980,7 @@ def _ftdata_symbol(character: str) -> str:
         "marth": "ftDataMars",
         "puff": "ftDataPurin",
         "falcon": "ftDataCaptain",
+        "zelda": "ftDataZelda",
     }[character]
 
 
@@ -990,10 +993,11 @@ def _ftdata_xc_count(character: str) -> int:
     """
     # Values are ftData_Table_Unk0[internal_id].count from refs/melee/src/melee/ft/ftdata.c
     # (FTKIND_MAX rows indexed by FighterKind): fox=row 1, sheik=row 7, marth=row 18,
-    # falco=row 22.
+    # zelda=row 19, falco=row 22.
     return {
         "fox": 327,
         "sheik": 317,
+        "zelda": 311,
         "falco": 327,
         "marth": 327,
     }[character]
@@ -1129,6 +1133,7 @@ def _default_costume_dat_and_joint(character: str) -> tuple[str, str]:
         "marth": ("PlMsNr.dat", "PlyMars5K_Share_joint"),
         "puff": ("PlPrNr.dat", "PlyPurin5K_Share_joint"),
         "falcon": ("PlCaNr.dat", "PlyCaptain5K_Share_joint"),
+        "zelda": ("PlZdNr.dat", "PlyZelda5K_Share_joint"),
     }[character]
 
 
@@ -1733,7 +1738,7 @@ def extract_one_character(
     global _TIMINGS
     prev_timings = _TIMINGS
     _TIMINGS = _Timings() if timings else None
-    if character not in {"fox", "falco", "sheik", "peach", "marth", "puff", "falcon"}:
+    if character not in {"fox", "falco", "sheik", "peach", "marth", "puff", "falcon", "zelda"}:
         _TIMINGS = prev_timings
         raise SystemExit(f"unsupported character {character!r}")
 
@@ -2423,7 +2428,7 @@ def extract_one_character(
 def main() -> None:
     global DATA_DIR, ISO_DIR
     ap = argparse.ArgumentParser(description="Extract per-move fighter bone matrices from FigaTree animations (decomp-first).")
-    ap.add_argument("--character", type=str, required=True, help="one of: fox,falco,sheik,peach,marth,puff,falcon")
+    ap.add_argument("--character", type=str, required=True, help="one of: fox,falco,sheik,peach,marth,puff,falcon,zelda")
     ap.add_argument("--moves", type=Path, default=None, help="path to data/moves/<character>.json (default inferred)")
     ap.add_argument("--data-dir", type=Path, default=Path("data"), help="directory containing generated character metadata")
     ap.add_argument("--iso-dir", type=Path, default=Path("_iso"), help="directory containing extracted Pl*.dat files")

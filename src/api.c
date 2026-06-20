@@ -532,14 +532,15 @@ static inline uint8_t reseed_seeded_laser_stale_damage_owner(const MslBatch* bat
 }
 
 static inline uint8_t reseed_seeded_sheik_needle_stale_damage_owner(const MslBatch* batch, int bi,
+                                                                    const MslSeed* seed,
                                                                     const MslItem* item,
                                                                     uint16_t item_attack_id,
                                                                     float* out_stale_mul) {
   if (out_stale_mul != NULL) {
     *out_stale_mul = 1.0f;
   }
-  if (batch == NULL || item == NULL || out_stale_mul == NULL || item->exists == 0u ||
-      item->owner < 0 || item->owner >= (int8_t)batch->config.num_players ||
+  if (batch == NULL || seed == NULL || item == NULL || out_stale_mul == NULL ||
+      item->exists == 0u || item->owner < 0 || item->owner >= (int8_t)batch->config.num_players ||
       item_attack_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT || item->attack_instance == 0u) {
     return 0u;
   }
@@ -554,6 +555,36 @@ static inline uint8_t reseed_seeded_sheik_needle_stale_damage_owner(const MslBat
   const float mul = reseed_staling_multiplier_before_latest_instance(
       batch, owner_idx, item_attack_id, item->attack_instance, &valid);
   if (valid == 0u || !(mul > 0.0f)) {
+    return 0u;
+  }
+  const float recent_spawn_cutoff =
+      (ap->needle_lifetime_frames > 6u) ? (float)(ap->needle_lifetime_frames - 6u) : 0.0f;
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const MslItem* other = &seed->items[it];
+    if (other == item || other->exists == 0u || other->owner != item->owner ||
+        other->type != item->type || other->attack_id != item->attack_id ||
+        other->attack_instance != item->attack_instance || other->spawn_id >= item->spawn_id) {
+      continue;
+    }
+    if (other->state == 0u) {
+      continue;
+    }
+    if (!(item->timer > recent_spawn_cutoff)) {
+      continue;
+    }
+    // A lower-spawn same-volley Needle that is still published in a post-contact state is concrete
+    // replay-visible provenance that a just-spawned candidate Needle's HitCapsule was created after
+    // a same attack-instance stale insert. Bound "just-spawned" by the source six-frame
+    // shootNeedles cadence and the extracted thrown-Needle lifetime; older live Needles can predate
+    // the stale insert and still need the rewind above. Do not rewind the latest stale-table entry
+    // for the later article; the ordinary live stale lookup reconstructs the source-frozen
+    // HitCapsule.damage.
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialNEnd_Anim
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::shootNeedles
+    // refs/melee/src/melee/it/itanimlist.c::it_802790C0
+    // refs/melee/src/melee/it/itcoll.c::it_80272460
+    // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+    // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
     return 0u;
   }
   // Seeded live thrown-Needle HitCapsule.damage:
@@ -3179,14 +3210,17 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // refs/melee/src/melee/ft/chara/ftSeak/{types.h,ftSk_SpecialHi.c,ftSk_SpecialN.c,
       //   ftSk_SpecialS.c}
       batch->state.sheik_needle_count[idx] = seed->sheik_needle_count_u8[p];
+      batch->state.zelda_twin_state_flags_2218[idx] = seed->zelda_twin_state_flags_2218_u8[p];
       if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_SHEIK &&
           msl_seed_action_is_sheik_chain(seed->action_id[p])) {
         batch->state.sheik_special_timer[idx] = seed->sheik_chain_x0_u8[p];
+        batch->state.sheik_special_timer_frame_start[idx] = seed->sheik_chain_x0_u8[p];
         batch->state.sheik_special_latch[idx] = seed->sheik_chain_release_latch_u8[p] ? 1u : 0u;
       } else {
         batch->state.sheik_special_timer[idx] = seed->sheik_needle_specialn_timer_u8[p] != 0u
                                                     ? seed->sheik_needle_specialn_timer_u8[p]
                                                     : seed->sheik_vanish_travel_timer_u8[p];
+        batch->state.sheik_special_timer_frame_start[idx] = batch->state.sheik_special_timer[idx];
         batch->state.sheik_special_latch[idx] = 0u;
       }
       {
@@ -3459,6 +3493,34 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     for (int it = 0; it < MSL_MAX_ITEMS; it++) {
       const size_t ii = msl_idx_item(bi, it);
       const MslItem* item = &seed->items[it];
+      const MslItemArticleParams* sheik_ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+      const uint16_t sheik_chain_itkind = (sheik_ap != NULL) ? sheik_ap->sheik_chain_itkind : 0u;
+      const uint8_t old_live_chain =
+          (sheik_chain_itkind != 0u && batch->state.item_exists[ii] != 0u &&
+           batch->state.item_type[ii] == sheik_chain_itkind)
+              ? 1u
+              : 0u;
+      const uint8_t seed_live_chain =
+          (sheik_chain_itkind != 0u && item->exists != 0u && item->type == sheik_chain_itkind) ? 1u
+                                                                                               : 0u;
+      const uint8_t same_chain_identity = (old_live_chain != 0u && seed_live_chain != 0u &&
+                                           batch->state.item_owner[ii] == item->owner &&
+                                           batch->state.item_instance_id[ii] == item->instance_id &&
+                                           batch->state.item_spawn_id[ii] == item->spawn_id)
+                                              ? 1u
+                                              : 0u;
+      if (same_chain_identity == 0u) {
+        // Reseed is a source boundary for Sheik Chain's ItemLink/x2C_b0 frontier and fighter-hitcap
+        // publication cache when the public item identity is absent or replaced. Slippi exposes the
+        // article identity/state/timer, not the Chain's `ItemLink` array or `it_802BCB88`
+        // HitCapsule map, so a reused rollout handle must not carry private hitcaps from an older
+        // slot into a seed with no matching Chain article. If the same public Chain article remains
+        // live, keep the hidden link state: that is the source article continuation produced by the
+        // rollout prefix, while same-source victim cooldown is handled by ftColl/hitlist owners.
+        // refs/melee/src/melee/it/items/itseakchain.c::{it_802BAF2C,it_802BBD64,it_802BC080,
+        //   it_802BCB88}
+        items_reseed_clear_sheik_chain_hidden_slot(batch, ii);
+      }
       batch->state.item_exists[ii] = item->exists;
       batch->state.item_state[ii] = item->state;
       batch->state.item_type[ii] = item->type;
@@ -3484,8 +3546,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       if (reseed_seeded_laser_stale_damage_owner(batch, bi, seed, item,
                                                  batch->state.item_attack_id[ii],
                                                  &seeded_item_stale_mul) != 0u ||
-          reseed_seeded_sheik_needle_stale_damage_owner(
-              batch, bi, item, batch->state.item_attack_id[ii], &seeded_item_stale_mul) != 0u) {
+          reseed_seeded_sheik_needle_stale_damage_owner(batch, bi, seed, item,
+                                                        batch->state.item_attack_id[ii],
+                                                        &seeded_item_stale_mul) != 0u) {
         batch->state.item_stale_damage_valid[ii] = 1u;
         batch->state.item_stale_damage_mul[ii] = seeded_item_stale_mul;
       }

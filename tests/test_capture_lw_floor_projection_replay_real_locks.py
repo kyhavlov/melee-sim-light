@@ -9,6 +9,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 ACT_WAIT = 0x000E
+ACT_DASH = 0x0014
 SM_WAIT1_0 = 2
 ACT_ATTACK_HI4 = 0x003F
 ACT_CAPTURE_PULLED_LW = 0x00E2
@@ -20,6 +21,7 @@ ACT_DAMAGE_FLY_N = 0x0058
 ACT_DAMAGE_FLY_TOP = 0x005A
 ACT_CAPTURE_PULLED_HI = 0x00DF
 ACT_FX_SPECIAL_AIR_LW_LOOP = 0x016E
+STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -144,6 +146,99 @@ def _run_rollout_records(
         return out_by_record
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_capturepulledlw_preserves_source_allow_interrupt_flag_dhh() -> None:
+    # Low-pulled capture keeps the interrupted source fp+0x2218 allow_interrupt bit visible through
+    # CapturePulledLw. The Dash->CapturePulledHi clear is a narrower high-pulled owner and must not
+    # erase the low-pulled lane.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CapturePulledHi_Anim,ftCo_CapturePulledLw_Anim}
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 -> state_flags[0])
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _aggregate_validation_dataset_path(root, "marth", "DraftyHealthyHare.msl")
+
+    seed_4593, ref_4593, out_4593 = _run_one_step_seed(dataset_path, 4593)
+    seed_4594, ref_4594, out_4594 = _run_one_step_seed(dataset_path, 4594)
+
+    assert int(seed_4593["action_id"][0]) == ACT_DASH
+    assert int(out_4593["action_id"][0]) == int(ref_4593["action_id"][0]) == ACT_CAPTURE_PULLED_LW
+    assert int(seed_4594["action_id"][0]) == ACT_CAPTURE_PULLED_LW
+    assert int(out_4594["action_id"][0]) == int(ref_4594["action_id"][0]) == ACT_CAPTURE_PULLED_LW
+    assert int(out_4593["state_flags"][0, 0]) & STATE_FLAG_2218_ALLOW_INTERRUPT
+    assert int(out_4594["state_flags"][0, 0]) & STATE_FLAG_2218_ALLOW_INTERRUPT
+    assert out_4593["state_flags"][0].tolist() == ref_4593["state_flags"][0].tolist()
+    assert out_4594["state_flags"][0].tolist() == ref_4594["state_flags"][0].tolist()
+
+    lim_path = _aggregate_validation_dataset_path(root, "yoshis_story_recent", "LawfulInsistentMeerkat.msl")
+    seed_lim, ref_lim, out_lim = _run_one_step_seed(lim_path, 2449)
+    assert int(seed_lim["action_id"][0]) == ACT_DASH
+    assert int(out_lim["action_id"][0]) == int(ref_lim["action_id"][0]) == ACT_CAPTURE_PULLED_LW
+    assert int(seed_lim["state_flags"][0, 0]) & STATE_FLAG_2218_ALLOW_INTERRUPT
+    assert int(ref_lim["state_flags"][0, 0]) == 0x20
+    assert out_lim["state_flags"][0].tolist() == ref_lim["state_flags"][0].tolist()
+
+
+@pytest.mark.integration
+def test_capturepulledlw_floor_loss_handoff_uses_stage_line_and_vertical_carry_discriminators() -> None:
+    # CapturePulledLw floor-loss callback boundary:
+    # - Main-floor rows can have sparse compact floor probes after the replay-visible capture anchor
+    #   delta; they must stay grounded PulledLw when source CollData floor ownership remains valid.
+    # - Carried platform/ledge floors, or a source-visible vertical carry above p_ftCommonData->x3C4,
+    #   can enter the airborne PulledHi callback when the source floor mask is gone.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CapturePulledLw_Phys,ftCo_CapturePulledLw_Coll,fn_800DB230}
+    # data/stages/bin/*.bin::MSLSTG01 segment.{platform,ledge}
+    # data/common/ft_common_data.json::capture_pulled_lw_air_delta_y
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    cases = [
+        (
+            _aggregate_validation_dataset_path(root, "marth", "ExtraLargeScaryHornet.msl"),
+            440,
+            1,
+            ACT_CAPTURE_PULLED_LW,
+            "Pokemon Stadium main floor keeps PulledLw",
+        ),
+        (
+            _aggregate_validation_dataset_path(root, "marth", "ExtraLargeScaryHornet.msl"),
+            540,
+            0,
+            ACT_CAPTURE_PULLED_LW,
+            "Pokemon Stadium main floor keeps PulledLw with CatchWait owner",
+        ),
+        (
+            _aggregate_validation_dataset_path(root, "marth", "InternalPowerlessWallaby.msl"),
+            7312,
+            0,
+            ACT_CAPTURE_PULLED_HI,
+            "Fountain carried vertical separation enters PulledHi",
+        ),
+        (
+            _aggregate_validation_dataset_path(root, "marth", "MetallicUniqueGrouse.msl"),
+            2274,
+            0,
+            ACT_CAPTURE_PULLED_HI,
+            "Yoshi ledge floor-loss enters PulledHi",
+        ),
+        (
+            root / "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl",
+            3836,
+            1,
+            ACT_CAPTURE_PULLED_HI,
+            "Pokemon Stadium platform floor-loss enters PulledHi",
+        ),
+    ]
+    for dataset_path, record, p, expected_action, note in cases:
+        seed, ref, out = _run_one_step_seed(dataset_path, record)
+        assert int(seed["action_id"][p]) == ACT_CAPTURE_PULLED_LW, note
+        assert int(ref["action_id"][p]) == expected_action, note
+        assert int(out["action_id"][p]) == int(ref["action_id"][p]), note
+        assert int(out["on_ground"][p]) == int(ref["on_ground"][p]), note
+        assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p]), note
 
 
 @pytest.mark.integration

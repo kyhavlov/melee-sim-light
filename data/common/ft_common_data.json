@@ -30,6 +30,7 @@
   "capture_grab_timer_slot_mul": 15.0,
   "capture_jump_escape_speed_x": 1.0,
   "capture_jump_escape_speed_y": 2.0,
+  "capture_pulled_lw_air_delta_y": 5.0,
   "capture_wait_anim_rate": 2.0,
   "capture_wait_anim_rate_hold_frames": 10.0,
   "capture_wait_grab_mash_damage": 6.0,

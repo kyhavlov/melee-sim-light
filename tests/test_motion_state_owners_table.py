@@ -768,6 +768,36 @@ def test_sheik_chain_motion_state_callbacks_publish_source_collision_owners() ->
         assert has(action_id, CLASS_FT800827A0_EDGE_SNAP_COLL)
 
 
+@pytest.mark.integration
+def test_sheik_needle_motion_state_callbacks_publish_source_collision_owners() -> None:
+    sheik = read_mslmso01_v1(SHEIK)
+    symbols = read_callback_manifest(MANIFEST)
+
+    def cb_name(action_id: int, lane: str) -> str:
+        cb_id = getattr(sheik, f"{lane}_cb_id")[action_id]
+        return symbols[int(cb_id)]
+
+    def has(action_id: int, bit: int) -> bool:
+        return bool(int(sheik.class_bits[action_id]) & bit)
+
+    # Aerial Needle Start/Loop/Cancel callbacks call ft_80081D0C directly before their grounded
+    # handoff; End uses ft_80082708 and is therefore a separate landing owner.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    #   ftSk_SpecialAirNStart_Coll,ftSk_SpecialAirNLoop_Coll,ftSk_SpecialAirNCancel_Coll,
+    #   ftSk_SpecialAirNEnd_Coll}
+    for action_id, coll_cb in (
+        (0x0159, "ftSk_SpecialAirNStart_Coll"),
+        (0x015A, "ftSk_SpecialAirNLoop_Coll"),
+        (0x015B, "ftSk_SpecialAirNCancel_Coll"),
+    ):
+        assert cb_name(action_id, "coll") == coll_cb
+        assert has(action_id, CLASS_FT80081D0C_AIR_COLL)
+        assert not has(action_id, CLASS_FT80083090_PLATFORM_PASS_COLL)
+
+    assert cb_name(0x015C, "coll") == "ftSk_SpecialAirNEnd_Coll"
+    assert not has(0x015C, CLASS_FT80081D0C_AIR_COLL)
+
+
 def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actions() -> None:
     fox = read_mslmso01_v1(FOX)
     falco = read_mslmso01_v1(FALCO)

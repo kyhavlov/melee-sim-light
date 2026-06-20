@@ -24,7 +24,12 @@ pytest.importorskip("msl_binding")
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset  # noqa: E402
 
 DATASET = Path("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
-DEMO_DATASET = Path("datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl")
+DEMO_DATASET = Path(
+    "datasets/sheik_demo_triage/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+)
+DEMO2_FULL_DATASET = Path(
+    "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+)
 ZESTY_DATASET = Path("datasets/sheik/replays/validation/sheik/ZestyPreciousTurtle.msl")
 TENSE_DATASET = Path("datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl")
 P_MARTH = 1
@@ -339,6 +344,58 @@ def test_sheik_demo_thrown_needle_active_hitlag_body_uses_frozen_low_hurtcap() -
     assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 4
     assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
     assert float(out["percent"][P_MARTH]) == pytest.approx(6.0)
+
+
+@pytest.mark.integration
+def test_sheik_demo2_needle_hitlag_handoff_replaces_hi_reaction_adjacent_negative() -> None:
+    # In the second Sheik demo, the next thrown Needle hits Marth while the previous Needle's
+    # DamageHi packet is still in hitlag. Source item BODY processing is still allowed to replace
+    # that Hi reaction with the new DamageN owner; this guards the later top-off rule from
+    # suppressing all hitlag-window Needle contacts.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_8006CB94}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_8007A06C}
+    seed, ref, out = _run_row(5485, dataset=DEMO2_FULL_DATASET)
+
+    assert int(seed["items"]["type"][0]) == ITEM_NEEDLE_THROWN
+    assert int(seed["items"]["state"][0]) == 0
+    assert int(seed["action_id"][P_MARTH]) == 76
+    assert int(seed["hitlag"][P_MARTH]) == 2
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 79
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 4
+    assert int(out["hitstun"][P_MARTH]) == int(ref["hitstun"][P_MARTH]) == 13
+    assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
+    assert float(out["percent"][P_MARTH]) == pytest.approx(35.1)
+
+
+@pytest.mark.integration
+def test_sheik_demo2_later_needle_topoffs_damage_hitlag_with_staled_damage() -> None:
+    # The following Needle in that volley is a later-spawn same-attack article. A visible lower
+    # spawn in post-contact state plus the stale table proves this Needle's source HitCapsule.damage
+    # was frozen after the earlier stale insert, so the row takes 0.91x damage. Because Marth is
+    # already in the same DamageN hitlag packet, the later article contributes percent and its
+    # callback without replacing action/hitlag with a fresh Damage entry.
+    # refs/melee/src/melee/it/itanimlist.c::it_802790C0
+    # refs/melee/src/melee/it/itcoll.c::it_80272460
+    # refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+    # refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+    seed, ref, out = _run_row(5487, dataset=DEMO2_FULL_DATASET)
+
+    assert int(seed["items"]["type"][1]) == ITEM_NEEDLE_THROWN
+    assert int(seed["items"]["state"][1]) == 0
+    assert int(seed["items"]["state"][0]) == 4
+    assert int(seed["action_id"][P_MARTH]) == 79
+    assert int(seed["hitlag"][P_MARTH]) == 3
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 79
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 3
+    assert int(out["hitstun"][P_MARTH]) == int(ref["hitstun"][P_MARTH]) == 13
+    assert float(out["percent"][P_MARTH]) == pytest.approx(float(ref["percent"][P_MARTH]))
+    assert float(out["percent"][P_MARTH]) == pytest.approx(37.83)
+    assert float(out["speed_x_attack"][P_MARTH]) == pytest.approx(
+        float(ref["speed_x_attack"][P_MARTH]), abs=1e-6
+    )
+    assert abs(float(out["speed_x_attack"][P_MARTH])) < abs(float(seed["speed_x_attack"][P_MARTH]))
 
 
 @pytest.mark.integration

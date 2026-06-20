@@ -972,8 +972,8 @@ none are retained as validation safety.
 
 | Kind | Exact guard name(s) |
 | --- | --- |
-| Reject bit | `MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE`, `MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR` |
-| Suppression | `suppress_active_damage_hitlag_bottom_above_floor_land`, `suppress_active_damage_hitlag_land`, `suppress_damage_transformed_platform_ecb_only_land`, `suppress_damageair_attackair_entry_land`, `suppress_damageflyroll_below_floor_active_hitlag_land`, `suppress_damageflyroll_hitlag_exit_floor_land`, `suppress_damageflyroll_shallow_land` |
+| Reject bit | `MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE`, `MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR`, `MSL_MPCOLL_REJECT_DAMAGE_SUSTAINED_PLATFORM_NO_BOTTOM_SWEEP` |
+| Suppression | `suppress_active_damage_hitlag_bottom_above_floor_land`, `suppress_active_damage_hitlag_land`, `suppress_damage_sustained_platform_without_bottom_sweep`, `suppress_damage_transformed_platform_ecb_only_land`, `suppress_damageair_attackair_entry_land`, `suppress_damageflyroll_below_floor_active_hitlag_land`, `suppress_damageflyroll_hitlag_exit_floor_land`, `suppress_damageflyroll_shallow_land` |
 
 #### Phase 5 Owner Accounting: Fall / FallSpecial
 

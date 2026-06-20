@@ -852,8 +852,15 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftSeak/types.h::ftSeak_FighterVars/ftSeak_MotionVars
   uint8_t* sheik_needle_count;   // fv.sk.x0, clamped 0..6
   uint8_t* sheik_special_timer;  // mv.sk.special{n,s,hi}.x0 compact timer
+  uint8_t* sheik_special_timer_frame_start;
   uint8_t* sheik_special_latch;  // release / per-action latch
   uint8_t* sheik_vanish_smoke_accessory_pending;
+  // Hidden Zelda twin fp+0x2218 byte for bounded Sheik/Zelda transform support. Source transform
+  // activates the same-player hidden twin through ftCommon_8007EFC8; Slippi only exposes the
+  // currently visible fighter, so one-step reseed carries the inactive Zelda twin byte explicitly.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::fn_8011412C
+  uint8_t* zelda_twin_state_flags_2218;
   float* sheik_chain_pose_angle;  // mv.sk.specials.x18 (ftSk_SpecialS_80110490)
   float* sheik_chain_pose_mag;    // mv.sk.specials.x14 (ftSk_SpecialS_80110490)
   // fp->lstick_angle for special launch tilt (Dolphin Slash); ftMars_FighterVars.x222C
@@ -1493,21 +1500,24 @@ typedef struct MslStateSoA {
   uint8_t* item_sheik_chain_hitbox_link_idx;  // [batch * MSL_MAX_ITEMS * MSL_MAX_HITBOXES]
   uint8_t* item_sheik_chain_hitcaps_active;   // [batch * MSL_MAX_ITEMS]
   uint8_t* item_sheik_chain_hit_cooldown;     // [batch * MSL_MAX_ITEMS] (mv.sk.specials.x1C)
+  uint8_t* item_sheik_chain_hit_grace;        // [batch * MSL_MAX_ITEMS] (mv.sk.specials.x20)
   uint8_t* item_sheik_chain_hit_reset_prev;   // [batch * MSL_MAX_ITEMS] (ZeroHitboxPositions edge)
   uint8_t* item_sheik_chain_hit_prev_valid;   // [batch * MSL_MAX_ITEMS]
-  uint32_t* item_sheik_chain_env_flags;       // [batch * MSL_MAX_ITEMS] (seakchain.x10)
-  float* item_sheik_chain_hit_prev_x;         // [batch * MSL_MAX_ITEMS * MSL_MAX_HITBOXES]
-  float* item_sheik_chain_hit_prev_y;         // [batch * MSL_MAX_ITEMS * MSL_MAX_HITBOXES]
-  uint8_t* item_sheik_chain_target_valid;     // [batch * MSL_MAX_ITEMS]
-  float* item_sheik_chain_target_x;           // [batch * MSL_MAX_ITEMS]
-  float* item_sheik_chain_target_y;           // [batch * MSL_MAX_ITEMS]
-  float* item_sheik_chain_target_z;           // [batch * MSL_MAX_ITEMS]
-  float* item_sheik_chain_link_pos_x;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
-  float* item_sheik_chain_link_pos_y;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
-  float* item_sheik_chain_link_pos_z;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
-  float* item_sheik_chain_link_vel_x;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
-  float* item_sheik_chain_link_vel_y;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
-  float* item_sheik_chain_link_vel_z;         // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  uint8_t* item_sheik_chain_stale_damage_valid;  // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_chain_stale_damage_mul;      // [batch * MSL_MAX_ITEMS]
+  uint32_t* item_sheik_chain_env_flags;          // [batch * MSL_MAX_ITEMS] (seakchain.x10)
+  float* item_sheik_chain_hit_prev_x;            // [batch * MSL_MAX_ITEMS * MSL_MAX_HITBOXES]
+  float* item_sheik_chain_hit_prev_y;            // [batch * MSL_MAX_ITEMS * MSL_MAX_HITBOXES]
+  uint8_t* item_sheik_chain_target_valid;        // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_chain_target_x;              // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_chain_target_y;              // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_chain_target_z;              // [batch * MSL_MAX_ITEMS]
+  float* item_sheik_chain_link_pos_x;    // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_pos_y;    // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_pos_z;    // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_vel_x;    // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_vel_y;    // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
+  float* item_sheik_chain_link_vel_z;    // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_MAX_LINKS]
   float* item_sheik_chain_history_x;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_HISTORY_LEN]
   float* item_sheik_chain_history_y;     // [batch * MSL_MAX_ITEMS * MSL_SHEIK_CHAIN_HISTORY_LEN]
   float* item_sheik_chain_prev_stick_x;  // [batch * MSL_MAX_ITEMS] (owner lstick1 analogue)

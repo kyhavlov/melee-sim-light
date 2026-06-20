@@ -130,6 +130,10 @@ typedef struct MslCommonParams {
   float capture_wait_jump_latch_window_frames;  // p_ftCommonData->x3AC
   float capture_wait_anim_rate_hold_frames;     // p_ftCommonData->x3B0
   float capture_wait_anim_rate;                 // p_ftCommonData->x3B4
+  // CapturePulledLw grounded-to-air handoff threshold.
+  // Decomp: ftCo_CapturePulledLw_Phys compares hidden capture-anchor delta dy against
+  // `p_ftCommonData->x3C4 * fp->x34_scale.y`.
+  float capture_pulled_lw_air_delta_y;  // p_ftCommonData->x3C4
   // Common grab/capture breakout timer formula + exit velocities.
   // Decomp:
   // - ftCo_800DA824 computes the initial grab timer from x354/x358/x35C/x360/x364/x368.

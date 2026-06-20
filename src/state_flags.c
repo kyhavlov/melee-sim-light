@@ -824,15 +824,20 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
         }
       }
-      if (action_id >= (uint16_t)MSL_ACT_CAPTURE_PULLED_HI &&
-          action_id <= (uint16_t)MSL_ACT_CAPTURE_PULLED_LW &&
+      const uint8_t capture_pulled_lw_b2_clear_owner =
+          (action_id == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW &&
+           (f2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u)
+              ? 1u
+              : 0u;
+      if ((action_id == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI ||
+           capture_pulled_lw_b2_clear_owner != 0u) &&
           (prev_action == (uint16_t)MSL_ACT_DASH ||
            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_DASH)) {
         // Dash -> CapturePulled allow_interrupt clear:
-        // CapturePulled{Hi,Lw} carries command bits such as x2218_b2 from the pulled source path,
-        // but the Dash-interrupted destination does not own fp->allow_interrupt. Clear only
-        // x2218_b0 for that Dash entry owner; other CapturePulled rows can carry source 0x80 from
-        // their interrupted motion/callback lane.
+        // CapturePulledHi, and CapturePulledLw rows that already carry x2218_b2, carry command
+        // bits from the pulled source path while the destination does not own fp->allow_interrupt.
+        // Clear only x2218_b0 for that pulled-source owner. CapturePulledLw rows without x2218_b2
+        // can still carry source 0x80 from their interrupted motion/callback lane.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
         //   ftCo_CapturePulledHi_Anim,ftCo_CapturePulledLw_Anim}
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState

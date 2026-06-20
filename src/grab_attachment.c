@@ -6,8 +6,10 @@
 #include "anim_timebase.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "mpcoll_ground.h"
 #include "move_tables.h"
 #include "mtx34.h"
+#include "stage_collision.h"
 
 // Fighter_Part ids (GALE01).
 // Source of truth: refs/melee/src/melee/ft/forward.h::Fighter_Part.
@@ -621,9 +623,85 @@ void grab_attachment_apply_capture_delta_now(MslBatch* batch, int bi, int victim
   }
 
   // Decomp-shaped application: `cur_pos += (sp20 - sp2c)` in world space.
-  batch->state.pos_x[vidx] += ax - vx;
-  batch->state.pos_y[vidx] += ay - vy;
-  batch->state.pos_z[vidx] += az - vz;
+  const float dx = ax - vx;
+  const float dy = ay - vy;
+  const float dz = az - vz;
+  batch->state.pos_x[vidx] += dx;
+  batch->state.pos_y[vidx] += dy;
+  batch->state.pos_z[vidx] += dz;
+}
+
+static void capture_pulled_lw_try_air_handoff_after_delta(MslBatch* batch, int bi, int victim_p,
+                                                          int owner_p, float pre_victim_y) {
+  if (batch == NULL) {
+    return;
+  }
+  const size_t vidx = msl_idx_player(bi, victim_p);
+  if (batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_LW ||
+      batch->state.on_ground[vidx] == 0u) {
+    return;
+  }
+  MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx],
+                                           batch->state.pos_x[vidx]};
+  uint8_t floor_mask = mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result);
+  if (floor_mask == 0u && batch->state.ground_id[vidx] != 0xFFFFu) {
+    floor_mask = mpcoll_800477e0_capture_root_floor_mask_probe(batch, vidx, &floor_result);
+  }
+  if (floor_mask != 0u) {
+    return;
+  }
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const uint16_t ground_id = batch->state.ground_id[vidx];
+  uint8_t source_floor_loss_ok = 0u;
+  if (ground_id != 0xFFFFu) {
+    const size_t oidx = msl_idx_player(bi, owner_p);
+    const uint8_t owner_on_same_floor =
+        (uint8_t)(batch->state.on_ground[oidx] != 0u && batch->state.ground_id[oidx] == ground_id);
+    source_floor_loss_ok =
+        (uint8_t)(stage_collision_floor_line_is_platform(stage_id, ground_id) != 0u ||
+                  (owner_on_same_floor != 0u &&
+                   stage_collision_floor_line_is_ledge(stage_id, ground_id) != 0u &&
+                   stage_collision_floor_line_is_sloped(stage_id, ground_id) != 0u));
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (source_floor_loss_ok == 0u && c != NULL) {
+    const size_t oidx = msl_idx_player(bi, owner_p);
+    const float owner_root_dy = batch->state.pos_y[oidx] - pre_victim_y;
+    source_floor_loss_ok = (uint8_t)(owner_root_dy > c->capture_pulled_lw_air_delta_y *
+                                                         pose_model_scale_y(batch, vidx));
+  }
+  if (source_floor_loss_ok == 0u) {
+    return;
+  }
+
+  // CapturePulledLw source handoff:
+  // Coll calls ft_8008403C(gobj, fn_800DB230); only a true source floor-mask miss, including
+  //   the capture-root CollData floor fallback, should enter the airborne PulledHi path.
+  // The Phys dy threshold path uses hidden live JObj state that is not replay-visible enough to
+  // trust the reconstructed anchor dy directly. Use source-visible floor metadata (platforms and
+  // same-carried-floor sloped ledges) or the decomp common vertical carry threshold on
+  // owner-root-victim-root as the bounded discriminator before allowing the floor-loss callback.
+  // data/stages/bin/*.bin::MSLSTG01 segment.{platform,ledge,endpoints}
+  // data/common/ft_common_data.json::capture_pulled_lw_air_delta_y
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_CapturePulledLw_Phys,ftCo_CapturePulledLw_Coll,fn_800DB230,fn_800DAA40}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_8008403C
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_UnlockECB}
+  const float cur_anim = batch->state.anim_frame_f32[vidx];
+  batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_PULLED_HI;
+  batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_PULLED_HI;
+  batch->state.on_ground[vidx] = 0u;
+  batch->state.speed_ground_x_self[vidx] = 0.0f;
+  batch->state.ecb_lock_timer[vidx] = 0u;
+  if (batch->state.floor_skip_segment_id != NULL) {
+    batch->state.floor_skip_segment_id[vidx] = ground_id;
+  }
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[vidx]);
+  if (ch != NULL && ch->max_jumps > 0u) {
+    batch->state.jumps_left[vidx] = (uint8_t)(ch->max_jumps - 1u);
+  }
+  msl_anim_timebase_enter(batch, vidx, cur_anim, 1.0f);
+  grab_attachment_apply_capture_delta_now(batch, bi, victim_p, owner_p);
 }
 
 void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int bi, int victim_p, int owner_p) {
@@ -1080,7 +1158,9 @@ void grab_attachment_update_pre_collision(MslBatch* batch) {
         }
         // Decomp ordering: CapturePulled*/CaptureDamage* runs fn_800DAD18 in Phys, then runs Coll.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAD18,ftCo_CapturePulledHi_Coll}
+        const float pre_victim_y = batch->state.pos_y[vidx];
         grab_attachment_apply_capture_delta_now(batch, bi, p, (int)owner);
+        capture_pulled_lw_try_air_handoff_after_delta(batch, bi, p, (int)owner, pre_victim_y);
       } else if (msl_action_is_thrown_victim(batch->state.action_id[vidx])) {
         const uint16_t cur_action = batch->state.action_id[vidx];
         const uint16_t prev_action = batch->state.prev_action_id[vidx];

@@ -15,10 +15,9 @@ typedef struct MslCharRegistryEntry {
 } MslCharRegistryEntry;
 
 static const MslCharRegistryEntry MSL_CHAR_REGISTRY[] = {
-    {(uint8_t)MSL_CHAR_ID_FOX, "fox"},
-    {(uint8_t)MSL_CHAR_ID_SHEIK, "sheik"},
-    {(uint8_t)MSL_CHAR_ID_FALCO, "falco"},
-    {(uint8_t)MSL_CHAR_ID_MARTH, "marth"},
+    {(uint8_t)MSL_CHAR_ID_FOX, "fox"},     {(uint8_t)MSL_CHAR_ID_SHEIK, "sheik"},
+    {(uint8_t)MSL_CHAR_ID_FALCO, "falco"}, {(uint8_t)MSL_CHAR_ID_MARTH, "marth"},
+    {(uint8_t)MSL_CHAR_ID_ZELDA, "zelda"},
 };
 
 enum { MSL_CHAR_REGISTRY_COUNT = sizeof(MSL_CHAR_REGISTRY) / sizeof(MSL_CHAR_REGISTRY[0]) };

@@ -269,7 +269,13 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         bits |= CLASS_LANDING_AIR
     if any(cb.startswith("ftCo_Fall") for cb in callbacks):
         bits |= CLASS_COMMON_FALL
-    if any(cb.startswith("ftFx_SpecialHi") or cb.startswith("ftFx_SpecialAirHi") for cb in callbacks):
+    if any(
+        cb.startswith("ftFx_SpecialHi")
+        or cb.startswith("ftFx_SpecialAirHi")
+        or cb.startswith("ftMs_SpecialHi")
+        or cb.startswith("ftMs_SpecialAirHi")
+        for cb in callbacks
+    ):
         bits |= CLASS_SPECIALHI
     if phys_cb in {
         "ftCo_Jump_Phys",
@@ -316,13 +322,18 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftSk_SpecialAirSStart_Coll",
         "ftSk_SpecialAirS_Coll",
         "ftSk_SpecialAirSEnd_Coll",
+        "ftSk_SpecialAirNStart_Coll",
+        "ftSk_SpecialAirNLoop_Coll",
+        "ftSk_SpecialAirNCancel_Coll",
     }:
         # These common Fox/Falco collision callbacks delegate through `ft_80082C74`, whose
         # `ft_80081D0C` helper loads the normal airborne ECB and runs `mpColl_800471F8`. That
         # source owner uses the full airborne wall/floor/ceiling collision callback without the
         # common-air walljump post-consumers.
-        # Sheik Chain aerial Start/Active/End call `ft_80081D0C` directly before their source
-        # state handoff.
+        # Sheik Chain aerial Start/Active/End and aerial Needle Start/Loop/Cancel call
+        # `ft_80081D0C` directly before their source state handoff.
+        # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+        #   ftSk_SpecialAirNStart_Coll,ftSk_SpecialAirNLoop_Coll,ftSk_SpecialAirNCancel_Coll}
         # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
         #   ftSk_SpecialAirSStart_Coll,ftSk_SpecialAirS_Coll,ftSk_SpecialAirSEnd_Coll}
         bits |= CLASS_FT80081D0C_AIR_COLL

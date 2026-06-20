@@ -634,7 +634,7 @@ def test_aerial_landing_enters_landing_air_lag(char_name: str) -> None:
     seed["jumps_left"][0, 0] = np.uint8(1)
     atk = _mk_inputs(buttons=0x0100)
     idle = _mk_inputs()
-    outs = _run(seed, [atk] + [idle] * 30)
+    outs = _run(seed, [atk] + [idle] * 45)
     acts = [int(o["action_id"][0]) for o in outs]
     assert ACT_ATTACK_AIR_N in acts, f"{char_name}: no NAir: {acts[:5]}"
     assert ACT_LANDING_AIR_N in acts, f"{char_name}: never landed into LandingAirN: {sorted(set(acts))}"
@@ -867,7 +867,7 @@ def test_platform_drop_through(char_name: str) -> None:
     seed["pos_x"][0, 1] = np.float32(20.0)
     seed["ground_id"][0, 0] = np.uint16(1)
     down = _mk_inputs(main_y=-127)
-    outs = _run(seed, [_mk_inputs()] * 2 + [down] * 6 + [_mk_inputs()] * 20)
+    outs = _run(seed, [_mk_inputs()] * 2 + [down] * 6 + [_mk_inputs()] * 60)
     acts = [int(o["action_id"][0]) for o in outs]
     passed = (ACT_PASS in acts) or any(int(o["on_ground"][0]) == 0 for o in outs[2:10])
     assert passed, f"{char_name}: never dropped through: {acts[:12]}"

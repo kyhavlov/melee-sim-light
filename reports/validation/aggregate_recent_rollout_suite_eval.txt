@@ -502,13 +502,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == datasets/aggregate_recent/replays/validation/marth/BriefAdoredOyster.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1408
-rollout.streak_count: 26
-rollout.streak_len.median: 126
+rollout.streak_count: 25
+rollout.streak_len.median: 174
 rollout.streak_len.p90: 774
 rollout.streak_len.p95: 847
 rollout.streak_len.max: 1408
-rollout.first_mismatch_total: 26
-rollout.first_mismatch_seeded_total: 9
+rollout.first_mismatch_total: 24
+rollout.first_mismatch_seeded_total: 7
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=32.1998 rec=3888 p=1 seed/ref/out=27.4264/26.8264/59.0262 actions=358/358/358 category=unclassified
@@ -550,8 +550,8 @@ rollout.streak_len.median: 597
 rollout.streak_len.p90: 1042
 rollout.streak_len.p95: 1962
 rollout.streak_len.max: 1962
-rollout.first_mismatch_total: 18
-rollout.first_mismatch_seeded_total: 6
+rollout.first_mismatch_total: 17
+rollout.first_mismatch_seeded_total: 5
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=53.2395 rec=6496 p=0 seed/ref/out=28.3643/28.6304/81.8699 actions=28/28/28 category=unclassified
@@ -631,13 +631,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 == datasets/aggregate_recent/replays/validation/marth/InternalPowerlessWallaby.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 2020
-rollout.streak_count: 42
+rollout.streak_count: 41
 rollout.streak_len.median: 92
 rollout.streak_len.p90: 586
-rollout.streak_len.p95: 690
+rollout.streak_len.p95: 770
 rollout.streak_len.max: 2020
-rollout.first_mismatch_total: 41
-rollout.first_mismatch_seeded_total: 20
+rollout.first_mismatch_total: 40
+rollout.first_mismatch_seeded_total: 19
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=43.0663 rec=4485 p=1 seed/ref/out=100.244/101.357/58.2903 actions=89/89/89 category=unclassified
@@ -674,14 +674,14 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == datasets/aggregate_recent/replays/validation/marth/MetallicUniqueGrouse.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1079
+rollout.best_len: 1502
 rollout.streak_count: 18
-rollout.streak_len.median: 151
+rollout.streak_len.median: 149
 rollout.streak_len.p90: 850
-rollout.streak_len.p95: 1079
-rollout.streak_len.max: 1079
+rollout.streak_len.p95: 1502
+rollout.streak_len.max: 1502
 rollout.first_mismatch_total: 18
-rollout.first_mismatch_seeded_total: 8
+rollout.first_mismatch_seeded_total: 7
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=10.71 rec=4823 p=1 seed/ref/out=-24.8992/-24.8992/-35.6092 actions=60/60/60 category=unclassified
@@ -760,13 +760,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:209
 == datasets/aggregate_recent/replays/validation/marth/StiffDraftyWalrus.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1948
-rollout.streak_count: 25
+rollout.streak_count: 24
 rollout.streak_len.median: 215
-rollout.streak_len.p90: 967
+rollout.streak_len.p90: 1144
 rollout.streak_len.p95: 1563
 rollout.streak_len.max: 1948
-rollout.first_mismatch_total: 25
-rollout.first_mismatch_seeded_total: 8
+rollout.first_mismatch_total: 23
+rollout.first_mismatch_seeded_total: 6
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=18.0006 rec=9661 p=0 seed/ref/out=72.8454/71.9998/90.0004 actions=4/4/4 category=unclassified
@@ -995,14 +995,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:522
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == suite summary ==
-overall.rollout.streak_count: 662
+overall.rollout.streak_count: 659
 overall.rollout.streak_len.median: 251
-overall.rollout.streak_len.p90: 1261
-overall.rollout.streak_len.p95: 2110
+overall.rollout.streak_len.p90: 1284
+overall.rollout.streak_len.p95: 2213
 overall.rollout.streak_len.max: 12475
 overall.rollout.best_len.max: 12475
-overall.rollout.first_mismatch_total: 631
-overall.rollout.first_mismatch_seeded_total: 270
+overall.rollout.first_mismatch_total: 625
+overall.rollout.first_mismatch_seeded_total: 263
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=159.875 rec=5010 p=1 seed/ref/out=-7.05318/-5.65008/-165.525 actions=7/7/7 category=unclassified

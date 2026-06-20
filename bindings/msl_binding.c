@@ -7809,6 +7809,8 @@ static PyMethodDef methods[] = {
     {"derive_sheik_chain_seed_lanes", msl_derive_sheik_chain_seed_lanes_py, METH_VARARGS,
      "derive_sheik_chain_seed_lanes(char, action, buttons, hitlag, sheik_id, b_mask, "
      "release_min) -> (x0,latch)"},
+    {"derive_zelda_twin_state_flags_2218", msl_derive_zelda_twin_state_flags_2218_py, METH_VARARGS,
+     "derive_zelda_twin_state_flags_2218(char, state_flags, zelda_id) -> uint8[:]"},
     {"derive_sheik_vanish_floor_skip_segments", msl_derive_sheik_vanish_floor_skip_segments_py,
      METH_VARARGS,
      "derive_sheik_vanish_floor_skip_segments(char, action, on_ground, ground_id, vanish_timer, "

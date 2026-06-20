@@ -11,6 +11,7 @@
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
+#include "dash_iasa.h"
 #include "grab_flow.h"
 #include "ids.h"
 #include "items.h"
@@ -21,7 +22,19 @@
 #include "msl_math.h"
 #include "move_tables.h"
 #include "stage_collision.h"
+#include "state_flags.h"
 #include "trigger_input.h"
+
+// Zelda Down-B ids from refs/melee/src/melee/ft/chara/ftZelda/forward.h and
+// refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c. Only the demo2-visible transform
+// handoff is runtime-owned here; full hidden Sheik/Zelda twin-entity state and Zelda's other
+// specials stay deferred until a replay reaches them.
+enum {
+  MSL_ACT_ZD_SPECIAL_LW = 355,
+  MSL_ACT_ZD_SPECIAL_LW_2 = 356,
+  MSL_ACT_ZD_SPECIAL_AIR_LW = 357,
+  MSL_ACT_ZD_SPECIAL_AIR_LW_2 = 358,
+};
 
 static inline float sk_stick_unit(int8_t v) { return (float)v * (1.0f / 80.0f); }
 
@@ -35,20 +48,16 @@ static uint16_t sk_submotion(uint16_t action_id) {
   return msl_motion_state_submotion_id((uint8_t)MSL_CHAR_ID_SHEIK, action_id);
 }
 
-static uint16_t sk_chain_hitbox_script_msid(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_SK_SPECIAL_S:
-      return sk_submotion((uint16_t)MSL_ACT_SK_SPECIAL_S_START);
-    case MSL_ACT_SK_SPECIAL_AIR_S:
-      return sk_submotion((uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START);
-    default:
-      return sk_submotion(action_id);
-  }
-}
-
 static uint8_t sk_anim_finished(const MslBatch* batch, size_t idx, uint16_t action_id) {
   const uint16_t msid = sk_submotion(action_id);
   const float end = msl_anim_end_frame((uint8_t)MSL_CHAR_ID_SHEIK, msid);
+  return (end > 0.0f && msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]) >= end) ? 1u
+                                                                                              : 0u;
+}
+
+static uint8_t zd_anim_finished(const MslBatch* batch, size_t idx, uint16_t action_id) {
+  const uint16_t msid = msl_motion_state_submotion_id((uint8_t)MSL_CHAR_ID_ZELDA, action_id);
+  const float end = msl_anim_end_frame((uint8_t)MSL_CHAR_ID_ZELDA, msid);
   return (end > 0.0f && msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]) >= end) ? 1u
                                                                                               : 0u;
 }
@@ -118,7 +127,8 @@ static void sk_arm_vanish_smoke_accessory(MslBatch* batch, size_t idx) {
 static void sk_enter(MslBatch* batch, size_t idx, uint16_t action_id, float start_frame,
                      float anim_rate) {
   batch->state.action_id[idx] = action_id;
-  batch->state.animation_index[idx] = (uint32_t)sk_submotion(action_id);
+  batch->state.animation_index[idx] =
+      (uint32_t)msl_motion_state_submotion_id(batch->state.char_id[idx], action_id);
   msl_anim_timebase_enter(batch, idx, start_frame, anim_rate);
 }
 
@@ -140,6 +150,28 @@ static void sk_enter_wait(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+}
+
+static uint8_t sk_transform_live_2218(const MslBatch* batch, size_t idx) {
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  return batch->state.state_flags[flags_i];
+}
+
+static void sk_transform_set_live_2218(MslBatch* batch, size_t idx, uint8_t flags_2218) {
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  batch->state.state_flags[flags_i] = flags_2218;
+}
+
+static void sk_transform_cache_visible_zelda_twin_2218(MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_ZELDA) {
+    return;
+  }
+  // ftCommon_8007EFC8 swaps to the same-player hidden twin entity, so the inactive Zelda twin's
+  // raw fp+0x2218 byte must persist while Sheik is visible. Slippi publishes only the visible
+  // fighter byte; cache it whenever Zelda is live and restore it on Sheik->Zelda transform.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::fn_8011412C
+  batch->state.zelda_twin_state_flags_2218[idx] = sk_transform_live_2218(batch, idx);
 }
 
 static uint8_t sk_try_run_grounded_wait_iasa_after_ft_8008A2BC(MslBatch* batch,
@@ -245,12 +277,16 @@ static void sk_enter_vanish_air_end(MslBatch* batch, const MslCharParams* ch, si
 }
 
 static uint8_t sk_action_allows_ground_special(const MslBatch* batch, size_t idx, uint16_t a) {
+  // Grounded common IASA owners that call ftCo_SpecialS_CheckInput before lower-priority
+  // locomotion/attack consumers. This table gates only Sheik/Zelda special entry helpers.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Wait,Squat,Dash,Run,RunDirect,Landing}.c
   switch (a) {
     case MSL_ACT_WAIT:
     case MSL_ACT_WALK_SLOW:
     case MSL_ACT_WALK_MIDDLE:
     case MSL_ACT_WALK_FAST:
     case MSL_ACT_SQUAT:
+    case MSL_ACT_DASH:
     case MSL_ACT_RUN:
     case MSL_ACT_RUN_DIRECT:
     case MSL_ACT_OTTOTTO:
@@ -326,14 +362,21 @@ static void sk_enter_specials(MslBatch* batch, size_t idx, uint8_t ground, float
     }
     const MslCharParams* ch = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
     if (ch != NULL) {
-      // Shared grounded Side-B entry damps current gr_vel by co_attrs.xB8 before the
-      // character-specific Sheik Chain enter runs; SpecialSStart_Phys then applies ordinary
-      // ft_80084F3C ground friction on the same frame.
+      // Shared grounded Side-B entry damps current gr_vel through co_attrs.xB8 and
+      // ft_GetGroundFrictionMultiplier before the character-specific Sheik Chain enter runs;
+      // SpecialSStart_Phys then applies ordinary ft_80084F3C ground friction on the same frame.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
+      // refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
       //   ftSk_SpecialS_Enter,ftSk_SpecialSStart_Phys}
       // data/characters/sheik.json::side_special_ground_entry_vel_mul
-      batch->state.speed_ground_x_self[idx] *= ch->side_special_ground_entry_vel_mul;
+      float friction_mul = batch->state.ground_friction_mul[idx];
+      if (!(friction_mul > 0.0f)) {
+        friction_mul = 1.0f;
+      }
+      batch->state.speed_ground_x_self[idx] += -(batch->state.speed_ground_x_self[idx] *
+                                                 (1.0f - ch->side_special_ground_entry_vel_mul)) *
+                                               friction_mul;
       batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
     }
   } else {
@@ -456,6 +499,13 @@ static void sk_enter_specialhi(MslBatch* batch, const MslCharParams* ch, size_t 
   batch->state.special_cmd0[idx] = 0u;
   batch->state.sheik_special_timer[idx] = 0u;
   batch->state.sheik_special_latch[idx] = 0u;
+  // ftSk_SpecialHi_Enter / ftSk_SpecialAirHi_Enter enter Start_0 through
+  // Fighter_ChangeMotionState without Ft_MF_KeepFastFall, so source clears fp->fall_fast before
+  // Slippi publishes fp+0x221A isFastFalling.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+  //   ftSk_SpecialHi_Enter,ftSk_SpecialAirHi_Enter}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  batch->state.fall_fast[idx] = 0u;
   if (!ground) {
     batch->state.speed_y_self[idx] = ch->sheik_vanish_air_entry_vel_y;
   }
@@ -483,6 +533,76 @@ static void sk_enter_speciallw(MslBatch* batch, const MslCharParams* ch, size_t 
            ground ? (uint16_t)MSL_ACT_SK_SPECIAL_LW : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_LW, 0.0f,
            1.0f);
   msl_anim_timebase_tick_once(batch, idx);
+}
+
+static void zd_enter_speciallw(MslBatch* batch, const MslCharParams* ch, size_t idx,
+                               uint8_t ground) {
+  // ftZd_SpecialLw.c::{ftZd_SpecialLw_Enter,ftZd_SpecialAirLw_Enter} via
+  // ftZelda_SpecialLw_StartAction_Helper.
+  if (ch->zelda_transform_vel_x_divisor > 0.0f) {
+    batch->state.speed_air_x_self[idx] /= ch->zelda_transform_vel_x_divisor;
+    batch->state.speed_ground_x_self[idx] /= ch->zelda_transform_vel_x_divisor;
+  }
+  if (ch->zelda_transform_vel_y_divisor > 0.0f) {
+    batch->state.speed_y_self[idx] /= ch->zelda_transform_vel_y_divisor;
+  }
+  batch->state.special_cmd0[idx] = 0u;
+  batch->state.sheik_special_timer[idx] = 0u;
+  batch->state.sheik_special_latch[idx] = 0u;
+  sk_enter(batch, idx,
+           ground ? (uint16_t)MSL_ACT_ZD_SPECIAL_LW : (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW, 0.0f,
+           1.0f);
+  msl_anim_timebase_tick_once(batch, idx);
+}
+
+static uint8_t zd_try_enter_transform(MslBatch* batch, const MslCommonParams* c,
+                                      const MslCharParams* ch, size_t idx, uint8_t ground) {
+  if (batch == NULL || c == NULL || ch == NULL || batch->state.hitlag[idx] != 0u ||
+      batch->state.hitstun[idx] != 0u) {
+    return 0u;
+  }
+  if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u) {
+    return 0u;
+  }
+  const uint16_t a = batch->state.action_id[idx];
+  if (ground) {
+    if (!sk_action_allows_ground_special(batch, idx, a)) {
+      return 0u;
+    }
+  } else if (!sk_action_allows_air_special(a)) {
+    return 0u;
+  }
+  const float sy = sk_deadzone(sk_stick_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  if (sy > -c->special_stick_y_threshold) {
+    return 0u;
+  }
+  // Source ftCo_Special{,Air}_CheckInput dispatches Down-B to Zelda's ftData_SpecialLw entry. This
+  // pass intentionally implements only that transform owner for Zelda.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_SpecialS_CheckInput
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
+  //   ftZd_SpecialLw_Enter,ftZd_SpecialAirLw_Enter}
+  zd_enter_speciallw(batch, ch, idx, ground);
+  return 1u;
+}
+
+uint8_t zelda_special_try_transform_iasa(MslBatch* batch, size_t idx, uint8_t ground) {
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_ZELDA) {
+    return 0u;
+  }
+  return zd_try_enter_transform(batch, msl_common_params(),
+                                msl_char_params_fast((uint8_t)MSL_CHAR_ID_ZELDA), idx, ground);
+}
+
+void zelda_special_enter_transform(MslBatch* batch, size_t idx, uint8_t ground) {
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_ZELDA) {
+    return;
+  }
+  const MslCharParams* ch = msl_char_params_fast((uint8_t)MSL_CHAR_ID_ZELDA);
+  if (ch == NULL) {
+    return;
+  }
+  zd_enter_speciallw(batch, ch, idx, ground);
 }
 
 static uint8_t sk_hsd_lr_edge(const MslBatch* batch, const MslCommonParams* c, size_t idx) {
@@ -540,6 +660,24 @@ static uint8_t sk_try_enter_b_special(MslBatch* batch, const MslCommonParams* c,
   const float sy = sk_deadzone(sk_stick_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
   const float ax = fabsf(sx);
   if (ground) {
+    if (a == (uint16_t)MSL_ACT_DASH || a == (uint16_t)MSL_ACT_RUN ||
+        a == (uint16_t)MSL_ACT_RUN_DIRECT) {
+      // Dash/Run/RunDirect IASA calls only ftCo_SpecialS_CheckInput, not the full grounded
+      // SpecialHi/SpecialLw/SpecialN selector used by Wait/Squat/Landing.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Dash,Run,RunDirect}.c
+      if (ax >= c->special_stick_x_threshold_side) {
+        sk_enter_specials(batch, idx, 1u, sx);
+        if (a == (uint16_t)MSL_ACT_DASH) {
+          // Dash_IASA resumes after the non-returning SpecialS entry and applies its terminal
+          // gr_vel scalar before the destination SpecialSStart Phys callback.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+          dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
+          batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+        }
+        return 1u;
+      }
+      return 0u;
+    }
     // ftCo_Wait_IASA order is SpecialS -> SpecialHi -> SpecialN -> SpecialLw, but the latter
     // three are entered through hidden x686/x689/x687 latch callsites. Until those seed/live lanes
     // are promoted, use the live B-edge stick owner only to choose among the Sheik entry funcs.
@@ -603,6 +741,21 @@ uint8_t sheik_special_try_landing_iasa(MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
   return sk_try_enter_b_special(batch, c, ch, idx, 1u);
+}
+
+uint8_t sheik_special_try_air_iasa(MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
+      batch->state.on_ground[idx] != 0u) {
+    return 0u;
+  }
+  // Common airborne IASA runs ftCo_SpecialAir_CheckInput before item/aerial attack/jump checks.
+  // Keep the action eligibility inside sk_action_allows_air_special so this helper remains tied to
+  // the source common-air owners rather than local replay rows.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Fall,Jump,PassiveWall}.c
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
+  return sk_try_enter_b_special(batch, msl_common_params(),
+                                msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK), idx, 0u);
 }
 
 static void sk_update_specialn_loop_iasa(MslBatch* batch, const MslCommonParams* c, size_t idx,
@@ -732,29 +885,27 @@ static void sk_update_specials(MslBatch* batch, const MslCommonParams* c, const 
                                                            : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S,
                  0.0f, 1.0f);
         // ftSk_SpecialS_80111830/80111988 call ftSk_SpecialS_80110610 immediately after
-        // Fighter_ChangeMotionState, before the same-frame accessory callback.
+        // Fighter_ChangeMotionState, then ftSk_SpecialS_80110AEC enables/zeros the four Chain
+        // x914 HitCapsules before the same-frame accessory callback can publish link positions.
         // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
-        //   ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_80110610}
+        //   ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_80110610,
+        //   ftSk_SpecialS_80110AEC}
+        (void)items_activate_sheik_chain_hitcaps_on_entry(batch, idx);
         sk_update_chain_pose_filter(batch, c, idx);
         batch->state.sheik_special_timer[idx] = 0u;
       }
     } break;
     case MSL_ACT_SK_SPECIAL_S:
     case MSL_ACT_SK_SPECIAL_AIR_S: {
-      // Active Chain hitbox publication is script-gated: it_802BCB88 calls
-      // ftSk_SpecialS_UpdateHitboxes, which returns unless cmd_vars[0] is set. The active swing
-      // pose msids (305/308) do not carry the create/cmd script; source preserves the capsules
-      // created by the start scripts (303/306) across Fighter_ChangeMotionState(..., flags=8).
-      // Slippi does not expose cmd_vars, so keep this hidden lane table-backed from that source
-      // script rather than from the active pose msid.
+      // Active Chain entry clears cmd_vars[0] in ftSk_SpecialS_80110F70. The start-script-created
+      // x914 capsules are preserved by Fighter_ChangeMotionState(..., flags=8), but held active
+      // Chain must not keep re-synthesizing the start script's cmd0 gate every frame; otherwise
+      // it_802BCB88 can republish capsules after ftSk_SpecialS_80110BCC has disabled them.
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
-      //   ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_UpdateHitboxes,
-      //   ftSk_SpecialS_80110BCC}
+      //   ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_80110F70,
+      //   ftSk_SpecialS_80110BCC,ftSk_SpecialS_UpdateHitboxes}
       // refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
-      // data/scripts/sheik.bin::MSLFTSC1 specials_by_msid[303] set_cmd_var(idx=0,value=1)
-      batch->state.special_cmd0[idx] = move_tables_special_cmd_var_value_at_frame(
-          batch->state.char_id[idx], sk_chain_hitbox_script_msid(a), 0u,
-          batch->state.anim_frame_f32[idx]);
+      batch->state.special_cmd0[idx] = 0u;
       // Source `mv.sk.specials.x0` continues past the release threshold while B is held. Preserve
       // the threshold state in the compact runtime lane without uint8 wraparound.
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
@@ -976,37 +1127,97 @@ uint8_t sheik_special_vanish_air_start1_platform_pass_active(const MslBatch* bat
   return ((float)collision_tick < ch->sheik_vanish_ground_contact_min_frames) ? 1u : 0u;
 }
 
-static void sk_update_speciallw(MslBatch* batch, const MslCharParams* ch, size_t idx, uint16_t a) {
+static void sk_update_speciallw(MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch,
+                                size_t idx, uint16_t a) {
   switch (a) {
     case MSL_ACT_SK_SPECIAL_LW:
     case MSL_ACT_SK_SPECIAL_AIR_LW:
       if (sk_anim_finished(batch, idx, a)) {
-        // Stage-0 Zelda/Transform boundary. In the source, when the transform-start anim ends
-        // `ftSk_SpecialLw_Anim` installs `fn_8011412C`, which calls
-        // `ftCommon_8007EFC8(gobj, &ftZd_SpecialLw_8013B4D8)` -- a TWIN-ENTITY swap: the player owns a
-        // second (Zelda) fighter via `Player_GetEntityAtIndex(player_id, 1)`, and the switch copies
-        // pos/percent/vel/input onto it and hands control to Zelda's SpecialLw. The sim has one fighter
-        // per player and no Zelda registry character, so that swap is not feasible at Stage-0. The
-        // policy instead substitutes Sheik's own private finish state (`ftSk_SpecialLw_80114758`
-        // AS_SheikFinishTransformation) at `attr->x70` and keeps the fighter as Sheik. The transform
-        // therefore never produces a Zelda action id or a swapped entity -- it always resolves inside
-        // Sheik's action space (finish -> Wait/Fall below), which is the explicit, safe unsupported
-        // boundary. refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::{ftSk_SpecialLw_Anim,
-        //   fn_8011412C,ftSk_SpecialLw_80114758}
+        const MslCharParams* zd = msl_char_params_fast((uint8_t)MSL_CHAR_ID_ZELDA);
+        if (zd == NULL) {
+          return;
+        }
+        // Source Sheik transform installs `fn_8011412C`, which calls ftCommon_8007EFC8 into
+        // Zelda's twin entity and then `ftZd_SpecialLw_8013B4D8` enters Zelda's finish action. The
+        // lite runtime has one entity per player, so the source-owned visible handoff is modeled by
+        // swapping the live `char_id` and preserving all state lanes on the same player.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::{ftSk_SpecialLw_Anim,fn_8011412C}
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B4D8
         // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
+        batch->state.char_id[idx] = (uint8_t)MSL_CHAR_ID_ZELDA;
         sk_enter(batch, idx,
-                 a == (uint16_t)MSL_ACT_SK_SPECIAL_LW ? (uint16_t)MSL_ACT_SK_SPECIAL_LW_2
-                                                      : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_LW_2,
-                 ch->sheik_transform_finish_start_frame, 1.0f);
+                 batch->state.on_ground[idx] ? (uint16_t)MSL_ACT_ZD_SPECIAL_LW_2
+                                             : (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW_2,
+                 zd->zelda_transform_finish_start_frame, 1.0f);
+        // Source transform activates Zelda's hidden twin through ftCommon_8007EFC8, then enters
+        // AS_ZeldaFinishTransformation on that twin. Restore the cached raw fp+0x2218 byte instead
+        // of synthesizing an interrupt bit from the outgoing visible Sheik.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::{ftSk_SpecialLw_Anim,fn_8011412C}
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B4D8
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
+        sk_transform_set_live_2218(batch, idx, batch->state.zelda_twin_state_flags_2218[idx]);
       }
       break;
     case MSL_ACT_SK_SPECIAL_LW_2:
       if (sk_anim_finished(batch, idx, a)) {
         sk_enter_wait(batch, idx);
+        (void)sk_try_run_grounded_wait_iasa_after_ft_8008A2BC(batch, c, ch, idx, a);
       }
       break;
     case MSL_ACT_SK_SPECIAL_AIR_LW_2:
       if (sk_anim_finished(batch, idx, a)) {
+        sk_enter_fall(batch, idx);
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+static uint8_t zd_action_is_transform(uint16_t action_id) {
+  return (uint8_t)(action_id >= (uint16_t)MSL_ACT_ZD_SPECIAL_LW &&
+                   action_id <= (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW_2);
+}
+
+static void zd_update_speciallw(MslBatch* batch, size_t idx, uint16_t a) {
+  switch (a) {
+    case MSL_ACT_ZD_SPECIAL_LW:
+    case MSL_ACT_ZD_SPECIAL_AIR_LW:
+      if (zd_anim_finished(batch, idx, a)) {
+        const MslCharParams* sk = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
+        if (sk == NULL) {
+          return;
+        }
+        // Zelda transform start installs `ftZd_SpecialLw_8013AEAC`, which calls ftCommon_8007EFC8
+        // into Sheik and then `ftSk_SpecialLw_80114758` enters Sheik's finish action. Preserve the
+        // source state lanes and swap the one runtime entity back to Sheik.
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{ftZd_SpecialLw_Anim,
+        //   ftZd_SpecialAirLw_Anim,ftZd_SpecialLw_8013AEAC}
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::ftSk_SpecialLw_80114758
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
+        sk_transform_cache_visible_zelda_twin_2218(batch, idx);
+        batch->state.char_id[idx] = (uint8_t)MSL_CHAR_ID_SHEIK;
+        sk_enter(batch, idx,
+                 batch->state.on_ground[idx] ? (uint16_t)MSL_ACT_SK_SPECIAL_LW_2
+                                             : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_LW_2,
+                 sk->sheik_transform_finish_start_frame, 1.0f);
+        // This bounded demo2 transform model does not claim full hidden Sheik twin-entity support.
+        // The replay spans covered here reactivate Sheik with fp+0x2218 clear; keep the Zelda byte
+        // cached separately above so a later Sheik->Zelda handoff can restore it.
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
+        //   ftZd_SpecialLw_Anim,ftZd_SpecialAirLw_Anim,ftZd_SpecialLw_8013AEAC}
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::ftSk_SpecialLw_80114758
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
+        sk_transform_set_live_2218(batch, idx, 0u);
+      }
+      break;
+    case MSL_ACT_ZD_SPECIAL_LW_2:
+      if (zd_anim_finished(batch, idx, a)) {
+        sk_enter_wait(batch, idx);
+      }
+      break;
+    case MSL_ACT_ZD_SPECIAL_AIR_LW_2:
+      if (zd_anim_finished(batch, idx, a)) {
         sk_enter_fall(batch, idx);
       }
       break;
@@ -1025,10 +1236,12 @@ void sheik_specials_update_pre_physics(MslBatch* batch) {
   for (int bi = 0; bi < n; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+      if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK &&
+          batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_ZELDA) {
         continue;
       }
-      const MslCharParams* ch = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
+      const uint8_t char_id = batch->state.char_id[idx];
+      const MslCharParams* ch = msl_char_params_fast(char_id);
       if (ch == NULL || c == NULL) {
         continue;
       }
@@ -1042,6 +1255,16 @@ void sheik_specials_update_pre_physics(MslBatch* batch) {
         continue;
       }
       const uint16_t a = batch->state.action_id[idx];
+      if (char_id == (uint8_t)MSL_CHAR_ID_ZELDA) {
+        if (zd_action_is_transform(a)) {
+          batch->state.animation_index[idx] =
+              (uint32_t)msl_motion_state_submotion_id((uint8_t)MSL_CHAR_ID_ZELDA, a);
+          zd_update_speciallw(batch, idx, a);
+        } else {
+          (void)zd_try_enter_transform(batch, c, ch, idx, batch->state.on_ground[idx] ? 1u : 0u);
+        }
+        continue;
+      }
       if (!sheik_action_is_special(a)) {
         if (sk_try_enter_b_special(batch, c, ch, idx, batch->state.on_ground[idx] ? 1u : 0u)) {
           continue;
@@ -1052,7 +1275,20 @@ void sheik_specials_update_pre_physics(MslBatch* batch) {
       sk_update_specialn(batch, c, ch, idx, a);
       sk_update_specials(batch, c, ch, idx, a);
       sk_update_specialhi(batch, c, ch, idx, a);
-      sk_update_speciallw(batch, ch, idx, a);
+      sk_update_speciallw(batch, c, ch, idx, a);
+    }
+  }
+}
+
+void sheik_specials_cache_transform_twins_post_frame(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int n = batch->batch_size;
+  const int num_players = msl_batch_num_players(batch);
+  for (int bi = 0; bi < n; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      sk_transform_cache_visible_zelda_twin_2218(batch, msl_idx_player(bi, p));
     }
   }
 }
@@ -1163,6 +1399,25 @@ static void sk_apply_air_fall_friction_eec(MslBatch* batch, const MslCharParams*
       sk_apply_air_friction(batch->state.speed_air_x_self[idx], ch->aerial_friction);
 }
 
+static void sk_apply_attr_fall_friction_cef4(MslBatch* batch, const MslCharParams* ch, size_t idx,
+                                             float grav, float terminal) {
+  // ftCommon_Fall with move attributes, followed by ftCommon_8007CEF4. The transform callbacks use
+  // this friction-only X path; they do not call ftCommon_8007D268, so held stick must not add common
+  // air drift during the transform start/finish.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::{
+  //   ftSk_SpecialAirLw_Phys,ftSk_SpecialAirLw2_Phys}
+  // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
+  //   ftZd_SpecialAirLw_Phys,ftZd_SpecialAirLw2_Phys}
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_Fall,ftCommon_8007CEF4}
+  float vy = batch->state.speed_y_self[idx] - grav;
+  if (vy < -terminal) {
+    vy = -terminal;
+  }
+  batch->state.speed_y_self[idx] = vy;
+  batch->state.speed_air_x_self[idx] =
+      sk_apply_air_friction(batch->state.speed_air_x_self[idx], ch->aerial_friction);
+}
+
 static void sk_apply_ground_friction_f3c(MslBatch* batch, const MslCharParams* ch, size_t idx) {
   // ft_80084F3C applies ordinary ground friction, with the common high-speed multiplier when
   // |gr_vel| exceeds walk_max.
@@ -1183,14 +1438,37 @@ static void sk_apply_ground_friction_f3c(MslBatch* batch, const MslCharParams* c
 }
 
 uint8_t sheik_specials_phys(MslBatch* batch, size_t idx) {
-  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+  if (batch == NULL || (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK &&
+                        batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_ZELDA)) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
+  const uint8_t char_id = batch->state.char_id[idx];
+  const MslCharParams* ch = msl_char_params_fast(char_id);
   if (ch == NULL) {
     return 0u;
   }
   const uint16_t a = batch->state.action_id[idx];
+  if (char_id == (uint8_t)MSL_CHAR_ID_ZELDA) {
+    switch (a) {
+      case MSL_ACT_ZD_SPECIAL_LW:
+      case MSL_ACT_ZD_SPECIAL_LW_2:
+        // ftZd_SpecialLw{,2}_Phys use ordinary grounded ft_80084F3C.
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
+        //   ftZd_SpecialLw_Phys,ftZd_SpecialLw2_Phys}
+        sk_apply_ground_friction_f3c(batch, ch, idx);
+        return 1u;
+      case MSL_ACT_ZD_SPECIAL_AIR_LW:
+      case MSL_ACT_ZD_SPECIAL_AIR_LW_2:
+        // ftZd_SpecialAirLw{,2}_Phys: ftCommon_Fall(fp, x78, x7C), then ftCommon_8007CEF4.
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
+        //   ftZd_SpecialAirLw_Phys,ftZd_SpecialAirLw2_Phys}
+        sk_apply_attr_fall_friction_cef4(batch, ch, idx, ch->zelda_transform_air_gravity,
+                                         ch->zelda_transform_air_terminal_vel);
+        return 1u;
+      default:
+        return 0u;
+    }
+  }
   switch (a) {
     case MSL_ACT_SK_SPECIAL_HI_START_0:
       // ftSk_SpecialHiStart_0_Phys: grounded Vanish startup uses ft_80084F3C before Coll can
@@ -1244,8 +1522,19 @@ uint8_t sheik_specials_phys(MslBatch* batch, size_t idx) {
       return 1u;
     case MSL_ACT_SK_SPECIAL_AIR_LW:
     case MSL_ACT_SK_SPECIAL_AIR_LW_2:
-      sk_apply_common_fall(batch, ch, idx, ch->sheik_transform_air_gravity,
-                           ch->sheik_transform_air_terminal_vel);
+      sk_apply_attr_fall_friction_cef4(batch, ch, idx, ch->sheik_transform_air_gravity,
+                                       ch->sheik_transform_air_terminal_vel);
+      return 1u;
+    case MSL_ACT_SK_SPECIAL_N_START:
+    case MSL_ACT_SK_SPECIAL_N_LOOP:
+    case MSL_ACT_SK_SPECIAL_N_CANCEL:
+    case MSL_ACT_SK_SPECIAL_N_END:
+      // Grounded Needle charge/cancel/end Phys callbacks all use ordinary ft_80084F3C. Without this
+      // owner, SpecialN carries stale ground velocity through the charge loop.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+      //   ftSk_SpecialNStart_Phys,ftSk_SpecialNLoop_Phys,ftSk_SpecialNCancel_Phys,
+      //   ftSk_SpecialNEnd_Phys}
+      sk_apply_ground_friction_f3c(batch, ch, idx);
       return 1u;
     case MSL_ACT_SK_SPECIAL_AIR_S_START:
       if (batch->state.special_cmd0[idx] != 0u) {
@@ -1278,7 +1567,29 @@ uint8_t sheik_specials_phys(MslBatch* batch, size_t idx) {
 }
 
 uint8_t sheik_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
-  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA) {
+    const uint16_t a = batch->state.action_id[idx];
+    switch (a) {
+      case MSL_ACT_ZD_SPECIAL_LW:
+        // ftZd_SpecialLw_Coll floor loss preserves frame into aerial transform start.
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B1CC
+        sk_enter(batch, idx, (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW, batch->state.anim_frame_f32[idx],
+                 1.0f);
+        return 1u;
+      case MSL_ACT_ZD_SPECIAL_LW_2:
+        // ftZd_SpecialLw2_Coll floor loss preserves frame into aerial transform finish.
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B400
+        sk_enter(batch, idx, (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW_2,
+                 batch->state.anim_frame_f32[idx], 1.0f);
+        return 1u;
+      default:
+        return 0u;
+    }
+  }
+  if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;
   }
 #define SK_GROUND_TO_AIR_SWAP_ENTER(action, frame, rate)       \
@@ -1335,7 +1646,29 @@ uint8_t sheik_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
 }
 
 uint8_t sheik_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {
-  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA) {
+    const uint16_t a = batch->state.action_id[idx];
+    switch (a) {
+      case MSL_ACT_ZD_SPECIAL_AIR_LW:
+        // ftZd_SpecialAirLw_Coll floor contact preserves frame into grounded transform start.
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B238
+        sk_enter(batch, idx, (uint16_t)MSL_ACT_ZD_SPECIAL_LW, batch->state.anim_frame_f32[idx],
+                 1.0f);
+        return 1u;
+      case MSL_ACT_ZD_SPECIAL_AIR_LW_2:
+        // ftZd_SpecialAirLw2_Coll floor contact preserves frame into grounded transform finish.
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B46C
+        sk_enter(batch, idx, (uint16_t)MSL_ACT_ZD_SPECIAL_LW_2, batch->state.anim_frame_f32[idx],
+                 1.0f);
+        return 1u;
+      default:
+        return 0u;
+    }
+  }
+  if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;
   }
   const uint16_t a = batch->state.action_id[idx];
@@ -1377,11 +1710,17 @@ uint8_t sheik_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {
       sk_arm_vanish_smoke_accessory(batch, idx);
       return 1u;
     case MSL_ACT_SK_SPECIAL_AIR_HI_START_1:
-      // ftSk_SpecialAirHi_Coll enters the grounded travel state after the common collision path
-      // accepts a floor contact. Pass-through early-contact rejection is owned by mpColl before
-      // this callback; do not reinterpret the x3C timer as a post-contact runtime gate here.
+      // ftSk_SpecialAirHiStart_1_Coll enters grounded travel through ftSk_SpecialHi_801137C8
+      // after the common collision path accepts a floor contact. Source ftCommon_8007D7FC/
+      // Fighter_ChangeMotionState preserve the vertical travel lane for the grounded freeze row
+      // but do not carry the airborne horizontal self velocity into gr_vel.
+      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+      //   ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialHi_801137C8}
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D7FC
       sk_enter(batch, idx, (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_1,
                batch->state.anim_frame_f32[idx], 0.0f);
+      batch->state.speed_air_x_self[idx] = 0.0f;
+      batch->state.speed_ground_x_self[idx] = 0.0f;
       return 1u;
     case MSL_ACT_SK_SPECIAL_AIR_HI:
       sk_enter_landing_fallspecial(batch, msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK), idx);

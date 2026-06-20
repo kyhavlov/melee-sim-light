@@ -1799,6 +1799,22 @@ uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segme
   return line->is_platform ? 1u : 0u;
 }
 
+uint8_t stage_collision_floor_line_is_ledge(uint32_t stage_id, uint16_t segment_i) {
+  const MslStageFloorLine* line = stage_floor_line_for_segment(stage_slot(stage_id), segment_i);
+  if (line == NULL) {
+    return 0u;
+  }
+  return line->is_ledge ? 1u : 0u;
+}
+
+uint8_t stage_collision_floor_line_is_sloped(uint32_t stage_id, uint16_t segment_i) {
+  const MslStageFloorLine* line = stage_floor_line_for_segment(stage_slot(stage_id), segment_i);
+  if (line == NULL) {
+    return 0u;
+  }
+  return (fabsf(line->y1 - line->y0) > 1.0e-5f) ? 1u : 0u;
+}
+
 uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i) {
   const MslStageFloorLine* line = stage_floor_line_for_segment(stage_slot(stage_id), segment_i);
   if (line == NULL) {

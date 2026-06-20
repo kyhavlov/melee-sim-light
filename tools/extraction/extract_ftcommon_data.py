@@ -381,6 +381,11 @@ def main() -> None:
         "capture_wait_jump_latch_window_frames": float(_f32_be(buf, ft_common_abs + 0x3AC)),
         "capture_wait_anim_rate_hold_frames": float(_f32_be(buf, ft_common_abs + 0x3B0)),
         "capture_wait_anim_rate": float(_f32_be(buf, ft_common_abs + 0x3B4)),
+        # CapturePulledLw grounded-to-air handoff threshold:
+        # ftCo_CapturePulledLw_Phys computes the hidden live-JObj capture-anchor dy and calls
+        # fn_800DB230 when `dy > p_ftCommonData->x3C4 * fp->x34_scale.y`.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CapturePulledLw_Phys
+        "capture_pulled_lw_air_delta_y": float(_f32_be(buf, ft_common_abs + 0x3C4)),
         # Common grab/capture breakout timer formula + exit velocities.
         # Decomp:
         # - ftCo_800DA824 computes the initial grab timer from x354/x358/x35C/x360/x364/x368.
