@@ -37,6 +37,154 @@ def _input_bytes(rows: np.ndarray, field: str, *, stride: int) -> np.ndarray:
     return np.frombuffer(rows[field].tobytes(order="C"), dtype=np.uint8).copy().reshape(len(rows), stride)
 
 
+def _step_one_dataset_row(dataset_path: Path, record: int, *, seed_mutator=None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short: record={record}"
+
+    row = samples[record : record + 1]
+    seed = row["seed_t"].copy()
+    if seed_mutator is not None:
+        seed_mutator(seed)
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return seed.reshape(-1)[0], out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0], row["ref_t1"].reshape(-1)[0]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "victim", "expected_action", "expected_anim", "expected_on_ground"),
+    [
+        ("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl", 7484, 0, 224, 252, 0),
+        ("datasets/sheik/replays/validation/sheik/UnusedLivelyLouse.msl", 3493, 0, 224, 252, 0),
+        ("datasets/sheik/replays/validation/sheik/BeautifulDistantWolverine.msl", 3787, 1, 224, 252, 0),
+        ("datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl", 143, 1, 227, 255, 1),
+        ("datasets/sheik/replays/validation/sheik/BeautifulDistantWolverine.msl", 362, 0, 227, 255, 1),
+        ("datasets/aggregate_recent/replays/validation/marth/LoudDullGoat.msl", 5525, 0, 226, 254, 1),
+        ("datasets/aggregate_recent/replays/validation/marth/MetallicUniqueGrouse.msl", 561, 0, 226, 254, 1),
+        ("datasets/aggregate_recent/replays/validation/marth/MetallicUniqueGrouse.msl", 5067, 0, 226, 254, 1),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+            5619,
+            1,
+            226,
+            254,
+            1,
+        ),
+    ],
+)
+def test_capturepulled_lw_phys_threshold_selects_capturewait_variant_before_owner_handoff(
+    dataset_rel: str,
+    record: int,
+    victim: int,
+    expected_action: int,
+    expected_anim: int,
+    expected_on_ground: int,
+) -> None:
+    # CapturePulledLw source ordering:
+    # - The victim Phys callback applies fn_800DAD18 and compares the vertical carry against
+    #   p_ftCommonData->x3C4 * fp->x34_scale.y before the owner CatchPull/CatchDashPull
+    #   CatchWait callback selects CaptureWaitHi/Lw through fn_800DB6C8.
+    # - Fresh same-floor CapturePulledLw rows are still action-entry-owned; they can sparse-miss a
+    #   compact replay-visible floor probe but must not run the victim Phys air handoff early.
+    #   Fresh dash-pull cross-floor LandingFallSpecial rows can already be floor-loss-owned because
+    #   the catcher/victim floor publications disagree; ordinary Landing/DownBound fresh entries
+    #   remain same-frame Lw.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CapturePulledLw_Phys,fn_800DB230_inline,fn_800DB6C8}
+    # data/common/ft_common_data.json::capture_pulled_lw_air_delta_y
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref = _step_one_dataset_row(dataset_path, record)
+    assert int(seed["action_id"][victim]) == 226
+    assert int(ref["action_id"][victim]) == expected_action
+    assert int(ref["animation_index"][victim]) == expected_anim
+    assert int(ref["on_ground"][victim]) == expected_on_ground
+
+    assert int(out["action_id"][victim]) == expected_action
+    assert int(out["animation_index"][victim]) == expected_anim
+    assert int(out["on_ground"][victim]) == expected_on_ground
+    assert int(out["jumps_left"][victim]) == int(ref["jumps_left"][victim])
+    assert float(out["pos_x"][victim]) == pytest.approx(float(ref["pos_x"][victim]), abs=2e-5)
+    assert float(out["pos_y"][victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=3e-6)
+
+
+@pytest.mark.integration
+def test_capturepulled_lw_fresh_cross_floor_entry_selects_hi_before_lw_anchor() -> None:
+    # Fresh dash-pull cross-floor LandingFallSpecial -> CapturePulledLw rows can already be
+    # floor-loss-owned before the Lw Phys anchor. Lock only the discrete CapturePulledHi owner here:
+    # this row carries an unrelated pre-existing x-position float residual in both HEAD and this
+    # packet.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   fn_800DB230,fn_800DAC78,ftCo_CapturePulledLw_Phys}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/InternalPowerlessWallaby.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_dataset_row(dataset_path, 7312)
+    victim = 0
+    owner = int(seed["grab_owner_port"][victim])
+    assert int(seed["action_id"][victim]) == 226
+    assert int(seed["seed_prev_action_id"][victim]) != 226
+    assert int(seed["ground_id"][victim]) != int(seed["ground_id"][owner])
+
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id", "jumps_left"):
+        assert int(out[field][victim]) == int(ref[field][victim]), field
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "victim"),
+    [
+        ("datasets/aggregate_recent/replays/validation/marth/DraftyHealthyHare.msl", 9358, 1),
+        ("datasets/aggregate_recent/replays/validation/marth/ExtraLargeScaryHornet.msl", 9699, 0),
+    ],
+)
+def test_capturepulled_lw_fresh_dash_pull_non_landingfallspecial_stays_lw(
+    dataset_rel: str, record: int, victim: int
+) -> None:
+    # Adjacent negative for the dash-pull cross-floor handoff: ordinary Landing/DownBound fresh
+    # CapturePulledLw entries remain entry-owned Lw. These rows carry unrelated attachment-position
+    # float residuals, so lock only the discrete owner.
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref = _step_one_dataset_row(dataset_path, record)
+    owner = int(seed["grab_owner_port"][victim])
+    assert int(seed["action_id"][victim]) == 226
+    assert int(seed["seed_prev_action_id"][victim]) != 43
+    assert int(seed["action_id"][owner]) == 215
+
+    for field in ("action_id", "animation_index", "on_ground", "ground_id", "jumps_left"):
+        assert int(out[field][victim]) == int(ref[field][victim]), field
+
+
 def test_capturewait_owner_tick_uses_source_recent_buttons_or_sign_change() -> None:
     # Decomp: ftCommon_GrabMash treats fp->input.x668 AB/XY/LR or x1A50/x1A51 sign-latch changes
     # as active mash input, and CatchWait callback ownership can apply one extra
@@ -593,3 +741,41 @@ def test_capturewait_first_steady_seed_reconstruction_keeps_visible_timer_bounda
         assert int(ref_row["action_frame"][victim_p]) == want_frame
         assert int(out_row["action_id"][victim_p]) == 227
         assert int(out_row["action_frame"][victim_p]) == want_frame
+
+
+@pytest.mark.integration
+def test_capturewait_expired_anim_rate_timer_resets_stale_replay_speed() -> None:
+    # Teacher-forced CaptureWait seed reconstruction:
+    # - If x2344 seeds as 0, ftCo_CaptureWaitHi_Anim has already expired the mash-rate window and
+    #   reset frame_speed_mul to 1.0 on the source callback.
+    # - The active-timer mutation remains rate-2.0 to guard the adjacent bridge above.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+    root = Path(__file__).resolve().parents[1]
+    cases = (
+        (root / "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl", 2560, 1),
+        (root / "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl", 5298, 1),
+        (root / "datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl", 859, 1),
+    )
+    for dataset_path, record, victim_p in cases:
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_path}")
+        seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, victim_p)
+        assert int(seed_row["action_id"][victim_p]) == 227  # CaptureWaitLw
+        assert float(seed_row["frame_speed_mul_f32"][victim_p]) == pytest.approx(2.0)
+        assert float(seed_row["capture_wait_anim_rate_timer_f32"][victim_p]) == pytest.approx(0.0)
+        assert int(ref_row["action_frame"][victim_p]) == int(seed_row["action_frame"][victim_p]) + 1
+        assert int(out_row["action_frame"][victim_p]) == int(ref_row["action_frame"][victim_p])
+
+    dataset_path, record, victim_p = cases[0]
+    rows = read_dataset(str(dataset_path)).samples[[record]].copy()
+    seed = rows["seed_t"].copy()
+    seed["capture_wait_anim_rate_timer_f32"][0, victim_p] = np.float32(1.0)
+    binding = pytest.importorskip("msl_binding")
+    input_stride = int(binding.sizes()["input"])
+    out = _step(
+        seed,
+        _input_bytes(rows, "prev_input_t", stride=input_stride),
+        _input_bytes(rows, "input_t", stride=input_stride),
+        num_players=2,
+    )
+    assert int(out["action_frame"][0, victim_p]) == int(seed["action_frame"][0, victim_p]) + 2

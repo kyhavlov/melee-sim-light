@@ -16154,7 +16154,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
             (action_id == (uint16_t)MSL_ACT_FALL &&
              batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_FALL &&
              final_ground_line_idx >= 0 && (size_t)final_ground_line_idx < g->line_count &&
-             batch->state.ground_id[idx] == final_ground_line_idx &&
+             batch->state.ground_id[idx] == g->lines[(size_t)final_ground_line_idx].segment_i &&
              g->lines[(size_t)final_ground_line_idx].is_platform &&
              !resolved_line_has_platform_transform && batch->state.fall_fast[idx] == 0u &&
              batch->state.speed_y_self[idx] < 0.0f && prev_y < (contact_y - k_floor_y_bias) &&

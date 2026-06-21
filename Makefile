@@ -1,4 +1,4 @@
-.PHONY: build build-native clean-native-shadow test test-parallel test-serial package-smoke preprocess preprocess-aggregate slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-rollout validate-rollout-aggregate validate-rollout-marth validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data viewer-build viewer fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
+.PHONY: build build-native clean-native-shadow test test-parallel test-serial package-smoke preprocess preprocess-aggregate slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-sheik validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data viewer-build viewer fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -6,15 +6,20 @@ SUITE ?= replays/suites/fox_falco_fd_ucf084_recent.json
 AGG_SUITE ?= replays/suites/aggregate_recent.json
 DOUBLES_SUITE ?= replays/suites/doubles_recent.json
 MARTH_SUITE ?= replays/suites/marth.json
+SHEIK_SUITE ?= replays/suites/sheik.json
 CHUNK ?= 4096
 OUT ?=
 FIELDS ?= action_id,animation_index,on_ground,hitlag,hitstun,state_flags
+PRIMARY_ONE_STEP_OUT ?= reports/validation/one_step_suite_eval.txt
+PRIMARY_ROLLOUT_OUT ?= reports/validation/rollout_suite_eval.txt
 AGG_ONE_STEP_OUT ?= reports/validation/aggregate_recent_one_step_suite_eval.txt
 AGG_ROLLOUT_OUT ?= reports/validation/aggregate_recent_rollout_suite_eval.txt
 DOUBLES_ONE_STEP_OUT ?= reports/validation/doubles_recent_one_step_suite_eval.txt
 DOUBLES_ROLLOUT_OUT ?= reports/validation/doubles_recent_rollout_suite_eval.txt
 MARTH_ONE_STEP_OUT ?= reports/validation/marth_one_step.txt
 MARTH_ROLLOUT_OUT ?= reports/validation/marth_rollout.txt
+SHEIK_ONE_STEP_OUT ?= reports/validation/sheik_one_step.txt
+SHEIK_ROLLOUT_OUT ?= reports/validation/sheik_rollout.txt
 ROLLOUT_JSON ?= reports/triage/current_rollout_streaks.json
 ROLLOUT_BEFORE ?= reports/triage/rollout_streaks.json
 ROLLOUT_AFTER ?= reports/triage/current_rollout_streaks.json
@@ -62,9 +67,11 @@ VIEWER_PORT ?= 8001
 HOST ?= 127.0.0.1
 OPEN ?= 1
 
+VALIDATE_OUT := --out "$(PRIMARY_ONE_STEP_OUT)"
+ROLLOUT_OUT := --out "$(PRIMARY_ROLLOUT_OUT)"
 ifneq ($(strip $(OUT)),)
-VALIDATE_OUT := --out $(OUT)
-ROLLOUT_OUT := --out $(OUT)
+VALIDATE_OUT := --out "$(OUT)"
+ROLLOUT_OUT := --out "$(OUT)"
 endif
 ifneq ($(strip $(ROLLOUT_SUMMARY_OUT)),)
 ROLLOUT_SUMMARY_OUT_ARG := --out $(ROLLOUT_SUMMARY_OUT)
@@ -157,8 +164,14 @@ validate-marth: build
 validate-rollout-marth: build
 	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(MARTH_SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(MARTH_ROLLOUT_OUT)"
 
+validate-sheik: build
+	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SHEIK_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --out "$(SHEIK_ONE_STEP_OUT)"
+
+validate-rollout-sheik: build
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SHEIK_SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(SHEIK_ROLLOUT_OUT)"
+
 validate-all: build
-	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --doubles-suite "$(DOUBLES_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --doubles-one-step-out "$(DOUBLES_ONE_STEP_OUT)" --doubles-rollout-out "$(DOUBLES_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
+	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --doubles-suite "$(DOUBLES_SUITE)" --sheik-suite "$(SHEIK_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --doubles-one-step-out "$(DOUBLES_ONE_STEP_OUT)" --doubles-rollout-out "$(DOUBLES_ROLLOUT_OUT)" --sheik-one-step-out "$(SHEIK_ONE_STEP_OUT)" --sheik-rollout-out "$(SHEIK_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
 
 # Always writes to ROLLOUT_JSON (independent of OUT=...).
 rollout-capture: build

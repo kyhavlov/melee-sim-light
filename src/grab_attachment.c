@@ -631,62 +631,9 @@ void grab_attachment_apply_capture_delta_now(MslBatch* batch, int bi, int victim
   batch->state.pos_z[vidx] += dz;
 }
 
-static void capture_pulled_lw_try_air_handoff_after_delta(MslBatch* batch, int bi, int victim_p,
-                                                          int owner_p, float pre_victim_y) {
-  if (batch == NULL) {
-    return;
-  }
+static void capture_pulled_lw_enter_hi_and_apply_delta(MslBatch* batch, int bi, int victim_p,
+                                                       int owner_p, uint16_t ground_id) {
   const size_t vidx = msl_idx_player(bi, victim_p);
-  if (batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_LW ||
-      batch->state.on_ground[vidx] == 0u) {
-    return;
-  }
-  MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx],
-                                           batch->state.pos_x[vidx]};
-  uint8_t floor_mask = mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result);
-  if (floor_mask == 0u && batch->state.ground_id[vidx] != 0xFFFFu) {
-    floor_mask = mpcoll_800477e0_capture_root_floor_mask_probe(batch, vidx, &floor_result);
-  }
-  if (floor_mask != 0u) {
-    return;
-  }
-  const uint32_t stage_id = batch->state.stage_id[bi];
-  const uint16_t ground_id = batch->state.ground_id[vidx];
-  uint8_t source_floor_loss_ok = 0u;
-  if (ground_id != 0xFFFFu) {
-    const size_t oidx = msl_idx_player(bi, owner_p);
-    const uint8_t owner_on_same_floor =
-        (uint8_t)(batch->state.on_ground[oidx] != 0u && batch->state.ground_id[oidx] == ground_id);
-    source_floor_loss_ok =
-        (uint8_t)(stage_collision_floor_line_is_platform(stage_id, ground_id) != 0u ||
-                  (owner_on_same_floor != 0u &&
-                   stage_collision_floor_line_is_ledge(stage_id, ground_id) != 0u &&
-                   stage_collision_floor_line_is_sloped(stage_id, ground_id) != 0u));
-  }
-  const MslCommonParams* c = msl_common_params();
-  if (source_floor_loss_ok == 0u && c != NULL) {
-    const size_t oidx = msl_idx_player(bi, owner_p);
-    const float owner_root_dy = batch->state.pos_y[oidx] - pre_victim_y;
-    source_floor_loss_ok = (uint8_t)(owner_root_dy > c->capture_pulled_lw_air_delta_y *
-                                                         pose_model_scale_y(batch, vidx));
-  }
-  if (source_floor_loss_ok == 0u) {
-    return;
-  }
-
-  // CapturePulledLw source handoff:
-  // Coll calls ft_8008403C(gobj, fn_800DB230); only a true source floor-mask miss, including
-  //   the capture-root CollData floor fallback, should enter the airborne PulledHi path.
-  // The Phys dy threshold path uses hidden live JObj state that is not replay-visible enough to
-  // trust the reconstructed anchor dy directly. Use source-visible floor metadata (platforms and
-  // same-carried-floor sloped ledges) or the decomp common vertical carry threshold on
-  // owner-root-victim-root as the bounded discriminator before allowing the floor-loss callback.
-  // data/stages/bin/*.bin::MSLSTG01 segment.{platform,ledge,endpoints}
-  // data/common/ft_common_data.json::capture_pulled_lw_air_delta_y
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
-  //   ftCo_CapturePulledLw_Phys,ftCo_CapturePulledLw_Coll,fn_800DB230,fn_800DAA40}
-  // refs/melee/src/melee/ft/ft_081B.c::ft_8008403C
-  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_UnlockECB}
   const float cur_anim = batch->state.anim_frame_f32[vidx];
   batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_PULLED_HI;
   batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_PULLED_HI;
@@ -702,6 +649,128 @@ static void capture_pulled_lw_try_air_handoff_after_delta(MslBatch* batch, int b
   }
   msl_anim_timebase_enter(batch, vidx, cur_anim, 1.0f);
   grab_attachment_apply_capture_delta_now(batch, bi, victim_p, owner_p);
+}
+
+static void capture_pulled_lw_try_air_handoff_after_delta(MslBatch* batch, int bi, int victim_p,
+                                                          int owner_p, float capture_delta_y) {
+  if (batch == NULL) {
+    return;
+  }
+  const size_t vidx = msl_idx_player(bi, victim_p);
+  if (batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_LW ||
+      batch->state.on_ground[vidx] == 0u) {
+    return;
+  }
+  const size_t oidx = msl_idx_player(bi, owner_p);
+  const uint8_t sustained_capture_pulled_lw =
+      (uint8_t)(batch->state.frame_start_action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW &&
+                batch->state.seed_prev_action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW);
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const uint16_t ground_id = batch->state.ground_id[vidx];
+  const uint8_t fresh_ledge_floor_loss_entry =
+      (uint8_t)(sustained_capture_pulled_lw == 0u && ground_id != 0xFFFFu &&
+                batch->state.seed_prev_action_id[vidx] == (uint16_t)MSL_ACT_ESCAPE_N &&
+                stage_collision_floor_line_is_ledge(stage_id, ground_id) != 0u);
+  const uint8_t fresh_platform_floor_loss_entry =
+      (uint8_t)(sustained_capture_pulled_lw == 0u && ground_id != 0xFFFFu &&
+                batch->state.seed_prev_action_id[vidx] == (uint16_t)MSL_ACT_GUARD_ON &&
+                stage_collision_floor_line_is_platform(stage_id, ground_id) != 0u);
+  if (sustained_capture_pulled_lw == 0u && fresh_ledge_floor_loss_entry == 0u &&
+      fresh_platform_floor_loss_entry == 0u) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  const uint8_t vertical_carry_handoff =
+      (uint8_t)(c != NULL && capture_delta_y > c->capture_pulled_lw_air_delta_y *
+                                                   batch->state.fighter_scale_y[vidx]);
+  MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx],
+                                           batch->state.pos_x[vidx]};
+  uint8_t source_floor_loss_ok = vertical_carry_handoff;
+  if (source_floor_loss_ok == 0u) {
+    uint8_t floor_mask = mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result);
+    if (floor_mask == 0u && ground_id != 0xFFFFu && batch->state.ecb_lock_timer[vidx] != 0u) {
+      floor_mask = mpcoll_800477e0_capture_root_floor_mask_probe(batch, vidx, &floor_result);
+    }
+    if (floor_mask != 0u) {
+      return;
+    }
+    if (ground_id != 0xFFFFu) {
+      const uint8_t owner_on_same_floor = (uint8_t)(batch->state.on_ground[oidx] != 0u &&
+                                                    batch->state.ground_id[oidx] == ground_id);
+      source_floor_loss_ok =
+          (uint8_t)(stage_collision_floor_line_is_platform(stage_id, ground_id) != 0u ||
+                    (owner_on_same_floor != 0u &&
+                     stage_collision_floor_line_is_ledge(stage_id, ground_id) != 0u &&
+                     stage_collision_floor_line_is_sloped(stage_id, ground_id) != 0u));
+    }
+  }
+  if (source_floor_loss_ok == 0u) {
+    return;
+  }
+
+  // CapturePulledLw source handoff:
+  // - Once the victim is a sustained frame-start CapturePulledLw row, Phys applies fn_800DAD18 and
+  //   can enter CapturePulledHi from the vertical carry threshold (`p_ftCommonData->x3C4 *
+  //   fp->x34_scale.y`). Fresh CapturePulledLw entries from Catch/Wait/Damage owners expose their
+  //   previous source action in the frame-start/seed-prev lanes and stay entry-owned here, except
+  //   for bounded MSLSTG01 floor-loss owners: EscapeN leaves ledge floors and GuardOn leaves soft
+  //   platform floors before the replay-visible low-pull row. The owner-side same-frame helper
+  //   below handles the bounded fresh cross-floor Hi-first path before applying a Lw anchor.
+  // - Coll then calls ft_8008403C(gobj, fn_800DB230); a live mpColl_800477E0 floor-mask miss owns
+  //   the source floor-loss callback for platform/ledge owners expressed by MSLSTG01. Grounded
+  //   rows below the vertical threshold can sparse-miss the replay-visible compact floor probe while
+  //   source CollData still owns/projects the previous hard floor; do not convert those to PulledHi.
+  // data/common/ft_common_data.json::capture_pulled_lw_air_delta_y
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_CapturePulledLw_Phys,ftCo_CapturePulledLw_Coll,fn_800DB230,fn_800DAA40}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_8008403C
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_UnlockECB}
+  capture_pulled_lw_enter_hi_and_apply_delta(batch, bi, victim_p, owner_p, ground_id);
+}
+
+uint8_t grab_attachment_apply_capture_pulled_lw_phys_now(MslBatch* batch, int bi, int victim_p,
+                                                         int owner_p) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (victim_p < 0 || victim_p >= num_players || owner_p < 0 || owner_p >= num_players) {
+    return 0u;
+  }
+  const size_t vidx = msl_idx_player(bi, victim_p);
+  const size_t oidx = msl_idx_player(bi, owner_p);
+  if (batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_LW ||
+      batch->state.hitlag_started_frame[vidx] != 0u ||
+      batch->state.hitlag_started_frame[oidx] != 0u) {
+    return 0u;
+  }
+  if (batch->state.seed_prev_action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_LW &&
+      batch->state.frame_start_on_ground[vidx] != 0u && batch->state.on_ground[oidx] != 0u &&
+      batch->state.action_id[oidx] == (uint16_t)MSL_ACT_CATCH_DASH_PULL &&
+      batch->state.seed_prev_action_id[vidx] == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL &&
+      batch->state.ground_id[vidx] != batch->state.ground_id[oidx]) {
+    // Fresh dash-pull cross-floor LandingFallSpecial -> CapturePulledLw entry can already be
+    // floor-loss-owned before the Lw Phys anchor. Convert to CapturePulledHi first, then apply the
+    // single Hi anchor delta that fn_800DB230/fn_800DAC78 owns. Fresh ordinary Landing/DownBound
+    // rows remain entry-owned Lw until a sustained victim Phys/Coll tick.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    //   fn_800DB230,fn_800DAC78,fn_800DB6C8}
+    capture_pulled_lw_enter_hi_and_apply_delta(batch, bi, victim_p, owner_p,
+                                               batch->state.ground_id[vidx]);
+    return 1u;
+  }
+
+  // Same source owner as grab_attachment_update_pre_collision(), exposed for CatchPull_Anim's
+  // owner-side CapturePulled -> CaptureWait dispatch. If the victim's Lw Phys callback runs earlier
+  // in the frame, fn_800DB6C8 must see CapturePulledHi and enter CaptureWaitHi rather than using the
+  // stale frame-start CapturePulledLw variant.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_CapturePulledLw_Phys,fn_800DB230_inline,fn_800DB6C8}
+  const float pre_victim_y = batch->state.pos_y[vidx];
+  grab_attachment_apply_capture_delta_now(batch, bi, victim_p, owner_p);
+  capture_pulled_lw_try_air_handoff_after_delta(batch, bi, victim_p, owner_p,
+                                                batch->state.pos_y[vidx] - pre_victim_y);
+  return 1u;
 }
 
 void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int bi, int victim_p, int owner_p) {
@@ -1158,9 +1227,26 @@ void grab_attachment_update_pre_collision(MslBatch* batch) {
         }
         // Decomp ordering: CapturePulled*/CaptureDamage* runs fn_800DAD18 in Phys, then runs Coll.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAD18,ftCo_CapturePulledHi_Coll}
-        const float pre_victim_y = batch->state.pos_y[vidx];
-        grab_attachment_apply_capture_delta_now(batch, bi, p, (int)owner);
-        capture_pulled_lw_try_air_handoff_after_delta(batch, bi, p, (int)owner, pre_victim_y);
+        if (batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW &&
+            batch->state.seed_prev_action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_LW &&
+            batch->state.frame_start_on_ground[vidx] != 0u && batch->state.on_ground[oidx] != 0u &&
+            batch->state.action_id[oidx] == (uint16_t)MSL_ACT_CATCH_DASH_PULL &&
+            batch->state.seed_prev_action_id[vidx] == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL &&
+            batch->state.ground_id[vidx] != batch->state.ground_id[oidx]) {
+          // Fresh dash-pull cross-floor LandingFallSpecial -> CapturePulledLw rows are source
+          // floor-loss-owned before the normal Lw Phys anchor. Enter Hi first so fn_800DAC78
+          // applies the single airborne anchor delta. Same-floor and ordinary Landing/DownBound
+          // fresh rows remain entry-owned and take the Lw path below.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+          //   fn_800DB230,fn_800DAC78,ftCo_CapturePulledLw_Phys}
+          capture_pulled_lw_enter_hi_and_apply_delta(batch, bi, p, (int)owner,
+                                                     batch->state.ground_id[vidx]);
+        } else {
+          const float pre_victim_y = batch->state.pos_y[vidx];
+          grab_attachment_apply_capture_delta_now(batch, bi, p, (int)owner);
+          capture_pulled_lw_try_air_handoff_after_delta(batch, bi, p, (int)owner,
+                                                        batch->state.pos_y[vidx] - pre_victim_y);
+        }
       } else if (msl_action_is_thrown_victim(batch->state.action_id[vidx])) {
         const uint16_t cur_action = batch->state.action_id[vidx];
         const uint16_t prev_action = batch->state.prev_action_id[vidx];

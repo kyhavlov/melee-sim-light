@@ -609,13 +609,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:231
 == datasets/aggregate_recent/replays/validation/marth/FemaleWorthyAlpaca.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 995
-rollout.streak_count: 37
-rollout.streak_len.median: 178
-rollout.streak_len.p90: 384
-rollout.streak_len.p95: 595
+rollout.streak_count: 34
+rollout.streak_len.median: 154
+rollout.streak_len.p90: 595
+rollout.streak_len.p95: 707
 rollout.streak_len.max: 995
-rollout.first_mismatch_total: 39
-rollout.first_mismatch_seeded_total: 23
+rollout.first_mismatch_total: 36
+rollout.first_mismatch_seeded_total: 20
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=11.3508 rec=3330 p=1 seed/ref/out=54.1063/54.0113/42.6605 actions=35/0/0 category=unclassified
@@ -631,13 +631,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 == datasets/aggregate_recent/replays/validation/marth/InternalPowerlessWallaby.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 2020
-rollout.streak_count: 41
-rollout.streak_len.median: 92
+rollout.streak_count: 40
+rollout.streak_len.median: 94
 rollout.streak_len.p90: 586
 rollout.streak_len.p95: 770
 rollout.streak_len.max: 2020
-rollout.first_mismatch_total: 40
-rollout.first_mismatch_seeded_total: 19
+rollout.first_mismatch_total: 39
+rollout.first_mismatch_seeded_total: 18
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=43.0663 rec=4485 p=1 seed/ref/out=100.244/101.357/58.2903 actions=89/89/89 category=unclassified
@@ -675,13 +675,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == datasets/aggregate_recent/replays/validation/marth/MetallicUniqueGrouse.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1502
-rollout.streak_count: 18
-rollout.streak_len.median: 149
+rollout.streak_count: 17
+rollout.streak_len.median: 151
 rollout.streak_len.p90: 850
 rollout.streak_len.p95: 1502
 rollout.streak_len.max: 1502
-rollout.first_mismatch_total: 18
-rollout.first_mismatch_seeded_total: 7
+rollout.first_mismatch_total: 17
+rollout.first_mismatch_seeded_total: 6
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=10.71 rec=4823 p=1 seed/ref/out=-24.8992/-24.8992/-35.6092 actions=60/60/60 category=unclassified
@@ -803,13 +803,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:138
 == datasets/aggregate_recent/replays/validation/marth/VigorousRelievedLlama.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1733
-rollout.streak_count: 32
-rollout.streak_len.median: 252
+rollout.streak_count: 31
+rollout.streak_len.median: 282
 rollout.streak_len.p90: 524
-rollout.streak_len.p95: 809
+rollout.streak_len.p95: 933
 rollout.streak_len.max: 1733
-rollout.first_mismatch_total: 34
-rollout.first_mismatch_seeded_total: 20
+rollout.first_mismatch_total: 33
+rollout.first_mismatch_seeded_total: 19
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=22.7706 rec=5748 p=1 seed/ref/out=5.7136/5.71378/-17.0568 actions=60/60/60 category=unclassified
@@ -975,13 +975,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:316
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1441
-rollout.streak_count: 23
-rollout.streak_len.median: 231
+rollout.streak_count: 22
+rollout.streak_len.median: 258
 rollout.streak_len.p90: 1242
 rollout.streak_len.p95: 1286
 rollout.streak_len.max: 1441
-rollout.first_mismatch_total: 26
-rollout.first_mismatch_seeded_total: 16
+rollout.first_mismatch_total: 25
+rollout.first_mismatch_seeded_total: 15
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=36.0083 rec=7055 p=0 seed/ref/out=56.5205/55.9905/19.9822 actions=35/0/0 category=unclassified
@@ -995,14 +995,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:522
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == suite summary ==
-overall.rollout.streak_count: 659
-overall.rollout.streak_len.median: 251
+overall.rollout.streak_count: 652
+overall.rollout.streak_len.median: 252
 overall.rollout.streak_len.p90: 1284
 overall.rollout.streak_len.p95: 2213
 overall.rollout.streak_len.max: 12475
 overall.rollout.best_len.max: 12475
-overall.rollout.first_mismatch_total: 625
-overall.rollout.first_mismatch_seeded_total: 263
+overall.rollout.first_mismatch_total: 618
+overall.rollout.first_mismatch_seeded_total: 256
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=159.875 rec=5010 p=1 seed/ref/out=-7.05318/-5.65008/-165.525 actions=7/7/7 category=unclassified

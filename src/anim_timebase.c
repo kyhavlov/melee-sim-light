@@ -14,6 +14,7 @@
 #include "damage_source.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
+#include "sheik_specials.h"
 
 enum { Ft_MF_KeepFastFall = 1 << 0 };
 
@@ -1127,7 +1128,6 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           }
         }
       }
-
       // ThrowLw attached pulse/post-hitlag anim-rate ownership:
       // - Throw entry computes one shared throw anim-speed via ftCo_800DD4B0, and ftCo_800DD398
       //   installs it onto both thrower and thrown victim.
@@ -1217,22 +1217,16 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // re-derivation would clobber it with the common default because prev_action_id is
       // already self by the time this runs. Spacie rows keep the original re-derivation
       // unconditionally (validated lock behavior: reseeds carry replay rates).
-      // Sheik/Zelda Vanish landing writes the source-correct stretched rate in
-      // sk_enter_landing_fallspecial; by the af==0 re-derivation prev_action is already
-      // LandingFallSpecial, so the source cannot be recovered and the common default would shorten
-      // the 30-frame submotion to ~9 frames. Preserve the live rate like Marth's Dolphin Slash, but
-      // scope it strictly to LandingFallSpecial: the only Sheik/Zelda source that owns this stretched
-      // rate is Vanish -> LandingFallSpecial, so other Sheik/Zelda landing actions (e.g. LandingAir*)
-      // must keep the ordinary entry-rate re-derivation.
+      // Sheik/Zelda Vanish LandingFallSpecial publishes a transient entry `frame_speed_mul`
+      // matching ftSk_SpecialHi's landing helper, but Slippi state_age then advances with the
+      // steady LandingFallSpecial rate on the following frame. Frame-0 replay seeds therefore
+      // rederive the steady rate instead of preserving the visible transient. Marth Dolphin Slash
+      // keeps the existing preserve path because its source-specific landing lag is not otherwise
+      // recoverable from the frame-0 self prev-action row.
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Coll
-      const uint8_t vanish_landing_fall_special_rate_preserve =
-          (a == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL && ch != NULL &&
-           ch->sheik_vanish_landing_lag_frames > 0.0f)
-              ? 1u
-              : 0u;
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
       const uint8_t skip_rederive_live_entry =
-          ((batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH ||
-            vanish_landing_fall_special_rate_preserve) &&
+          (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
            batch->state.frame_speed_mul_fp_q16_16[idx] != msl_q16_16_from_f32(1.0f))
               ? 1u
               : 0u;
@@ -1264,6 +1258,20 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
             // Dolphin Slash direct landing: LandingFallSpecial with MarsAttributes x2C.
             // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
             lag = (ch != NULL) ? ch->specialhi_landing_lag_frames : lag;
+          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+                     (source_prev_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI ||
+                      live_prev_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI) &&
+                     ch != NULL && ch->sheik_vanish_landing_lag_frames > 0.0f) {
+            // Sheik Vanish direct landing: ftSk_SpecialAirHi_Coll enters
+            // LandingFallSpecial through the Sheik-specific landing helper. Replay frame-0
+            // snapshots can expose the helper's transient entry rate, while the next source
+            // Anim tick consumes the steady `(end_frame + 0.1f) / da->x2EC` rate.
+            // MSLMSO01's fx_special_kind lane is intentionally Fox/Falco-scoped, so this
+            // Sheik-only callsite uses the ftSk action id and the extracted character attr.
+            // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+            //   ftSk_SpecialAirHi_Coll,fn_80112ED8}
+            // data/characters/sheik.json::sheik_vanish_landing_lag_frames
+            lag = ch->sheik_vanish_landing_lag_frames;
           } else if (msl_motion_state_fx_special_kind(batch->state.char_id[idx],
                                                       source_prev_action) ==
                      (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END) {
@@ -1284,9 +1292,16 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
               entry_rate = (end_frame + 0.1f) / lag;
             }
           }
-        } else if (anim_timebase_try_landing_air_rate(a, ch, c, batch->state.char_id[idx],
-                                                      batch->state.lr_press_timer[idx],
-                                                      batch->state.l_cancel[idx], &entry_rate)) {
+        } else if (anim_timebase_try_landing_air_rate(
+                       a, ch, c, batch->state.char_id[idx],
+                       batch->state.l_cancel[idx] == 1u ? 0u : UINT8_MAX,
+                       batch->state.l_cancel[idx], &entry_rate)) {
+          // Entry-shaped replay seeds already carry Slippi's post-frame L-cancel result.
+          // A stale x67F/lr_press_timer window can remain nonzero on the first LandingAir frame
+          // even when source did not take the divide-lag branch, so frame-0 rederive uses the
+          // explicit result lane while live entry paths still call the helper with the input timer.
+          // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
           // rate already written to entry_rate by helper.
         }
         if (entry_rate > 0.0f) {

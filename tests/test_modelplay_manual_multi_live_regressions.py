@@ -141,10 +141,11 @@ def test_specialhi_fallspecial_consumes_jumps_before_recovery_fall() -> None:
 
     fox = 0
     assert int(history[2159]["action_id"][fox]) == 353  # Grounded SpecialHi.
-    assert int(history[2251]["action_id"][fox]) == 35  # FallSpecial.
-    assert int(history[2251]["jumps_left"][fox]) == 0
+    assert int(history[2251]["action_id"][fox]) == 358  # SpecialHiFall, before anim end.
+    assert int(history[2253]["action_id"][fox]) == 35  # FallSpecial.
+    assert int(history[2253]["jumps_left"][fox]) == 0
 
-    for frame in range(2251, 2259):
+    for frame in range(2253, 2259):
         assert int(history[frame]["action_id"][fox]) != 28  # No JumpAerialB during recovery.
         assert int(history[frame]["jumps_left"][fox]) == 0
 

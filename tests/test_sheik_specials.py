@@ -653,6 +653,58 @@ def test_sheik_vanish_travel_entry_spawns_smoke_article_demo_locks(
     )
 
 
+@pytest.mark.integration
+def test_sheik_vanish_travel_entry_can_spawn_second_smoke_article_replay_real() -> None:
+    # Vanish's accessory4 callback spawns a fresh smoke article on each travel entry. Source does
+    # not reject the spawn when an older It_Kind_Seak_Vanish smoke from the same owner is still
+    # alive; it_802B1C60 allocates a new item and the older smoke simply continues its lifetime.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+    #   inlineA0,ftSk_SpecialHi_80113A30,fn_80112ED8}
+    # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+    record = 4592
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_0
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert _item_type_present(samples[record]["seed_t"], ITEM_SHEIK_VANISH)
+
+    out = _run_sample_row(samples, record)
+    out_slots = [
+        i
+        for i, item in enumerate(out["items"])
+        if int(item["exists"]) != 0 and int(item["type"]) == ITEM_SHEIK_VANISH
+    ]
+    ref_slots = [
+        i
+        for i, item in enumerate(samples[record]["ref_t1"]["items"])
+        if int(item["exists"]) != 0 and int(item["type"]) == ITEM_SHEIK_VANISH
+    ]
+    assert len(out_slots) == len(ref_slots) == 2
+    assert float(out["items"][out_slots[1]]["timer"]) == pytest.approx(80.0, abs=1e-6)
+
+
+@pytest.mark.integration
+def test_sheik_vanish_start0_existing_smoke_does_not_duplicate_before_travel_entry() -> None:
+    # Adjacent quiet frame: a live older smoke article alone is not a spawn command. The second
+    # smoke appears only once Start0's Anim callback reaches the travel-entry owner.
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+    record = 4591
+    assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_0
+    assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_0
+
+    out = _run_sample_row(samples, record)
+    out_count = sum(
+        1
+        for item in out["items"]
+        if int(item["exists"]) != 0 and int(item["type"]) == ITEM_SHEIK_VANISH
+    )
+    ref_count = sum(
+        1
+        for item in samples[record]["ref_t1"]["items"]
+        if int(item["exists"]) != 0 and int(item["type"]) == ITEM_SHEIK_VANISH
+    )
+    assert out_count == ref_count == 1
+
+
 def test_sheik_non_vanish_special_does_not_spawn_smoke_article_negative() -> None:
     seed = _seed_base("sheik")
     seed["action_id"][0, 0] = np.uint16(ACT_SK_SPECIAL_N_END)
@@ -2711,7 +2763,7 @@ def test_sheik_needle_seed_lane_chain_callback_installed_clears_count() -> None:
         (ACT_SK_SPECIAL_S_START, 22, 0, 1),
         (ACT_SK_SPECIAL_AIR_S_START, 31, 1, 3),
         (ACT_SK_SPECIAL_S_END, 17, 3, 4),
-        (ACT_SK_SPECIAL_AIR_S_END, 26, 4, 0),
+        (ACT_SK_SPECIAL_AIR_S_END, 26, 4, 4),
     ],
 )
 def test_sheik_chain_article_state_thresholds_follow_source_timer(
@@ -2725,7 +2777,7 @@ def test_sheik_chain_article_state_thresholds_follow_source_timer(
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
     #   ftSk_SpecialS_CheckInitChain,ftSk_SpecialSEnd_Anim,ftSk_SpecialAirSEnd_Anim}
     # refs/melee/src/melee/it/items/itseakchain.c::{
-    #   it_802BCFC4,it_802BCED4,it_802BCF84,it_2725_Logic54_PickedUp}
+    #   it_802BCFC4,it_802BCED4,it_802BCF84,it_802BB20C}
     seed = _seed_base("sheik")
     seed["action_id"][0, 0] = np.uint16(action)
     seed["sheik_chain_x0_u8"][0, 0] = np.uint8(x0)
@@ -2761,7 +2813,6 @@ def test_sheik_chain_article_destroy_threshold_and_orphan_owner_negative() -> No
         (1392, 0, 1),
         (1401, 1, 3),
         (1431, 3, 4),
-        (4667, 4, 0),
     ],
 )
 def test_sheik_demo_chain_article_state_machine_replay_real(
@@ -2780,6 +2831,31 @@ def test_sheik_demo_chain_article_state_machine_replay_real(
     assert int(out["items"]["exists"][0]) == int(ref["items"]["exists"][0])
     assert int(out["items"]["type"][0]) == ITEM_SHEIK_CHAIN
     assert int(out["items"]["state"][0]) == ref_state
+
+
+@pytest.mark.integration
+def test_sheik_demo2_chain_end_pre_destroy_frame_preserves_retract_state_replay_real() -> None:
+    # ftSk_SpecialS{Air}End_Anim calls it_802BCF84 at x24 and it_802BB20C at x28. A state-4
+    # one-step seed at x0=26 must not be collapsed to state 0 by the fighter timer; state 0 is owned
+    # by the item retract helper it_802BC94C -> it_2725_Logic54_PickedUp when hidden ItemLink
+    # frontier geometry reaches the hand, which is not the same source predicate as x28-1.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    #   ftSk_SpecialSEnd_Anim,ftSk_SpecialAirSEnd_Anim}
+    # refs/melee/src/melee/it/items/itseakchain.c::{
+    #   it_802BCF84,it_802BB20C,it_802BC94C,it_2725_Logic54_PickedUp}
+    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl")
+    seed = samples[7532]["seed_t"]
+    ref = samples[7532]["ref_t1"]
+    assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_S_END
+    assert int(seed["sheik_chain_x0_u8"][0]) == 26
+    assert int(seed["items"]["type"][0]) == ITEM_SHEIK_CHAIN
+    assert int(seed["items"]["state"][0]) == 4
+    assert int(ref["items"]["state"][0]) == 4
+
+    out = _run_sample_row(samples, 7532)
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["type"][0]) == ITEM_SHEIK_CHAIN
+    assert int(out["items"]["state"][0]) == 4
 
 
 @pytest.mark.integration

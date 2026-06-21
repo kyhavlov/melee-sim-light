@@ -51,6 +51,7 @@ def main() -> None:
     ap.add_argument("--suite", required=True)
     ap.add_argument("--agg-suite", required=True)
     ap.add_argument("--doubles-suite", default="")
+    ap.add_argument("--sheik-suite", default="")
     ap.add_argument("--datasets-dir", default="datasets")
     ap.add_argument("--chunk", type=int, default=4096)
     ap.add_argument("--fields", default="action_id,animation_index,on_ground,hitlag,hitstun,state_flags")
@@ -60,6 +61,8 @@ def main() -> None:
     ap.add_argument("--agg-rollout-out", default="reports/validation/aggregate_recent_rollout_suite_eval.txt")
     ap.add_argument("--doubles-one-step-out", default="reports/validation/doubles_recent_one_step_suite_eval.txt")
     ap.add_argument("--doubles-rollout-out", default="reports/validation/doubles_recent_rollout_suite_eval.txt")
+    ap.add_argument("--sheik-one-step-out", default="reports/validation/sheik_one_step.txt")
+    ap.add_argument("--sheik-rollout-out", default="reports/validation/sheik_rollout.txt")
     ap.add_argument("--workers", type=int, default=1, help="Parallel report worker subprocesses.")
     args = ap.parse_args()
 
@@ -83,15 +86,60 @@ def main() -> None:
             name="run_one_step_suite_eval",
             module="tools.eval.run_one_step_suite_eval",
             main=run_one_step_suite_eval.main,
-            args=["--suite", args.agg_suite, *one_step_common, "--out", args.agg_one_step_out, "--quiet"],
+            args=[
+                "--suite",
+                args.agg_suite,
+                *one_step_common,
+                "--out",
+                args.agg_one_step_out,
+                "--quiet",
+            ],
         ),
         _ReportJob(
             name="run_rollout_suite_eval",
             module="tools.eval.run_rollout_suite_eval",
             main=run_rollout_suite_eval.main,
-            args=["--suite", args.agg_suite, *rollout_common, "--out", args.agg_rollout_out, "--quiet"],
+            args=[
+                "--suite",
+                args.agg_suite,
+                *rollout_common,
+                "--out",
+                args.agg_rollout_out,
+                "--quiet",
+            ],
         ),
     ]
+    if args.sheik_suite:
+        jobs.extend(
+            [
+                _ReportJob(
+                    name="run_one_step_suite_eval",
+                    module="tools.eval.run_one_step_suite_eval",
+                    main=run_one_step_suite_eval.main,
+                    args=[
+                        "--suite",
+                        args.sheik_suite,
+                        *one_step_common,
+                        "--out",
+                        args.sheik_one_step_out,
+                        "--quiet",
+                    ],
+                ),
+                _ReportJob(
+                    name="run_rollout_suite_eval",
+                    module="tools.eval.run_rollout_suite_eval",
+                    main=run_rollout_suite_eval.main,
+                    args=[
+                        "--suite",
+                        args.sheik_suite,
+                        *rollout_common,
+                        "--out",
+                        args.sheik_rollout_out,
+                        "--quiet",
+                    ],
+                ),
+            ]
+        )
     if args.doubles_suite:
         jobs.extend(
             [

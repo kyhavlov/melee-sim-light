@@ -367,6 +367,56 @@ def test_marth_hitlag_exit_uses_body_attribution_to_reconstruct_victims1() -> No
 
 
 @pytest.mark.integration
+def test_sheik_vanish_smoke_hitlag_tail_uses_body_attribution_to_reject_rehit() -> None:
+    # Replay-real hidden-state lock for Sheik Vanish smoke item HitCapsule victims_1 carry:
+    # - RRR 2909 starts Marth on the last hitlag tick of a Vanish smoke BODY hit.
+    # - The smoke article's hidden item victims_1 list is not serialized, but Slippi still exposes
+    #   the accepted source through last_hit_by + instance_hit_by.
+    # - The next item BODY pass must reject the same smoke episode before percent/hitlag writes.
+    # refs/melee/src/melee/it/items/itseakvanish.c::it_802B1D40
+    # refs/melee/src/melee/it/itcoll.c::it_80272460
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 2909
+    attacker = 0
+    defender = 1
+    seed = samples["seed_t"][record]
+
+    assert int(seed["char_id"][attacker]) == 7  # Sheik
+    assert int(seed["action_id"][attacker]) == 359  # ftSk_MS_SpecialAirHiStart1
+    assert int(seed["action_id"][defender]) == 90  # ftCo_MS_DamageFlyTop
+    assert int(seed["hitlag"][defender]) == 1
+    assert int(seed["hitstun"][defender]) > 0
+    assert int(seed["last_hit_by"][defender]) == attacker
+    assert int(seed["instance_hit_by"][defender]) == int(seed["instance_id"][attacker])
+    assert int(seed["items"][0]["exists"]) == 1
+    assert int(seed["items"][0]["owner"]) == attacker
+    assert int(seed["items"][0]["type"]) == 85  # Sheik Vanish smoke article, MSLITAR1.
+    assert int(seed["items"][0]["instance_id"]) == int(seed["instance_id"][attacker])
+
+    ref, out = _step_one_record(dataset_path, record)
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 38
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+
+    poisoned = samples[record : record + 1].copy()
+    poisoned["seed_t"]["instance_hit_by"][0, defender] = np.uint16(0)
+    poisoned["seed_t"]["last_hit_by"][0, defender] = np.uint8(6)
+    _, poisoned_out = _step_one_record(dataset_path, record, poisoned["seed_t"])
+    assert int(poisoned_out["hitlag"][defender]) > int(ref["hitlag"][defender])
+    assert float(poisoned_out["percent"][defender]) > float(ref["percent"][defender])
+
+
+@pytest.mark.integration
 def test_guardsetoff_hitlag_exit_materializes_authoritative_hitcapsule_seed_on_rollout() -> None:
     # Replay-real rollout lock for a shield-hit hitlag tail seeded mid-window:
     # - PPA 5355 starts with Fox UpAir and Falco GuardSetOff both in the last visible hitlag tail.

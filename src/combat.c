@@ -3796,6 +3796,10 @@ static inline uint8_t combat_attackairhi_create_edge_damageflytop_suppresses_ful
       batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx]) {
     return 0u;
   }
+  if (batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
+      batch->state.hitlag[d_idx] != 0u) {
+    return 0u;
+  }
   if (!msl_damage_source_victim_port_matches_attacker(batch, d_idx, a_idx, attacker)) {
     return 0u;
   }
@@ -11263,6 +11267,29 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   }
 
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
+  const MslItemArticleParams* sheik_ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (sheik_ap != NULL && item_type == sheik_ap->sheik_vanish_itkind &&
+      batch->state.char_id[a_idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+      item_instance_id == batch->state.instance_id[a_idx] &&
+      batch->state.hitlag_pre_timer[d_idx] != 0u && batch->state.hitstun[d_idx] != 0u &&
+      combat_is_damage_or_firefox_launch_victim_action(batch->state.char_id[d_idx], d_motion_id) &&
+      msl_damage_source_victim_port_matches_attacker(batch, d_idx, a_idx, attacker) &&
+      batch->state.instance_hit_by[d_idx] == item_instance_id) {
+    // Sheik Vanish smoke hitlag-tail victims_1 carry:
+    // itSeakvanish publishes one item HitCapsule through it_802B1D40 -> it_8027518C. After that
+    // HitCapsule has already damaged a fighter, lbColl_80008688 records the victim in the item
+    // capsule's victims_1 list; Fighter_8006A360 then freezes the victim while hitlag is active.
+    // Replay rows do not serialize the smoke item's hidden victims_1 ring, but the last-hitlag-tick
+    // Damage victim still exposes the accepted source through x18C4/x18EC (`last_hit_by` and
+    // `instance_hit_by`). Reject only that same-source Vanish smoke BODY repeat before percent-temp
+    // accumulation; fresh Vanish smoke contacts and non-Vanish projectiles stay on the normal item
+    // BODY path.
+    // refs/melee/src/melee/it/items/itseakvanish.c::it_802B1D40
+    // refs/melee/src/melee/it/itcoll.c::it_80272460
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    return MSL_ITEM_HIT_NONE;
+  }
 
   // Marth Counter intercepts item/projectile contacts through the same descriptor used for
   // fighter BODY contacts: the AbsorbDesc is a ShieldDesc-family intercept, and item collision

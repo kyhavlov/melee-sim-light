@@ -306,6 +306,7 @@ def test_modelplay_rerun5_7582_downbound_does_not_fall_through_main_floor() -> N
         end_frame=7599,
         overrides={
             (0, "ground_id"): np.uint16(1),
+            (0, "dmg_x2224_b2"): np.uint8(1),
             (0, "speed_air_x_self"): np.float32(0.0),
             (0, "speed_ground_x_self"): np.float32(0.0),
             (0, "speed_y_self"): np.float32(0.0),
@@ -325,7 +326,7 @@ def test_modelplay_rerun5_7582_downbound_does_not_fall_through_main_floor() -> N
         assert int(out["action_id"][0]) == ACT_DOWN_BOUND_U
         assert float(out["pos_y"][0]) >= -0.001
         assert int(out["ground_id"][0]) == 1
-    for frame_i in range(7592, 7600):
+    for frame_i in range(7586, 7600):
         out = history[frame_i]
         if int(out["action_id"][0]) == ACT_DOWN_BOUND_U:
             first_downbound = frame_i

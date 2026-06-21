@@ -2340,12 +2340,12 @@ uint8_t items_set_sheik_chain_article_state(MslBatch* batch, size_t owner_idx, u
   // - Chain segment accessory movement calls it_802BCED4 when extension reaches the terminal link,
   //   entering state 3.
   // - End_Anim calls it_802BCF84 at x24, entering retract state 4.
-  // - it_802BC94C / it_2725_Logic54_PickedUp returns the fully retracted article to state 0
-  //   shortly before End_Anim's x28 destroy call.
+  // - End_Anim calls it_802BB20C at x28, destroying the article; there is no x28-1 fighter-owned
+  //   state-0 publication.
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
   //   ftSk_SpecialS_CheckInitChain,ftSk_SpecialSEnd_Anim,ftSk_SpecialAirSEnd_Anim}
   // refs/melee/src/melee/it/items/itseakchain.c::{
-  //   it_802BCFC4,it_802BCED4,it_802BCF84,it_2725_Logic54_PickedUp}
+  //   it_802BCFC4,it_802BCED4,it_802BCF84,it_802BB20C}
   batch->state.item_state[msl_idx_item(bi, slot)] = state;
   return 1u;
 }
@@ -3338,9 +3338,6 @@ uint8_t items_spawn_sheik_vanish_smoke_article(MslBatch* batch, size_t owner_idx
   if (char_id != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;
   }
-  if (items_find_owned_item_slot(batch, bi, owner, ap->sheik_vanish_itkind) >= 0) {
-    return 0u;
-  }
   float spawn_x = 0.0f;
   float spawn_y = 0.0f;
   if (sheik_article_spawn_anchor_position(batch, owner_idx, ap->sheik_vanish_spawn_part_id,
@@ -3356,10 +3353,10 @@ uint8_t items_spawn_sheik_vanish_smoke_article(MslBatch* batch, size_t owner_idx
   item_slot_clear(batch, ii);
 
   // Vanish travel entry installs `fn_80112ED8` through inlineA0 / ftSk_SpecialHi_80113A30.
-  // The accessory callback samples HipN with lb_8000B1CC, spawns the smoke article once with
-  // it_802B1C60, and initializes It_Kind_Seak_Vanish state 0. The runtime-visible lifetime comes
-  // from it_8027518C, which overwrites the local 60.0f seed with ItemCommonData::xF8 before the
-  // script starts.
+  // The accessory callback samples HipN with lb_8000B1CC, spawns a fresh smoke article with
+  // it_802B1C60, and initializes It_Kind_Seak_Vanish state 0. Source does not enforce one
+  // smoke-per-owner: a second Vanish transition can publish a new smoke while the prior smoke's
+  // ItemCommonData::xF8 lifetime is still active.
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
   //   inlineA0,ftSk_SpecialHi_80113A30,fn_80112ED8,ftSk_SpecialHi_80112F48}
   // refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
@@ -6036,9 +6033,6 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
         continue;
       }
       const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
-      const uint8_t use_frozen_hitlag_hurtcaps =
-          (batch->state.hitlag[d_idx] != 0u || batch->state.hitlag_pre_timer[d_idx] != 0u) ? 1u
-                                                                                           : 0u;
       float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f;
       sheik_needle_hitbox_segment_xy(params, hb, contact_x0, contact_y0, contact_x1, contact_y1,
                                      dirx, diry, item_facing_dir, &sx0, &sy0, &sx1, &sy1);
@@ -6061,14 +6055,11 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
         // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
         // refs/melee/src/melee/it/itcoll.c::it_8027137C
         // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_802AFF08,itSeakneedlethrown_UnkMotion0_Coll}
-        if (use_frozen_hitlag_hurtcaps == 0u) {
-          if (item_body_lbcoll_matrix_radius_overlap(batch, bi, def, sx0, sy0, sx1, sy1, hbr,
-                                                     (int)ci, &cap_height, &overlap,
-                                                     &exact_evaluated, 0u)) {
-            hurt_height = cap_height;
-            hit = 1u;
-            break;
-          }
+        if (item_body_lbcoll_matrix_radius_overlap(batch, bi, def, sx0, sy0, sx1, sy1, hbr, (int)ci,
+                                                   &cap_height, &overlap, &exact_evaluated, 0u)) {
+          hurt_height = cap_height;
+          hit = 1u;
+          break;
         }
         if (exact_evaluated != 0u && !sheik_needle_body_fallback_hitcap_packet_owns_contact(
                                          batch, bi, def, sx0, sy0, sx1, sy1, hbr)) {
@@ -6078,15 +6069,15 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
         // for ordinary BODY contact unless a concrete live fighter HitCapsule packet also overlaps
         // this Needle HitCapsule. Unrelated/CATCH/inert hitboxes do not widen BODY admission: clank
         // was already resolved above, and only an overlapping non-catch fighter HitCapsule proves the
-        // same live contact packet source is in play. Active fighter hitlag is the other narrow
-        // exception: Fighter_8006A360 freezes the JObj/hurt-capsule packet, so this loop skips the
-        // recomputed matrix owner and consumes the already-live fp->hurt_capsules while
-        // Fighter_8006CB94 still calls ftColl_8007925C.
+        // same live contact packet source is in play. Hitlag does not skip this exact matrix owner:
+        // Fighter_8006CB94 still reaches ftColl_8007925C under ordinary x2219_b5 hitlag, and that
+        // source BODY loop calls lbColl_8000805C before any hurtcaps fallback.
         // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_8006CB94}
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+        // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
         if (item_swept_sphere_capsule_overlap_amount(batch, bi, def, sx0, sy0, sx1, sy1, hbr,
                                                      (int)ci, &cap_height, &overlap, 0u, 1.0f)) {
-          if (use_frozen_hitlag_hurtcaps == 0u) {
+          if (exact_evaluated == 0u) {
             hurt_height = cap_height;
             hit = 1u;
             break;
@@ -6194,10 +6185,6 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
   if (batch == NULL) {
     return;
   }
-  const uint8_t replay_reseed =
-      (batch->replay_reseed_frame_active != NULL && batch->replay_reseed_frame_active[bi] != 0u)
-          ? 1u
-          : 0u;
   MslStageBounds blast_bounds = {0};
   const uint8_t has_blast_bounds =
       stage_collision_get_blast_bounds_world(batch->state.stage_id[bi], &blast_bounds);
@@ -6229,22 +6216,21 @@ static void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
       }
       continue;
     }
-    if (replay_reseed != 0u && batch->state.item_state[ii] == 4u &&
-        batch->state.item_damage[ii] != 0u) {
+    if (batch->state.item_state[ii] == 4u && batch->state.item_damage[ii] != 0u) {
       uint8_t fighter_hitlag_active = 0u;
       for (int p = 0; p < (int)batch->config.num_players; p++) {
-        if (batch->state.hitlag[msl_idx_player(bi, p)] != 0u) {
+        const size_t pidx = msl_idx_player(bi, p);
+        if (batch->state.hitlag[pidx] != 0u || batch->state.hitlag_pre_timer[pidx] != 0u) {
           fighter_hitlag_active = 1u;
           break;
         }
       }
       if (fighter_hitlag_active != 0u) {
-        // Slippi does not expose Item.xCBC_hitlagFrames. A replay reseed of a Needle that just
-        // bounced from DmgReceived can carry state4/damage/timer while the victim deal-hitlag is
-        // still active; source Item_802697D4 freezes item anim/phys/lifetime until item hitlag
-        // drains. That hidden item-hitlag count is the only remaining reseed-slice gap here: the
-        // free-running stage-hit stick/bounce state machine and the SetupBounce drift/terminal/
-        // gravity (xDD8/xDDC/xDE0) lanes are now modeled.
+        // Slippi does not expose Item.xCBC_hitlagFrames. A one-step or rollout reseed of a Needle
+        // that just bounced from DmgReceived can carry state4/damage/timer while the victim
+        // deal-hitlag is still active; source Item_802697D4 freezes item anim/phys/lifetime until
+        // item hitlag drains. Free-run callbacks seed item_hitlag directly, but teacher-forced rows
+        // need this source-visible state4+damage+fighter-hitlag reconstruction.
         // refs/melee/src/melee/it/item.c::{checkHitLag,Item_802697D4}
         // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgReceived
         continue;

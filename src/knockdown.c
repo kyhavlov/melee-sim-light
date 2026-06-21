@@ -3507,7 +3507,13 @@ void knockdown_update_post_collision(MslBatch* batch) {
           const float kbx = batch->state.speed_x_attack[idx];
           const float kby = batch->state.speed_y_attack[idx];
           const float mag = sqrtf(kbx * kbx + kby * kby);
-          if (mag >= c->damagefly_downbound_kb_vel_threshold) {
+          // DamageAir shares the common Damage_Coll floor-contact selector:
+          // `fp->x2224_b2 || |kb| >= p_ftCommonData->x1E0` enters DownBound before the lower
+          // Landing threshold. Keep this source bit aligned with the non-fly grounded Damage lane
+          // above instead of letting low-KB DamageAir rows fall through to Landing.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097D40
+          if (batch->state.dmg_x2224_b2[idx] || mag >= c->damagefly_downbound_kb_vel_threshold) {
             enter_down_bound_from_damage_land(batch, ch, (size_t)bi, idx, a0);
             continue;
           }

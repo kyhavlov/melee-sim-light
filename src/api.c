@@ -3241,6 +3241,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
             batch->state.frame_speed_mul_fp_q16_16[idx] =
                 msl_q16_16_from_f32(c->capture_wait_anim_rate);
+          } else if (c != NULL && seed->capture_wait_anim_rate_timer_f32[p] <= 0.0f &&
+                     seed->frame_speed_mul_f32[p] == c->capture_wait_anim_rate) {
+            // Expired-rate counterpart to the bridge above: when x2344 seeds as 0,
+            // ftCo_CaptureWaitHi_Anim has already cleared the rate-2 AObj speed on the source
+            // callback. Some teacher-forced rows still expose the previous visible
+            // frame_speed_mul; reset only the exact captured-state rate here.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+            batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
           }
         }
         batch->state.capture_wait_jump_latch[idx] = seed->capture_wait_jump_latch_u8[p] ? 1u : 0u;

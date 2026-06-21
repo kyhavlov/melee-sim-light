@@ -34,6 +34,19 @@ void grab_attachment_use_static_offsets_for_thrown_entry(MslBatch* batch, int ba
 void grab_attachment_apply_capture_delta_now(MslBatch* batch, int batch_index, int victim_p,
                                              int owner_p);
 
+// CapturePulledLw same-callback Phys floor-loss helper.
+//
+// Decomp-shaped usage:
+// - ftCo_CapturePulledLw_Phys applies fn_800DAD18, then enters CapturePulledHi through
+//   fn_800DB230_inline when the source vertical carry exceeds p_ftCommonData->x3C4 or the
+//   following Coll callback loses the floor.
+// - CatchPull_Anim's owner-side fn_800DB6C8 CaptureWait handoff must observe that updated
+//   CapturePulledHi/Lw variant when both callbacks occur in the same simulator frame.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+//   ftCo_CapturePulledLw_Phys,fn_800DB230_inline,fn_800DB6C8}
+uint8_t grab_attachment_apply_capture_pulled_lw_phys_now(MslBatch* batch, int batch_index,
+                                                         int victim_p, int owner_p);
+
 // Thrown victim same-frame anchor ownership helper.
 //
 // Decomp-shaped usage:

@@ -940,8 +940,6 @@ static void sk_update_specials(MslBatch* batch, const MslCommonParams* c, const 
       batch->state.sheik_special_timer[idx] = t;
       if ((float)t == ch->sheik_chain_destroy_frame) {
         (void)items_destroy_sheik_chain_article(batch, idx);
-      } else if ((float)t == ch->sheik_chain_destroy_frame - 1.0f) {
-        (void)items_set_sheik_chain_article_state(batch, idx, 0u);
       } else if ((float)t == ch->sheik_chain_retract_frame) {
         (void)items_set_sheik_chain_article_state(batch, idx, 4u);
       }
@@ -955,8 +953,6 @@ static void sk_update_specials(MslBatch* batch, const MslCommonParams* c, const 
       batch->state.sheik_special_timer[idx] = t;
       if ((float)t == ch->sheik_chain_destroy_frame) {
         (void)items_destroy_sheik_chain_article(batch, idx);
-      } else if ((float)t == ch->sheik_chain_destroy_frame - 1.0f) {
-        (void)items_set_sheik_chain_article_state(batch, idx, 0u);
       } else if ((float)t == ch->sheik_chain_retract_frame) {
         (void)items_set_sheik_chain_article_state(batch, idx, 4u);
       }

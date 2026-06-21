@@ -140,6 +140,18 @@ static inline void enter_capture_wait_from_pulled(MslBatch* batch, int bi, int o
                                                   int victim_p, size_t vidx) {
   const uint16_t pulled_hitlag = batch->state.hitlag[vidx];
   const uint16_t pulled_hitstun = batch->state.hitstun[vidx];
+  uint8_t pulled_lw_phys_applied = 0u;
+  if (pulled_hitlag == 0u && pulled_hitstun == 0u &&
+      batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW) {
+    // CapturePulledLw Phys can run earlier in the same frame than the owner's CatchPull_Anim wait
+    // handoff. That Phys callback applies fn_800DAD18 and may route through fn_800DB230_inline to
+    // CapturePulledHi; fn_800DB6C8 must then select CaptureWaitHi from the live variant, not the
+    // frame-start Lw row.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    //   ftCo_CapturePulledLw_Phys,fn_800DB230_inline,fn_800DB6C8}
+    pulled_lw_phys_applied =
+        grab_attachment_apply_capture_pulled_lw_phys_now(batch, bi, victim_p, owner_p);
+  }
   if (pulled_hitlag == 0u && pulled_hitstun == 0u) {
     // CapturePulled -> CaptureWait same-frame world-position ownership:
     // - CatchPull_Anim can enter CatchWait and dispatch victim fn_800DB6C8 in the same callback.
@@ -148,7 +160,9 @@ static inline void enter_capture_wait_from_pulled(MslBatch* batch, int bi, int o
     // - Preserve that callback-owned capture delta once before swapping the victim motion state.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8,fn_800DAD18}
     // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    grab_attachment_apply_capture_delta_now(batch, bi, victim_p, owner_p);
+    if (pulled_lw_phys_applied == 0u) {
+      grab_attachment_apply_capture_delta_now(batch, bi, victim_p, owner_p);
+    }
   }
   // Decomp: CatchPull->CatchWait entry calls fn_800DB6C8 on the victim gobj, which enters
   // CaptureWait (hi/lw) based on the current capture variant.

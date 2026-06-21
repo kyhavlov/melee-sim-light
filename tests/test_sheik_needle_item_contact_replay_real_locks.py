@@ -47,6 +47,8 @@ def _run_row(
     *,
     dataset: Path = DATASET,
     mutate_item0_type: int | None = None,
+    mutate_item0_damage: int | None = None,
+    mutate_marth_hitlag: int | None = None,
     mutate_input_r_p0: int | None = None,
 ) -> tuple[np.void, np.void, np.void]:
     import msl_binding
@@ -56,6 +58,10 @@ def _run_row(
     row = ds.samples[record : record + 1].copy()
     if mutate_item0_type is not None:
         row["seed_t"]["items"]["type"][0, 0] = np.uint16(mutate_item0_type)
+    if mutate_item0_damage is not None:
+        row["seed_t"]["items"]["damage"][0, 0] = np.uint16(mutate_item0_damage)
+    if mutate_marth_hitlag is not None:
+        row["seed_t"]["hitlag"][0, P_MARTH] = np.uint16(mutate_marth_hitlag)
     if mutate_input_r_p0 is not None:
         row["input_t"]["p"]["r"][0, 0] = np.uint8(mutate_input_r_p0)
 
@@ -436,3 +442,26 @@ def test_sheik_bounced_needle_reseed_reconstructs_hidden_item_hitlag_freeze_repl
     assert float(out["items"]["pos_y"][0]) == pytest.approx(float(ref["items"]["pos_y"][0]))
     assert float(out["items"]["vel_y"][0]) == pytest.approx(float(ref["items"]["vel_y"][0]))
     assert float(out["items"]["timer"][0]) == pytest.approx(float(ref["items"]["timer"][0]))
+
+
+@pytest.mark.integration
+def test_sheik_bounced_needle_one_hitlag_frame_still_freezes_item_phase_replay_real() -> None:
+    # Same hidden Item.xCBC_hitlagFrames owner as the row above, but the fighter hitlag counter seeds
+    # as 1 and drains before the item phase. The frame-start hitlag latch is still source evidence
+    # that Item_802697D4 should freeze this state-4 Needle.
+    # refs/melee/src/melee/it/item.c::{checkHitLag,Item_802697D4}
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgReceived
+    seed, ref, out = _run_row(8666, dataset=TENSE_DATASET)
+
+    assert int(seed["items"]["type"][0]) == ITEM_NEEDLE_THROWN
+    assert int(seed["items"]["state"][0]) == 4
+    assert int(seed["items"]["damage"][0]) == 12
+    assert int(seed["hitlag"][P_MARTH]) == 1
+
+    assert int(out["items"]["exists"][0]) == int(ref["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == int(ref["items"]["state"][0]) == 4
+    assert float(out["items"]["pos_y"][0]) == pytest.approx(float(ref["items"]["pos_y"][0]))
+    assert float(out["items"]["vel_y"][0]) == pytest.approx(float(ref["items"]["vel_y"][0]))
+
+    _, _, out_no_damage = _run_row(8666, dataset=TENSE_DATASET, mutate_item0_damage=0)
+    assert int(out_no_damage["items"]["exists"][0]) == 0

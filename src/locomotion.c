@@ -214,6 +214,7 @@ static inline uint8_t wait_iasa_locomotion_subset_try_enter(
     uint8_t tilt_timer_y, float facing_dir, uint16_t action_id_start);
 static inline void enter_fall_from_grounded_floor_loss(MslBatch* batch, const MslCharParams* ch,
                                                        size_t idx);
+static inline uint8_t action_is_attackair(uint16_t a);
 
 static inline float clamp_absf(float value, float max_abs) {
   if (value > max_abs) {
@@ -4633,14 +4634,17 @@ void locomotion_update_pre(MslBatch* batch) {
              (batch->replay_frame_rng_applied != NULL && batch->replay_frame_rng_applied[bi] != 0u))
                 ? 1u
                 : 0u;
-        const uint32_t wait_anim = replay_wait_rng_owner != 0u ? batch->state.animation_index[idx]
-                                                               : (uint32_t)MSL_SM_WAIT1_0;
+        const uint32_t wait_anim = batch->state.animation_index[idx];
         if (action_id == MSL_ACT_WAIT && wait_anim <= 0xFFFFu &&
             anim_finished(cid, (uint16_t)wait_anim, batch->state.anim_frame_f32[idx])) {
           // Wait_Anim does not simply let the AObj loop carry the visible frame past the end.
           // It calls ftCo_8008A7A8, which restarts the current/selected wait subanimation through
           // ftCo_8008A6D8 / ftAnim_8006EBE8. Character WaitStruct tables provide the weighted
           // submotion choices; getAnimID consumes HSD_Randi(100)+1 for the source selection.
+          // The end gate belongs to the current visible Wait submotion's AObj; this is separate
+          // from the RNG-owned choice of the next Wait variant. Ordinary rollout may still choose a
+          // deterministic next variant when the roulette stream is not reconstructed, but it must
+          // not end the currently visible Wait2/Wait3 early using Wait1's duration.
           // This is not Fighter_ChangeMotionState, so it must not run the motion-entry identity
           // bundle (`ft_800895E0` / `plAttack_80037B08`) or bump fp->x2088.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Anim

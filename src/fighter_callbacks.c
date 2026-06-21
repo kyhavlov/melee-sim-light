@@ -58,7 +58,7 @@ static void camera_update_zoom_scale_from_player0_cstick(MslBatch* batch,
   (void)input_stride_bytes;
 }
 
-static inline void clear_landing_transients(MslBatch* batch) {
+static inline void clear_begin_frame_anim_transients(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
@@ -66,11 +66,28 @@ static inline void clear_landing_transients(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      // Slippi post-frame `l_cancel` is a 1-frame status on LandingAir* entry. Clear it each frame
-      // and let landing entry code set it when applicable.
-      batch->state.l_cancel[idx] = 0;
       // Clear per-frame anim-timebase transients.
       batch->state.anim_defer_tick_once[idx] = 0;
+    }
+  }
+}
+
+static inline void clear_landing_status_after_anim_timebase(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      // Slippi post-frame `l_cancel` is a 1-frame status on LandingAir* entry. Preserve it through
+      // Fighter_8006A360 ordering so frame-0 LandingAir replay seeds can consume the same
+      // ftCo_LandingAir_EnterWithLag branch, then clear before current-frame gameplay/output
+      // unless collision enters a fresh LandingAir row later this step.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      batch->state.l_cancel[idx] = 0;
     }
   }
 }
@@ -531,7 +548,7 @@ static inline void cache_damagefly_hitlag_exit_sweep_root(MslBatch* batch) {
 }
 
 static void fighter_callbacks_begin_frame_phase(MslBatch* batch) {
-  clear_landing_transients(batch);
+  clear_begin_frame_anim_transients(batch);
   cache_prev_action_state(batch);
   cache_floor_sweep_prev_pos(batch);
   cache_guard_reflect_timer_seed_snapshots(batch);
@@ -573,6 +590,7 @@ static int fighter_callbacks_pre_input_anim_phase(MslBatch* batch, const uint8_t
   // (prio 3). Advance our deterministic cur_anim_frame accumulator here, after timers.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (ftAnim_8006EBA4 under !hitlag)
   anim_timebase_update_pre_input(batch);
+  clear_landing_status_after_anim_timebase(batch);
 
   // Post anim-timebase match flow clamps (e.g. EntryStart animation end-frame).
   match_flow_update_post_anim(batch);
