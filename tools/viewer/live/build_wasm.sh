@@ -47,7 +47,7 @@ required_data=(
   "$DATA_DIR/stage_items/dream_whispy.json"
 )
 
-viewer_chars=(fox falco marth sheik)
+viewer_chars=(fox falco marth sheik zelda)
 for char in "${viewer_chars[@]}"; do
   required_data+=(
     "$DATA_DIR/characters/$char.json"

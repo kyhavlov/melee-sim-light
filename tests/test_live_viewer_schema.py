@@ -44,11 +44,11 @@ def _live_supported_characters(schema: str) -> list[tuple[int, str]]:
     return characters
 
 
-def _viewer_external_char_map(viewer_adapter: str) -> dict[int, int]:
+def _viewer_external_char_map(adapter_source: str) -> dict[int, int]:
     return {
         int(internal_id): int(external_id)
         for internal_id, external_id in re.findall(
-            r"if \(internalCharId === (\d+)\) return (\d+);", viewer_adapter
+            r"if \(internalCharId === (\d+)\) return (\d+);", adapter_source
         )
     }
 
@@ -142,6 +142,24 @@ def test_live_viewer_supported_characters_have_packaged_animation_zips() -> None
     assert not missing, (
         "live viewer character dropdown has unpackaged animation zips: " + ", ".join(missing)
     )
+
+
+def test_live_viewer_transform_characters_map_to_animation_assets() -> None:
+    root = Path(__file__).resolve().parents[1]
+    schema = (root / "tools/viewer/live/schema.js").read_text()
+    viewer_adapter = (root / "tools/viewer/live/viewer_adapter.js").read_text()
+    trace_adapter = (root / "tools/viewer/msltrace1.js").read_text()
+
+    supported = dict(_live_supported_characters(schema))
+    assert supported[7] == "Sheik"
+    assert supported[19] == "Zelda"
+
+    # Live Compare traces expose simulator internal ids. Slippi animation zips are keyed by
+    # external ids, so Sheik/Zelda transform spans need both sides of the public id mapping.
+    for adapter_source in (viewer_adapter, trace_adapter):
+        external = _viewer_external_char_map(adapter_source)
+        assert external[7] == 19
+        assert external[19] == 18
 
 
 def test_live_viewer_supported_characters_are_required_by_wasm_build() -> None:

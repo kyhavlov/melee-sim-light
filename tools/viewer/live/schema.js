@@ -2,6 +2,7 @@ export const CHAR_FOX = 1;
 export const CHAR_SHEIK = 7;
 export const CHAR_FALCO = 22;
 export const CHAR_MARTH = 18;
+export const CHAR_ZELDA = 19;
 export const STAGE_FOUNTAIN_OF_DREAMS = 2;
 export const STAGE_POKEMON_STADIUM = 3;
 export const STAGE_YOSHIS_STORY = 8;
@@ -21,6 +22,7 @@ export const SUPPORTED_STAGES = Object.freeze([
 export const SUPPORTED_CHARACTERS = Object.freeze([
   Object.freeze({ id: CHAR_FOX, label: "Fox" }),
   Object.freeze({ id: CHAR_SHEIK, label: "Sheik" }),
+  Object.freeze({ id: CHAR_ZELDA, label: "Zelda" }),
   Object.freeze({ id: CHAR_FALCO, label: "Falco" }),
   Object.freeze({ id: CHAR_MARTH, label: "Marth" }),
 ]);
