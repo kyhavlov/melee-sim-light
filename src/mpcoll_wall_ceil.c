@@ -3741,6 +3741,121 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             }
           }
         }
+        if (batch->state.wall_kind[idx] == 0 && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+            mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(batch, idx) && fg != NULL &&
+            fg->lines != NULL && batch->state.ground_id[idx] != 0xFFFFu &&
+            mpcoll_wall_ceil_prev_root_runtime_owned(batch, idx)) {
+          // EscapeAir can reach `mpColl_80046904` with callback-local `mpCollPrev` before the
+          // replay-visible root clears the ledge wall. Keep this to the carried MSLSTG01 floor's
+          // exact adjacent left-wall link; sloped/multi-floor stages are entry-only, while the
+          // generated all-cardinal static topology covers sustained FD-style wall sweeps.
+          //
+          // data/stages/bin/*.bin::MSLSTG01 floor adjacent_left_wall + ledge metadata
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+          // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904}
+          const int carried_floor_idx =
+              stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+          const MslStageFloorLine* carried_floor =
+              (carried_floor_idx >= 0 && (size_t)carried_floor_idx < fg->line_count)
+                  ? &fg->lines[(size_t)carried_floor_idx]
+                  : NULL;
+          const uint8_t cardinal_static_stage =
+              stage_collision_stage_has_only_static_cardinal_hard_floors(stage_id);
+          const int adjacent_left_wall_idx =
+              (carried_floor != NULL && carried_floor->fighter_solid != 0u &&
+               carried_floor->is_platform == 0u && carried_floor->is_ledge != 0u)
+                  ? carried_floor->adjacent_left_wall
+                  : -1;
+          const float carried_floor_min_x =
+              (carried_floor != NULL && carried_floor->x0 < carried_floor->x1)
+                  ? carried_floor->x0
+                  : (carried_floor != NULL ? carried_floor->x1 : 0.0f);
+          const uint8_t side_reaches_adjacent_left =
+              (uint8_t)(carried_floor != NULL &&
+                        left_cur_ecb->left_x <= carried_floor_min_x + k_line_end_clamp);
+          const uint8_t prev_left_wall_compatible =
+              (uint8_t)(prev_wall_kind == 0u ||
+                        (prev_wall_kind == (uint8_t)MSL_WALL_LEFT && adjacent_left_wall_idx >= 0 &&
+                         (size_t)adjacent_left_wall_idx < lwg->line_count &&
+                         prev_wall_id == lwg->lines[(size_t)adjacent_left_wall_idx].segment_i));
+          const float adjacent_left_wall_dx =
+              (adjacent_left_wall_idx >= 0 && (size_t)adjacent_left_wall_idx < lwg->line_count)
+                  ? fabsf(lwg->lines[(size_t)adjacent_left_wall_idx].x0 -
+                          lwg->lines[(size_t)adjacent_left_wall_idx].x1)
+                  : 0.0f;
+          const float adjacent_left_wall_dy =
+              (adjacent_left_wall_idx >= 0 && (size_t)adjacent_left_wall_idx < lwg->line_count)
+                  ? fabsf(lwg->lines[(size_t)adjacent_left_wall_idx].y0 -
+                          lwg->lines[(size_t)adjacent_left_wall_idx].y1)
+                  : 0.0f;
+          // Admit either a DAT-authored sloped ledge wall (meaningful horizontal extent) on the
+          // entry callback, or the generated all-cardinal static-hard-floor stage class (FD) on
+          // sustained EscapeAir. Resolve through the shared airborne ECB envelope: FD ledgedashes
+          // can put the root under the floor lip while the bottom/side diamond, not the root path,
+          // is the source wall contact owner. Near-cardinal moving/multi-floor stages, such as FoD,
+          // stay with the sustained wall/floor paths below.
+          if (adjacent_left_wall_idx >= 0 && (size_t)adjacent_left_wall_idx < lwg->line_count &&
+              cardinal_static_stage != 0u && side_reaches_adjacent_left != 0u &&
+              prev_left_wall_compatible != 0u &&
+              lwg->lines[(size_t)adjacent_left_wall_idx].fighter_solid != 0u) {
+            MslWallCandidateList adjacent_candidates;
+            wall_candidate_list_init(&adjacent_candidates);
+            left_wall_candidate_add(&adjacent_candidates, lwg, adjacent_left_wall_idx, 0u,
+                                    lwg->lines[(size_t)adjacent_left_wall_idx].x0,
+                                    lwg->lines[(size_t)adjacent_left_wall_idx].y0);
+            float envelope_x = 0.0f;
+            int envelope_line_idx = -1;
+            float envelope_nx = -1.0f;
+            float envelope_ny = 0.0f;
+            if (!left_wall_air_envelope_min_x(stage_id, lwg, &adjacent_candidates, left_cur_ecb,
+                                              batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                              &envelope_x, &envelope_line_idx, &envelope_nx,
+                                              &envelope_ny)) {
+              envelope_line_idx = -1;
+            }
+            const float dx = envelope_x - batch->state.pos_x[idx];
+            if (envelope_line_idx >= 0 && (size_t)envelope_line_idx < lwg->line_count &&
+                lwg->lines[(size_t)envelope_line_idx].fighter_solid != 0u &&
+                (envelope_line_idx == adjacent_left_wall_idx ||
+                 wall_lines_connected_prev_next(lwg, adjacent_left_wall_idx, envelope_line_idx)) &&
+                dx < 0.0f) {
+              const float contact_x =
+                  adjacent_candidates.count != 0u ? adjacent_candidates.first_ix : envelope_x;
+              const float contact_y = adjacent_candidates.count != 0u ? adjacent_candidates.first_iy
+                                                                      : batch->state.pos_y[idx];
+              MslMpcollWallResult wall = mpcoll_wall_result_make(
+                  MSL_WALL_LEFT, 0u, MSL_MPCOLL_WALL_RESULT_AIR_POINT_PROJECT,
+                  lwg->lines[(size_t)envelope_line_idx].segment_i, dx, contact_x, contact_y,
+                  envelope_nx, envelope_ny);
+              mpcoll_commit_wall_result(batch, idx, &wall);
+              ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
+            }
+          }
+          if (batch->state.wall_kind[idx] == 0 && cardinal_static_stage == 0u &&
+              adjacent_left_wall_idx >= 0 && (size_t)adjacent_left_wall_idx < lwg->line_count &&
+              batch->state.action_frame[idx] <= 1 &&
+              adjacent_left_wall_dx * 2.0f > adjacent_left_wall_dy &&
+              lwg->lines[(size_t)adjacent_left_wall_idx].fighter_solid != 0u) {
+            MslStageQueryHit hit = {0};
+            if (stage_collision_static_query(stage_id, (uint32_t)MSL_STAGE_QUERY_LEFT_WALL,
+                                             callback_prev_x, callback_prev_y,
+                                             batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                             0xFFFFu, joint_id_skip, joint_id_only, &hit) &&
+                hit.line_idx == adjacent_left_wall_idx &&
+                lwg->lines[(size_t)hit.line_idx].fighter_solid != 0u) {
+              const float dx = hit.x - batch->state.pos_x[idx];
+              if (dx < 0.0f) {
+                MslMpcollWallResult wall = mpcoll_wall_result_make(
+                    MSL_WALL_LEFT, 0u, MSL_MPCOLL_WALL_RESULT_AIR_POINT_PROJECT,
+                    lwg->lines[(size_t)hit.line_idx].segment_i, dx, hit.x, hit.y, hit.normal_x,
+                    hit.normal_y);
+                mpcoll_commit_wall_result(batch, idx, &wall);
+                ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
+              }
+            }
+          }
+        }
         if (batch->state.wall_kind[idx] == 0 &&
             (!use_left_air_envelope || use_damagefly_left_envelope)) {
           float ix = 0.0f, iy = 0.0f;
@@ -4126,6 +4241,122 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                   mpcoll_commit_wall_result(batch, idx, &wall);
                   ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
                 }
+              }
+            }
+          }
+        }
+        if (batch->state.wall_kind[idx] == 0 && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+            mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(batch, idx) && fg != NULL &&
+            fg->lines != NULL && batch->state.ground_id[idx] != 0xFFFFu &&
+            mpcoll_wall_ceil_prev_root_runtime_owned(batch, idx)) {
+          // EscapeAir can reach `mpColl_80046904` with callback-local `mpCollPrev` before the
+          // replay-visible root clears a short right ledge wall. Keep this to the carried MSLSTG01
+          // floor's exact adjacent right-wall link; sloped/multi-floor stages are entry-only, while
+          // the generated all-cardinal static topology covers sustained FD-style wall sweeps.
+          //
+          // data/stages/bin/*.bin::MSLSTG01 floor adjacent_right_wall + ledge metadata
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+          // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904}
+          const int carried_floor_idx =
+              stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+          const MslStageFloorLine* carried_floor =
+              (carried_floor_idx >= 0 && (size_t)carried_floor_idx < fg->line_count)
+                  ? &fg->lines[(size_t)carried_floor_idx]
+                  : NULL;
+          const uint8_t cardinal_static_stage =
+              stage_collision_stage_has_only_static_cardinal_hard_floors(stage_id);
+          const int adjacent_right_wall_idx =
+              (carried_floor != NULL && carried_floor->fighter_solid != 0u &&
+               carried_floor->is_platform == 0u && carried_floor->is_ledge != 0u)
+                  ? carried_floor->adjacent_right_wall
+                  : -1;
+          const float carried_floor_max_x =
+              (carried_floor != NULL && carried_floor->x0 > carried_floor->x1)
+                  ? carried_floor->x0
+                  : (carried_floor != NULL ? carried_floor->x1 : 0.0f);
+          const uint8_t side_reaches_adjacent_right =
+              (uint8_t)(carried_floor != NULL &&
+                        right_cur_ecb->right_x >= carried_floor_max_x - k_line_end_clamp);
+          const uint8_t prev_right_wall_compatible =
+              (uint8_t)(prev_wall_kind == 0u ||
+                        (prev_wall_kind == (uint8_t)MSL_WALL_RIGHT &&
+                         adjacent_right_wall_idx >= 0 &&
+                         (size_t)adjacent_right_wall_idx < rwg->line_count &&
+                         prev_wall_id == rwg->lines[(size_t)adjacent_right_wall_idx].segment_i));
+          const float adjacent_right_wall_dx =
+              (adjacent_right_wall_idx >= 0 && (size_t)adjacent_right_wall_idx < rwg->line_count)
+                  ? fabsf(rwg->lines[(size_t)adjacent_right_wall_idx].x0 -
+                          rwg->lines[(size_t)adjacent_right_wall_idx].x1)
+                  : 0.0f;
+          const float adjacent_right_wall_dy =
+              (adjacent_right_wall_idx >= 0 && (size_t)adjacent_right_wall_idx < rwg->line_count)
+                  ? fabsf(rwg->lines[(size_t)adjacent_right_wall_idx].y0 -
+                          rwg->lines[(size_t)adjacent_right_wall_idx].y1)
+                  : 0.0f;
+          // Admit either a DAT-authored sloped ledge wall (meaningful horizontal extent) on the
+          // entry callback, or the generated all-cardinal static-hard-floor stage class (FD) on
+          // sustained EscapeAir. Resolve through the shared airborne ECB envelope: FD ledgedashes
+          // can put the root under the floor lip while the bottom/side diamond, not the root path,
+          // is the source wall contact owner. Near-cardinal moving/multi-floor stages, such as FoD,
+          // stay with the sustained wall/floor paths below.
+          if (adjacent_right_wall_idx >= 0 && (size_t)adjacent_right_wall_idx < rwg->line_count &&
+              cardinal_static_stage != 0u && side_reaches_adjacent_right != 0u &&
+              prev_right_wall_compatible != 0u &&
+              rwg->lines[(size_t)adjacent_right_wall_idx].fighter_solid != 0u) {
+            MslWallCandidateList adjacent_candidates;
+            wall_candidate_list_init(&adjacent_candidates);
+            right_wall_candidate_add(&adjacent_candidates, rwg, adjacent_right_wall_idx, 0u,
+                                     rwg->lines[(size_t)adjacent_right_wall_idx].x0,
+                                     rwg->lines[(size_t)adjacent_right_wall_idx].y0);
+            float envelope_x = 0.0f;
+            int envelope_line_idx = -1;
+            float envelope_nx = 1.0f;
+            float envelope_ny = 0.0f;
+            if (!right_wall_air_envelope_max_x(stage_id, rwg, &adjacent_candidates, right_cur_ecb,
+                                               batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                               &envelope_x, &envelope_line_idx, &envelope_nx,
+                                               &envelope_ny)) {
+              envelope_line_idx = -1;
+            }
+            const float dx = envelope_x - batch->state.pos_x[idx];
+            if (envelope_line_idx >= 0 && (size_t)envelope_line_idx < rwg->line_count &&
+                rwg->lines[(size_t)envelope_line_idx].fighter_solid != 0u &&
+                (envelope_line_idx == adjacent_right_wall_idx ||
+                 wall_lines_connected_prev_next(rwg, adjacent_right_wall_idx, envelope_line_idx)) &&
+                dx > 0.0f) {
+              const float contact_x =
+                  adjacent_candidates.count != 0u ? adjacent_candidates.first_ix : envelope_x;
+              const float contact_y = adjacent_candidates.count != 0u ? adjacent_candidates.first_iy
+                                                                      : batch->state.pos_y[idx];
+              MslMpcollWallResult wall = mpcoll_wall_result_make(
+                  MSL_WALL_RIGHT, 0u, MSL_MPCOLL_WALL_RESULT_AIR_POINT_PROJECT,
+                  rwg->lines[(size_t)envelope_line_idx].segment_i, dx, contact_x, contact_y,
+                  envelope_nx, envelope_ny);
+              mpcoll_commit_wall_result(batch, idx, &wall);
+              ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
+            }
+          }
+          if (batch->state.wall_kind[idx] == 0 && cardinal_static_stage == 0u &&
+              adjacent_right_wall_idx >= 0 && (size_t)adjacent_right_wall_idx < rwg->line_count &&
+              batch->state.action_frame[idx] <= 1 &&
+              adjacent_right_wall_dx * 2.0f > adjacent_right_wall_dy &&
+              rwg->lines[(size_t)adjacent_right_wall_idx].fighter_solid != 0u) {
+            MslStageQueryHit hit = {0};
+            if (stage_collision_static_query(stage_id, (uint32_t)MSL_STAGE_QUERY_RIGHT_WALL,
+                                             callback_prev_x, callback_prev_y,
+                                             batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                             0xFFFFu, joint_id_skip, joint_id_only, &hit) &&
+                hit.line_idx == adjacent_right_wall_idx &&
+                rwg->lines[(size_t)hit.line_idx].fighter_solid != 0u) {
+              const float dx = hit.x - batch->state.pos_x[idx];
+              if (dx > 0.0f) {
+                MslMpcollWallResult wall = mpcoll_wall_result_make(
+                    MSL_WALL_RIGHT, 0u, MSL_MPCOLL_WALL_RESULT_AIR_POINT_PROJECT,
+                    rwg->lines[(size_t)hit.line_idx].segment_i, dx, hit.x, hit.y, hit.normal_x,
+                    hit.normal_y);
+                mpcoll_commit_wall_result(batch, idx, &wall);
+                ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
               }
             }
           }

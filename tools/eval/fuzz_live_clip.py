@@ -45,6 +45,7 @@ import json
 import random
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -75,6 +76,19 @@ STAGES = {
     "fod": (2, "fountain_of_dreams"),
     "ps": (3, "pokemon_stadium"),
 }
+
+
+def matrix_chars() -> tuple[str, ...]:
+    manifest_path = Path("data/manifest.json")
+    if manifest_path.exists():
+        try:
+            chars = json.loads(manifest_path.read_text(encoding="utf-8")).get("chars") or ()
+        except (OSError, json.JSONDecodeError):
+            chars = ()
+        out = tuple(ch for ch in chars if ch in _REGISTRY_CHARS)
+        if out:
+            return out
+    return ("fox", "falco", "marth", "sheik", "zelda")
 
 
 class StageHull:
@@ -161,15 +175,21 @@ def _judge(stage: str, outs: list) -> list:
         # Cliff-family actions (CliffCatch..CliffJump escapes, 0xFC-0x10A) are ledge-anchored:
         # their root legally sits inside the shallow band at the lip.
         ledge_anchored = 0x00FC <= act <= 0x010A
-        interior = ((not grounded) and not ledge_anchored and top is not None and
-                    y < top - 2.0 and hull.inside(x, y))
+        inside_shell = (not grounded) and not ledge_anchored and top is not None and hull.inside(x, y)
+        interior = inside_shell and y < top - 2.0
         if interior:
             if run_start is None:
                 run_start = i
             run_len += 1
             gap = 0
         elif run_start is not None:
-            gap += 1
+            if inside_shell:
+                # A deep under-lip run can legally flatten into a shallow in-hull corner transit
+                # before the landing/grab resolves. Keep the original run open so the resolution
+                # check sees that landing instead of cutting the run at the depth threshold.
+                gap = 0
+            else:
+                gap += 1
             if grounded or gap >= GAP_MERGE:
                 if run_len >= MIN_RUN:
                     runs.append((run_start, i - gap + 1))
@@ -493,7 +513,7 @@ def main() -> int:
     if args.mode == "random":
         found = run_random(args.char, args.stage, args.episodes, args.frames, args.seed)
     else:
-        chars = ("marth", "fox", "falco") if args.matrix else (args.char,)
+        chars = matrix_chars() if args.matrix else (args.char,)
         stages = tuple(STAGES) if args.matrix else (args.stage,)
         families = (args.family,) if args.family else tuple(SWEEP_FAMILIES)
         for ch in chars:
