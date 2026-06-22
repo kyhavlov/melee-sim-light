@@ -115,6 +115,52 @@ static inline uint8_t msl_shielddesc_attackairb_guardreflect_x19a4_lower_bound_s
   return 1u;
 }
 
+static inline uint8_t msl_shielddesc_attackairb_guardon_x19a4_lower_bound_seed_owner(
+    const MslBatch* batch, int bi, int attacker, int defender) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const size_t d_idx = msl_idx_player(bi, defender);
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B ||
+      batch->state.animation_index[a_idx] != (uint32_t)MSL_SM_ATTACK_AIR_B ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON ||
+      batch->state.action_frame[d_idx] >= 0 || batch->state.animation_index[d_idx] != UINT32_MAX ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u) {
+    return 0u;
+  }
+  const size_t hb0_i = msl_shielddesc_idx_hitbox(bi, attacker, 0);
+  const size_t hb1_i = msl_shielddesc_idx_hitbox(bi, attacker, 1);
+  const size_t hb2_i = msl_shielddesc_idx_hitbox(bi, attacker, 2);
+  if (batch->state.hitbox_enabled[hb0_i] == 0u || batch->state.hitbox_damage[hb0_i] != 15.0f ||
+      batch->state.hitbox_enabled[hb1_i] == 0u || batch->state.hitbox_damage[hb1_i] != 15.0f ||
+      batch->state.hitbox_enabled[hb2_i] == 0u || batch->state.hitbox_damage[hb2_i] != 9.0f) {
+    return 0u;
+  }
+  const uint8_t seeded_x19a4 = batch->state.combat_shield_hit_int_damage[d_idx];
+  const uint8_t seeded_x19a0 = batch->state.combat_shield_damage_taken[d_idx];
+  if (seeded_x19a4 == 0u || seeded_x19a4 >= seeded_x19a0 || seeded_x19a0 > 15u) {
+    return 0u;
+  }
+  for (int hb = 0; hb < 3; hb++) {
+    if (batch->state.combat_shield_contact_hb_kind[msl_shielddesc_idx_hitbox_victim(
+            bi, attacker, hb, defender)] != 2u) {
+      return 0u;
+    }
+  }
+  // No-submotion GuardOn BAir lower-bound x19A4 owner:
+  // Slippi can expose GuardOn without the live shield submotion while the replay-proven
+  // ShieldDesc contact seed is exact for admission. The separate x19A4 seed can still be only a
+  // hitlag-derived lower bound. For this zero-shield-damage BAir packet, the recovered x19A0 lane
+  // identifies the selected source HitCapsule payload; use that narrow reconstruction for
+  // ftCo_80092F2C's x19A4 consumer instead of letting the runtime proxy over-include a stronger
+  // sibling capsule.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_8007ABD0}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  return 1u;
+}
+
 static inline float msl_shielddesc_model_scale_for_idx(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 1.0f;

@@ -108,7 +108,12 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
   }
 
   // Decomp: ftCo_80099A58 uses `fp->input.x668 & (HSD_PAD_R|HSD_PAD_L)` (pressed-edge semantics).
+  // This is the physical L/R edge, not the separate HSD_PAD_LR macro lane. Analog trigger and
+  // Z synthesize HSD_PAD_LR for guard/timers/capture, but do not set physical HSD_PAD_L/R.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58
+  // refs/melee/src/melee/ft/fighter.c::{
+  //   Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10}
+  // refs/melee/src/melee/ft/fighter.c:1868-1890
   const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
   if ((buttons_pressed & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R)) == 0) {
     return 0;
@@ -1627,6 +1632,11 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
               : 0u;
       const uint8_t guardon_frame_start_x672_seed =
           (guardon_entry_x0_nonshield_seed != 0u &&
+           // MSLMSO01 separates this frame-start x672 powershield bridge from the broader fresh
+           // GuardOn item ShieldDesc owner. Landing_IASA can publish ShieldDesc, but its follow-up
+           // GuardOn_IASA consumes live x672 rather than this replay frame-start lane.
+           // data/motion_state/owners/*.bin::MSLMSO01 GUARDON_FRAME_START_X672_IASA
+           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093694
            msl_motion_state_common_class_has_fast(batch->state.seed_prev_action_id[idx],
                                                   MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA))
               ? 1u

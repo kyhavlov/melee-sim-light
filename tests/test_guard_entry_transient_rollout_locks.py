@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
@@ -13,6 +13,7 @@ SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T18
 AGN_SLP = Path("replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz")
 EWT_SLP = Path("replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz")
 PTE_SLP = Path("replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz")
+AGN_DATASET = Path("datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl")
 
 
 def _rollout_until_from_slp(slp_path: Path, *, record: int, ports: list[int]) -> tuple[np.void, np.void, np.void]:
@@ -341,6 +342,44 @@ def test_cliff_option_end_held_lr_without_fresh_press_stays_guardon() -> None:
     assert int(out["action_id"][p]) == 178  # GuardOn
     assert int(out["action_frame"][p]) == -1
     assert int(out["animation_index"][p]) == 0xFFFFFFFF
+
+
+@pytest.mark.integration
+def test_landing_origin_guardon_uses_live_x672_for_followup_guardreflect() -> None:
+    # AGN rec 1339 enters no-submotion GuardOn from Landing on the previous frame. Landing_IASA
+    # publishes GuardOn/ShieldDesc state, but the follow-up GuardOn_IASA powershield gate consumes
+    # the live x672 timer; it must not reuse the grounded-locomotion frame-start x672 bridge.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::*_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80093694}
+    if not AGN_DATASET.exists():
+        pytest.skip(f"missing local dataset: {AGN_DATASET}")
+    ds = read_dataset(str(AGN_DATASET))
+    row = ds.samples[1339:1340].copy()
+    p = 1
+    assert int(row["seed_t"]["action_id"][0, p]) == 178  # GuardOn
+    assert int(row["seed_t"]["seed_prev_action_id"][0, p]) == 42  # Landing
+    assert int(row["input_t"]["p"]["buttons"][0, p]) & 0x0020  # R pressed
+
+    out = _one_step_sample(ds, row)
+    assert int(out["action_id"][p]) == 178  # GuardOn
+    assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
+
+
+@pytest.mark.integration
+def test_guardreflect_x18_nonfinal_reject_does_not_false_hitshield() -> None:
+    # AGN rec 115 is a no-submotion GuardReflect row with x14 already expired and x18 still above
+    # the final tick. Source reflect ownership is gone, but the remaining powershield-damage timer
+    # does not create a new ShieldDesc hit after the exact item matrix path rejects the laser.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    seed, ref, out = _one_step_from_slp(AGN_SLP, record=115, ports=[1, 2])
+    p = 1
+    assert int(seed["action_id"][p]) == 182  # GuardReflect
+    assert int(seed["guard_reflect_timer_x14"][p]) == 0
+    assert int(seed["guard_reflect_timer_x18"][p]) > 1
+    assert int(ref["action_id"][p]) == int(out["action_id"][p]) == 182
+    assert int(out["hitlag"][p]) == 0
+    assert float(out["shield_hp"][p]) == pytest.approx(float(ref["shield_hp"][p]), abs=5e-4)
 
 
 @pytest.mark.integration

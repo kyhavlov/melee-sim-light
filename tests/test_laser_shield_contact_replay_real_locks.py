@@ -120,6 +120,16 @@ def _run_rollout_to_record(dataset_path: Path, start_record: int, target_record:
             7327,
             1,
         ),
+        (
+            "datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl",
+            3057,
+            0,
+        ),
+        (
+            "datasets/sheik/replays/validation/sheik/PaleMajorEchidna.msl",
+            3118,
+            0,
+        ),
     ],
 )
 def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
@@ -138,6 +148,11 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
     #   immediate reflected owner transfer.
     # - MAJ:7327 covers same-step Wait -> GuardReflect where the already-live laser uses the fresh
     #   ShieldDesc center and must go to HitShield/GuardSetOff rather than reflect owner transfer.
+    # - TOC:3057 covers no-submotion GuardReflect after x14/ReflectDesc expiry, where stale x18 is
+    #   still visible but the laser resolves through the ShieldDesc origin sample / HitShield lane.
+    # - PME:3118 covers Landing_IASA -> GuardOn through the MSLMSO01 class2
+    #   FRESH_GUARDON_ITEM_SHIELDDESC_IASA owner; the same item pass sees ShieldDesc and resolves
+    #   HitShield/GuardSetOff instead of leaving the laser shooter-owned.
     # refs/melee/src/melee/it/items/itfoxlaser.c::{
     #   itFoxlaser_UnkMotion1_Phys,it_8029C4D4,itFoxLaser_Logic94_HitShield}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardReflect_Anim
@@ -169,6 +184,17 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
         assert int(seed_row["seed_prev_action_id"][p]) == 14
         assert int(seed_row["items"][0]["exists"]) == 1
         assert int(seed_row["items"][0]["timer"]) < 95
+    if record == 3057:
+        assert int(seed_row["action_id"][p]) == 182  # GuardReflect
+        assert int(seed_row["guard_reflect_timer_x14"][p]) == 0
+        assert int(seed_row["guard_reflect_timer_x18"][p]) == 1
+        assert int(seed_row["items"][1]["exists"]) == 1
+        assert int(seed_row["items"][1]["type"]) == 55
+    if record == 3118:
+        assert int(seed_row["action_id"][p]) == 42  # Landing
+        assert int(seed_row["seed_prev_action_id"][p]) == 42
+        assert int(ref_row["items"][0]["exists"]) == 1  # ShieldBounced laser survives.
+        assert int(ref_row["items"][0]["type"]) == 55
 
     assert int(ref_row["action_id"][p]) == 181
     assert int(out_row["action_id"][p]) == 181
@@ -1359,6 +1385,30 @@ def test_high_flag_laser_steady_guard_does_not_hit_immediately() -> None:
             f"field={field} expected={int(ref_row['items'][1][field])} "
             f"got={int(out_row['items'][1][field])}"
         )
+
+
+@pytest.mark.integration
+def test_guardreflect_late_x18_keepalive_does_not_false_hitshield_tvr() -> None:
+    # TVR rec 11276 is a later no-submotion GuardReflect keepalive row (`action_frame=-2`) with
+    # x14 expired and the final x18 bit still serialized. The final-x18 ShieldDesc handoff is
+    # limited to the action_frame=-1 callback boundary; this row keeps the laser alive instead of
+    # entering GuardSetOff from the broad projectile-origin segment.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 0
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 11276, p)
+    assert int(seed_row["action_id"][p]) == 182  # GuardReflect
+    assert int(seed_row["action_frame"][p]) == -2
+    assert int(seed_row["guard_reflect_timer_x14"][p]) == 0
+    assert int(seed_row["guard_reflect_timer_x18"][p]) == 1
+    assert int(ref_row["action_id"][p]) == int(out_row["action_id"][p]) == 182
+    assert int(out_row["hitlag"][p]) == 0
+    _assert_live_laser_set_matches_ref(out_row=out_row, ref_row=ref_row, record=11276)
 
 
 @pytest.mark.integration

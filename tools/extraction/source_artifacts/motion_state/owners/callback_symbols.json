@@ -38,7 +38,8 @@
     "COMMON_GROUNDED_B108_COLL": 2,
     "COMMON_GROUNDED_B2DC_COLL": 8,
     "COMMON_GROUNDED_B4B0_COLL": 16,
-    "COMMON_GROUNDED_COLL": 1
+    "COMMON_GROUNDED_COLL": 1,
+    "FRESH_GUARDON_ITEM_SHIELDDESC_IASA": 32
   },
   "classes3": {
     "PHASE4_ATTACK_AIR_COLL": 1,
@@ -4367,18 +4368,306 @@
     },
     {
       "id": 1071,
-      "symbol": "ftpickupitem_Anim"
+      "symbol": "ftZd_SpecialAirHiStart_0_Anim"
     },
     {
       "id": 1072,
-      "symbol": "ftpickupitem_Coll"
+      "symbol": "ftZd_SpecialAirHiStart_0_Coll"
     },
     {
       "id": 1073,
-      "symbol": "ftpickupitem_IASA"
+      "symbol": "ftZd_SpecialAirHiStart_0_IASA"
     },
     {
       "id": 1074,
+      "symbol": "ftZd_SpecialAirHiStart_0_Phys"
+    },
+    {
+      "id": 1075,
+      "symbol": "ftZd_SpecialAirHiStart_1_Anim"
+    },
+    {
+      "id": 1076,
+      "symbol": "ftZd_SpecialAirHiStart_1_Coll"
+    },
+    {
+      "id": 1077,
+      "symbol": "ftZd_SpecialAirHiStart_1_IASA"
+    },
+    {
+      "id": 1078,
+      "symbol": "ftZd_SpecialAirHiStart_1_Phys"
+    },
+    {
+      "id": 1079,
+      "symbol": "ftZd_SpecialAirHi_Anim"
+    },
+    {
+      "id": 1080,
+      "symbol": "ftZd_SpecialAirHi_Coll"
+    },
+    {
+      "id": 1081,
+      "symbol": "ftZd_SpecialAirHi_IASA"
+    },
+    {
+      "id": 1082,
+      "symbol": "ftZd_SpecialAirHi_Phys"
+    },
+    {
+      "id": 1083,
+      "symbol": "ftZd_SpecialAirLw2_Anim"
+    },
+    {
+      "id": 1084,
+      "symbol": "ftZd_SpecialAirLw2_Coll"
+    },
+    {
+      "id": 1085,
+      "symbol": "ftZd_SpecialAirLw2_IASA"
+    },
+    {
+      "id": 1086,
+      "symbol": "ftZd_SpecialAirLw2_Phys"
+    },
+    {
+      "id": 1087,
+      "symbol": "ftZd_SpecialAirLw_Anim"
+    },
+    {
+      "id": 1088,
+      "symbol": "ftZd_SpecialAirLw_Coll"
+    },
+    {
+      "id": 1089,
+      "symbol": "ftZd_SpecialAirLw_IASA"
+    },
+    {
+      "id": 1090,
+      "symbol": "ftZd_SpecialAirLw_Phys"
+    },
+    {
+      "id": 1091,
+      "symbol": "ftZd_SpecialAirN_Anim"
+    },
+    {
+      "id": 1092,
+      "symbol": "ftZd_SpecialAirN_Coll"
+    },
+    {
+      "id": 1093,
+      "symbol": "ftZd_SpecialAirN_IASA"
+    },
+    {
+      "id": 1094,
+      "symbol": "ftZd_SpecialAirN_Phys"
+    },
+    {
+      "id": 1095,
+      "symbol": "ftZd_SpecialAirSEnd_Anim"
+    },
+    {
+      "id": 1096,
+      "symbol": "ftZd_SpecialAirSEnd_Coll"
+    },
+    {
+      "id": 1097,
+      "symbol": "ftZd_SpecialAirSEnd_IASA"
+    },
+    {
+      "id": 1098,
+      "symbol": "ftZd_SpecialAirSEnd_Phys"
+    },
+    {
+      "id": 1099,
+      "symbol": "ftZd_SpecialAirSLoop_Anim"
+    },
+    {
+      "id": 1100,
+      "symbol": "ftZd_SpecialAirSLoop_Coll"
+    },
+    {
+      "id": 1101,
+      "symbol": "ftZd_SpecialAirSLoop_IASA"
+    },
+    {
+      "id": 1102,
+      "symbol": "ftZd_SpecialAirSLoop_Phys"
+    },
+    {
+      "id": 1103,
+      "symbol": "ftZd_SpecialAirSStart_Anim"
+    },
+    {
+      "id": 1104,
+      "symbol": "ftZd_SpecialAirSStart_Coll"
+    },
+    {
+      "id": 1105,
+      "symbol": "ftZd_SpecialAirSStart_IASA"
+    },
+    {
+      "id": 1106,
+      "symbol": "ftZd_SpecialAirSStart_Phys"
+    },
+    {
+      "id": 1107,
+      "symbol": "ftZd_SpecialHiStart_0_Anim"
+    },
+    {
+      "id": 1108,
+      "symbol": "ftZd_SpecialHiStart_0_Coll"
+    },
+    {
+      "id": 1109,
+      "symbol": "ftZd_SpecialHiStart_0_IASA"
+    },
+    {
+      "id": 1110,
+      "symbol": "ftZd_SpecialHiStart_0_Phys"
+    },
+    {
+      "id": 1111,
+      "symbol": "ftZd_SpecialHiStart_1_Anim"
+    },
+    {
+      "id": 1112,
+      "symbol": "ftZd_SpecialHiStart_1_Coll"
+    },
+    {
+      "id": 1113,
+      "symbol": "ftZd_SpecialHiStart_1_IASA"
+    },
+    {
+      "id": 1114,
+      "symbol": "ftZd_SpecialHiStart_1_Phys"
+    },
+    {
+      "id": 1115,
+      "symbol": "ftZd_SpecialHi_Anim"
+    },
+    {
+      "id": 1116,
+      "symbol": "ftZd_SpecialHi_Coll"
+    },
+    {
+      "id": 1117,
+      "symbol": "ftZd_SpecialHi_IASA"
+    },
+    {
+      "id": 1118,
+      "symbol": "ftZd_SpecialHi_Phys"
+    },
+    {
+      "id": 1119,
+      "symbol": "ftZd_SpecialLw2_Anim"
+    },
+    {
+      "id": 1120,
+      "symbol": "ftZd_SpecialLw2_Coll"
+    },
+    {
+      "id": 1121,
+      "symbol": "ftZd_SpecialLw2_IASA"
+    },
+    {
+      "id": 1122,
+      "symbol": "ftZd_SpecialLw2_Phys"
+    },
+    {
+      "id": 1123,
+      "symbol": "ftZd_SpecialLw_Anim"
+    },
+    {
+      "id": 1124,
+      "symbol": "ftZd_SpecialLw_Coll"
+    },
+    {
+      "id": 1125,
+      "symbol": "ftZd_SpecialLw_IASA"
+    },
+    {
+      "id": 1126,
+      "symbol": "ftZd_SpecialLw_Phys"
+    },
+    {
+      "id": 1127,
+      "symbol": "ftZd_SpecialN_Anim"
+    },
+    {
+      "id": 1128,
+      "symbol": "ftZd_SpecialN_Coll"
+    },
+    {
+      "id": 1129,
+      "symbol": "ftZd_SpecialN_IASA"
+    },
+    {
+      "id": 1130,
+      "symbol": "ftZd_SpecialN_Phys"
+    },
+    {
+      "id": 1131,
+      "symbol": "ftZd_SpecialSEnd_Anim"
+    },
+    {
+      "id": 1132,
+      "symbol": "ftZd_SpecialSEnd_Coll"
+    },
+    {
+      "id": 1133,
+      "symbol": "ftZd_SpecialSEnd_IASA"
+    },
+    {
+      "id": 1134,
+      "symbol": "ftZd_SpecialSEnd_Phys"
+    },
+    {
+      "id": 1135,
+      "symbol": "ftZd_SpecialSLoop_Anim"
+    },
+    {
+      "id": 1136,
+      "symbol": "ftZd_SpecialSLoop_Coll"
+    },
+    {
+      "id": 1137,
+      "symbol": "ftZd_SpecialSLoop_IASA"
+    },
+    {
+      "id": 1138,
+      "symbol": "ftZd_SpecialSLoop_Phys"
+    },
+    {
+      "id": 1139,
+      "symbol": "ftZd_SpecialSStart_Anim"
+    },
+    {
+      "id": 1140,
+      "symbol": "ftZd_SpecialSStart_Coll"
+    },
+    {
+      "id": 1141,
+      "symbol": "ftZd_SpecialSStart_IASA"
+    },
+    {
+      "id": 1142,
+      "symbol": "ftZd_SpecialSStart_Phys"
+    },
+    {
+      "id": 1143,
+      "symbol": "ftpickupitem_Anim"
+    },
+    {
+      "id": 1144,
+      "symbol": "ftpickupitem_Coll"
+    },
+    {
+      "id": 1145,
+      "symbol": "ftpickupitem_IASA"
+    },
+    {
+      "id": 1146,
       "symbol": "ftpickupitem_Phys"
     }
   ],

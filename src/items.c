@@ -4338,16 +4338,36 @@ static inline uint8_t item_fresh_guardon_locomotion_shielddesc_owner(const MslBa
   }
   const uint16_t prev = batch->state.seed_prev_action_id[d_idx];
   // Fresh grounded-locomotion GuardOn entry ShieldDesc owner:
-  // generated Wait/Walk/Turn/Dash/Run/Squat IASA callbacks can install a fresh ShieldDesc through
-  // ftCo_80091A4C/ftCo_80092450 before item shield collision consumes it. On this owner, the
-  // laser shield branch must use the real item HitCapsule scaleZ lane from it_8027137C / lbColl,
-  // matching the same source transform used by steady shield contacts.
+  // generated IASA callbacks can install a fresh ShieldDesc through ftCo_80091A4C/ftCo_80092450
+  // before item shield collision consumes it. This class2 owner is deliberately separate from the
+  // GuardOn frame-start x672 powershield bridge: Landing_IASA can publish item ShieldDesc while
+  // follow-up GuardOn_IASA still consumes live x672.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80092450}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
   // refs/melee/src/melee/it/itcoll.c::it_8027137C
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
-  return msl_motion_state_common_class_has_fast(prev, MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA)
+  return msl_motion_state_common_class2_has_fast(prev,
+                                                 MSL_MS_CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA)
              ? 1u
              : 0u;
+}
+
+static inline uint8_t item_fresh_guardon_landing_shielddesc_owner(const MslBatch* batch,
+                                                                  size_t d_idx) {
+  if (batch == NULL || batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON ||
+      batch->state.guard_on_entered_this_frame[d_idx] == 0u ||
+      (batch->state.guard_on_entry_reflect_source_latch[d_idx] == 0u &&
+       batch->state.seed_prev_action_id[d_idx] != (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL)) {
+    return 0u;
+  }
+  // Landing_IASA -> GuardOn item ShieldDesc owner:
+  // `enter_guard_on` sets guard_on_entry_reflect_source_latch for Landing source callbacks; replay
+  // seeds can also expose LandingFallSpecial before that latch is available. Keep this
+  // item-contact-local; the broader MSLMSO01 GuardOn x672 class is deliberately separate because
+  // it feeds GuardOn powershield/recharge timing rather than item ShieldDesc admission.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80092450,ftCo_800921DC}
+  return 1u;
 }
 
 static inline float item_guard_shield_radius_from_state(const MslBatch* batch,
@@ -9777,8 +9797,6 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint8_t guard_reflect_frozen_final_seed_keepalive_snapshot =
           (guard_reflect_frozen_final_seed_snapshot && !guard_reflect_origin_x14_expired) ? 1u : 0u;
       const uint16_t prev_action = batch->state.seed_prev_action_id[d_idx];
-      const uint8_t guard_on_entry_from_landing =
-          (guard_on_no_submotion_snapshot && (prev_action == (uint16_t)MSL_ACT_LANDING)) ? 1u : 0u;
       const uint8_t guard_reflect_entry_from_landing =
           (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
            batch->state.action_frame[d_idx] < 0 &&
@@ -9793,6 +9811,15 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // shield precedence; `item_try_guard_fresh_shield_center` below supplies the matching
         // current-pose center.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_80092450,ftCo_800921DC}
+        shr = item_guard_shield_radius_from_state(batch, common, d_idx);
+      }
+      if (!(shr > 0.0f) && (item_fresh_guardon_locomotion_shielddesc_owner(batch, d_idx) ||
+                            item_fresh_guardon_landing_shielddesc_owner(batch, d_idx))) {
+        // Same-step GuardOn item contact:
+        // generated MSLMSO01 class2 owner covers IASA callbacks that can publish a fresh
+        // ShieldDesc for item collision. Landing-specific replay seeds can still arrive through
+        // the live entry latch when the previous row no longer exposes the source IASA action.
+        // data/motion_state/owners/*.bin::MSLMSO01 FRESH_GUARDON_ITEM_SHIELDDESC_IASA
         shr = item_guard_shield_radius_from_state(batch, common, d_idx);
       }
       if (!(shr > 0.0f) && item_no_submotion_guard_shielddesc_root_x_owner(batch, d_idx)) {
@@ -9813,7 +9840,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
            batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u)
               ? 1u
               : 0u;
-      if (shr > 0.0f && !guard_on_entry_from_landing && !guard_reflect_same_frame_landing_entry &&
+      if (shr > 0.0f && !guard_reflect_same_frame_landing_entry &&
           !shield_fresh_dash_guardreflect_full_shield_snapshot &&
           !shield_dash_guardon_followup_guard_reflect_snapshot) {
         // Use derived shield bubble center from shields_refresh() (same geometry used by the
@@ -10193,7 +10220,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                 ? 0u
                 : 1u;
         const uint8_t collision_time_fresh_guardon_shielddesc =
-            item_fresh_guardon_locomotion_shielddesc_owner(batch, d_idx);
+            (uint8_t)(item_fresh_guardon_locomotion_shielddesc_owner(batch, d_idx) ||
+                      item_fresh_guardon_landing_shielddesc_owner(batch, d_idx));
         // Shield HitCapsule endpoint ownership:
         // - itcoll refresh carries the previous endpoint (`x58`) from the prior post-frame scale
         //   and rebuilds the current endpoint (`x4C`) from this frame's item scale,
@@ -10301,6 +10329,29 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               shield_bounce_best_vy = trial_bounce_vy;
             }
           }
+        }
+        if (!shield_hit && defender_guard_reflect_no_submotion_snapshot &&
+            batch->state.action_frame[d_idx] == -1 &&
+            batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+            batch->state.guard_reflect_timer_x18_seed[d_idx] == 1u &&
+            item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, sr, shx, shy, shz,
+                                                   shr)) {
+          // Stale-x18 GuardReflect HitShield handoff:
+          // once `ftCo_80093BC0` has expired mv.co.guard.x14/ReflectDesc, the item collision path
+          // falls through to ShieldDesc on the final serialized x18 tick/frame. Earlier x18 rows
+          // and later no-submotion keepalive rows only prove powershield-damage state is still
+          // live; they do not by themselves publish a new ShieldDesc hit after the exact matrix
+          // path rejected the projectile. The accepted laser sample for this final-tick handoff is
+          // the article origin segment, not the authored beam-offset probes that are owned by live
+          // ReflectDesc/ShieldBounced paths above.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_GuardReflect_Anim,ftCo_80093BC0}
+          // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+          // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C4D4,it_2725_Logic94_HitShield}
+          shield_hit = 1u;
+          shield_hit_contact_x = x;
+          shield_hit_contact_y = y;
+          shield_bounce_contact_found = 1u;
         }
         // If no scripted offsets exist, fall back to the projectile origin on the same prev->cur
         // owner segment used by it_8029C4D4.
@@ -11174,8 +11225,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                   : 0u;
           const uint8_t guard_reflect_stale_x18_hitshield_snapshot =
               (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+               batch->state.action_frame[d_idx] == -1 &&
                batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
-               batch->state.guard_reflect_timer_x18_seed[d_idx] != 0u)
+               batch->state.guard_reflect_timer_x18_seed[d_idx] == 1u)
                   ? 1u
                   : 0u;
           const uint8_t shield_bounce_hp_allows =

@@ -60,6 +60,7 @@ CLASS2_COMMON_GROUNDED_B108_COLL = 1 << 1
 CLASS2_COMMON_AIRBORNE_COLL = 1 << 2
 CLASS2_COMMON_GROUNDED_B2DC_COLL = 1 << 3
 CLASS2_COMMON_GROUNDED_B4B0_COLL = 1 << 4
+CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA = 1 << 5
 
 CLASS3_PHASE4_ATTACK_AIR_COLL = 1 << 0
 CLASS3_PHASE4_ESCAPE_AIR_COLL = 1 << 1
@@ -582,7 +583,26 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
 
 def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
     bits = 0
+    iasa_cb = callbacks[1]
     coll_cb = callbacks[3]
+    if iasa_cb in {
+        "ftCo_Wait_IASA",
+        "ftCo_Walk_IASA",
+        "ftCo_Turn_IASA",
+        "ftCo_Dash_IASA",
+        "ftCo_Run_IASA",
+        "ftCo_RunDirect_IASA",
+        "ftCo_Squat_IASA",
+        "ftCo_SquatWait_IASA",
+        "ftCo_SquatRv_IASA",
+        "ftCo_Landing_IASA",
+    }:
+        # Same-callback GuardOn item ShieldDesc publication owner. Landing is included here because
+        # ftCo_Landing_IASA can publish ShieldDesc through ftCo_80091A4C, but it stays out of the
+        # frame-start x672 bridge because follow-up GuardOn_IASA consumes live x672.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80092450,ftCo_80093694}
+        bits |= CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA
     if coll_cb in {
         "ftCo_Wait_Coll",
         "ftCo_Walk_Coll",
@@ -921,6 +941,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
     }
     classes2 = {
         "COMMON_AIRBORNE_COLL": CLASS2_COMMON_AIRBORNE_COLL,
+        "FRESH_GUARDON_ITEM_SHIELDDESC_IASA": CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA,
         "COMMON_GROUNDED_B2DC_COLL": CLASS2_COMMON_GROUNDED_B2DC_COLL,
         "COMMON_GROUNDED_B4B0_COLL": CLASS2_COMMON_GROUNDED_B4B0_COLL,
         "COMMON_GROUNDED_B108_COLL": CLASS2_COMMON_GROUNDED_B108_COLL,

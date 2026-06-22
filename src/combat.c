@@ -13589,11 +13589,29 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           const uint8_t lower_bound_attackairb_guardreflect_x19a4_seed =
               msl_shielddesc_attackairb_guardreflect_x19a4_lower_bound_seed_owner(
                   batch, bi, attacker, defender);
+          const uint8_t lower_bound_attackairb_guardon_x19a4_seed =
+              msl_shielddesc_attackairb_guardon_x19a4_lower_bound_seed_owner(batch, bi, attacker,
+                                                                             defender);
           const uint8_t seeded_x19a4 = (lower_bound_attackairb_guard_seed != 0u ||
                                         lower_bound_attackairb_guardreflect_x19a4_seed != 0u)
                                            ? 0u
                                            : batch->state.combat_shield_hit_int_damage[d_idx];
-          if (seeded_x19a4 != 0u) {
+          const uint8_t guardon_bair_x19a4_from_x19a0 =
+              (lower_bound_attackairb_guardon_x19a4_seed != 0u)
+                  ? batch->state.combat_shield_damage_taken[d_idx]
+                  : 0u;
+          if (guardon_bair_x19a4_from_x19a0 != 0u) {
+            // No-submotion GuardOn BAir lower-bound reconstruction:
+            // this source shape has replay-proven ShieldDesc admission, zero hitbox shield
+            // damage, and an x19A4 seed that can be only a hitlag-derived lower bound. The
+            // recovered x19A0 lane then identifies the selected BAir HitCapsule payload that
+            // ftColl_80076CBC wrote into x19A4 before ftCo_80092F2C consumed it for GuardSetOff
+            // shieldstun/recoil. Keep this narrow to the source-shaped helper above so unrelated
+            // shieldDamageTaken accumulator rows do not become x19A4.
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_8007ABD0}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+            max_int_dmg = (int)guardon_bair_x19a4_from_x19a0;
+          } else if (seeded_x19a4 != 0u) {
             // Teacher-forced shield-hit max-damage lane:
             // - ftColl_80076CBC writes defender fp->x19A4 as the max getEnvDmg(hit0->damage)
             //   across accepted shield contacts before ftCo_80092F2C consumes it for GuardSetOff

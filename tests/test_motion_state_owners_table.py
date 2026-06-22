@@ -34,6 +34,7 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_COMMON_GROUNDED_B4B0_COLL,
     CLASS2_COMMON_GROUNDED_B108_COLL,
     CLASS2_COMMON_GROUNDED_COLL,
+    CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA,
     CLASS3_PHASE4_ATTACK_AIR_COLL,
     FX_SPECIAL_KIND_BY_SYMBOL,
     FX_SPECIAL_KIND_VALUES,
@@ -61,6 +62,7 @@ FALCO = Path("data/motion_state/owners/falco.bin")
 MANIFEST = Path("data/motion_state/owners/callback_symbols.json")
 MARTH = Path("data/motion_state/owners/marth.bin")
 SHEIK = Path("data/motion_state/owners/sheik.bin")
+SOURCE_ARTIFACT_OWNERS = Path("tools/extraction/source_artifacts/motion_state/owners")
 
 
 def _data_manifest_chars() -> list[str]:
@@ -319,6 +321,21 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0028,
         0x0029,
     }
+    fresh_guardon_item_shielddesc_iasa = {
+        0x000E,
+        0x000F,
+        0x0010,
+        0x0011,
+        0x0012,
+        0x0014,
+        0x0015,
+        0x0016,
+        0x0027,
+        0x0028,
+        0x0029,
+        0x002A,
+        0x002B,
+    }
     ft80081d0c_air_coll = {
         *range(0x0041, 0x0046),
         0x00CD,
@@ -468,6 +485,10 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         assert both_have(action_id, CLASS_GUARDON_FRAME_START_X672_IASA) == (
             action_id in guardon_frame_start_x672_iasa
         )
+        assert (
+            bool(int(fox.class2_bits[action_id]) & CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA)
+            and bool(int(falco.class2_bits[action_id]) & CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA)
+        ) == (action_id in fresh_guardon_item_shielddesc_iasa)
         assert both_have(action_id, CLASS_FT80081D0C_AIR_COLL) == (
             action_id in ft80081d0c_air_coll
         )
@@ -654,6 +675,9 @@ def test_motion_state_owner_phase3_common_owner_classes_exclude_later_families()
     assert both_have2(0x0027, CLASS2_COMMON_GROUNDED_B108_COLL)
     assert both_have2(0x002A, CLASS2_COMMON_GROUNDED_COLL)  # Landing
     assert both_have2(0x002A, CLASS2_COMMON_GROUNDED_B4B0_COLL)
+    assert both_have2(0x000E, CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA)  # Wait IASA
+    assert both_have2(0x002A, CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA)  # Landing IASA
+    assert not both_have2(0x002A, CLASS2_COMMON_GROUNDED_B108_COLL)
     assert both_have2(0x00B3, CLASS2_COMMON_GROUNDED_COLL)  # Guard
     assert both_have2(0x00B3, CLASS2_COMMON_GROUNDED_B108_COLL)
     assert both_have2(0x00F5, CLASS2_COMMON_GROUNDED_COLL)  # Ottotto
@@ -693,6 +717,7 @@ def test_motion_state_owner_phase3_common_owner_classes_exclude_later_families()
         assert not both_have2(action_id, CLASS2_COMMON_GROUNDED_B2DC_COLL)
         assert not both_have2(action_id, CLASS2_COMMON_GROUNDED_B4B0_COLL)
         assert not both_have2(action_id, CLASS2_COMMON_AIRBORNE_COLL)
+        assert not both_have2(action_id, CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA)
 
 
 @pytest.mark.integration
@@ -859,8 +884,23 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
         "ftCo_Pass_Coll",
     }
 
-    def expected_bits(coll_cb: str) -> int:
+    fresh_guardon_item_shielddesc_iasa = {
+        "ftCo_Wait_IASA",
+        "ftCo_Walk_IASA",
+        "ftCo_Turn_IASA",
+        "ftCo_Dash_IASA",
+        "ftCo_Run_IASA",
+        "ftCo_RunDirect_IASA",
+        "ftCo_Squat_IASA",
+        "ftCo_SquatWait_IASA",
+        "ftCo_SquatRv_IASA",
+        "ftCo_Landing_IASA",
+    }
+
+    def expected_bits(iasa_cb: str, coll_cb: str) -> int:
         bits = 0
+        if iasa_cb in fresh_guardon_item_shielddesc_iasa:
+            bits |= CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA
         if coll_cb in common_grounded:
             bits |= CLASS2_COMMON_GROUNDED_COLL
         if coll_cb in common_grounded_b108:
@@ -878,10 +918,12 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
     # refs/melee/src/melee/ft/ft_081B.c common grounded/airborne wrappers.
     for label, table in (("fox", fox), ("falco", falco)):
         for action_id in range(len(table.class2_bits)):
+            iasa_cb = symbols[int(table.iasa_cb_id[action_id])]
             coll_cb = symbols[int(table.coll_cb_id[action_id])]
-            assert int(table.class2_bits[action_id]) == expected_bits(coll_cb), (
+            assert int(table.class2_bits[action_id]) == expected_bits(iasa_cb, coll_cb), (
                 label,
                 action_id,
+                iasa_cb,
                 coll_cb,
             )
 
@@ -1022,6 +1064,17 @@ def test_motion_state_owner_extractor_regenerates_stable_artifacts(tmp_path: Pat
     )
     for rel in [f"{ch}.bin" for ch in _data_manifest_chars()] + ["callback_symbols.json"]:
         assert (out_dir / rel).read_bytes() == (Path("data/motion_state/owners") / rel).read_bytes()
+
+
+def test_motion_state_owner_source_artifacts_match_generated_data() -> None:
+    # build_data's no-decomp path copies these tracked source artifacts directly. Keep their
+    # manifest class maps and shared callback-id namespace byte-identical with the generated data
+    # tree so a regenerated runtime table cannot silently drift from the packaged fallback.
+    rels = [f"{ch}.bin" for ch in _data_manifest_chars()] + ["callback_symbols.json"]
+    for rel in rels:
+        assert (SOURCE_ARTIFACT_OWNERS / rel).read_bytes() == (
+            Path("data/motion_state/owners") / rel
+        ).read_bytes(), rel
 
 
 def test_fx_special_kind_matches_anim_callback_symbols() -> None:

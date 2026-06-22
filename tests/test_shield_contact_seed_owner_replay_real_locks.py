@@ -3004,6 +3004,133 @@ def test_marth_guardon_terminal_no_submotion_shielddesc_uses_live_guardon_pose_r
 
 
 @pytest.mark.integration
+def test_falco_attackairb_guardon_lower_bound_x19a4_uses_live_damage_wgp_5380() -> None:
+    # WGP rec5380 is a no-submotion GuardOn ShieldDesc hit by Falco BAir. The replay-proven
+    # ShieldDesc lane owns admission, but the x19A4 seed is only the minimum damage inferred from
+    # hitlag. ftColl_80076CBC consumes the current ftColl_8007ABD0 HitCapsule.damage for
+    # GuardSetOff recoil, so the 12-damage lower bound must not under-push the 13-damage source
+    # recoil.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_8007ABD0}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    # data/moves/falco.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/WingedGorgeousPanther.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 5380
+    attacker = 0
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed_t = ds.samples[record]["seed_t"]
+    assert int(seed_t["action_id"][attacker]) == 67  # Falco AttackAirB.
+    assert int(seed_t["action_id"][defender]) == 178  # GuardOn no-submotion.
+    assert int(seed_t["action_frame"][defender]) < 0
+    assert int(seed_t["animation_index"][defender]) == 0xFFFFFFFF
+    assert int(seed_t["combat_shield_hit_int_damage"][defender]) == 12
+    assert int(seed_t["combat_shield_damage_taken"][defender]) == 13
+    assert all(
+        int(seed_t["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 2
+        for hb in range(3)
+    )
+
+    _seed, ref, out = _run_one_step_row(dataset_path, record, defender)
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 7
+    assert float(out["speed_ground_x_self"][defender]) == pytest.approx(
+        float(ref["speed_ground_x_self"][defender]), abs=1e-7
+    )
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_falco_attackairb_guardon_weak_hb2_keeps_seeded_x19a4_fsp_3100() -> None:
+    # Adjacent weak-hit negative for the WGP lower-bound x19A4 owner. FSP rec3100 has the same
+    # no-submotion GuardOn BAir ShieldDesc provenance, but only the weak hb2 payload owns the live
+    # shield hit. The seeded x19A4=6 lower-bound must stay authoritative for GuardSetOff hitlag
+    # instead of being replaced by the strong BAir capsule damage.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_8007ABD0}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    # data/moves/falco.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 3100
+    attacker = 1
+    defender = 0
+    ds = read_dataset(str(dataset_path))
+    seed_t = ds.samples[record]["seed_t"]
+    assert int(seed_t["action_id"][attacker]) == 67  # Falco AttackAirB.
+    assert int(seed_t["action_id"][defender]) == 178  # GuardOn no-submotion.
+    assert int(seed_t["action_frame"][defender]) < 0
+    assert int(seed_t["animation_index"][defender]) == 0xFFFFFFFF
+    assert int(seed_t["combat_shield_hit_int_damage"][defender]) == 6
+    assert int(seed_t["combat_shield_damage_taken"][defender]) == 7
+    assert all(
+        int(seed_t["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 2
+        for hb in range(3)
+    )
+
+    _seed, ref, out = _run_one_step_row(dataset_path, record, defender)
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 5
+    assert float(out["speed_ground_x_self"][defender]) == pytest.approx(
+        float(ref["speed_ground_x_self"][defender]), abs=1e-7
+    )
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_falco_attackairb_guardon_x19a4_requires_replay_proven_shielddesc_wgp_5380() -> None:
+    # Adjacent negative for the WGP lower-bound x19A4 owner: x19A0>x19A4 alone is not enough to
+    # invent a shield hit. Without replay-proven per-HitCapsule ShieldDesc admission, the same
+    # no-submotion GuardOn BAir packet must stay outside the GuardSetOff path.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/WingedGorgeousPanther.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+
+    def clear_shielddesc_contact(seed_t: np.ndarray) -> None:
+        seed_t["combat_shield_contact_hb_kind"][0, attacker, :, defender] = 0
+
+    _seed, _ref, out = _run_one_step_row(
+        dataset_path,
+        5380,
+        defender,
+        seed_mutator=clear_shielddesc_contact,
+    )
+    assert int(out["action_id"][defender]) != 181
+
+
+@pytest.mark.integration
+def test_wgp_guardon_x19a4_rollout_reaches_later_guardsetoff_contact() -> None:
+    # Rollout lock for the aggregate hard red: under-pushing WGP rec5380 by the lower-bound x19A4
+    # leaves Marth 0.798 units behind by the later shield-contact cluster, causing rec6259 to stay
+    # Guard instead of entering GuardSetOff.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/WingedGorgeousPanther.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    ref, out = _run_rollout_window(dataset_path, 5380, 6259)
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 7
+    assert abs(float(out["shield_hp"][defender]) - float(ref["shield_hp"][defender])) < 0.05
+
+
+@pytest.mark.integration
 def test_spacie_guardon_terminal_no_submotion_live_pose_does_not_force_seeded_no_contact() -> None:
     # Cross-character negative for the table-backed GuardOn ShieldDesc owner. Fox/Falco terminal
     # no-submotion GuardOn rows with vanilla no-shield-contact provenance must remain GuardOn/Guard

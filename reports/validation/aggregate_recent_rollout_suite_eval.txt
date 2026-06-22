@@ -847,13 +847,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 == datasets/aggregate_recent/replays/validation/marth/WingedGorgeousPanther.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1600
-rollout.streak_count: 31
-rollout.streak_len.median: 177
-rollout.streak_len.p90: 688
+rollout.streak_count: 30
+rollout.streak_len.median: 163
+rollout.streak_len.p90: 809
 rollout.streak_len.p95: 1551
 rollout.streak_len.max: 1600
-rollout.first_mismatch_total: 33
-rollout.first_mismatch_seeded_total: 17
+rollout.first_mismatch_total: 32
+rollout.first_mismatch_seeded_total: 16
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=23.24 rec=367 p=0 seed/ref/out=-41.6429/-41.6429/-64.8829 actions=229/229/229 category=unclassified
@@ -995,14 +995,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:522
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == suite summary ==
-overall.rollout.streak_count: 652
+overall.rollout.streak_count: 651
 overall.rollout.streak_len.median: 252
 overall.rollout.streak_len.p90: 1284
 overall.rollout.streak_len.p95: 2213
 overall.rollout.streak_len.max: 12475
 overall.rollout.best_len.max: 12475
-overall.rollout.first_mismatch_total: 618
-overall.rollout.first_mismatch_seeded_total: 256
+overall.rollout.first_mismatch_total: 617
+overall.rollout.first_mismatch_seeded_total: 255
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=159.875 rec=5010 p=1 seed/ref/out=-7.05318/-5.65008/-165.525 actions=7/7/7 category=unclassified

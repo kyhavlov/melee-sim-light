@@ -120,7 +120,9 @@ void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const Msl
 
 // Attempt to enter EscapeAir (airdodge). Returns 1 if entered.
 //
-// Contract: only call from eligible airborne locomotion states; this helper only checks L/R press.
+// Contract: only call from eligible airborne locomotion states; this helper checks the physical
+// digital L/R edge used by `ftCo_80099A58`. The synthesized HSD_PAD_LR lane used by some grounded
+// guard/Wait owners is a different source predicate.
 uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommonParams* c,
                                                  size_t idx);
 

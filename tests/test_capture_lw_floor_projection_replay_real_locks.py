@@ -242,6 +242,57 @@ def test_capturepulledlw_floor_loss_handoff_uses_stage_line_and_vertical_carry_d
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "p", "note"),
+    [
+        (
+            "BeautifulDistantWolverine.msl",
+            2686,
+            0,
+            "Yoshi left ledge frame-1 CapturePulledLw Phys enters airborne PulledHi",
+        ),
+        (
+            "DrabMeanArmadillo.msl",
+            2208,
+            1,
+            "Yoshi right ledge frame-1 CapturePulledLw Phys enters airborne PulledHi",
+        ),
+        (
+            "sheik_demo_game_2.msl",
+            5603,
+            1,
+            "Battlefield platform frame-1 CapturePulledLw Phys enters airborne PulledHi",
+        ),
+    ],
+)
+def test_sheik_capturepulledlw_frame1_floor_loss_enters_capturepulledhi(
+    dataset_name: str, record: int, p: int, note: str
+) -> None:
+    # CapturePulledLw frame-1 Phys/Coll floor-loss owner:
+    # - `ftCo_CapturePulledLw_Phys` runs `fn_800DAD18` on already-visible PulledLw rows even when
+    #   the prior replay action was Catch/Wait/Passive instead of PulledLw.
+    # - If the following `ft_8008403C -> mpColl_800477E0` floor mask misses a carried MSLSTG01
+    #   platform/ledge floor, `fn_800DB230` enters CapturePulledHi and applies the airborne anchor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CapturePulledLw_Phys,ftCo_CapturePulledLw_Coll,fn_800DAD18,fn_800DB230}
+    # data/stages/bin/*.bin::MSLSTG01 segment.{platform,ledge}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / f"datasets/sheik/replays/validation/sheik/{dataset_name}"
+    if not dataset_path.exists():
+      pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, ref, out = _run_one_step_seed(dataset_path, record)
+    assert int(seed["action_id"][p]) == ACT_CAPTURE_PULLED_LW, note
+    assert int(seed["action_frame"][p]) == 1, note
+    assert int(ref["action_id"][p]) == ACT_CAPTURE_PULLED_HI, note
+    assert int(out["action_id"][p]) == ACT_CAPTURE_PULLED_HI, note
+    assert int(out["animation_index"][p]) == int(ref["animation_index"][p]), note
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-5)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
 def test_capturewaitlw_allow_ground_to_air_collision_reprojects_floor_direct_and_rollout() -> None:
     # Replay-real lock for low-capture grounded collision:
     # - CaptureWaitLw_Phys runs `fn_800DAD18`, which can move the victim XRotN slightly above floor.

@@ -14,6 +14,12 @@ def _reference_events(seed: np.ndarray, ref: np.ndarray, out: np.ndarray, num_pl
     code_by_name = {name: code for code, name in NATIVE_FIELD_CODE_TO_NAME.items()}
     events: list[tuple[int, ...]] = []
     n = int(seed.shape[0])
+
+    def native_i32(value) -> int:
+        # collect_mismatch_events publishes scalar values through int32 arrays. Match that ABI for
+        # unsigned sentinel fields such as animation_index == 0xFFFFFFFF.
+        return int(np.asarray(value).astype(np.int32))
+
     for i in range(n):
         for p in range(num_players):
             for field in PLAYER_FIELDS:
@@ -43,9 +49,9 @@ def _reference_events(seed: np.ndarray, ref: np.ndarray, out: np.ndarray, num_pl
                         p,
                         code_by_name[field],
                         -1,
-                        seed_v,
-                        int(ref[field][i, p]),
-                        int(out[field][i, p]),
+                        native_i32(seed_v),
+                        native_i32(ref[field][i, p]),
+                        native_i32(out[field][i, p]),
                     )
                 )
         for slot in range(out["items"].shape[1]):
@@ -59,9 +65,9 @@ def _reference_events(seed: np.ndarray, ref: np.ndarray, out: np.ndarray, num_pl
                         slot,
                         code_by_name[field],
                         -1,
-                        int(seed["items"][subfield][i, slot]),
-                        int(ref["items"][subfield][i, slot]),
-                        int(out["items"][subfield][i, slot]),
+                        native_i32(seed["items"][subfield][i, slot]),
+                        native_i32(ref["items"][subfield][i, slot]),
+                        native_i32(out["items"][subfield][i, slot]),
                     )
                 )
     return events

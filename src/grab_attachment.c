@@ -669,11 +669,11 @@ static void capture_pulled_lw_try_air_handoff_after_delta(MslBatch* batch, int b
   const uint16_t ground_id = batch->state.ground_id[vidx];
   const uint8_t fresh_ledge_floor_loss_entry =
       (uint8_t)(sustained_capture_pulled_lw == 0u && ground_id != 0xFFFFu &&
-                batch->state.seed_prev_action_id[vidx] == (uint16_t)MSL_ACT_ESCAPE_N &&
+                batch->state.action_frame[vidx] >= 1 &&
                 stage_collision_floor_line_is_ledge(stage_id, ground_id) != 0u);
   const uint8_t fresh_platform_floor_loss_entry =
       (uint8_t)(sustained_capture_pulled_lw == 0u && ground_id != 0xFFFFu &&
-                batch->state.seed_prev_action_id[vidx] == (uint16_t)MSL_ACT_GUARD_ON &&
+                batch->state.action_frame[vidx] >= 1 &&
                 stage_collision_floor_line_is_platform(stage_id, ground_id) != 0u);
   if (sustained_capture_pulled_lw == 0u && fresh_ledge_floor_loss_entry == 0u &&
       fresh_platform_floor_loss_entry == 0u) {
@@ -688,7 +688,8 @@ static void capture_pulled_lw_try_air_handoff_after_delta(MslBatch* batch, int b
   uint8_t source_floor_loss_ok = vertical_carry_handoff;
   if (source_floor_loss_ok == 0u) {
     uint8_t floor_mask = mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result);
-    if (floor_mask == 0u && ground_id != 0xFFFFu && batch->state.ecb_lock_timer[vidx] != 0u) {
+    if (floor_mask == 0u && ground_id != 0xFFFFu &&
+        (batch->state.ecb_lock_timer[vidx] != 0u || sustained_capture_pulled_lw == 0u)) {
       floor_mask = mpcoll_800477e0_capture_root_floor_mask_probe(batch, vidx, &floor_result);
     }
     if (floor_mask != 0u) {
@@ -711,11 +712,12 @@ static void capture_pulled_lw_try_air_handoff_after_delta(MslBatch* batch, int b
   // CapturePulledLw source handoff:
   // - Once the victim is a sustained frame-start CapturePulledLw row, Phys applies fn_800DAD18 and
   //   can enter CapturePulledHi from the vertical carry threshold (`p_ftCommonData->x3C4 *
-  //   fp->x34_scale.y`). Fresh CapturePulledLw entries from Catch/Wait/Damage owners expose their
-  //   previous source action in the frame-start/seed-prev lanes and stay entry-owned here, except
-  //   for bounded MSLSTG01 floor-loss owners: EscapeN leaves ledge floors and GuardOn leaves soft
-  //   platform floors before the replay-visible low-pull row. The owner-side same-frame helper
-  //   below handles the bounded fresh cross-floor Hi-first path before applying a Lw anchor.
+  //   fp->x34_scale.y`). Replay-visible frame-1 CapturePulledLw rows have already completed the
+  //   catch/connect entry; their Phys/Coll callbacks are source-owned even when the prior visible
+  //   action was Catch/Wait/Passive rather than Lw. Keep fresh floor-loss admission bounded to
+  //   MSLSTG01 platform/ledge floors plus the live floor-mask miss below instead of a predecessor
+  //   action list. The owner-side same-frame helper below handles the bounded fresh cross-floor
+  //   Hi-first path before applying a Lw anchor.
   // - Coll then calls ft_8008403C(gobj, fn_800DB230); a live mpColl_800477E0 floor-mask miss owns
   //   the source floor-loss callback for platform/ledge owners expressed by MSLSTG01. Grounded
   //   rows below the vertical threshold can sparse-miss the replay-visible compact floor probe while

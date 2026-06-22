@@ -162,6 +162,28 @@ def test_air_locomotion_lr_press_enters_escape_air_next_step() -> None:
     assert int(out["animation_index"][0]) == SM_ESCAPE_AIR
 
 
+def test_air_locomotion_analog_trigger_edge_does_not_enter_escape_air() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_air_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_JUMP_AERIAL_F)
+    seed["action_frame"][0, 0] = np.int16(10)
+    seed["anim_frame_f32"][0, 0] = np.float32(10.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_JUMP_AERIAL_F)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["l"][0, 0] = np.uint8(255)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) != ACT_ESCAPE_AIR
+
+
 def test_opening_input_lock_blocks_escape_air_interrupt() -> None:
     import msl_binding
 
