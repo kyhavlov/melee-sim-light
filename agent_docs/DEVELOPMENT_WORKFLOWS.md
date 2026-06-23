@@ -84,6 +84,22 @@ coverage. Focused stage suites exist under `replays/suites/*_recent.json` for
 Battlefield, Fountain of Dreams, Pokemon Stadium, Yoshi's Story, and Dream Land
 N64.
 
+Held-out/generalization scorecard:
+
+```bash
+make validate-heldout
+```
+
+`make validate-heldout` runs every suite listed in
+`replays/suites/heldout.json`, writes reports under
+`reports/validation/heldout/`, and emits a normalized cross-suite summary.
+Held-out replay files are local-only ignored assets expected at the suite paths;
+do not commit them or LFS-track them. Held-out replays are separate from
+aggregate comparability: do not add them to `aggregate_recent.json`, and do not
+use held-out rows as direct lock targets or implementation selectors. Adding or
+replacing held-out replay selections is a data curation packet and must stay
+disjoint from normal validation suites.
+
 Diff validation reports against a baseline:
 
 ```bash

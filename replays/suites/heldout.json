@@ -1,0 +1,8 @@
+{
+  "notes": "Held-out/generalization scorecard suites. Do not add these replays to aggregate_recent, and do not use held-out rows as direct lock targets.",
+  "suites": [
+    "replays/suites/marth_heldout.json",
+    "replays/suites/sheik_heldout.json",
+    "replays/suites/spacies_heldout.json"
+  ]
+}

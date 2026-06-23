@@ -1,4 +1,4 @@
-.PHONY: build build-native clean-native-shadow test test-parallel test-serial package-smoke preprocess preprocess-aggregate slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-sheik validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data viewer-build viewer fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
+.PHONY: build build-native clean-native-shadow test test-parallel test-serial package-smoke preprocess preprocess-aggregate slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-sheik validate-all validate-heldout rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data viewer-build viewer fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -7,6 +7,7 @@ AGG_SUITE ?= replays/suites/aggregate_recent.json
 DOUBLES_SUITE ?= replays/suites/doubles_recent.json
 MARTH_SUITE ?= replays/suites/marth.json
 SHEIK_SUITE ?= replays/suites/sheik.json
+HELDOUT_INDEX ?= replays/suites/heldout.json
 CHUNK ?= 4096
 OUT ?=
 FIELDS ?= action_id,animation_index,on_ground,hitlag,hitstun,state_flags
@@ -20,6 +21,8 @@ MARTH_ONE_STEP_OUT ?= reports/validation/marth_one_step.txt
 MARTH_ROLLOUT_OUT ?= reports/validation/marth_rollout.txt
 SHEIK_ONE_STEP_OUT ?= reports/validation/sheik_one_step.txt
 SHEIK_ROLLOUT_OUT ?= reports/validation/sheik_rollout.txt
+HELDOUT_OUT_DIR ?= reports/validation/heldout
+HELDOUT_SUMMARY_OUT ?= reports/validation/heldout/summary.txt
 ROLLOUT_JSON ?= reports/triage/current_rollout_streaks.json
 ROLLOUT_BEFORE ?= reports/triage/rollout_streaks.json
 ROLLOUT_AFTER ?= reports/triage/current_rollout_streaks.json
@@ -172,6 +175,9 @@ validate-rollout-sheik: build
 
 validate-all: build
 	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --doubles-suite "$(DOUBLES_SUITE)" --sheik-suite "$(SHEIK_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --doubles-one-step-out "$(DOUBLES_ONE_STEP_OUT)" --doubles-rollout-out "$(DOUBLES_ROLLOUT_OUT)" --sheik-one-step-out "$(SHEIK_ONE_STEP_OUT)" --sheik-rollout-out "$(SHEIK_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
+
+validate-heldout: build
+	@$(PY) -m tools.eval.run_heldout_validation --index "$(HELDOUT_INDEX)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --out-dir "$(HELDOUT_OUT_DIR)" --summary-out "$(HELDOUT_SUMMARY_OUT)"
 
 # Always writes to ROLLOUT_JSON (independent of OUT=...).
 rollout-capture: build

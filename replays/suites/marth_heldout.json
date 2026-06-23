@@ -1,0 +1,152 @@
+{
+  "name": "marth_heldout",
+  "notes": "Held-out Marth telemetry suite from SlippiLab. Generalization scorecard only; do not use rows from this suite as direct lock targets or implementation selectors.",
+  "replays": [
+    {
+      "characters": {
+        "2": "Marth",
+        "3": "Falco"
+      },
+      "ports": [
+        2,
+        3
+      ],
+      "replay": "replays/heldout/marth/JoyousShoddyLocust.slpz",
+      "stage_id": 31
+    },
+    {
+      "characters": {
+        "1": "Marth",
+        "4": "Falco"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/heldout/marth/ClutteredSevereEchidna.slpz",
+      "stage_id": 31
+    },
+    {
+      "characters": {
+        "1": "Marth",
+        "4": "Fox"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/heldout/marth/FavoriteInternationalEmu.slpz",
+      "stage_id": 28
+    },
+    {
+      "characters": {
+        "2": "Fox",
+        "4": "Marth"
+      },
+      "ports": [
+        2,
+        4
+      ],
+      "replay": "replays/heldout/marth/SubstantialDefinitiveRam.slpz",
+      "stage_id": 28
+    },
+    {
+      "characters": {
+        "1": "Marth",
+        "2": "Marth"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/heldout/marth/EntireHardToFindSnail.slpz",
+      "stage_id": 32
+    },
+    {
+      "characters": {
+        "1": "Marth",
+        "4": "Marth"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/heldout/marth/CruelOddballBarracuda.slpz",
+      "stage_id": 32
+    },
+    {
+      "characters": {
+        "1": "Marth",
+        "4": "Falco"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/heldout/marth/SquareWoozyRaccoon.slpz",
+      "stage_id": 2
+    },
+    {
+      "characters": {
+        "1": "Marth",
+        "4": "Falco"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/heldout/marth/CookedPureKouprey.slpz",
+      "stage_id": 2
+    },
+    {
+      "characters": {
+        "1": "Fox",
+        "4": "Marth"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/heldout/marth/ParallelPoisedPorpoise.slpz",
+      "stage_id": 3
+    },
+    {
+      "characters": {
+        "2": "Fox",
+        "4": "Marth"
+      },
+      "ports": [
+        2,
+        4
+      ],
+      "replay": "replays/heldout/marth/WorstUnsungSparrow.slpz",
+      "stage_id": 3
+    },
+    {
+      "characters": {
+        "1": "Marth",
+        "2": "Marth"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/heldout/marth/DisloyalPaltryHawk.slpz",
+      "stage_id": 8
+    },
+    {
+      "characters": {
+        "1": "Marth",
+        "4": "Marth"
+      },
+      "ports": [
+        1,
+        4
+      ],
+      "replay": "replays/heldout/marth/VigilantValuableGull.slpz",
+      "stage_id": 8
+    }
+  ],
+  "ucf_cardinals_1_0_enabled": true,
+  "ucf_enabled": true
+}
