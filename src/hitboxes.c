@@ -836,7 +836,7 @@ static inline uint8_t hitboxes_active_attackairlw_dense_seed_initializes_hitcaps
   return 0u;
 }
 
-static inline uint8_t hitboxes_seed_reconstruct_attackairn_damageflytop_dense_applies(
+static inline uint8_t hitboxes_seed_reconstruct_attackairn_damagefly_dense_applies(
     const MslBatch* batch, int bi, int attacker, int hb_id, uint8_t hit_group) {
   if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
       hb_id >= (int)MSL_MAX_HITBOXES || hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
@@ -865,7 +865,8 @@ static inline uint8_t hitboxes_seed_reconstruct_attackairn_damageflytop_dense_ap
       continue;
     }
     const size_t v_idx = msl_idx_player(bi, victim);
-    if (batch->state.action_id[v_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
+    if (!msl_motion_state_common_class_has_fast(batch->state.action_id[v_idx],
+                                                MSL_MS_CLASS_DAMAGE_FLY) ||
         batch->state.hitlag[v_idx] != 0u || batch->state.hitstun[v_idx] == 0u ||
         batch->state.last_hit_by[v_idx] != attacker_source_port0) {
       continue;
@@ -881,11 +882,92 @@ static inline uint8_t hitboxes_seed_reconstruct_attackairn_damageflytop_dense_ap
     //   same-group AttackAirN refreshes keep the existing HitCapsule victim pointer.
     // - The seed contract has an authoritative per-HitCapsule lane when extraction proves a slot is
     //   empty. Without that lane, the dense group victim entry is the only available source for a
-    //   same-object DamageFlyTop latch across AttackAirN's same-group active window.
+    //   same-object DamageFly latch across AttackAirN's same-group active window.
     // - This reconstructs hidden HitCapsule state from seed/provenance only; normal free-running
     //   gameplay still uses the live HitCapsule list populated by ftColl_80076ED8.
     // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
     // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    return 1u;
+  }
+  return 0u;
+}
+
+static inline uint8_t hitboxes_active_attackairn_same_instance_damage_dense_applies(
+    const MslBatch* batch, int bi, int attacker, int hb_id, uint8_t hit_group,
+    uint16_t active_start_frame, uint16_t pose_frame, uint8_t post_clear_create_phase) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= (int)MSL_MAX_HITBOXES || hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  if (hitboxes_has_authoritative_hitlist_seed(batch, bi, attacker, hb_id)) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_N ||
+      batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u) {
+    return 0u;
+  }
+  const uint16_t attacker_iid = batch->state.instance_id[a_idx];
+  const uint8_t attacker_source_port0 = hitboxes_source_port0_for_attacker(batch, a_idx, attacker);
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  for (int victim = 0; victim < (int)batch->config.num_players; victim++) {
+    if (victim == attacker) {
+      continue;
+    }
+    const size_t cd_i =
+        group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                          (size_t)MSL_MAX_PLAYERS +
+                      (size_t)victim);
+    if (batch->state.combat_hitlist_cd[cd_i] == 0u) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, victim);
+    const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[cd_i];
+    if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx]) {
+      continue;
+    }
+    const uint8_t damage_state =
+        (uint8_t)(msl_motion_state_common_class_has_fast(batch->state.action_id[v_idx],
+                                                         MSL_MS_CLASS_DAMAGE_COMMON) ||
+                  msl_motion_state_common_class_has_fast(batch->state.action_id[v_idx],
+                                                         MSL_MS_CLASS_DAMAGE_FLY));
+    if (damage_state != 0u && batch->state.hitstun[v_idx] != 0u) {
+      if (batch->state.hitlag[v_idx] != 0u || batch->state.instance_hit_by[v_idx] != attacker_iid ||
+          batch->state.last_hit_by[v_idx] != attacker_source_port0) {
+        continue;
+      }
+      if (post_clear_create_phase != 0u) {
+        if (active_start_frame == 0xFFFFu || pose_frame < active_start_frame) {
+          continue;
+        }
+        const int16_t damage_time = batch->state.damage_time_since_hit_x18ac[v_idx];
+        // x18AC is ticked in Fighter_8006A360 before ftAnim_8006EBA4/ftAction_8007121C on
+        // non-hitlag frames, so hitbox materialization observes one more tick than seed_t.
+        const uint16_t current_band_age =
+            (uint16_t)((uint16_t)(pose_frame - active_start_frame) + 2u);
+        if (damage_time < 0 || (uint16_t)damage_time > current_band_age) {
+          continue;
+        }
+      }
+    } else {
+      continue;
+    }
+    // Active NAir same-instance damage latch:
+    // - ftAction_8007121C does not clear/copy victims unless the HitCapsule slot enables or
+    //   changes hit_group; active same-group NAir refreshes keep the existing victims_1 list.
+    // - For replay reseed, the dense group lane plus current `instance_hit_by` proves this victim is
+    //   still in a damage episode owned by the same NAir action instance. Post-clear create bands
+    //   additionally require fp->dmg.x18AC_time_since_hit to fit inside the current extracted
+    //   HitCapsule band lifetime; older first-band damage episodes keep dense group provenance but
+    //   source ftColl_800768A0 has already cleared the new concrete HitCapsule list.
+    //   Materialize the hidden HitCapsule victim pointer so lbColl_8000ACFC suppresses the rehit.
+    // - Older same-port DamageFlyRoll episodes are intentionally excluded by the instance check; a
+    //   later active NAir frame can legitimately hit again there.
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     return 1u;
   }
@@ -2415,7 +2497,10 @@ void hitboxes_refresh(MslBatch* batch) {
                 const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
                 if (hitboxes_seed_bridge_post_contact_hitlag_hitlist_applies(batch, bi, p, hi, g) ||
                     hitboxes_seed_bridge_attackairn_same_source_tail_hitlist_applies(batch, bi, p,
-                                                                                     hi, g)) {
+                                                                                     hi, g) ||
+                    hitboxes_active_attackairn_same_instance_damage_dense_applies(
+                        batch, bi, p, hi, g, def[hi].frame, pose_frame,
+                        attackair_post_clear_create_empty_hitcapsule_owner)) {
                   // Post-contact hitlag tail inside an AttackAir post-clear band:
                   // the clear/create script edge owns an empty HitCapsule only until a BODY hit is
                   // accepted. If reseed starts during that hitlag window, same-source dense
@@ -2464,7 +2549,10 @@ void hitboxes_refresh(MslBatch* batch) {
                     if (hitboxes_seed_bridge_post_contact_hitlag_hitlist_applies(batch, bi, p, hi,
                                                                                  g) ||
                         hitboxes_seed_bridge_attackairn_same_source_tail_hitlist_applies(
-                            batch, bi, p, hi, g)) {
+                            batch, bi, p, hi, g) ||
+                        hitboxes_active_attackairn_same_instance_damage_dense_applies(
+                            batch, bi, p, hi, g, def[hi].frame, pose_frame,
+                            attackair_post_clear_create_empty_hitcapsule_owner)) {
                       hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
                     } else {
                       // AttackAir post-clear create band:
@@ -2494,8 +2582,11 @@ void hitboxes_refresh(MslBatch* batch) {
                 const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
                 if (attackair_post_clear_create_empty_hitcapsule_owner != 0u &&
                     !hitboxes_hitlist_has_victims1_entry(&batch->state.fighter_hitlist[hl_i]) &&
-                    hitboxes_seed_bridge_attackairn_same_source_tail_hitlist_applies(batch, bi, p,
-                                                                                     hi, g)) {
+                    (hitboxes_seed_bridge_attackairn_same_source_tail_hitlist_applies(batch, bi, p,
+                                                                                      hi, g) ||
+                     hitboxes_active_attackairn_same_instance_damage_dense_applies(
+                         batch, bi, p, hi, g, def[hi].frame, pose_frame,
+                         attackair_post_clear_create_empty_hitcapsule_owner))) {
                   // A current-generation empty marker can come from replay post-clear seed
                   // reconstruction. Same-source LandingFallSpecial provenance after a confirmed
                   // NAir hit proves the source HitCapsule list is no longer empty.
@@ -2668,7 +2759,7 @@ void hitboxes_refresh(MslBatch* batch) {
                       batch, bi, p, (int)hb, new_g)) {
                 hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(batch, bi, p, (int)hb,
                                                                             new_g);
-              } else if (hitboxes_seed_reconstruct_attackairn_damageflytop_dense_applies(
+              } else if (hitboxes_seed_reconstruct_attackairn_damagefly_dense_applies(
                              batch, bi, p, (int)hb, new_g)) {
                 hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, (int)hb, new_g);
               } else if (ev->frame == first_create_frame[hb] &&
@@ -2776,7 +2867,10 @@ void hitboxes_refresh(MslBatch* batch) {
               const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
               if (hitboxes_seed_bridge_post_contact_hitlag_hitlist_applies(batch, bi, p, hi, g) ||
                   hitboxes_seed_bridge_attackairn_same_source_tail_hitlist_applies(batch, bi, p, hi,
-                                                                                   g)) {
+                                                                                   g) ||
+                  hitboxes_active_attackairn_same_instance_damage_dense_applies(
+                      batch, bi, p, hi, g, def[hi].frame, pose_frame,
+                      attackair_post_clear_create_empty_hitcapsule_owner)) {
                 hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
               } else {
                 // Same owner as the pose-frame event path: a replay seed inside an AttackAir
@@ -2819,12 +2913,18 @@ void hitboxes_refresh(MslBatch* batch) {
               const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
               if (attackair_post_clear_create_empty_hitcapsule_owner != 0u &&
                   !hitboxes_hitlist_has_victims1_entry(&batch->state.fighter_hitlist[hl_i]) &&
-                  hitboxes_seed_bridge_attackairn_same_source_tail_hitlist_applies(batch, bi, p, hi,
-                                                                                   g)) {
+                  (hitboxes_seed_bridge_attackairn_same_source_tail_hitlist_applies(batch, bi, p,
+                                                                                    hi, g) ||
+                   hitboxes_active_attackairn_same_instance_damage_dense_applies(
+                       batch, bi, p, hi, g, def[hi].frame, pose_frame,
+                       attackair_post_clear_create_empty_hitcapsule_owner))) {
                 hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
               }
               if (!hitboxes_hitlist_has_victims1_entry(&batch->state.fighter_hitlist[hl_i]) &&
-                  (hitboxes_active_attackairlw_dense_seed_initializes_hitcapsule(batch, bi, p, hi,
+                  (hitboxes_active_attackairn_same_instance_damage_dense_applies(
+                       batch, bi, p, hi, g, def[hi].frame, pose_frame,
+                       attackair_post_clear_create_empty_hitcapsule_owner) ||
+                   hitboxes_active_attackairlw_dense_seed_initializes_hitcapsule(batch, bi, p, hi,
                                                                                  g) ||
                    hitboxes_no_clear_attackairlw_dense_seed_initializes_hitcapsule(batch, bi, p, hi,
                                                                                    g))) {

@@ -189,24 +189,24 @@ overall.float_norm_mae_p95: 0.00027700
 == datasets/sheik_heldout/replays/heldout/sheik/WiseTenseMole.msl ==
 Records: 10146  Players/scored per record: 2  Total player-frames: 20292
 mismatch.action_id: 15 / 20292 (0.000739)
-mismatch.action_frame: 49 / 20292 (0.002415)
+mismatch.action_frame: 48 / 20292 (0.002365)
 mismatch.on_ground: 8 / 20292 (0.000394)
 mismatch.facing: 5 / 20292 (0.000246)
 mismatch.stocks: 0 / 20292 (0.000000)
 mismatch.jumps_left: 8 / 20292 (0.000394)
 mismatch.is_dead: 0 / 20292 (0.000000)
-mismatch.hitlag: 12 / 20292 (0.000591)
-mismatch.hitstun: 7 / 20292 (0.000345)
+mismatch.hitlag: 10 / 20292 (0.000493)
+mismatch.hitstun: 6 / 20292 (0.000296)
 mismatch.l_cancel: 1 / 20292 (0.000049)
 mismatch.hurtbox_state: 1 / 20292 (0.000049)
 mismatch.ground_id: 1 / 20292 (0.000049)
 mismatch.animation_index: 15 / 20292 (0.000739)
 mismatch.instance_hit_by: 6 / 20292 (0.000296)
-mismatch.instance_id: 13 / 20292 (0.000641)
+mismatch.instance_id: 12 / 20292 (0.000591)
 mismatch.last_attack_landed: 5 / 20292 (0.000246)
-mismatch.combo_count: 7 / 20292 (0.000345)
+mismatch.combo_count: 6 / 20292 (0.000296)
 mismatch.last_hit_by: 18 / 20292 (0.000887)
-mismatch.state_flags: 46 / 101460 (0.000453)
+mismatch.state_flags: 44 / 101460 (0.000434)
 mismatch.item_exists: 0 / 152190 (0.000000)
 mismatch.item_type: 0 / 152190 (0.000000)
 mismatch.item_state: 0 / 152190 (0.000000)
@@ -217,19 +217,19 @@ err.pos_x: mae=0.003967 p95=0.000000 max=2.689636
 err.pos_y: mae=0.001399 p95=0.000000 max=4.989966
 err.speed_air_x_self: mae=0.000979 p95=0.000000 max=1.553808
 err.speed_ground_x_self: mae=0.000831 p95=0.000000 max=1.553809
-err.speed_y_self: mae=0.000665 p95=0.000000 max=2.200000
-err.speed_x_attack: mae=0.000078 p95=0.000000 max=1.083677
-err.speed_y_attack: mae=0.001294 p95=0.000000 max=4.723829
-err.percent: mae=0.003996 p95=0.000000 max=12.000000
+err.speed_y_self: mae=0.000641 p95=0.000000 max=2.200000
+err.speed_x_attack: mae=0.000053 p95=0.000000 max=1.083677
+err.speed_y_attack: mae=0.001290 p95=0.000000 max=4.723829
+err.percent: mae=0.003547 p95=0.000000 max=12.000000
 err.shield_hp: mae=0.000280 p95=0.000000 max=2.799999
 err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.008966 p95=0.000000 max=2.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 217 / 1227666
-overall.strict_discrete_mismatch: 234 / 1227666
+overall.discrete_mismatch: 209 / 1227666
+overall.strict_discrete_mismatch: 226 / 1227666
 overall.ignored_discrete_mismatch: 17
-overall.float_norm_mae_p95: 0.00025552
+overall.float_norm_mae_p95: 0.00025135
 
 == datasets/sheik_heldout/replays/heldout/sheik/VibrantObedientMandrill.msl ==
 Records: 9542  Players/scored per record: 2  Total player-frames: 19084
@@ -547,7 +547,7 @@ overall.ignored_discrete_mismatch: 49
 overall.float_norm_mae_p95: 0.00073999
 
 == suite summary ==
-overall.discrete_mismatch: 2637 / 12504140
-overall.strict_discrete_mismatch: 3287 / 12504140
+overall.discrete_mismatch: 2629 / 12504140
+overall.strict_discrete_mismatch: 3279 / 12504140
 overall.ignored_discrete_mismatch: 650
-overall.float_norm_mae_p95: 5.37873519
+overall.float_norm_mae_p95: 5.37873483

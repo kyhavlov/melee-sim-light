@@ -15,6 +15,7 @@ ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_DAMAGE_N_2 = 0x0050
 ACT_DAMAGE_AIR_2 = 0x0055
 ACT_DAMAGE_FLY_TOP = 0x005A
+ACT_DAMAGE_FLY_ROLL = 0x005B
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -23,10 +24,13 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
         "data/characters/fox.json",
         "data/characters/falco.json",
         "data/characters/marth.json",
+        "data/characters/sheik.json",
         "data/moves/marth.json",
+        "data/moves/sheik.json",
         "data/anims/fox.tracks.bin",
         "data/anims/falco.tracks.bin",
         "data/anims/marth.tracks.bin",
+        "data/anims/sheik.tracks.bin",
     ]
     missing = [rel for rel in required if not (root / rel).exists()]
     if missing:
@@ -54,6 +58,14 @@ def _marth_dataset_path(root: Path) -> Path:
 
 def _marth_ipw_dataset_path(root: Path) -> Path:
     dataset_rel = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
+def _sheik_dataset_path(root: Path) -> Path:
+    dataset_rel = "datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
@@ -112,6 +124,43 @@ def _step_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -> tu
         binding.destroy(handle)
 
     return out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy(), row["ref_t1"][0].copy()
+
+
+def _pre_combat_hitlist_contains(
+    dataset_path: Path,
+    record: int,
+    seed: np.ndarray,
+    attacker: int,
+    victim: int,
+) -> list[int]:
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+
+    seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        return [
+            int(binding.debug_hitlist_fighter_contains(handle, 0, attacker, hb_id, victim))
+            for hb_id in range(4)
+        ]
+    finally:
+        binding.destroy(handle)
 
 
 def _run_rollout_records(
@@ -198,6 +247,150 @@ def test_attackairhi_create_frame_keeps_same_source_damageflytop_dense_latch_tbk
     assert int(out_without_latch["action_id"][victim]) == ACT_DAMAGE_AIR_2
     assert int(out_without_latch["hitlag"][victim]) > 0
     assert float(out_without_latch["percent"][victim]) > float(ref["percent"][victim])
+
+
+@pytest.mark.integration
+def test_sheik_attackairn_dense_latch_covers_damageflyroll_toc_10987() -> None:
+    # Sheik NAir has a no-clear same-group payload update:
+    # data/moves/sheik.json::moves.ftCo_SM_AttackAirN has create_hitbox frames 3 and 7 before the
+    # frame-31 clear. ftAction_8007121C therefore preserves/copies HitCapsule.victims_1 across the
+    # same-group owner. TOC:10987 exposes only the dense group-0 seed, but it names the current Fox
+    # DamageFlyRoll instance and p0 is still in the same-source hitstun episode; materialize that
+    # hidden victims_1 latch for Sheik's active NAir hitcapsules instead of admitting another BODY
+    # hit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _sheik_dataset_path(root)
+    ds = read_dataset(str(dataset_path))
+
+    attacker = 1
+    victim = 0
+    record = 10987
+    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    seed_row = seed[0]
+    assert int(seed_row["char_id"][attacker]) == 22
+    assert int(seed_row["action_id"][attacker]) == ACT_ATTACK_AIR_N
+    assert int(seed_row["animation_index"][attacker]) == 68
+    assert int(seed_row["action_frame"][attacker]) == 3
+    assert int(seed_row["action_id"][victim]) == ACT_DAMAGE_FLY_ROLL
+    assert int(seed_row["hitlag"][victim]) == 0
+    assert int(seed_row["hitstun"][victim]) == 9
+    assert int(seed_row["last_hit_by"][victim]) == int(seed_row["source_port0"][attacker])
+    assert int(seed_row["combat_hitlist_cd"][attacker, 0, victim]) == 0xFFFF
+    assert int(seed_row["combat_hitlist_victim_iid"][attacker, 0, victim]) == int(
+        seed_row["instance_id"][victim]
+    )
+    assert [int(v) for v in seed_row["combat_hitlist_hb_valid"][attacker]] == [0, 0, 0, 0]
+
+    hitlist_contains = _pre_combat_hitlist_contains(dataset_path, record, seed, attacker, victim)
+    assert hitlist_contains[:2] == [1, 1]
+
+    out, ref = _step_row_with_seed(dataset_path, record, seed)
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_DAMAGE_FLY_ROLL
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 0
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]), abs=1e-6)
+
+    no_dense_seed = seed.copy()
+    no_dense_seed[0]["combat_hitlist_cd"][attacker, 0, victim] = np.uint16(0)
+    no_dense_seed[0]["combat_hitlist_victim_iid"][attacker, 0, victim] = np.uint16(0)
+    no_latch_out, _ = _step_row_with_seed(dataset_path, record, no_dense_seed)
+    assert int(no_latch_out["action_id"][victim]) != ACT_DAMAGE_FLY_ROLL
+    assert int(no_latch_out["hitlag"][victim]) > 0
+    assert float(no_latch_out["percent"][victim]) > float(ref["percent"][victim])
+
+
+@pytest.mark.integration
+def test_attackairn_current_instance_damage_common_dense_latch_aac_962() -> None:
+    # Same source owner as the TOC DamageFlyRoll create-edge lock, but for an already-active NAir
+    # HitCapsule against a DamageN victim. The dense group seed names the current victim object and
+    # `instance_hit_by` still names the current NAir action instance, so ftColl_800768A0 has not
+    # cleared/copied this HitCapsule.victims_1 list and lbColl_8000ACFC suppresses the rehit.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+    ds = read_dataset(str(dataset_path))
+
+    attacker = 1
+    victim = 0
+    record = 962
+    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    seed_row = seed[0]
+    assert int(seed_row["char_id"][attacker]) == 18
+    assert int(seed_row["action_id"][attacker]) == ACT_ATTACK_AIR_N
+    assert int(seed_row["animation_index"][attacker]) == 68
+    assert int(seed_row["action_frame"][attacker]) == 16
+    assert int(seed_row["action_id"][victim]) == ACT_DAMAGE_N_2
+    assert int(seed_row["hitlag"][victim]) == 0
+    assert int(seed_row["hitstun"][victim]) == 22
+    assert int(seed_row["instance_hit_by"][victim]) == int(seed_row["instance_id"][attacker])
+    assert int(seed_row["last_hit_by"][victim]) == int(seed_row["source_port0"][attacker])
+    assert int(seed_row["combat_hitlist_cd"][attacker, 0, victim]) == 0xFFFF
+    assert int(seed_row["combat_hitlist_victim_iid"][attacker, 0, victim]) == int(
+        seed_row["instance_id"][victim]
+    )
+    assert [int(v) for v in seed_row["combat_hitlist_hb_valid"][attacker]] == [0, 0, 0, 0]
+
+    hitlist_contains = _pre_combat_hitlist_contains(dataset_path, record, seed, attacker, victim)
+    assert hitlist_contains == [1, 1, 1, 1]
+
+    out, ref = _step_row_with_seed(dataset_path, record, seed)
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_DAMAGE_N_2
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 0
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]), abs=1e-6)
+
+    no_dense_seed = seed.copy()
+    no_dense_seed[0]["combat_hitlist_cd"][attacker, 0, victim] = np.uint16(0)
+    no_dense_seed[0]["combat_hitlist_victim_iid"][attacker, 0, victim] = np.uint16(0)
+    no_latch_out, _ = _step_row_with_seed(dataset_path, record, no_dense_seed)
+    assert int(no_latch_out["action_id"][victim]) != ACT_DAMAGE_N_2
+    assert int(no_latch_out["hitlag"][victim]) > 0
+    assert float(no_latch_out["percent"][victim]) > float(ref["percent"][victim])
+
+
+@pytest.mark.integration
+def test_sheik_attackairn_older_same_port_damageflyroll_latch_releases_toc_10988() -> None:
+    # Adjacent negative for the current-instance gate: TOC:10988 carries the same dense group victim
+    # from an older same-port NAir episode, but `instance_hit_by` no longer names the current NAir
+    # action instance. The source HitCapsule latch is stale for this active frame, so the BODY hit
+    # must be admitted; only the DamageFlyRoll RNG/action choice remains outside this owner.
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _sheik_dataset_path(root)
+    ds = read_dataset(str(dataset_path))
+
+    attacker = 1
+    victim = 0
+    record = 10988
+    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    seed_row = seed[0]
+    assert int(seed_row["action_id"][attacker]) == ACT_ATTACK_AIR_N
+    assert int(seed_row["action_id"][victim]) == ACT_DAMAGE_FLY_ROLL
+    assert int(seed_row["hitlag"][victim]) == 0
+    assert int(seed_row["hitstun"][victim]) == 8
+    assert int(seed_row["instance_hit_by"][victim]) != int(seed_row["instance_id"][attacker])
+    assert int(seed_row["last_hit_by"][victim]) == int(seed_row["source_port0"][attacker])
+    assert int(seed_row["combat_hitlist_cd"][attacker, 0, victim]) == 0xFFFF
+    assert [int(v) for v in seed_row["combat_hitlist_hb_valid"][attacker]] == [0, 0, 0, 0]
+
+    hitlist_contains = _pre_combat_hitlist_contains(dataset_path, record, seed, attacker, victim)
+    assert hitlist_contains == [0, 0, 0, 0]
+
+    out, ref = _step_row_with_seed(dataset_path, record, seed)
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 6
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim]) == 74
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]), abs=1e-6)
+    assert float(out["percent"][victim]) > float(seed_row["percent"][victim])
 
 
 @pytest.mark.integration

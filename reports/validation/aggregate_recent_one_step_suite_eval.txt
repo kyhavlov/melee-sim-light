@@ -1853,25 +1853,25 @@ overall.float_norm_mae_p95: 0.00012034
 
 == datasets/aggregate_recent/replays/validation/marth/ExtraLargeScaryHornet.msl ==
 Records: 10973  Players/scored per record: 2  Total player-frames: 21946
-mismatch.action_id: 7 / 21946 (0.000319)
-mismatch.action_frame: 9 / 21946 (0.000410)
+mismatch.action_id: 6 / 21946 (0.000273)
+mismatch.action_frame: 8 / 21946 (0.000365)
 mismatch.on_ground: 2 / 21946 (0.000091)
 mismatch.facing: 0 / 21946 (0.000000)
 mismatch.stocks: 0 / 21946 (0.000000)
 mismatch.jumps_left: 2 / 21946 (0.000091)
 mismatch.is_dead: 0 / 21946 (0.000000)
-mismatch.hitlag: 8 / 21946 (0.000365)
-mismatch.hitstun: 4 / 21946 (0.000182)
+mismatch.hitlag: 6 / 21946 (0.000273)
+mismatch.hitstun: 3 / 21946 (0.000137)
 mismatch.l_cancel: 0 / 21946 (0.000000)
 mismatch.hurtbox_state: 0 / 21946 (0.000000)
 mismatch.ground_id: 0 / 21946 (0.000000)
-mismatch.animation_index: 5 / 21946 (0.000228)
+mismatch.animation_index: 4 / 21946 (0.000182)
 mismatch.instance_hit_by: 1 / 21946 (0.000046)
-mismatch.instance_id: 6 / 21946 (0.000273)
+mismatch.instance_id: 5 / 21946 (0.000228)
 mismatch.last_attack_landed: 2 / 21946 (0.000091)
-mismatch.combo_count: 1 / 21946 (0.000046)
+mismatch.combo_count: 0 / 21946 (0.000000)
 mismatch.last_hit_by: 8 / 21946 (0.000365)
-mismatch.state_flags: 12 / 109730 (0.000109)
+mismatch.state_flags: 10 / 109730 (0.000091)
 mismatch.item_exists: 0 / 164595 (0.000000)
 mismatch.item_type: 0 / 164595 (0.000000)
 mismatch.item_state: 0 / 164595 (0.000000)
@@ -1882,19 +1882,19 @@ err.pos_x: mae=0.013965 p95=0.000000 max=148.882751
 err.pos_y: mae=0.012736 p95=0.000000 max=41.199921
 err.speed_air_x_self: mae=0.000893 p95=0.000000 max=2.151708
 err.speed_ground_x_self: mae=0.000081 p95=0.000000 max=0.940000
-err.speed_y_self: mae=0.000443 p95=0.000000 max=2.330000
-err.speed_x_attack: mae=0.000278 p95=0.000000 max=4.361992
-err.speed_y_attack: mae=0.000265 p95=0.000000 max=4.212327
-err.percent: mae=0.002055 p95=0.000000 max=20.000000
+err.speed_y_self: mae=0.000439 p95=0.000000 max=2.330000
+err.speed_x_attack: mae=0.000272 p95=0.000000 max=4.361992
+err.speed_y_attack: mae=0.000256 p95=0.000000 max=4.212327
+err.percent: mae=0.001640 p95=0.000000 max=20.000000
 err.shield_hp: mae=0.000000 p95=0.000000 max=0.000744
 err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 67 / 1327733
-overall.strict_discrete_mismatch: 168 / 1327733
+overall.discrete_mismatch: 57 / 1327733
+overall.strict_discrete_mismatch: 158 / 1327733
 overall.ignored_discrete_mismatch: 101
-overall.float_norm_mae_p95: 0.00016820
+overall.float_norm_mae_p95: 0.00016647
 
 == datasets/aggregate_recent/replays/validation/marth/StiffDraftyWalrus.msl ==
 Records: 10153  Players/scored per record: 2  Total player-frames: 20306
@@ -2302,7 +2302,7 @@ overall.ignored_discrete_mismatch: 51
 overall.float_norm_mae_p95: 0.00023364
 
 == suite summary ==
-overall.discrete_mismatch: 3281 / 57060091
-overall.strict_discrete_mismatch: 5919 / 57060091
+overall.discrete_mismatch: 3271 / 57060091
+overall.strict_discrete_mismatch: 5909 / 57060091
 overall.ignored_discrete_mismatch: 2638
-overall.float_norm_mae_p95: 0.77068322
+overall.float_norm_mae_p95: 0.77068318

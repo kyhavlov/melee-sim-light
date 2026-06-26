@@ -12,14 +12,14 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 
 == datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1370
+rollout.best_len: 1371
 rollout.streak_count: 17
 rollout.streak_len.median: 268
 rollout.streak_len.p90: 911
-rollout.streak_len.p95: 1370
-rollout.streak_len.max: 1370
+rollout.streak_len.p95: 1371
+rollout.streak_len.max: 1371
 rollout.first_mismatch_total: 16
-rollout.first_mismatch_seeded_total: 9
+rollout.first_mismatch_seeded_total: 8
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=4.75762 rec=5925 p=0 seed/ref/out=0.866282/-3.58988/1.16774 actions=239/239/239 category=unclassified
@@ -291,8 +291,8 @@ rollout.streak_len.median: 245
 rollout.streak_len.p90: 921
 rollout.streak_len.p95: 1025
 rollout.streak_len.max: 1358
-rollout.first_mismatch_total: 41
-rollout.first_mismatch_seeded_total: 26
+rollout.first_mismatch_total: 40
+rollout.first_mismatch_seeded_total: 25
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=10.2601 rec=3750 p=1 seed/ref/out=-76.7035/-76.7035/-66.4434 actions=179/179/179 category=unclassified
@@ -440,8 +440,8 @@ overall.rollout.streak_len.p90: 876
 overall.rollout.streak_len.p95: 1216
 overall.rollout.streak_len.max: 3169
 overall.rollout.best_len.max: 3169
-overall.rollout.first_mismatch_total: 538
-overall.rollout.first_mismatch_seeded_total: 314
+overall.rollout.first_mismatch_total: 537
+overall.rollout.first_mismatch_seeded_total: 312
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=129.105 rec=3633 p=0 seed/ref/out=11.6665/9.93194/139.037 actions=7/7/7 category=unclassified

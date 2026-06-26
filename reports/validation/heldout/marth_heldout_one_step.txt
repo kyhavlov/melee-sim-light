@@ -143,25 +143,25 @@ overall.float_norm_mae_p95: 0.00010268
 
 == datasets/marth_heldout/replays/heldout/marth/SubstantialDefinitiveRam.msl ==
 Records: 11050  Players/scored per record: 2  Total player-frames: 22100
-mismatch.action_id: 22 / 22100 (0.000995)
-mismatch.action_frame: 20 / 22100 (0.000905)
+mismatch.action_id: 19 / 22100 (0.000860)
+mismatch.action_frame: 17 / 22100 (0.000769)
 mismatch.on_ground: 8 / 22100 (0.000362)
 mismatch.facing: 1 / 22100 (0.000045)
 mismatch.stocks: 0 / 22100 (0.000000)
 mismatch.jumps_left: 9 / 22100 (0.000407)
 mismatch.is_dead: 0 / 22100 (0.000000)
-mismatch.hitlag: 15 / 22100 (0.000679)
-mismatch.hitstun: 7 / 22100 (0.000317)
+mismatch.hitlag: 9 / 22100 (0.000407)
+mismatch.hitstun: 4 / 22100 (0.000181)
 mismatch.l_cancel: 2 / 22100 (0.000090)
 mismatch.hurtbox_state: 2 / 22100 (0.000090)
 mismatch.ground_id: 13 / 22100 (0.000588)
-mismatch.animation_index: 22 / 22100 (0.000995)
+mismatch.animation_index: 19 / 22100 (0.000860)
 mismatch.instance_hit_by: 2 / 22100 (0.000090)
-mismatch.instance_id: 17 / 22100 (0.000769)
+mismatch.instance_id: 14 / 22100 (0.000633)
 mismatch.last_attack_landed: 2 / 22100 (0.000090)
-mismatch.combo_count: 5 / 22100 (0.000226)
+mismatch.combo_count: 2 / 22100 (0.000090)
 mismatch.last_hit_by: 13 / 22100 (0.000588)
-mismatch.state_flags: 28 / 110500 (0.000253)
+mismatch.state_flags: 22 / 110500 (0.000199)
 mismatch.item_exists: 0 / 165750 (0.000000)
 mismatch.item_type: 0 / 165750 (0.000000)
 mismatch.item_state: 0 / 165750 (0.000000)
@@ -172,41 +172,41 @@ err.pos_x: mae=0.002426 p95=0.000000 max=1.998886
 err.pos_y: mae=0.001450 p95=0.000000 max=6.561066
 err.speed_air_x_self: mae=0.000700 p95=0.000000 max=2.151708
 err.speed_ground_x_self: mae=0.000338 p95=0.000000 max=1.463640
-err.speed_y_self: mae=0.001089 p95=0.000000 max=3.427001
-err.speed_x_attack: mae=0.000129 p95=0.000000 max=1.301387
-err.speed_y_attack: mae=0.000388 p95=0.000000 max=3.224103
-err.percent: mae=0.002569 p95=0.000000 max=10.000000
+err.speed_y_self: mae=0.000964 p95=0.000000 max=3.427001
+err.speed_x_attack: mae=0.000089 p95=0.000000 max=1.301387
+err.speed_y_attack: mae=0.000349 p95=0.000000 max=3.224103
+err.percent: mae=0.001333 p95=0.000000 max=10.000000
 err.shield_hp: mae=0.000003 p95=0.000000 max=0.019001
 err.item_pos_x: mae=0.596519 p95=3.780247 max=4.100000
 err.item_pos_y: mae=0.015036 p95=0.000000 max=0.405701
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 188 / 1337050
-overall.strict_discrete_mismatch: 278 / 1337050
+overall.discrete_mismatch: 158 / 1337050
+overall.strict_discrete_mismatch: 248 / 1337050
 overall.ignored_discrete_mismatch: 90
-overall.float_norm_mae_p95: 0.00015410
+overall.float_norm_mae_p95: 0.00014240
 
 == datasets/marth_heldout/replays/heldout/marth/EntireHardToFindSnail.msl ==
 Records: 8450  Players/scored per record: 2  Total player-frames: 16900
-mismatch.action_id: 18 / 16900 (0.001065)
-mismatch.action_frame: 18 / 16900 (0.001065)
+mismatch.action_id: 15 / 16900 (0.000888)
+mismatch.action_frame: 15 / 16900 (0.000888)
 mismatch.on_ground: 11 / 16900 (0.000651)
 mismatch.facing: 4 / 16900 (0.000237)
 mismatch.stocks: 0 / 16900 (0.000000)
 mismatch.jumps_left: 11 / 16900 (0.000651)
 mismatch.is_dead: 0 / 16900 (0.000000)
-mismatch.hitlag: 20 / 16900 (0.001183)
-mismatch.hitstun: 9 / 16900 (0.000533)
+mismatch.hitlag: 14 / 16900 (0.000828)
+mismatch.hitstun: 6 / 16900 (0.000355)
 mismatch.l_cancel: 0 / 16900 (0.000000)
 mismatch.hurtbox_state: 7 / 16900 (0.000414)
 mismatch.ground_id: 1 / 16900 (0.000059)
-mismatch.animation_index: 18 / 16900 (0.001065)
+mismatch.animation_index: 15 / 16900 (0.000888)
 mismatch.instance_hit_by: 6 / 16900 (0.000355)
-mismatch.instance_id: 14 / 16900 (0.000828)
+mismatch.instance_id: 11 / 16900 (0.000651)
 mismatch.last_attack_landed: 6 / 16900 (0.000355)
-mismatch.combo_count: 5 / 16900 (0.000296)
+mismatch.combo_count: 2 / 16900 (0.000118)
 mismatch.last_hit_by: 18 / 16900 (0.001065)
-mismatch.state_flags: 34 / 84500 (0.000402)
+mismatch.state_flags: 28 / 84500 (0.000331)
 mismatch.item_exists: 0 / 126750 (0.000000)
 mismatch.item_type: 0 / 126750 (0.000000)
 mismatch.item_state: 0 / 126750 (0.000000)
@@ -217,19 +217,19 @@ err.pos_x: mae=0.004911 p95=0.000000 max=3.470840
 err.pos_y: mae=0.004377 p95=0.000000 max=5.234525
 err.speed_air_x_self: mae=0.001674 p95=0.000000 max=3.470817
 err.speed_ground_x_self: mae=0.000371 p95=0.000000 max=2.585603
-err.speed_y_self: mae=0.002544 p95=0.000000 max=2.330000
-err.speed_x_attack: mae=0.000597 p95=0.000000 max=4.389549
-err.speed_y_attack: mae=0.000983 p95=0.000000 max=4.238939
-err.percent: mae=0.004727 p95=0.000000 max=14.000000
+err.speed_y_self: mae=0.002514 p95=0.000000 max=2.330000
+err.speed_x_attack: mae=0.000557 p95=0.000000 max=4.389549
+err.speed_y_attack: mae=0.000949 p95=0.000000 max=4.238939
+err.percent: mae=0.003111 p95=0.000000 max=14.000000
 err.shield_hp: mae=0.000561 p95=0.000000 max=5.801853
 err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 200 / 1022450
-overall.strict_discrete_mismatch: 215 / 1022450
+overall.discrete_mismatch: 170 / 1022450
+overall.strict_discrete_mismatch: 185 / 1022450
 overall.ignored_discrete_mismatch: 15
-overall.float_norm_mae_p95: 0.00041667
+overall.float_norm_mae_p95: 0.00040791
 
 == datasets/marth_heldout/replays/heldout/marth/CruelOddballBarracuda.msl ==
 Records: 7197  Players/scored per record: 2  Total player-frames: 14394
@@ -278,25 +278,25 @@ overall.float_norm_mae_p95: 0.00030439
 
 == datasets/marth_heldout/replays/heldout/marth/SquareWoozyRaccoon.msl ==
 Records: 11823  Players/scored per record: 2  Total player-frames: 23646
-mismatch.action_id: 36 / 23646 (0.001522)
-mismatch.action_frame: 33 / 23646 (0.001396)
+mismatch.action_id: 34 / 23646 (0.001438)
+mismatch.action_frame: 31 / 23646 (0.001311)
 mismatch.on_ground: 26 / 23646 (0.001100)
 mismatch.facing: 3 / 23646 (0.000127)
 mismatch.stocks: 0 / 23646 (0.000000)
 mismatch.jumps_left: 27 / 23646 (0.001142)
 mismatch.is_dead: 0 / 23646 (0.000000)
-mismatch.hitlag: 16 / 23646 (0.000677)
-mismatch.hitstun: 14 / 23646 (0.000592)
+mismatch.hitlag: 12 / 23646 (0.000507)
+mismatch.hitstun: 12 / 23646 (0.000507)
 mismatch.l_cancel: 11 / 23646 (0.000465)
 mismatch.hurtbox_state: 6 / 23646 (0.000254)
 mismatch.ground_id: 12 / 23646 (0.000507)
-mismatch.animation_index: 35 / 23646 (0.001480)
+mismatch.animation_index: 33 / 23646 (0.001396)
 mismatch.instance_hit_by: 7 / 23646 (0.000296)
-mismatch.instance_id: 24 / 23646 (0.001015)
+mismatch.instance_id: 22 / 23646 (0.000930)
 mismatch.last_attack_landed: 6 / 23646 (0.000254)
-mismatch.combo_count: 4 / 23646 (0.000169)
+mismatch.combo_count: 2 / 23646 (0.000085)
 mismatch.last_hit_by: 19 / 23646 (0.000804)
-mismatch.state_flags: 40 / 118230 (0.000338)
+mismatch.state_flags: 36 / 118230 (0.000304)
 mismatch.item_exists: 1 / 177345 (0.000006)
 mismatch.item_type: 1 / 177345 (0.000006)
 mismatch.item_state: 1 / 177345 (0.000006)
@@ -307,19 +307,19 @@ err.pos_x: mae=0.002444 p95=0.000000 max=4.884766
 err.pos_y: mae=0.004729 p95=0.000000 max=7.314985
 err.speed_air_x_self: mae=0.002131 p95=0.000000 max=5.261856
 err.speed_ground_x_self: mae=0.000474 p95=0.000000 max=1.481250
-err.speed_y_self: mae=0.000968 p95=0.000000 max=3.100000
-err.speed_x_attack: mae=0.000248 p95=0.000000 max=2.823840
-err.speed_y_attack: mae=0.000596 p95=0.000000 max=2.726951
-err.percent: mae=0.003189 p95=0.000000 max=14.000000
+err.speed_y_self: mae=0.000932 p95=0.000000 max=3.100000
+err.speed_x_attack: mae=0.000240 p95=0.000000 max=2.823840
+err.speed_y_attack: mae=0.000554 p95=0.000000 max=2.726951
+err.percent: mae=0.002470 p95=0.000000 max=14.000000
 err.shield_hp: mae=0.000062 p95=0.000000 max=1.399998
 err.item_pos_x: mae=0.091902 p95=0.000008 max=12.884533
 err.item_pos_y: mae=0.034101 p95=0.000000 max=8.614908
 err.item_vel_x: mae=0.000563 p95=0.000000 max=0.128738
 err.item_vel_y: mae=0.000773 p95=0.000000 max=0.174736
-overall.discrete_mismatch: 324 / 1430583
-overall.strict_discrete_mismatch: 401 / 1430583
+overall.discrete_mismatch: 304 / 1430583
+overall.strict_discrete_mismatch: 381 / 1430583
 overall.ignored_discrete_mismatch: 77
-overall.float_norm_mae_p95: 0.00029362
+overall.float_norm_mae_p95: 0.00028916
 
 == datasets/marth_heldout/replays/heldout/marth/CookedPureKouprey.msl ==
 Records: 11322  Players/scored per record: 2  Total player-frames: 22644
@@ -547,7 +547,7 @@ overall.ignored_discrete_mismatch: 57
 overall.float_norm_mae_p95: 0.00035828
 
 == suite summary ==
-overall.discrete_mismatch: 2147 / 14168979
-overall.strict_discrete_mismatch: 2781 / 14168979
+overall.discrete_mismatch: 2067 / 14168979
+overall.strict_discrete_mismatch: 2701 / 14168979
 overall.ignored_discrete_mismatch: 634
-overall.float_norm_mae_p95: 0.00024594
+overall.float_norm_mae_p95: 0.00024392
