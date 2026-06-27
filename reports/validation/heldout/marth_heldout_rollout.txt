@@ -119,14 +119,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:130
 
 == datasets/marth_heldout/replays/heldout/marth/FavoriteInternationalEmu.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1564
-rollout.streak_count: 15
+rollout.best_len: 1655
+rollout.streak_count: 14
 rollout.streak_len.median: 374
 rollout.streak_len.p90: 1464
-rollout.streak_len.p95: 1564
-rollout.streak_len.max: 1564
-rollout.first_mismatch_total: 23
-rollout.first_mismatch_seeded_total: 17
+rollout.streak_len.p95: 1655
+rollout.streak_len.max: 1655
+rollout.first_mismatch_total: 21
+rollout.first_mismatch_seeded_total: 15
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=13.32 rec=7570 p=0 seed/ref/out=-64.6713/-63.5313/-76.8513 actions=19/19/19 category=unclassified
@@ -269,14 +269,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:980
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == suite summary ==
-overall.rollout.streak_count: 351
+overall.rollout.streak_count: 350
 overall.rollout.streak_len.median: 229
 overall.rollout.streak_len.p90: 738
 overall.rollout.streak_len.p95: 1078
 overall.rollout.streak_len.max: 1865
 overall.rollout.best_len.max: 1865
-overall.rollout.first_mismatch_total: 402
-overall.rollout.first_mismatch_seeded_total: 249
+overall.rollout.first_mismatch_total: 400
+overall.rollout.first_mismatch_seeded_total: 247
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=63.0278 rec=3662 p=0 seed/ref/out=-75.3506/-77.8475/-14.8197 actions=35/35/35 category=unclassified

@@ -13,13 +13,13 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 == datasets/spacies_heldout/replays/heldout/spacies/AbandonedNoxiousButterfly.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1610
-rollout.streak_count: 10
-rollout.streak_len.median: 511
-rollout.streak_len.p90: 1155
+rollout.streak_count: 8
+rollout.streak_len.median: 628
+rollout.streak_len.p90: 1610
 rollout.streak_len.p95: 1610
 rollout.streak_len.max: 1610
-rollout.first_mismatch_total: 10
-rollout.first_mismatch_seeded_total: 9
+rollout.first_mismatch_total: 8
+rollout.first_mismatch_seeded_total: 7
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. percent max_err=1 rec=5284 p=1 seed/ref/out=91.04/91.04/92.04 actions=354/354/354 category=unclassified
@@ -30,7 +30,6 @@ rollout.float_top_downstream:
   2. pos_y max_err=3.82493 rec=4986 p=1 seed/ref/out=51.4254/51.4254/47.6005 actions=226/227/224 category=downstream_discrete_mismatch
   3. speed_y_self max_err=1.15 rec=4308 p=0 seed/ref/out=-0.92/0/-1.15 actions=80/86/80 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:445
-rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == datasets/spacies_heldout/replays/heldout/spacies/AccurateHarmlessReindeer.msl ==
 rollout.status: NOT-CLEAN
@@ -269,14 +268,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:848
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == suite summary ==
-overall.rollout.streak_count: 251
-overall.rollout.streak_len.median: 267
-overall.rollout.streak_len.p90: 1050
+overall.rollout.streak_count: 249
+overall.rollout.streak_len.median: 269
+overall.rollout.streak_len.p90: 1070
 overall.rollout.streak_len.p95: 1592
 overall.rollout.streak_len.max: 2803
 overall.rollout.best_len.max: 2803
-overall.rollout.first_mismatch_total: 255
-overall.rollout.first_mismatch_seeded_total: 158
+overall.rollout.first_mismatch_total: 253
+overall.rollout.first_mismatch_seeded_total: 156
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=148.729 rec=7437 p=1 seed/ref/out=-18.905/-19.2322/129.497 actions=7/7/7 category=unclassified
@@ -287,4 +286,4 @@ overall.rollout.float_top_downstream:
   2. pos_x max_err=28.158 rec=4120 p=0 seed/ref/out=-14.1055/-14.1055/-42.2635 actions=44/237/44 category=downstream_discrete_mismatch
   3. percent max_err=19.66 rec=6289 p=1 seed/ref/out=23.26/41.26/21.6 actions=90/90/90 category=downstream_discrete_mismatch
 overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:6753
-overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:10
+overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:9

@@ -179,13 +179,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:134
 == datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1557
-rollout.streak_count: 29
+rollout.streak_count: 28
 rollout.streak_len.median: 244
 rollout.streak_len.p90: 695
 rollout.streak_len.p95: 1007
 rollout.streak_len.max: 1557
-rollout.first_mismatch_total: 31
-rollout.first_mismatch_seeded_total: 19
+rollout.first_mismatch_total: 30
+rollout.first_mismatch_seeded_total: 18
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=5.325 rec=8602 p=1 seed/ref/out=27.2001/32.9331/38.2581 actions=88/88/88 category=unclassified
@@ -221,14 +221,14 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1527
-rollout.streak_count: 26
+rollout.best_len: 1830
+rollout.streak_count: 25
 rollout.streak_len.median: 267
 rollout.streak_len.p90: 938
 rollout.streak_len.p95: 1311
-rollout.streak_len.max: 1527
-rollout.first_mismatch_total: 27
-rollout.first_mismatch_seeded_total: 15
+rollout.streak_len.max: 1830
+rollout.first_mismatch_total: 25
+rollout.first_mismatch_seeded_total: 13
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=15.9159 rec=7409 p=1 seed/ref/out=23.9809/23.9809/8.06502 actions=349/349/349 category=unclassified
@@ -308,13 +308,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 == datasets/sheik/replays/validation/sheik/UnusedLivelyLouse.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1602
-rollout.streak_count: 20
-rollout.streak_len.median: 235
-rollout.streak_len.p90: 594
-rollout.streak_len.p95: 596
+rollout.streak_count: 18
+rollout.streak_len.median: 125
+rollout.streak_len.p90: 617
+rollout.streak_len.p95: 1602
 rollout.streak_len.max: 1602
-rollout.first_mismatch_total: 19
-rollout.first_mismatch_seeded_total: 7
+rollout.first_mismatch_total: 17
+rollout.first_mismatch_seeded_total: 6
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=21.811 rec=5557 p=1 seed/ref/out=81.6101/81.6027/103.414 actions=90/90/90 category=unclassified
@@ -330,13 +330,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 == datasets/sheik/replays/validation/sheik/UselessGlassLoris.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1640
-rollout.streak_count: 13
+rollout.streak_count: 12
 rollout.streak_len.median: 682
 rollout.streak_len.p90: 1553
 rollout.streak_len.p95: 1640
 rollout.streak_len.max: 1640
-rollout.first_mismatch_total: 12
-rollout.first_mismatch_seeded_total: 6
+rollout.first_mismatch_total: 11
+rollout.first_mismatch_seeded_total: 5
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=18.0001 rec=3751 p=0 seed/ref/out=72.8369/72.0003/90.0004 actions=4/4/4 category=unclassified
@@ -429,14 +429,14 @@ rollout.float_top_errors:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:54
 
 == suite summary ==
-overall.rollout.streak_count: 485
+overall.rollout.streak_count: 480
 overall.rollout.streak_len.median: 248
 overall.rollout.streak_len.p90: 934
 overall.rollout.streak_len.p95: 1293
 overall.rollout.streak_len.max: 3169
 overall.rollout.best_len.max: 3169
-overall.rollout.first_mismatch_total: 495
-overall.rollout.first_mismatch_seeded_total: 283
+overall.rollout.first_mismatch_total: 489
+overall.rollout.first_mismatch_seeded_total: 278
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=129.105 rec=3633 p=0 seed/ref/out=11.6665/9.93194/139.037 actions=7/7/7 category=unclassified

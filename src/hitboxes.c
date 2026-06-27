@@ -447,6 +447,17 @@ static inline uint8_t hitboxes_motion_state_entry_preserves_hitcapsules(
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AFF8
     return 0u;
   }
+  if (msl_action_is_throw_owner(action_id)) {
+    // Common Throw* motion rows carry Ft_MF_SkipHit in forward.h, but ftCo_800DD398 enters them
+    // through Fighter_ChangeMotionState(..., flags=0). Source therefore clears the old CatchPull
+    // x914 capsules on throw entry; the later throw-swing create edge starts with a fresh
+    // HitCapsule victim list instead of inheriting CatchPull's victim ring.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
+    // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_Throw
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AFF8
+    return 0u;
+  }
   return 1u;
 }
 

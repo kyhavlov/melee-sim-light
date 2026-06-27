@@ -293,6 +293,46 @@ def test_sheik_capturepulledlw_frame1_floor_loss_enters_capturepulledhi(
 
 
 @pytest.mark.integration
+def test_capturepulledlw_platform_anchor_still_on_surface_stays_low_slz() -> None:
+    # Adjacent negative for the platform floor-loss callback:
+    # `ftCo_CapturePulledLw_Phys` applies fn_800DAD18 first, then `ftCo_CapturePulledLw_Coll`
+    # calls ft_8008403C(gobj, fn_800DB230). A compact simulator floor probe can miss a carried
+    # Battlefield platform even though the post-anchor root is still on the same current platform;
+    # that is not source floor loss and must stay in the low capture variant.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CapturePulledLw_Phys,ftCo_CapturePulledLw_Coll,fn_800DAD18,fn_800DB230}
+    # data/stages/bin/grnba.bin::MSLSTG01 platform segment 2
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+    seed_2720, ref_2720, out_2720 = _run_one_step_seed(dataset_path, 2720)
+    assert int(seed_2720["action_id"][p]) == ACT_CAPTURE_PULLED_LW
+    assert int(seed_2720["action_frame"][p]) == 1
+    assert int(seed_2720["ground_id"][p]) == 2
+    assert int(ref_2720["action_id"][p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out_2720["action_id"][p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out_2720["on_ground"][p]) == int(ref_2720["on_ground"][p]) == 1
+    assert int(out_2720["jumps_left"][p]) == int(ref_2720["jumps_left"][p]) == 2
+    assert float(out_2720["pos_x"][p]) == pytest.approx(float(ref_2720["pos_x"][p]), abs=1e-5)
+    assert float(out_2720["pos_y"][p]) == pytest.approx(float(ref_2720["pos_y"][p]), abs=1e-6)
+
+    seed_2721, ref_2721, out_2721 = _run_one_step_seed(dataset_path, 2721)
+    assert int(seed_2721["action_id"][p]) == ACT_CAPTURE_PULLED_LW
+    assert int(seed_2721["action_frame"][p]) == 2
+    assert int(seed_2721["ground_id"][p]) == 2
+    assert int(ref_2721["action_id"][p]) == ACT_CAPTURE_WAIT_LW
+    assert int(out_2721["action_id"][p]) == ACT_CAPTURE_WAIT_LW
+    assert int(out_2721["on_ground"][p]) == int(ref_2721["on_ground"][p]) == 1
+    assert int(out_2721["jumps_left"][p]) == int(ref_2721["jumps_left"][p]) == 2
+    assert float(out_2721["pos_x"][p]) == pytest.approx(float(ref_2721["pos_x"][p]), abs=1e-5)
+    assert float(out_2721["pos_y"][p]) == pytest.approx(float(ref_2721["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_capturewaitlw_allow_ground_to_air_collision_reprojects_floor_direct_and_rollout() -> None:
     # Replay-real lock for low-capture grounded collision:
     # - CaptureWaitLw_Phys runs `fn_800DAD18`, which can move the victim XRotN slightly above floor.

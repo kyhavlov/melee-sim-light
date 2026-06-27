@@ -143,8 +143,8 @@ overall.float_norm_mae_p95: 0.00007420
 
 == datasets/spacies_heldout/replays/heldout/spacies/AbandonedNoxiousButterfly.msl ==
 Records: 5498  Players/scored per record: 2  Total player-frames: 10996
-mismatch.action_id: 10 / 10996 (0.000909)
-mismatch.action_frame: 8 / 10996 (0.000728)
+mismatch.action_id: 8 / 10996 (0.000728)
+mismatch.action_frame: 6 / 10996 (0.000546)
 mismatch.on_ground: 4 / 10996 (0.000364)
 mismatch.facing: 4 / 10996 (0.000364)
 mismatch.stocks: 0 / 10996 (0.000000)
@@ -155,23 +155,23 @@ mismatch.hitstun: 4 / 10996 (0.000364)
 mismatch.l_cancel: 0 / 10996 (0.000000)
 mismatch.hurtbox_state: 1 / 10996 (0.000091)
 mismatch.ground_id: 2 / 10996 (0.000182)
-mismatch.animation_index: 10 / 10996 (0.000909)
+mismatch.animation_index: 8 / 10996 (0.000728)
 mismatch.instance_hit_by: 1 / 10996 (0.000091)
 mismatch.instance_id: 7 / 10996 (0.000637)
 mismatch.last_attack_landed: 2 / 10996 (0.000182)
 mismatch.combo_count: 1 / 10996 (0.000091)
 mismatch.last_hit_by: 7 / 10996 (0.000637)
-mismatch.state_flags: 17 / 54980 (0.000309)
+mismatch.state_flags: 11 / 54980 (0.000200)
 mismatch.item_exists: 0 / 82470 (0.000000)
 mismatch.item_type: 0 / 82470 (0.000000)
 mismatch.item_state: 0 / 82470 (0.000000)
 mismatch.item_owner: 0 / 82470 (0.000000)
 mismatch.item_instance_id: 0 / 82470 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 56 / 10996 (0.005093)
-err.pos_x: mae=0.000791 p95=0.000000 max=1.792206
+err.pos_x: mae=0.000777 p95=0.000000 max=1.792206
 err.pos_y: mae=0.000774 p95=0.000000 max=3.824928
-err.speed_air_x_self: mae=0.000037 p95=0.000000 max=0.250000
-err.speed_ground_x_self: mae=0.000210 p95=0.000000 max=1.900000
+err.speed_air_x_self: mae=0.000023 p95=0.000000 max=0.250000
+err.speed_ground_x_self: mae=0.000196 p95=0.000000 max=1.900000
 err.speed_y_self: mae=0.000105 p95=0.000000 max=1.130000
 err.speed_x_attack: mae=0.000258 p95=0.000000 max=2.059613
 err.speed_y_attack: mae=0.000181 p95=0.000000 max=1.988946
@@ -181,10 +181,10 @@ err.item_pos_x: mae=0.059040 p95=0.000000 max=26.469999
 err.item_pos_y: mae=0.001043 p95=0.000000 max=0.400000
 err.item_vel_x: mae=0.000002 p95=0.000000 max=0.000228
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000060
-overall.discrete_mismatch: 88 / 665258
-overall.strict_discrete_mismatch: 144 / 665258
+overall.discrete_mismatch: 76 / 665258
+overall.strict_discrete_mismatch: 132 / 665258
 overall.ignored_discrete_mismatch: 56
-overall.float_norm_mae_p95: 0.00005587
+overall.float_norm_mae_p95: 0.00005430
 
 == datasets/spacies_heldout/replays/heldout/spacies/VigorousSuspiciousLocust.msl ==
 Records: 10775  Players/scored per record: 2  Total player-frames: 21550
@@ -547,7 +547,7 @@ overall.ignored_discrete_mismatch: 52
 overall.float_norm_mae_p95: 0.00016384
 
 == suite summary ==
-overall.discrete_mismatch: 1919 / 13208723
-overall.strict_discrete_mismatch: 2592 / 13208723
+overall.discrete_mismatch: 1907 / 13208723
+overall.strict_discrete_mismatch: 2580 / 13208723
 overall.ignored_discrete_mismatch: 673
-overall.float_norm_mae_p95: 0.00024769
+overall.float_norm_mae_p95: 0.00024762

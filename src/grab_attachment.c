@@ -651,6 +651,45 @@ static void capture_pulled_lw_enter_hi_and_apply_delta(MslBatch* batch, int bi, 
   grab_attachment_apply_capture_delta_now(batch, bi, victim_p, owner_p);
 }
 
+static inline float capture_floor_line_y_at_x(const MslStageFloorLine* line, float x) {
+  if (line == NULL) {
+    return 0.0f;
+  }
+  const float dx = line->x1 - line->x0;
+  if (fabsf(dx) <= 1.0e-6f) {
+    return (line->y0 > line->y1) ? line->y0 : line->y1;
+  }
+  const float t = (x - line->x0) / dx;
+  return line->y0 + (line->y1 - line->y0) * t;
+}
+
+static uint8_t capture_pulled_lw_platform_floor_lost_after_anchor(const MslBatch* batch, int bi,
+                                                                  size_t vidx, uint32_t stage_id,
+                                                                  uint16_t ground_id) {
+  if (batch == NULL || ground_id == 0xFFFFu ||
+      stage_collision_floor_line_is_platform(stage_id, ground_id) == 0u) {
+    return 0u;
+  }
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+
+  MslStageFloorLine line = g->lines[(size_t)line_idx];
+  MslStageFloorLine world_line = line;
+  if (stage_collision_floor_line_world(batch, bi, &line, &world_line) != 0u) {
+    line = world_line;
+  }
+
+  const float x = batch->state.pos_x[vidx];
+  if (x < line.x0 || x > line.x1) {
+    return 1u;
+  }
+  const float y = capture_floor_line_y_at_x(&line, x);
+  return (batch->state.pos_y[vidx] < y) ? 1u : 0u;
+}
+
 static void capture_pulled_lw_try_air_handoff_after_delta(MslBatch* batch, int bi, int victim_p,
                                                           int owner_p, float capture_delta_y) {
   if (batch == NULL) {
@@ -698,8 +737,10 @@ static void capture_pulled_lw_try_air_handoff_after_delta(MslBatch* batch, int b
     if (ground_id != 0xFFFFu) {
       const uint8_t owner_on_same_floor = (uint8_t)(batch->state.on_ground[oidx] != 0u &&
                                                     batch->state.ground_id[oidx] == ground_id);
+      const uint8_t platform_floor_lost =
+          capture_pulled_lw_platform_floor_lost_after_anchor(batch, bi, vidx, stage_id, ground_id);
       source_floor_loss_ok =
-          (uint8_t)(stage_collision_floor_line_is_platform(stage_id, ground_id) != 0u ||
+          (uint8_t)(platform_floor_lost != 0u ||
                     (owner_on_same_floor != 0u &&
                      stage_collision_floor_line_is_ledge(stage_id, ground_id) != 0u &&
                      stage_collision_floor_line_is_sloped(stage_id, ground_id) != 0u));
@@ -716,8 +757,10 @@ static void capture_pulled_lw_try_air_handoff_after_delta(MslBatch* batch, int b
   //   catch/connect entry; their Phys/Coll callbacks are source-owned even when the prior visible
   //   action was Catch/Wait/Passive rather than Lw. Keep fresh floor-loss admission bounded to
   //   MSLSTG01 platform/ledge floors plus the live floor-mask miss below instead of a predecessor
-  //   action list. The owner-side same-frame helper below handles the bounded fresh cross-floor
-  //   Hi-first path before applying a Lw anchor.
+  //   action list. Platform floor loss is only source-owned once the post-anchor root falls below
+  //   or outside the current platform surface; a compact floor probe miss while the root is still
+  //   on the carried platform is not enough to call `fn_800DB230`. The owner-side same-frame helper
+  //   below handles the bounded fresh cross-floor Hi-first path before applying a Lw anchor.
   // - Coll then calls ft_8008403C(gobj, fn_800DB230); a live mpColl_800477E0 floor-mask miss owns
   //   the source floor-loss callback for platform/ledge owners expressed by MSLSTG01. Grounded
   //   rows below the vertical threshold can sparse-miss the replay-visible compact floor probe while

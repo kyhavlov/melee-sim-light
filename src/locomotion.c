@@ -5289,6 +5289,17 @@ void locomotion_update_pre(MslBatch* batch) {
             grab_flow_try_enter_catchdash_from_iasa(batch, c, idx)) {
           continue;
         }
+        if ((action_id == MSL_ACT_RUN || action_id == MSL_ACT_RUN_DIRECT) &&
+            action_id_start == action_id &&
+            grab_flow_try_enter_catchdash_from_iasa(batch, c, idx)) {
+          // Run/RunDirect IASA reaches ftCo_800D8A38 before ftCo_80091A4C. The shared guard pass
+          // runs before the explicit Run IASA block in this simulator, so consume Z/A+LR
+          // CatchDash here rather than letting GuardOn steal the same source command.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8A38
+          continue;
+        }
         if (action_id == MSL_ACT_DASH && action_id_start == MSL_ACT_DASH &&
             batch->state.anim_frame_f32[idx] <= c->dash_iasa_x4c &&
             (buttons & (uint16_t)MSL_BUTTON_B) != 0u &&

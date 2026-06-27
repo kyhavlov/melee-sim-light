@@ -17,6 +17,7 @@ _BUTTON_R = 0x0020
 
 _ACT_WAIT = 14
 _ACT_DASH = 20
+_ACT_RUN = 21
 _ACT_TURN = 18
 _ACT_KNEE_BEND = 24
 _ACT_CATCH = 212
@@ -250,6 +251,52 @@ def test_dash_grab_enters_catchdash(dataset_name: str, record: int, attacker: in
     assert float(out[0]["speed_ground_x_self"][attacker]) == pytest.approx(
         float(ref["speed_ground_x_self"][attacker]), abs=1e-6
     )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "start_record", "record", "attacker"),
+    [
+        ("datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl", 5270, 5754, 1),
+        ("datasets/sheik/replays/validation/sheik/UnusedLivelyLouse.msl", 1602, 1892, 0),
+        ("datasets/sheik/replays/validation/sheik/UselessGlassLoris.msl", 4698, 4764, 1),
+    ],
+)
+def test_run_grab_preempts_guardon_catchdash_before_shared_guard_pass(
+    dataset_rel: str, start_record: int, record: int, attacker: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"]
+    ref = row["ref_t1"]
+
+    # Run/RunDirect IASA calls the CatchDash helper before Guard input. The simulator's shared
+    # guard pass runs earlier than the explicit Run IASA block, so this replay-real lock keeps
+    # Run+grab from being consumed as GuardOn on the same frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8A38
+    assert int(seed["action_id"][0, attacker]) == _ACT_RUN
+    assert int(ref["action_id"][0, attacker]) == _ACT_CATCH_DASH
+    assert int(ref["animation_index"][0, attacker]) == _SM_CATCH_DASH
+    assert _grab_attempt_edge(row, attacker)
+
+    out, direct_ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, attacker]) == int(direct_ref["action_id"][attacker])
+    assert int(out["action_id"][0, attacker]) == _ACT_CATCH_DASH
+    assert int(out["animation_index"][0, attacker]) == _SM_CATCH_DASH
+
+    _, rollout_out, rollout_ref = _run_rollout_to_record(
+        dataset_path, start_record=start_record, target_record=record
+    )
+    assert int(rollout_out["action_id"][attacker]) == int(rollout_ref["action_id"][attacker])
+    assert int(rollout_out["action_id"][attacker]) == _ACT_CATCH_DASH
+    assert int(rollout_out["animation_index"][attacker]) == _SM_CATCH_DASH
 
 
 @pytest.mark.integration

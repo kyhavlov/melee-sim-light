@@ -19,6 +19,30 @@ ACT_DAMAGE_FLY_TOP = 90
 ACT_DOWN_BOUND_U = 183
 STATE_FLAG_221C_B0 = 0x80
 
+_BODY_CONTACT_DTYPE = np.dtype(
+    [
+        ("attacker", "u1"),
+        ("defender", "u1"),
+        ("hitbox_id", "u1"),
+        ("hurtcap_id", "u1"),
+        ("attacker_msid", "<u2"),
+        ("attacker_action_frame", "<i2"),
+        ("hitbox_x", "<f4"),
+        ("hitbox_y", "<f4"),
+        ("hitbox_z", "<f4"),
+        ("hitbox_radius", "<f4"),
+        ("hitbox_damage", "<f4"),
+        ("hurtcap_ax", "<f4"),
+        ("hurtcap_ay", "<f4"),
+        ("hurtcap_az", "<f4"),
+        ("hurtcap_bx", "<f4"),
+        ("hurtcap_by", "<f4"),
+        ("hurtcap_bz", "<f4"),
+        ("hurtcap_radius", "<f4"),
+    ],
+    align=False,
+)
+
 
 def _field_bytes(samples, record: int, field: str, stride: int) -> np.ndarray:
     off = int(samples.dtype.fields[field][1])
@@ -56,6 +80,52 @@ def _rollout_to(dataset_path: Path, start_record: int, target_record: int) -> tu
         binding.destroy(handle)
 
     return out_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy(), samples[target_record]["ref_t1"]
+
+
+def _rollout_to_pre_combat(
+    dataset_path: Path,
+    start_record: int,
+    target_record: int,
+    attacker: int,
+    defender: int,
+) -> tuple[list[int], np.ndarray]:
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, _field_bytes(samples, start_record, "seed_t", seed_stride))
+        for record in range(start_record, target_record):
+            binding.step_input_replay_frame_rng(
+                handle,
+                _field_bytes(samples, record, "seed_t", seed_stride),
+                _field_bytes(samples, record, "prev_input_t", input_stride),
+                _field_bytes(samples, record, "input_t", input_stride),
+            )
+        binding.debug_step_input_pre_combat(
+            handle,
+            _field_bytes(samples, target_record, "prev_input_t", input_stride),
+            _field_bytes(samples, target_record, "input_t", input_stride),
+        )
+        hitlist_contains = [
+            int(binding.debug_hitlist_fighter_contains(handle, 0, attacker, hb, defender))
+            for hb in range(4)
+        ]
+        raw, count = binding.debug_combat_select_body_hits(handle, 0, 16)
+        assert raw.shape[1] == _BODY_CONTACT_DTYPE.itemsize
+        contacts = raw.reshape(-1).view(_BODY_CONTACT_DTYPE)[: int(count)].copy()
+        return hitlist_contains, contacts
+    finally:
+        binding.destroy(handle)
 
 
 @pytest.mark.integration
@@ -210,6 +280,54 @@ def test_sheik_throwlw_body_hitlag_resumes_thrower_anim_before_release_rollout()
     assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim])
     assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]))
     assert float(out["pos_y"][victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_throw_entry_clears_catchpull_hitlist_before_first_swing_rollout() -> None:
+    # ULL rec5192 populates CatchPull's HitCapsule victim ring, then ftCo_800DD398 enters ThrowLw.
+    # That source entry uses Fighter_ChangeMotionState(..., flags=0), so the rec5224 f31 throw-swing
+    # create edge must not inherit the old CatchPull victims_1 ring even though the ThrowLw motion
+    # row carries Ft_MF_SkipHit. The fresh ThrowLw BODY contact is then selected and applies 5%.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD398,ftCo_800DD724}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AFF8,ftColl_800768A0,ftColl_80076ED8}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/UnusedLivelyLouse.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    start_record = 5101
+    target_record = 5224
+    thrower = 0
+    victim = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[target_record]["seed_t"]
+    ref = ds.samples[target_record]["ref_t1"]
+    assert int(seed["action_id"][thrower]) == ACT_THROW_LW
+    assert int(seed["action_id"][victim]) == ACT_THROWN_LW
+    assert [int(v) for v in seed["combat_hitlist_hb_valid"][thrower]] == [0, 0, 0, 0]
+    assert float(ref["percent"][victim]) == pytest.approx(float(seed["percent"][victim]) + 5.0)
+
+    hitlist_contains, contacts = _rollout_to_pre_combat(
+        dataset_path, start_record, target_record, thrower, victim
+    )
+    assert hitlist_contains[:2] == [0, 0]
+    assert any(
+        int(c["attacker"]) == thrower
+        and int(c["defender"]) == victim
+        and int(c["hitbox_id"]) in (0, 1)
+        and float(c["hitbox_damage"]) == pytest.approx(5.0)
+        for c in contacts
+    )
+
+    out, ref = _rollout_to(dataset_path, start_record, target_record)
+    assert int(out["action_id"][thrower]) == int(ref["action_id"][thrower]) == ACT_THROW_LW
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_THROWN_LW
+    assert int(out["hitlag"][thrower]) == int(ref["hitlag"][thrower]) == 4
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 0
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]))
 
 
 @pytest.mark.integration

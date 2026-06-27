@@ -29,6 +29,7 @@ ACT_GUARD = 0x00B3
 ACT_GUARD_OFF = 0x00B4
 ACT_GUARD_SET_OFF = 0x00B5
 ACT_GUARD_REFLECT = 0x00B6
+ACT_CATCH_DASH = 0x00D6
 ACT_ESCAPE_B = 0x00EA
 ACT_PASS = 0x00F4
 ACT_FX_SPECIAL_LW_START = 0x0168
@@ -790,11 +791,13 @@ def test_run_iasa_still_admits_guard_entry_spacie_control() -> None:
     shield_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
     shield_view["p"]["l"][0, 0] = np.uint8(255)
 
-    # Run_IASA calls ftCo_80091A4C after attack/CatchDash checks, unlike TurnRun_IASA. This is the
-    # adjacent spacie control for the TurnRun exclusion above.
+    # Run_IASA calls ftCo_80091A4C after attack/CatchDash checks, unlike TurnRun_IASA. With only
+    # shield held and no grab edge, this remains the adjacent guard control for Run's pre-guard
+    # CatchDash helper.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
     out_row = _run_seed_one_step(seed, shield)
+    assert int(out_row["action_id"][0]) != ACT_CATCH_DASH
     assert int(out_row["action_id"][0]) in (ACT_GUARD_ON, ACT_GUARD_REFLECT)
 
 
