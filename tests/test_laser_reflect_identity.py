@@ -272,6 +272,7 @@ def test_item_hidden_callback_seed_lanes_keep_shallow_shieldbounced_velocity() -
         ref_hitstun,
         ref_instance_hit_by,
         laser_lut,
+        laser_lut,
         2,
     )
     assert int(bounce_valid[0, 0]) == 1
@@ -302,6 +303,137 @@ def test_item_hidden_callback_seed_lanes_keep_shallow_shieldbounced_velocity() -
         ref_hitstun,
         ref_instance_hit_by,
         laser_lut,
+        laser_lut,
+        2,
+    )
+    assert int(bounce_valid[0, 0]) == 0
+
+
+def test_item_hidden_callback_seed_lanes_allow_nonlaser_shield_bounce_without_body_latch() -> None:
+    import msl_binding
+
+    seed_exists = np.zeros((1, 15), dtype=np.uint8)
+    seed_type = np.zeros((1, 15), dtype=np.uint16)
+    seed_owner = np.full((1, 15), -1, dtype=np.int8)
+    seed_iid = np.zeros((1, 15), dtype=np.uint16)
+    seed_spawn = np.zeros((1, 15), dtype=np.uint32)
+    seed_dir = np.ones((1, 15), dtype=np.float32)
+    seed_vx = np.zeros((1, 15), dtype=np.float32)
+    seed_vy = np.zeros((1, 15), dtype=np.float32)
+    ref_exists = np.zeros((1, 15), dtype=np.uint8)
+    ref_type = np.zeros((1, 15), dtype=np.uint16)
+    ref_owner = np.full((1, 15), -1, dtype=np.int8)
+    ref_iid = np.zeros((1, 15), dtype=np.uint16)
+    ref_spawn = np.zeros((1, 15), dtype=np.uint32)
+    ref_vx = np.zeros((1, 15), dtype=np.float32)
+    ref_vy = np.zeros((1, 15), dtype=np.float32)
+    seed_action = np.zeros((1, 4), dtype=np.uint16)
+    ref_action = np.zeros((1, 4), dtype=np.uint16)
+    ref_hitlag = np.zeros((1, 4), dtype=np.uint16)
+    ref_hitstun = np.zeros((1, 4), dtype=np.uint16)
+    ref_instance_hit_by = np.zeros((1, 4), dtype=np.uint16)
+    laser_lut = np.zeros(65536, dtype=np.uint8)
+    shield_bounce_lut = np.zeros(65536, dtype=np.uint8)
+
+    seed_exists[0, 0] = 1
+    seed_type[0, 0] = 79  # Sheik thrown Needle.
+    seed_owner[0, 0] = 0
+    seed_iid[0, 0] = 44
+    seed_spawn[0, 0] = 9
+    seed_vx[0, 0] = -4.0
+    ref_exists[0, 0] = 1
+    ref_type[0, 0] = 79
+    ref_owner[0, 0] = 0
+    ref_iid[0, 0] = 44
+    ref_spawn[0, 0] = 9
+    ref_vx[0, 0] = np.float32(1.25)
+    ref_vy[0, 0] = np.float32(-3.8)
+    seed_action[0, 1] = ACT_GUARD_REFLECT
+    ref_action[0, 1] = 181  # GuardSetOff.
+    shield_bounce_lut[79] = 1
+
+    *_, body_victim, body_height, callback_flags = msl_binding.derive_item_hidden_callback_seed_lanes(
+        seed_exists,
+        seed_type,
+        seed_owner,
+        seed_iid,
+        seed_spawn,
+        seed_dir,
+        seed_vx,
+        seed_vy,
+        ref_exists,
+        ref_type,
+        ref_owner,
+        ref_iid,
+        ref_spawn,
+        ref_vx,
+        ref_vy,
+        seed_action,
+        ref_action,
+        ref_hitlag,
+        ref_hitstun,
+        ref_instance_hit_by,
+        laser_lut,
+        shield_bounce_lut,
+        2,
+    )
+    _, _, bounce_valid, bounce_vx, bounce_vy, *_ = msl_binding.derive_item_hidden_callback_seed_lanes(
+        seed_exists,
+        seed_type,
+        seed_owner,
+        seed_iid,
+        seed_spawn,
+        seed_dir,
+        seed_vx,
+        seed_vy,
+        ref_exists,
+        ref_type,
+        ref_owner,
+        ref_iid,
+        ref_spawn,
+        ref_vx,
+        ref_vy,
+        seed_action,
+        ref_action,
+        ref_hitlag,
+        ref_hitstun,
+        ref_instance_hit_by,
+        laser_lut,
+        shield_bounce_lut,
+        2,
+    )
+    assert int(bounce_valid[0, 0]) == 1
+    assert float(bounce_vx[0, 0]) == pytest.approx(float(ref_vx[0, 0]), abs=1e-7)
+    assert float(bounce_vy[0, 0]) == pytest.approx(float(ref_vy[0, 0]), abs=1e-7)
+    assert int(body_victim[0, 0]) == 0xFF
+    assert int(body_height[0, 0]) == 0
+    assert int(callback_flags[0, 0]) == 0
+
+    ref_vx[0, 0] = 0.0
+    ref_vy[0, 0] = 0.0
+    _, _, bounce_valid, *_ = msl_binding.derive_item_hidden_callback_seed_lanes(
+        seed_exists,
+        seed_type,
+        seed_owner,
+        seed_iid,
+        seed_spawn,
+        seed_dir,
+        seed_vx,
+        seed_vy,
+        ref_exists,
+        ref_type,
+        ref_owner,
+        ref_iid,
+        ref_spawn,
+        ref_vx,
+        ref_vy,
+        seed_action,
+        ref_action,
+        ref_hitlag,
+        ref_hitstun,
+        ref_instance_hit_by,
+        laser_lut,
+        shield_bounce_lut,
         2,
     )
     assert int(bounce_valid[0, 0]) == 0
@@ -374,6 +506,7 @@ def test_item_hidden_callback_seed_lanes_mark_reflected_laser_body_latch_only_wh
         ref_hitstun,
         ref_instance_hit_by,
         laser_lut,
+        laser_lut,
         2,
     )
     assert int(body_victim[0, 0]) == 1
@@ -406,6 +539,7 @@ def test_item_hidden_callback_seed_lanes_mark_reflected_laser_body_latch_only_wh
         ref_hitlag,
         ref_hitstun,
         ref_instance_hit_by,
+        laser_lut,
         laser_lut,
         2,
     )
@@ -440,6 +574,7 @@ def test_item_hidden_callback_seed_lanes_mark_reflected_laser_body_latch_only_wh
         ref_hitlag,
         ref_hitstun,
         ref_instance_hit_by,
+        laser_lut,
         laser_lut,
         2,
     )

@@ -4658,6 +4658,20 @@ static inline uint8_t item_guardsetoff_current_shielddesc_allows_item_contact(co
   if (batch->state.item_shield_bounce_seed_valid[item_idx] != 0u) {
     return 1u;
   }
+  const MslItemArticleParams* needle_params =
+      item_article_params_for_sheik_needle_throw_item_type(batch->state.item_type[item_idx]);
+  if (needle_params != NULL && batch->state.item_state[item_idx] == 0u &&
+      needle_params->needle_lifetime_frames != 0u &&
+      batch->state.item_timer[item_idx] >= (float)needle_params->needle_lifetime_frames) {
+    // A freshly-created thrown Needle's command-11 HitCapsule reaches ftColl_8007925C on its first
+    // active callback even when the defender is in GuardSetOff with no fresh x2218 command bits.
+    // Later same-volley ShieldDesc packets need explicit ShieldBounced provenance or a live command
+    // lane; otherwise stale x221B shield-active state would re-enter Item_80269DC8.
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::shootNeedles
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_802AFD8C,ItemStateTable}
+    // refs/melee/src/melee/it/item.c::Item_80269DC8
+    return 1u;
+  }
   // GuardSetOff can keep fp+0x221B_b0 shield-active visible after the accepted shield-hit packet,
   // but source does not manufacture a new item ShieldDesc collision from that stale packet alone.
   // Require either a current x2218 command/behavior lane or explicit item shield-bounce provenance;
@@ -5797,6 +5811,43 @@ static inline void sheik_needle_bounce_or_destroy_callback(MslBatch* batch, int 
   sheik_needle_apply_item_hitlag(batch, ii, hitlag_damage_i);
 }
 
+static inline uint8_t laser_try_shield_bounce_velocity_from_segment(
+    float vx, float vy, float shield_x, float shield_y, float shield_z, float shield_radius,
+    float prev_x, float prev_y, float prev_z, float cur_x, float cur_y, float cur_z,
+    float hit_radius, float* out_vx, float* out_vy);
+
+static inline uint8_t sheik_needle_try_shield_bounced_callback(
+    MslBatch* batch, size_t ii, const MslItemArticleParams* params, float vx, float vy,
+    float shield_x, float shield_y, float shield_z, float shield_radius, float prev_x, float prev_y,
+    float cur_x, float cur_y, float hit_radius) {
+  // Item_80269DC8 dispatches ShieldBounced before HitShield when ftColl_80077688 set the item
+  // shield-bounce flag (xDCE.b5), the Needle is airborne, and the contact normal is within
+  // ItemCommonData::unk_degrees of the shield plane. ShieldBounced mirrors x40_vel across hidden
+  // xC58 and leaves the state-0 Needle alive; HitShield is the separate RNG destroy/state-4 callback.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+  // refs/melee/src/melee/it/item.c::Item_80269DC8
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   it_2725_Logic109_ShieldBounced,it_2725_Logic109_HitShield}
+  (void)params;
+  if (batch->state.item_shield_bounce_seed_valid[ii] != 0u) {
+    batch->state.item_vel_x[ii] = batch->state.item_shield_bounce_seed_vel_x[ii];
+    batch->state.item_vel_y[ii] = batch->state.item_shield_bounce_seed_vel_y[ii];
+    batch->state.item_direction[ii] = (batch->state.item_vel_x[ii] >= 0.0f) ? 1.0f : -1.0f;
+    return 1u;
+  }
+  float bounce_vx = 0.0f;
+  float bounce_vy = 0.0f;
+  if (!laser_try_shield_bounce_velocity_from_segment(
+          vx, vy, shield_x, shield_y, shield_z, shield_radius, prev_x, prev_y, 0.0f, cur_x, cur_y,
+          0.0f, hit_radius, &bounce_vx, &bounce_vy)) {
+    return 0u;
+  }
+  batch->state.item_vel_x[ii] = bounce_vx;
+  batch->state.item_vel_y[ii] = bounce_vy;
+  batch->state.item_direction[ii] = (bounce_vx >= 0.0f) ? 1.0f : -1.0f;
+  return 1u;
+}
+
 static inline void sheik_needle_apply_damage_callback(MslBatch* batch, int bi, size_t ii,
                                                       const MslItemArticleParams* params,
                                                       int damage_i) {
@@ -6156,16 +6207,15 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
     if (shield_active) {
       // ShieldDesc contact (source contact order ReflectDesc -> ShieldDesc -> BODY): an active
       // ShieldDesc resolves the Needle HitCapsule against the shield bubble BEFORE the BODY hurtcaps.
-      // On overlap the source applies the shield-intake damage (ftColl_80077688) and runs
-      // it_2725_Logic109_HitShield -- HSD_Randi(3)==0 bounce (state 4 via the same it_803F7020[Randi(8)]
-      // + SetupBounce sequence) else destroy, the identical outcome to DmgDealt, so it reuses
-      // sheik_needle_bounce_or_destroy_callback, then returns. On a MISS (the shield bubble does not
-      // overlap, or no shield radius is resolvable) the contact FALLS THROUGH to clank -> BODY, exactly
-      // as the source does: ftColl_8007925C's catch_path only `continue`s on a shield HIT
-      // (lbColl_80007BCC shield_hit overlap -> ftColl_80077688) and otherwise reaches catch_elem_path /
-      // the hurt_capsules BODY test. So a shielding defender CAN still be BODY-hit when the Needle
-      // misses the shield bubble but overlaps a hurtcap. The ShieldDesc bubble is the projectile-agnostic
-      // shield sphere already modeled
+      // On overlap ftColl_80077688 writes the item xDCE/xC58 shield-bounce packet and Item_80269DC8
+      // chooses ShieldBounced before falling back to HitShield. ShieldBounced keeps the state-0
+      // Needle alive with mirrored velocity; HitShield is the RNG destroy/state-4 callback. On a MISS
+      // (the shield bubble does not overlap, or no shield radius is resolvable) the contact FALLS
+      // THROUGH to clank -> BODY, exactly as the source does: ftColl_8007925C's catch_path only
+      // `continue`s on a shield HIT (lbColl_80007BCC shield_hit overlap -> ftColl_80077688) and
+      // otherwise reaches catch_elem_path / the hurt_capsules BODY test. So a shielding defender CAN
+      // still be BODY-hit when the Needle misses the shield bubble but overlaps a hurtcap. The
+      // ShieldDesc bubble is the projectile-agnostic shield sphere already modeled
       // and replay-witness-locked for the laser/illusion item path (shield center +
       // item_guard_shield_radius_from_state radius + ShieldDesc.size=1 through the fighter
       // scale/model-scale JObj matrix); this reuses that geometry/shield-damage primitive only --
@@ -6174,8 +6224,9 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688,ftColl_80076CBC}
       // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_GetModelScale
-      // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_2725_Logic109_HitShield,
-      //   itSeakNeedleThrown_SetupBounce}
+      // refs/melee/src/melee/it/item.c::Item_80269DC8
+      // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+      //   it_2725_Logic109_ShieldBounced,it_2725_Logic109_HitShield}
       const MslCommonParams* common = msl_common_params();
       float shr = batch->state.shield_radius[d_idx];
       if (shr > 0.0f &&
@@ -6226,8 +6277,33 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
           float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f;
           sheik_needle_hitbox_segment_xy(params, hb, contact_x0, contact_y0, contact_x1, contact_y1,
                                          dirx, diry, item_facing_dir, &sx0, &sy0, &sx1, &sy1);
-          if (!item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx1, sy1, 0.0f, hbr, shx, shy,
-                                                      shz, shr + shield_desc_world_r)) {
+          uint8_t shield_overlap = item_swept_sphere_sphere_intersects_3d(
+              sx0, sy0, 0.0f, sx1, sy1, 0.0f, hbr, shx, shy, shz, shr + shield_desc_world_r);
+          if (shield_overlap == 0u &&
+              item_guardsetoff_current_shielddesc_allows_item_contact(batch, d_idx, ii) != 0u &&
+              batch->state.item_state[ii] == 0u &&
+              batch->state.item_timer[ii] >= (float)params->needle_lifetime_frames) {
+            // First-active thrown-Needle ShieldDesc retry:
+            // GuardSetOff rows can serialize the stale shield center while the current item
+            // callback still consumes the live ShieldDesc packet. Keep this retry scoped to the
+            // source-owned first-active article packet above and move only the horizontal sample to
+            // the fighter root, matching the existing item ShieldDesc root-X owner shape.
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+            // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_802AFD8C,ItemStateTable}
+            shield_overlap = item_swept_sphere_sphere_intersects_3d(
+                sx0, sy0, 0.0f, sx1, sy1, 0.0f, hbr, batch->state.pos_x[d_idx], shy, shz,
+                shr + shield_desc_world_r);
+            if (shield_overlap != 0u) {
+              shx = batch->state.pos_x[d_idx];
+            }
+          }
+          if (shield_overlap == 0u && batch->state.item_shield_bounce_seed_valid[ii] != 0u) {
+            // Teacher-forced one-step: explicit hidden xC58 ShieldBounced provenance is stronger
+            // than a stale public shield-center sample, and still seeds the same Item_80269DC8
+            // owner rather than changing free-running collision.
+            shield_overlap = 1u;
+          }
+          if (shield_overlap == 0u) {
             continue;
           }
           const float damage = params->needle_hitbox_damage_by_id[hb];
@@ -6238,7 +6314,11 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
                                        batch->state.item_pos_x[ii]);
           hitlist_register_item_fighter(batch, bi, item_slot, def, def_iid,
                                         (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
-          sheik_needle_bounce_or_destroy_callback(batch, bi, ii, params, (int)ceilf(damage));
+          if (!sheik_needle_try_shield_bounced_callback(batch, ii, params, vx, vy, shx, shy, shz,
+                                                        shr + shield_desc_world_r, sx0, sy0, sx1,
+                                                        sy1, hbr)) {
+            sheik_needle_bounce_or_destroy_callback(batch, bi, ii, params, (int)ceilf(damage));
+          }
           return 1u;
         }
       }
@@ -7294,6 +7374,51 @@ static inline uint8_t item_laser_no_submotion_guard_entry_shielddesc_root_x_owne
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092450,ftCo_80091D58,ftCo_80093A50}
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+  return 1u;
+}
+
+static inline uint8_t item_laser_guardon_command_behavior_root_x_owner(const MslBatch* batch,
+                                                                       size_t d_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON ||
+      batch->state.seed_prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON ||
+      batch->state.action_frame[d_idx] >= 0 || batch->state.animation_index[d_idx] != UINT32_MAX ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u) {
+    return 0u;
+  }
+  const uint8_t flags_221b =
+      batch->state
+          .state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX];
+  if ((flags_221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) == 0u) {
+    return 0u;
+  }
+  const uint8_t flags_2218 =
+      batch->state
+          .state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+  const uint8_t command_behavior =
+      (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B2 |
+                MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR);
+  const uint8_t mask = (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                                 MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECTING |
+                                 MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR);
+  if ((flags_2218 & mask) != command_behavior) {
+    return 0u;
+  }
+  // No-submotion GuardOn command/behavior item ShieldDesc owner:
+  // GuardOn_Anim can publish a live ShieldDesc while the replay-visible row has no submotion and
+  // carries raw fp+0x2218 allow-interrupt + command + reflect-behavior bits. In that slice
+  // ftColl_8007925C still consumes the current item HitCapsule segment, but the serialized shield
+  // JObj horizontal sample may be the guard-bone blend rather than the source root-X sample used by
+  // the item callback. Retry only the item ShieldDesc lane at root X; ordinary 0xC0 live-article
+  // GuardOn rows and settled Guard command/behavior rows keep their existing point/segment owners.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_GuardOn_Anim,ftCo_80091E78,ftCo_80092450}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{
+  //   itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218/0x221B bytes)
   return 1u;
 }
 
@@ -10788,8 +10913,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           }
         }
         if (!shield_hit && !guard_reflect_final_x14_same_owner_reflect_keepalive &&
-            item_laser_no_submotion_guard_entry_shielddesc_root_x_owner(batch, d_idx,
-                                                                        shield_bounce_seed_valid)) {
+            (item_laser_no_submotion_guard_entry_shielddesc_root_x_owner(
+                 batch, d_idx, shield_bounce_seed_valid) ||
+             item_laser_guardon_command_behavior_root_x_owner(batch, d_idx))) {
           const float root_shx = batch->state.pos_x[d_idx];
           for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X; oi++) {
             const float off_x =

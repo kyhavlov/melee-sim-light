@@ -9420,13 +9420,14 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
   PyObject* ref_hitstun_obj = NULL;
   PyObject* ref_instance_hit_by_obj = NULL;
   PyObject* laser_lut_obj = NULL;
+  PyObject* shield_bounce_lut_obj = NULL;
   int num_players = 0;
-  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOOOOOOOOOOi", &seed_exists_obj, &seed_type_obj,
-                        &seed_owner_obj, &seed_iid_obj, &seed_spawn_obj, &seed_dir_obj,
-                        &seed_vx_obj, &seed_vy_obj, &ref_exists_obj, &ref_type_obj, &ref_owner_obj,
-                        &ref_iid_obj, &ref_spawn_obj, &ref_vx_obj, &ref_vy_obj, &seed_action_obj,
-                        &ref_action_obj, &ref_hitlag_obj, &ref_hitstun_obj,
-                        &ref_instance_hit_by_obj, &laser_lut_obj, &num_players)) {
+  if (!PyArg_ParseTuple(
+          args, "OOOOOOOOOOOOOOOOOOOOOOi", &seed_exists_obj, &seed_type_obj, &seed_owner_obj,
+          &seed_iid_obj, &seed_spawn_obj, &seed_dir_obj, &seed_vx_obj, &seed_vy_obj,
+          &ref_exists_obj, &ref_type_obj, &ref_owner_obj, &ref_iid_obj, &ref_spawn_obj, &ref_vx_obj,
+          &ref_vy_obj, &seed_action_obj, &ref_action_obj, &ref_hitlag_obj, &ref_hitstun_obj,
+          &ref_instance_hit_by_obj, &laser_lut_obj, &shield_bounce_lut_obj, &num_players)) {
     return NULL;
   }
   PyArrayObject* seed_exists =
@@ -9471,12 +9472,14 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
       require_contiguous_array(ref_instance_hit_by_obj, NPY_UINT16, 2, "ref_instance_hit_by_u16");
   PyArrayObject* laser_lut =
       require_contiguous_array(laser_lut_obj, NPY_UINT8, 1, "laser_type_lut");
+  PyArrayObject* shield_bounce_lut =
+      require_contiguous_array(shield_bounce_lut_obj, NPY_UINT8, 1, "shield_bounce_type_lut");
   if (seed_exists == NULL || seed_type == NULL || seed_owner == NULL || seed_iid == NULL ||
       seed_spawn == NULL || seed_dir == NULL || seed_vx == NULL || seed_vy == NULL ||
       ref_exists == NULL || ref_type == NULL || ref_owner == NULL || ref_iid == NULL ||
       ref_spawn == NULL || ref_vx == NULL || ref_vy == NULL || seed_action == NULL ||
       ref_action == NULL || ref_hitlag == NULL || ref_hitstun == NULL ||
-      ref_instance_hit_by == NULL || laser_lut == NULL) {
+      ref_instance_hit_by == NULL || laser_lut == NULL || shield_bounce_lut == NULL) {
     return NULL;
   }
   const npy_intp n = PyArray_DIM(seed_exists, 0);
@@ -9506,7 +9509,7 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
       PyArray_DIM(seed_action, 1) != PyArray_DIM(ref_hitlag, 1) ||
       PyArray_DIM(seed_action, 1) != PyArray_DIM(ref_hitstun, 1) ||
       PyArray_DIM(seed_action, 1) != PyArray_DIM(ref_instance_hit_by, 1) ||
-      PyArray_SIZE(laser_lut) < 65536) {
+      PyArray_SIZE(laser_lut) < 65536 || PyArray_SIZE(shield_bounce_lut) < 65536) {
     PyErr_SetString(PyExc_ValueError, "item hidden callback action/LUT inputs are invalid");
     return NULL;
   }
@@ -9563,6 +9566,7 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
   const uint16_t* rhitstun = (const uint16_t*)PyArray_DATA(ref_hitstun);
   const uint16_t* rhitby = (const uint16_t*)PyArray_DATA(ref_instance_hit_by);
   const uint8_t* laser = (const uint8_t*)PyArray_DATA(laser_lut);
+  const uint8_t* shield_bounce = (const uint8_t*)PyArray_DATA(shield_bounce_lut);
   uint16_t* riid_out = (uint16_t*)PyArray_DATA(reflect_iid);
   uint8_t* bvalid = (uint8_t*)PyArray_DATA(bounce_valid);
   float* bvx = (float*)PyArray_DATA(bounce_vx);
@@ -9580,13 +9584,16 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
       const npy_intp idx = (i * slots) + it;
       if (se[idx] == 0u) continue;
       const uint16_t item_type = st[idx];
-      if (laser[item_type] == 0u) continue;
+      const bool is_laser = laser[item_type] != 0u;
+      const bool is_shield_bounce_item = shield_bounce[item_type] != 0u;
+      if (!is_laser && !is_shield_bounce_item) continue;
       const uint16_t seed_item_iid = siid[idx];
       const int seed_item_owner = (int)so[idx];
       const bool ref_exists_now = re[idx] != 0u;
       const bool ref_same_item = ref_exists_now && rt[idx] == item_type &&
                                  riid[idx] == seed_item_iid && rspawn[idx] == sspawn[idx];
-      if (guard_context && ref_exists_now && rt[idx] == item_type && rspawn[idx] == sspawn[idx]) {
+      if (is_laser && guard_context && ref_exists_now && rt[idx] == item_type &&
+          rspawn[idx] == sspawn[idx]) {
         const int ref_item_owner = (int)ro[idx];
         const uint16_t ref_item_iid = riid[idx];
         if (ref_item_owner >= 0 && ref_item_owner < players &&
@@ -9595,16 +9602,19 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
           riid_out[idx] = ref_item_iid;
         }
       }
-      if (guard_context && ref_same_item && (int)ro[idx] == seed_item_owner) {
+      if (is_shield_bounce_item && guard_context && ref_same_item &&
+          (int)ro[idx] == seed_item_owner) {
         const float dx = rvx[idx] - svx[idx];
         const float dy = rvy[idx] - svy[idx];
+        const float ref_speed2 = (rvx[idx] * rvx[idx]) + (rvy[idx] * rvy[idx]);
         if (isfinite(svx[idx]) && isfinite(svy[idx]) && isfinite(rvx[idx]) && isfinite(rvy[idx]) &&
-            (dx * dx + dy * dy) > 1.0e-6f) {
+            (dx * dx + dy * dy) > 1.0e-6f && ref_speed2 > 1.0e-6f) {
           // Hidden ShieldBounced xC58 provenance can be a shallow mirror, especially for
           // GuardReflect -> ShieldDesc fallthrough where the source lbColl normal is almost
           // vertical. A large velocity-delta threshold drops real Item_80269DC8 ownership and
-          // forces runtime to guess from public item velocity. Guard context plus same laser
-          // identity/same owner are the source filter; the epsilon only rejects serialization noise.
+          // forces runtime to guess from public item velocity. Guard context plus same
+          // shield-bounce-capable item identity/same owner are the source filter; the epsilon only
+          // rejects serialization noise.
           // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077688,ftColl_8007925C}
           // refs/melee/src/melee/it/item.c::Item_80269DC8
           // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
@@ -9613,8 +9623,8 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
           bvy[idx] = rvy[idx];
         }
       }
-      if (!ref_exists_now && !ref_same_item && isfinite(sdir[idx]) && isfinite(svx[idx]) &&
-          sdir[idx] * svx[idx] < 0.0f) {
+      if (is_laser && !ref_exists_now && !ref_same_item && isfinite(sdir[idx]) &&
+          isfinite(svx[idx]) && sdir[idx] * svx[idx] < 0.0f) {
         uint8_t victim = 0xFFu;
         for (int p = 0; p < players; p++) {
           const npy_intp pidx = (i * width) + p;

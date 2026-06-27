@@ -191,12 +191,12 @@ rollout.streak_len.p90: 777
 rollout.streak_len.p95: 1050
 rollout.streak_len.max: 1462
 rollout.first_mismatch_total: 41
-rollout.first_mismatch_seeded_total: 33
+rollout.first_mismatch_seeded_total: 32
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=11.3603 rec=1008 p=1 seed/ref/out=43.3364/42.9759/31.6155 actions=90/201/201 category=unclassified
   2. pos_y max_err=9.48472 rec=10338 p=0 seed/ref/out=9.3751/9.4876/0.00287533 actions=178/178/178 category=unclassified
-  3. percent max_err=2 rec=3390 p=0 seed/ref/out=112.25/112.25/110.25 actions=29/29/29 category=unclassified
+  3. percent max_err=2 rec=3389 p=0 seed/ref/out=112.25/112.25/110.25 actions=29/29/29 category=unclassified
 rollout.float_top_downstream:
   1. pos_y max_err=14.1144 rec=1963 p=0 seed/ref/out=16.0681/22.1251/8.01072 actions=85/42/85 category=downstream_discrete_mismatch
   2. percent max_err=11.04 rec=500 p=1 seed/ref/out=23/34.04/23 actions=90/86/90 category=downstream_discrete_mismatch
@@ -275,7 +275,7 @@ overall.rollout.streak_len.p95: 1592
 overall.rollout.streak_len.max: 2803
 overall.rollout.best_len.max: 2803
 overall.rollout.first_mismatch_total: 253
-overall.rollout.first_mismatch_seeded_total: 156
+overall.rollout.first_mismatch_seeded_total: 155
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=148.729 rec=7437 p=1 seed/ref/out=-18.905/-19.2322/129.497 actions=7/7/7 category=unclassified

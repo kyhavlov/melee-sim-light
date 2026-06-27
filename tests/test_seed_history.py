@@ -5,7 +5,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.slippi.combat_history import derive_combat_hitlist_seed_fields
+from tools.slippi.combat_history import (
+    _localize_last_hit_by_for_native,
+    derive_combat_hitlist_seed_fields,
+)
 from tools.slippi.anim_timebase import EndFrameTables, derive_frame_speed_mul_f32
 from tools.slippi.seed_history import (
     compute_fighter_button_timers,
@@ -45,6 +48,7 @@ from tools.slippi.make_dataset_from_slp import _derive_attackdash_x0_seed_lane
 from tools.slippi.make_dataset_from_slp import _derive_mpcoll_wall_seed_lanes
 from tools.slippi.make_dataset_from_slp import _derive_passivewall_timer
 from tools.slippi.make_dataset_from_slp import _derive_grounded_overlap_hidden_pos_z
+from tools.eval.dataset import read_dataset
 
 
 def test_compute_tilt_timer_axis_basic_sequence() -> None:
@@ -2688,6 +2692,97 @@ def test_derive_combat_hitlist_seed_fields_per_hitbox_schema_shape() -> None:
     assert not bool(np.any(group_cd))
     assert not bool(np.any(hb_valid))
     assert not bool(np.any(shield_contact_kind))
+
+
+def test_last_hit_by_raw_port_mapping_keeps_ambiguous_local_slots() -> None:
+    # Out-of-range raw controller ports prove source_port0 ownership only on a replay-visible
+    # damage onset from a prior shield-family row that also names the attacker's live instance.
+    # In-range values are ambiguous with legacy local-slot seed lanes and must keep the local
+    # meaning so the raw-port repair does not widen unrelated hitlist provenance.
+    got = _localize_last_hit_by_for_native(
+        last_hit_by=np.array([[0, 1], [2, 3], [3, 2], [4, 0]], dtype=np.uint8),
+        source_port0=np.array([[1, 0], [2, 3], [0, 3], [1, 0]], dtype=np.uint8),
+        action_id=np.array([[0xB2, 0xB2], [0x59, 0x59], [0x59, 0x59], [0x59, 0x59]], dtype=np.uint16),
+        hitlag=np.array([[0, 0], [4, 4], [4, 4], [4, 0]], dtype=np.uint16),
+        percent=np.array([[0.0, 0.0], [5.0, 5.0], [5.0, 6.0], [7.0, 6.0]], dtype=np.float32),
+        instance_hit_by=np.array([[0, 0], [11, 21], [22, 12], [13, 0]], dtype=np.uint16),
+        instance_id=np.array([[10, 20], [11, 21], [12, 22], [13, 23]], dtype=np.uint16),
+        num_players=2,
+    )
+    assert got.tolist() == [[0, 1], [0, 1], [0xFF, 0xFF], [0xFF, 0]]
+
+
+@pytest.mark.integration
+def test_guardon_body_admission_hitlist_uses_raw_source_port_mapping() -> None:
+    # RuralReasonableRat:2973 is a GuardOn ShieldDesc-miss -> BODY hit. The active BAir hitboxes
+    # carry a stale dense hitlist entry from the prior no-damage GuardOn overlap, but the next
+    # post-frame proves BODY damage from raw source port 3. The selected local attacker slot is 1,
+    # so replay-only BODY admission must compare last_hit_by against source_port0, not local slot.
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by raw controller-port lane)
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+    ds = read_dataset(str(dataset_path))
+    rec = 2973
+    attacker = 1
+    defender = 0
+    samples = ds.samples
+    cur = samples[rec]["seed_t"]
+    nxt = samples[rec + 1]["seed_t"]
+
+    def stack_seed(name: str) -> np.ndarray:
+        return np.ascontiguousarray(samples["seed_t"][name])
+
+    def stack_input(name: str) -> np.ndarray:
+        return np.ascontiguousarray(samples["input_t"]["p"][name])
+
+    common_kwargs = dict(
+        num_players=2,
+        is_teams=False,
+        team_id=stack_seed("team_id"),
+        char_id=stack_seed("char_id"),
+        action_id=stack_seed("action_id"),
+        action_frame=stack_seed("action_frame"),
+        animation_index=stack_seed("animation_index"),
+        facing=stack_seed("facing"),
+        on_ground=stack_seed("on_ground"),
+        pos_x=stack_seed("pos_x"),
+        pos_y=stack_seed("pos_y"),
+        fighter_scale_y=stack_seed("fighter_scale_y"),
+        guard_tilt_x8=stack_seed("guard_tilt_x8"),
+        guard_tilt_x4=stack_seed("guard_tilt_x4"),
+        stocks=stack_seed("stocks"),
+        percent=stack_seed("percent"),
+        shield_hp=stack_seed("shield_hp"),
+        hurtbox_state=stack_seed("hurtbox_state"),
+        hitlag=stack_seed("hitlag"),
+        last_hit_by=stack_seed("last_hit_by"),
+        instance_hit_by=stack_seed("instance_hit_by"),
+        instance_id=stack_seed("instance_id"),
+        input_buttons=stack_input("buttons"),
+        input_l=stack_input("l"),
+        input_r=stack_input("r"),
+        anim_frame_f32=stack_seed("anim_frame_f32"),
+        frame_speed_mul_f32=stack_seed("frame_speed_mul_f32"),
+        include_per_hitbox=True,
+        include_replay_only_body_admission=True,
+        data_root="data",
+    )
+    assert int(cur["last_hit_by"][defender]) == 3
+    assert int(cur["source_port0"][attacker]) == 3
+    assert int(nxt["last_hit_by"][defender]) == 3
+    assert int(nxt["instance_hit_by"][defender]) == int(cur["instance_id"][attacker])
+
+    no_map = derive_combat_hitlist_seed_fields(**common_kwargs)
+    with_map = derive_combat_hitlist_seed_fields(
+        **common_kwargs,
+        source_port0=stack_seed("source_port0"),
+    )
+    assert [int(x) for x in no_map[2][rec, attacker]] == [0, 0, 0, 0]
+    assert [int(x) for x in with_map[2][rec, attacker]] == [1, 1, 1, 0]
+    assert [int(with_map[3][rec, attacker, hb, defender]) for hb in range(4)] == [0, 0, 0, 0]
+    assert [int(with_map[4][rec, attacker, hb, defender]) for hb in range(4)] == [0, 0, 0, 0]
 
 
 def test_seed_bridge_trim_preserves_authoritative_per_hitbox_hitlist() -> None:

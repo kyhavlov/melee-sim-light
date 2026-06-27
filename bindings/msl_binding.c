@@ -7833,7 +7833,8 @@ static PyMethodDef methods[] = {
      "float32[:,slots]"},
     {"derive_item_hidden_callback_seed_lanes", msl_derive_item_hidden_callback_seed_lanes_py,
      METH_VARARGS,
-     "derive_item_hidden_callback_seed_lanes(seed/ref item fields, action fields, laser LUT) -> "
+     "derive_item_hidden_callback_seed_lanes(seed/ref item fields, action fields, laser and "
+     "shield-bounce LUTs) -> "
      "item hidden callback arrays"},
     {"derive_yoshi_shyguy_seed_lanes", msl_derive_yoshi_shyguy_seed_lanes_py, METH_VARARGS,
      "derive_yoshi_shyguy_seed_lanes(item fields, params...) -> Shy Guy seed lanes"},

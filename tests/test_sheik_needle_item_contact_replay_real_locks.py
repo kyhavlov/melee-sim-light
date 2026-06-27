@@ -442,6 +442,32 @@ def test_sheik_thrown_needle_catchdash_entry_pose_rejects_body_overlap_aac(recor
 
 
 @pytest.mark.integration
+def test_sheik_needle_first_active_guardsetoff_shieldbounced_contact_replay_real() -> None:
+    # ZestyPreciousTurtle:5537 is a first-active thrown Needle ShieldDesc hit while Marth is already
+    # in GuardSetOff. The source still reaches ftColl_80077688 / Item_80269DC8 for this current
+    # command-11 HitCapsule packet; because the ShieldBounced predicate owns the contact, the Needle
+    # remains live in state 0 with mirrored velocity instead of running the HitShield destroy/state-4
+    # callback.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077688,ftColl_8007925C}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_ShieldBounced
+    seed, ref, out = _run_row(5537, dataset=ZESTY_DATASET)
+
+    assert int(seed["items"]["type"][0]) == ITEM_NEEDLE_THROWN
+    assert int(seed["items"]["state"][0]) == 0
+    assert int(seed["items"]["timer"][0]) == 30
+    assert int(seed["action_id"][P_MARTH]) == 181  # GuardSetOff.
+
+    assert int(out["action_id"][P_MARTH]) == int(ref["action_id"][P_MARTH]) == 181
+    assert int(out["hitlag"][P_MARTH]) == int(ref["hitlag"][P_MARTH]) == 4
+    assert float(out["shield_hp"][P_MARTH]) == pytest.approx(float(ref["shield_hp"][P_MARTH]))
+    assert int(out["items"]["type"][0]) == int(ref["items"]["type"][0]) == ITEM_NEEDLE_THROWN
+    assert int(out["items"]["state"][0]) == int(ref["items"]["state"][0]) == 0
+    assert float(out["items"]["vel_x"][0]) == pytest.approx(float(ref["items"]["vel_x"][0]), abs=1e-5)
+    assert float(out["items"]["vel_y"][0]) == pytest.approx(float(ref["items"]["vel_y"][0]), abs=1e-5)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("record", [5541, 5542])
 def test_sheik_needle_same_volley_guardsetoff_packet_does_not_rehit_shield(record: int) -> None:
     # ZestyPreciousTurtle:5541/5542 are existing GuardSetOff shield-hit packets from the same

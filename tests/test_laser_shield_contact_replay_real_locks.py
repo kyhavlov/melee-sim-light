@@ -1956,6 +1956,52 @@ def test_landing_carried_laser_steady_guardon_live_article_stays_point_sample() 
 
 
 @pytest.mark.integration
+def test_guardon_command_behavior_root_x_laser_hits_only_after_current_segment_reaches_tsh() -> None:
+    # Positive/negative pair for no-submotion GuardOn x2218 command/behavior item ShieldDesc:
+    # - TSH:9187 has the same GuardOn/x2218=0xA4/Falco-laser family but the current item segment has
+    #   not reached the source root-X ShieldDesc sample, so vanilla stays GuardOn.
+    # - TSH:9188 is the next row; ftColl_8007925C consumes the current item HitCapsule segment
+    #   against ShieldDesc and Item_80269DC8 resolves HitShield/GuardSetOff.
+    # The owner is the GuardOn command/behavior lane plus current source segment geometry, not the
+    # replay row id or a broad GuardOn laser admission.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardOn_Anim,ftCo_80091E78,ftCo_80092450}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 0
+    neg_seed, neg_ref, neg_out = _run_one_step_row(dataset_path, 9187, p)
+    assert int(neg_seed["action_id"][p]) == 178
+    assert int(neg_seed["action_frame"][p]) == -1
+    assert int(neg_seed["animation_index"][p]) == 0xFFFFFFFF
+    assert int(neg_seed["state_flags"][p][0]) == 0xA4
+    assert int(neg_seed["items"][1]["exists"]) == 1
+    assert int(neg_seed["items"][1]["type"]) == 55
+    assert int(neg_ref["action_id"][p]) == 178
+    assert int(neg_out["action_id"][p]) == 178
+    assert int(neg_out["hitlag"][p]) == 0
+    assert float(neg_out["shield_hp"][p]) == pytest.approx(float(neg_ref["shield_hp"][p]), abs=5e-4)
+
+    pos_seed, pos_ref, pos_out = _run_one_step_row(dataset_path, 9188, p)
+    assert int(pos_seed["action_id"][p]) == 178
+    assert int(pos_seed["action_frame"][p]) == -1
+    assert int(pos_seed["animation_index"][p]) == 0xFFFFFFFF
+    assert int(pos_seed["state_flags"][p][0]) == 0xA4
+    assert int(pos_seed["items"][1]["exists"]) == 1
+    assert int(pos_seed["items"][1]["type"]) == 55
+    assert int(pos_ref["action_id"][p]) == 181
+    assert int(pos_out["action_id"][p]) == 181
+    assert int(pos_out["hitlag"][p]) == int(pos_ref["hitlag"][p]) == 3
+    assert float(pos_out["shield_hp"][p]) == pytest.approx(float(pos_ref["shield_hp"][p]), abs=5e-4)
+    assert int(pos_out["items"][1]["exists"]) == int(pos_ref["items"][1]["exists"]) == 0
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
     [

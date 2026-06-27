@@ -2592,6 +2592,148 @@ def test_neutral_current_guardon_x20_accepts_strong_attackairlw_tsh_rollout_cont
 
 
 @pytest.mark.integration
+def test_sheik_nair_guardon_x10_uses_live_prev_action_not_stale_seed_prev_gra() -> None:
+    # Runtime-positive/adjacent-negative for sustained no-submotion GuardOn x10 provenance:
+    # - GRA:4400 is a Sheik NAir outer-hb ShieldDesc hit against Fox's no-submotion GuardOn.
+    # - The rollout has carried the defender's live previous action as GuardOn from 4399, but the
+    #   replay seed lane still exposes the stale pre-entry aerial action. Source ownership is the
+    #   live `ftCo_GuardOn_Anim -> ftCo_80091E78` x10 path, not the stale seed_prev lane.
+    # - GRA:4399 is the adjacent quiet frame: the same rollout has entered GuardOn, but the current
+    #   NAir packet remains outside the source ShieldDesc extent and must not enter GuardSetOff.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    # data/moves/sheik.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/GlaringRosyAlpaca.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][4400]
+    assert int(seed["action_id"][attacker]) == 65  # AttackAirN.
+    assert int(seed["animation_index"][attacker]) == 68
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert int(seed["seed_prev_action_id"][defender]) == 71  # stale pre-entry aerial, not GuardOn.
+    assert int(seed["guard_x10"][defender]) != 0
+    assert int(seed["combat_shield_hit_int_damage"][defender]) == 9
+    assert int(seed["combat_shield_damage_taken"][defender]) == 10
+    assert all(
+        int(seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 2
+        for hb in range(4)
+    )
+
+    got = _run_rollout_records_replay_frame_rng(
+        dataset_path,
+        4349,
+        (4399, 4400),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    out_quiet, ref_quiet = got[4399]
+    assert int(ref_quiet["action_id"][defender]) == 178
+    assert int(out_quiet["action_id"][defender]) == 178
+    assert int(out_quiet["hitlag"][defender]) == int(ref_quiet["hitlag"][defender]) == 0
+    assert float(out_quiet["shield_hp"][defender]) == pytest.approx(
+        float(ref_quiet["shield_hp"][defender])
+    )
+
+    out_hit, ref_hit = got[4400]
+    assert int(ref_hit["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out_hit["action_id"][defender]) == 181
+    assert int(out_hit["hitlag"][defender]) == int(ref_hit["hitlag"][defender]) == 6
+    assert int(out_hit["hitlag"][attacker]) == int(ref_hit["hitlag"][attacker]) == 6
+    assert float(out_hit["shield_hp"][defender]) == pytest.approx(float(ref_hit["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_sheik_bair_guardon_x10_payload_uses_shielddesc_size_ugl() -> None:
+    # Runtime-positive/adjacent-negative for Sheik BAir's authored ShieldDesc.size lane:
+    # - UGL:757 is Sheik's late BAir payload against Fox's no-submotion GuardOn x10. Source
+    #   `lbColl_80007BCC` still includes the ShieldDesc.size term while GuardOn_Anim samples the
+    #   live x10 pose, so the shield hit must enter GuardSetOff.
+    # - UGL:756 is the adjacent quiet frame. It has the same GuardOn episode, but the current BAir
+    #   packet has not yet reached the source ShieldDesc boundary.
+    # Existing Fox/Falco AttackAirB x44 tests in this file keep this from becoming a generic BAir
+    # size bridge.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    # data/moves/sheik.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/UselessGlassLoris.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][757]
+    assert int(seed["char_id"][attacker]) == 7  # Sheik.
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
+    assert int(seed["animation_index"][attacker]) == 70
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert int(seed["seed_prev_action_id"][defender]) == 178
+    assert int(seed["guard_x10"][defender]) != 0
+    assert int(seed["combat_shield_hit_int_damage"][defender]) == 6
+    assert int(seed["combat_shield_damage_taken"][defender]) == 8
+    assert all(
+        int(seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 2
+        for hb in range(4)
+    )
+
+    got = _run_rollout_records_replay_frame_rng(
+        dataset_path,
+        0,
+        (756, 757),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    out_quiet, ref_quiet = got[756]
+    assert int(ref_quiet["action_id"][defender]) == 178
+    assert int(out_quiet["action_id"][defender]) == 178
+    assert int(out_quiet["hitlag"][defender]) == int(ref_quiet["hitlag"][defender]) == 0
+    assert float(out_quiet["shield_hp"][defender]) == pytest.approx(
+        float(ref_quiet["shield_hp"][defender])
+    )
+
+    out_hit, ref_hit = got[757]
+    assert int(ref_hit["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out_hit["action_id"][defender]) == 181
+    assert int(out_hit["hitlag"][defender]) == int(ref_hit["hitlag"][defender]) == 5
+    assert int(out_hit["hitlag"][attacker]) == int(ref_hit["hitlag"][attacker]) == 5
+    assert float(out_hit["shield_hp"][defender]) == pytest.approx(float(ref_hit["shield_hp"][defender]))
+
+    # The supplemental size lane is not a generic Sheik BAir shortcut: WRA:3486 has the same
+    # no-submotion GuardOn x10 family, but the live strong outer hb3 is still outside the source
+    # ShieldDesc packet and must remain GuardOn.
+    negative_path = root / "datasets/sheik/replays/validation/sheik/WavyRundownAardvark.msl"
+    if not negative_path.exists():
+        pytest.skip(f"missing local dataset: {negative_path}")
+
+    neg_got = _run_rollout_records_replay_frame_rng(
+        negative_path,
+        3166,
+        (3486,),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    neg_out, neg_ref = neg_got[3486]
+    assert int(neg_ref["action_id"][defender]) == 178
+    assert int(neg_out["action_id"][defender]) == 178
+    assert int(neg_out["hitlag"][defender]) == int(neg_ref["hitlag"][defender]) == 0
+    assert float(neg_out["shield_hp"][defender]) == pytest.approx(
+        float(neg_ref["shield_hp"][defender])
+    )
+
+
+@pytest.mark.integration
 def test_continuing_guardon_x20_extent_keeps_tilted_doubles_miss() -> None:
     # Negative boundary for the reduced ShieldDesc extent supplement:
     # - This doubles row has the same continuing GuardOn + early AttackAirLw broad owner shape as

@@ -359,9 +359,10 @@ def test_attackairn_current_instance_damage_common_dense_latch_aac_962() -> None
 @pytest.mark.integration
 def test_sheik_attackairn_older_same_port_damageflyroll_latch_releases_toc_10988() -> None:
     # Adjacent negative for the current-instance gate: TOC:10988 carries the same dense group victim
-    # from an older same-port NAir episode, but `instance_hit_by` no longer names the current NAir
-    # action instance. The source HitCapsule latch is stale for this active frame, so the BODY hit
-    # must be admitted; only the DamageFlyRoll RNG/action choice remains outside this owner.
+    # from an older same-port NAir episode. Raw-port reconstruction can still recover valid
+    # per-HitCapsule lanes, but `instance_hit_by` no longer names the current NAir action instance.
+    # The source HitCapsule latch is stale for this active frame, so the BODY hit must be admitted;
+    # only the DamageFlyRoll RNG/action choice remains outside this owner.
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
     root = Path(__file__).resolve().parents[1]
@@ -381,7 +382,7 @@ def test_sheik_attackairn_older_same_port_damageflyroll_latch_releases_toc_10988
     assert int(seed_row["instance_hit_by"][victim]) != int(seed_row["instance_id"][attacker])
     assert int(seed_row["last_hit_by"][victim]) == int(seed_row["source_port0"][attacker])
     assert int(seed_row["combat_hitlist_cd"][attacker, 0, victim]) == 0xFFFF
-    assert [int(v) for v in seed_row["combat_hitlist_hb_valid"][attacker]] == [0, 0, 0, 0]
+    assert [int(v) for v in seed_row["combat_hitlist_hb_valid"][attacker]] == [1, 1, 1, 0]
 
     hitlist_contains = _pre_combat_hitlist_contains(dataset_path, record, seed, attacker, victim)
     assert hitlist_contains == [0, 0, 0, 0]

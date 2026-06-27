@@ -3514,6 +3514,7 @@ def _derive_item_hidden_callback_seed_lanes(
     ref_instance_hit_by_u16: np.ndarray,
     num_players: int,
     laser_types: tuple[int, ...],
+    shield_bounce_types: tuple[int, ...],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Derive hidden item callback/collision seed lanes for teacher-forced replay reseed.
 
@@ -3547,6 +3548,9 @@ def _derive_item_hidden_callback_seed_lanes(
     laser_lut = np.zeros(65536, dtype=np.uint8)
     for item_kind in laser_types:
         laser_lut[int(item_kind) & 0xFFFF] = np.uint8(1)
+    shield_bounce_lut = np.zeros(65536, dtype=np.uint8)
+    for item_kind in shield_bounce_types:
+        shield_bounce_lut[int(item_kind) & 0xFFFF] = np.uint8(1)
     return msl_binding.derive_item_hidden_callback_seed_lanes(
         np.ascontiguousarray(seed_items["exists"], dtype=np.uint8),
         np.ascontiguousarray(seed_items["type"], dtype=np.uint16),
@@ -3569,6 +3573,7 @@ def _derive_item_hidden_callback_seed_lanes(
         np.ascontiguousarray(ref_hitstun_u16, dtype=np.uint16),
         np.ascontiguousarray(ref_instance_hit_by_u16, dtype=np.uint16),
         laser_lut,
+        shield_bounce_lut,
         int(num_players),
     )
 
@@ -3973,6 +3978,8 @@ def _main_impl(args) -> Dataset:
     data_root = Path("data")
     air_drift_max_by_char = _load_f32_character_attr_lut(data_root, "air_drift_max")
     laser_item_types = item_article_kind_set(data_root, "blaster_shot_itkind")
+    needle_throw_item_types = item_article_kind_set(data_root, "needle_throw_itkind")
+    shield_bounce_item_types = tuple(sorted(set(laser_item_types) | set(needle_throw_item_types)))
     laser_kind_by_char = item_article_values_by_sim_char(data_root, "blaster_shot_itkind")
     throw_laser_hitbox_masks = {
         int(laser_kind_by_char[1]): np.uint8(0x03),
@@ -6253,6 +6260,7 @@ def _main_impl(args) -> Dataset:
     post_hitstun = np.zeros((n_frames, 4), dtype=np.uint16)
     post_state_flags = np.zeros((n_frames, 4, 5), dtype=np.uint8)
     post_last_hit_by = np.full((n_frames, 4), 0xFF, dtype=np.uint8)
+    post_source_port0 = np.full((n_frames, 4), 0xFF, dtype=np.uint8)
     pre_buttons = np.zeros((n_frames, 4), dtype=np.uint16)
     pre_main_x_2d = np.zeros((n_frames, 4), dtype=np.int8)
     pre_main_y_2d = np.zeros((n_frames, 4), dtype=np.int8)
@@ -6294,6 +6302,7 @@ def _main_impl(args) -> Dataset:
         post_instance_id[:, slot] = _to_numpy(post.field("instance_id")).astype(np.uint16)
         post_hitlag[:, slot] = _u16_from_float_frames(_to_numpy(post.field("hitlag")).astype(np.float32), n_frames)
         post_last_hit_by[:, slot] = _to_numpy(post.field("last_hit_by")).astype(np.uint8)
+        post_source_port0[:, slot] = np.uint8(int(src_ports[slot]) - 1)
         sf = post.field("state_flags")
         post_state_flags[:, slot, :] = np.stack(
             [
@@ -6769,6 +6778,7 @@ def _main_impl(args) -> Dataset:
         ref_instance_hit_by_u16=samples["ref_t1"]["instance_hit_by"],
         num_players=num_players,
         laser_types=laser_item_types,
+        shield_bounce_types=shield_bounce_item_types,
     )
     samples["seed_t"]["item_reflect_transfer_port"] = item_reflect_transfer_port
     samples["seed_t"]["item_reflect_transfer_iid"] = item_reflect_transfer_iid
@@ -6918,6 +6928,7 @@ def _main_impl(args) -> Dataset:
         hurtbox_state=post_hurtbox_state,
         hitlag=post_hitlag,
         last_hit_by=post_last_hit_by,
+        source_port0=post_source_port0,
         instance_hit_by=post_instance_hit_by,
         instance_id=post_instance_id,
         input_buttons=pre_buttons,

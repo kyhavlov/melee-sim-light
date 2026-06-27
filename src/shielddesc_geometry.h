@@ -413,14 +413,18 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
     }
   }
 
-  const uint8_t guardon_raise_shield_no_submotion_attackair_x10 =
+  const uint8_t guardon_raise_no_submotion_attackair_x10_base =
       (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
        batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] == UINT32_MAX &&
        batch->state.guard_on_entered_this_frame[d_idx] == 0u &&
        batch->state.guard_x10[d_idx] != 0u &&
-       msl_action_is_live_shield_family(batch->state.seed_prev_action_id[d_idx]) &&
        msl_motion_state_common_class_has_fast(batch->state.action_id[a_idx],
                                               MSL_MS_CLASS_ATTACK_AIR))
+          ? 1u
+          : 0u;
+  const uint8_t guardon_raise_shield_no_submotion_attackair_x10 =
+      (guardon_raise_no_submotion_attackair_x10_base &&
+       msl_action_is_live_shield_family(batch->state.seed_prev_action_id[d_idx]))
           ? 1u
           : 0u;
   const MslCommonParams* shield_c = msl_common_params();
@@ -504,7 +508,26 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
        batch->state.hitbox_damage[hb_i] == 12.0f)
           ? 1u
           : 0u;
-  if (guardon_raise_shield_no_submotion_attackair_x10) {
+  const uint8_t guardon_raise_sheik_attackairn_b2_current_center =
+      (guardon_raise_no_submotion_attackair_x10_base &&
+       // Free rollout owns this sustained GuardOn path through the live previous action; one-step
+       // reseed may only have the source callback owner in seed_prev_action_id. Keep this live-prev
+       // extension local to the Sheik NAir B2 current-center owner so shared GuardOn x10 BAir/DAir
+       // x44 and tilt controls stay on their existing seed-proven lanes.
+       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+       (msl_action_is_live_shield_family(batch->state.prev_action_id[d_idx]) ||
+        msl_action_is_live_shield_family(batch->state.seed_prev_action_id[d_idx])) &&
+       batch->state.char_id[a_idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_N &&
+       batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_AIR_N &&
+       fabsf(batch->state.guard_tilt_x4[d_idx]) <= FLT_EPSILON &&
+       (batch->state.state_flags_2218_frame_start[d_idx] &
+        (uint8_t)(MSL_STATE_FLAG_2218_B1 | MSL_STATE_FLAG_2218_B2 |
+                  MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR)) == (uint8_t)MSL_STATE_FLAG_2218_B2)
+          ? 1u
+          : 0u;
+  if (guardon_raise_shield_no_submotion_attackair_x10 &&
+      guardon_raise_sheik_attackairn_b2_current_center == 0u) {
     MslShieldTiltTableView tv;
     if (msl_shield_tilt_table_view(batch->state.char_id[d_idx], &tv) == 0 && tv.xyz != NULL &&
         tv.frame_count > 0u) {
@@ -711,6 +734,57 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
        batch->state.hitbox_damage[hb_i] == 15.0f)
           ? 1u
           : 0u;
+  // Sheik AttackAirB vs no-submotion GuardOn ShieldDesc.size:
+  // Sheik's authored BAir packet has a distinct two-phase damage layout (8/8/10/14 then
+  // 6/7/9/10) and source still forwards ShieldDesc.size through lbColl_80007BCC while GuardOn x10
+  // is live. Keep this supplement to the extracted root/inner strong packet and weak late-tail
+  // packet; the strong outer hb3 stays on exact matrix ownership because its far-tail source rows
+  // have replay-real ShieldDesc miss controls. Fox/Falco BAir x44 and weak-tail controls use
+  // separate owners.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+  // data/moves/sheik.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  const uint8_t sheik_attackairb_payload =
+      (batch->state.char_id[a_idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
+       batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_AIR_B &&
+       ((hb_id == 0u &&
+         (batch->state.hitbox_damage[hb_i] == 8.0f || batch->state.hitbox_damage[hb_i] == 6.0f)) ||
+        (hb_id == 1u &&
+         (batch->state.hitbox_damage[hb_i] == 8.0f || batch->state.hitbox_damage[hb_i] == 7.0f)) ||
+        (hb_id == 2u &&
+         (batch->state.hitbox_damage[hb_i] == 10.0f || batch->state.hitbox_damage[hb_i] == 9.0f)) ||
+        (hb_id == 3u && batch->state.hitbox_damage[hb_i] == 10.0f)))
+          ? 1u
+          : 0u;
+  const uint8_t sheik_attackairb_guardon_x10_size_lane =
+      (guardon_raise_shield_no_submotion_attackair_x10 && sheik_attackairb_payload != 0u &&
+       batch->state.hitbox_prev_enabled[hb_i] != 0u)
+          ? 1u
+          : 0u;
+  // Sheik AttackAirN outer HitCapsule vs sustained no-submotion GuardOn B2 ShieldDesc extent:
+  // - Source continues through `ftCo_GuardOn_Anim -> ftCo_80091E78` while Slippi still exposes a
+  //   no-submotion GuardOn snapshot. The B2 command lane owns the current ShieldDesc center rather
+  //   than the x20 target-center owner above, and `lbColl_80007BCC` forwards the small ShieldDesc
+  //   extent for the current outer NAir capsule.
+  // - Keep this to the authored 10-damage hb3 outer capsule and B2-only GuardOn command lane.
+  //   Earlier rows with the same NAir family remain outside the extent radius, and B1/reflect
+  //   behavior rows stay on their existing shield/contact owners.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  // data/moves/sheik.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+  const uint8_t attackairn_outer_guardon_b2_extent_lane =
+      (guardon_raise_sheik_attackairn_b2_current_center != 0u &&
+       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_N &&
+       batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_AIR_N &&
+       (batch->state.state_flags_2218_frame_start[d_idx] &
+        (uint8_t)(MSL_STATE_FLAG_2218_B1 | MSL_STATE_FLAG_2218_B2 |
+                  MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR)) == (uint8_t)MSL_STATE_FLAG_2218_B2 &&
+       hb_id == 3 && batch->state.hitbox_damage[hb_i] == 10.0f)
+          ? 1u
+          : 0u;
   // No-submotion GuardOn entry/raise rows can expose a recreated ShieldDesc before Slippi exposes
   // a settled Guard submotion. Keep the ShieldDesc.size term on source create/enable edges only;
   // persistent aerial capsules have replay-real miss controls and must stay on the ordinary matrix
@@ -781,7 +855,7 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
          guardon_raise_neutral_strong_attackairlw_extent_lane ||
          attackairb_weak_tail_tilted_guard_extent_lane ||
          attackairn_root_guardon_raise_neutral_input_size_lane ||
-         attackairb_strong_root_guardon_raise_size_lane ||
+         attackairb_strong_root_guardon_raise_size_lane || sheik_attackairb_guardon_x10_size_lane ||
          landing_guard_entry_attackhi3_hb1_sweep_size_lane)) ||
        guardreflect_expired_no_submotion_attackairlw_persistent_size_lane)
           ? shield_desc_world_r
@@ -790,13 +864,14 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
   const uint8_t shield_extent_lane_active =
       (shield_desc_envelope_ready && !guardreflect_final_x14_no_submotion &&
        (!guardon_already_shielding_no_submotion || guardon_raise_no_tilt_extent_lane ||
-        guardon_raise_neutral_strong_attackairlw_extent_lane) &&
+        guardon_raise_neutral_strong_attackairlw_extent_lane ||
+        attackairn_outer_guardon_b2_extent_lane) &&
        !attackairlw_weak_multihit_guard_enable_edge_extent_reject &&
        (batch->state.hitbox_enable_edge[hb_i] || shield_extent_bridge_active ||
         guardon_raise_no_tilt_extent_lane || attackairlw_strong_no_submotion_guard_extent_lane ||
         guardon_raise_neutral_strong_attackairlw_extent_lane ||
         attackairn_root_guardon_raise_neutral_input_size_lane ||
-        attackairb_weak_tail_tilted_guard_extent_lane))
+        attackairb_weak_tail_tilted_guard_extent_lane || attackairn_outer_guardon_b2_extent_lane))
           ? 1u
           : 0u;
   // The real helper forwards `lbColl_804D7A34 * defender_scale` into the full matrix narrowphase.

@@ -323,25 +323,25 @@ overall.float_norm_mae_p95: 0.00024797
 
 == datasets/spacies_heldout/replays/heldout/spacies/UnhealthyMajorJackal.msl ==
 Records: 12225  Players/scored per record: 2  Total player-frames: 24450
-mismatch.action_id: 38 / 24450 (0.001554)
-mismatch.action_frame: 28 / 24450 (0.001145)
-mismatch.on_ground: 23 / 24450 (0.000941)
-mismatch.facing: 3 / 24450 (0.000123)
+mismatch.action_id: 37 / 24450 (0.001513)
+mismatch.action_frame: 27 / 24450 (0.001104)
+mismatch.on_ground: 22 / 24450 (0.000900)
+mismatch.facing: 2 / 24450 (0.000082)
 mismatch.stocks: 0 / 24450 (0.000000)
-mismatch.jumps_left: 24 / 24450 (0.000982)
+mismatch.jumps_left: 23 / 24450 (0.000941)
 mismatch.is_dead: 0 / 24450 (0.000000)
-mismatch.hitlag: 23 / 24450 (0.000941)
-mismatch.hitstun: 9 / 24450 (0.000368)
+mismatch.hitlag: 21 / 24450 (0.000859)
+mismatch.hitstun: 8 / 24450 (0.000327)
 mismatch.l_cancel: 1 / 24450 (0.000041)
 mismatch.hurtbox_state: 2 / 24450 (0.000082)
 mismatch.ground_id: 18 / 24450 (0.000736)
-mismatch.animation_index: 38 / 24450 (0.001554)
-mismatch.instance_hit_by: 6 / 24450 (0.000245)
-mismatch.instance_id: 28 / 24450 (0.001145)
-mismatch.last_attack_landed: 6 / 24450 (0.000245)
-mismatch.combo_count: 3 / 24450 (0.000123)
+mismatch.animation_index: 37 / 24450 (0.001513)
+mismatch.instance_hit_by: 5 / 24450 (0.000204)
+mismatch.instance_id: 27 / 24450 (0.001104)
+mismatch.last_attack_landed: 5 / 24450 (0.000204)
+mismatch.combo_count: 2 / 24450 (0.000082)
 mismatch.last_hit_by: 27 / 24450 (0.001104)
-mismatch.state_flags: 44 / 122250 (0.000360)
+mismatch.state_flags: 40 / 122250 (0.000327)
 mismatch.item_exists: 1 / 183375 (0.000005)
 mismatch.item_type: 1 / 183375 (0.000005)
 mismatch.item_state: 0 / 183375 (0.000000)
@@ -353,18 +353,18 @@ err.pos_y: mae=0.004448 p95=0.000000 max=11.748009
 err.speed_air_x_self: mae=0.000318 p95=0.000000 max=2.140000
 err.speed_ground_x_self: mae=0.000713 p95=0.000000 max=2.790000
 err.speed_y_self: mae=0.000841 p95=0.000000 max=6.783999
-err.speed_x_attack: mae=0.000252 p95=0.000000 max=2.498401
-err.speed_y_attack: mae=0.000624 p95=0.000000 max=2.657314
-err.percent: mae=0.002888 p95=0.000000 max=13.649998
+err.speed_x_attack: mae=0.000250 p95=0.000000 max=2.498401
+err.speed_y_attack: mae=0.000561 p95=0.000000 max=2.657314
+err.percent: mae=0.002683 p95=0.000000 max=13.649998
 err.shield_hp: mae=0.000035 p95=0.000000 max=0.700001
 err.item_pos_x: mae=0.070480 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000092
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000208
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000061
-overall.discrete_mismatch: 325 / 1479225
-overall.strict_discrete_mismatch: 401 / 1479225
+overall.discrete_mismatch: 308 / 1479225
+overall.strict_discrete_mismatch: 384 / 1479225
 overall.ignored_discrete_mismatch: 76
-overall.float_norm_mae_p95: 0.00078421
+overall.float_norm_mae_p95: 0.00078116
 
 == datasets/spacies_heldout/replays/heldout/spacies/WillingMessyGnu.msl ==
 Records: 11376  Players/scored per record: 2  Total player-frames: 22752
@@ -547,7 +547,7 @@ overall.ignored_discrete_mismatch: 52
 overall.float_norm_mae_p95: 0.00016384
 
 == suite summary ==
-overall.discrete_mismatch: 1907 / 13208723
-overall.strict_discrete_mismatch: 2580 / 13208723
+overall.discrete_mismatch: 1890 / 13208723
+overall.strict_discrete_mismatch: 2563 / 13208723
 overall.ignored_discrete_mismatch: 673
-overall.float_norm_mae_p95: 0.00024762
+overall.float_norm_mae_p95: 0.00024731
