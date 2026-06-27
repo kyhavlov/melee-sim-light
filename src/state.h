@@ -6,6 +6,11 @@
 #include "api.h"
 #include "hitlist_types.h"
 
+enum {
+  MSL_DAMAGE_HITLAG_ECB_SOURCE_NONE = 0,
+  MSL_DAMAGE_HITLAG_ECB_SOURCE_THROWN_NEEDLE = 1,
+};
+
 // Hot SoA state owned by a batch. All arrays are sized for MAX_PLAYERS/ITEMS.
 typedef struct MslStateSoA {
   // Meta
@@ -166,6 +171,13 @@ typedef struct MslStateSoA {
   // Damage pose. Runtime writes this on live Damage entry; replay reseed initializes it from
   // MslSeed::damage_hitlag_ecb_*.
   uint8_t* coll_damage_hitlag_ecb_valid;
+  // Runtime provenance for the frozen active-hitlag Damage ECB. Source can keep the victim's
+  // Damage hitlag CollData envelope live after a thrown Needle BODY hit even when the article is
+  // consumed/destroyed by its callback; consumers must not rediscover that ownership by scanning
+  // currently live items.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ProcessHit_8006D1EC}
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt
+  uint8_t* coll_damage_hitlag_ecb_source_kind;
   // Runtime-only CollData.floor/contact/env provenance produced by a live active-hitlag Damage
   // map callback. Source writes this through `ftCo_Damage_Coll -> ft_80081DD4 ->
   // mpColl_800477E0 -> mpColl_80044628_Floor/mpColl_80044948_Floor`, then later hitlag map

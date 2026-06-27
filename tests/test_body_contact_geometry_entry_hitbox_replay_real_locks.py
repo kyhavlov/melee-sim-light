@@ -589,6 +589,80 @@ def test_stm_pokemon_stadium_x44_body_gap_owners_are_payload_bounded() -> None:
 
 
 @pytest.mark.integration
+def test_strong_dair_attacklw4_medium_sibling_owns_damage_height_teg_1532() -> None:
+    # Strong DAir selected-height owner:
+    # TEG 1532 is a grounded Fox AttackLw4 victim struck by Falco's strong AttackAirLw pair.
+    # Runtime geometry sees hb0 overlap cap2/high first, but the same source collision pass also
+    # has the authored same-group hb1 strong-DAir sibling overlapping cap1/medium. Source
+    # ftColl_8007A06C consumes the selected DmgLog hurt height as DamageFlyN.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8,ftColl_8007A06C}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/TornEnchantingGiraffe.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 1532)
+    assert int(seed["action_id"][0]) == 64  # AttackLw4.
+    assert int(seed["action_id"][1]) == 69  # AttackAirLw.
+    assert int(ref["action_id"][0]) == 88  # DamageFlyN.
+    assert int(out["action_id"][0]) == int(ref["action_id"][0])
+    assert int(out["animation_index"][0]) == int(ref["animation_index"][0])
+    assert int(out["hitlag"][0]) == int(ref["hitlag"][0]) == 6
+    assert int(out["hitstun"][0]) == int(ref["hitstun"][0])
+    assert float(out["percent"][0]) == pytest.approx(float(ref["percent"][0]))
+
+
+@pytest.mark.integration
+def test_strong_dair_attacklw4_high_cap_stays_without_medium_sibling_teg_1532_negative() -> None:
+    # Adjacent negative for the selected-height owner above. When the same-group hb1 medium-cap
+    # sibling is absent, the live hb0/cap2 high source remains authoritative and enters DamageFlyHi.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/TornEnchantingGiraffe.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    binding = _load_binding()
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[1532:1533]
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, seed_stride
+    )
+    prev_input_bytes = np.frombuffer(
+        row["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+    ).copy().reshape(1, input_stride)
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        binding.debug_set_hitbox_world(handle, 0, 1, 1, 0.0, 0.0, 0.0, 0.0, 0.0, 0)
+        binding.debug_combat_resolve(handle)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+    assert int(out["action_id"][0]) == 87  # DamageFlyHi from hb0/cap2 high.
+    assert int(out["animation_index"][0]) == 177
+
+
+@pytest.mark.integration
 def test_tvr_specialhi_launch_x44_body_gap_owner_is_stage_and_payload_bounded() -> None:
     # TVR rec12278 closes the Pokemon Stadium x44 BODY residual for generated up-special launch:
     # authored SpecialHi hb0 (16 damage, angle 80, kbg 60, bkb 80) reaches the airborne root cap
@@ -2711,6 +2785,67 @@ def test_fox_jumpb_dynamic_chain_selects_attackairb_body_ppa_3182() -> None:
     for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
         assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
     assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 7
+
+
+@pytest.mark.integration
+def test_sheik_attackairb_same_group_selects_hb2_before_outer_hb3_tsh_3935() -> None:
+    # Sheik BAir same-group BODY selection:
+    # - TSH:3935 creates four BAir HitCapsules on frame 4. hb2 and hb3 both overlap Falco JumpF
+    #   hurtcaps, but source ftColl records the first accepted same-group BODY DmgLog entry and
+    #   applies the 10-damage hb2 result before the larger outer hb3 can widen the hit.
+    # - The Fox/Falco AttackAirB model-scale cancellation lane is payload-owned by their 15/9
+    #   damage extracted BAir split; Sheik's 10/14 damage hb2/hb3 payload must remain on the
+    #   ordinary lbColl matrix path rather than borrowing that scale-only counterfactual.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    # data/moves/{fox,falco,sheik}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 3935
+    row = ds.samples[record : record + 1]
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        selected_raw, selected_count = binding.debug_combat_select_body_hits(handle, 0, 64)
+    finally:
+        binding.destroy(handle)
+
+    attacker = 0
+    defender = 1
+    assert int(row["seed_t"]["action_id"][0, attacker]) == 67  # AttackAirB.
+    assert int(row["ref_t1"]["hitlag"][0, attacker]) == 6
+    assert int(selected_count) == 1
+    assert int(selected_raw[0, 0]) == attacker
+    assert int(selected_raw[0, 1]) == defender
+    assert int(selected_raw[0, 2]) == 2  # hb2, not the higher-damage outer hb3.
+
+    _seed, out, ref = _step_one_row(dataset_path, record)
+    assert int(ref["action_id"][defender]) == 85  # DamageAir2 from hb2.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 6
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 12
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)
 
 
 @pytest.mark.integration

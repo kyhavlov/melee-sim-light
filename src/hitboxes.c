@@ -62,6 +62,22 @@ static inline void hitboxes_clear_world_slot(MslBatch* batch, int bi, int p, int
   batch->state.hitbox_flags[oi] = 0;
 }
 
+void hitboxes_clear_player_active(MslBatch* batch, int bi, int p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 || p >= MSL_MAX_PLAYERS) {
+    return;
+  }
+  const size_t idx = msl_idx_player(bi, p);
+  batch->state.hitbox_count[idx] = 0u;
+  for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
+    const size_t oi = idx_hitbox(bi, p, hi);
+    batch->state.hitbox_capsule_enabled[oi] = 0u;
+    batch->state.hitbox_capsule_group[oi] = 0u;
+    batch->state.hitbox_x43_b2[oi] = 0u;
+    batch->state.hitbox_prev_enabled[oi] = 0u;
+    hitboxes_clear_world_slot(batch, bi, p, hi);
+  }
+}
+
 static inline uint8_t hitboxes_has_authoritative_hitlist_seed(const MslBatch* batch, int bi,
                                                               int attacker, int hb) {
   if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb < 0 ||

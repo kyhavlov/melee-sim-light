@@ -47,7 +47,9 @@ ACT_SQUAT = 0x0027
 ACT_JUMP_F = 0x0019
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
+ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
+ACT_ATTACK_AIR_LW = 0x0045
 ACT_ATTACK_100_START = 0x002F
 ACT_LANDING_AIR_N = 0x0046
 ACT_DAMAGE_N_1 = 0x004E
@@ -55,6 +57,7 @@ ACT_DAMAGE_N_3 = 0x0050
 ACT_DAMAGE_LW_2 = 0x0052
 ACT_GUARD_ON = 0x00B2
 ACT_FX_SPECIAL_N_START = 0x0155
+ACT_FX_SPECIAL_HI_HOLD_AIR = 0x0162
 ACT_SK_SPECIAL_N_START = 341
 ACT_SK_SPECIAL_N_LOOP = 342
 ACT_SK_SPECIAL_N_END = 344
@@ -3438,6 +3441,30 @@ def test_sheik_vanish_airhistart0_windup_drift_matches_source_common_drift_repla
     assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=0.05)
 
 
+@pytest.mark.integration
+def test_sheik_air_needle_cancel_finish_runs_fall_iasa_tail_aac_2333() -> None:
+    # ftSk_SpecialAirNCancel_Anim exits through ftCo_Fall_Enter. Source then reaches the
+    # destination Fall IASA tail in the same Fighter_procUpdate, so an A edge on the finish frame
+    # enters AttackAirN immediately; the prior quiet frame remains in SpecialAirNCancel.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialAirNCancel_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_IASA_Inner}
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl"
+    )
+    quiet = _run_sample_row(samples, 2332)
+    assert int(samples[2332]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_N_CANCEL
+    assert int(samples[2332]["input_t"]["p"]["buttons"][0]) & A == 0
+    assert int(quiet["action_id"][0]) == ACT_SK_SPECIAL_AIR_N_CANCEL
+
+    out = _run_sample_row(samples, 2333)
+    ref = samples[2333]["ref_t1"]
+    assert int(samples[2333]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_N_CANCEL
+    assert int(samples[2333]["input_t"]["p"]["buttons"][0]) & A
+    assert int(ref["action_id"][0]) == ACT_ATTACK_AIR_N
+    assert int(out["action_id"][0]) == ACT_ATTACK_AIR_N
+    assert int(out["animation_index"][0]) == int(ref["animation_index"][0])
+
+
 # ---------------------------------------------------------------------------
 # Entry-path + data-contract coverage for the thrown-Needle stage-bounce trajectory
 # (SetupBounce xDD8 horizontal drift). These free-run the real aerial-throw -> descend ->
@@ -3845,6 +3872,226 @@ def test_sheik_demo_vanish_smoke_spawn_frame_body_hit_and_no_hitlag_rehit_lock()
     assert float(out["percent"][1]) == pytest.approx(
         float(samples[1928]["ref_t1"]["percent"][1]), abs=1.0e-5
     )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "player", "action_id", "expected_hitlag"),
+    [
+        (
+            "datasets/sheik/replays/validation/sheik/ZestyPreciousTurtle.msl",
+            2273,
+            1,
+            ACT_ATTACK_AIR_LW,
+            6,
+        ),
+        (
+            "datasets/sheik/replays/validation/sheik/MixedAllQuetzal.msl",
+            9336,
+            1,
+            ACT_ATTACK_AIR_B,
+            5,
+        ),
+    ],
+)
+def test_sheik_vanish_fresh_smoke_hitcapsule_gives_attacker_hitlag_without_body(
+    dataset_rel: str, record: int, player: int, action_id: int, expected_hitlag: int
+) -> None:
+    # The Vanish accessory callback spawns It_Kind_Seak_Vanish and immediately publishes its item
+    # HitCapsule. A same-frame opposing fighter HitCapsule can contact that fresh item HitCapsule,
+    # giving attacker deal-hitlag without running the smoke BODY damage path.
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{fn_80112ED8,ftSk_SpecialHi_80112F48}
+    # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
+    # refs/melee/src/melee/it/it_2725.c::it_8027518C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
+    samples = _sheik_validation_samples(dataset_rel)
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+
+    assert not _item_type_present(seed, ITEM_SHEIK_VANISH)
+    assert _item_type_present(ref, ITEM_SHEIK_VANISH)
+    assert int(ref["items"]["damage"][0]) == 0
+    assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_0
+    assert int(ref["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert int(seed["action_id"][player]) == action_id
+    assert int(ref["action_id"][player]) == action_id
+    assert int(ref["hitlag"][player]) == expected_hitlag
+    assert float(ref["percent"][player]) == pytest.approx(float(seed["percent"][player]), abs=1e-5)
+
+    out = _run_sample_row(samples, record, replay_frame_rng=True)
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert int(out["action_id"][player]) == action_id
+    assert int(out["hitlag"][player]) == expected_hitlag
+    assert float(out["percent"][player]) == pytest.approx(float(ref["percent"][player]), abs=1e-5)
+    assert _item_type_present(out, ITEM_SHEIK_VANISH)
+    assert int(out["items"]["damage"][0]) == 0
+
+
+@pytest.mark.integration
+def test_sheik_vanish_fresh_smoke_owner_contact_hitlist_blocks_later_rehit() -> None:
+    # MixedAllQuetzal:9336 is the fresh-smoke positive above. The same BAir HitCapsule also reaches
+    # the invincible Vanish owner, so source ftColl has a no-damage fighter victim ring installed
+    # before the item BODY pass. When the BAir's first deal-hitlag expires, MQ:9342 must not re-hit
+    # that invincible owner from the same active hit group.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007925C,ftColl_80076ED8}
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/MixedAllQuetzal.msl"
+    )
+    player = 1
+
+    direct = _run_sample_row(samples, 9342, replay_frame_rng=True)
+    assert int(samples[9342]["ref_t1"]["hitlag"][player]) == 0
+    assert int(direct["hitlag"][player]) == 0
+
+    rollout = _run_sample_rollout_records(
+        samples, start_record=9336, records=(9336, 9342), replay_frame_rng=True
+    )
+    assert int(rollout[9336]["hitlag"][player]) == int(samples[9336]["ref_t1"]["hitlag"][player]) == 5
+    assert int(rollout[9342]["hitlag"][player]) == 0
+    assert float(rollout[9342]["percent"][player]) == pytest.approx(
+        float(samples[9342]["ref_t1"]["percent"][player]), abs=1e-5
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "player", "expected_hitlag"),
+    [
+        ("datasets/sheik/replays/validation/sheik/MixedAllQuetzal.msl", 5914, 1, 5),
+        ("datasets/sheik/replays/validation/sheik/UselessGlassLoris.msl", 2167, 1, 7),
+    ],
+)
+def test_sheik_vanish_smoke_owner_order_defers_body_after_invincible_owner_contact(
+    dataset_rel: str, record: int, player: int, expected_hitlag: int
+) -> None:
+    # Source fighter iteration checks fighter-vs-fighter HitCapsules for the Vanish smoke owner
+    # before the defender's later item BODY pass. If the defender's active aerial reaches the
+    # invincible/no-damage owner first, the defender receives attacker-side deal hitlag and the smoke
+    # BODY does not also launch them in that source frame.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007925C,ftColl_80076ED8}
+    samples = _sheik_validation_samples(dataset_rel)
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][player]) == ACT_ATTACK_AIR_B
+    assert int(ref["action_id"][player]) == ACT_ATTACK_AIR_B
+    assert int(ref["hitlag"][player]) == expected_hitlag
+
+    out = _run_sample_row(samples, record, replay_frame_rng=True)
+    assert int(out["action_id"][player]) == ACT_ATTACK_AIR_B
+    assert int(out["hitlag"][player]) == expected_hitlag
+    assert float(out["percent"][player]) == pytest.approx(float(ref["percent"][player]), abs=1e-5)
+
+
+def test_sheik_vanish_smoke_owner_order_defers_body_with_reversed_ports() -> None:
+    # Reversed-port owner-order lock: source fighter-vs-fighter contact with the invincible Vanish
+    # owner is an object/owner pass ordering lane, not a player-index ordering rule. With Sheik on
+    # port 1 and the defender on port 0, the defender's clankable HitCapsule gets attacker hitlag
+    # from the invincible owner contact, and the same fresh smoke item must not also BODY-damage the
+    # defender in the item pass.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007925C,ftColl_80076ED8}
+    # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
+    import msl_binding
+
+    seed = _seed_base("fox", grounded=False)
+    seed["char_id"][0, 1] = np.uint8(CHAR_SHEIK)
+    seed["pos_x"][0, :2] = np.float32(0.0)
+    seed["pos_y"][0, :2] = np.float32(0.0)
+    seed["on_ground"][0, :2] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_B)
+    seed["animation_index"][0, 0] = np.uint32(68)
+    seed["action_frame"][0, 0] = np.int16(5)
+    seed["anim_frame_f32"][0, 0] = np.float32(5.0)
+    seed["action_id"][0, 1] = np.uint16(ACT_SK_SPECIAL_AIR_HI_START_1)
+    seed["animation_index"][0, 1] = np.uint32(312)
+    seed["action_frame"][0, 1] = np.int16(0)
+    seed["anim_frame_f32"][0, 1] = np.float32(35.0)
+    seed["hurtbox_state"][0, 1] = np.uint8(1)
+    _install_vanish_smoke(seed, pos_x=0.0, pos_y=0.0, timer=80.0, owner=1)
+    seed["item_hidden_callback_flags"][0, 0] = np.uint8(1 << 1)
+
+    sizes = msl_binding.sizes()
+    seed_bytes = seed.view(np.uint8).reshape((1, int(sizes["seed"]))).copy()
+    input_bytes = _mk_inputs().view(np.uint8).reshape((1, int(sizes["input"]))).copy()
+    out_bytes = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.debug_refresh_combat_geometry(handle)
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 50.0, 9.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, HIT_GROUNDED | HIT_AERIAL)
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
+        msl_binding.step_input(handle, input_bytes, input_bytes)
+        msl_binding.write_compare(handle, out_bytes)
+    finally:
+        msl_binding.destroy(handle)
+
+    out = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+    assert int(out["action_id"][0]) == ACT_ATTACK_AIR_B
+    assert int(out["hitlag"][0]) == 7
+    assert float(out["percent"][0]) == pytest.approx(0.0)
+
+
+@pytest.mark.integration
+def test_sheik_vanish_smoke_stale_owner_action_does_not_defer_to_attacker_hitlag() -> None:
+    # UnusedLivelyLouse:5483 has a lingering Vanish smoke article, but the owner is no longer in the
+    # Vanish travel-entry action that owns the source fighter-contact ordering lane. Marth's Dolphin
+    # Slash HitCapsules therefore do not receive attacker deal-hitlag from the old smoke owner.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHiStart_1_Anim
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/UnusedLivelyLouse.msl"
+    )
+    record = 5483
+    player = 1
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+
+    assert int(seed["items"]["type"][0]) == ITEM_SHEIK_VANISH
+    assert int(seed["items"]["owner"][0]) == 0
+    assert int(seed["action_id"][0]) not in (
+        ACT_SK_SPECIAL_HI_START_1,
+        ACT_SK_SPECIAL_AIR_HI_START_1,
+    )
+
+    out = _run_sample_row(samples, record, replay_frame_rng=True)
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 368
+    assert int(out["hitlag"][player]) == int(ref["hitlag"][player]) == 0
+    assert float(out["percent"][player]) == pytest.approx(float(ref["percent"][player]), abs=1e-5)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [8538, 8540])
+def test_sheik_vanish_smoke_owner_order_ignores_nonclank_specialhi_hold_pulses(
+    record: int,
+) -> None:
+    # Fox SpecialHiHoldAir creates alternating, non-clank fire HitCapsules during the same Vanish
+    # smoke owner frame. They are real damaging hitboxes, but they are not the clankable
+    # ftColl_80078C70 ordering lane that preempts Sheik smoke BODY in the BAir positives above.
+    # Keep the discriminator on the extracted create_hitbox `clank` bit, not the replay row/action.
+    # data/moves/fox.json::specials_by_msid[308].events.create_hitbox.clank=false
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007925C}
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/MixedAllQuetzal.msl"
+    )
+    player = 1
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+
+    assert int(seed["items"]["type"][0]) == ITEM_SHEIK_VANISH
+    assert int(seed["items"]["owner"][0]) == 0
+    assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
+    assert int(seed["action_id"][player]) == ACT_FX_SPECIAL_HI_HOLD_AIR
+    assert int(ref["hitlag"][player]) == 0
+
+    out = _run_sample_row(samples, record, replay_frame_rng=True)
+    assert int(out["action_id"][player]) == ACT_FX_SPECIAL_HI_HOLD_AIR
+    assert int(out["hitlag"][player]) == 0
+    assert float(out["percent"][player]) == pytest.approx(float(ref["percent"][player]), abs=1e-5)
 
 
 def test_sheik_vanish_explosion_inactive_after_remove_frame() -> None:

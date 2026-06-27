@@ -31,6 +31,7 @@
 #include "state_flags.h"
 #include "stage_collision.h"
 #include "input_axis.h"
+#include "item_article_params.h"
 #include "throw_flow.h"
 
 // Decomp constants (mplib.c):
@@ -846,6 +847,26 @@ static inline uint8_t action_uses_ftco_80096cc8_floor_callback(uint16_t a) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_800831CC,ft_800835B0}
   return msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_FT80083090_PLATFORM_PASS_COLL);
+}
+
+static inline uint8_t damage_hitlag_exit_carry_source_is_thrown_needle(const MslBatch* batch,
+                                                                       size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // Thrown-Needle Damage-hitlag ECB carry:
+  // A same-volley Needle can hit on the frame after Fighter_8006A1BC decrements visible hitlag to
+  // zero but before the next Damage_Coll callback can rebuild CollData from the Damage pose. The
+  // source item BODY pass still tests the frozen Damage ECB/hurtcaps for the current item contact.
+  // This source state belongs to the victim's Damage hitlag CollData packet, not to a still-live
+  // item slot; Needle DmgDealt can destroy/bounce the article before the exit-carry consumer runs.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_ProcessHit_8006D1EC}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt
+  return (batch->state.coll_damage_hitlag_ecb_source_kind[idx] ==
+          (uint8_t)MSL_DAMAGE_HITLAG_ECB_SOURCE_THROWN_NEEDLE)
+             ? 1u
+             : 0u;
 }
 
 static inline uint8_t is_just_entered_specialairn_end_from_loop(uint8_t char_id, uint16_t action_id,
@@ -8621,9 +8642,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
            msl_motion_state_class_has(char_id, prev_action_id, MSL_MS_CLASS_ATTACK_AIR))
               ? 1u
               : 0u;
+      const uint8_t active_damage_hitlag_ecb_exit_carry =
+          (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u &&
+           is_damage_collision_landing_action(action_id) &&
+           batch->state.coll_damage_hitlag_ecb_valid[idx] != 0u &&
+           damage_hitlag_exit_carry_source_is_thrown_needle(batch, idx) != 0u)
+              ? 1u
+              : 0u;
       const uint8_t active_damage_hitlag_ecb_carry =
           (have_state_cur_ecb && batch->state.hitlag_pre_timer[idx] != 0u &&
-           batch->state.hitlag[idx] != 0u && is_damage_collision_landing_action(action_id) &&
+           (batch->state.hitlag[idx] != 0u || active_damage_hitlag_ecb_exit_carry != 0u) &&
+           is_damage_collision_landing_action(action_id) &&
            (batch->state.coll_damage_hitlag_ecb_valid[idx] != 0u ||
             active_damage_hitlag_ecb_live_entry))
               ? 1u
@@ -17465,6 +17494,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
       batch->state.coll_damage_hitlag_ecb_valid[idx] =
           (active_damage_hitlag_ecb_carry || active_damage_hitlag_floor_contact_runtime_next) ? 1u
                                                                                               : 0u;
+      if (active_damage_hitlag_ecb_carry == 0u) {
+        batch->state.coll_damage_hitlag_ecb_source_kind[idx] = MSL_DAMAGE_HITLAG_ECB_SOURCE_NONE;
+      }
       batch->state.coll_damage_hitlag_floor_contact_runtime[idx] =
           active_damage_hitlag_floor_contact_runtime_next;
       const float unlocked_fall_pose_bottom_rel =

@@ -72,6 +72,8 @@ static inline void msl_mpcoll_copy_colldata_lane(MslBatch* batch, size_t dst, si
   batch->state.coll_squeeze_restore_ecb_valid[dst] =
       batch->state.coll_squeeze_restore_ecb_valid[src];
   batch->state.coll_damage_hitlag_ecb_valid[dst] = batch->state.coll_damage_hitlag_ecb_valid[src];
+  batch->state.coll_damage_hitlag_ecb_source_kind[dst] =
+      batch->state.coll_damage_hitlag_ecb_source_kind[src];
 
   batch->state.coll_env_flags[dst] = batch->state.coll_env_flags[src];
   batch->state.coll_prev_env_flags[dst] = batch->state.coll_prev_env_flags[src];

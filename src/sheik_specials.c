@@ -818,7 +818,16 @@ static void sk_update_specialn(MslBatch* batch, const MslCommonParams* c, const 
       break;
     case MSL_ACT_SK_SPECIAL_AIR_N_CANCEL:
       if (sk_anim_finished(batch, idx, a)) {
-        sk_enter_fall(batch, idx);
+        // Aerial Needle-cancel Anim exits through ftCo_Fall_Enter; Fighter_procUpdate then reaches
+        // the destination Fall IASA in the same proc, so same-frame attack/airdodge/jump inputs can
+        // overwrite Fall immediately. This mirrors the Marth aerial-special exit owner and keeps
+        // the character-special check ahead of the common-air tail.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialAirNCancel_Anim
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_IASA_Inner}
+        msl_locomotion_enter_fall_via_ftco_fall_enter(batch, ch, idx);
+        if (sheik_special_try_air_iasa(batch, idx) == 0u) {
+          (void)msl_locomotion_run_fall_iasa_non_special_tail(batch, c, ch, idx);
+        }
       }
       break;
     case MSL_ACT_SK_SPECIAL_N_END:
@@ -1294,6 +1303,7 @@ void sheik_specials_update_accessory4_phase(MslBatch* batch) {
     return;
   }
   items_update_sheik_chain_accessory_phase(batch);
+  items_update_sheik_needle_accessory_phase(batch);
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {

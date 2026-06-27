@@ -8,6 +8,8 @@ void combat_resolve(MslBatch* batch);
 void combat_processhit_consume(MslBatch* batch);
 uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx);
 void combat_apply_deal_hitlag_raw_damage(MslBatch* batch, size_t idx, int damage);
+int combat_hitbox_collision_env_damage(const MslBatch* batch, size_t idx, size_t hb_i);
+void combat_apply_deal_hitlag_hitbox_damage(MslBatch* batch, size_t idx, size_t hb_i);
 void combat_apply_min_hitlag_frames(MslBatch* batch, size_t idx, uint16_t hitlag_frames);
 void combat_rng_trace_begin_frame(MslBatch* batch);
 void combat_rng_trace_end_frame(MslBatch* batch);

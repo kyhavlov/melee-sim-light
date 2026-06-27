@@ -8679,6 +8679,48 @@ def test_cnm_shyguy_knocked_state_carries_source_hitcapsule_body_owner_replay_re
 
 
 @pytest.mark.integration
+def test_cnm_shyguy_active_state1_accepts_live_fighter_damage_replay_real() -> None:
+    # Active Heiho state 1 is still in the live it_802703E8 fighter-hitbox/item-hurtbox callback.
+    # It consumes the current fighter HitCapsule damage/stale lane, then it_802D8EC8 enters the
+    # knocked low-damage state. This is the reported state-1 source owner; return/knocked states
+    # are covered by adjacent tests below and the existing knocked-state carry lock.
+    # refs/melee/src/melee/it/itcoll.c::{it_802703E8,it_8026F9AC,it_80270E30}
+    # refs/melee/src/melee/it/items/itheiho.c::it_802D8EC8
+    ds = _cnm_dataset()
+    record = 592
+    row = ds.samples[record]
+    shyguy_slot = 3
+    assert int(row["seed_t"]["items"]["type"][shyguy_slot]) == 210
+    assert int(row["seed_t"]["items"]["state"][shyguy_slot]) == 1
+    assert int(row["seed_t"]["items"]["damage"][shyguy_slot]) == 0
+
+    out = _step_one_replay_row_rollout(ds, record)
+    ref = row["ref_t1"]
+    assert int(out["items"]["state"][shyguy_slot]) == int(ref["items"]["state"][shyguy_slot]) == 3
+    assert int(out["items"]["damage"][shyguy_slot]) == int(ref["items"]["damage"][shyguy_slot]) == 12
+    np.testing.assert_array_equal(out["hitlag"], ref["hitlag"])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(("record", "slot", "state"), [(756, 3, 4), (5275, 3, 2)])
+def test_cnm_shyguy_non_active_states_do_not_use_state1_damage_owner(
+    record: int, slot: int, state: int
+) -> None:
+    # Adjacent lifecycle negatives: state 2 and return-flight state 4 are already past the active
+    # state-1 callback owner. They keep their own damage/clear lifecycles rather than borrowing the
+    # state-1 live stale-damage path.
+    # refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,it_802D9168}
+    ds = _cnm_dataset()
+    row = ds.samples[record]
+    assert int(row["seed_t"]["items"]["type"][slot]) == 210
+    assert int(row["seed_t"]["items"]["state"][slot]) == state
+
+    out = _step_one_replay_row_rollout(ds, record)
+    ref = row["ref_t1"]
+    assert int(out["items"]["exists"][slot]) == int(ref["items"]["exists"][slot]) == 0
+
+
+@pytest.mark.integration
 def test_cnm_speciallw_start_damageflyroll_rng_source_owner_replay_real() -> None:
     # CNM rec7490: grounded Reflector startup hb0 is the current ProcessHit source for a severe
     # DamageLw -> DamageFlyRoll gate. The selected source payload is the extracted 5-damage

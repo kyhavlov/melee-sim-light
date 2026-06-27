@@ -559,6 +559,22 @@ static inline uint8_t reseed_seeded_sheik_needle_stale_damage_owner(const MslBat
   }
   const float recent_spawn_cutoff =
       (ap->needle_lifetime_frames > 6u) ? (float)(ap->needle_lifetime_frames - 6u) : 0.0f;
+  const float first_active_timer = (ap->needle_lifetime_frames > 1u)
+                                       ? (float)(ap->needle_lifetime_frames - 1u)
+                                       : (float)ap->needle_lifetime_frames;
+  if (item->timer >= first_active_timer) {
+    // A seeded state-0 Needle still on its first active item frame has not already run
+    // it_2725_Logic109_DmgDealt: a prior BODY hit would have bounced it into state 4 or destroyed
+    // it. If the owner's latest stale-table entry matches this attack instance, that stale insert
+    // therefore belongs to an earlier same-volley Needle, and the current article's HitCapsule was
+    // created after that insert. Leave the item on the ordinary live stale lookup rather than
+    // rewinding the latest entry.
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt
+    // refs/melee/src/melee/it/itcoll.c::it_80272460
+    // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+    // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+    return 0u;
+  }
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
     const MslItem* other = &seed->items[it];
     if (other == item || other->exists == 0u || other->owner != item->owner ||
@@ -3151,6 +3167,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.coll_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_damage_hitlag_ecb_valid[idx] = 0u;
+        batch->state.coll_damage_hitlag_ecb_source_kind[idx] = MSL_DAMAGE_HITLAG_ECB_SOURCE_NONE;
         // Source clear boundary for runtime CollData floor contact: reseed is not a vanilla
         // callback continuation. It may reconstruct explicit seed ECB state below, but it must not
         // manufacture live `mpColl_80044628_Floor` floor-contact authority.
@@ -3170,6 +3187,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           reseed_store_colldata_ecb_prev(batch, idx, &damage_hitlag_ecb);
           reseed_store_colldata_ecb_desired(batch, idx, &damage_hitlag_ecb);
           batch->state.coll_damage_hitlag_ecb_valid[idx] = 1u;
+          batch->state.coll_damage_hitlag_ecb_source_kind[idx] = MSL_DAMAGE_HITLAG_ECB_SOURCE_NONE;
         }
       }
       batch->state.dynamic_pose_state_valid[idx] = 0u;

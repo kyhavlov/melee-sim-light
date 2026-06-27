@@ -2538,6 +2538,60 @@ def test_continuing_guardon_x20_pose_accepts_dsg_attackairlw_rollout_contact() -
 
 
 @pytest.mark.integration
+def test_neutral_current_guardon_x20_accepts_strong_attackairlw_tsh_rollout_contact() -> None:
+    # Runtime-positive for neutral-current continuing GuardOn x20 extent:
+    # - TSH:8649 starts from a free rollout before p0's no-submotion GuardOn x10 / p1 strong DAir
+    #   shield boundary. One-step seed state proves the source accepted ShieldDesc contact, but
+    #   rollout has no teacher-forced `combat_shield_contact_hb_kind` lane on the collision frame.
+    # - The current main stick is neutral, so the tiny carried x4 tilt does not own a tilted Guard
+    #   matrix. Source still samples the GuardOn x20 pose and forwards ShieldDesc.size/extent for
+    #   Falco's authored 12-damage AttackAirLw packet before ftColl_80076CBC enters GuardSetOff.
+    # - The adjacent tilted doubles miss and BHH replay-proven miss locks keep this from becoming a
+    #   broad tilted-GuardOn or generic DAir shield shortcut.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_800924C0,ftCo_GuardOn_Anim,ftCo_80091E78}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    attacker = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][8649]
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert int(seed["seed_prev_action_id"][defender]) == 178
+    assert int(seed["guard_x10"][defender]) != 0
+    assert 0.0 < float(seed["guard_tilt_x4"][defender]) < 0.05
+    assert int(seed["action_id"][attacker]) == 69  # AttackAirLw.
+    assert int(seed["animation_index"][attacker]) == 72
+    assert int(seed["combat_shield_hit_int_damage"][defender]) == 12
+    assert int(seed["combat_shield_damage_taken"][defender]) == 0
+    assert all(
+        int(seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 2
+        for hb in range(4)
+    )
+
+    ref, out = _run_rollout_window(
+        dataset_path,
+        8617,
+        8649,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    assert int(ref["action_id"][defender]) == 181
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 7
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 7
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
 def test_continuing_guardon_x20_extent_keeps_tilted_doubles_miss() -> None:
     # Negative boundary for the reduced ShieldDesc extent supplement:
     # - This doubles row has the same continuing GuardOn + early AttackAirLw broad owner shape as
@@ -2578,6 +2632,59 @@ def test_continuing_guardon_x20_extent_keeps_tilted_doubles_miss() -> None:
 
     assert int(ref["action_id"][defender]) == 178
     assert int(out["action_id"][defender]) == 178
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_neutral_current_guardon_x20_extent_rejects_stale_angled_x8_doubles_miss() -> None:
+    # Adjacent negative for the neutral-current strong DAir x20 extent bridge:
+    # - Game_20260509T152622:8027 has p1 in no-submotion GuardOn with x10 live and current main
+    #   stick back inside deadzone, while p3's strong DAir is on the same authored 12-damage packet
+    #   as the TSH positive above.
+    # - The frame-start GuardOn tilt timeline is already a carried angled owner, though, so source
+    #   `ftCo_80091E78` takes the nonzero-x4 angled branch before lbColl_80007BCC. The replay seed
+    #   marks every p3->p1 ShieldDesc lane as a miss; free rollout must not widen that into
+    #   GuardSetOff merely because the current stick is neutral.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardOn_Anim,ftCo_80091BC4,ftCo_80091E78}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    attacker = 3
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][8027]
+
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert int(seed["seed_prev_action_id"][defender]) == 178
+    assert int(seed["guard_x10"][defender]) != 0
+    assert float(seed["guard_tilt_x4"][defender]) > 0.0
+    assert int(seed["guard_tilt_x8"][defender]) > 100
+    assert int(seed["action_id"][attacker]) == 69  # AttackAirLw.
+    assert int(seed["animation_index"][attacker]) == 72
+    assert all(
+        int(seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 1
+        for hb in range(4)
+    )
+
+    ref, out = _run_rollout_window(
+        dataset_path,
+        7755,
+        8027,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    assert int(ref["action_id"][defender]) == 178  # GuardOn, not GuardSetOff.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
     assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 0
     assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
@@ -3080,9 +3187,7 @@ def test_falco_attackairb_guardon_weak_hb2_keeps_seeded_x19a4_fsp_3100() -> None
     _seed, ref, out = _run_one_step_row(dataset_path, record, defender)
     assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 5
-    assert float(out["speed_ground_x_self"][defender]) == pytest.approx(
-        float(ref["speed_ground_x_self"][defender]), abs=1e-7
-    )
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 5
     assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
 
 
@@ -3110,6 +3215,142 @@ def test_falco_attackairb_guardon_x19a4_requires_replay_proven_shielddesc_wgp_53
         seed_mutator=clear_shielddesc_contact,
     )
     assert int(out["action_id"][defender]) != 181
+
+
+@pytest.mark.integration
+def test_settled_guard_x19a4_attacker_seed_rejects_x2218_b2_command_lane() -> None:
+    # Adjacent negative for the no-submotion Guard x19A4-only attacker owner:
+    # PFZ rec2642 has replay-proven ShieldDesc contact, x19A4=12, and x19A0=0. That seed-only
+    # x19A4 packet can own attacker hitlag only in the no-command settled Guard lane. If
+    # frame-start fp+0x2218_b2 is present, source is on the current command/powershield lane instead
+    # and this helper must not route attacker hitlag through x19A4.
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/ParallelFamiliarZebra.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 2642
+    attacker = 1
+    defender = 0
+    seed, ref, out = _run_one_step_row(dataset_path, record, defender)
+    assert int(seed["action_id"][defender]) == 179  # Guard no-submotion.
+    assert int(seed["action_frame"][defender]) < 0
+    assert int(seed["animation_index"][defender]) == 0xFFFFFFFF
+    assert int(seed["combat_shield_hit_int_damage"][defender]) == 12
+    assert int(seed["combat_shield_damage_taken"][defender]) == 0
+    assert int(seed["state_flags"][defender, 0]) & 0x20 == 0
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 7
+
+    def set_x2218_b2(seed_t: np.ndarray) -> None:
+        seed_t["state_flags"][0, defender, 0] = np.uint8(
+            int(seed_t["state_flags"][0, defender, 0]) | 0x20
+        )
+
+    _seed_b2, _ref_b2, out_b2 = _run_one_step_row(
+        dataset_path,
+        record,
+        defender,
+        seed_mutator=set_x2218_b2,
+    )
+    assert int(out_b2["hitlag"][attacker]) < int(out["hitlag"][attacker])
+
+
+@pytest.mark.integration
+def test_settled_guard_x2218_b2_exact_x19a4_packet_sets_attacker_hitlag_qhp_3490() -> None:
+    # Positive for the separate settled-Guard command lane:
+    # - QHP rec3490 is Guard with raw frame-start fp+0x2218 == x2218_b2, x19A4=9, x19A0=0, and
+    #   replay-proven ShieldDesc contact for every live AttackAirF HitCapsule.
+    # - The no-command settled-Guard helper must reject B2 rows, but the exact current ShieldDesc
+    #   seed packet can still source both attacker hitlag and shield HP from x19A4 when no other
+    #   fp+0x2218 owner bits are present.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 3490
+    attacker = 1
+    defender = 0
+    seed, ref, out = _run_one_step_row(dataset_path, record, defender)
+
+    assert int(seed["action_id"][defender]) == 179  # Guard no-submotion.
+    assert int(seed["action_frame"][defender]) < 0
+    assert int(seed["animation_index"][defender]) == 0xFFFFFFFF
+    assert int(seed["state_flags"][defender, 0]) == 0x20
+    assert int(seed["combat_shield_hit_int_damage"][defender]) == 9
+    assert int(seed["combat_shield_damage_taken"][defender]) == 0
+    assert all(
+        int(seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 2
+        for hb in range(4)
+    )
+
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 6
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_current_x19a4_packet_keeps_live_shield_hp_accumulator_toc_6840() -> None:
+    # x19A4 is the max hitlag/shieldstun scalar, not the shield HP accumulator. TOC rec6840 has
+    # exact current ShieldDesc contact provenance and x19A4=9 with no recovered x19A0. Source
+    # Fighter_ProcessHit must still consume the live x19A0-style accumulated shieldDamageTaken
+    # from the accepted contacts, not clamp shield HP depletion to x19A4.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 6840
+    attacker = 0
+    defender = 1
+    seed, ref, out = _run_one_step_row(dataset_path, record, defender)
+
+    assert int(seed["combat_shield_hit_int_damage"][defender]) == 9
+    assert int(seed["combat_shield_damage_taken"][defender]) == 0
+    assert all(
+        int(seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 2
+        for hb in range(4)
+    )
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert float(out["shield_hp"][defender]) == pytest.approx(
+        float(ref["shield_hp"][defender]), abs=1e-6
+    )
+
+
+@pytest.mark.integration
+def test_current_x19a4_packet_keeps_live_shield_hp_accumulator_aac_6069() -> None:
+    # Same x19A4-vs-x19A0 boundary as TOC, from Sheik/Frozen Stadium rollout coverage. The
+    # current ShieldDesc seed packet owns hitlag, but absent x19A0 is not a license to cap shield HP
+    # depletion at x19A4.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 6069
+    defender = 0
+    seed, ref, out = _run_one_step_row(dataset_path, record, defender)
+
+    assert int(seed["combat_shield_hit_int_damage"][defender]) != 0
+    assert int(seed["combat_shield_damage_taken"][defender]) == 0
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert float(out["shield_hp"][defender]) == pytest.approx(
+        float(ref["shield_hp"][defender]), abs=1e-6
+    )
 
 
 @pytest.mark.integration

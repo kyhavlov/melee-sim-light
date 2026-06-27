@@ -121,8 +121,24 @@ def _run_rollout_to_record(dataset_path: Path, start_record: int, target_record:
             1,
         ),
         (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.msl",
+            5546,
+            0,
+        ),
+        (
             "datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl",
             3057,
+            0,
+        ),
+        (
+            "datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl",
+            3836,
+            0,
+        ),
+        (
+            "datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl",
+            7738,
             0,
         ),
         (
@@ -148,8 +164,14 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
     #   immediate reflected owner transfer.
     # - MAJ:7327 covers same-step Wait -> GuardReflect where the already-live laser uses the fresh
     #   ShieldDesc center and must go to HitShield/GuardSetOff rather than reflect owner transfer.
+    # - TVR:5546 covers the settled-Guard 0xC4 mature scale-ramp boundary where the laser current
+    #   segment reaches ShieldDesc and must enter GuardSetOff; TVR:5545 below is the adjacent miss.
     # - TOC:3057 covers no-submotion GuardReflect after x14/ReflectDesc expiry, where stale x18 is
     #   still visible but the laser resolves through the ShieldDesc origin sample / HitShield lane.
+    # - TOC:3836 covers the final visible GuardReflect x14 tick: ReflectDesc lifetime remains visible,
+    #   but the live shield bubble admits Item_80269DC8 HitShield instead of keepalive/reflect.
+    # - TOC:7738 covers settled Guard with allow-interrupt+B1+reflect-behavior state: mature current
+    #   laser segments can still route to HitShield even without hidden ShieldBounced provenance.
     # - PME:3118 covers Landing_IASA -> GuardOn through the MSLMSO01 class2
     #   FRESH_GUARDON_ITEM_SHIELDDESC_IASA owner; the same item pass sees ShieldDesc and resolves
     #   HitShield/GuardSetOff instead of leaving the laser shooter-owned.
@@ -190,6 +212,25 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
         assert int(seed_row["guard_reflect_timer_x18"][p]) == 1
         assert int(seed_row["items"][1]["exists"]) == 1
         assert int(seed_row["items"][1]["type"]) == 55
+    if record == 5546:
+        assert int(seed_row["action_id"][p]) == 179  # Guard.
+        assert int(seed_row["state_flags"][p][0]) == 0xC4
+        assert int(seed_row["items"][0]["exists"]) == 1
+        assert int(seed_row["items"][0]["type"]) == 55
+        assert int(seed_row["item_shield_bounce_valid"][0]) == 0
+    if record == 3836:
+        assert int(seed_row["action_id"][p]) == 182  # GuardReflect
+        assert int(seed_row["seed_prev_action_id"][p]) == 182
+        assert int(seed_row["guard_reflect_timer_x14"][p]) == 1
+        assert int(seed_row["guard_reflect_timer_x18"][p]) > 0
+        assert int(seed_row["items"][0]["exists"]) == 1
+        assert int(seed_row["items"][0]["type"]) == 55
+    if record == 7738:
+        assert int(seed_row["action_id"][p]) == 179  # Guard
+        assert int(seed_row["state_flags"][p][0]) == 0xC4
+        assert int(seed_row["items"][0]["exists"]) == 1
+        assert int(seed_row["items"][0]["type"]) == 55
+        assert int(seed_row["item_shield_bounce_valid"][0]) == 0
     if record == 3118:
         assert int(seed_row["action_id"][p]) == 42  # Landing
         assert int(seed_row["seed_prev_action_id"][p]) == 42
@@ -206,9 +247,8 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
             assert int(out_row["items"][i][field]) == int(ref_row["items"][i][field]), (
                 f"record={record} item={i} field={field} "
                 f"expected={int(ref_row['items'][i][field])} got={int(out_row['items'][i][field])}"
-            )
+        )
     _assert_live_laser_set_matches_ref(out_row=out_row, ref_row=ref_row, record=record)
-
 
 @pytest.mark.integration
 def test_terminal_guardreflect_x10_samples_laser_before_next_segment_tvr() -> None:
@@ -1483,6 +1523,106 @@ def test_high_flag_fresh_scale_ramping_laser_still_enters_guardsetoff_dcc() -> N
 
     assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p])
     assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p]) == 3
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "item_slot"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.msl",
+            5545,
+            0,
+            0,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/marth/FemaleWorthyAlpaca.msl",
+            4467,
+            1,
+            0,
+        ),
+    ],
+)
+def test_allow_interrupt_guard_current_segment_waits_for_source_scale_boundary(
+    dataset_rel: str, record: int, p: int, item_slot: int
+) -> None:
+    # Adjacent negatives for the settled-Guard 0xC4 current-segment bridge:
+    # - TVR:5545 is the frame before the mature Falco-laser scale-ramp segment reaches ShieldDesc;
+    #   TVR:5546 above is the adjacent positive.
+    # - FWA:4467 proves the bridge is not a broad 0xC4/laser-origin hit: raw reach can already be
+    #   true for a saturated Fox laser while source still leaves the article alive on this row.
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+
+    assert int(seed_row["action_id"][p]) == 179  # Guard.
+    assert int(seed_row["action_frame"][p]) == -1
+    assert int(seed_row["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed_row["state_flags"][p][0]) == 0xC4
+    assert int(seed_row["items"][item_slot]["exists"]) == 1
+    assert int(seed_row["items"][item_slot]["type"]) in (54, 55)
+    assert int(seed_row["item_shield_bounce_valid"][item_slot]) == 0
+
+    assert int(ref_row["action_id"][p]) == 179
+    assert int(out_row["action_id"][p]) == 179
+    assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p]) == 0
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
+
+    for field in ("exists", "type", "state", "owner", "instance_id"):
+        assert int(out_row["items"][item_slot][field]) == int(
+            ref_row["items"][item_slot][field]
+        ), (
+            f"record={record} item={item_slot} field={field} "
+            f"expected={int(ref_row['items'][item_slot][field])} "
+            f"got={int(out_row['items'][item_slot][field])}"
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "expected_flags"),
+    [
+        ("datasets/sheik/replays/validation/sheik/PaleMajorEchidna.msl", 3855, 0, 0x24),
+    ],
+)
+def test_sheik_guard_hold_high_flag_laser_current_segment_enters_guardsetoff(
+    dataset_rel: str, record: int, p: int, expected_flags: int
+) -> None:
+    # Replay-real positives for settled Guard laser ShieldDesc contact:
+    # - PME:3855 has the B2+reflect-behavior command byte (`0x24`) but the shot is still in the
+    #   non-saturated current-callback segment, so ftColl_8007925C consumes it through HitShield.
+    # The adjacent high-flag controls above keep DCC:6517 spawn-boundary and STM:7006 stale saturated
+    # B2 rows on the carried point sample.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+
+    assert int(seed_row["action_id"][p]) == 179  # Guard.
+    assert int(seed_row["action_frame"][p]) == -1
+    assert int(seed_row["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed_row["state_flags"][p][0]) == expected_flags
+    assert int(seed_row["items"][0]["exists"]) == 1
+    assert int(seed_row["items"][0]["type"]) == 55
+    assert int(ref_row["action_id"][p]) == 181
+
+    assert int(out_row["action_id"][p]) == 181
+    assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p])
+    assert int(out_row["hitstun"][p]) == int(ref_row["hitstun"][p])
     assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
 
 

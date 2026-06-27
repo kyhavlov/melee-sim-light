@@ -30,6 +30,7 @@ ACT_DAMAGE_AIR1 = 0x0054
 ACT_SQUAT = 0x0027
 ACT_SQUAT_WAIT = 0x0028
 ACT_GUARD_REFLECT = 0x00B6
+ACT_GUARD_ON = 0x00B2
 ACT_GUARD_SET_OFF = 0x00B5
 ACT_DAMAGE_N1 = 0x004E
 ACT_ATTACK_AIR_B = 0x0043
@@ -1340,6 +1341,91 @@ def test_combat_resolve_distinct_group_shield_contacts_accumulate_damage_taken()
         exp_depletion = shield_hit_damage_mul * (shield_damage_taken * (1.0 - ls)) + shield_hit_damage_base
 
         assert np.isclose(hp1, hp0 - exp_depletion, atol=1e-5)
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_no_submotion_guardon_x19a0_multi_contact_does_not_rewrite_hitlag_damage() -> None:
+    # x19A0 is the shieldDamageTaken accumulator, while x19A4 is the max getEnvDmg packet consumed
+    # for GuardSetOff hitlag/shieldstun. A no-submotion GuardOn seed with two accepted zero-shield-
+    # damage contacts must use the x19A0 sum for shield HP only; it must not reinterpret that sum as
+    # a selected HitCapsule damage lane.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed["action_id"][0, 1] = np.uint16(ACT_GUARD_ON)
+        seed["action_frame"][0, 1] = np.int16(-1)
+        seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
+        seed["combat_shield_hit_int_damage"][0, 1] = np.uint8(7)
+        seed["combat_shield_damage_taken"][0, 1] = np.uint8(10)
+        seed["combat_shield_contact_hb_kind"][0, 0, 0, 1] = np.uint8(2)
+        seed["combat_shield_contact_hb_kind"][0, 0, 1, 1] = np.uint8(2)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = np.zeros((1, input_stride), dtype=np.uint8)
+        shield = np.zeros((1, input_stride), dtype=np.uint8)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
+
+        # Step once only to sample the source Guard shield bubble in world space. Re-seed the
+        # no-submotion GuardOn packet immediately after, so the combat pass exercises the hidden
+        # x19A*/ShieldDesc provenance shape rather than a normal live Guard submotion.
+        msl_binding.step_input(handle, neutral, shield)
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy, shz, shr = (
+            float(bubbles[1, 0]),
+            float(bubbles[1, 1]),
+            float(bubbles[1, 2]),
+            float(bubbles[1, 3]),
+        )
+        assert shr > 0.0
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        out0 = _read_compare(handle)
+        hp0 = float(out0["shield_hp"][1])
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, shx, shy, shz, 1.0, 3.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, shx, shy, shz, 1.0, 7.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 1, 1)
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        hitlag_dmg_mul = _common_attr("hitlag_dmg_mul")
+        hitlag_base = _common_attr("hitlag_base")
+        exp_hl = int(int(7) * hitlag_dmg_mul + hitlag_base)
+        bad_x19a0_hl = int(int(10) * hitlag_dmg_mul + hitlag_base)
+        assert int(out["hitlag"][0]) == exp_hl
+        assert int(out["hitlag"][1]) == exp_hl
+        assert int(out["hitlag"][0]) != bad_x19a0_hl
+
+        trig_deadzone = _common_attr("trigger_deadzone")
+        shield_hit_damage_mul = _common_attr("shield_hit_damage_mul")
+        shield_hit_damage_base = _common_attr("shield_hit_damage_base")
+        shield_hit_ls_min = _common_attr("shield_hit_lightshield_min")
+        shield_hit_ls_max = _common_attr("shield_hit_lightshield_max")
+
+        assert trig_deadzone < 1.0
+        light = 0.0
+        ls = light * (shield_hit_ls_max - shield_hit_ls_min) + shield_hit_ls_min
+        exp_depletion = shield_hit_damage_mul * (10.0 * (1.0 - ls)) + shield_hit_damage_base
+        assert np.isclose(float(out["shield_hp"][1]), hp0 - exp_depletion, atol=1e-5)
     finally:
         msl_binding.destroy(handle)
         del handle

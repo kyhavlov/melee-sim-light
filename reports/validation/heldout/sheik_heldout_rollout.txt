@@ -13,13 +13,13 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 == datasets/sheik_heldout/replays/heldout/sheik/AblePertinentSeahorse.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1107
-rollout.streak_count: 49
-rollout.streak_len.median: 121
+rollout.streak_count: 47
+rollout.streak_len.median: 131
 rollout.streak_len.p90: 785
 rollout.streak_len.p95: 849
 rollout.streak_len.max: 1107
-rollout.first_mismatch_total: 52
-rollout.first_mismatch_seeded_total: 36
+rollout.first_mismatch_total: 50
+rollout.first_mismatch_seeded_total: 34
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=139.917 rec=3840 p=0 seed/ref/out=13.7942/11.888/151.805 actions=7/7/7 category=unclassified
@@ -56,13 +56,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:4
 
 == datasets/sheik_heldout/replays/heldout/sheik/DazzlingAccomplishedMink.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1096
-rollout.streak_count: 27
-rollout.streak_len.median: 222
+rollout.best_len: 1431
+rollout.streak_count: 25
+rollout.streak_len.median: 186
 rollout.streak_len.p90: 841
-rollout.streak_len.p95: 841
-rollout.streak_len.max: 1096
-rollout.first_mismatch_total: 27
+rollout.streak_len.p95: 1063
+rollout.streak_len.max: 1431
+rollout.first_mismatch_total: 25
 rollout.first_mismatch_seeded_total: 16
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -84,7 +84,7 @@ rollout.streak_len.p90: 776
 rollout.streak_len.p95: 1641
 rollout.streak_len.max: 1881
 rollout.first_mismatch_total: 29
-rollout.first_mismatch_seeded_total: 20
+rollout.first_mismatch_seeded_total: 21
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=2.86673 rec=4313 p=0 seed/ref/out=58.6362/58.2718/61.1385 actions=264/264/264 category=unclassified
@@ -100,13 +100,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == datasets/sheik_heldout/replays/heldout/sheik/FrailGiganticCrow.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 2416
-rollout.streak_count: 29
-rollout.streak_len.median: 212
-rollout.streak_len.p90: 974
-rollout.streak_len.p95: 1059
+rollout.streak_count: 24
+rollout.streak_len.median: 219
+rollout.streak_len.p90: 992
+rollout.streak_len.p95: 1512
 rollout.streak_len.max: 2416
-rollout.first_mismatch_total: 28
-rollout.first_mismatch_seeded_total: 19
+rollout.first_mismatch_total: 23
+rollout.first_mismatch_seeded_total: 16
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=18 rec=3787 p=0 seed/ref/out=-19.7208/-20.7858/-38.7858 actions=68/68/68 category=unclassified
@@ -120,18 +120,18 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:885
 
 == datasets/sheik_heldout/replays/heldout/sheik/MiserlyWhiteCassowary.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1105
-rollout.streak_count: 21
-rollout.streak_len.median: 399
-rollout.streak_len.p90: 732
-rollout.streak_len.p95: 858
-rollout.streak_len.max: 1105
-rollout.first_mismatch_total: 20
-rollout.first_mismatch_seeded_total: 6
+rollout.best_len: 1131
+rollout.streak_count: 20
+rollout.streak_len.median: 343
+rollout.streak_len.p90: 858
+rollout.streak_len.p95: 1105
+rollout.streak_len.max: 1131
+rollout.first_mismatch_total: 19
+rollout.first_mismatch_seeded_total: 7
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=6.41883 rec=3461 p=1 seed/ref/out=-64.8384/-64.6134/-58.1946 actions=35/0/0 category=unclassified
-  2. percent max_err=6.045 rec=2623 p=1 seed/ref/out=70.61/76.655/70.61 actions=88/38/38 category=unclassified
+  2. percent max_err=6.045 rec=2625 p=1 seed/ref/out=76.655/76.655/70.61 actions=38/38/38 category=unclassified
   3. speed_air_x_self max_err=3.49356 rec=5789 p=1 seed/ref/out=3.49356/3.49356/0 actions=368/368/368 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=12.09 rec=2618 p=1 seed/ref/out=70.61/70.61/82.7 actions=88/88/89 category=downstream_discrete_mismatch
@@ -163,12 +163,12 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:113
 == datasets/sheik_heldout/replays/heldout/sheik/NiceOrganicSandpiper.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1577
-rollout.streak_count: 14
+rollout.streak_count: 13
 rollout.streak_len.median: 537
-rollout.streak_len.p90: 1166
+rollout.streak_len.p90: 1351
 rollout.streak_len.p95: 1577
 rollout.streak_len.max: 1577
-rollout.first_mismatch_total: 13
+rollout.first_mismatch_total: 12
 rollout.first_mismatch_seeded_total: 8
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -190,7 +190,7 @@ rollout.streak_len.median: 332
 rollout.streak_len.p90: 1100
 rollout.streak_len.p95: 1120
 rollout.streak_len.max: 1120
-rollout.first_mismatch_total: 19
+rollout.first_mismatch_total: 21
 rollout.first_mismatch_seeded_total: 12
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -208,16 +208,16 @@ rollout.status: NOT-CLEAN
 rollout.best_len: 1201
 rollout.streak_count: 24
 rollout.streak_len.median: 213
-rollout.streak_len.p90: 799
+rollout.streak_len.p90: 809
 rollout.streak_len.p95: 1143
 rollout.streak_len.max: 1201
 rollout.first_mismatch_total: 26
-rollout.first_mismatch_seeded_total: 20
+rollout.first_mismatch_seeded_total: 21
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=18.0001 rec=8078 p=0 seed/ref/out=72.8368/72.0003/90.0004 actions=4/4/4 category=unclassified
   2. pos_x max_err=3.93566 rec=1421 p=1 seed/ref/out=-90.8792/-91.6857/-87.75 actions=360/360/360 category=unclassified
-  3. percent max_err=3 rec=5838 p=0 seed/ref/out=50.42/50.42/53.42 actions=85/85/85 category=unclassified
+  3. percent max_err=2 rec=7458 p=0 seed/ref/out=125.659/125.659/123.659 actions=351/352/352 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=14.1 rec=3841 p=1 seed/ref/out=105.45/105.45/119.55 actions=42/16/88 category=downstream_discrete_mismatch
   2. shield_hp max_err=7.7 rec=7107 p=0 seed/ref/out=60/52.3/60 actions=200/181/178 category=downstream_discrete_mismatch
@@ -228,18 +228,18 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 == datasets/sheik_heldout/replays/heldout/sheik/VibrantObedientMandrill.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1507
-rollout.streak_count: 26
+rollout.streak_count: 25
 rollout.streak_len.median: 284
-rollout.streak_len.p90: 826
-rollout.streak_len.p95: 835
+rollout.streak_len.p90: 835
+rollout.streak_len.p95: 891
 rollout.streak_len.max: 1507
-rollout.first_mismatch_total: 26
+rollout.first_mismatch_total: 25
 rollout.first_mismatch_seeded_total: 19
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=10.6208 rec=6501 p=0 seed/ref/out=128.232/129.438/140.059 actions=247/0/0 category=unclassified
   2. pos_y max_err=3.375 rec=8176 p=1 seed/ref/out=0.000100136/-3.3749/9.98974e-05 actions=79/79/79 category=unclassified
-  3. percent max_err=1 rec=1665 p=0 seed/ref/out=128.64/128.64/129.64 actions=66/66/66 category=unclassified
+  3. percent max_err=1 rec=1664 p=0 seed/ref/out=128.64/128.64/129.64 actions=66/66/66 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=17 rec=3834 p=0 seed/ref/out=98.17/98.17/115.17 actions=191/191/88 category=downstream_discrete_mismatch
   2. pos_y max_err=14.9688 rec=6469 p=0 seed/ref/out=-11.1265/-14.9687/0.0001 actions=91/91/191 category=downstream_discrete_mismatch
@@ -255,7 +255,7 @@ rollout.streak_len.p90: 640
 rollout.streak_len.p95: 794
 rollout.streak_len.max: 3122
 rollout.first_mismatch_total: 89
-rollout.first_mismatch_seeded_total: 71
+rollout.first_mismatch_seeded_total: 70
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=29.92 rec=3283 p=0 seed/ref/out=60.4778/58.8078/88.7278 actions=29/29/29 category=unclassified
@@ -268,19 +268,19 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:163
 
 == suite summary ==
-overall.rollout.streak_count: 411
-overall.rollout.streak_len.median: 93
-overall.rollout.streak_len.p90: 760
-overall.rollout.streak_len.p95: 1032
+overall.rollout.streak_count: 399
+overall.rollout.streak_len.median: 92
+overall.rollout.streak_len.p90: 784
+overall.rollout.streak_len.p95: 1100
 overall.rollout.streak_len.max: 3122
 overall.rollout.best_len.max: 3122
-overall.rollout.first_mismatch_total: 477
-overall.rollout.first_mismatch_seeded_total: 354
+overall.rollout.first_mismatch_total: 467
+overall.rollout.first_mismatch_seeded_total: 351
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=139.917 rec=3840 p=0 seed/ref/out=13.7942/11.888/151.805 actions=7/7/7 category=unclassified
   2. pos_x max_err=87.2014 rec=3855 p=0 seed/ref/out=15.2459/16.584/-70.6174 actions=7/7/7 category=unclassified
-  3. percent max_err=6.045 rec=2623 p=1 seed/ref/out=70.61/76.655/70.61 actions=88/38/38 category=unclassified
+  3. percent max_err=6.045 rec=2625 p=1 seed/ref/out=76.655/76.655/70.61 actions=38/38/38 category=unclassified
 overall.rollout.float_top_downstream:
   1. pos_y max_err=75.7303 rec=3082 p=1 seed/ref/out=-74.1948/-75.7214/0.0089 actions=86/86/42 category=downstream_discrete_mismatch
   2. percent max_err=18.8824 rec=1414 p=1 seed/ref/out=53.17/72.0524/53.17 actions=43/88/43 category=downstream_discrete_mismatch

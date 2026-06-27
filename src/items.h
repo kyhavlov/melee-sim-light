@@ -18,14 +18,16 @@ static inline uint8_t item_type_is_illusion_article(uint16_t type) {
 // refs/melee/src/melee/it/item.c::Item_8026862C.
 //
 // Supported RL 1.0 item families route through explicit source owners:
-// - fighter-owned article spawns run from the fighter Anim callback phase via
-//   items_spawn_fighter_anim_phase();
+// - fighter-owned article spawns run from their source callback phase: fighter Anim via
+//   items_spawn_fighter_anim_phase(), or character accessory callbacks where the decomp uses
+//   fp->accessory4_cb;
 // - supported article motion/collision runs in items_update_collision_phase();
 // - item post-hit callbacks run in items_update_post_combat().
 // Full generic GObj priority for unsupported item kinds is intentionally outside the current
 // item-core gameplay scope.
 void items_update_pre_fighter_anim_phase(MslBatch* batch);
 void items_update_sheik_chain_accessory_phase(MslBatch* batch);
+void items_update_sheik_needle_accessory_phase(MslBatch* batch);
 void items_spawn_fighter_anim_phase(MslBatch* batch);
 uint8_t items_spawn_sheik_held_needle_article(MslBatch* batch, size_t owner_idx);
 void items_sheik_needle_damage_callback(MslBatch* batch, int batch_index, int owner,

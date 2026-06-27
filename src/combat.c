@@ -26,6 +26,7 @@
 #include "escapeair_collision_owner.h"
 #include "grab_flow.h"
 #include "hit_elements.h"
+#include "hitboxes.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "hurtcaps_tables.h"
@@ -287,6 +288,8 @@ typedef struct MslCombatProcessHitResolved {
   uint8_t update_bookkeeping;
   uint8_t source_hb_valid;
   uint8_t source_cap_valid;
+  uint8_t source_is_item_hit;
+  uint8_t source_item_owns_motion_clear;
   int source_hitcapsule_int_dmg;
   uint16_t source_hitbox_angle;
   uint16_t source_hitbox_kbg;
@@ -652,6 +655,87 @@ static inline uint8_t combat_attackairlw_strong_grounded_high_cap_rejects_lower_
       // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
       // data/hurtcaps/{fox,falco}.json height 1/2
       return 1u;
+    }
+  }
+  return 0u;
+}
+
+static inline uint8_t combat_attackairlw_strong_attacklw4_high_cap_sibling_rejects_body_contact(
+    const MslBatch* batch, int bi, int attacker, uint8_t hb_id, int defender, size_t a_idx,
+    size_t d_idx, const MslHurtCap* cap) {
+  if (batch == NULL || cap == NULL || cap->height < 2u || hb_id > 1u) {
+    return 0u;
+  }
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_LW ||
+      !(batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_ATTACK_LW4 ||
+        batch->state.frame_start_action_id[d_idx] == (uint16_t)MSL_ACT_ATTACK_LW4) ||
+      batch->state.on_ground[d_idx] == 0u || batch->state.hitlag[d_idx] != 0u ||
+      batch->state.hitstun[d_idx] != 0u) {
+    return 0u;
+  }
+  const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+  if (combat_attackairlw_hitbox_payload_is_authored_strong_meteor(
+          hb_id, batch->state.hitbox_damage[hb_i], batch->state.hitbox_angle[hb_i],
+          batch->state.hitbox_kbg[hb_i], batch->state.hitbox_wsk[hb_i],
+          batch->state.hitbox_bkb[hb_i]) == 0u) {
+    return 0u;
+  }
+  const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+  const uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
+  for (uint8_t sibling_hb_id = 0u; sibling_hb_id <= 1u; sibling_hb_id++) {
+    if (sibling_hb_id == hb_id) {
+      continue;
+    }
+    const size_t sibling_hb_i = idx_hitbox(bi, attacker, (int)sibling_hb_id);
+    if (batch->state.hitbox_enabled[sibling_hb_i] == 0u ||
+        hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[sibling_hb_i]) != hit_group ||
+        combat_attackairlw_hitbox_payload_is_authored_strong_meteor(
+            sibling_hb_id, batch->state.hitbox_damage[sibling_hb_i],
+            batch->state.hitbox_angle[sibling_hb_i], batch->state.hitbox_kbg[sibling_hb_i],
+            batch->state.hitbox_wsk[sibling_hb_i], batch->state.hitbox_bkb[sibling_hb_i]) == 0u) {
+      continue;
+    }
+    const float sx = batch->state.hitbox_x[sibling_hb_i];
+    const float sy = batch->state.hitbox_y[sibling_hb_i];
+    const float sz = batch->state.hitbox_z[sibling_hb_i];
+    const float sr = batch->state.hitbox_radius[sibling_hb_i];
+    for (uint8_t medium_cap_id = 0u; medium_cap_id < hurtcap_count; medium_cap_id++) {
+      const size_t medium_cap_i = idx_hurtcap(bi, defender, (int)medium_cap_id);
+      if (batch->state.hurtcap_enabled[medium_cap_i] == 0u ||
+          batch->state.hurtcap_height[medium_cap_i] != 1u) {
+        continue;
+      }
+      float overlap_amount = 0.0f;
+      uint8_t overlap_evaluated = 0u;
+      uint8_t overlaps = combat_body_overlap_lbColl_80006E58_matrix_radius(
+          batch, bi, attacker, (int)sibling_hb_id, defender, (int)medium_cap_id, sx, sy, sz, sr,
+          batch->state.hurtcap_a_x[medium_cap_i], batch->state.hurtcap_a_y[medium_cap_i],
+          batch->state.hurtcap_a_z[medium_cap_i], batch->state.hurtcap_b_x[medium_cap_i],
+          batch->state.hurtcap_b_y[medium_cap_i], batch->state.hurtcap_b_z[medium_cap_i], 0u,
+          &overlap_amount, &overlap_evaluated);
+      const uint8_t baseline_overlaps = combat_sphere_capsule_intersects(
+          sx, sy, sz, sr, batch->state.hurtcap_a_x[medium_cap_i],
+          batch->state.hurtcap_a_y[medium_cap_i], batch->state.hurtcap_a_z[medium_cap_i],
+          batch->state.hurtcap_b_x[medium_cap_i], batch->state.hurtcap_b_y[medium_cap_i],
+          batch->state.hurtcap_b_z[medium_cap_i], batch->state.hurtcap_radius[medium_cap_i], NULL);
+      overlaps = (uint8_t)(overlaps || baseline_overlaps);
+      if (overlaps) {
+        // Strong DAir vs grounded AttackLw4 selected-height owner:
+        // ftCo_AttackLw4_IASA can enter locomotion before the same frame's combat pass, but the
+        // source hit still belongs to the frame-start down-smash callback/hurt pose. ftColl_80078C70
+        // admits one BODY DmgLog entry per accepted HitCapsule, and ftColl_8007A06C consumes the
+        // selected DmgLog hurt height for DamageFlyHi/N/Lw. On that frame-start down-smash pose, the
+        // replay-reconstructed lbColl matrix can over-select strong DAir hb0 against a high cap
+        // while the authored same-group strong DAir sibling has a current medium-cap source overlap.
+        // Preserve that medium selected-height owner without changing strong DAir rows where the
+        // sibling packet is absent.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_IASA
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8,ftColl_8007A06C}
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+        // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+        // data/hurtcaps/{fox,falco}.json height 1/2
+        return 1u;
+      }
     }
   }
   return 0u;
@@ -1466,6 +1550,24 @@ static inline uint8_t combat_attackairb_jump_low_body_source_owns_model_scale_by
   return 1u;
 }
 
+static inline uint8_t combat_attackairb_model_scale_cancellation_payload(
+    uint8_t hb_id, float damage, uint16_t angle, uint16_t kbg, uint16_t wsk, uint16_t bkb) {
+  const uint8_t strong_payload =
+      (uint8_t)((hb_id == (uint8_t)MSL_ATTACKAIRB_STRONG_BODY_ROOT_HITBOX ||
+                 hb_id == (uint8_t)MSL_ATTACKAIRB_STRONG_BODY_TAIL_HITBOX) &&
+                damage == 15.0f && angle == 361u && kbg == 100u && wsk == 0u && bkb == 0u);
+  const uint8_t weak_payload = (uint8_t)(hb_id < (uint8_t)MSL_MAX_HITBOXES && damage == 9.0f &&
+                                         angle == 361u && kbg == 100u && wsk == 0u && bkb == 0u);
+  // The model-scale cancellation lane is source-owned by Fox/Falco's extracted AttackAirB
+  // strong/weak payload split. Sheik BAir has a different hb2/hb3 damage/BKB payload on the same
+  // frame and remains an ordinary ftColl same-group BODY selector.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UpdateModelScale
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+  // data/moves/{fox,falco,sheik}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  return (uint8_t)(strong_payload || weak_payload);
+}
+
 static inline uint8_t combat_attackairb_enable_edge_model_scale_allows_body_contact(
     const MslBatch* batch, size_t a_idx, size_t hb_i, size_t d_idx, float hx, float hy, float hz,
     float hr, float ax, float ay, float az, float bx, float by, float bz, float cr,
@@ -1486,6 +1588,13 @@ static inline uint8_t combat_attackairb_enable_edge_model_scale_allows_body_cont
     return 1u;
   }
   if (batch->state.hitbox_enable_edge[hb_i] == 0u) {
+    return 1u;
+  }
+  const uint8_t hb_id = (uint8_t)(hb_i % (size_t)MSL_MAX_HITBOXES);
+  if (combat_attackairb_model_scale_cancellation_payload(
+          hb_id, batch->state.hitbox_damage[hb_i], batch->state.hitbox_angle[hb_i],
+          batch->state.hitbox_kbg[hb_i], batch->state.hitbox_wsk[hb_i],
+          batch->state.hitbox_bkb[hb_i]) == 0u) {
     return 1u;
   }
 
@@ -4630,6 +4739,62 @@ static inline void combat_publish_damage_entry_hitlag_ecb_current(MslBatch* batc
   batch->state.coll_prev_ecb_side_rel_y[idx] = ecb.side_rel_y;
   batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
   batch->state.coll_damage_hitlag_ecb_valid[idx] = 1u;
+  batch->state.coll_damage_hitlag_ecb_source_kind[idx] = MSL_DAMAGE_HITLAG_ECB_SOURCE_NONE;
+}
+
+static inline uint8_t combat_sample_active_hitlag_attackair_ecb(const MslBatch* batch, size_t idx,
+                                                                MslEcbWorldPoints* out) {
+  if (batch == NULL || out == NULL || batch->state.animation_index[idx] > 0xFFFFu) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[idx];
+  if (!msl_motion_state_class_has(batch->state.char_id[idx], action, MSL_MS_CLASS_ATTACK_AIR)) {
+    return 0u;
+  }
+
+  // Active Damage-hitlag CollData ECB owner:
+  // The seed extractor's `derive_damage_hitlag_colldata_ecb` mirrors source by sampling the
+  // pre-Damage AttackAir CollData pose on the first airborne Damage hitlag row and freezing it
+  // across the hitlag episode. Runtime reaches ProcessHit after the AttackAir Anim/Hit callbacks
+  // have already advanced `cur_anim_frame`, so the current live AttackAir frame is the same source
+  // frame that the extractor sees as previous-row `anim_frame + frame_speed`. Publish that packet
+  // before Fighter_ChangeMotionState replaces the visible action with Damage*.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A360}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_Damage_Coll}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+  const uint8_t char_id = batch->state.char_id[idx];
+  const uint32_t anim = batch->state.animation_index[idx];
+  const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  msl_ecb_world_points_sample(out, char_id, anim, frame, facing_dir, batch->state.pos_x[idx],
+                              batch->state.pos_y[idx], 0u);
+  if (!isfinite(out->bottom_rel_y) || !isfinite(out->top_rel_y) || !isfinite(out->left_rel_x) ||
+      !isfinite(out->right_rel_x) || !isfinite(out->side_rel_y) ||
+      out->top_rel_y <= out->bottom_rel_y || out->right_rel_x <= out->left_rel_x) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static inline void combat_publish_damage_hitlag_ecb_points(MslBatch* batch, size_t idx,
+                                                           const MslEcbWorldPoints* ecb) {
+  if (batch == NULL || ecb == NULL) {
+    return;
+  }
+  batch->state.coll_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
+  batch->state.coll_ecb_top_rel_y[idx] = ecb->top_rel_y;
+  batch->state.coll_ecb_left_rel_x[idx] = ecb->left_rel_x;
+  batch->state.coll_ecb_right_rel_x[idx] = ecb->right_rel_x;
+  batch->state.coll_ecb_side_rel_y[idx] = ecb->side_rel_y;
+  batch->state.coll_ecb_bottom_valid[idx] = 1u;
+  batch->state.coll_prev_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
+  batch->state.coll_prev_ecb_top_rel_y[idx] = ecb->top_rel_y;
+  batch->state.coll_prev_ecb_left_rel_x[idx] = ecb->left_rel_x;
+  batch->state.coll_prev_ecb_right_rel_x[idx] = ecb->right_rel_x;
+  batch->state.coll_prev_ecb_side_rel_y[idx] = ecb->side_rel_y;
+  batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
+  batch->state.coll_damage_hitlag_ecb_valid[idx] = 1u;
+  batch->state.coll_damage_hitlag_ecb_source_kind[idx] = MSL_DAMAGE_HITLAG_ECB_SOURCE_NONE;
 }
 
 static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch* batch,
@@ -5088,6 +5253,36 @@ static inline uint8_t combat_guard_reflect_x18_expiry_rejects_strong_attackairn_
   return 1u;
 }
 
+static inline uint8_t combat_guardsetoff_carried_shield_packet_owner(const MslBatch* batch,
+                                                                     size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.combat_shield_hit_int_damage[idx] == 0u ||
+      batch->state.combat_shield_damage_taken[idx] == 0u) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[idx];
+  if (action == (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+    return 1u;
+  }
+  if (action == (uint16_t)MSL_ACT_GUARD &&
+      (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF ||
+       batch->state.frame_start_action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF ||
+       batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF)) {
+    // GuardSetOff -> Guard carried shield-hit packet:
+    // GuardSetOff_Anim can enter Guard before the current frame's collision pass, while the
+    // replay-visible hidden x19A4/x19A0 shield-hit lanes still belong to the GuardSetOff source
+    // episode that produced this callback. Treat the x19A* packet as the source discriminator,
+    // not the destination Guard action id.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    //   ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_80092F2C}
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslBatch* batch,
                                                                       size_t idx) {
   if (batch == NULL) {
@@ -5096,6 +5291,18 @@ static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslB
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
   if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B2) != 0u) {
+    if (combat_guardsetoff_carried_shield_packet_owner(batch, idx) != 0u) {
+      // Carried GuardSetOff shield-hit packet:
+      // Slippi can retain fp+0x221C_b2 on an already-entered or just-advanced GuardSetOff source
+      // episode, while the hidden x19A4/x19A0 lanes prove ftColl_80076CBC accumulated a fresh
+      // shield-hit packet for this callback. Collision-time x221C_b2 would have suppressed x19A0,
+      // so the nonzero x19A0 lane is the source-owned discriminator that the visible bit is stale
+      // for shield-damage accumulation.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}
+      return 0u;
+    }
     // Shield-hit damage/recoil consumes the live powershield flag directly. This is intentionally
     // broader than item reflect ownership: x14 owns ReflectDesc/item reflection, while
     // ftColl_80076CBC and ftCo_80092F2C gate shieldDamageTaken and GuardSetOff pushback on
@@ -5628,6 +5835,19 @@ static inline float combat_hitcapsule_collision_damage(const MslBatch* batch, si
     dmg *= stale_mult;
   }
   return dmg;
+}
+
+void combat_apply_deal_hitlag_hitbox_damage(MslBatch* batch, size_t idx, size_t hb_i) {
+  if (batch == NULL) {
+    return;
+  }
+  const int dmg_i = combat_hitbox_collision_env_damage(batch, idx, hb_i);
+  combat_apply_deal_hitlag_raw_damage(batch, idx, dmg_i);
+}
+
+int combat_hitbox_collision_env_damage(const MslBatch* batch, size_t idx, size_t hb_i) {
+  const float dmg = combat_hitcapsule_collision_damage(batch, idx, hb_i);
+  return combat_get_env_dmg(dmg);
 }
 
 static inline int combat_guard_setoff_x19a4_int_damage(const MslBatch* batch, size_t a_idx,
@@ -10012,7 +10232,15 @@ static inline void combat_processhit_apply_resolved_damage(const MslCommonParams
   }
   combat_damage_mark_entry_time_since_hit(batch, ev->d_idx);
 
+  MslEcbWorldPoints active_hitlag_attackair_ecb = {0};
+  const uint8_t active_hitlag_attackair_ecb_valid =
+      (ev->defender_on_ground == 0u && ev->d_hl != 0u && ev->source_is_item_hit != 0u &&
+       ev->source_item_owns_motion_clear != 0u)
+          ? combat_sample_active_hitlag_attackair_ecb(batch, ev->d_idx,
+                                                      &active_hitlag_attackair_ecb)
+          : 0u;
   const uint8_t defender_on_ground_after = batch->state.on_ground[ev->d_idx] ? 1u : 0u;
+  const uint16_t pre_entry_action = batch->state.action_id[ev->d_idx];
   combat_damage_enter_state(
       c, batch, ev->bi, ev->d_idx, ev->defender_on_ground, defender_on_ground_after,
       ev->hurt_height, ev->kb_applied, ev->kb_angle_rad, ev->damage_state_raw_angle, ev->a_idx,
@@ -10020,8 +10248,37 @@ static inline void combat_processhit_apply_resolved_damage(const MslCommonParams
       ev->source_motion_id, ev->source_hitcapsule_int_dmg, ev->source_hitbox_angle,
       ev->source_hitbox_kbg, ev->source_hitbox_bkb, ev->d_motion_id, ev->source_item_type,
       ev->source_item_state, ev->force_tumble_severity);
+  const uint16_t post_entry_action = batch->state.action_id[ev->d_idx];
+  if (post_entry_action != pre_entry_action && ev->source_is_item_hit != 0u &&
+      ev->source_item_owns_motion_clear != 0u &&
+      !msl_motion_state_has_motion_flag(batch->state.char_id[ev->d_idx], post_entry_action,
+                                        MSL_MOTION_FLAG_SKIP_HIT)) {
+    // Fighter_ChangeMotionState clears x914 HitCapsules through ftColl_8007AFF8 unless the
+    // destination MotionState carries Ft_MF_SkipHit. ProcessHit damage entry can run while hitlag
+    // is active, before the next hitboxes_refresh pass, so clear the live outgoing capsules here
+    // instead of letting frozen-hitlag preservation carry the old attack into later Needle
+    // item/contact callbacks. Keep this on the retained thrown-Needle owner: broader independent
+    // projectile sources can resolve after fighter collision in source order, so clearing their
+    // victim's outgoing HitCapsules immediately would erase same-frame reciprocal fighter hits.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AFF8,ftColl_8007ABD0,ftColl_80076ED8}
+    // refs/melee/src/melee/it/itcoll.c::it_80272460
+    hitboxes_clear_player_active(batch, ev->bi, ev->defender);
+  }
   if (ev->grounded_ecb_lock_owner != 0u && ev->d_hl != 0u) {
     combat_publish_damage_entry_hitlag_ecb_current(batch, ev->d_idx);
+  }
+  if (active_hitlag_attackair_ecb_valid != 0u) {
+    combat_publish_damage_hitlag_ecb_points(batch, ev->d_idx, &active_hitlag_attackair_ecb);
+    if (ev->source_item_owns_motion_clear != 0u) {
+      // Thrown-Needle item BODY owns the frozen active-hitlag Damage ECB even if the article's
+      // DmgDealt callback destroys or bounces it later in the same item pass. Persist the source
+      // kind on the victim's CollData state instead of rediscovering it from live item slots.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ProcessHit_8006D1EC}
+      // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt
+      batch->state.coll_damage_hitlag_ecb_source_kind[ev->d_idx] =
+          MSL_DAMAGE_HITLAG_ECB_SOURCE_THROWN_NEEDLE;
+    }
   }
   combat_processhit_apply_hitlag_after_entry(batch, ev);
   if (ev->apply_guard_reflect_followup != 0u) {
@@ -11393,6 +11650,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
        ((item_state == 0u) ? lp->zero_kb_damage_class : lp->state1_zero_kb_damage_class) != 0u)
           ? 1u
           : 0u;
+  const uint8_t item_damage_owns_motion_clear =
+      (item_article_params_for_sheik_needle_throw_item_type(item_type) != NULL) ? 1u : 0u;
   MslCombatDamageApplyClass item_damage_class =
       zero_kb_damage_class_hit ? MSL_COMBAT_DAMAGE_PERCENT_ONLY_NO_ENTRY : MSL_COMBAT_DAMAGE_FULL;
   if (item_damage_class == MSL_COMBAT_DAMAGE_PERCENT_ONLY_NO_ENTRY) {
@@ -11614,6 +11873,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     ev.d_motion_id = d_motion_id;
     ev.source_item_type = item_type;
     ev.source_item_state = item_state;
+    ev.source_is_item_hit = 1u;
     ev.d_hl = d_hl;
     ev.d_hl_prev = d_hl_prev;
     ev.kb_applied = 0.0f;
@@ -11621,6 +11881,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     ev.last_hit_by = combat_source_port0_for_attacker(batch, a_idx, attacker);
     ev.source_write = MSL_PROCESS_HIT_SOURCE_WRITE_COMMIT_OWNER;
     ev.update_bookkeeping = 1u;
+    ev.source_item_owns_motion_clear = item_damage_owns_motion_clear;
     ev.stale_move_id = damage_product.move_id;
     ev.stale_attack_instance = damage_product.attack_instance;
     ev.combo_attack_id = damage_product.move_id;
@@ -11764,6 +12025,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   ev.d_motion_id = d_motion_id;
   ev.source_item_type = item_type;
   ev.source_item_state = item_state;
+  ev.source_is_item_hit = 1u;
+  ev.source_item_owns_motion_clear = item_damage_owns_motion_clear;
   ev.d_hl = d_hl;
   ev.d_hl_prev = d_hl_prev;
   ev.kb_applied = kb_applied;
@@ -12290,11 +12553,9 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   (void)a_idx;
 }
 
-static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batch, size_t a_idx,
-                                                                  size_t d_idx, int max_int_dmg,
-                                                                  int shield_damage_taken,
-                                                                  uint16_t attacker_motion_id,
-                                                                  uint8_t hit_element) {
+static inline void combat_mutations_pass1_future_apply_shield_hit(
+    MslBatch* batch, size_t a_idx, size_t d_idx, int a_max_int_dmg, int d_max_int_dmg,
+    int shield_damage_taken, uint16_t attacker_motion_id, uint8_t hit_element) {
   if (batch == NULL) {
     return;
   }
@@ -12319,8 +12580,11 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // Fighter_ProcessHit applies the per-frame shield health reduction:
   // shield_health -= x284 * (shieldDamageTaken*(1 - (lightshield_amount*(x2E0-x2DC)+x2DC))) + x288
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  if (max_int_dmg < 0) {
-    max_int_dmg = 0;
+  if (a_max_int_dmg < 0) {
+    a_max_int_dmg = 0;
+  }
+  if (d_max_int_dmg < 0) {
+    d_max_int_dmg = 0;
   }
   if (shield_damage_taken < 0) {
     shield_damage_taken = 0;
@@ -12330,6 +12594,19 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // active" flag is set (x221C_b2).
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC (`if (!fp1->x221C_b2) { ...shieldDamageTaken... }`)
   uint8_t powershield_active = combat_shield_damage_powershield_suppressed_idx(batch, d_idx);
+  const uint8_t guardsetoff_carried_x19a0_owner =
+      (combat_guardsetoff_carried_shield_packet_owner(batch, d_idx) != 0u) ? 1u : 0u;
+  if (powershield_active != 0u && guardsetoff_carried_x19a0_owner != 0u) {
+    // Active GuardSetOff carried shield-hit packet:
+    // Slippi can still expose fp+0x221C_b2 on an already-entered GuardSetOff snapshot, while the
+    // hidden x19A4/x19A0 lanes prove ftColl_80076CBC accumulated a fresh shield-hit packet for
+    // this callback. The x221C bit is stale replay-visible state here; source collision already
+    // wrote x19A0, so Fighter_ProcessHit consumes that damage instead of powershield-suppressing it.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}
+    powershield_active = 0u;
+  }
   const uint8_t recoil_powershield_active = combat_guard_setoff_recoil_x221c_b2_idx(batch, d_idx);
   if (powershield_active) {
     // Powershield-active fighter shield contact:
@@ -12368,7 +12645,7 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}
   batch->state.action_id[d_idx] = (uint16_t)MSL_ACT_GUARD_SET_OFF;
   batch->state.guard_setoff_hitlag_damage_min[d_idx] =
-      (max_int_dmg > 255) ? 255u : (uint8_t)max_int_dmg;
+      (d_max_int_dmg > 255) ? 255u : (uint8_t)d_max_int_dmg;
   // Decomp: GuardSetOff uses ftCo_SM_GuardDamage as its submotion (msid=40).
   // refs/melee/src/melee/ft/ftmotionstates.c (GuardSetOff motion-state entry uses ftCo_SM_GuardDamage)
   batch->state.animation_index[d_idx] = (uint32_t)MSL_SM_GUARD_DAMAGE;
@@ -12391,7 +12668,7 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
       (light * (c->shield_stun_lightshield_max - c->shield_stun_lightshield_min)) +
       c->shield_stun_lightshield_min;
   float stun_frames =
-      c->shield_stun_mul * ((float)max_int_dmg * (1.0f - ls_stun)) + c->shield_stun_base;
+      c->shield_stun_mul * ((float)d_max_int_dmg * (1.0f - ls_stun)) + c->shield_stun_base;
   if (!(stun_frames > 0.0f)) {
     stun_frames = 1.0f;
   }
@@ -12434,9 +12711,13 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // - attacker uses fp->dmg.x1924 (max int_dmg over shield contacts this frame),
   // - defender uses fp->x19A4 (max int_dmg over shield contacts this frame),
   // both computed from hit0->damage via getEnvDmg.
+  //
+  // Replay seed lanes can recover the defender-only x19A4 scalar without recovering the exact
+  // attacker dmg.x1924 packet. Keep the two consumers split so a teacher-forced x19A4 lower-bound
+  // does not incorrectly rewrite attacker hitlag.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC and fighter.c::Fighter_ProcessHit_8006D1EC
-  const uint16_t a_hl = combat_calc_hitlag_frames(c, max_int_dmg, attacker_motion_id, 1.0f);
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, max_int_dmg, d_motion_id_pre, 1.0f);
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, a_max_int_dmg, attacker_motion_id, 1.0f);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, d_max_int_dmg, d_motion_id_pre, 1.0f);
   batch->state.hitlag[a_idx] = a_hl;
   batch->state.hitlag[d_idx] = d_hl;
   combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
@@ -12453,7 +12734,7 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
     // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2A4
-    const float eval = light * (float)max_int_dmg * c->shield_attacker_ground_kb_mul +
+    const float eval = light * (float)a_max_int_dmg * c->shield_attacker_ground_kb_mul +
                        c->shield_attacker_ground_kb_base;
     batch->state.attacker_shield_ground_kb_vel[a_idx] =
         (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -eval : eval;
@@ -13269,6 +13550,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         uint8_t sel_rehit_frames = 0;
         int shield_damage_taken_sum = 0;
         uint8_t shield_contact_count = 0u;
+        uint8_t shield_seed_accept_count = 0u;
+        uint8_t zero_shield_damage_contact_count = 0u;
+        uint8_t zero_shield_damage_x19a0_match_count = 0u;
         uint8_t shield_contact_groups[MSL_MAX_HITBOXES] = {0};
         uint8_t shield_contact_rehit_frames[MSL_MAX_HITBOXES] = {0};
         uint8_t shield_contact_group_seen[8] = {0};
@@ -13561,11 +13845,21 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (x19a4_int_dmg > max_int_dmg) {
             max_int_dmg = x19a4_int_dmg;
           }
+          if (shield_seed_kind == 2u && shield_seed_accept_count < (uint8_t)MSL_MAX_HITBOXES) {
+            shield_seed_accept_count++;
+          }
           int contact_shield_damage = int_dmg + (int)batch->state.hitbox_shield_damage[hb_i];
           if (contact_shield_damage < 0) {
             contact_shield_damage = 0;
           }
           shield_damage_taken_sum += contact_shield_damage;
+          if (batch->state.hitbox_shield_damage[hb_i] == 0 &&
+              zero_shield_damage_contact_count < (uint8_t)MSL_MAX_HITBOXES) {
+            zero_shield_damage_contact_count++;
+            if (contact_shield_damage == (int)batch->state.combat_shield_damage_taken[d_idx]) {
+              zero_shield_damage_x19a0_match_count++;
+            }
+          }
           shield_contact_group_seen[hit_group] = 1u;
 
           if (sel_int_dmg == 0) {
@@ -13584,33 +13878,72 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         }
 
         if (sel_int_dmg > 0) {
+          int attacker_max_int_dmg = max_int_dmg;
           const uint8_t lower_bound_attackairb_guard_seed =
               msl_shielddesc_attackairb_guard_lower_bound_seed_owner(batch, bi, attacker, defender);
           const uint8_t lower_bound_attackairb_guardreflect_x19a4_seed =
               msl_shielddesc_attackairb_guardreflect_x19a4_lower_bound_seed_owner(
                   batch, bi, attacker, defender);
-          const uint8_t lower_bound_attackairb_guardon_x19a4_seed =
-              msl_shielddesc_attackairb_guardon_x19a4_lower_bound_seed_owner(batch, bi, attacker,
-                                                                             defender);
+          const uint8_t no_submotion_zero_shield_damage_x19a0_seed =
+              msl_shielddesc_no_submotion_zero_shield_damage_x19a0_seed_shape(batch, bi, attacker,
+                                                                              defender);
+          const uint8_t no_submotion_single_contact_x19a0_owner =
+              (uint8_t)(no_submotion_zero_shield_damage_x19a0_seed != 0u &&
+                        shield_contact_count == 1u && zero_shield_damage_contact_count == 1u &&
+                        zero_shield_damage_x19a0_match_count == 1u &&
+                        shield_damage_taken_sum ==
+                            (int)batch->state.combat_shield_damage_taken[d_idx]);
+          const uint8_t guard_no_command_x19a4_attacker_seed =
+              msl_shielddesc_guard_no_command_x19a4_attacker_seed_owner(batch, bi, attacker,
+                                                                        defender);
+          const uint8_t guard_zero_x19a0_x19a4_attacker_seed =
+              msl_shielddesc_guard_zero_x19a0_x19a4_attacker_seed_owner(batch, bi, attacker,
+                                                                        defender);
+          const uint16_t defender_action = batch->state.action_id[d_idx];
+          const uint8_t no_submotion_guardon_reflect_x19a4_seed_shape =
+              (uint8_t)((defender_action == (uint16_t)MSL_ACT_GUARD_ON ||
+                         defender_action == (uint16_t)MSL_ACT_GUARD_REFLECT) &&
+                        batch->state.action_frame[d_idx] < 0 &&
+                        batch->state.animation_index[d_idx] == UINT32_MAX &&
+                        batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u);
+          const uint8_t frame_start_flags_2218 = batch->state.state_flags_2218_frame_start[d_idx];
+          const uint8_t settled_guard_b2_current_x19a4_seed_shape =
+              (uint8_t)(defender_action == (uint16_t)MSL_ACT_GUARD &&
+                        batch->state.action_frame[d_idx] < 0 &&
+                        batch->state.animation_index[d_idx] == UINT32_MAX &&
+                        batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u &&
+                        frame_start_flags_2218 == (uint8_t)MSL_STATE_FLAG_2218_B2);
           const uint8_t seeded_x19a4 = (lower_bound_attackairb_guard_seed != 0u ||
                                         lower_bound_attackairb_guardreflect_x19a4_seed != 0u)
                                            ? 0u
                                            : batch->state.combat_shield_hit_int_damage[d_idx];
-          const uint8_t guardon_bair_x19a4_from_x19a0 =
-              (lower_bound_attackairb_guardon_x19a4_seed != 0u)
+          const uint8_t exact_seeded_current_x19a4_packet =
+              (seeded_x19a4 != 0u && shield_seed_accept_count != 0u &&
+               shield_seed_accept_count == shield_contact_count &&
+               (no_submotion_guardon_reflect_x19a4_seed_shape != 0u ||
+                settled_guard_b2_current_x19a4_seed_shape != 0u) &&
+               lower_bound_attackairb_guard_seed == 0u &&
+               lower_bound_attackairb_guardreflect_x19a4_seed == 0u &&
+               no_submotion_single_contact_x19a0_owner == 0u)
+                  ? 1u
+                  : 0u;
+          const uint8_t guardon_x19a4_from_x19a0 =
+              (no_submotion_single_contact_x19a0_owner != 0u)
                   ? batch->state.combat_shield_damage_taken[d_idx]
                   : 0u;
-          if (guardon_bair_x19a4_from_x19a0 != 0u) {
-            // No-submotion GuardOn BAir lower-bound reconstruction:
-            // this source shape has replay-proven ShieldDesc admission, zero hitbox shield
-            // damage, and an x19A4 seed that can be only a hitlag-derived lower bound. The
-            // recovered x19A0 lane then identifies the selected BAir HitCapsule payload that
-            // ftColl_80076CBC wrote into x19A4 before ftCo_80092F2C consumed it for GuardSetOff
-            // shieldstun/recoil. Keep this narrow to the source-shaped helper above so unrelated
-            // shieldDamageTaken accumulator rows do not become x19A4.
+          if (guardon_x19a4_from_x19a0 != 0u) {
+            // No-submotion GuardOn lower-bound reconstruction:
+            // this source shape has replay-proven ShieldDesc admission and an x19A4 seed that can
+            // be only a hitlag-derived lower bound. x19A0 is an accumulator, so consume it as the
+            // x19A4 source-damage lane only when this callback accepts exactly one
+            // zero-shield-damage contact whose collision-time damage contribution equals x19A0.
+            // Multi-contact accumulator rows stay on the normal max-int-damage owner.
             // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_8007ABD0}
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
-            max_int_dmg = (int)guardon_bair_x19a4_from_x19a0;
+            max_int_dmg = (int)guardon_x19a4_from_x19a0;
+            if (no_submotion_single_contact_x19a0_owner != 0u) {
+              attacker_max_int_dmg = (int)guardon_x19a4_from_x19a0;
+            }
           } else if (seeded_x19a4 != 0u) {
             // Teacher-forced shield-hit max-damage lane:
             // - ftColl_80076CBC writes defender fp->x19A4 as the max getEnvDmg(hit0->damage)
@@ -13624,6 +13957,43 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
             max_int_dmg = (int)seeded_x19a4;
+            if (exact_seeded_current_x19a4_packet != 0u) {
+              // Current-frame ShieldDesc seed packet:
+              // the seed bridge proves every accepted live ShieldDesc contact for this
+              // attacker/defender pair. In that source shape x19A4 and attacker dmg.x1924 share
+              // the same max getEnvDmg packet, while x19A0 remains a separate accumulator consumed
+              // below for shield HP. Do not require x19A0==0 here; multi-contact x19A0 rows can
+              // still source attacker hitlag from x19A4 without treating x19A0 as selected damage.
+              // Settled Guard rows enter this packet owner only on the raw fp+0x2218_b2 command
+              // lane with no other fp+0x2218 owners; the no-command helper above keeps broader
+              // settled Guard seed packets off this command-owned path.
+              // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80078C70}
+              // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+              // bindings/msl_preprocess_native.c::msl_derive_shield_contact_seed_bridge_py
+              attacker_max_int_dmg = (int)seeded_x19a4;
+            } else if (guard_no_command_x19a4_attacker_seed != 0u ||
+                       guard_zero_x19a0_x19a4_attacker_seed != 0u) {
+              // Settled no-command Guard shield-hit packet:
+              // with raw fp+0x2218_b2 clear, the replay-proven ShieldDesc packet owns attacker
+              // hitlag as well as defender x19A4. One-step live geometry can otherwise choose a
+              // sibling HitCapsule or miss the seed-only ShieldDesc packet consumed by
+              // Fighter_ProcessHit. The zero-x19A0 variant still consumes only x19A4 here; x19A0
+              // remains an accumulator and is not used as selected damage.
+              // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+              // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+              attacker_max_int_dmg = (int)seeded_x19a4;
+            } else if (combat_guardsetoff_carried_shield_packet_owner(batch, d_idx) != 0u &&
+                       shield_seed_accept_count != 0u) {
+              // Active GuardSetOff shield-hit carry:
+              // ftCo_80093240/Fighter_ProcessHit consumes the carried x19A4/x19A0 shield-hit
+              // packet from an already-active GuardSetOff callback. A one-step reseed can expose
+              // current live HitCapsule proxies that are stronger or wider than that carried
+              // packet; source does not replay a fresh attacker dmg.x1924 max from those proxies.
+              // Keep attacker hitlag on the same carried x19A4 scalar as the source packet.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}
+              // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+              attacker_max_int_dmg = (int)seeded_x19a4;
+            }
           }
           int tmp_dmg = shield_damage_taken_sum;
           const uint8_t seeded_x19a0 = (lower_bound_attackairb_guard_seed != 0u)
@@ -13638,6 +14008,18 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
             // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
             tmp_dmg = (int)seeded_x19a0;
+          } else if (exact_seeded_current_x19a4_packet != 0u &&
+                     settled_guard_b2_current_x19a4_seed_shape != 0u &&
+                     shield_damage_taken_sum > (int)seeded_x19a4) {
+            // Settled Guard command-lane current packet:
+            // raw fp+0x2218_b2 with no other fp+0x2218 owners can carry the source command-owned
+            // current ShieldDesc packet even when x19A0 is not replay-recovered. In this narrow
+            // lane x19A4 is the only bounded source damage scalar for both hitlag and shield HP;
+            // broader no-command/current ShieldDesc packets keep live shieldDamageTaken because
+            // x19A0 is the real accumulator and x19A4 is only the max-damage lane.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+            // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+            tmp_dmg = (int)seeded_x19a4;
           }
           if (tmp_dmg < 0) {
             tmp_dmg = 0;
@@ -13650,8 +14032,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // separately by collision.
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
           // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-          combat_mutations_pass1_future_apply_shield_hit(batch, a_idx, d_idx, max_int_dmg, tmp_dmg,
-                                                         a_motion_id, sel_element);
+          combat_mutations_pass1_future_apply_shield_hit(batch, a_idx, d_idx, attacker_max_int_dmg,
+                                                         max_int_dmg, tmp_dmg, a_motion_id,
+                                                         sel_element);
 
           // Hitlist register: decomp hitlists store a `victim` pointer inside the HitCapsule, so
           // the victim identity is stable across motion-state changes (e.g. GuardSetOff entry).
@@ -14128,6 +14511,14 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                               hy, hz, hr)) {
             overlaps = 0u;
           }
+          if (overlaps && combat_attackairlw_strong_attacklw4_high_cap_sibling_rejects_body_contact(
+                              batch, bi, attacker, hb_id, defender, a_idx, d_idx,
+                              use_guard_family_body_fallback_caps || defender_caps == NULL ||
+                                      cap_id >= defender_cap_count_u16
+                                  ? NULL
+                                  : &defender_caps[cap_id])) {
+            overlaps = 0u;
+          }
           if (overlaps && combat_attackairlw_attackdash_tail_allow_interrupt_rejects_body_contact(
                               batch, bi, attacker, hb_id, a_idx, d_idx,
                               use_guard_family_body_fallback_caps || defender_caps == NULL ||
@@ -14390,13 +14781,16 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                   ? combat_primary_phantom_tiplog_allows_later_same_group_body(
                         batch, c, bi, attacker, hb_id, defender, hit_group)
                   : 0u;
+          const uint8_t ordinary_fighter_phantom_tiplog_range =
+              (!shield_active &&
+               (!same_group_primary_full_body || primary_phantom_has_later_same_group_body) &&
+               lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8)
+                  ? 1u
+                  : 0u;
           const uint8_t fighter_phantom_tiplog_range =
               (!attackairb_stale_owner_candidate && lbcoll_overlap_valid &&
                lbcoll_overlap_amount > 0.0f &&
-               ((!shield_active &&
-                 (!same_group_primary_full_body || primary_phantom_has_later_same_group_body) &&
-                 lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8) ||
-                guard_shield_poke_phantom_boundary))
+               (ordinary_fighter_phantom_tiplog_range || guard_shield_poke_phantom_boundary))
                   ? 1u
                   : 0u;
           const uint8_t attackairb_phantom_tiplog_range =
