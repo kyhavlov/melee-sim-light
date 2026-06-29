@@ -533,6 +533,61 @@ def test_state_flags_2218_damage_entry_bounded_source_allow_interrupt(c: _Case) 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    "c",
+    [
+        _Case(
+            dataset_rel="datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl",
+            record=2418,
+            p=0,
+            byte=1,
+            seed_byte=0x08,
+            ref_byte=0x08,
+            note="DamageAir2 -> Fall keeps fastfall through ftCo_Fall_Enter",
+            seed_action_id=0x0056,
+            ref_action_id=0x001D,
+            seed_hitstun=0,
+            ref_hitstun=0,
+        ),
+        _Case(
+            dataset_rel="datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl",
+            record=5599,
+            p=1,
+            byte=1,
+            seed_byte=0x08,
+            ref_byte=0x08,
+            note="DamageAir1 -> Fall keeps fastfall through ftCo_Fall_Enter",
+            seed_action_id=0x0055,
+            ref_action_id=0x001D,
+            seed_hitstun=0,
+            ref_hitstun=0,
+        ),
+        _Case(
+            dataset_rel="datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl",
+            record=3143,
+            p=1,
+            byte=1,
+            seed_byte=0x00,
+            ref_byte=0x00,
+            note="DamageAir1 -> Fall does not create fastfall without source latch",
+            seed_action_id=0x0055,
+            ref_action_id=0x001D,
+            seed_hitstun=0,
+            ref_hitstun=0,
+        ),
+    ],
+)
+def test_state_flags_221a_damageair_fall_keepfastfall(c: _Case) -> None:
+    # DamageAir Anim exits through ftCo_Fall_Enter, which calls Fighter_ChangeMotionState with
+    # Ft_MF_KeepFastFall. Preserve only the source fastfall latch already live on the DamageAir
+    # row; do not synthesize the bit for ordinary non-fastfall DamageAir exits.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+    # refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside ChangeMotionState)
+    _run_case(c)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("record", "p", "ref_action", "ref_bit_set", "note"),
     [
         (

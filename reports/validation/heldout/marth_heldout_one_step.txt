@@ -431,7 +431,7 @@ mismatch.instance_id: 15 / 21496 (0.000698)
 mismatch.last_attack_landed: 10 / 21496 (0.000465)
 mismatch.combo_count: 4 / 21496 (0.000186)
 mismatch.last_hit_by: 19 / 21496 (0.000884)
-mismatch.state_flags: 47 / 107480 (0.000437)
+mismatch.state_flags: 46 / 107480 (0.000428)
 mismatch.item_exists: 2 / 161220 (0.000012)
 mismatch.item_type: 2 / 161220 (0.000012)
 mismatch.item_state: 0 / 161220 (0.000000)
@@ -439,10 +439,10 @@ mismatch.item_owner: 2 / 161220 (0.000012)
 mismatch.item_instance_id: 2 / 161220 (0.000012)
 ignored_mismatch.state_flags[4]&0x80: 68 / 21496 (0.003163)
 err.pos_x: mae=0.001790 p95=0.000000 max=2.151703
-err.pos_y: mae=0.001747 p95=0.000000 max=5.211698
+err.pos_y: mae=0.001733 p95=0.000000 max=5.211698
 err.speed_air_x_self: mae=0.000788 p95=0.000000 max=2.151708
 err.speed_ground_x_self: mae=0.000480 p95=0.000000 max=1.277249
-err.speed_y_self: mae=0.001061 p95=0.000000 max=3.170000
+err.speed_y_self: mae=0.001047 p95=0.000000 max=3.170000
 err.speed_x_attack: mae=0.000415 p95=0.000000 max=1.938755
 err.speed_y_attack: mae=0.001022 p95=0.000000 max=5.868326
 err.percent: mae=0.004133 p95=0.000000 max=13.000000
@@ -451,10 +451,10 @@ err.item_pos_x: mae=1.691233 p95=0.000000 max=155.064667
 err.item_pos_y: mae=0.436979 p95=0.000000 max=40.639061
 err.item_vel_x: mae=0.075269 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000001
-overall.discrete_mismatch: 218 / 1300508
-overall.strict_discrete_mismatch: 286 / 1300508
+overall.discrete_mismatch: 217 / 1300508
+overall.strict_discrete_mismatch: 285 / 1300508
 overall.ignored_discrete_mismatch: 68
-overall.float_norm_mae_p95: 0.00025791
+overall.float_norm_mae_p95: 0.00025734
 
 == datasets/marth_heldout/replays/heldout/marth/DisloyalPaltryHawk.msl ==
 Records: 7745  Players/scored per record: 2  Total player-frames: 15490
@@ -547,7 +547,7 @@ overall.ignored_discrete_mismatch: 57
 overall.float_norm_mae_p95: 0.00035337
 
 == suite summary ==
-overall.discrete_mismatch: 2041 / 14168979
-overall.strict_discrete_mismatch: 2675 / 14168979
+overall.discrete_mismatch: 2040 / 14168979
+overall.strict_discrete_mismatch: 2674 / 14168979
 overall.ignored_discrete_mismatch: 634
-overall.float_norm_mae_p95: 0.00024309
+overall.float_norm_mae_p95: 0.00024304

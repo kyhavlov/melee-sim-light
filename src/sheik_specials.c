@@ -305,6 +305,26 @@ static uint8_t sk_action_allows_ground_special(const MslBatch* batch, size_t idx
       return 1u;
     }
     default:
+      // Generated grounded Attack* IASA owners delegate into the Wait_IASA grounded-special
+      // preamble after `fp->allow_interrupt`. This keeps Sheik's B-special selector table-backed
+      // instead of carrying a local AttackS3/Hi4/Lw4/S4 list here.
+      // data/motion_state/owners/<char>.bin MSLMSO01 class
+      // GROUNDED_ATTACK_WAIT_IASA_SPECIALS
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{AttackS3,AttackHi3,AttackS4,AttackHi4,AttackLw4}.c
+      if (msl_motion_state_common_class_has_fast(a,
+                                                 MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS)) {
+        const size_t flags_i =
+            idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+        // Grounded Attack* IASA first tests source `fp->allow_interrupt`; early smash frames can
+        // have a fresh B edge but still must not enter Sheik SpecialN/Hi/S/Lw until the command bit
+        // is live. Slippi exposes this source bit through fp+0x2218_b0 on the same late Attack*
+        // rows that enter specials.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{AttackS3,AttackHi3,AttackS4,AttackHi4,AttackLw4}.c
+        return (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT)
+                   ? 1u
+                   : 0u;
+      }
       return 0u;
   }
 }
@@ -741,6 +761,21 @@ uint8_t sheik_special_try_landing_iasa(MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
   return sk_try_enter_b_special(batch, c, ch, idx, 1u);
+}
+
+uint8_t sheik_special_try_ground_iasa(MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
+      batch->state.on_ground[idx] == 0u) {
+    return 0u;
+  }
+  // Grounded destination-Wait IASA owner used after common grounded Anim callbacks resolve through
+  // ft_8008A2BC. This mirrors ftCo_Wait_IASA's B-special ordering without broadening Landing's lag
+  // gate or Dash/Run's side-B-only source path.
+  // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
+  return sk_try_enter_b_special(batch, msl_common_params(),
+                                msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK), idx, 1u);
 }
 
 uint8_t sheik_special_try_air_iasa(MslBatch* batch, size_t idx) {

@@ -34,12 +34,12 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:135
 == datasets/marth_heldout/replays/heldout/marth/CookedPureKouprey.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1170
-rollout.streak_count: 40
-rollout.streak_len.median: 198
-rollout.streak_len.p90: 664
-rollout.streak_len.p95: 739
+rollout.streak_count: 39
+rollout.streak_len.median: 204
+rollout.streak_len.p90: 683
+rollout.streak_len.p95: 881
 rollout.streak_len.max: 1170
-rollout.first_mismatch_total: 40
+rollout.first_mismatch_total: 39
 rollout.first_mismatch_seeded_total: 23
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -99,12 +99,12 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == datasets/marth_heldout/replays/heldout/marth/EntireHardToFindSnail.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1133
-rollout.streak_count: 31
+rollout.streak_count: 30
 rollout.streak_len.median: 223
 rollout.streak_len.p90: 575
 rollout.streak_len.p95: 628
 rollout.streak_len.max: 1133
-rollout.first_mismatch_total: 33
+rollout.first_mismatch_total: 32
 rollout.first_mismatch_seeded_total: 19
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -248,14 +248,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:516
 
 == datasets/marth_heldout/replays/heldout/marth/WorstUnsungSparrow.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1691
-rollout.streak_count: 30
-rollout.streak_len.median: 310
-rollout.streak_len.p90: 686
+rollout.best_len: 1756
+rollout.streak_count: 29
+rollout.streak_len.median: 322
+rollout.streak_len.p90: 728
 rollout.streak_len.p95: 745
-rollout.streak_len.max: 1691
-rollout.first_mismatch_total: 31
-rollout.first_mismatch_seeded_total: 18
+rollout.streak_len.max: 1756
+rollout.first_mismatch_total: 30
+rollout.first_mismatch_seeded_total: 17
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=18.0006 rec=5218 p=1 seed/ref/out=72.8343/71.9997/90.0003 actions=4/4/4 category=unclassified
@@ -269,14 +269,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:980
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == suite summary ==
-overall.rollout.streak_count: 350
-overall.rollout.streak_len.median: 229
-overall.rollout.streak_len.p90: 738
+overall.rollout.streak_count: 347
+overall.rollout.streak_len.median: 231
+overall.rollout.streak_len.p90: 739
 overall.rollout.streak_len.p95: 1078
 overall.rollout.streak_len.max: 1865
 overall.rollout.best_len.max: 1865
-overall.rollout.first_mismatch_total: 400
-overall.rollout.first_mismatch_seeded_total: 247
+overall.rollout.first_mismatch_total: 397
+overall.rollout.first_mismatch_seeded_total: 246
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=63.0278 rec=3662 p=0 seed/ref/out=-75.3506/-77.8475/-14.8197 actions=35/35/35 category=unclassified

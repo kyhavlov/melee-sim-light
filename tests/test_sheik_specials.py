@@ -3875,6 +3875,70 @@ def test_sheik_demo_vanish_smoke_spawn_frame_body_hit_and_no_hitlag_rehit_lock()
 
 
 @pytest.mark.integration
+def test_sheik_vanish_smoke_same_item_hitstun_seed_reconstructs_victim_ring() -> None:
+    # TornEnchantingGiraffe:9258 snapshots the persistent smoke one frame after the victim leaves
+    # hitlag, while hitstun still carries the same item source (`last_hit_by` + `instance_hit_by`).
+    # The public seed lane for item victims is empty, so reseed must reconstruct the hidden
+    # HitCapsule victim ring from source provenance instead of letting the smoke BODY re-hit.
+    # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1D40,itSeakVanish_Logic42_DmgDealt}
+    # refs/melee/src/melee/it/it_2725.c::it_8027518C
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/TornEnchantingGiraffe.msl"
+    )
+    player = 1
+    for record in (9258, 9259, 9260):
+        seed = samples[record]["seed_t"]
+        ref = samples[record]["ref_t1"]
+        assert int(seed["items"]["type"][0]) == ITEM_SHEIK_VANISH
+        assert int(seed["items"]["owner"][0]) == 0
+        assert int(seed["items"]["instance_id"][0]) == int(seed["instance_hit_by"][player])
+        assert int(seed["item_hitlist_victim_port"][0]) == 0xFF
+        assert int(seed["hitlag"][player]) == 0
+        assert int(seed["hitstun"][player]) > 0
+
+        out = _run_sample_row(samples, record, replay_frame_rng=True)
+        assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 90
+        assert int(out["hitlag"][player]) == int(ref["hitlag"][player]) == 0
+        assert float(out["percent"][player]) == pytest.approx(
+            float(ref["percent"][player]), abs=1e-5
+        )
+
+    rollout = _run_sample_rollout_records(
+        samples, start_record=9251, records=(9258, 9259, 9260), replay_frame_rng=True
+    )
+    for record, out in rollout.items():
+        ref = samples[record]["ref_t1"]
+        assert int(out["hitlag"][player]) == int(ref["hitlag"][player]) == 0
+        assert float(out["percent"][player]) == pytest.approx(
+            float(ref["percent"][player]), abs=1e-5
+        )
+
+
+@pytest.mark.integration
+def test_sheik_vanish_smoke_victim_ring_seed_requires_same_item_source_negative() -> None:
+    # Adjacent negative for the reseed bridge above: without the exact item instance provenance,
+    # the seed does not prove an existing victims_1 entry, so the live active smoke BODY remains
+    # eligible to hit the overlapping defender.
+    samples = _sheik_validation_samples(
+        "datasets/sheik/replays/validation/sheik/TornEnchantingGiraffe.msl"
+    )
+    player = 1
+    seed = samples[9258]["seed_t"]
+    assert int(seed["items"]["type"][0]) == ITEM_SHEIK_VANISH
+    assert int(seed["items"]["instance_id"][0]) == int(seed["instance_hit_by"][player])
+
+    out = _run_sample_row(
+        samples,
+        9258,
+        replay_frame_rng=True,
+        mutate_seed={"instance_hit_by": (player, 0)},
+    )
+    assert int(out["hitlag"][player]) > 0
+    assert float(out["percent"][player]) > float(seed["percent"][player])
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "player", "action_id", "expected_hitlag"),
     [

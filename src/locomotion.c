@@ -2297,6 +2297,11 @@ static inline uint8_t grounded_attack_try_iasa_subset(MslBatch* batch, const Msl
   // - Down-B remains owned by shine.c; this helper admits the Neutral/Side/Up subset only.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D6824,ftCo_800D68C0}
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
+  if (grounded_attack_wait_iasa_specials_action(action_id) &&
+      sheik_special_try_ground_iasa(batch, idx)) {
+    return 1u;
+  }
   if (grounded_attack_wait_iasa_specials_action(action_id) &&
       blaster_try_enter_ground_from_iasa_subset(batch, c, idx)) {
     return 1u;
@@ -4894,6 +4899,10 @@ void locomotion_update_pre(MslBatch* batch) {
             //   shared pre-pass guard loop runs later in this frame.
             // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Attack1.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackLw3.c,ftCo_AttackS4.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c,ftCo_AttackDash.c}
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+            // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
+            if (sheik_special_try_ground_iasa(batch, idx)) {
+              continue;
+            }
             if (blaster_try_enter_ground_from_wait_iasa(batch, c, idx)) {
               continue;
             }
@@ -5117,10 +5126,15 @@ void locomotion_update_pre(MslBatch* batch) {
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_IASA
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+              if (grounded_attack_wait_iasa_specials_action(action_id) &&
+                  sheik_special_try_ground_iasa(batch, idx)) {
+                action_id = batch->state.action_id[idx];
+                grounded_attack_guard_iasa_consumed = 1u;
+              }
               const uint8_t speciallw_preempts_attacks4_guard =
                   spacie_speciallw_wait_iasa_pressed_edge(c, cid, buttons_pressed, stick_x,
                                                           stick_y);
-              if (speciallw_preempts_attacks4_guard) {
+              if (!grounded_attack_guard_iasa_consumed && speciallw_preempts_attacks4_guard) {
                 // AttackS4's source IASA preamble reaches the grounded special dispatcher before
                 // Catch/Guard. The Side/Hi/Neutral subset above lives in blaster.c; Reflector is
                 // owned by shine.c and must consume B+down before same-frame shield input can enter
@@ -5133,19 +5147,22 @@ void locomotion_update_pre(MslBatch* batch) {
                 shine_enter_ground_start_from_iasa(batch, idx);
                 action_id = batch->state.action_id[idx];
                 grounded_attack_guard_iasa_consumed = 1u;
-              } else if (grounded_attack_wait_iasa_specials_action(action_id) &&
+              } else if (!grounded_attack_guard_iasa_consumed &&
+                         grounded_attack_wait_iasa_specials_action(action_id) &&
                          blaster_try_enter_ground_from_iasa_subset(batch, c, idx)) {
                 action_id = batch->state.action_id[idx];
                 grounded_attack_guard_iasa_consumed = 1u;
-              } else if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed,
+              } else if (!grounded_attack_guard_iasa_consumed &&
+                         grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed,
                                                                stick_x, stick_y, tilt_timer_x,
                                                                tilt_timer_y, facing_dir, 0, 1)) {
                 action_id = batch->state.action_id[idx];
                 grounded_attack_guard_iasa_consumed = 1u;
-              } else if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+              } else if (!grounded_attack_guard_iasa_consumed &&
+                         grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
                 action_id = batch->state.action_id[idx];
                 grounded_attack_guard_iasa_consumed = 1u;
-              } else {
+              } else if (!grounded_attack_guard_iasa_consumed) {
                 const uint16_t act_before_guard = batch->state.action_id[idx];
                 guard_update_grounded(batch, c, idx, 1u);
                 action_id = batch->state.action_id[idx];

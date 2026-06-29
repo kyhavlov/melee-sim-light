@@ -120,13 +120,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:885
 
 == datasets/sheik_heldout/replays/heldout/sheik/MiserlyWhiteCassowary.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1547
-rollout.streak_count: 18
+rollout.best_len: 1585
+rollout.streak_count: 16
 rollout.streak_len.median: 384
-rollout.streak_len.p90: 1105
-rollout.streak_len.p95: 1547
-rollout.streak_len.max: 1547
-rollout.first_mismatch_total: 17
+rollout.streak_len.p90: 1547
+rollout.streak_len.p95: 1585
+rollout.streak_len.max: 1585
+rollout.first_mismatch_total: 15
 rollout.first_mismatch_seeded_total: 6
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -185,12 +185,12 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == datasets/sheik_heldout/replays/heldout/sheik/OldMagnificentFlamingo.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1120
-rollout.streak_count: 19
+rollout.streak_count: 18
 rollout.streak_len.median: 332
 rollout.streak_len.p90: 1100
 rollout.streak_len.p95: 1120
 rollout.streak_len.max: 1120
-rollout.first_mismatch_total: 21
+rollout.first_mismatch_total: 20
 rollout.first_mismatch_seeded_total: 12
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -205,14 +205,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:801
 
 == datasets/sheik_heldout/replays/heldout/sheik/PolishedMemorableOryx.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1201
-rollout.streak_count: 24
+rollout.best_len: 1825
+rollout.streak_count: 22
 rollout.streak_len.median: 213
 rollout.streak_len.p90: 809
 rollout.streak_len.p95: 1143
-rollout.streak_len.max: 1201
-rollout.first_mismatch_total: 26
-rollout.first_mismatch_seeded_total: 21
+rollout.streak_len.max: 1825
+rollout.first_mismatch_total: 24
+rollout.first_mismatch_seeded_total: 19
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=18.0001 rec=8078 p=0 seed/ref/out=72.8368/72.0003/90.0004 actions=4/4/4 category=unclassified
@@ -268,14 +268,14 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:163
 
 == suite summary ==
-overall.rollout.streak_count: 390
-overall.rollout.streak_len.median: 90
-overall.rollout.streak_len.p90: 786
-overall.rollout.streak_len.p95: 1100
+overall.rollout.streak_count: 385
+overall.rollout.streak_len.median: 89
+overall.rollout.streak_len.p90: 794
+overall.rollout.streak_len.p95: 1105
 overall.rollout.streak_len.max: 3122
 overall.rollout.best_len.max: 3122
-overall.rollout.first_mismatch_total: 457
-overall.rollout.first_mismatch_seeded_total: 343
+overall.rollout.first_mismatch_total: 452
+overall.rollout.first_mismatch_seeded_total: 341
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=139.917 rec=3840 p=0 seed/ref/out=13.7942/11.888/151.805 actions=7/7/7 category=unclassified

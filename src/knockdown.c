@@ -1509,8 +1509,15 @@ void knockdown_update_pre_physics(MslBatch* batch) {
             // for this frame's collision/hurtbox updates and commit only Fall animation/timebase
             // later. Fighter_ChangeMotionState identity side effects still run now, before other
             // fighters' later input callbacks and before ProcessHit can overwrite the action.
+            const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
             msl_motion_state_enter_side_effects(batch, idx);
+            // Decomp: ftCo_Fall_Enter uses Ft_MF_KeepFastFall, so a DamageAir source that is
+            // already fastfalling keeps fp->fall_fast on the first Fall publication row.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+            // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside ChangeMotionState)
+            batch->state.fall_fast[idx] = keep_fastfall;
           }
         }
         continue;

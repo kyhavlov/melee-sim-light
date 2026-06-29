@@ -3655,6 +3655,35 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
                                                (int)MSL_LBCOLL_INSERT_FT_BODY, cd);
         }
       }
+      if (item->exists != 0u && sheik_ap != NULL && sheik_ap->sheik_vanish_itkind != 0u &&
+          item->type == sheik_ap->sheik_vanish_itkind && item->state == 0u && item->owner >= 0 &&
+          item->owner < (int8_t)active_players && item->instance_id != 0u) {
+        // Sheik Vanish smoke persists after its BODY HitCapsule has hit a victim, and source
+        // lbColl stores that victim in the item's hidden victims_1 ring. Slippi exposes the live
+        // smoke identity plus the victim-side damage source (`last_hit_by` / `instance_hit_by`),
+        // but not the item HitCapsule victim ring. On one-step reseed, rematerialize only same-item
+        // victims that are still in hitstun from this exact smoke so the active article cannot
+        // re-hit while the source victim ring would suppress it.
+        // refs/melee/src/melee/it/items/itseakvanish.c::{
+        //   it_802B1D40,itSeakVanish_Logic42_DmgDealt}
+        // refs/melee/src/melee/it/it_2725.c::it_8027518C
+        // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        for (int victim = 0; victim < active_players; victim++) {
+          if (victim == (int)item->owner || seed->hitstun[victim] == 0u ||
+              seed->instance_hit_by[victim] != item->instance_id) {
+            continue;
+          }
+          const int attacker = msl_damage_source_seed_local_slot_from_port0(
+              seed, active_players, seed->last_hit_by[victim]);
+          if (attacker != (int)item->owner) {
+            continue;
+          }
+          const size_t v_idx = msl_idx_player(bi, victim);
+          hitlist_register_item_fighter(batch, bi, it, victim, batch->state.instance_id[v_idx],
+                                        (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+        }
+      }
     }
 
     // Reconstruct the owner-side attached victim pointer (`fp->victim_gobj`) from the seeded
