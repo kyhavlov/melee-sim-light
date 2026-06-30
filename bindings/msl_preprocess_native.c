@@ -67,6 +67,177 @@ static inline bool u16_in_fixed_set(uint16_t v, const uint16_t* set, Py_ssize_t 
   return false;
 }
 
+static inline bool item_key_less(uint16_t iid_a, uint32_t spawn_a, uint16_t type_a, uint16_t iid_b,
+                                 uint32_t spawn_b, uint16_t type_b) {
+  return iid_a < iid_b ||
+         (iid_a == iid_b && (spawn_a < spawn_b || (spawn_a == spawn_b && type_a < type_b)));
+}
+
+PyObject* msl_fill_items_fixed_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject *offsets_obj = NULL, *type_obj = NULL, *state_obj = NULL, *direction_obj = NULL;
+  PyObject *vel_x_obj = NULL, *vel_y_obj = NULL, *pos_x_obj = NULL, *pos_y_obj = NULL;
+  PyObject *damage_obj = NULL, *timer_obj = NULL, *spawn_obj = NULL, *misc0_obj = NULL;
+  PyObject *misc1_obj = NULL, *misc2_obj = NULL, *misc3_obj = NULL, *owner_obj = NULL;
+  PyObject *iid_obj = NULL, *owner_map_obj = NULL, *out_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOOOOOOOO", &offsets_obj, &type_obj, &state_obj,
+                        &direction_obj, &vel_x_obj, &vel_y_obj, &pos_x_obj, &pos_y_obj, &damage_obj,
+                        &timer_obj, &spawn_obj, &misc0_obj, &misc1_obj, &misc2_obj, &misc3_obj,
+                        &owner_obj, &iid_obj, &owner_map_obj, &out_obj)) {
+    return NULL;
+  }
+
+  PyArrayObject* offsets =
+      require_contiguous_array_readonly(offsets_obj, NPY_INT32, 1, "item_offsets_i32");
+  PyArrayObject* type = require_contiguous_array_readonly(type_obj, NPY_UINT16, 1, "item_type_u16");
+  PyArrayObject* state =
+      require_contiguous_array_readonly(state_obj, NPY_UINT8, 1, "item_state_u8");
+  PyArrayObject* direction =
+      require_contiguous_array_readonly(direction_obj, NPY_FLOAT32, 1, "item_direction_f32");
+  PyArrayObject* vel_x =
+      require_contiguous_array_readonly(vel_x_obj, NPY_FLOAT32, 1, "item_vel_x_f32");
+  PyArrayObject* vel_y =
+      require_contiguous_array_readonly(vel_y_obj, NPY_FLOAT32, 1, "item_vel_y_f32");
+  PyArrayObject* pos_x =
+      require_contiguous_array_readonly(pos_x_obj, NPY_FLOAT32, 1, "item_pos_x_f32");
+  PyArrayObject* pos_y =
+      require_contiguous_array_readonly(pos_y_obj, NPY_FLOAT32, 1, "item_pos_y_f32");
+  PyArrayObject* damage =
+      require_contiguous_array_readonly(damage_obj, NPY_UINT16, 1, "item_damage_u16");
+  PyArrayObject* timer =
+      require_contiguous_array_readonly(timer_obj, NPY_FLOAT32, 1, "item_timer_f32");
+  PyArrayObject* spawn =
+      require_contiguous_array_readonly(spawn_obj, NPY_UINT32, 1, "item_spawn_id_u32");
+  PyArrayObject* misc0 =
+      require_contiguous_array_readonly(misc0_obj, NPY_UINT8, 1, "item_misc0_u8");
+  PyArrayObject* misc1 =
+      require_contiguous_array_readonly(misc1_obj, NPY_UINT8, 1, "item_misc1_u8");
+  PyArrayObject* misc2 =
+      require_contiguous_array_readonly(misc2_obj, NPY_UINT8, 1, "item_misc2_u8");
+  PyArrayObject* misc3 =
+      require_contiguous_array_readonly(misc3_obj, NPY_UINT8, 1, "item_misc3_u8");
+  PyArrayObject* owner = require_contiguous_array_readonly(owner_obj, NPY_INT8, 1, "item_owner_i8");
+  PyArrayObject* iid =
+      require_contiguous_array_readonly(iid_obj, NPY_UINT16, 1, "item_instance_id_u16");
+  PyArrayObject* owner_map =
+      require_contiguous_array_readonly(owner_map_obj, NPY_INT8, 1, "owner_map_i8");
+  if (!PyArray_Check(out_obj)) {
+    PyErr_SetString(PyExc_TypeError, "out_items must be a NumPy array");
+    return NULL;
+  }
+  PyArrayObject* out = (PyArrayObject*)out_obj;
+  if (offsets == NULL || type == NULL || state == NULL || direction == NULL || vel_x == NULL ||
+      vel_y == NULL || pos_x == NULL || pos_y == NULL || damage == NULL || timer == NULL ||
+      spawn == NULL || misc0 == NULL || misc1 == NULL || misc2 == NULL || misc3 == NULL ||
+      owner == NULL || iid == NULL || owner_map == NULL) {
+    return NULL;
+  }
+  const npy_intp n_frames = PyArray_DIM(offsets, 0) - 1;
+  const npy_intp n_items = PyArray_DIM(type, 0);
+  if (n_frames < 0 || PyArray_DIM(owner_map, 0) < 4 || PyArray_NDIM(out) != 2 ||
+      PyArray_DIM(out, 0) != n_frames || PyArray_DIM(out, 1) != MSL_MAX_ITEMS ||
+      PyArray_TYPE(out) != NPY_VOID || !PyArray_ISCARRAY(out) ||
+      PyArray_ITEMSIZE(out) != (npy_intp)sizeof(MslItem) ||
+      PyArray_STRIDES(out)[0] != (npy_intp)(sizeof(MslItem) * MSL_MAX_ITEMS) ||
+      PyArray_STRIDES(out)[1] != (npy_intp)sizeof(MslItem)) {
+    PyErr_SetString(PyExc_ValueError, "invalid fixed item output shape");
+    return NULL;
+  }
+  PyArrayObject* arrays[] = {state, direction, vel_x, vel_y, pos_x, pos_y, damage, timer,
+                             spawn, misc0,     misc1, misc2, misc3, owner, iid};
+  for (size_t ai = 0; ai < sizeof(arrays) / sizeof(arrays[0]); ai++) {
+    if (PyArray_DIM(arrays[ai], 0) != n_items) {
+      PyErr_SetString(PyExc_ValueError, "flat item arrays must have matching lengths");
+      return NULL;
+    }
+  }
+
+  const int32_t* offp = (const int32_t*)PyArray_DATA(offsets);
+  const uint16_t* typep = (const uint16_t*)PyArray_DATA(type);
+  const uint8_t* statep = (const uint8_t*)PyArray_DATA(state);
+  const float* dirp = (const float*)PyArray_DATA(direction);
+  const float* vxp = (const float*)PyArray_DATA(vel_x);
+  const float* vyp = (const float*)PyArray_DATA(vel_y);
+  const float* pxp = (const float*)PyArray_DATA(pos_x);
+  const float* pyp = (const float*)PyArray_DATA(pos_y);
+  const uint16_t* dmgp = (const uint16_t*)PyArray_DATA(damage);
+  const float* timerp = (const float*)PyArray_DATA(timer);
+  const uint32_t* spawnp = (const uint32_t*)PyArray_DATA(spawn);
+  const uint8_t* misc0p = (const uint8_t*)PyArray_DATA(misc0);
+  const uint8_t* misc1p = (const uint8_t*)PyArray_DATA(misc1);
+  const uint8_t* misc2p = (const uint8_t*)PyArray_DATA(misc2);
+  const uint8_t* misc3p = (const uint8_t*)PyArray_DATA(misc3);
+  const int8_t* ownerp = (const int8_t*)PyArray_DATA(owner);
+  const uint16_t* iidp = (const uint16_t*)PyArray_DATA(iid);
+  const int8_t* owner_mapp = (const int8_t*)PyArray_DATA(owner_map);
+  char* out_base = PyArray_BYTES(out);
+  const npy_intp out_row_stride = PyArray_STRIDES(out)[0];
+  const npy_intp out_slot_stride = PyArray_STRIDES(out)[1];
+
+  for (npy_intp fi = 0; fi < n_frames; fi++) {
+    const int32_t start_i32 = offp[fi];
+    const int32_t stop_i32 = offp[fi + 1];
+    if (start_i32 < 0 || stop_i32 < start_i32 || stop_i32 > n_items) {
+      PyErr_SetString(PyExc_ValueError, "invalid item offsets");
+      return NULL;
+    }
+    uint32_t cand[MSL_MAX_ITEMS];
+    uint16_t cand_iid[MSL_MAX_ITEMS];
+    uint32_t cand_spawn[MSL_MAX_ITEMS];
+    uint16_t cand_type[MSL_MAX_ITEMS];
+    int cand_count = 0;
+    for (int32_t idx = start_i32; idx < stop_i32; idx++) {
+      const uint16_t key_iid = iidp[idx];
+      const uint32_t key_spawn = spawnp[idx];
+      const uint16_t key_type = typep[idx];
+      int insert = cand_count;
+      while (insert > 0 && item_key_less(key_iid, key_spawn, key_type, cand_iid[insert - 1],
+                                         cand_spawn[insert - 1], cand_type[insert - 1])) {
+        insert--;
+      }
+      if (insert >= MSL_MAX_ITEMS) {
+        continue;
+      }
+      if (cand_count < MSL_MAX_ITEMS) {
+        cand_count++;
+      }
+      for (int j = cand_count - 1; j > insert; j--) {
+        cand[j] = cand[j - 1];
+        cand_iid[j] = cand_iid[j - 1];
+        cand_spawn[j] = cand_spawn[j - 1];
+        cand_type[j] = cand_type[j - 1];
+      }
+      cand[insert] = (uint32_t)idx;
+      cand_iid[insert] = key_iid;
+      cand_spawn[insert] = key_spawn;
+      cand_type[insert] = key_type;
+    }
+    for (int slot = 0; slot < cand_count; slot++) {
+      const uint32_t idx = cand[slot];
+      MslItem* item = (MslItem*)(void*)(out_base + fi * out_row_stride + slot * out_slot_stride);
+      item->exists = 1u;
+      item->state = statep[idx];
+      item->type = typep[idx];
+      const int8_t raw_owner = ownerp[idx];
+      item->owner = (raw_owner >= 0 && raw_owner < 4) ? owner_mapp[(int)raw_owner] : -1;
+      item->instance_id = iidp[idx];
+      item->direction = dirp[idx];
+      item->vel_x = vxp[idx];
+      item->vel_y = vyp[idx];
+      item->pos_x = pxp[idx];
+      item->pos_y = pyp[idx];
+      item->damage = dmgp[idx];
+      item->timer = timerp[idx];
+      item->spawn_id = spawnp[idx];
+      item->misc0 = misc0p[idx];
+      item->misc1 = misc1p[idx];
+      item->misc2 = misc2p[idx];
+      item->misc3 = misc3p[idx];
+    }
+  }
+  Py_RETURN_NONE;
+}
+
 static inline uint8_t msl_py_u8_sat_inc_fe(uint8_t v) {
   return v < 0xFEu ? (uint8_t)(v + 1u) : 0xFEu;
 }

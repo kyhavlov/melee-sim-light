@@ -582,8 +582,7 @@ class _FObj:
 
     def _load_wait(self) -> int:
         if self.pos - self.ad_head >= self.length:
-            self.state = 6
-            return self.state
+            return 6
         self.fterm, self.pos = _parse_wait(self.ad, self.pos)
         self.flags_20 = True
         self.state = FOBJ_LOAD_DATA
@@ -631,13 +630,17 @@ class _FObj:
             return out
 
         fterm = 0.0
+        # Mirror HSD_FObjInterpretAnim: EOF helper returns are local interpreter state for this call,
+        # not persisted `self.state = 6`.
+        # refs/melee/src/sysdolphin/baselib/fobj.c::{FObjLoadData,FObjLoadWait,HSD_FObjInterpretAnim}
+        state = self.state
         iters = 0
         while True:
             iters += 1
             if iters > 100_000:
                 # Guardrail against malformed/corrupted animation streams causing non-termination.
                 return out
-            st = self.state
+            st = state
             if st == 6:
                 self.time = _f32(self.time + fterm)
                 self._launch_key_data()
@@ -646,28 +649,31 @@ class _FObj:
                     out.append(v)
                 return out
             if st in (FOBJ_LOAD_DATA0, FOBJ_LOAD_DATA):
-                self._load_data()
+                state = self._load_data()
                 continue
             if st == FOBJ_LOAD_WAIT:
                 if self.flags_80:
                     v = self._update_anim()
                     if v is not None:
                         out.append(v)
-                self._load_wait()
+                state = self._load_wait()
                 continue
             if st == 4:
                 if self.fterm <= self.time:
                     fterm = float(self.fterm)
                     self.time = _f32(self.time - float(self.fterm))
                     self.state = FOBJ_LOAD_WAIT
+                    state = FOBJ_LOAD_WAIT
                     continue
                 v = self._update_anim()
                 if v is not None:
                     out.append(v)
                 self.state = 5
+                state = 5
                 return out
             if st == 5:
                 self.state = 4
+                state = 4
                 continue
             return out
 

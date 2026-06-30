@@ -1081,6 +1081,37 @@ uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_i
   return 1u;
 }
 
+uint8_t move_tables_throw_pre_release_create_hitbox_payload_matches(
+    uint8_t char_id, uint16_t throw_action_id, uint8_t hitbox_id, int hitcapsule_int_dmg,
+    uint16_t angle, uint16_t kbg, uint16_t bkb, float cur_anim_frame_f32) {
+  uint16_t msid = 0;
+  if (!throw_msid_from_action(throw_action_id, &msid)) {
+    return 0u;
+  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || !cache->throw_flags_hit[0].loaded ||
+      !(cur_anim_frame_f32 < (float)cache->throw_flags_hit[0].start_af)) {
+    return 0u;
+  }
+  const MslScriptEventRange range = script_events_range(char_id, msid);
+  for (uint32_t i = 0; i < range.count; i++) {
+    const MslScriptEvent* ev = &range.events[i];
+    if (ev->kind_id != (uint16_t)MSL_SCRIPT_EVENT_CREATE_HITBOX ||
+        ev->frame >= (uint16_t)cache->throw_flags_hit[0].start_af) {
+      continue;
+    }
+    const MslScriptCreateHitboxPayload* hb = &ev->payload.create_hitbox;
+    if (hb->hitbox_id != hitbox_id) {
+      continue;
+    }
+    const int dmg = (int)(hb->damage + (hb->damage >= 0.0f ? 0.5f : -0.5f));
+    if (dmg == hitcapsule_int_dmg && hb->angle == angle && hb->kbg == kbg && hb->bkb == bkb) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 uint8_t move_tables_throw_release_after_create_hitbox(uint8_t char_id, uint16_t throw_action_id) {
   uint16_t msid = 0;
   if (!throw_msid_from_action(throw_action_id, &msid)) {

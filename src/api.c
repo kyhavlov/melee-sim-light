@@ -7030,6 +7030,26 @@ int msl_batch_debug_set_prev_action_id(MslBatch* batch, int batch_index, int pla
   return 0;
 }
 
+int msl_batch_debug_set_grab_owner_port(MslBatch* batch, int batch_index, int player_index,
+                                        uint8_t grab_owner_port) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (grab_owner_port != 0xFFu && grab_owner_port >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  batch->state.grab_owner_port[idx] = grab_owner_port;
+  return 0;
+}
+
 int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_index,
                                uint16_t hitlag_frames) {
   if (batch == NULL) {

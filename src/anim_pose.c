@@ -426,8 +426,7 @@ static int fobj_load_data(MslFObjEval* fo) {
 
 static int fobj_load_wait(MslFObjEval* fo) {
   if (fo->pos >= fo->length) {
-    fo->state = 6;
-    return fo->state;
+    return 6;
   }
   if (fobj_parse_wait(fo->ad, fo->length, &fo->pos, &fo->fterm) != 0) {
     fo->parse_error = 1u;
@@ -492,8 +491,14 @@ static uint8_t fobj_interpret(MslFObjEval* fo, float rate, float* out_value) {
     return 0u;
   }
   float fterm = 0.0f;
+  // HSD_FObjInterpretAnim keeps helper EOF returns in the interpreter-local state machine. The
+  // data/wait EOF helpers return 6 to finish this interpret call, but source does not persist
+  // `fo->state = 6` at those EOF branches.
+  // refs/melee/src/sysdolphin/baselib/fobj.c::{FObjLoadData,FObjLoadWait,HSD_FObjInterpretAnim}
+  // refs/melee/build/GALE01/asm/sysdolphin/baselib/fobj.s
+  int state = fo->state;
   for (int iters = 0; iters < 100000; iters++) {
-    const int st = fo->state;
+    const int st = state;
     if (st == 6) {
       fo->time = f32_from_double((double)fo->time + (double)fterm);
       fobj_launch_key_data(fo);
@@ -506,7 +511,7 @@ static uint8_t fobj_interpret(MslFObjEval* fo, float rate, float* out_value) {
       return any;
     }
     if (st == FOBJ_LOAD_DATA0 || st == FOBJ_LOAD_DATA) {
-      (void)fobj_load_data(fo);
+      state = fobj_load_data(fo);
       if (fo->parse_error) {
         *out_value = last;
         return any;
@@ -521,7 +526,7 @@ static uint8_t fobj_interpret(MslFObjEval* fo, float rate, float* out_value) {
           any = 1u;
         }
       }
-      (void)fobj_load_wait(fo);
+      state = fobj_load_wait(fo);
       if (fo->parse_error) {
         *out_value = last;
         return any;
@@ -533,6 +538,7 @@ static uint8_t fobj_interpret(MslFObjEval* fo, float rate, float* out_value) {
         fterm = (float)fo->fterm;
         fo->time = f32_from_double((double)fo->time - (double)fo->fterm);
         fo->state = FOBJ_LOAD_WAIT;
+        state = FOBJ_LOAD_WAIT;
         continue;
       }
       float v = 0.0f;
@@ -541,11 +547,13 @@ static uint8_t fobj_interpret(MslFObjEval* fo, float rate, float* out_value) {
         any = 1u;
       }
       fo->state = 5;
+      state = 5;
       *out_value = last;
       return any;
     }
     if (st == 5) {
       fo->state = 4;
+      state = 4;
       continue;
     }
     *out_value = last;
@@ -2850,6 +2858,29 @@ int anim_pose_debug_common_fall_blend_matrix(uint8_t char_id, uint16_t neutral_m
   }
   return matrix_from_common_fall_blended_locals(t, neutral_msid, target_msid, anim_frame, part_id,
                                                 weight, out_3x4);
+}
+
+int anim_pose_debug_collision_matrix_f32(uint8_t char_id, uint16_t msid, float anim_frame,
+                                         uint16_t part_id, float out_3x4[12]) {
+  if (out_3x4 == NULL) {
+    return -1;
+  }
+  const float safe_frame = isfinite(anim_frame) ? anim_frame : 0.0f;
+  const uint16_t frame = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(safe_frame));
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL) {
+    return -1;
+  }
+  const uint16_t frame_count = (t->have_msid[msid] != 0u) ? t->frame_count_by_msid[msid] : 0u;
+  if (fabsf(safe_frame - (float)frame) <= 1.0e-6f && frame < frame_count) {
+    return anim_pose_get_matrix(char_id, msid, frame, part_id, out_3x4);
+  }
+  if (matrix_from_locals_f32(t, msid, safe_frame, part_id, out_3x4) != 0) {
+    if (frame >= frame_count || anim_pose_get_matrix(char_id, msid, frame, part_id, out_3x4) != 0) {
+      return -1;
+    }
+  }
+  return 0;
 }
 
 int anim_pose_get_common_fall_blend_collision_matrix_f32(const MslBatch* batch, size_t player_idx,

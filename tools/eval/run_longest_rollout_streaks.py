@@ -296,7 +296,9 @@ def _scan_dataset_streaks(
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    ref_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+    players_u8 = np.asarray(players, dtype=np.uint8)
 
     # Efficient per-record byte slicing without per-step `.tobytes()` allocations.
     sample_stride = int(samples.dtype.itemsize)
@@ -304,6 +306,7 @@ def _scan_dataset_streaks(
     seed_off = int(samples.dtype.fields["seed_t"][1])
     prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
     input_off = int(samples.dtype.fields["input_t"][1])
+    ref_off = int(samples.dtype.fields["ref_t1"][1])
 
     ref = samples["ref_t1"]
     seed = samples["seed_t"]
@@ -327,18 +330,29 @@ def _scan_dataset_streaks(
         binding.step_input_replay_frame_rng(handle, seed_bytes, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
         if use_standard_rollout_compare:
-            scored = _first_mismatch_standard_rollout(
-                out_row=out_view[0],
-                ref_row=ref[j],
-                players=players,
-                profile_name=validation_profile.name,
+            ref_compare_bytes[0, :] = samples_u8[j, ref_off : ref_off + compare_stride]
+            code = int(
+                binding.standard_rollout_compare(
+                    out_compare_bytes,
+                    ref_compare_bytes,
+                    players_u8,
+                    int(validation_profile.name == "rl1_gameplay"),
+                )
             )
-            ignored = _first_ignored_standard_rollout(
-                out_row=out_view[0],
-                ref_row=ref[j],
-                players=players,
-                profile_name=validation_profile.name,
+            scored_code = code & 0xFF
+            scored = (
+                None
+                if scored_code == 0
+                else (
+                    "action_id",
+                    "animation_index",
+                    "on_ground",
+                    "hitlag",
+                    "hitstun",
+                    "state_flags",
+                )[scored_code - 1]
             )
+            ignored = "state_flags[4]&0x80" if (code & 0x100) != 0 else None
         else:
             scored = first_mismatch_field(
                 out_row=out_view[0],

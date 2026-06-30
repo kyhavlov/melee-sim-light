@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -79,18 +80,24 @@ def _read_end_frames_from_tracks_bin(path: Path) -> dict[int, float]:
     return out
 
 
-def load_end_frame_tables(data_root: Path) -> EndFrameTables:
+@lru_cache(maxsize=4)
+def _load_end_frame_tables_cached(data_root: str) -> EndFrameTables:
     # All registry characters: the old hardcoded (1, 22) loop left non-spacie characters
     # without anim end-frame tables (silent None in every consumer).
     from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS
 
+    data_root_path = Path(data_root)
     by_char_id: dict[int, dict[int, float]] = {}
     for info in _REGISTRY_CHARS.values():
-        path = data_root / "anims" / f"{info.name}.tracks.bin"
+        path = data_root_path / "anims" / f"{info.name}.tracks.bin"
         if not path.exists():
             continue
         by_char_id[int(info.internal_id)] = _read_end_frames_from_tracks_bin(path)
     return EndFrameTables(by_char_id=by_char_id)
+
+
+def load_end_frame_tables(data_root: Path) -> EndFrameTables:
+    return _load_end_frame_tables_cached(str(Path(data_root).resolve()))
 
 
 def derive_frame_speed_mul_f32(

@@ -446,6 +446,15 @@ uint8_t move_tables_throw_release_hit_idx(uint8_t char_id, uint16_t throw_action
 uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_id, uint8_t hit_idx,
                                         MslThrowHitboxParams* out);
 
+// Returns whether a live fighter HitCapsule matches an authored pre-release throw create_hitbox
+// payload. This is narrower than "throw has any create_hitbox before release": it ties consumers to
+// the concrete hitbox id and payload decoded from the MSLFTSC1 script.
+//
+// Source of truth: data/scripts/<char>.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] create_hitbox.
+uint8_t move_tables_throw_pre_release_create_hitbox_payload_matches(
+    uint8_t char_id, uint16_t throw_action_id, uint8_t hitbox_id, int hitcapsule_int_dmg,
+    uint16_t angle, uint16_t kbg, uint16_t bkb, float cur_anim_frame_f32);
+
 // Returns whether a throw script creates ordinary fighter HitCapsules before its release
 // set_throw_flags(hit_idx=0) command. This distinguishes Sheik-style low throws, where the
 // thrower enters hitlag on a script create_hitbox then resumes toward a later release flag, from

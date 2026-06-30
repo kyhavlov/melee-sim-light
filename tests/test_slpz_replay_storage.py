@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import struct
 from pathlib import Path
+
+import pytest
 
 from tools.slippi.slpz import (
     EVENT_PAYLOADS,
     GAME_START,
     RAW_HEADER,
+    _event_sizes,
+    _reorder_events,
+    _require_zstandard,
+    _unorder_events,
+    _unorder_events_python,
     compress_path,
     compress_slpz,
     decompress_path,
@@ -56,3 +64,61 @@ def test_slpz_path_helpers_accept_compressed_replay(tmp_path: Path) -> None:
 
     decompress_path(slpz, roundtrip)
     assert roundtrip.read_bytes() == _fake_slp()
+
+
+def test_slpz_native_unorder_matches_python_for_multicommand_payload() -> None:
+    sizes = [0] * 256
+    sizes[0x37] = 3
+    sizes[0x38] = 2
+    sizes[0x3B] = 5
+    events = bytes(
+        [
+            0x37,
+            1,
+            2,
+            3,
+            0x3B,
+            4,
+            5,
+            6,
+            7,
+            8,
+            0x38,
+            9,
+            10,
+            0x37,
+            11,
+            12,
+            13,
+            0x38,
+            14,
+            15,
+        ]
+    )
+    reordered = _reorder_events(events, sizes)
+
+    assert _unorder_events(reordered, sizes) == _unorder_events_python(reordered, sizes) == events
+
+
+def test_slpz_native_unorder_matches_python_for_real_replay_payload() -> None:
+    replay = Path("replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz")
+    if not replay.exists():
+        pytest.skip("representative compressed replay is not present")
+
+    slpz = replay.read_bytes()
+    if len(slpz) < 24:
+        raise AssertionError("truncated slpz fixture")
+    (
+        _version,
+        event_sizes_offset,
+        game_start_offset,
+        _metadata_offset,
+        event_data_offset,
+        event_data_size,
+    ) = struct.unpack(">IIIIII", slpz[:24])
+    sizes, _event_type_count = _event_sizes(slpz[event_sizes_offset:game_start_offset])
+    reordered = _require_zstandard().ZstdDecompressor().decompress(
+        slpz[event_data_offset:], max_output_size=event_data_size
+    )
+
+    assert _unorder_events(reordered, sizes) == _unorder_events_python(reordered, sizes)

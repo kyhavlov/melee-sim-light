@@ -150,18 +150,18 @@ mismatch.facing: 0 / 23444 (0.000000)
 mismatch.stocks: 0 / 23444 (0.000000)
 mismatch.jumps_left: 7 / 23444 (0.000299)
 mismatch.is_dead: 0 / 23444 (0.000000)
-mismatch.hitlag: 6 / 23444 (0.000256)
+mismatch.hitlag: 5 / 23444 (0.000213)
 mismatch.hitstun: 3 / 23444 (0.000128)
 mismatch.l_cancel: 1 / 23444 (0.000043)
 mismatch.hurtbox_state: 0 / 23444 (0.000000)
 mismatch.ground_id: 10 / 23444 (0.000427)
 mismatch.animation_index: 12 / 23444 (0.000512)
-mismatch.instance_hit_by: 1 / 23444 (0.000043)
+mismatch.instance_hit_by: 0 / 23444 (0.000000)
 mismatch.instance_id: 8 / 23444 (0.000341)
-mismatch.last_attack_landed: 2 / 23444 (0.000085)
+mismatch.last_attack_landed: 1 / 23444 (0.000043)
 mismatch.combo_count: 0 / 23444 (0.000000)
 mismatch.last_hit_by: 7 / 23444 (0.000299)
-mismatch.state_flags: 10 / 117220 (0.000085)
+mismatch.state_flags: 9 / 117220 (0.000077)
 mismatch.item_exists: 13 / 175830 (0.000074)
 mismatch.item_type: 13 / 175830 (0.000074)
 mismatch.item_state: 24 / 175830 (0.000136)
@@ -175,16 +175,16 @@ err.speed_ground_x_self: mae=0.000355 p95=0.000000 max=1.967385
 err.speed_y_self: mae=0.000169 p95=0.000000 max=2.440000
 err.speed_x_attack: mae=0.000001 p95=0.000000 max=0.018833
 err.speed_y_attack: mae=0.000079 p95=0.000000 max=1.856183
-err.percent: mae=0.000229 p95=0.000000 max=5.000000
+err.percent: mae=0.000015 p95=0.000000 max=0.270000
 err.shield_hp: mae=0.000517 p95=0.000000 max=6.228573
 err.item_pos_x: mae=0.105745 p95=0.000000 max=103.526596
 err.item_pos_y: mae=0.074453 p95=0.100000 max=46.191978
 err.item_vel_x: mae=0.007686 p95=0.000000 max=2.828427
 err.item_vel_y: mae=0.021064 p95=0.100000 max=5.328427
-overall.discrete_mismatch: 190 / 1418362
-overall.strict_discrete_mismatch: 286 / 1418362
+overall.discrete_mismatch: 186 / 1418362
+overall.strict_discrete_mismatch: 282 / 1418362
 overall.ignored_discrete_mismatch: 96
-overall.float_norm_mae_p95: 0.00026678
+overall.float_norm_mae_p95: 0.00026661
 
 == replays/heldout/sheik/WiseTenseMole.slpz ==
 Records: 10146  Players/scored per record: 2  Total player-frames: 20292
@@ -547,7 +547,7 @@ overall.ignored_discrete_mismatch: 49
 overall.float_norm_mae_p95: 0.00073890
 
 == suite summary ==
-overall.discrete_mismatch: 2557 / 12504140
-overall.strict_discrete_mismatch: 3207 / 12504140
+overall.discrete_mismatch: 2553 / 12504140
+overall.strict_discrete_mismatch: 3203 / 12504140
 overall.ignored_discrete_mismatch: 650
-overall.float_norm_mae_p95: 5.37872892
+overall.float_norm_mae_p95: 5.37872890

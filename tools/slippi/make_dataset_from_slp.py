@@ -3098,35 +3098,40 @@ def _fill_items_fixed(frames: pa.StructArray, n_frames: int, *, src_ports: list[
         return out
 
     items_list = frames.field("item")
-
-    # Offline preprocessing: simplest correct approach is converting to Python lists.
-    owner_slot_by_raw_port = {int(port) - 1: int(slot) for slot, port in enumerate(src_ports)}
-
-    items_py = items_list.to_pylist()
-    for fi, lst in enumerate(items_py):
-        if not lst:
-            continue
-        lst = sorted(lst, key=lambda it: (int(it["instance_id"]), int(it["id"]), int(it["type"])))
-        for slot, it in enumerate(lst[:15]):
-            out[fi, slot]["exists"] = np.uint8(1)
-            out[fi, slot]["state"] = np.uint8(int(it["state"]))
-            out[fi, slot]["type"] = np.uint16(int(it["type"]))
-            owner_raw = int(it.get("owner", -1))
-            out[fi, slot]["owner"] = np.int8(owner_slot_by_raw_port.get(owner_raw, -1))
-            out[fi, slot]["instance_id"] = np.uint16(int(it["instance_id"]))
-            out[fi, slot]["direction"] = np.float32(float(it["direction"]))
-            out[fi, slot]["vel_x"] = np.float32(float(it["velocity"]["x"]))
-            out[fi, slot]["vel_y"] = np.float32(float(it["velocity"]["y"]))
-            out[fi, slot]["pos_x"] = np.float32(float(it["position"]["x"]))
-            out[fi, slot]["pos_y"] = np.float32(float(it["position"]["y"]))
-            out[fi, slot]["damage"] = np.uint16(int(it["damage"]))
-            out[fi, slot]["timer"] = np.float32(float(it["timer"]))
-            out[fi, slot]["spawn_id"] = np.uint32(int(it["id"]))
-            misc = it.get("misc") or {}
-            out[fi, slot]["misc0"] = np.uint8(int(misc.get("0", 0)))
-            out[fi, slot]["misc1"] = np.uint8(int(misc.get("1", 0)))
-            out[fi, slot]["misc2"] = np.uint8(int(misc.get("2", 0)))
-            out[fi, slot]["misc3"] = np.uint8(int(misc.get("3", 0)))
+    values = items_list.values
+    velocity = values.field("velocity")
+    position = values.field("position")
+    misc = values.field("misc")
+    owner_map = np.full(4, -1, dtype=np.int8)
+    for slot, port in enumerate(src_ports):
+        raw_port = int(port) - 1
+        if 0 <= raw_port < 4:
+            owner_map[raw_port] = np.int8(slot)
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.fill_items_fixed is required; run `make build`") from exc
+    msl_binding.fill_items_fixed(
+        np.ascontiguousarray(_to_numpy(items_list.offsets), dtype=np.int32),
+        np.ascontiguousarray(_to_numpy(values.field("type")), dtype=np.uint16),
+        np.ascontiguousarray(_to_numpy(values.field("state")), dtype=np.uint8),
+        np.ascontiguousarray(_to_numpy(values.field("direction")), dtype=np.float32),
+        np.ascontiguousarray(_to_numpy(velocity.field("x")), dtype=np.float32),
+        np.ascontiguousarray(_to_numpy(velocity.field("y")), dtype=np.float32),
+        np.ascontiguousarray(_to_numpy(position.field("x")), dtype=np.float32),
+        np.ascontiguousarray(_to_numpy(position.field("y")), dtype=np.float32),
+        np.ascontiguousarray(_to_numpy(values.field("damage")), dtype=np.uint16),
+        np.ascontiguousarray(_to_numpy(values.field("timer")), dtype=np.float32),
+        np.ascontiguousarray(_to_numpy(values.field("id")), dtype=np.uint32),
+        np.ascontiguousarray(_to_numpy(misc.field("0")), dtype=np.uint8),
+        np.ascontiguousarray(_to_numpy(misc.field("1")), dtype=np.uint8),
+        np.ascontiguousarray(_to_numpy(misc.field("2")), dtype=np.uint8),
+        np.ascontiguousarray(_to_numpy(misc.field("3")), dtype=np.uint8),
+        np.ascontiguousarray(_to_numpy(values.field("owner")), dtype=np.int8),
+        np.ascontiguousarray(_to_numpy(values.field("instance_id")), dtype=np.uint16),
+        owner_map,
+        out,
+    )
 
     return out
 

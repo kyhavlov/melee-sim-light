@@ -11169,6 +11169,58 @@ static inline uint8_t combat_attached_throw_body_hit_suppresses_victim_hitlag(
   return attacker_anim_frame < release_af ? 1u : 0u;
 }
 
+static inline uint8_t combat_attached_throw_body_pose_gap_admits_pre_release_contact(
+    const MslBatch* batch, size_t a_idx, size_t d_idx, int attacker, size_t hb_i) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t attacker_motion_id = batch->state.action_id[a_idx];
+  if (!msl_action_is_throw_owner(attacker_motion_id)) {
+    return 0u;
+  }
+  const uint16_t defender_motion_id =
+      (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_FALL &&
+       msl_action_is_thrown_victim(batch->state.prev_action_id[d_idx]))
+          ? batch->state.prev_action_id[d_idx]
+          : batch->state.action_id[d_idx];
+  if (batch->state.grab_owner_port[d_idx] != (uint8_t)attacker ||
+      !msl_action_is_grabbed_victim(defender_motion_id)) {
+    return 0u;
+  }
+  if (batch->state.hitbox_kbg[hb_i] != 0u || batch->state.hitbox_bkb[hb_i] != 0u) {
+    return 0u;
+  }
+  float release_af = 0.0f;
+  if (move_tables_throw_release_frame(batch->state.char_id[a_idx], attacker_motion_id,
+                                      &release_af) == 0u) {
+    return 0u;
+  }
+  const float attacker_anim_frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[a_idx]);
+  if (!(attacker_anim_frame < release_af)) {
+    return 0u;
+  }
+  const uint8_t hb_id = (uint8_t)(hb_i % (size_t)MSL_MAX_HITBOXES);
+  const int int_dmg = combat_get_env_dmg(batch->state.hitbox_damage[hb_i]);
+  if (!move_tables_throw_pre_release_create_hitbox_payload_matches(
+          batch->state.char_id[a_idx], attacker_motion_id, hb_id, int_dmg,
+          batch->state.hitbox_angle[hb_i], batch->state.hitbox_kbg[hb_i],
+          batch->state.hitbox_bkb[hb_i], attacker_anim_frame)) {
+    return 0u;
+  }
+  // Source throw BODY pulses are ordinary HitCapsule contacts before ftCo_800DD724 consumes the
+  // later set_throw_flags release. Attached Thrown* victims are attachment-driven
+  // (ftCo_800DE508); if replay-derived hurt capsules expose the held pose one frame away from the
+  // source collision JObj chain, still admit the authored zero-direct-KB pre-release throw BODY
+  // pulse so the existing attached-victim damage class owns percent/bookkeeping without releasing
+  // the victim. CatchAttack has an authored only_hit_grabbed bit; throw BODY hitboxes do not, so
+  // this path binds to the concrete pre-release throw create_hitbox payload instead.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+  // data/scripts/<char>.bin (MSLFTSC1 create_hitbox before set_throw_flags for Throw*)
+  return 1u;
+}
+
 static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
                                                 MslCombatBodyDamageScratch* scratch) {
   if (batch == NULL || scratch == NULL || scratch->count == 0u) {
@@ -14658,6 +14710,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             overlaps = 0u;
           }
           if (!overlaps) {
+            overlaps = combat_attached_throw_body_pose_gap_admits_pre_release_contact(
+                batch, a_idx, d_idx, attacker, hb_i);
+          }
+          if (!overlaps) {
             continue;
           }
           if (combat_attackairlw_invincible_contact_rejects_body_hitlag(batch, a_idx, d_idx)) {
@@ -15153,6 +15209,10 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
                                   ? NULL
                                   : &defender_caps[cap_id])) {
             overlaps = 0u;
+          }
+          if (!overlaps) {
+            overlaps = combat_attached_throw_body_pose_gap_admits_pre_release_contact(
+                batch, a_idx, d_idx, attacker, hb_i);
           }
           if (!overlaps) {
             continue;

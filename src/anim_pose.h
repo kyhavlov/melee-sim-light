@@ -90,6 +90,11 @@ int anim_pose_debug_common_fall_blend_matrix(uint8_t char_id, uint16_t neutral_m
                                              uint16_t target_msid, float anim_frame,
                                              uint16_t part_id, float weight, float out_3x4[12]);
 
+// Debug/test helper for the float-frame collision matrix path without requiring a live batch.
+// This is intentionally not a gameplay API; it exists to lock SSANIMT1/FObj replay-data behavior.
+int anim_pose_debug_collision_matrix_f32(uint8_t char_id, uint16_t msid, float anim_frame,
+                                         uint16_t part_id, float out_3x4[12]);
+
 // Catch-selection collision-pose sampler.
 //
 // `ftColl_80078A2C` routes grabbable hurt capsules through `lbColl_80007ECC`, which consumes the

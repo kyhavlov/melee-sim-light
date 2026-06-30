@@ -896,8 +896,7 @@ static inline int fobj_load_data(FObj* fo) {
 
 static inline int fobj_load_wait(FObj* fo) {
   if (fo->pos >= fo->length) {
-    fo->state = 6;
-    return fo->state;
+    return 6;
   }
   fo->fterm = fobj_parse_wait(fo->ad, fo->length, &fo->pos);
   fo->flags_20 = true;
@@ -961,6 +960,12 @@ static inline bool fobj_interpret(FObj* fo, float rate, float* out_value) {
   }
 
   float fterm = 0.0f;
+  // HSD_FObjInterpretAnim keeps helper EOF returns in the interpreter-local state machine. The
+  // data/wait EOF helpers return 6 to finish this interpret call, but source does not persist
+  // `fo->state = 6` at those EOF branches.
+  // refs/melee/src/sysdolphin/baselib/fobj.c::{FObjLoadData,FObjLoadWait,HSD_FObjInterpretAnim}
+  // refs/melee/build/GALE01/asm/sysdolphin/baselib/fobj.s
+  int state = fo->state;
   int iters = 0;
   while (true) {
     iters += 1;
@@ -970,7 +975,7 @@ static inline bool fobj_interpret(FObj* fo, float rate, float* out_value) {
       }
       return any;
     }
-    const int st = fo->state;
+    const int st = state;
     if (st == 6) {
       fo->time = f32_from_double((double)fo->time + (double)fterm);
       fobj_launch_key_data(fo);
@@ -983,7 +988,7 @@ static inline bool fobj_interpret(FObj* fo, float rate, float* out_value) {
       return any;
     }
     if (st == FOBJ_LOAD_DATA0 || st == FOBJ_LOAD_DATA) {
-      (void)fobj_load_data(fo);
+      state = fobj_load_data(fo);
       continue;
     }
     if (st == FOBJ_LOAD_WAIT) {
@@ -994,7 +999,7 @@ static inline bool fobj_interpret(FObj* fo, float rate, float* out_value) {
           any = true;
         }
       }
-      (void)fobj_load_wait(fo);
+      state = fobj_load_wait(fo);
       continue;
     }
     if (st == 4) {
@@ -1002,6 +1007,7 @@ static inline bool fobj_interpret(FObj* fo, float rate, float* out_value) {
         fterm = (float)fo->fterm;
         fo->time = f32_from_double((double)fo->time - (double)fo->fterm);
         fo->state = FOBJ_LOAD_WAIT;
+        state = FOBJ_LOAD_WAIT;
         continue;
       }
       float v = 0.0f;
@@ -1010,11 +1016,13 @@ static inline bool fobj_interpret(FObj* fo, float rate, float* out_value) {
         any = true;
       }
       fo->state = 5;
+      state = 5;
       *out_value = last;
       return any;
     }
     if (st == 5) {
       fo->state = 4;
+      state = 4;
       continue;
     }
     *out_value = last;
@@ -5385,6 +5393,36 @@ static PyObject* msl_anim_pose_common_fall_blend_matrix_py(PyObject* self, PyObj
   return (PyObject*)arr;
 }
 
+static PyObject* msl_anim_pose_collision_matrix_f32_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int char_id_u = 0;
+  unsigned int msid_u = 0;
+  double anim_frame = 0.0;
+  unsigned int part_id_u = 0;
+  if (!PyArg_ParseTuple(args, "IIdI", &char_id_u, &msid_u, &anim_frame, &part_id_u)) {
+    return NULL;
+  }
+  if (char_id_u > 255u || msid_u > 0xFFFFu || part_id_u > 0xFFFFu) {
+    PyErr_SetString(PyExc_ValueError, "char_id/msid/part_id out of range");
+    return NULL;
+  }
+
+  npy_intp dims[1] = {(npy_intp)12};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_FLOAT32);
+  if (arr == NULL) {
+    return NULL;
+  }
+  float* out = (float*)PyArray_DATA(arr);
+  const int err = anim_pose_debug_collision_matrix_f32((uint8_t)char_id_u, (uint16_t)msid_u,
+                                                       (float)anim_frame, (uint16_t)part_id_u, out);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_SetString(PyExc_ValueError, "anim_pose_debug_collision_matrix_f32 failed");
+    return NULL;
+  }
+  return (PyObject*)arr;
+}
+
 static PyObject* msl_hurtcaps_world_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -6270,6 +6308,32 @@ static PyObject* msl_debug_set_prev_action_id_py(PyObject* self, PyObject* args)
                                                      (uint16_t)prev_action_id);
   if (err != 0) {
     PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_prev_action_id failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_set_grab_owner_port_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  unsigned int grab_owner_port = 0;
+  if (!PyArg_ParseTuple(args, "OiiI", &handle_obj, &batch_index, &player_index, &grab_owner_port)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (grab_owner_port > 0xFFu) {
+    PyErr_SetString(PyExc_ValueError, "grab_owner_port out of range");
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_grab_owner_port(h->batch, batch_index, player_index,
+                                                      (uint8_t)grab_owner_port);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_grab_owner_port failed: %d", err);
     return NULL;
   }
   Py_RETURN_NONE;
@@ -7405,6 +7469,205 @@ static PyObject* msl_hitlist_insert_cd_demo_py(PyObject* self, PyObject* args) {
   return PyLong_FromLong((long)hit.victims_1[0].cd);
 }
 
+static uint32_t msl_read_be_u32(const uint8_t* p) {
+  return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+}
+
+static PyObject* msl_slpz_unorder_events(PyObject* self, PyObject* args) {
+  (void)self;
+  Py_buffer data = {0};
+  PyObject* sizes_obj = NULL;
+  if (!PyArg_ParseTuple(args, "y*O", &data, &sizes_obj)) {
+    return NULL;
+  }
+  if (!PyList_Check(sizes_obj) || PyList_GET_SIZE(sizes_obj) < 256) {
+    PyBuffer_Release(&data);
+    PyErr_SetString(PyExc_ValueError, "sizes must be a list with at least 256 entries");
+    return NULL;
+  }
+  if (data.len < 4) {
+    PyBuffer_Release(&data);
+    PyErr_SetString(PyExc_ValueError, "truncated reordered event stream");
+    return NULL;
+  }
+
+  int sizes[256];
+  for (int i = 0; i < 256; i++) {
+    const long v = PyLong_AsLong(PyList_GET_ITEM(sizes_obj, i));
+    if (PyErr_Occurred()) {
+      PyBuffer_Release(&data);
+      return NULL;
+    }
+    if (v < 0 || v > 65535) {
+      PyBuffer_Release(&data);
+      PyErr_SetString(PyExc_ValueError, "invalid event payload size");
+      return NULL;
+    }
+    sizes[i] = (int)v;
+  }
+
+  const uint8_t* in = (const uint8_t*)data.buf;
+  const size_t data_len = (size_t)data.len;
+  const uint32_t total_events_u32 = msl_read_be_u32(in);
+  const size_t total_events = (size_t)total_events_u32;
+  const size_t event_order_offset = 4u;
+  if (total_events > SIZE_MAX - event_order_offset) {
+    PyBuffer_Release(&data);
+    PyErr_SetString(PyExc_ValueError, "invalid reordered event count");
+    return NULL;
+  }
+  const size_t reordered_offset = event_order_offset + total_events;
+  if (data_len < reordered_offset) {
+    PyBuffer_Release(&data);
+    PyErr_SetString(PyExc_ValueError, "truncated reordered event order");
+    return NULL;
+  }
+
+  uint32_t counts[256] = {0};
+  const uint8_t* event_order = in + event_order_offset;
+  for (size_t i = 0; i < total_events; i++) {
+    counts[event_order[i]]++;
+  }
+
+  size_t offsets[256];
+  size_t expected_payload_size = 0;
+  for (int command = 0; command < 256; command++) {
+    offsets[command] = expected_payload_size;
+    const size_t size = (size_t)sizes[command];
+    const size_t count = (size_t)counts[command];
+    if (size != 0u && count > (SIZE_MAX - expected_payload_size) / size) {
+      PyBuffer_Release(&data);
+      PyErr_SetString(PyExc_ValueError, "invalid reordered event payload size");
+      return NULL;
+    }
+    expected_payload_size += size * count;
+  }
+  if (data_len - reordered_offset != expected_payload_size) {
+    PyBuffer_Release(&data);
+    PyErr_SetString(PyExc_ValueError, "invalid reordered event payload size");
+    return NULL;
+  }
+  if (total_events > SIZE_MAX - expected_payload_size ||
+      total_events + expected_payload_size > (size_t)PY_SSIZE_T_MAX) {
+    PyBuffer_Release(&data);
+    PyErr_SetString(PyExc_ValueError, "invalid uncompressed event size");
+    return NULL;
+  }
+
+  const uint8_t* payloads = in + reordered_offset;
+  const size_t out_size = total_events + expected_payload_size;
+  PyObject* out_obj = PyBytes_FromStringAndSize(NULL, (Py_ssize_t)out_size);
+  if (out_obj == NULL) {
+    PyBuffer_Release(&data);
+    return NULL;
+  }
+  uint8_t* out = (uint8_t*)PyBytes_AS_STRING(out_obj);
+  uint32_t written[256] = {0};
+  size_t out_i = 0;
+  for (size_t event_i = 0; event_i < total_events; event_i++) {
+    const uint8_t command = event_order[event_i];
+    const size_t size = (size_t)sizes[command];
+    const size_t stride = (size_t)counts[command];
+    const size_t read_start = offsets[command] + (size_t)written[command];
+    out[out_i] = command;
+    for (size_t j = 0; j < size; j++) {
+      out[out_i + 1u + j] = payloads[read_start + j * stride];
+    }
+    written[command]++;
+    out_i += 1u + size;
+  }
+
+  PyBuffer_Release(&data);
+  return out_obj;
+}
+
+static PyObject* msl_standard_rollout_compare(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* out_obj = NULL;
+  PyObject* ref_obj = NULL;
+  PyObject* players_obj = NULL;
+  int profile_rl1 = 0;
+  if (!PyArg_ParseTuple(args, "OOOi", &out_obj, &ref_obj, &players_obj, &profile_rl1)) {
+    return NULL;
+  }
+  PyArrayObject* out_arr = require_contiguous_array_readonly(out_obj, NPY_UINT8, 2, "out_compare");
+  PyArrayObject* ref_arr = require_contiguous_array_readonly(ref_obj, NPY_UINT8, 2, "ref_compare");
+  PyArrayObject* players_arr =
+      require_contiguous_array_readonly(players_obj, NPY_UINT8, 1, "players");
+  if (out_arr == NULL || ref_arr == NULL || players_arr == NULL) {
+    return NULL;
+  }
+  if (PyArray_DIM(out_arr, 0) < 1 || PyArray_DIM(ref_arr, 0) < 1 ||
+      PyArray_DIM(out_arr, 1) < (npy_intp)sizeof(MslCompare) ||
+      PyArray_DIM(ref_arr, 1) < (npy_intp)sizeof(MslCompare)) {
+    PyErr_SetString(PyExc_ValueError, "compare buffers must contain at least one MslCompare row");
+    return NULL;
+  }
+  const MslCompare* out = (const MslCompare*)(const void*)PyArray_DATA(out_arr);
+  const MslCompare* ref = (const MslCompare*)(const void*)PyArray_DATA(ref_arr);
+  const uint8_t* players = (const uint8_t*)PyArray_DATA(players_arr);
+  const npy_intp player_count = PyArray_DIM(players_arr, 0);
+  int code = 0;
+  int ignored = 0;
+  for (npy_intp pi = 0; pi < player_count; pi++) {
+    const uint8_t p = players[pi];
+    if (p >= MSL_MAX_PLAYERS) {
+      continue;
+    }
+    if (out->action_id[p] != ref->action_id[p]) {
+      code = 1;
+      break;
+    }
+  }
+  for (npy_intp pi = 0; code == 0 && pi < player_count; pi++) {
+    const uint8_t p = players[pi];
+    if (p < MSL_MAX_PLAYERS && out->animation_index[p] != ref->animation_index[p]) {
+      code = 2;
+    }
+  }
+  for (npy_intp pi = 0; code == 0 && pi < player_count; pi++) {
+    const uint8_t p = players[pi];
+    if (p < MSL_MAX_PLAYERS && out->on_ground[p] != ref->on_ground[p]) {
+      code = 3;
+    }
+  }
+  for (npy_intp pi = 0; code == 0 && pi < player_count; pi++) {
+    const uint8_t p = players[pi];
+    if (p < MSL_MAX_PLAYERS && out->hitlag[p] != ref->hitlag[p]) {
+      code = 4;
+    }
+  }
+  for (npy_intp pi = 0; code == 0 && pi < player_count; pi++) {
+    const uint8_t p = players[pi];
+    if (p < MSL_MAX_PLAYERS && out->hitstun[p] != ref->hitstun[p]) {
+      code = 5;
+    }
+  }
+  for (npy_intp pi = 0; pi < player_count; pi++) {
+    const uint8_t p = players[pi];
+    if (p >= MSL_MAX_PLAYERS) {
+      continue;
+    }
+    for (int sub = 0; code == 0 && sub < 4; sub++) {
+      if (out->state_flags[p][sub] != ref->state_flags[p][sub]) {
+        code = 6;
+      }
+    }
+    if (profile_rl1 != 0) {
+      const uint8_t diff4 = (uint8_t)(out->state_flags[p][4] ^ ref->state_flags[p][4]);
+      if (code == 0 && (diff4 & 0x7Fu) != 0u) {
+        code = 6;
+      }
+      if ((diff4 & 0x80u) != 0u) {
+        ignored = 1;
+      }
+    } else if (code == 0 && out->state_flags[p][4] != ref->state_flags[p][4]) {
+      code = 6;
+    }
+  }
+  return PyLong_FromLong((long)(code | (ignored ? 0x100 : 0)));
+}
+
 static PyMethodDef methods[] = {
     {"init", (PyCFunction)(void (*)(void))msl_init, METH_VARARGS | METH_KEYWORDS,
      "init(batch_size, num_players, ucf_enabled=?, ucf_cardinals_1_0_enabled=?) -> handle"},
@@ -7510,6 +7773,10 @@ static PyMethodDef methods[] = {
      "disruptive_scan(samples_u8, horizons, discrete_fields, float_fields, players, num_players, "
      "max_records, stride, float_epsilon, ucf_enabled, ucf_cardinals_enabled, batch_size, "
      "start_record, stop_record, profile_rl1) -> (int64[:,22], float64[:,6])"},
+    {"slpz_unorder_events", msl_slpz_unorder_events, METH_VARARGS,
+     "slpz_unorder_events(data, sizes) -> bytes. Native .slpz event payload unshuffle."},
+    {"standard_rollout_compare", msl_standard_rollout_compare, METH_VARARGS,
+     "standard_rollout_compare(out_compare, ref_compare, players_u8, profile_rl1) -> int code"},
     {"write_gamestate", msl_write_gamestate, METH_VARARGS,
      "write_gamestate(handle, viewpoint_players[batch], out_bytes)"},
     {"write_terminal", msl_write_terminal, METH_VARARGS,
@@ -7644,6 +7911,8 @@ static PyMethodDef methods[] = {
      "derive_instance_id_counter(fighter_instance_id, item_instance_id) -> uint16[:]"},
     {"derive_item_spawn_id_counter", msl_derive_item_spawn_id_counter_py, METH_VARARGS,
      "derive_item_spawn_id_counter(item_exists, item_spawn_id) -> uint32[:]"},
+    {"fill_items_fixed", msl_fill_items_fixed_py, METH_VARARGS,
+     "fill_items_fixed(flat Arrow item fields, owner_map, out_items) -> None"},
     {"derive_staling_history", msl_derive_staling_history_py, METH_VARARGS,
      "derive_staling_history(src_ports, char_id, action_id, action_frame, animation_index, "
      "percent, stocks, instance_id, last_hit_by, last_hit_by_instance[, item_exists, item_owner, "
@@ -7909,6 +8178,9 @@ static PyMethodDef methods[] = {
     {"anim_pose_common_fall_blend_matrix", msl_anim_pose_common_fall_blend_matrix_py, METH_VARARGS,
      "anim_pose_common_fall_blend_matrix(char_id, neutral_msid, target_msid, anim_frame, "
      "part_id, weight) -> np.ndarray[float32] shape=(12,)"},
+    {"anim_pose_collision_matrix_f32", msl_anim_pose_collision_matrix_f32_py, METH_VARARGS,
+     "anim_pose_collision_matrix_f32(char_id, msid, anim_frame, part_id) -> DEBUG-ONLY "
+     "np.ndarray[float32] shape=(12,)"},
     {"move_tables_debug_query", msl_move_tables_debug_query_py, METH_VARARGS,
      "move_tables_debug_query(kind, char_id, action_or_msid, a, b) -> test helper"},
     {"move_tables_throw_has_release", msl_move_tables_throw_has_release_py, METH_VARARGS,
@@ -8036,6 +8308,8 @@ static PyMethodDef methods[] = {
      "source_slot_u8)"},
     {"debug_set_prev_action_id", msl_debug_set_prev_action_id_py, METH_VARARGS,
      "debug_set_prev_action_id(handle, batch_index, player_index, prev_action_id_u16)"},
+    {"debug_set_grab_owner_port", msl_debug_set_grab_owner_port_py, METH_VARARGS,
+     "debug_set_grab_owner_port(handle, batch_index, player_index, grab_owner_port_u8)"},
     {"debug_set_smash_charge_state", msl_debug_set_smash_charge_state_py, METH_VARARGS,
      "debug_set_smash_charge_state(handle, batch_index, player_index, state_u8, frames_u8, "
      "hold_frames_max_u8)"},

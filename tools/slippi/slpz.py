@@ -129,7 +129,7 @@ def _reorder_events(events: bytes, sizes: list[int]) -> bytes:
     return bytes(out)
 
 
-def _unorder_events(data: bytes, sizes: list[int]) -> bytes:
+def _unorder_events_python(data: bytes, sizes: list[int]) -> bytes:
     if len(data) < 4:
         raise SlpzError("truncated reordered event stream")
     total_events = struct.unpack(">I", data[:4])[0]
@@ -162,6 +162,20 @@ def _unorder_events(data: bytes, sizes: list[int]) -> bytes:
         written[command] += 1
         out_i += 1 + size
     return bytes(out)
+
+
+def _unorder_events(data: bytes, sizes: list[int]) -> bytes:
+    try:
+        import msl_binding  # type: ignore
+    except ImportError:
+        return _unorder_events_python(data, sizes)
+    native_unorder = getattr(msl_binding, "slpz_unorder_events", None)
+    if native_unorder is None:
+        return _unorder_events_python(data, sizes)
+    try:
+        return native_unorder(data, sizes)
+    except ValueError as exc:
+        raise SlpzError(str(exc)) from exc
 
 
 def compress_slpz(slp: bytes, *, level: int = 3) -> bytes:

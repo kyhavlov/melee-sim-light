@@ -100,13 +100,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == replays/heldout/sheik/FrailGiganticCrow.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 2416
-rollout.streak_count: 23
-rollout.streak_len.median: 405
-rollout.streak_len.p90: 992
+rollout.streak_count: 22
+rollout.streak_len.median: 219
+rollout.streak_len.p90: 1043
 rollout.streak_len.p95: 1512
 rollout.streak_len.max: 2416
-rollout.first_mismatch_total: 22
-rollout.first_mismatch_seeded_total: 15
+rollout.first_mismatch_total: 21
+rollout.first_mismatch_seeded_total: 14
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=18 rec=3787 p=0 seed/ref/out=-19.7208/-20.7858/-38.7858 actions=68/68/68 category=unclassified
@@ -268,14 +268,14 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:163
 
 == suite summary ==
-overall.rollout.streak_count: 385
-overall.rollout.streak_len.median: 89
-overall.rollout.streak_len.p90: 794
+overall.rollout.streak_count: 384
+overall.rollout.streak_len.median: 88
+overall.rollout.streak_len.p90: 802
 overall.rollout.streak_len.p95: 1105
 overall.rollout.streak_len.max: 3122
 overall.rollout.best_len.max: 3122
-overall.rollout.first_mismatch_total: 452
-overall.rollout.first_mismatch_seeded_total: 341
+overall.rollout.first_mismatch_total: 451
+overall.rollout.first_mismatch_seeded_total: 340
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=139.917 rec=3840 p=0 seed/ref/out=13.7942/11.888/151.805 actions=7/7/7 category=unclassified
