@@ -2825,6 +2825,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.x682[idx] = seed->x682[p];
       batch->state.x683[idx] = seed->x683[p];
       batch->state.x684[idx] = seed->x684[p];
+      // Teacher-forced reseed owns the persisted input-history counters above. The current-frame
+      // x668/x66C edge latches are transient Fighter_Spaghetti state and must not survive from a
+      // prior occupant of this batch lane, even during active hitlag where input_apply OR-latches
+      // edges for the current frame.
+      // refs/melee/src/melee/ft/fighter.c::{
+      //   Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10}
+      batch->state.input_buttons_pressed[idx] = 0u;
+      batch->state.input_buttons_released[idx] = 0u;
       // x686/x68B (up+B presence pair) have no seed lanes: vanilla spawns them at 0xFF
       // ("long ago"), and replay seeds carry no press-period history. 0xFF keeps the first
       // post-reseed up+B press fresh (x68B >= x1C), matching a fresh fighter.

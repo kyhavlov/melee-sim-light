@@ -758,8 +758,8 @@ err.pos_y: mae=0.000117 p95=0.000000 max=2.200000
 err.speed_air_x_self: mae=0.000061 p95=0.000000 max=1.480000
 err.speed_ground_x_self: mae=0.000018 p95=0.000000 max=0.108000
 err.speed_y_self: mae=0.000090 p95=0.000000 max=2.200000
-err.speed_x_attack: mae=0.000215 p95=0.000000 max=3.111742
-err.speed_y_attack: mae=0.000126 p95=0.000000 max=3.111742
+err.speed_x_attack: mae=0.000214 p95=0.000000 max=3.111742
+err.speed_y_attack: mae=0.000125 p95=0.000000 max=3.111742
 err.percent: mae=0.000544 p95=0.000000 max=12.000000
 err.shield_hp: mae=0.000006 p95=0.000000 max=0.070000
 err.item_pos_x: mae=0.000145 p95=0.000000 max=0.344872
@@ -769,7 +769,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000008
 overall.discrete_mismatch: 34 / 1502336
 overall.strict_discrete_mismatch: 67 / 1502336
 overall.ignored_discrete_mismatch: 33
-overall.float_norm_mae_p95: 0.00003031
+overall.float_norm_mae_p95: 0.00003019
 
 == replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz ==
 Records: 12914  Players/scored per record: 2  Total player-frames: 25828

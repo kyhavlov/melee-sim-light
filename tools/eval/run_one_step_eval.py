@@ -56,6 +56,7 @@ class OneStepEvalRuntime:
     handle: object
     capacity: int
     num_players: int
+    source_port0_layout: tuple[int, ...] | None
     seed_stride: int
     input_stride: int
     compare_stride: int
@@ -99,6 +100,7 @@ def create_one_step_eval_runtime(
         handle=handle,
         capacity=capacity,
         num_players=int(num_players),
+        source_port0_layout=None,
         seed_stride=seed_stride,
         input_stride=input_stride,
         compare_stride=compare_stride,
@@ -108,6 +110,12 @@ def create_one_step_eval_runtime(
         out_compare_bytes=out_compare_bytes,
         out_compare_view=out_compare_bytes.view(COMPARE_DTYPE).reshape(-1),
     )
+
+
+def _dataset_source_port0_layout(samples: np.ndarray, num_players: int) -> tuple[int, ...]:
+    if int(samples.shape[0]) == 0:
+        return ()
+    return tuple(int(x) for x in samples["seed_t"]["source_port0"][0, : int(num_players)])
 
 
 class Reporter:
@@ -307,6 +315,7 @@ def evaluate_dataset(
     num_records = samples.shape[0]
     num_players = int(ds.header["num_players"])
     max_items = int(samples.dtype["seed_t"]["items"].shape[0])
+    source_port0_layout = _dataset_source_port0_layout(samples, num_players)
 
     owns_runtime = runtime is None
     if runtime is None:
@@ -325,6 +334,14 @@ def evaluate_dataset(
         raise ValueError(
             f"shared one-step runtime num_players={runtime.num_players} does not match "
             f"dataset num_players={num_players}"
+        )
+    elif runtime.source_port0_layout is None:
+        runtime.source_port0_layout = source_port0_layout
+    elif runtime.source_port0_layout != source_port0_layout:
+        raise ValueError(
+            "shared one-step runtime source_port0 layout "
+            f"{runtime.source_port0_layout} does not match dataset layout {source_port0_layout}; "
+            "create a fresh runtime for a different replay port layout"
         )
 
     binding = runtime.binding
