@@ -9,7 +9,12 @@ from dataclasses import asdict
 from pathlib import Path
 
 from tools.eval import run_one_step_suite_eval, run_rollout_suite_eval
-from tools.eval.run_longest_rollout_streaks import _parse_csv, _parse_players, _scan_dataset_streaks, _validate_discrete_fields
+from tools.eval.run_longest_rollout_streaks import (
+    _parse_csv,
+    _parse_players,
+    _scan_dataset_streaks_with_native_float_rows,
+    _validate_discrete_fields,
+)
 from tools.eval.run_one_step_eval import (
     Reporter,
     create_one_step_eval_runtime,
@@ -87,7 +92,9 @@ def _combined_dataset_task(task: dict) -> dict:
         runtime.close()
 
     players = _parse_players(task["players_csv"], num_players=num_players)
-    streaks = _scan_dataset_streaks(
+    float_top = int(task.get("float_top_scan", 0))
+    rollout_dataset_label = _display_path(dataset_label, root=root)
+    streaks, float_rows = _scan_dataset_streaks_with_native_float_rows(
         dataset_path=dataset_label,
         ds=ds,
         fields=tuple(task["fields"]),
@@ -96,8 +103,11 @@ def _combined_dataset_task(task: dict) -> dict:
         ucf_enabled=bool(task["ucf_enabled"]),
         ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
         profile=str(task["profile"]),
+        float_fields=tuple(task["float_fields"]) if float_top > 0 else (),
+        float_top=float_top,
+        float_threshold=0.0,
+        float_dataset_label=rollout_dataset_label,
     )
-    rollout_dataset_label = _display_path(Path(streaks.dataset), root=root)
     first_rows: list[dict] = []
     exception_probe_limit = int(task.get("exception_probe_limit", 0))
     if exception_probe_limit > 0:
@@ -119,25 +129,6 @@ def _combined_dataset_task(task: dict) -> dict:
                 profile=str(task["profile"]),
             )
         ]
-    float_rows: dict[str, list[dict]] = {}
-    float_top = int(task.get("float_top_scan", 0))
-    if float_top > 0:
-        raw_float_rows = run_rollout_suite_eval.collect_dataset_top_rollout_float_offenders(
-            dataset_path=dataset_label,
-            ds=ds,
-            dataset_label=rollout_dataset_label,
-            fields=tuple(task["float_fields"]),
-            players=players,
-            top=float_top,
-            max_records=int(task["max_records"]),
-            threshold=0.0,
-            discrete_fields=tuple(task["fields"]),
-            profile=str(task["profile"]),
-            ucf_enabled=bool(task["ucf_enabled"]),
-            ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
-        )
-        float_rows = {field: [asdict(row) for row in rows] for field, rows in raw_float_rows.items()}
-
     return {
         "one_step_lines": one_capture.lines,
         "one_step_summary": one_summary,

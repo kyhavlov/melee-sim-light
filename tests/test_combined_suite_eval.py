@@ -8,6 +8,7 @@ from pathlib import Path
 
 from tools.eval import run_combined_suite_eval, run_heldout_validation, run_one_step_suite_eval
 from tools.eval import run_rollout_suite_eval, run_validate_all
+from tools.eval import top_float_offenders, validate_replay
 from tools.eval.run_one_step_eval import EvalSummary
 from tools.slippi.suite_io import repo_root
 
@@ -121,6 +122,32 @@ def test_combined_output_matches_existing_suite_runners_on_small_suite(tmp_path:
 
     assert combined_one.read_text() == old_one.read_text()
     assert combined_roll.read_text() == old_roll.read_text()
+
+
+def test_combined_rollout_float_rows_do_not_call_legacy_python_collector(
+    tmp_path: Path, monkeypatch
+) -> None:
+    suite = tmp_path / "small_suite.json"
+    _write_suite(suite, name="small_suite", replays=[REPLAY_A])
+
+    assert not hasattr(top_float_offenders, "collect_dataset_top_rollout_float_offenders")
+    assert not hasattr(run_rollout_suite_eval, "collect_dataset_top_rollout_float_offenders")
+    assert not hasattr(validate_replay, "collect_dataset_top_rollout_float_offenders")
+    _run_main(
+        monkeypatch,
+        "run_combined_suite_eval",
+        run_combined_suite_eval.main,
+        [
+            "--suite",
+            str(suite),
+            "--one-step-out",
+            str(tmp_path / "combined_one.txt"),
+            "--rollout-out",
+            str(tmp_path / "combined_roll.txt"),
+            "--workers",
+            "1",
+        ],
+    )
 
 
 def test_validate_all_evaluates_duplicate_replay_once_and_emits_each_report(tmp_path: Path, monkeypatch) -> None:

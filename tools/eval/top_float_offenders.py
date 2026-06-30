@@ -9,20 +9,21 @@ import argparse
 import heapq
 import importlib
 import json
-import sys
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_DTYPE, Dataset, read_dataset, read_dataset_window
-from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, first_mismatch_field
-from tools.eval.run_longest_rollout_streaks import _parse_players
-from tools.eval.validation_profile import get_validation_profile, validation_profile_names
+from tools.eval.dataset import COMPARE_DTYPE, Dataset, read_dataset
+from tools.eval.run_longest_rollout_streaks import (
+    _scan_dataset_streaks_with_native_float_rows,
+    _parse_players,
+)
+from tools.eval.validation_profile import validation_profile_names
 from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 from tools.slippi.slpz import resolve_replay_path
-from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
+from tools.slippi.suite_io import load_suite, repo_root
 
 
 DEFAULT_FLOAT_FIELDS = (
@@ -258,7 +259,7 @@ def collect_dataset_top_float_offenders(
     return _sorted_top_rows(heaps)
 
 
-def collect_dataset_top_rollout_float_offenders(
+def collect_dataset_top_standard_rollout_float_offenders(
     *,
     dataset_path: Path,
     ds: Dataset | None = None,
@@ -268,177 +269,40 @@ def collect_dataset_top_rollout_float_offenders(
     top: int,
     max_records: int,
     threshold: float,
-    discrete_fields: tuple[str, ...],
     profile: str,
     ucf_enabled: bool | None,
     ucf_cardinals_1_0_enabled: bool | None,
 ) -> dict[str, list[FloatOffender]]:
     if ds is None:
-        ds = read_dataset_window(str(dataset_path), 0, sys.maxsize)
-    samples = ds.samples
-    num_records_total = int(samples.shape[0])
+        raise ValueError("rollout float collection requires a replay-derived in-memory Dataset")
     num_players = int(ds.header["num_players"])
     if players is None:
         players = tuple(range(num_players))
-
-    n = num_records_total
-    if max_records > 0:
-        n = min(n, int(max_records))
-
-    binding = _load_binding()
-    sizes = binding.sizes()
-    seed_stride = int(sizes["seed"])
-    input_stride = int(sizes["input"])
-    compare_stride = int(sizes["compare"])
-
-    init_kwargs = {"batch_size": 1, "num_players": num_players}
-    if ucf_enabled is not None:
-        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
-    if ucf_cardinals_1_0_enabled is not None:
-        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
-    handle = binding.init(**init_kwargs)
-
-    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
-    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
-    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
-    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
-
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(num_records_total, sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
-
-    seed = samples["seed_t"]
-    ref = samples["ref_t1"]
-    compare_lanes = compile_discrete_compare_lanes(
-        discrete_fields,
-        players,
-        profile=get_validation_profile(profile),
-    )
     ds_rel = dataset_label if dataset_label is not None else _dataset_rel(repo_root(), dataset_path)
-    heaps: dict[str, list[tuple[float, str, int, int, str, int, float, float, float, FloatOffender]]] = {
-        f: [] for f in fields
+    _streaks, native_rows = _scan_dataset_streaks_with_native_float_rows(
+        dataset_path=dataset_path,
+        ds=ds,
+        fields=DEFAULT_DISCRETE_FIELDS,
+        players=players,
+        max_records=max_records,
+        ucf_enabled=ucf_enabled,
+        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        profile=profile,
+        float_fields=fields,
+        float_top=top,
+        float_threshold=threshold,
+        float_dataset_label=ds_rel,
+    )
+    return {
+        field: [FloatOffender(**dict(row)) for row in native_rows.get(field, [])]
+        for field in fields
     }
-
-    def reseed_at(j: int) -> None:
-        seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
-        binding.reseed_seed_rollout(handle, seed_bytes)
-
-    def step(j: int) -> None:
-        seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
-        prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
-        input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
-        binding.step_input_replay_frame_rng(handle, seed_bytes, prev_input_bytes, input_bytes)
-        binding.write_compare(handle, out_compare_bytes)
-
-    def discrete_matches(j: int) -> bool:
-        return (
-            first_mismatch_field(out_row=out_view[0], ref_row=ref[j], lanes=compare_lanes)
-            is None
-        )
-
-    def inspect_float_offenders(
-        j: int,
-        *,
-        attempt: str,
-        seeded_retry: bool,
-        row_discrete_matches: bool,
-        streak_start_record: int,
-        streak_len: int,
-    ) -> None:
-        for field in fields:
-            out_arr = out_view[0][field]
-            ref_arr = ref[j][field]
-            seed_arr = seed[j][field]
-            for p in players:
-                pp = int(p)
-                err = abs(float(out_arr[pp]) - float(ref_arr[pp]))
-                if err < threshold or not _would_enter_top(heaps[field], top=top, abs_err=err):
-                    continue
-                row = FloatOffender(
-                    field=field,
-                    abs_err=err,
-                    dataset=ds_rel,
-                    record=int(j),
-                    p=pp,
-                    seed_frame=int(seed["frame_id"][j]),
-                    ref_frame=int(ref["frame_id"][j]),
-                    seed=float(seed_arr[pp]),
-                    out=float(out_arr[pp]),
-                    ref=float(ref_arr[pp]),
-                    seed_action_id=int(seed["action_id"][j, pp]),
-                    out_action_id=int(out_view[0]["action_id"][pp]),
-                    ref_action_id=int(ref["action_id"][j, pp]),
-                    seed_action_frame=int(seed["action_frame"][j, pp]),
-                    out_action_frame=int(out_view[0]["action_frame"][pp]),
-                    ref_action_frame=int(ref["action_frame"][j, pp]),
-                    attempt=str(attempt),
-                    seeded_retry=bool(seeded_retry),
-                    discrete_state_matches=bool(row_discrete_matches),
-                    streak_start_record=int(streak_start_record),
-                    streak_len=int(streak_len),
-                )
-                _push_top(heaps[field], top=top, row=row)
-
-    try:
-        cur_start = 0
-        cur_len = 0
-        needs_seed = True
-        for j in range(n):
-            if needs_seed:
-                reseed_at(cur_start)
-                needs_seed = False
-
-            step(j)
-            row_discrete_matches = discrete_matches(j)
-            inspect_float_offenders(
-                j,
-                attempt="free_run",
-                seeded_retry=False,
-                row_discrete_matches=row_discrete_matches,
-                streak_start_record=cur_start,
-                streak_len=cur_len,
-            )
-            if row_discrete_matches:
-                cur_len += 1
-                continue
-
-            # Keep rollout-float triage aligned with canonical rollout streaking: report the
-            # failed free-run row, then retry from the real seed at the same record for the next
-            # streak. If that retry also fails, advance to j+1.
-            cur_start = j
-            cur_len = 0
-            reseed_at(j)
-            step(j)
-            retry_discrete_matches = discrete_matches(j)
-            inspect_float_offenders(
-                j,
-                attempt="seeded_retry",
-                seeded_retry=True,
-                row_discrete_matches=retry_discrete_matches,
-                streak_start_record=cur_start,
-                streak_len=0,
-            )
-            if retry_discrete_matches:
-                cur_len = 1
-            else:
-                cur_start = j + 1
-                cur_len = 0
-                needs_seed = True
-    finally:
-        try:
-            binding.destroy(handle)
-        except Exception:
-            pass
-
-    return _sorted_top_rows(heaps)
 
 
 def collect_suite_top_float_offenders(
     *,
     suite: Path,
+    datasets_dir: str | None = None,
     fields: tuple[str, ...],
     chunk: int,
     top: int,
@@ -449,6 +313,7 @@ def collect_suite_top_float_offenders(
     profile: str = "rl1_gameplay",
     dataset_filter: str = "",
 ) -> dict[str, object]:
+    del datasets_dir
     root = repo_root()
     suite_path = (root / suite).resolve()
     suite_obj = load_suite(suite_path)
@@ -458,22 +323,19 @@ def collect_suite_top_float_offenders(
     }
 
     for entry in suite_obj.replays:
-        dataset_label = dataset_path_for_suite_replay(
-            suite_name=suite_obj.name,
-            replay_rel_path=entry.replay,
-        )
-        ds_rel = _dataset_rel(root, dataset_label)
+        replay_path = resolve_replay_path((root / entry.replay).resolve())
+        ds_rel = _dataset_rel(root, replay_path)
         if dataset_filter and dataset_filter not in ds_rel and dataset_filter not in entry.replay:
             continue
         dataset_obj = build_dataset_from_slp(
-            slp_path=str(resolve_replay_path((root / entry.replay).resolve())),
+            slp_path=str(replay_path),
             ports=[int(p) for p in entry.ports],
             ucf_enabled=bool(suite_obj.ucf_enabled),
             ucf_cardinals_1_0_enabled=bool(suite_obj.ucf_cardinals_1_0_enabled),
         )
         if mode == "one-step":
             per_ds = collect_dataset_top_float_offenders(
-                dataset_path=dataset_label,
+                dataset_path=replay_path,
                 ds=dataset_obj,
                 dataset_label=ds_rel,
                 fields=fields,
@@ -484,8 +346,8 @@ def collect_suite_top_float_offenders(
             )
         elif mode == "rollout":
             num_players = int(dataset_obj.header["num_players"])
-            per_ds = collect_dataset_top_rollout_float_offenders(
-                dataset_path=dataset_label,
+            per_ds = collect_dataset_top_standard_rollout_float_offenders(
+                dataset_path=replay_path,
                 ds=dataset_obj,
                 dataset_label=ds_rel,
                 fields=fields,
@@ -493,7 +355,6 @@ def collect_suite_top_float_offenders(
                 top=top,
                 max_records=max_records,
                 threshold=threshold,
-                discrete_fields=DEFAULT_DISCRETE_FIELDS,
                 profile=profile,
                 ucf_enabled=bool(suite_obj.ucf_enabled),
                 ucf_cardinals_1_0_enabled=bool(suite_obj.ucf_cardinals_1_0_enabled),

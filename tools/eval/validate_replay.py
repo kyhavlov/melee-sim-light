@@ -16,7 +16,7 @@ from tools.eval.rollout_metrics import summarize_rollout_payload
 from tools.eval.run_longest_rollout_streaks import (
     _parse_csv,
     _parse_players,
-    _scan_dataset_streaks,
+    _scan_dataset_streaks_with_native_float_rows,
     _validate_discrete_fields,
 )
 from tools.eval.run_rollout_suite_eval import (
@@ -28,7 +28,6 @@ from tools.eval.run_rollout_suite_eval import (
     print_rollout_dataset_report,
 )
 from tools.eval.run_one_step_eval import Reporter, evaluate_dataset
-from tools.eval.top_float_offenders import collect_dataset_top_rollout_float_offenders
 from tools.eval.validation_exceptions import load_validation_exceptions
 from tools.eval.validation_profile import get_validation_profile, validation_profile_names
 from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
@@ -126,7 +125,9 @@ def _print_rollout(
     num_players = int(dataset.header["num_players"])
     players = _parse_players(players_csv, num_players=num_players)
     label = _dataset_label(replay)
-    streaks = _scan_dataset_streaks(
+    float_top_scan = max(0, int(float_top)) * 8
+    dataset_label = str(label)
+    streaks, float_rows = _scan_dataset_streaks_with_native_float_rows(
         dataset_path=label,
         ds=dataset,
         fields=fields,
@@ -135,9 +136,12 @@ def _print_rollout(
         ucf_enabled=ucf_enabled,
         ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
         profile=profile,
+        float_fields=_float_compare_fields() if float_top_scan > 0 else (),
+        float_top=float_top_scan,
+        float_threshold=0.0,
+        float_dataset_label=dataset_label,
     )
     exceptions = load_validation_exceptions(exceptions_path)
-    dataset_label = str(label)
     exception_probe_limit = _exception_probe_limit(dataset=dataset_label, exceptions=exceptions)
     if exception_probe_limit > 0 and int(max_records) > 0:
         exception_probe_limit = min(exception_probe_limit, int(max_records))
@@ -158,24 +162,6 @@ def _print_rollout(
                 profile=profile,
             )
         ]
-    float_rows = {}
-    float_top_scan = max(0, int(float_top)) * 8
-    if float_top_scan > 0:
-        raw_float_rows = collect_dataset_top_rollout_float_offenders(
-            dataset_path=label,
-            ds=dataset,
-            dataset_label=dataset_label,
-            fields=_float_compare_fields(),
-            players=players,
-            top=float_top_scan,
-            max_records=int(max_records),
-            threshold=0.0,
-            discrete_fields=fields,
-            profile=profile,
-            ucf_enabled=ucf_enabled,
-            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-        )
-        float_rows = {field: [asdict(row) for row in rows] for field, rows in raw_float_rows.items()}
     payload = {
         "suite": "single_replay",
         "suite_path": str(replay),

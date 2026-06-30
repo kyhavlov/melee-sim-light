@@ -7702,6 +7702,308 @@ static int msl_standard_rollout_step_compare(MslBatch* batch, const uint8_t* sam
   return msl_standard_rollout_compare_code(out, ref, players, player_count, profile_rl1);
 }
 
+enum {
+  MSL_RO_FLOAT_POS_X = 0,
+  MSL_RO_FLOAT_POS_Y = 1,
+  MSL_RO_FLOAT_SPEED_AIR_X_SELF = 2,
+  MSL_RO_FLOAT_SPEED_GROUND_X_SELF = 3,
+  MSL_RO_FLOAT_SPEED_Y_SELF = 4,
+  MSL_RO_FLOAT_SPEED_X_ATTACK = 5,
+  MSL_RO_FLOAT_SPEED_Y_ATTACK = 6,
+  MSL_RO_FLOAT_PERCENT = 7,
+  MSL_RO_FLOAT_SHIELD_HP = 8,
+};
+
+typedef struct MslRolloutFloatTopRow {
+  int field;
+  double abs_err;
+  int record;
+  int player;
+  int seed_frame;
+  int ref_frame;
+  float seed;
+  float out;
+  float ref;
+  int seed_action_id;
+  int out_action_id;
+  int ref_action_id;
+  int seed_action_frame;
+  int out_action_frame;
+  int ref_action_frame;
+  int attempt_seeded_retry;
+  int discrete_state_matches;
+  int streak_start_record;
+  int streak_len;
+} MslRolloutFloatTopRow;
+
+static const char* msl_rollout_float_field_name(int field) {
+  switch (field) {
+    case MSL_RO_FLOAT_POS_X:
+      return "pos_x";
+    case MSL_RO_FLOAT_POS_Y:
+      return "pos_y";
+    case MSL_RO_FLOAT_SPEED_AIR_X_SELF:
+      return "speed_air_x_self";
+    case MSL_RO_FLOAT_SPEED_GROUND_X_SELF:
+      return "speed_ground_x_self";
+    case MSL_RO_FLOAT_SPEED_Y_SELF:
+      return "speed_y_self";
+    case MSL_RO_FLOAT_SPEED_X_ATTACK:
+      return "speed_x_attack";
+    case MSL_RO_FLOAT_SPEED_Y_ATTACK:
+      return "speed_y_attack";
+    case MSL_RO_FLOAT_PERCENT:
+      return "percent";
+    case MSL_RO_FLOAT_SHIELD_HP:
+      return "shield_hp";
+    default:
+      return NULL;
+  }
+}
+
+static int msl_rollout_float_field_from_name(const char* name) {
+  if (strcmp(name, "pos_x") == 0) {
+    return MSL_RO_FLOAT_POS_X;
+  }
+  if (strcmp(name, "pos_y") == 0) {
+    return MSL_RO_FLOAT_POS_Y;
+  }
+  if (strcmp(name, "speed_air_x_self") == 0) {
+    return MSL_RO_FLOAT_SPEED_AIR_X_SELF;
+  }
+  if (strcmp(name, "speed_ground_x_self") == 0) {
+    return MSL_RO_FLOAT_SPEED_GROUND_X_SELF;
+  }
+  if (strcmp(name, "speed_y_self") == 0) {
+    return MSL_RO_FLOAT_SPEED_Y_SELF;
+  }
+  if (strcmp(name, "speed_x_attack") == 0) {
+    return MSL_RO_FLOAT_SPEED_X_ATTACK;
+  }
+  if (strcmp(name, "speed_y_attack") == 0) {
+    return MSL_RO_FLOAT_SPEED_Y_ATTACK;
+  }
+  if (strcmp(name, "percent") == 0) {
+    return MSL_RO_FLOAT_PERCENT;
+  }
+  if (strcmp(name, "shield_hp") == 0) {
+    return MSL_RO_FLOAT_SHIELD_HP;
+  }
+  return -1;
+}
+
+static float msl_rollout_seed_float(const MslSeed* seed, int field, int p) {
+  switch (field) {
+    case MSL_RO_FLOAT_POS_X:
+      return seed->pos_x[p];
+    case MSL_RO_FLOAT_POS_Y:
+      return seed->pos_y[p];
+    case MSL_RO_FLOAT_SPEED_AIR_X_SELF:
+      return seed->speed_air_x_self[p];
+    case MSL_RO_FLOAT_SPEED_GROUND_X_SELF:
+      return seed->speed_ground_x_self[p];
+    case MSL_RO_FLOAT_SPEED_Y_SELF:
+      return seed->speed_y_self[p];
+    case MSL_RO_FLOAT_SPEED_X_ATTACK:
+      return seed->speed_x_attack[p];
+    case MSL_RO_FLOAT_SPEED_Y_ATTACK:
+      return seed->speed_y_attack[p];
+    case MSL_RO_FLOAT_PERCENT:
+      return seed->percent[p];
+    case MSL_RO_FLOAT_SHIELD_HP:
+      return seed->shield_hp[p];
+    default:
+      return 0.0f;
+  }
+}
+
+static float msl_rollout_compare_float(const MslCompare* cmp, int field, int p) {
+  switch (field) {
+    case MSL_RO_FLOAT_POS_X:
+      return cmp->pos_x[p];
+    case MSL_RO_FLOAT_POS_Y:
+      return cmp->pos_y[p];
+    case MSL_RO_FLOAT_SPEED_AIR_X_SELF:
+      return cmp->speed_air_x_self[p];
+    case MSL_RO_FLOAT_SPEED_GROUND_X_SELF:
+      return cmp->speed_ground_x_self[p];
+    case MSL_RO_FLOAT_SPEED_Y_SELF:
+      return cmp->speed_y_self[p];
+    case MSL_RO_FLOAT_SPEED_X_ATTACK:
+      return cmp->speed_x_attack[p];
+    case MSL_RO_FLOAT_SPEED_Y_ATTACK:
+      return cmp->speed_y_attack[p];
+    case MSL_RO_FLOAT_PERCENT:
+      return cmp->percent[p];
+    case MSL_RO_FLOAT_SHIELD_HP:
+      return cmp->shield_hp[p];
+    default:
+      return 0.0f;
+  }
+}
+
+static int msl_rollout_float_heap_less(const MslRolloutFloatTopRow* a,
+                                       const MslRolloutFloatTopRow* b) {
+  if (a->abs_err != b->abs_err) {
+    return a->abs_err < b->abs_err;
+  }
+  if (a->record != b->record) {
+    return a->record < b->record;
+  }
+  if (a->player != b->player) {
+    return a->player < b->player;
+  }
+  if (a->attempt_seeded_retry != b->attempt_seeded_retry) {
+    return a->attempt_seeded_retry < b->attempt_seeded_retry;
+  }
+  if (a->seed != b->seed) {
+    return a->seed < b->seed;
+  }
+  if (a->out != b->out) {
+    return a->out < b->out;
+  }
+  return a->ref < b->ref;
+}
+
+static void msl_rollout_float_heap_sift_up(MslRolloutFloatTopRow* rows, int idx) {
+  while (idx > 0) {
+    const int parent = (idx - 1) / 2;
+    if (!msl_rollout_float_heap_less(&rows[idx], &rows[parent])) {
+      break;
+    }
+    const MslRolloutFloatTopRow tmp = rows[parent];
+    rows[parent] = rows[idx];
+    rows[idx] = tmp;
+    idx = parent;
+  }
+}
+
+static void msl_rollout_float_heap_sift_down(MslRolloutFloatTopRow* rows, int count) {
+  int idx = 0;
+  for (;;) {
+    const int left = idx * 2 + 1;
+    const int right = left + 1;
+    int best = idx;
+    if (left < count && msl_rollout_float_heap_less(&rows[left], &rows[best])) {
+      best = left;
+    }
+    if (right < count && msl_rollout_float_heap_less(&rows[right], &rows[best])) {
+      best = right;
+    }
+    if (best == idx) {
+      break;
+    }
+    const MslRolloutFloatTopRow tmp = rows[best];
+    rows[best] = rows[idx];
+    rows[idx] = tmp;
+    idx = best;
+  }
+}
+
+static void msl_rollout_float_stable_sort_report_order(MslRolloutFloatTopRow* rows, int count) {
+  for (int i = 1; i < count; i++) {
+    const MslRolloutFloatTopRow cur = rows[i];
+    int j = i - 1;
+    while (j >= 0) {
+      const MslRolloutFloatTopRow* prev = &rows[j];
+      const int cur_before_prev = (cur.abs_err > prev->abs_err) ||
+                                  (cur.abs_err == prev->abs_err &&
+                                   (cur.record < prev->record ||
+                                    (cur.record == prev->record && cur.player < prev->player)));
+      if (!cur_before_prev) {
+        break;
+      }
+      rows[j + 1] = rows[j];
+      j--;
+    }
+    rows[j + 1] = cur;
+  }
+}
+
+static void msl_rollout_float_collect(MslRolloutFloatTopRow* rows, int* counts, const int* fields,
+                                      int field_count, int top, double threshold,
+                                      const uint8_t* players, npy_intp player_count,
+                                      const MslSeed* seed, const MslCompare* out,
+                                      const MslCompare* ref, int record, int attempt_seeded_retry,
+                                      int discrete_state_matches, int streak_start_record,
+                                      int streak_len) {
+  if (rows == NULL || counts == NULL || top <= 0 || field_count <= 0) {
+    return;
+  }
+  for (int fi = 0; fi < field_count; fi++) {
+    MslRolloutFloatTopRow* field_rows = rows + (size_t)fi * (size_t)top;
+    int* count = &counts[fi];
+    const int field = fields[fi];
+    for (npy_intp pi = 0; pi < player_count; pi++) {
+      const int p = (int)players[pi];
+      const float out_v = msl_rollout_compare_float(out, field, p);
+      const float ref_v = msl_rollout_compare_float(ref, field, p);
+      const double abs_err = fabs((double)out_v - (double)ref_v);
+      if (abs_err < threshold || abs_err <= 0.0) {
+        continue;
+      }
+      MslRolloutFloatTopRow next = (MslRolloutFloatTopRow){
+          .field = field,
+          .abs_err = abs_err,
+          .record = record,
+          .player = p,
+          .seed_frame = seed->frame_id,
+          .ref_frame = ref->frame_id,
+          .seed = msl_rollout_seed_float(seed, field, p),
+          .out = out_v,
+          .ref = ref_v,
+          .seed_action_id = seed->action_id[p],
+          .out_action_id = out->action_id[p],
+          .ref_action_id = ref->action_id[p],
+          .seed_action_frame = seed->action_frame[p],
+          .out_action_frame = out->action_frame[p],
+          .ref_action_frame = ref->action_frame[p],
+          .attempt_seeded_retry = attempt_seeded_retry,
+          .discrete_state_matches = discrete_state_matches,
+          .streak_start_record = streak_start_record,
+          .streak_len = streak_len,
+      };
+      int dst = *count;
+      if (dst < top) {
+        field_rows[dst] = next;
+        *count = dst + 1;
+        msl_rollout_float_heap_sift_up(field_rows, dst);
+      } else if (abs_err > field_rows[0].abs_err) {
+        field_rows[0] = next;
+        msl_rollout_float_heap_sift_down(field_rows, top);
+      }
+    }
+  }
+}
+
+static int msl_put_bool(PyObject* dict, const char* key, int value) {
+  PyObject* obj = value ? Py_True : Py_False;
+  Py_INCREF(obj);
+  const int err = PyDict_SetItemString(dict, key, obj);
+  Py_DECREF(obj);
+  return err;
+}
+
+static int msl_put_double(PyObject* dict, const char* key, double value) {
+  PyObject* obj = PyFloat_FromDouble(value);
+  if (obj == NULL) {
+    return -1;
+  }
+  const int err = PyDict_SetItemString(dict, key, obj);
+  Py_DECREF(obj);
+  return err;
+}
+
+static int msl_put_string(PyObject* dict, const char* key, const char* value) {
+  PyObject* obj = PyUnicode_FromString(value);
+  if (obj == NULL) {
+    return -1;
+  }
+  const int err = PyDict_SetItemString(dict, key, obj);
+  Py_DECREF(obj);
+  return err;
+}
+
 static int msl_put_long(PyObject* dict, const char* key, long value) {
   PyObject* obj = PyLong_FromLong(value);
   if (obj == NULL) {
@@ -7710,6 +8012,69 @@ static int msl_put_long(PyObject* dict, const char* key, long value) {
   const int err = PyDict_SetItemString(dict, key, obj);
   Py_DECREF(obj);
   return err;
+}
+
+static PyObject* msl_rollout_float_rows_to_py(const int* fields, const int* counts,
+                                              MslRolloutFloatTopRow* rows, int field_count,
+                                              int top) {
+  PyObject* out = PyDict_New();
+  if (out == NULL) {
+    return NULL;
+  }
+  for (int fi = 0; fi < field_count; fi++) {
+    const char* field_name = msl_rollout_float_field_name(fields[fi]);
+    if (field_name == NULL) {
+      Py_DECREF(out);
+      PyErr_SetString(PyExc_RuntimeError, "invalid rollout float field");
+      return NULL;
+    }
+    const int count = counts[fi];
+    PyObject* rows_list = PyList_New(count);
+    if (rows_list == NULL) {
+      Py_DECREF(out);
+      return NULL;
+    }
+    MslRolloutFloatTopRow* field_rows = rows + (size_t)fi * (size_t)top;
+    msl_rollout_float_stable_sort_report_order(field_rows, count);
+    for (int ri = 0; ri < count; ri++) {
+      const MslRolloutFloatTopRow* row = &field_rows[ri];
+      PyObject* row_dict = PyDict_New();
+      if (row_dict == NULL || msl_put_string(row_dict, "field", field_name) != 0 ||
+          msl_put_double(row_dict, "abs_err", row->abs_err) != 0 ||
+          msl_put_long(row_dict, "record", row->record) != 0 ||
+          msl_put_long(row_dict, "p", row->player) != 0 ||
+          msl_put_long(row_dict, "seed_frame", row->seed_frame) != 0 ||
+          msl_put_long(row_dict, "ref_frame", row->ref_frame) != 0 ||
+          msl_put_double(row_dict, "seed", row->seed) != 0 ||
+          msl_put_double(row_dict, "out", row->out) != 0 ||
+          msl_put_double(row_dict, "ref", row->ref) != 0 ||
+          msl_put_long(row_dict, "seed_action_id", row->seed_action_id) != 0 ||
+          msl_put_long(row_dict, "out_action_id", row->out_action_id) != 0 ||
+          msl_put_long(row_dict, "ref_action_id", row->ref_action_id) != 0 ||
+          msl_put_long(row_dict, "seed_action_frame", row->seed_action_frame) != 0 ||
+          msl_put_long(row_dict, "out_action_frame", row->out_action_frame) != 0 ||
+          msl_put_long(row_dict, "ref_action_frame", row->ref_action_frame) != 0 ||
+          msl_put_string(row_dict, "attempt",
+                         row->attempt_seeded_retry ? "seeded_retry" : "free_run") != 0 ||
+          msl_put_bool(row_dict, "seeded_retry", row->attempt_seeded_retry) != 0 ||
+          msl_put_bool(row_dict, "discrete_state_matches", row->discrete_state_matches) != 0 ||
+          msl_put_long(row_dict, "streak_start_record", row->streak_start_record) != 0 ||
+          msl_put_long(row_dict, "streak_len", row->streak_len) != 0) {
+        Py_XDECREF(row_dict);
+        Py_DECREF(rows_list);
+        Py_DECREF(out);
+        return NULL;
+      }
+      PyList_SET_ITEM(rows_list, ri, row_dict);
+    }
+    if (PyDict_SetItemString(out, field_name, rows_list) != 0) {
+      Py_DECREF(rows_list);
+      Py_DECREF(out);
+      return NULL;
+    }
+    Py_DECREF(rows_list);
+  }
+  return out;
 }
 
 static PyObject* msl_standard_rollout_scan(PyObject* self, PyObject* args) {
@@ -7721,8 +8086,12 @@ static PyObject* msl_standard_rollout_scan(PyObject* self, PyObject* args) {
   int ucf_enabled = -1;
   int ucf_cardinals = -1;
   int profile_rl1 = 0;
-  if (!PyArg_ParseTuple(args, "OOiiiii", &samples_obj, &players_obj, &num_players, &max_records,
-                        &ucf_enabled, &ucf_cardinals, &profile_rl1)) {
+  PyObject* float_fields_obj = NULL;
+  int float_top = 0;
+  double float_threshold = 0.0;
+  if (!PyArg_ParseTuple(args, "OOiiiii|Oid", &samples_obj, &players_obj, &num_players, &max_records,
+                        &ucf_enabled, &ucf_cardinals, &profile_rl1, &float_fields_obj, &float_top,
+                        &float_threshold)) {
     return NULL;
   }
   PyArrayObject* samples =
@@ -7748,20 +8117,78 @@ static PyObject* msl_standard_rollout_scan(PyObject* self, PyObject* args) {
       return NULL;
     }
   }
+  if (float_top < 0) {
+    PyErr_SetString(PyExc_ValueError, "float_top must be non-negative");
+    return NULL;
+  }
 
   const int total_records = (int)PyArray_DIM(samples, 0);
   int n = total_records;
   if (max_records > 0 && n > max_records) {
     n = max_records;
   }
+  int* float_fields = NULL;
+  int* float_counts = NULL;
+  MslRolloutFloatTopRow* float_rows = NULL;
+  int float_field_count = 0;
+  if (float_fields_obj != NULL && float_top > 0) {
+    PyObject* seq = PySequence_Fast(float_fields_obj, "float_fields must be a sequence");
+    if (seq == NULL) {
+      return NULL;
+    }
+    const Py_ssize_t seq_n = PySequence_Fast_GET_SIZE(seq);
+    if (seq_n > 0) {
+      float_fields = (int*)PyMem_RawMalloc((size_t)seq_n * sizeof(int));
+      float_counts = (int*)PyMem_RawCalloc((size_t)seq_n, sizeof(int));
+      float_rows = (MslRolloutFloatTopRow*)PyMem_RawCalloc((size_t)seq_n * (size_t)float_top,
+                                                           sizeof(MslRolloutFloatTopRow));
+      if (float_fields == NULL || float_counts == NULL || float_rows == NULL) {
+        Py_DECREF(seq);
+        PyMem_RawFree(float_fields);
+        PyMem_RawFree(float_counts);
+        PyMem_RawFree(float_rows);
+        PyErr_NoMemory();
+        return NULL;
+      }
+      for (Py_ssize_t i = 0; i < seq_n; i++) {
+        PyObject* item = PySequence_Fast_GET_ITEM(seq, i);
+        const char* name = PyUnicode_AsUTF8(item);
+        if (name == NULL) {
+          Py_DECREF(seq);
+          PyMem_RawFree(float_fields);
+          PyMem_RawFree(float_counts);
+          PyMem_RawFree(float_rows);
+          return NULL;
+        }
+        const int field = msl_rollout_float_field_from_name(name);
+        if (field < 0) {
+          Py_DECREF(seq);
+          PyMem_RawFree(float_fields);
+          PyMem_RawFree(float_counts);
+          PyMem_RawFree(float_rows);
+          PyErr_Format(PyExc_ValueError, "unsupported rollout float field: %s", name);
+          return NULL;
+        }
+        float_fields[i] = field;
+      }
+      float_field_count = (int)seq_n;
+    }
+    Py_DECREF(seq);
+  }
   int* hist = (int*)PyMem_RawCalloc((size_t)n + 1u, sizeof(int));
   if (hist == NULL) {
+    PyMem_RawFree(float_fields);
+    PyMem_RawFree(float_counts);
+    PyMem_RawFree(float_rows);
     PyErr_NoMemory();
     return NULL;
   }
   MslBatch* batch = msl_batch_create(1, num_players);
   if (batch == NULL) {
     PyMem_RawFree(hist);
+    PyMem_RawFree(float_fields);
+    PyMem_RawFree(float_counts);
+    PyMem_RawFree(float_rows);
     PyErr_SetString(PyExc_RuntimeError, "msl_batch_create failed");
     return NULL;
   }
@@ -7805,6 +8232,12 @@ static PyObject* msl_standard_rollout_scan(PyObject* self, PyObject* args) {
       ignored_first++;
     }
     const int code = attempt & 0xFF;
+    const uint8_t* row = samples_u8 + (size_t)j * sample_stride;
+    const MslSeed* seed = (const MslSeed*)(const void*)(row + offsetof(MslSample, seed_t));
+    const MslCompare* ref = (const MslCompare*)(const void*)(row + offsetof(MslSample, ref_t1));
+    msl_rollout_float_collect(float_rows, float_counts, float_fields, float_field_count, float_top,
+                              float_threshold, players, player_count, seed, &out, ref, j, 0,
+                              code == 0, cur_start, cur_len);
     if (code == 0) {
       cur_len++;
       if (cur_len > best_len) {
@@ -7838,6 +8271,12 @@ static PyObject* msl_standard_rollout_scan(PyObject* self, PyObject* args) {
       ignored_first_seeded++;
     }
     const int retry_code = retry & 0xFF;
+    row = samples_u8 + (size_t)j * sample_stride;
+    seed = (const MslSeed*)(const void*)(row + offsetof(MslSample, seed_t));
+    ref = (const MslCompare*)(const void*)(row + offsetof(MslSample, ref_t1));
+    msl_rollout_float_collect(float_rows, float_counts, float_fields, float_field_count, float_top,
+                              float_threshold, players, player_count, seed, &out, ref, j, 1,
+                              retry_code == 0, cur_start, 0);
     if (retry_code == 0) {
       cur_len = 1;
       if (cur_len > best_len) {
@@ -7863,6 +8302,9 @@ static PyObject* msl_standard_rollout_scan(PyObject* self, PyObject* args) {
   msl_batch_destroy(batch);
   if (err != 0) {
     PyMem_RawFree(hist);
+    PyMem_RawFree(float_fields);
+    PyMem_RawFree(float_counts);
+    PyMem_RawFree(float_rows);
     PyErr_Format(PyExc_RuntimeError, "standard_rollout_scan failed: %d", err);
     return NULL;
   }
@@ -7878,6 +8320,9 @@ static PyObject* msl_standard_rollout_scan(PyObject* self, PyObject* args) {
     Py_XDECREF(mismatch_list);
     Py_XDECREF(mismatch_seeded_list);
     PyMem_RawFree(hist);
+    PyMem_RawFree(float_fields);
+    PyMem_RawFree(float_counts);
+    PyMem_RawFree(float_rows);
     return NULL;
   }
   for (int len = 1; len <= n; len++) {
@@ -7894,6 +8339,9 @@ static PyObject* msl_standard_rollout_scan(PyObject* self, PyObject* args) {
       Py_DECREF(mismatch_list);
       Py_DECREF(mismatch_seeded_list);
       PyMem_RawFree(hist);
+      PyMem_RawFree(float_fields);
+      PyMem_RawFree(float_counts);
+      PyMem_RawFree(float_rows);
       return NULL;
     }
     Py_DECREF(key);
@@ -7910,6 +8358,9 @@ static PyObject* msl_standard_rollout_scan(PyObject* self, PyObject* args) {
       Py_DECREF(hist_dict);
       Py_DECREF(mismatch_list);
       Py_DECREF(mismatch_seeded_list);
+      PyMem_RawFree(float_fields);
+      PyMem_RawFree(float_counts);
+      PyMem_RawFree(float_rows);
       return NULL;
     }
     PyList_SET_ITEM(mismatch_list, i, a);
@@ -7927,11 +8378,31 @@ static PyObject* msl_standard_rollout_scan(PyObject* self, PyObject* args) {
     Py_DECREF(hist_dict);
     Py_DECREF(mismatch_list);
     Py_DECREF(mismatch_seeded_list);
+    PyMem_RawFree(float_fields);
+    PyMem_RawFree(float_counts);
+    PyMem_RawFree(float_rows);
     return NULL;
   }
+  PyObject* float_rows_dict = msl_rollout_float_rows_to_py(float_fields, float_counts, float_rows,
+                                                           float_field_count, float_top);
+  if (float_rows_dict == NULL || PyDict_SetItemString(result, "float_rows", float_rows_dict) != 0) {
+    Py_XDECREF(float_rows_dict);
+    Py_DECREF(result);
+    Py_DECREF(hist_dict);
+    Py_DECREF(mismatch_list);
+    Py_DECREF(mismatch_seeded_list);
+    PyMem_RawFree(float_fields);
+    PyMem_RawFree(float_counts);
+    PyMem_RawFree(float_rows);
+    return NULL;
+  }
+  Py_DECREF(float_rows_dict);
   Py_DECREF(hist_dict);
   Py_DECREF(mismatch_list);
   Py_DECREF(mismatch_seeded_list);
+  PyMem_RawFree(float_fields);
+  PyMem_RawFree(float_counts);
+  PyMem_RawFree(float_rows);
   return result;
 }
 
@@ -8046,7 +8517,8 @@ static PyMethodDef methods[] = {
      "standard_rollout_compare(out_compare, ref_compare, players_u8, profile_rl1) -> int code"},
     {"standard_rollout_scan", msl_standard_rollout_scan, METH_VARARGS,
      "standard_rollout_scan(samples_u8, players_u8, num_players, max_records, ucf_enabled, "
-     "ucf_cardinals_enabled, profile_rl1) -> dict"},
+     "ucf_cardinals_enabled, profile_rl1, float_fields=(), float_top=0, float_threshold=0.0) -> "
+     "dict"},
     {"write_gamestate", msl_write_gamestate, METH_VARARGS,
      "write_gamestate(handle, viewpoint_players[batch], out_bytes)"},
     {"write_terminal", msl_write_terminal, METH_VARARGS,

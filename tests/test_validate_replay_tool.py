@@ -11,7 +11,6 @@ import pytest
 from tools.eval import validate_replay
 from tools.eval import run_one_step_suite_eval
 from tools.eval.run_one_step_eval import EvalSummary
-from tools.eval.top_float_offenders import FloatOffender
 
 
 def test_validate_replay_parse_ports_defaults_and_sorts() -> None:
@@ -293,8 +292,34 @@ def test_validate_replay_rollout_prints_report_overlay_fields(
     def fake_build_dataset_from_slp(**_kwargs):
         return fake_dataset
 
-    def fake_scan_dataset_streaks(**_kwargs):
-        return fake_streaks
+    def fake_scan_dataset_streaks_with_native_float_rows(**kwargs):
+        return fake_streaks, {
+            "percent": [
+                {
+                    "field": "percent",
+                    "abs_err": 1.0,
+                    "dataset": str(kwargs["float_dataset_label"]),
+                    "record": 20,
+                    "p": 0,
+                    "seed_frame": -100,
+                    "ref_frame": -99,
+                    "seed": 89.0,
+                    "out": 89.0,
+                    "ref": 90.0,
+                    "seed_action_id": 38,
+                    "out_action_id": 38,
+                    "ref_action_id": 38,
+                    "seed_action_frame": 1,
+                    "out_action_frame": 2,
+                    "ref_action_frame": 2,
+                    "attempt": "free_run",
+                    "seeded_retry": False,
+                    "discrete_state_matches": True,
+                    "streak_start_record": 0,
+                    "streak_len": 12,
+                }
+            ]
+        }
 
     def fake_locate_dataset_rollout_desyncs(**kwargs):
         return [
@@ -311,42 +336,16 @@ def test_validate_replay_rollout_prints_report_overlay_fields(
             )
         ]
 
-    def fake_collect_dataset_top_rollout_float_offenders(**kwargs):
-        return {
-            "percent": [
-                FloatOffender(
-                    field="percent",
-                    abs_err=1.0,
-                    dataset=str(kwargs["dataset_label"]),
-                    record=20,
-                    p=0,
-                    seed_frame=-100,
-                    ref_frame=-99,
-                    seed=89.0,
-                    out=89.0,
-                    ref=90.0,
-                    seed_action_id=38,
-                    out_action_id=38,
-                    ref_action_id=38,
-                    seed_action_frame=1,
-                    out_action_frame=2,
-                    ref_action_frame=2,
-                    discrete_state_matches=True,
-                )
-            ]
-        }
-
     monkeypatch.setattr(validate_replay, "build_dataset_from_slp", fake_build_dataset_from_slp)
-    monkeypatch.setattr(validate_replay, "_scan_dataset_streaks", fake_scan_dataset_streaks)
+    monkeypatch.setattr(
+        validate_replay,
+        "_scan_dataset_streaks_with_native_float_rows",
+        fake_scan_dataset_streaks_with_native_float_rows,
+    )
     monkeypatch.setattr(
         validate_replay,
         "_locate_dataset_rollout_desyncs",
         fake_locate_dataset_rollout_desyncs,
-    )
-    monkeypatch.setattr(
-        validate_replay,
-        "collect_dataset_top_rollout_float_offenders",
-        fake_collect_dataset_top_rollout_float_offenders,
     )
     monkeypatch.setattr(validate_replay, "_float_compare_fields", lambda: ("percent",))
 

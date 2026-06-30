@@ -12,11 +12,10 @@ from tools.eval.rollout_metrics import summarize_rollout_payload
 from tools.eval.run_longest_rollout_streaks import (
     _parse_csv,
     _parse_players,
-    _scan_dataset_streaks,
+    _scan_dataset_streaks_with_native_float_rows,
     _validate_discrete_fields,
 )
 from tools.eval.run_one_step_eval import Reporter
-from tools.eval.top_float_offenders import collect_dataset_top_rollout_float_offenders
 from tools.eval.validation_exceptions import (
     ValidationExceptions,
     classify_float_row,
@@ -451,7 +450,9 @@ def _scan_dataset_payload_task(task: dict) -> dict:
     )
     num_players = int(ds.header["num_players"])
     players = _parse_players(task["players_csv"], num_players=num_players)
-    s = _scan_dataset_streaks(
+    float_top = int(task.get("float_top_scan", 0))
+    display_label = _display_path(dataset_label, root=root)
+    s, float_rows = _scan_dataset_streaks_with_native_float_rows(
         dataset_path=dataset_label,
         ds=ds,
         fields=tuple(task["fields"]),
@@ -460,8 +461,11 @@ def _scan_dataset_payload_task(task: dict) -> dict:
         ucf_enabled=bool(task["ucf_enabled"]),
         ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
         profile=str(task["profile"]),
+        float_fields=tuple(task["float_fields"]) if float_top > 0 else (),
+        float_top=float_top,
+        float_threshold=0.0,
+        float_dataset_label=display_label,
     )
-    dataset_label = _display_path(Path(s.dataset), root=root)
     first_rows: list[dict] = []
     exception_probe_limit = int(task.get("exception_probe_limit", 0))
     if exception_probe_limit > 0:
@@ -472,7 +476,7 @@ def _scan_dataset_payload_task(task: dict) -> dict:
             asdict(row)
             for row in _locate_dataset_rollout_desyncs(
                 dataset_path=Path(str(task["dataset_label"])),
-                dataset_label=dataset_label,
+                dataset_label=display_label,
                 ds=ds,
                 fields=tuple(task["fields"]),
                 players=players,
@@ -483,26 +487,8 @@ def _scan_dataset_payload_task(task: dict) -> dict:
                 profile=str(task["profile"]),
             )
         ]
-    float_rows: dict[str, list[dict]] = {}
-    float_top = int(task.get("float_top_scan", 0))
-    if float_top > 0:
-        raw_float_rows = collect_dataset_top_rollout_float_offenders(
-            dataset_path=Path(str(task["dataset_label"])),
-            ds=ds,
-            dataset_label=dataset_label,
-            fields=tuple(task["float_fields"]),
-            players=players,
-            top=float_top,
-            max_records=int(task["max_records"]),
-            threshold=0.0,
-            discrete_fields=tuple(task["fields"]),
-            profile=str(task["profile"]),
-            ucf_enabled=bool(task["ucf_enabled"]),
-            ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
-        )
-        float_rows = {field: [asdict(row) for row in rows] for field, rows in raw_float_rows.items()}
     return {
-        "dataset": dataset_label,
+        "dataset": display_label,
         "num_records": s.num_records,
         "max_records_used": s.max_records_used,
         "players": list(s.players),

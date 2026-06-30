@@ -269,6 +269,38 @@ def _scan_dataset_streaks(
     ucf_cardinals_1_0_enabled: bool | None,
     profile: str | ValidationProfile | None = None,
 ) -> DatasetStreaks:
+    streaks, _float_rows = _scan_dataset_streaks_with_native_float_rows(
+        dataset_path=dataset_path,
+        ds=ds,
+        fields=fields,
+        players=players,
+        max_records=max_records,
+        ucf_enabled=ucf_enabled,
+        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        profile=profile,
+        float_fields=(),
+        float_top=0,
+        float_threshold=0.0,
+        float_dataset_label=None,
+    )
+    return streaks
+
+
+def _scan_dataset_streaks_with_native_float_rows(
+    *,
+    dataset_path: Path,
+    ds: Dataset,
+    fields: tuple[str, ...],
+    players: tuple[int, ...],
+    max_records: int,
+    ucf_enabled: bool | None,
+    ucf_cardinals_1_0_enabled: bool | None,
+    profile: str | ValidationProfile | None = None,
+    float_fields: tuple[str, ...] = (),
+    float_top: int = 0,
+    float_threshold: float = 0.0,
+    float_dataset_label: str | None = None,
+) -> tuple[DatasetStreaks, dict[str, list[dict]]]:
     validation_profile = get_validation_profile(profile)
     samples = ds.samples
     num_records_total = int(samples.shape[0])
@@ -299,6 +331,9 @@ def _scan_dataset_streaks(
             -1 if ucf_enabled is None else int(bool(ucf_enabled)),
             -1 if ucf_cardinals_1_0_enabled is None else int(bool(ucf_cardinals_1_0_enabled)),
             int(validation_profile.name == "rl1_gameplay"),
+            tuple(float_fields),
+            int(float_top),
+            float(float_threshold),
         )
         field_names = (
             "action_id",
@@ -341,24 +376,39 @@ def _scan_dataset_streaks(
             except Exception:
                 end_ref_frame_incl = None
 
-        return DatasetStreaks(
-            dataset=str(dataset_path),
-            num_records=num_records_total,
-            max_records_used=n,
-            players=players,
-            fields=fields,
-            best_len=int(native["best_len"]),
-            best_start_record=best_start,
-            best_end_record_excl=best_end,
-            best_start_seed_frame_id=start_seed_frame,
-            best_end_ref_frame_id_inclusive=end_ref_frame_incl,
-            streak_histogram=dict(sorted((int(k), int(v)) for k, v in native["streak_histogram"].items())),
-            first_mismatch_field_counts=dict(sorted(mismatch_counts.items())),
-            first_mismatch_field_counts_seeded=dict(sorted(mismatch_counts_seeded.items())),
-            ignored_first_mismatch_field_counts=dict(sorted(ignored_counts.items())),
-            ignored_first_mismatch_field_counts_seeded=dict(sorted(ignored_counts_seeded.items())),
-            profile_name=validation_profile.name,
+        float_rows = {
+            str(field): [
+                {"dataset": float_dataset_label if float_dataset_label is not None else str(dataset_path), **dict(row)}
+                for row in rows
+            ]
+            for field, rows in dict(native.get("float_rows", {})).items()
+        }
+        return (
+            DatasetStreaks(
+                dataset=str(dataset_path),
+                num_records=num_records_total,
+                max_records_used=n,
+                players=players,
+                fields=fields,
+                best_len=int(native["best_len"]),
+                best_start_record=best_start,
+                best_end_record_excl=best_end,
+                best_start_seed_frame_id=start_seed_frame,
+                best_end_ref_frame_id_inclusive=end_ref_frame_incl,
+                streak_histogram=dict(
+                    sorted((int(k), int(v)) for k, v in native["streak_histogram"].items())
+                ),
+                first_mismatch_field_counts=dict(sorted(mismatch_counts.items())),
+                first_mismatch_field_counts_seeded=dict(sorted(mismatch_counts_seeded.items())),
+                ignored_first_mismatch_field_counts=dict(sorted(ignored_counts.items())),
+                ignored_first_mismatch_field_counts_seeded=dict(sorted(ignored_counts_seeded.items())),
+                profile_name=validation_profile.name,
+            ),
+            float_rows,
         )
+
+    if int(float_top) > 0 and tuple(float_fields):
+        raise ValueError("native rollout float collection is only supported for the standard rollout field set")
 
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -463,25 +513,28 @@ def _scan_dataset_streaks(
         except Exception:
             end_ref_frame_incl = None
 
-    return DatasetStreaks(
-        dataset=str(dataset_path),
-        num_records=num_records_total,
-        max_records_used=n,
-        players=players,
-        fields=fields,
-        best_len=int(scan.best_len),
-        best_start_record=int(scan.best_start_record),
-        best_end_record_excl=int(scan.best_end_record_excl),
-        best_start_seed_frame_id=start_seed_frame,
-        best_end_ref_frame_id_inclusive=end_ref_frame_incl,
-        streak_histogram=dict(sorted(scan.streak_histogram.items())),
-        first_mismatch_field_counts=dict(sorted(scan.first_mismatch_field_counts.items())),
-        first_mismatch_field_counts_seeded=dict(sorted(scan.first_mismatch_field_counts_seeded.items())),
-        ignored_first_mismatch_field_counts=dict(sorted(scan.ignored_first_mismatch_field_counts.items())),
-        ignored_first_mismatch_field_counts_seeded=dict(
-            sorted(scan.ignored_first_mismatch_field_counts_seeded.items())
+    return (
+        DatasetStreaks(
+            dataset=str(dataset_path),
+            num_records=num_records_total,
+            max_records_used=n,
+            players=players,
+            fields=fields,
+            best_len=int(scan.best_len),
+            best_start_record=int(scan.best_start_record),
+            best_end_record_excl=int(scan.best_end_record_excl),
+            best_start_seed_frame_id=start_seed_frame,
+            best_end_ref_frame_id_inclusive=end_ref_frame_incl,
+            streak_histogram=dict(sorted(scan.streak_histogram.items())),
+            first_mismatch_field_counts=dict(sorted(scan.first_mismatch_field_counts.items())),
+            first_mismatch_field_counts_seeded=dict(sorted(scan.first_mismatch_field_counts_seeded.items())),
+            ignored_first_mismatch_field_counts=dict(sorted(scan.ignored_first_mismatch_field_counts.items())),
+            ignored_first_mismatch_field_counts_seeded=dict(
+                sorted(scan.ignored_first_mismatch_field_counts_seeded.items())
+            ),
+            profile_name=validation_profile.name,
         ),
-        profile_name=validation_profile.name,
+        {},
     )
 
 
