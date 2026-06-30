@@ -12,25 +12,6 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, Dataset, 
 from tools.eval.validation_profile import ValidationProfile, get_validation_profile, scored_lane_count_for_field
 
 
-@dataclass
-class FloatMetric:
-    mae: float
-    p95: float
-    mx: float
-
-
-def _float_metrics(err: np.ndarray) -> FloatMetric:
-    err = np.asarray(err, dtype=np.float32).reshape(-1)
-    if err.size == 0:
-        return FloatMetric(0.0, 0.0, 0.0)
-    abs_err = np.abs(err)
-    return FloatMetric(
-        mae=float(abs_err.mean()),
-        p95=float(np.quantile(abs_err, 0.95)),
-        mx=float(abs_err.max()),
-    )
-
-
 def _load_binding():
     # Built by `python -m pip install -e python` (or similar).
     return importlib.import_module("msl_binding")
@@ -48,6 +29,50 @@ class EvalSummary:
     profile_name: str
     float_norm_sum: float
     float_norm_count: int
+
+
+_DISCRETE_FIELDS: tuple[str, ...] = (
+    "action_id",
+    "action_frame",
+    "on_ground",
+    "facing",
+    "stocks",
+    "jumps_left",
+    "is_dead",
+    "hitlag",
+    "hitstun",
+    "l_cancel",
+    "hurtbox_state",
+    "ground_id",
+    "animation_index",
+    "instance_hit_by",
+    "instance_id",
+    "last_attack_landed",
+    "combo_count",
+    "last_hit_by",
+    "state_flags",
+    "item_exists",
+    "item_type",
+    "item_state",
+    "item_owner",
+    "item_instance_id",
+)
+
+_FLOAT_FIELDS: tuple[str, ...] = (
+    "pos_x",
+    "pos_y",
+    "speed_air_x_self",
+    "speed_ground_x_self",
+    "speed_y_self",
+    "speed_x_attack",
+    "speed_y_attack",
+    "percent",
+    "shield_hp",
+    "item_pos_x",
+    "item_pos_y",
+    "item_vel_x",
+    "item_vel_y",
+)
 
 
 @dataclass
@@ -266,26 +291,6 @@ def _strict_discrete_mismatch_total(summary: EvalSummary) -> tuple[int, int]:
     return total_mismatches, total_checks
 
 
-def _float_norm_mae_p95(float_err: dict[str, list[np.ndarray]], ref_abs: dict[str, list[np.ndarray]]) -> tuple[float, float, int]:
-    total_norm_sum = 0.0
-    total_count = 0
-    for k, pieces in float_err.items():
-        ref_pieces = ref_abs.get(k, [])
-        if not pieces or not ref_pieces:
-            continue
-        err = np.concatenate(pieces, axis=0).astype(np.float32)
-        ref_vals = np.concatenate(ref_pieces, axis=0).astype(np.float32)
-        if err.size == 0 or ref_vals.size == 0:
-            continue
-        scale = float(np.quantile(ref_vals, 0.95))
-        if scale <= 0.0:
-            scale = 1e-6
-        total_norm_sum += float(np.abs(err).sum()) / scale
-        total_count += int(err.size)
-    overall = total_norm_sum / total_count if total_count > 0 else 0.0
-    return overall, total_norm_sum, total_count
-
-
 def evaluate_dataset(
     *,
     dataset_path: Path,
@@ -352,59 +357,16 @@ def evaluate_dataset(
 
     total_records = 0
     total_player_frames = 0
-    mismatches = {
-        "action_id": 0,
-        "action_frame": 0,
-        "on_ground": 0,
-        "facing": 0,
-        "stocks": 0,
-        "jumps_left": 0,
-        "is_dead": 0,
-        "hitlag": 0,
-        "hitstun": 0,
-        "l_cancel": 0,
-        "hurtbox_state": 0,
-        "ground_id": 0,
-        "animation_index": 0,
-        "instance_hit_by": 0,
-        "instance_id": 0,
-        "last_attack_landed": 0,
-        "combo_count": 0,
-        "last_hit_by": 0,
-        "state_flags": 0,
-        "item_exists": 0,
-        "item_type": 0,
-        "item_state": 0,
-        "item_owner": 0,
-        "item_instance_id": 0,
-    }
-    strict_mismatches = {k: 0 for k in mismatches}
-    ignored_mismatches = {lane.label: 0 for lane in validation_profile.ignored_lanes}
-    float_err = {
-        k: []
-        for k in (
-            "pos_x",
-            "pos_y",
-            "speed_air_x_self",
-            "speed_ground_x_self",
-            "speed_y_self",
-            "speed_x_attack",
-            "speed_y_attack",
-            "percent",
-            "shield_hp",
-            "item_pos_x",
-            "item_pos_y",
-            "item_vel_x",
-            "item_vel_y",
-        )
-    }
-    ref_abs = {k: [] for k in float_err}
-
     # Preallocated buffers (bytes) that C reads/writes.
     seed_bytes = runtime.seed_bytes
     prev_input_bytes = runtime.prev_input_bytes
     input_bytes = runtime.input_bytes
     out_compare_bytes = runtime.out_compare_bytes
+    summary_handle = binding.one_step_summary_create(
+        num_records,
+        num_players,
+        int(validation_profile.name == "rl1_gameplay"),
+    )
 
     # Views for vectorized comparisons.
     out_compare_view_full = runtime.out_compare_view
@@ -417,7 +379,7 @@ def evaluate_dataset(
     debug_fields: tuple[str, ...] = ()
     debug_left: dict[str, int] = {}
     if reporter is not None and debug_mismatch:
-        valid_discrete = set(mismatches.keys())
+        valid_discrete = set(_DISCRETE_FIELDS)
         debug_fields = tuple(f for f in debug_mismatch if f in valid_discrete)
         if debug_fields:
             debug_left = {f: int(debug_limit) for f in debug_fields}
@@ -431,7 +393,7 @@ def evaluate_dataset(
     ] = {}
     debug_float_limit = int(debug_float_limit)
     if reporter is not None and debug_float and debug_float_limit > 0:
-        valid_float = set(float_err.keys())
+        valid_float = set(_FLOAT_FIELDS)
         debug_float_fields = tuple(f for f in debug_float if f in valid_float and not f.startswith("item_"))
         if debug_float_fields:
             debug_float_heaps = {f: [] for f in debug_float_fields}
@@ -462,6 +424,7 @@ def evaluate_dataset(
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
         out_compare_view = out_compare_view_full[:chunk_n]
+        binding.one_step_summary_accumulate(summary_handle, out_compare_bytes[:chunk_n], chunk_u8)
 
         seed = chunk_view["seed_t"]
         ref = chunk_view["ref_t1"]
@@ -670,81 +633,6 @@ def evaluate_dataset(
                     )
                     debug_left[field] = left - 1
 
-        for field in (
-            "action_id",
-            "action_frame",
-            "on_ground",
-            "facing",
-            "stocks",
-            "jumps_left",
-            "is_dead",
-            "hitlag",
-            "hitstun",
-            "l_cancel",
-            "hurtbox_state",
-            "ground_id",
-            "animation_index",
-            "instance_hit_by",
-            "instance_id",
-            "last_attack_landed",
-            "combo_count",
-            "last_hit_by",
-        ):
-            count = int((out_compare_view[field][:, active] != ref[field][:, active]).sum())
-            mismatches[field] += count
-            strict_mismatches[field] += count
-
-        # state_flags is (players,5). Validation profiles may ignore whole bytes or individual
-        # bits inside a byte; scored counts keep the byte lane when any non-ignored bit differs.
-        state_flags_xor = (
-            out_compare_view["state_flags"][:, active, :].astype(np.uint16)
-            ^ ref["state_flags"][:, active, :].astype(np.uint16)
-        )
-        state_flags_diff = state_flags_xor != 0
-        strict_state_flags = int(state_flags_diff.sum())
-        scored_state_flags_xor = state_flags_xor.copy()
-        for lane in validation_profile.ignored_lanes:
-            if lane.field == "state_flags":
-                if lane.bitmask is None:
-                    ignored = state_flags_diff[:, :, lane.subindex]
-                    ignored_count = int(ignored.sum())
-                    ignored_mismatches[lane.label] += ignored_count
-                    scored_state_flags_xor[:, :, lane.subindex] = 0
-                else:
-                    ignored_mask = int(lane.bitmask) & 0xFF
-                    ignored = (state_flags_xor[:, :, lane.subindex] & ignored_mask) != 0
-                    ignored_count = int(ignored.sum())
-                    ignored_mismatches[lane.label] += ignored_count
-                    scored_state_flags_xor[:, :, lane.subindex] &= np.uint16(~ignored_mask & 0xFF)
-        mismatches["state_flags"] += int((scored_state_flags_xor != 0).sum())
-        strict_mismatches["state_flags"] += strict_state_flags
-
-        # Items: compare all 15 slots (global), but only for exists-matched slots for float errors.
-        out_items = out_compare_view["items"]
-        ref_items = ref["items"]
-        for field, subfield in (
-            ("item_exists", "exists"),
-            ("item_type", "type"),
-            ("item_state", "state"),
-            ("item_owner", "owner"),
-            ("item_instance_id", "instance_id"),
-        ):
-            count = int((out_items[subfield] != ref_items[subfield]).sum())
-            mismatches[field] += count
-            strict_mismatches[field] += count
-
-        for k in float_err:
-            if k.startswith("item_"):
-                name = k.replace("item_", "")
-                mask = ref["items"]["exists"].astype(bool)
-                err = out_items[name].astype(np.float32) - ref_items[name].astype(np.float32)
-                float_err[k].append(err[mask].reshape(-1))
-                ref_abs[k].append(np.abs(ref_items[name].astype(np.float32)[mask].reshape(-1)))
-            else:
-                err = out_compare_view[k][:, active].astype(np.float32) - ref[k][:, active].astype(np.float32)
-                float_err[k].append(err.reshape(-1))
-                ref_abs[k].append(np.abs(ref[k][:, active].astype(np.float32)).reshape(-1))
-
         total_records += chunk_n
         total_player_frames += chunk_n * num_players
         offset += chunk_n
@@ -754,6 +642,23 @@ def evaluate_dataset(
 
     total_state_flags = total_player_frames * 5
     total_item_slots = total_records * max_items
+    native_summary = binding.one_step_summary_finish(summary_handle)
+    mismatches = {
+        field: int(value)
+        for field, value in zip(_DISCRETE_FIELDS, native_summary["mismatches"], strict=True)
+    }
+    strict_mismatches = {
+        field: int(value)
+        for field, value in zip(_DISCRETE_FIELDS, native_summary["strict_mismatches"], strict=True)
+    }
+    ignored_mismatches = {lane.label: 0 for lane in validation_profile.ignored_lanes}
+    for lane in validation_profile.ignored_lanes:
+        if lane.field == "state_flags" and lane.subindex == 4 and lane.bitmask == 0x80:
+            ignored_mismatches[lane.label] = int(native_summary["ignored_state_flags_4_0x80"])
+    float_metrics = native_summary["float_metrics"]
+    float_norm_sum = float(native_summary["float_norm_sum"])
+    float_norm_count = int(native_summary["float_norm_count"])
+    overall_float_norm = float_norm_sum / float_norm_count if float_norm_count > 0 else 0.0
 
     if print_profile:
         reporter.print(f"validation.profile: {validation_profile.name}")
@@ -777,11 +682,11 @@ def evaluate_dataset(
         denom = total_player_frames if k.startswith("state_flags[") else 0
         if denom > 0:
             reporter.print(f"ignored_mismatch.{k}: {v} / {denom} ({v/denom:.6f})")
-    for k, pieces in float_err.items():
-        m = _float_metrics(np.concatenate(pieces, axis=0) if pieces else np.array([], dtype=np.float32))
-        reporter.print(f"err.{k}: mae={m.mae:.6f} p95={m.p95:.6f} max={m.mx:.6f}")
-
-    overall_float_norm, float_norm_sum, float_norm_count = _float_norm_mae_p95(float_err, ref_abs)
+    for k in _FLOAT_FIELDS:
+        m = float_metrics[k]
+        reporter.print(
+            f"err.{k}: mae={float(m['mae']):.6f} p95={float(m['p95']):.6f} max={float(m['max']):.6f}"
+        )
 
     summary = EvalSummary(
         total_records=total_records,

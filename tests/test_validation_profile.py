@@ -228,6 +228,9 @@ class _FakeDataset:
 class _FakeBinding:
     def __init__(self, out_compare: np.ndarray) -> None:
         self._out_compare = out_compare
+        self._summary: dict[str, object] | None = None
+        self._num_players = 0
+        self._profile_rl1 = 0
 
     def sizes(self) -> dict[str, int]:
         return {"seed": int(SEED_DTYPE.itemsize), "input": int(INPUT_DTYPE.itemsize), "compare": int(COMPARE_DTYPE.itemsize)}
@@ -246,6 +249,49 @@ class _FakeBinding:
     def write_compare(self, _handle, out_compare_bytes: np.ndarray) -> None:
         view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
         view[:] = self._out_compare[: view.shape[0]]
+
+    def one_step_summary_create(self, _total_records: int, num_players: int, profile_rl1: int) -> object:
+        self._summary = None
+        self._num_players = int(num_players)
+        self._profile_rl1 = int(profile_rl1)
+        return object()
+
+    def one_step_summary_accumulate(
+        self, _summary_handle: object, out_compare_bytes: np.ndarray, samples_u8: np.ndarray
+    ) -> None:
+        import tools.eval.run_one_step_eval as eval_mod
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        samples = samples_u8.view(SAMPLE_DTYPE).reshape(-1)
+        ref = samples["ref_t1"]
+        active = slice(0, self._num_players)
+        mismatches = [0 for _ in eval_mod._DISCRETE_FIELDS]
+        strict = [0 for _ in eval_mod._DISCRETE_FIELDS]
+        sf_idx = eval_mod._DISCRETE_FIELDS.index("state_flags")
+        xor = out["state_flags"][:, active, :].astype(np.uint16) ^ ref["state_flags"][
+            :, active, :
+        ].astype(np.uint16)
+        strict[sf_idx] = int((xor != 0).sum())
+        scored = xor.copy()
+        ignored = int(((xor[:, :, 4] & 0x80) != 0).sum()) if self._profile_rl1 else 0
+        if self._profile_rl1:
+            scored[:, :, 4] &= np.uint16(0x7F)
+        mismatches[sf_idx] = int((scored != 0).sum())
+        self._summary = {
+            "mismatches": mismatches,
+            "strict_mismatches": strict,
+            "ignored_state_flags_4_0x80": ignored,
+            "float_metrics": {
+                field: {"mae": 0.0, "p95": 0.0, "max": 0.0, "count": 0}
+                for field in eval_mod._FLOAT_FIELDS
+            },
+            "float_norm_sum": 0.0,
+            "float_norm_count": 0,
+        }
+
+    def one_step_summary_finish(self, _summary_handle: object) -> dict[str, object]:
+        assert self._summary is not None
+        return self._summary
 
 
 def test_one_step_profile_counts_state_flags_4_camera_bit_as_ignored_only(

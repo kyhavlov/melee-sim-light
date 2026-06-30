@@ -8014,6 +8014,592 @@ static int msl_put_long(PyObject* dict, const char* key, long value) {
   return err;
 }
 
+enum {
+  MSL_OS_ACTION_ID = 0,
+  MSL_OS_ACTION_FRAME,
+  MSL_OS_ON_GROUND,
+  MSL_OS_FACING,
+  MSL_OS_STOCKS,
+  MSL_OS_JUMPS_LEFT,
+  MSL_OS_IS_DEAD,
+  MSL_OS_HITLAG,
+  MSL_OS_HITSTUN,
+  MSL_OS_L_CANCEL,
+  MSL_OS_HURTBOX_STATE,
+  MSL_OS_GROUND_ID,
+  MSL_OS_ANIMATION_INDEX,
+  MSL_OS_INSTANCE_HIT_BY,
+  MSL_OS_INSTANCE_ID,
+  MSL_OS_LAST_ATTACK_LANDED,
+  MSL_OS_COMBO_COUNT,
+  MSL_OS_LAST_HIT_BY,
+  MSL_OS_STATE_FLAGS,
+  MSL_OS_ITEM_EXISTS,
+  MSL_OS_ITEM_TYPE,
+  MSL_OS_ITEM_STATE,
+  MSL_OS_ITEM_OWNER,
+  MSL_OS_ITEM_INSTANCE_ID,
+  MSL_OS_FIELD_COUNT,
+};
+
+enum {
+  MSL_OS_FLOAT_POS_X = 0,
+  MSL_OS_FLOAT_POS_Y,
+  MSL_OS_FLOAT_SPEED_AIR_X_SELF,
+  MSL_OS_FLOAT_SPEED_GROUND_X_SELF,
+  MSL_OS_FLOAT_SPEED_Y_SELF,
+  MSL_OS_FLOAT_SPEED_X_ATTACK,
+  MSL_OS_FLOAT_SPEED_Y_ATTACK,
+  MSL_OS_FLOAT_PERCENT,
+  MSL_OS_FLOAT_SHIELD_HP,
+  MSL_OS_FLOAT_ITEM_POS_X,
+  MSL_OS_FLOAT_ITEM_POS_Y,
+  MSL_OS_FLOAT_ITEM_VEL_X,
+  MSL_OS_FLOAT_ITEM_VEL_Y,
+  MSL_OS_FLOAT_COUNT,
+};
+
+typedef struct MslOneStepSummary {
+  int num_players;
+  int profile_rl1;
+  int player_float_capacity;
+  int item_float_capacity;
+  long mismatches[MSL_OS_FIELD_COUNT];
+  long strict_mismatches[MSL_OS_FIELD_COUNT];
+  long ignored_state_flags_4_0x80;
+  int float_counts[MSL_OS_FLOAT_COUNT];
+  float* float_err_abs[MSL_OS_FLOAT_COUNT];
+  float* float_ref_abs[MSL_OS_FLOAT_COUNT];
+} MslOneStepSummary;
+
+static const char* msl_one_step_float_field_name(int field) {
+  static const char* names[MSL_OS_FLOAT_COUNT] = {
+      "pos_x",          "pos_y",          "speed_air_x_self", "speed_ground_x_self", "speed_y_self",
+      "speed_x_attack", "speed_y_attack", "percent",          "shield_hp",           "item_pos_x",
+      "item_pos_y",     "item_vel_x",     "item_vel_y",
+  };
+  return (field >= 0 && field < MSL_OS_FLOAT_COUNT) ? names[field] : NULL;
+}
+
+static void msl_one_step_summary_free(MslOneStepSummary* s) {
+  if (s == NULL) {
+    return;
+  }
+  for (int i = 0; i < MSL_OS_FLOAT_COUNT; i++) {
+    PyMem_Free(s->float_err_abs[i]);
+    PyMem_Free(s->float_ref_abs[i]);
+  }
+  PyMem_Free(s);
+}
+
+static void msl_one_step_summary_capsule_destructor(PyObject* capsule) {
+  MslOneStepSummary* s = (MslOneStepSummary*)PyCapsule_GetPointer(capsule, "msl.OneStepSummary");
+  if (s == NULL) {
+    return;
+  }
+  msl_one_step_summary_free(s);
+}
+
+static MslOneStepSummary* msl_one_step_summary_unpack(PyObject* obj) {
+  MslOneStepSummary* s = (MslOneStepSummary*)PyCapsule_GetPointer(obj, "msl.OneStepSummary");
+  if (s == NULL) {
+    PyErr_SetString(PyExc_ValueError, "invalid one-step summary handle");
+    return NULL;
+  }
+  return s;
+}
+
+static int msl_one_step_float_capacity(const MslOneStepSummary* s, int field) {
+  return field < MSL_OS_FLOAT_ITEM_POS_X ? s->player_float_capacity : s->item_float_capacity;
+}
+
+static int msl_one_step_append_float(MslOneStepSummary* s, int field, float out_v, float ref_v) {
+  const int idx = s->float_counts[field];
+  if (idx >= msl_one_step_float_capacity(s, field)) {
+    PyErr_SetString(PyExc_ValueError, "one-step summary float capacity exceeded");
+    return -1;
+  }
+  const float err = out_v - ref_v;
+  s->float_err_abs[field][idx] = fabsf(err);
+  s->float_ref_abs[field][idx] = fabsf(ref_v);
+  s->float_counts[field] = idx + 1;
+  return 0;
+}
+
+static PyObject* msl_one_step_summary_create(PyObject* self, PyObject* args) {
+  (void)self;
+  int total_records = 0;
+  int num_players = 0;
+  int profile_rl1 = 0;
+  if (!PyArg_ParseTuple(args, "iii", &total_records, &num_players, &profile_rl1)) {
+    return NULL;
+  }
+  if (total_records < 0) {
+    PyErr_SetString(PyExc_ValueError, "total_records must be non-negative");
+    return NULL;
+  }
+  if (num_players <= 0 || num_players > MSL_MAX_PLAYERS) {
+    PyErr_SetString(PyExc_ValueError, "num_players out of range");
+    return NULL;
+  }
+  MslOneStepSummary* s = (MslOneStepSummary*)PyMem_Calloc(1u, sizeof(*s));
+  if (s == NULL) {
+    PyErr_NoMemory();
+    return NULL;
+  }
+  s->num_players = num_players;
+  s->profile_rl1 = profile_rl1 != 0;
+  s->player_float_capacity = total_records * num_players;
+  s->item_float_capacity = total_records * MSL_MAX_ITEMS;
+  for (int i = 0; i < MSL_OS_FLOAT_COUNT; i++) {
+    const int capacity = msl_one_step_float_capacity(s, i);
+    if (capacity <= 0) {
+      continue;
+    }
+    s->float_err_abs[i] = (float*)PyMem_Malloc((size_t)capacity * sizeof(float));
+    s->float_ref_abs[i] = (float*)PyMem_Malloc((size_t)capacity * sizeof(float));
+    if (s->float_err_abs[i] == NULL || s->float_ref_abs[i] == NULL) {
+      msl_one_step_summary_free(s);
+      PyErr_NoMemory();
+      return NULL;
+    }
+  }
+  PyObject* capsule =
+      PyCapsule_New(s, "msl.OneStepSummary", msl_one_step_summary_capsule_destructor);
+  if (capsule == NULL) {
+    msl_one_step_summary_free(s);
+    return NULL;
+  }
+  return capsule;
+}
+
+static PyObject* msl_one_step_summary_accumulate(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* summary_obj = NULL;
+  PyObject* out_obj = NULL;
+  PyObject* samples_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOO", &summary_obj, &out_obj, &samples_obj)) {
+    return NULL;
+  }
+  MslOneStepSummary* s = msl_one_step_summary_unpack(summary_obj);
+  if (s == NULL) {
+    return NULL;
+  }
+  PyArrayObject* out_arr = require_contiguous_array_readonly(out_obj, NPY_UINT8, 2, "out_compare");
+  PyArrayObject* samples_arr =
+      require_contiguous_array_readonly(samples_obj, NPY_UINT8, 2, "samples_u8");
+  if (out_arr == NULL || samples_arr == NULL) {
+    return NULL;
+  }
+  const int n = (int)PyArray_DIM(out_arr, 0);
+  if (PyArray_DIM(samples_arr, 0) != (npy_intp)n ||
+      PyArray_DIM(out_arr, 1) < (npy_intp)sizeof(MslCompare) ||
+      PyArray_DIM(samples_arr, 1) < (npy_intp)sizeof(MslSample)) {
+    PyErr_SetString(PyExc_ValueError,
+                    "one_step_summary_accumulate expects matching native compare/sample rows");
+    return NULL;
+  }
+
+  const uint8_t* out_u8 = (const uint8_t*)PyArray_DATA(out_arr);
+  const uint8_t* samples_u8 = (const uint8_t*)PyArray_DATA(samples_arr);
+  const size_t out_stride = (size_t)PyArray_STRIDE(out_arr, 0);
+  const size_t sample_stride = (size_t)PyArray_STRIDE(samples_arr, 0);
+
+  for (int r = 0; r < n; r++) {
+    const MslCompare* out = (const MslCompare*)(const void*)(out_u8 + (size_t)r * out_stride);
+    const MslSample* sample =
+        (const MslSample*)(const void*)(samples_u8 + (size_t)r * sample_stride);
+    const MslCompare* ref = &sample->ref_t1;
+    for (int p = 0; p < s->num_players; p++) {
+      if (out->action_id[p] != ref->action_id[p]) {
+        s->mismatches[MSL_OS_ACTION_ID]++;
+        s->strict_mismatches[MSL_OS_ACTION_ID]++;
+      }
+      if (out->action_frame[p] != ref->action_frame[p]) {
+        s->mismatches[MSL_OS_ACTION_FRAME]++;
+        s->strict_mismatches[MSL_OS_ACTION_FRAME]++;
+      }
+      if (out->on_ground[p] != ref->on_ground[p]) {
+        s->mismatches[MSL_OS_ON_GROUND]++;
+        s->strict_mismatches[MSL_OS_ON_GROUND]++;
+      }
+      if (out->facing[p] != ref->facing[p]) {
+        s->mismatches[MSL_OS_FACING]++;
+        s->strict_mismatches[MSL_OS_FACING]++;
+      }
+      if (out->stocks[p] != ref->stocks[p]) {
+        s->mismatches[MSL_OS_STOCKS]++;
+        s->strict_mismatches[MSL_OS_STOCKS]++;
+      }
+      if (out->jumps_left[p] != ref->jumps_left[p]) {
+        s->mismatches[MSL_OS_JUMPS_LEFT]++;
+        s->strict_mismatches[MSL_OS_JUMPS_LEFT]++;
+      }
+      if (out->is_dead[p] != ref->is_dead[p]) {
+        s->mismatches[MSL_OS_IS_DEAD]++;
+        s->strict_mismatches[MSL_OS_IS_DEAD]++;
+      }
+      if (out->hitlag[p] != ref->hitlag[p]) {
+        s->mismatches[MSL_OS_HITLAG]++;
+        s->strict_mismatches[MSL_OS_HITLAG]++;
+      }
+      if (out->hitstun[p] != ref->hitstun[p]) {
+        s->mismatches[MSL_OS_HITSTUN]++;
+        s->strict_mismatches[MSL_OS_HITSTUN]++;
+      }
+      if (out->l_cancel[p] != ref->l_cancel[p]) {
+        s->mismatches[MSL_OS_L_CANCEL]++;
+        s->strict_mismatches[MSL_OS_L_CANCEL]++;
+      }
+      if (out->hurtbox_state[p] != ref->hurtbox_state[p]) {
+        s->mismatches[MSL_OS_HURTBOX_STATE]++;
+        s->strict_mismatches[MSL_OS_HURTBOX_STATE]++;
+      }
+      if (out->ground_id[p] != ref->ground_id[p]) {
+        s->mismatches[MSL_OS_GROUND_ID]++;
+        s->strict_mismatches[MSL_OS_GROUND_ID]++;
+      }
+      if (out->animation_index[p] != ref->animation_index[p]) {
+        s->mismatches[MSL_OS_ANIMATION_INDEX]++;
+        s->strict_mismatches[MSL_OS_ANIMATION_INDEX]++;
+      }
+      if (out->instance_hit_by[p] != ref->instance_hit_by[p]) {
+        s->mismatches[MSL_OS_INSTANCE_HIT_BY]++;
+        s->strict_mismatches[MSL_OS_INSTANCE_HIT_BY]++;
+      }
+      if (out->instance_id[p] != ref->instance_id[p]) {
+        s->mismatches[MSL_OS_INSTANCE_ID]++;
+        s->strict_mismatches[MSL_OS_INSTANCE_ID]++;
+      }
+      if (out->last_attack_landed[p] != ref->last_attack_landed[p]) {
+        s->mismatches[MSL_OS_LAST_ATTACK_LANDED]++;
+        s->strict_mismatches[MSL_OS_LAST_ATTACK_LANDED]++;
+      }
+      if (out->combo_count[p] != ref->combo_count[p]) {
+        s->mismatches[MSL_OS_COMBO_COUNT]++;
+        s->strict_mismatches[MSL_OS_COMBO_COUNT]++;
+      }
+      if (out->last_hit_by[p] != ref->last_hit_by[p]) {
+        s->mismatches[MSL_OS_LAST_HIT_BY]++;
+        s->strict_mismatches[MSL_OS_LAST_HIT_BY]++;
+      }
+      for (int sub = 0; sub < 5; sub++) {
+        const uint8_t xo = (uint8_t)(out->state_flags[p][sub] ^ ref->state_flags[p][sub]);
+        if (xo != 0u) {
+          s->strict_mismatches[MSL_OS_STATE_FLAGS]++;
+        }
+        uint8_t scored = xo;
+        if (s->profile_rl1 != 0 && sub == 4) {
+          if ((xo & 0x80u) != 0u) {
+            s->ignored_state_flags_4_0x80++;
+          }
+          scored = (uint8_t)(scored & 0x7Fu);
+        }
+        if (scored != 0u) {
+          s->mismatches[MSL_OS_STATE_FLAGS]++;
+        }
+      }
+      if (msl_one_step_append_float(s, MSL_OS_FLOAT_POS_X, out->pos_x[p], ref->pos_x[p]) != 0 ||
+          msl_one_step_append_float(s, MSL_OS_FLOAT_POS_Y, out->pos_y[p], ref->pos_y[p]) != 0 ||
+          msl_one_step_append_float(s, MSL_OS_FLOAT_SPEED_AIR_X_SELF, out->speed_air_x_self[p],
+                                    ref->speed_air_x_self[p]) != 0 ||
+          msl_one_step_append_float(s, MSL_OS_FLOAT_SPEED_GROUND_X_SELF,
+                                    out->speed_ground_x_self[p],
+                                    ref->speed_ground_x_self[p]) != 0 ||
+          msl_one_step_append_float(s, MSL_OS_FLOAT_SPEED_Y_SELF, out->speed_y_self[p],
+                                    ref->speed_y_self[p]) != 0 ||
+          msl_one_step_append_float(s, MSL_OS_FLOAT_SPEED_X_ATTACK, out->speed_x_attack[p],
+                                    ref->speed_x_attack[p]) != 0 ||
+          msl_one_step_append_float(s, MSL_OS_FLOAT_SPEED_Y_ATTACK, out->speed_y_attack[p],
+                                    ref->speed_y_attack[p]) != 0 ||
+          msl_one_step_append_float(s, MSL_OS_FLOAT_PERCENT, out->percent[p], ref->percent[p]) !=
+              0 ||
+          msl_one_step_append_float(s, MSL_OS_FLOAT_SHIELD_HP, out->shield_hp[p],
+                                    ref->shield_hp[p]) != 0) {
+        return NULL;
+      }
+    }
+    for (int slot = 0; slot < MSL_MAX_ITEMS; slot++) {
+      const MeleeItem* oi = &out->items[slot];
+      const MeleeItem* ri = &ref->items[slot];
+      if (oi->exists != ri->exists) {
+        s->mismatches[MSL_OS_ITEM_EXISTS]++;
+        s->strict_mismatches[MSL_OS_ITEM_EXISTS]++;
+      }
+      if (oi->type != ri->type) {
+        s->mismatches[MSL_OS_ITEM_TYPE]++;
+        s->strict_mismatches[MSL_OS_ITEM_TYPE]++;
+      }
+      if (oi->state != ri->state) {
+        s->mismatches[MSL_OS_ITEM_STATE]++;
+        s->strict_mismatches[MSL_OS_ITEM_STATE]++;
+      }
+      if (oi->owner != ri->owner) {
+        s->mismatches[MSL_OS_ITEM_OWNER]++;
+        s->strict_mismatches[MSL_OS_ITEM_OWNER]++;
+      }
+      if (oi->instance_id != ri->instance_id) {
+        s->mismatches[MSL_OS_ITEM_INSTANCE_ID]++;
+        s->strict_mismatches[MSL_OS_ITEM_INSTANCE_ID]++;
+      }
+      if (ri->exists != 0u) {
+        if (msl_one_step_append_float(s, MSL_OS_FLOAT_ITEM_POS_X, oi->pos_x, ri->pos_x) != 0 ||
+            msl_one_step_append_float(s, MSL_OS_FLOAT_ITEM_POS_Y, oi->pos_y, ri->pos_y) != 0 ||
+            msl_one_step_append_float(s, MSL_OS_FLOAT_ITEM_VEL_X, oi->vel_x, ri->vel_x) != 0 ||
+            msl_one_step_append_float(s, MSL_OS_FLOAT_ITEM_VEL_Y, oi->vel_y, ri->vel_y) != 0) {
+          return NULL;
+        }
+      }
+    }
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_one_step_float_array(float* data, int count) {
+  npy_intp dims[1] = {(npy_intp)count};
+  return PyArray_SimpleNewFromData(1, dims, NPY_FLOAT32, data);
+}
+
+static double msl_numpy_scalar_double(PyObject* obj) {
+  const double out = PyFloat_AsDouble(obj);
+  return out;
+}
+
+static PyObject* msl_numpy_call0(PyObject* obj, const char* method) {
+  return PyObject_CallMethod(obj, method, NULL);
+}
+
+static PyObject* msl_numpy_quantile(PyObject* quantile_func, PyObject* arr) {
+  PyObject* q = PyFloat_FromDouble(0.95);
+  if (q == NULL) {
+    return NULL;
+  }
+  PyObject* out = PyObject_CallFunctionObjArgs(quantile_func, arr, q, NULL);
+  Py_DECREF(q);
+  return out;
+}
+
+static PyObject* msl_one_step_summary_finish(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* summary_obj = NULL;
+  if (!PyArg_ParseTuple(args, "O", &summary_obj)) {
+    return NULL;
+  }
+  MslOneStepSummary* s = msl_one_step_summary_unpack(summary_obj);
+  if (s == NULL) {
+    return NULL;
+  }
+
+  PyObject* result = PyDict_New();
+  PyObject* mismatch_list = PyList_New(MSL_OS_FIELD_COUNT);
+  PyObject* strict_list = PyList_New(MSL_OS_FIELD_COUNT);
+  PyObject* float_dict = PyDict_New();
+  if (result == NULL || mismatch_list == NULL || strict_list == NULL || float_dict == NULL) {
+    Py_XDECREF(result);
+    Py_XDECREF(mismatch_list);
+    Py_XDECREF(strict_list);
+    Py_XDECREF(float_dict);
+    return NULL;
+  }
+  for (int i = 0; i < MSL_OS_FIELD_COUNT; i++) {
+    PyObject* a = PyLong_FromLong(s->mismatches[i]);
+    PyObject* b = PyLong_FromLong(s->strict_mismatches[i]);
+    if (a == NULL || b == NULL) {
+      Py_XDECREF(a);
+      Py_XDECREF(b);
+      Py_DECREF(result);
+      Py_DECREF(mismatch_list);
+      Py_DECREF(strict_list);
+      Py_DECREF(float_dict);
+      return NULL;
+    }
+    PyList_SET_ITEM(mismatch_list, i, a);
+    PyList_SET_ITEM(strict_list, i, b);
+  }
+
+  PyObject* numpy_mod = PyImport_ImportModule("numpy");
+  PyObject* quantile_func =
+      numpy_mod != NULL ? PyObject_GetAttrString(numpy_mod, "quantile") : NULL;
+  Py_XDECREF(numpy_mod);
+  if (quantile_func == NULL) {
+    Py_DECREF(result);
+    Py_DECREF(mismatch_list);
+    Py_DECREF(strict_list);
+    Py_DECREF(float_dict);
+    return NULL;
+  }
+
+  double total_norm_sum = 0.0;
+  long total_norm_count = 0;
+  for (int i = 0; i < MSL_OS_FLOAT_COUNT; i++) {
+    const int count = s->float_counts[i];
+    PyObject* metrics = PyDict_New();
+    if (metrics == NULL) {
+      Py_DECREF(result);
+      Py_DECREF(mismatch_list);
+      Py_DECREF(strict_list);
+      Py_DECREF(float_dict);
+      Py_DECREF(quantile_func);
+      return NULL;
+    }
+    if (count == 0) {
+      if (msl_put_double(metrics, "mae", 0.0) != 0 || msl_put_double(metrics, "p95", 0.0) != 0 ||
+          msl_put_double(metrics, "max", 0.0) != 0 || msl_put_long(metrics, "count", 0) != 0) {
+        Py_DECREF(metrics);
+        Py_DECREF(result);
+        Py_DECREF(mismatch_list);
+        Py_DECREF(strict_list);
+        Py_DECREF(float_dict);
+        Py_DECREF(quantile_func);
+        return NULL;
+      }
+    } else {
+      PyObject* err_arr = msl_one_step_float_array(s->float_err_abs[i], count);
+      PyObject* ref_arr = msl_one_step_float_array(s->float_ref_abs[i], count);
+      PyObject* mean_obj = err_arr != NULL ? msl_numpy_call0(err_arr, "mean") : NULL;
+      PyObject* p95_obj = err_arr != NULL ? msl_numpy_quantile(quantile_func, err_arr) : NULL;
+      PyObject* max_obj = err_arr != NULL ? msl_numpy_call0(err_arr, "max") : NULL;
+      PyObject* sum_obj = err_arr != NULL ? msl_numpy_call0(err_arr, "sum") : NULL;
+      PyObject* ref_p95_obj = ref_arr != NULL ? msl_numpy_quantile(quantile_func, ref_arr) : NULL;
+      if (err_arr == NULL || ref_arr == NULL || mean_obj == NULL || p95_obj == NULL ||
+          max_obj == NULL || sum_obj == NULL || ref_p95_obj == NULL) {
+        Py_XDECREF(err_arr);
+        Py_XDECREF(ref_arr);
+        Py_XDECREF(mean_obj);
+        Py_XDECREF(p95_obj);
+        Py_XDECREF(max_obj);
+        Py_XDECREF(sum_obj);
+        Py_XDECREF(ref_p95_obj);
+        Py_DECREF(metrics);
+        Py_DECREF(result);
+        Py_DECREF(mismatch_list);
+        Py_DECREF(strict_list);
+        Py_DECREF(float_dict);
+        Py_DECREF(quantile_func);
+        return NULL;
+      }
+      const double mae = msl_numpy_scalar_double(mean_obj);
+      const double p95 = msl_numpy_scalar_double(p95_obj);
+      const double mx = msl_numpy_scalar_double(max_obj);
+      const double sum_abs = msl_numpy_scalar_double(sum_obj);
+      double ref_p95 = msl_numpy_scalar_double(ref_p95_obj);
+      if (PyErr_Occurred()) {
+        Py_DECREF(err_arr);
+        Py_DECREF(ref_arr);
+        Py_DECREF(mean_obj);
+        Py_DECREF(p95_obj);
+        Py_DECREF(max_obj);
+        Py_DECREF(sum_obj);
+        Py_DECREF(ref_p95_obj);
+        Py_DECREF(metrics);
+        Py_DECREF(result);
+        Py_DECREF(mismatch_list);
+        Py_DECREF(strict_list);
+        Py_DECREF(float_dict);
+        Py_DECREF(quantile_func);
+        return NULL;
+      }
+      if (ref_p95 <= 0.0) {
+        ref_p95 = 1e-6;
+      }
+      total_norm_sum += sum_abs / ref_p95;
+      total_norm_count += (long)count;
+      Py_DECREF(err_arr);
+      Py_DECREF(ref_arr);
+      Py_DECREF(mean_obj);
+      Py_DECREF(p95_obj);
+      Py_DECREF(max_obj);
+      Py_DECREF(sum_obj);
+      Py_DECREF(ref_p95_obj);
+      if (msl_put_double(metrics, "mae", mae) != 0 || msl_put_double(metrics, "p95", p95) != 0 ||
+          msl_put_double(metrics, "max", mx) != 0 || msl_put_long(metrics, "count", count) != 0) {
+        Py_DECREF(metrics);
+        Py_DECREF(result);
+        Py_DECREF(mismatch_list);
+        Py_DECREF(strict_list);
+        Py_DECREF(float_dict);
+        Py_DECREF(quantile_func);
+        return NULL;
+      }
+    }
+    const char* name = msl_one_step_float_field_name(i);
+    if (name == NULL || PyDict_SetItemString(float_dict, name, metrics) != 0) {
+      Py_DECREF(metrics);
+      Py_DECREF(result);
+      Py_DECREF(mismatch_list);
+      Py_DECREF(strict_list);
+      Py_DECREF(float_dict);
+      Py_DECREF(quantile_func);
+      return NULL;
+    }
+    Py_DECREF(metrics);
+  }
+  Py_DECREF(quantile_func);
+
+  if (PyDict_SetItemString(result, "mismatches", mismatch_list) != 0 ||
+      PyDict_SetItemString(result, "strict_mismatches", strict_list) != 0 ||
+      PyDict_SetItemString(result, "float_metrics", float_dict) != 0 ||
+      msl_put_long(result, "ignored_state_flags_4_0x80", s->ignored_state_flags_4_0x80) != 0 ||
+      msl_put_double(result, "float_norm_sum", total_norm_sum) != 0 ||
+      msl_put_long(result, "float_norm_count", total_norm_count) != 0) {
+    Py_DECREF(result);
+    Py_DECREF(mismatch_list);
+    Py_DECREF(strict_list);
+    Py_DECREF(float_dict);
+    return NULL;
+  }
+  Py_DECREF(mismatch_list);
+  Py_DECREF(strict_list);
+  Py_DECREF(float_dict);
+  return result;
+}
+
+static PyObject* msl_one_step_summary(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* out_obj = NULL;
+  PyObject* samples_obj = NULL;
+  int num_players = 0;
+  int profile_rl1 = 0;
+  if (!PyArg_ParseTuple(args, "OOii", &out_obj, &samples_obj, &num_players, &profile_rl1)) {
+    return NULL;
+  }
+  PyArrayObject* out_arr = require_contiguous_array_readonly(out_obj, NPY_UINT8, 2, "out_compare");
+  if (out_arr == NULL) {
+    return NULL;
+  }
+  PyObject* create_args =
+      Py_BuildValue("iii", (int)PyArray_DIM(out_arr, 0), num_players, profile_rl1);
+  if (create_args == NULL) {
+    return NULL;
+  }
+  PyObject* capsule = msl_one_step_summary_create(NULL, create_args);
+  Py_DECREF(create_args);
+  if (capsule == NULL) {
+    return NULL;
+  }
+  PyObject* accum_args = Py_BuildValue("OOO", capsule, out_obj, samples_obj);
+  if (accum_args == NULL) {
+    Py_DECREF(capsule);
+    return NULL;
+  }
+  PyObject* accum = msl_one_step_summary_accumulate(NULL, accum_args);
+  Py_DECREF(accum_args);
+  if (accum == NULL) {
+    Py_DECREF(capsule);
+    return NULL;
+  }
+  Py_DECREF(accum);
+  PyObject* finish_args = Py_BuildValue("O", capsule);
+  if (finish_args == NULL) {
+    Py_DECREF(capsule);
+    return NULL;
+  }
+  PyObject* result = msl_one_step_summary_finish(NULL, finish_args);
+  Py_DECREF(finish_args);
+  Py_DECREF(capsule);
+  return result;
+}
+
 static PyObject* msl_rollout_float_rows_to_py(const int* fields, const int* counts,
                                               MslRolloutFloatTopRow* rows, int field_count,
                                               int top) {
@@ -8515,6 +9101,14 @@ static PyMethodDef methods[] = {
      "slpz_unorder_events(data, sizes) -> bytes. Native .slpz event payload unshuffle."},
     {"standard_rollout_compare", msl_standard_rollout_compare, METH_VARARGS,
      "standard_rollout_compare(out_compare, ref_compare, players_u8, profile_rl1) -> int code"},
+    {"one_step_summary_create", msl_one_step_summary_create, METH_VARARGS,
+     "one_step_summary_create(total_records, num_players, profile_rl1) -> native accumulator"},
+    {"one_step_summary_accumulate", msl_one_step_summary_accumulate, METH_VARARGS,
+     "one_step_summary_accumulate(summary, out_compare_u8, samples_u8) -> None"},
+    {"one_step_summary_finish", msl_one_step_summary_finish, METH_VARARGS,
+     "one_step_summary_finish(summary) -> dict"},
+    {"one_step_summary", msl_one_step_summary, METH_VARARGS,
+     "one_step_summary(out_compare_u8, samples_u8, num_players, profile_rl1) -> dict"},
     {"standard_rollout_scan", msl_standard_rollout_scan, METH_VARARGS,
      "standard_rollout_scan(samples_u8, players_u8, num_players, max_records, ucf_enabled, "
      "ucf_cardinals_enabled, profile_rl1, float_fields=(), float_top=0, float_threshold=0.0) -> "

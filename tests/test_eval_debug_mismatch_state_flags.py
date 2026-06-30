@@ -38,6 +38,29 @@ class _FakeBinding:
         view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
         view[:] = self._out_compare[: view.shape[0]]
 
+    def one_step_summary_create(self, _total_records: int, _num_players: int, _profile_rl1: int) -> object:
+        return object()
+
+    def one_step_summary_accumulate(
+        self, _summary_handle: object, _out_compare_bytes: np.ndarray, _samples_u8: np.ndarray
+    ) -> None:
+        return None
+
+    def one_step_summary_finish(self, _summary_handle: object) -> dict[str, object]:
+        import tools.eval.run_one_step_eval as eval_mod
+
+        return {
+            "mismatches": [0 for _ in eval_mod._DISCRETE_FIELDS],
+            "strict_mismatches": [0 for _ in eval_mod._DISCRETE_FIELDS],
+            "ignored_state_flags_4_0x80": 0,
+            "float_metrics": {
+                field: {"mae": 0.0, "p95": 0.0, "max": 0.0, "count": 0}
+                for field in eval_mod._FLOAT_FIELDS
+            },
+            "float_norm_sum": 0.0,
+            "float_norm_count": 0,
+        }
+
 
 def test_debug_mismatch_state_flags_multidim(capsys, monkeypatch, tmp_path: Path) -> None:
     # This used to crash with "too many values to unpack" because `np.argwhere` on a
@@ -73,4 +96,3 @@ def test_debug_mismatch_state_flags_multidim(capsys, monkeypatch, tmp_path: Path
     assert "seed=9" in out
     assert "out=0" in out
     assert "ref=7" in out
-

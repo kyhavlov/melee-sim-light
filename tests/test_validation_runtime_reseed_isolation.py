@@ -109,6 +109,29 @@ class _FakeBinding:
     def write_compare(self, _handle, out_compare_bytes: np.ndarray) -> None:
         out_compare_bytes.fill(0)
 
+    def one_step_summary_create(self, _total_records: int, _num_players: int, _profile_rl1: int) -> object:
+        return object()
+
+    def one_step_summary_accumulate(
+        self, _summary_handle: object, _out_compare_bytes: np.ndarray, _samples_u8: np.ndarray
+    ) -> None:
+        return None
+
+    def one_step_summary_finish(self, _summary_handle: object) -> dict[str, object]:
+        from tools.eval.run_one_step_eval import _DISCRETE_FIELDS, _FLOAT_FIELDS
+
+        return {
+            "mismatches": [0 for _ in _DISCRETE_FIELDS],
+            "strict_mismatches": [0 for _ in _DISCRETE_FIELDS],
+            "ignored_state_flags_4_0x80": 0,
+            "float_metrics": {
+                field: {"mae": 0.0, "p95": 0.0, "max": 0.0, "count": 0}
+                for field in _FLOAT_FIELDS
+            },
+            "float_norm_sum": 0.0,
+            "float_norm_count": 0,
+        }
+
 
 def _runtime_for_synthetic_layout() -> OneStepEvalRuntime:
     seed_bytes = np.empty((1, int(SEED_DTYPE.itemsize)), dtype=np.uint8)
