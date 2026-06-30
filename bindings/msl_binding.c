@@ -9274,6 +9274,8 @@ static PyMethodDef methods[] = {
      METH_VARARGS,
      "derive_damage_hitlag_sdi_reset_post_mask(action, hitlag, flags, pos_x, pos_y, stick_x, "
      "stick_y, damage_actions, sdi_step_mul) -> bool[:]"},
+    {"derive_damage_time_since_hit_x18ac", msl_derive_damage_time_since_hit_x18ac_py, METH_VARARGS,
+     "derive_damage_time_since_hit_x18ac(action, hitlag, hitstun, state_flags) -> int16[:]"},
     {"derive_damage_entry_tilt_timer_reset_post_mask",
      msl_derive_damage_entry_tilt_timer_reset_post_mask_py, METH_VARARGS,
      "derive_damage_entry_tilt_timer_reset_post_mask(action, frame, hitlag, percent, "

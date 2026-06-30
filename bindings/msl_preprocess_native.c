@@ -1824,6 +1824,77 @@ PyObject* msl_derive_guard_release_lockout_and_lightshield_py(PyObject* self, Py
   return Py_BuildValue("NNN", out_xc, out_x10, out_light);
 }
 
+PyObject* msl_derive_damage_time_since_hit_x18ac_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* action_obj = NULL;
+  PyObject* hitlag_obj = NULL;
+  PyObject* hitstun_obj = NULL;
+  PyObject* flags_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOOO", &action_obj, &hitlag_obj, &hitstun_obj, &flags_obj)) {
+    return NULL;
+  }
+  PyArrayObject* action =
+      require_contiguous_array_readonly(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* hitlag =
+      require_contiguous_array_readonly(hitlag_obj, NPY_UINT16, 1, "hitlag_u16");
+  PyArrayObject* hitstun =
+      require_contiguous_array_readonly(hitstun_obj, NPY_UINT16, 1, "hitstun_u16");
+  PyArrayObject* flags =
+      require_contiguous_array_readonly(flags_obj, NPY_UINT8, 2, "state_flags_u8");
+  if (action == NULL || hitlag == NULL || hitstun == NULL || flags == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(hitlag, 0);
+  if (PyArray_DIM(action, 0) != n || PyArray_DIM(hitstun, 0) != n || PyArray_DIM(flags, 0) != n ||
+      PyArray_DIM(flags, 1) < 4) {
+    PyErr_SetString(
+        PyExc_ValueError,
+        "damage-history input arrays must have matching frame counts and flags [n,>=4]");
+    return NULL;
+  }
+
+  npy_intp dims[1] = {n};
+  PyArrayObject* out_arr = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_INT16);
+  if (out_arr == NULL) {
+    return NULL;
+  }
+
+  const uint16_t* hitlag_p = (const uint16_t*)PyArray_DATA(hitlag);
+  const uint16_t* hitstun_p = (const uint16_t*)PyArray_DATA(hitstun);
+  const uint8_t* flags_p = (const uint8_t*)PyArray_DATA(flags);
+  const npy_intp flags_s0 = PyArray_STRIDE(flags, 0);
+  const npy_intp flags_s1 = PyArray_STRIDE(flags, 1);
+  int16_t* out = (int16_t*)PyArray_DATA(out_arr);
+
+  int timer = -1;
+  uint16_t prev_hitlag = 0u;
+  uint16_t prev_hitstun = 0u;
+  for (npy_intp fi = 0; fi < n; fi++) {
+    const uint16_t hl = hitlag_p[fi];
+    const uint16_t hs = hitstun_p[fi];
+    const uint8_t flag_221c =
+        *(const uint8_t*)(const void*)(flags_p + fi * flags_s0 + 3 * flags_s1);
+    const uint8_t in_hitstun = (uint8_t)((flag_221c & 0x02u) != 0u);
+    const uint8_t fresh_damage =
+        (uint8_t)(((prev_hitlag == 0u && hl > 0u && (hs > 0u || in_hitstun != 0u)) ||
+                   ((uint32_t)hs > (uint32_t)prev_hitstun + 1u))
+                      ? 1u
+                      : 0u);
+
+    if (fresh_damage != 0u) {
+      timer = 0;
+    } else if (timer >= 0 && hl == 0u && timer < INT16_MAX) {
+      timer++;
+    }
+
+    out[fi] = (int16_t)timer;
+    prev_hitlag = hl;
+    prev_hitstun = hs;
+  }
+
+  return (PyObject*)out_arr;
+}
+
 PyObject* msl_derive_damage_hitlag_sdi_reset_post_mask_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* action_obj = NULL;
@@ -9444,40 +9515,106 @@ PyObject* msl_derive_dream_whispy_wind_seed_lanes_py(PyObject* self, PyObject* a
   const size_t out_stride = (size_t)PyArray_DIM(out_arr, 1);
   int err = 0;
   const npy_intp sim_chunk = 512;
+  const int batch_size = (n < sim_chunk) ? (int)n : (int)sim_chunk;
+  MslBatch* batch = msl_batch_create(batch_size, num_players);
+  uint8_t* seed_scratch = NULL;
+  uint8_t* prev_input_scratch = NULL;
+  uint8_t* input_scratch = NULL;
+  uint8_t* out_scratch = NULL;
+  if (batch == NULL) {
+    Py_DECREF(dir_arr);
+    Py_DECREF(valid_arr);
+    Py_DECREF(timer_arr);
+    Py_DECREF(out_arr);
+    PyErr_SetString(PyExc_MemoryError, "msl_batch_create failed");
+    return NULL;
+  }
+  (void)msl_batch_set_ucf_enabled(batch, 1);
+  (void)msl_batch_set_ucf_cardinals_1_0_enabled(batch, 1);
+  if (batch_size > 1) {
+    seed_scratch = (uint8_t*)malloc((size_t)batch_size * sizeof(MslSeed));
+    prev_input_scratch = (uint8_t*)malloc((size_t)batch_size * sizeof(MslInput));
+    input_scratch = (uint8_t*)malloc((size_t)batch_size * sizeof(MslInput));
+    out_scratch = (uint8_t*)malloc((size_t)batch_size * sizeof(MslCompare));
+    if (seed_scratch == NULL || prev_input_scratch == NULL || input_scratch == NULL ||
+        out_scratch == NULL) {
+      free(seed_scratch);
+      free(prev_input_scratch);
+      free(input_scratch);
+      free(out_scratch);
+      msl_batch_destroy(batch);
+      Py_DECREF(dir_arr);
+      Py_DECREF(valid_arr);
+      Py_DECREF(timer_arr);
+      Py_DECREF(out_arr);
+      PyErr_NoMemory();
+      return NULL;
+    }
+  }
   for (npy_intp start = 0; start < n; start += sim_chunk) {
     const npy_intp remaining = n - start;
     const int chunk_n = (int)((remaining < sim_chunk) ? remaining : sim_chunk);
-    MslBatch* batch = msl_batch_create(chunk_n, num_players);
-    if (batch == NULL) {
-      err = -1000;
-      break;
+    const uint8_t* chunk_seed = seed_data + (size_t)start * seed_stride;
+    const uint8_t* chunk_prev_input = prev_input_data + (size_t)start * prev_input_stride;
+    const uint8_t* chunk_input = input_data + (size_t)start * input_stride;
+    uint8_t* chunk_out = out_data + (size_t)start * out_stride;
+    size_t chunk_seed_stride = seed_stride;
+    size_t chunk_prev_input_stride = prev_input_stride;
+    size_t chunk_input_stride = input_stride;
+    size_t chunk_out_stride = out_stride;
+    if (chunk_n < batch_size) {
+      for (int lane = 0; lane < chunk_n; lane++) {
+        memcpy(seed_scratch + (size_t)lane * sizeof(MslSeed),
+               chunk_seed + (size_t)lane * seed_stride, sizeof(MslSeed));
+        memcpy(prev_input_scratch + (size_t)lane * sizeof(MslInput),
+               chunk_prev_input + (size_t)lane * prev_input_stride, sizeof(MslInput));
+        memcpy(input_scratch + (size_t)lane * sizeof(MslInput),
+               chunk_input + (size_t)lane * input_stride, sizeof(MslInput));
+      }
+      for (int lane = chunk_n; lane < batch_size; lane++) {
+        memcpy(seed_scratch + (size_t)lane * sizeof(MslSeed), seed_scratch, sizeof(MslSeed));
+        memcpy(prev_input_scratch + (size_t)lane * sizeof(MslInput), prev_input_scratch,
+               sizeof(MslInput));
+        memcpy(input_scratch + (size_t)lane * sizeof(MslInput), input_scratch, sizeof(MslInput));
+      }
+      chunk_seed = seed_scratch;
+      chunk_prev_input = prev_input_scratch;
+      chunk_input = input_scratch;
+      chunk_out = out_scratch;
+      chunk_seed_stride = sizeof(MslSeed);
+      chunk_prev_input_stride = sizeof(MslInput);
+      chunk_input_stride = sizeof(MslInput);
+      chunk_out_stride = sizeof(MslCompare);
     }
-    (void)msl_batch_set_ucf_enabled(batch, 1);
-    (void)msl_batch_set_ucf_cardinals_1_0_enabled(batch, 1);
-    err = msl_batch_reseed_seed(batch, seed_data + (size_t)start * seed_stride, seed_stride);
+    err = msl_batch_reseed_seed(batch, chunk_seed, chunk_seed_stride);
     if (err == 0) {
-      err = msl_batch_step_input(batch, prev_input_data + (size_t)start * prev_input_stride,
-                                 prev_input_stride, input_data + (size_t)start * input_stride,
-                                 input_stride);
+      err = msl_batch_step_input(batch, chunk_prev_input, chunk_prev_input_stride, chunk_input,
+                                 chunk_input_stride);
     }
     if (err == 0) {
-      err = msl_batch_write_compare(batch, out_data + (size_t)start * out_stride, out_stride);
+      err = msl_batch_write_compare(batch, chunk_out, chunk_out_stride);
     }
-    msl_batch_destroy(batch);
+    if (err == 0 && chunk_n < batch_size) {
+      for (int lane = 0; lane < chunk_n; lane++) {
+        memcpy(out_data + ((size_t)start + (size_t)lane) * out_stride,
+               out_scratch + (size_t)lane * sizeof(MslCompare), sizeof(MslCompare));
+      }
+    }
     if (err != 0) {
       break;
     }
   }
+  free(seed_scratch);
+  free(prev_input_scratch);
+  free(input_scratch);
+  free(out_scratch);
+  msl_batch_destroy(batch);
   if (err != 0) {
     Py_DECREF(dir_arr);
     Py_DECREF(valid_arr);
     Py_DECREF(timer_arr);
     Py_DECREF(out_arr);
-    if (err == -1000) {
-      PyErr_SetString(PyExc_MemoryError, "msl_batch_create failed");
-    } else {
-      PyErr_Format(PyExc_RuntimeError, "Dream Whispy derivation sim failed: %d", err);
-    }
+    PyErr_Format(PyExc_RuntimeError, "Dream Whispy derivation sim failed: %d", err);
     return NULL;
   }
 

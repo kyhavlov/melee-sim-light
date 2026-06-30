@@ -16,6 +16,7 @@ PyObject* msl_compute_tilt_timer_axis_pre_post_py(PyObject* self, PyObject* args
 PyObject* msl_compute_tilt_timer_y_pre_post_with_fall_fast_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_grab_mash_stick_sign_post_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_guard_release_lockout_and_lightshield_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_damage_time_since_hit_x18ac_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_damage_hitlag_sdi_reset_post_mask_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_damage_entry_tilt_timer_reset_post_mask_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_guard_reflect_timer_plus1_py(PyObject* self, PyObject* args);
