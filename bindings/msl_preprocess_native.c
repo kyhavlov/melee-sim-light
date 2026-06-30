@@ -9434,43 +9434,56 @@ PyObject* msl_derive_dream_whispy_wind_seed_lanes_py(PyObject* self, PyObject* a
   memset(valid, 0, (size_t)n);
   memset(timer, 0, (size_t)n * sizeof(uint16_t));
 
-  MslBatch* batch = msl_batch_create((int)n, num_players);
-  if (batch == NULL) {
-    Py_DECREF(dir_arr);
-    Py_DECREF(valid_arr);
-    Py_DECREF(timer_arr);
-    Py_DECREF(out_arr);
-    PyErr_SetString(PyExc_MemoryError, "msl_batch_create failed");
-    return NULL;
+  const uint8_t* seed_data = (const uint8_t*)PyArray_DATA(seed_arr);
+  const uint8_t* prev_input_data = (const uint8_t*)PyArray_DATA(prev_input_arr);
+  const uint8_t* input_data = (const uint8_t*)PyArray_DATA(input_arr);
+  uint8_t* out_data = (uint8_t*)PyArray_DATA(out_arr);
+  const size_t seed_stride = (size_t)PyArray_DIM(seed_arr, 1);
+  const size_t prev_input_stride = (size_t)PyArray_DIM(prev_input_arr, 1);
+  const size_t input_stride = (size_t)PyArray_DIM(input_arr, 1);
+  const size_t out_stride = (size_t)PyArray_DIM(out_arr, 1);
+  int err = 0;
+  const npy_intp sim_chunk = 512;
+  for (npy_intp start = 0; start < n; start += sim_chunk) {
+    const npy_intp remaining = n - start;
+    const int chunk_n = (int)((remaining < sim_chunk) ? remaining : sim_chunk);
+    MslBatch* batch = msl_batch_create(chunk_n, num_players);
+    if (batch == NULL) {
+      err = -1000;
+      break;
+    }
+    (void)msl_batch_set_ucf_enabled(batch, 1);
+    (void)msl_batch_set_ucf_cardinals_1_0_enabled(batch, 1);
+    err = msl_batch_reseed_seed(batch, seed_data + (size_t)start * seed_stride, seed_stride);
+    if (err == 0) {
+      err = msl_batch_step_input(batch, prev_input_data + (size_t)start * prev_input_stride,
+                                 prev_input_stride, input_data + (size_t)start * input_stride,
+                                 input_stride);
+    }
+    if (err == 0) {
+      err = msl_batch_write_compare(batch, out_data + (size_t)start * out_stride, out_stride);
+    }
+    msl_batch_destroy(batch);
+    if (err != 0) {
+      break;
+    }
   }
-  (void)msl_batch_set_ucf_enabled(batch, 1);
-  (void)msl_batch_set_ucf_cardinals_1_0_enabled(batch, 1);
-  int err = msl_batch_reseed_seed(batch, (const uint8_t*)PyArray_DATA(seed_arr),
-                                  (size_t)PyArray_DIM(seed_arr, 1));
-  if (err == 0) {
-    err = msl_batch_step_input(
-        batch, (const uint8_t*)PyArray_DATA(prev_input_arr), (size_t)PyArray_DIM(prev_input_arr, 1),
-        (const uint8_t*)PyArray_DATA(input_arr), (size_t)PyArray_DIM(input_arr, 1));
-  }
-  if (err == 0) {
-    err = msl_batch_write_compare(batch, (uint8_t*)PyArray_DATA(out_arr),
-                                  (size_t)PyArray_DIM(out_arr, 1));
-  }
-  msl_batch_destroy(batch);
   if (err != 0) {
     Py_DECREF(dir_arr);
     Py_DECREF(valid_arr);
     Py_DECREF(timer_arr);
     Py_DECREF(out_arr);
-    PyErr_Format(PyExc_RuntimeError, "Dream Whispy derivation sim failed: %d", err);
+    if (err == -1000) {
+      PyErr_SetString(PyExc_MemoryError, "msl_batch_create failed");
+    } else {
+      PyErr_Format(PyExc_RuntimeError, "Dream Whispy derivation sim failed: %d", err);
+    }
     return NULL;
   }
 
-  const uint8_t* seed_bytes = (const uint8_t*)PyArray_DATA(seed_arr);
-  const uint8_t* out_bytes = (const uint8_t*)PyArray_DATA(out_arr);
+  const uint8_t* seed_bytes = seed_data;
+  const uint8_t* out_bytes = out_data;
   const uint8_t* ref_bytes = (const uint8_t*)PyArray_DATA(ref_arr);
-  const size_t seed_stride = (size_t)PyArray_DIM(seed_arr, 1);
-  const size_t out_stride = (size_t)PyArray_DIM(out_arr, 1);
   const size_t ref_stride = (size_t)PyArray_DIM(ref_arr, 1);
   const float wind_speed = (float)wind_speed_d;
   const float eps = (float)epsilon_d;

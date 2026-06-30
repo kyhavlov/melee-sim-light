@@ -287,12 +287,12 @@ def _one_step(
     try:
         with _patched_native_timers(
             timer,
-            {
-                "reseed_seed": "one_step_native_reseed",
-                "step_input": "one_step_native_step",
-                "write_compare": "one_step_native_write_compare",
-            },
-        ):
+        {
+            "reseed_seed": "one_step_native_reseed",
+            "step_input": "one_step_native_step",
+            "write_compare": "one_step_native_write_compare",
+        },
+    ):
             if profile is not None:
                 profile.enable()
             summary = evaluate_dataset(
@@ -350,6 +350,7 @@ def _rollout(
             "reseed_seed_rollout": "rollout_native_reseed",
             "step_input_replay_frame_rng": "rollout_native_step",
             "write_compare": "rollout_native_write_compare",
+            "standard_rollout_scan": "rollout_native_scan",
         },
     ):
         if profile is not None:
@@ -578,6 +579,7 @@ def main() -> None:
                 "one_step_python_compare_s": one["python_compare_other_wall_s"],
                 "rollout_wall_s": rollout["wall_s"],
                 "rollout_records_per_sec": _records_per_sec(build["records"], rollout["wall_s"]),
+                "rollout_native_scan_s": rollout["phase_wall_s"].get("rollout_native_scan", 0.0),
                 "rollout_native_reseed_s": rollout["phase_wall_s"].get("rollout_native_reseed", 0.0),
                 "rollout_native_step_s": rollout["phase_wall_s"].get("rollout_native_step", 0.0),
                 "rollout_native_write_s": rollout["phase_wall_s"].get("rollout_native_write_compare", 0.0),

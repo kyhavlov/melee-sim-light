@@ -278,7 +278,88 @@ def _scan_dataset_streaks(
     if max_records > 0:
         n = min(n, int(max_records))
 
+    # Efficient per-record byte slicing without per-step `.tobytes()` allocations.
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(num_records_total, sample_stride)
+
+    ref = samples["ref_t1"]
+    seed = samples["seed_t"]
     binding = _load_binding()
+    players_u8 = np.asarray(players, dtype=np.uint8)
+    use_standard_rollout_compare = (
+        tuple(fields) == _STANDARD_ROLLOUT_FIELDS
+        and validation_profile.name in ("rl1_gameplay", "strict")
+    )
+    if use_standard_rollout_compare:
+        native = binding.standard_rollout_scan(
+            samples_u8,
+            players_u8,
+            int(num_players),
+            int(max_records),
+            -1 if ucf_enabled is None else int(bool(ucf_enabled)),
+            -1 if ucf_cardinals_1_0_enabled is None else int(bool(ucf_cardinals_1_0_enabled)),
+            int(validation_profile.name == "rl1_gameplay"),
+        )
+        field_names = (
+            "action_id",
+            "animation_index",
+            "on_ground",
+            "hitlag",
+            "hitstun",
+            "state_flags",
+        )
+        mismatch_counts = {
+            field: int(count)
+            for field, count in zip(field_names, native["first_mismatch_counts"], strict=True)
+            if int(count) != 0
+        }
+        mismatch_counts_seeded = {
+            field: int(count)
+            for field, count in zip(field_names, native["first_mismatch_counts_seeded"], strict=True)
+            if int(count) != 0
+        }
+        ignored_counts = {}
+        ignored = int(native["ignored_first"])
+        if ignored:
+            ignored_counts["state_flags[4]&0x80"] = ignored
+        ignored_counts_seeded = {}
+        ignored_seeded = int(native["ignored_first_seeded"])
+        if ignored_seeded:
+            ignored_counts_seeded["state_flags[4]&0x80"] = ignored_seeded
+
+        best_start = int(native["best_start_record"])
+        best_end = int(native["best_end_record_excl"])
+        start_seed_frame = None
+        end_ref_frame_incl = None
+        if int(native["best_len"]) > 0:
+            try:
+                start_seed_frame = int(seed["frame_id"][best_start])
+            except Exception:
+                start_seed_frame = None
+            try:
+                end_ref_frame_incl = int(ref["frame_id"][best_end - 1])
+            except Exception:
+                end_ref_frame_incl = None
+
+        return DatasetStreaks(
+            dataset=str(dataset_path),
+            num_records=num_records_total,
+            max_records_used=n,
+            players=players,
+            fields=fields,
+            best_len=int(native["best_len"]),
+            best_start_record=best_start,
+            best_end_record_excl=best_end,
+            best_start_seed_frame_id=start_seed_frame,
+            best_end_ref_frame_id_inclusive=end_ref_frame_incl,
+            streak_histogram=dict(sorted((int(k), int(v)) for k, v in native["streak_histogram"].items())),
+            first_mismatch_field_counts=dict(sorted(mismatch_counts.items())),
+            first_mismatch_field_counts_seeded=dict(sorted(mismatch_counts_seeded.items())),
+            ignored_first_mismatch_field_counts=dict(sorted(ignored_counts.items())),
+            ignored_first_mismatch_field_counts_seeded=dict(sorted(ignored_counts_seeded.items())),
+            profile_name=validation_profile.name,
+        )
+
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -298,25 +379,14 @@ def _scan_dataset_streaks(
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     ref_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
-    players_u8 = np.asarray(players, dtype=np.uint8)
 
-    # Efficient per-record byte slicing without per-step `.tobytes()` allocations.
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(num_records_total, sample_stride)
     seed_off = int(samples.dtype.fields["seed_t"][1])
     prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
     input_off = int(samples.dtype.fields["input_t"][1])
     ref_off = int(samples.dtype.fields["ref_t1"][1])
-
-    ref = samples["ref_t1"]
-    seed = samples["seed_t"]
     compare_lanes = compile_discrete_compare_lanes(fields, players, profile=validation_profile)
     ignored_lanes = compile_discrete_compare_lanes(
         fields, players, profile=validation_profile, ignored_only=True
-    )
-    use_standard_rollout_compare = (
-        tuple(fields) == _STANDARD_ROLLOUT_FIELDS
-        and validation_profile.name in ("rl1_gameplay", "strict")
     )
 
     def reseed_at(j: int) -> None:

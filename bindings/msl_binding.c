@@ -7581,32 +7581,9 @@ static PyObject* msl_slpz_unorder_events(PyObject* self, PyObject* args) {
   return out_obj;
 }
 
-static PyObject* msl_standard_rollout_compare(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* out_obj = NULL;
-  PyObject* ref_obj = NULL;
-  PyObject* players_obj = NULL;
-  int profile_rl1 = 0;
-  if (!PyArg_ParseTuple(args, "OOOi", &out_obj, &ref_obj, &players_obj, &profile_rl1)) {
-    return NULL;
-  }
-  PyArrayObject* out_arr = require_contiguous_array_readonly(out_obj, NPY_UINT8, 2, "out_compare");
-  PyArrayObject* ref_arr = require_contiguous_array_readonly(ref_obj, NPY_UINT8, 2, "ref_compare");
-  PyArrayObject* players_arr =
-      require_contiguous_array_readonly(players_obj, NPY_UINT8, 1, "players");
-  if (out_arr == NULL || ref_arr == NULL || players_arr == NULL) {
-    return NULL;
-  }
-  if (PyArray_DIM(out_arr, 0) < 1 || PyArray_DIM(ref_arr, 0) < 1 ||
-      PyArray_DIM(out_arr, 1) < (npy_intp)sizeof(MslCompare) ||
-      PyArray_DIM(ref_arr, 1) < (npy_intp)sizeof(MslCompare)) {
-    PyErr_SetString(PyExc_ValueError, "compare buffers must contain at least one MslCompare row");
-    return NULL;
-  }
-  const MslCompare* out = (const MslCompare*)(const void*)PyArray_DATA(out_arr);
-  const MslCompare* ref = (const MslCompare*)(const void*)PyArray_DATA(ref_arr);
-  const uint8_t* players = (const uint8_t*)PyArray_DATA(players_arr);
-  const npy_intp player_count = PyArray_DIM(players_arr, 0);
+static int msl_standard_rollout_compare_code(const MslCompare* out, const MslCompare* ref,
+                                             const uint8_t* players, npy_intp player_count,
+                                             int profile_rl1) {
   int code = 0;
   int ignored = 0;
   for (npy_intp pi = 0; pi < player_count; pi++) {
@@ -7665,7 +7642,297 @@ static PyObject* msl_standard_rollout_compare(PyObject* self, PyObject* args) {
       code = 6;
     }
   }
-  return PyLong_FromLong((long)(code | (ignored ? 0x100 : 0)));
+  return code | (ignored ? 0x100 : 0);
+}
+
+static PyObject* msl_standard_rollout_compare(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* out_obj = NULL;
+  PyObject* ref_obj = NULL;
+  PyObject* players_obj = NULL;
+  int profile_rl1 = 0;
+  if (!PyArg_ParseTuple(args, "OOOi", &out_obj, &ref_obj, &players_obj, &profile_rl1)) {
+    return NULL;
+  }
+  PyArrayObject* out_arr = require_contiguous_array_readonly(out_obj, NPY_UINT8, 2, "out_compare");
+  PyArrayObject* ref_arr = require_contiguous_array_readonly(ref_obj, NPY_UINT8, 2, "ref_compare");
+  PyArrayObject* players_arr =
+      require_contiguous_array_readonly(players_obj, NPY_UINT8, 1, "players");
+  if (out_arr == NULL || ref_arr == NULL || players_arr == NULL) {
+    return NULL;
+  }
+  if (PyArray_DIM(out_arr, 0) < 1 || PyArray_DIM(ref_arr, 0) < 1 ||
+      PyArray_DIM(out_arr, 1) < (npy_intp)sizeof(MslCompare) ||
+      PyArray_DIM(ref_arr, 1) < (npy_intp)sizeof(MslCompare)) {
+    PyErr_SetString(PyExc_ValueError, "compare buffers must contain at least one MslCompare row");
+    return NULL;
+  }
+  const MslCompare* out = (const MslCompare*)(const void*)PyArray_DATA(out_arr);
+  const MslCompare* ref = (const MslCompare*)(const void*)PyArray_DATA(ref_arr);
+  const uint8_t* players = (const uint8_t*)PyArray_DATA(players_arr);
+  const npy_intp player_count = PyArray_DIM(players_arr, 0);
+  return PyLong_FromLong(
+      (long)msl_standard_rollout_compare_code(out, ref, players, player_count, profile_rl1));
+}
+
+static int msl_standard_rollout_reseed_at(MslBatch* batch, const uint8_t* samples_u8,
+                                          size_t sample_stride, int record) {
+  const uint8_t* seed = samples_u8 + (size_t)record * sample_stride + offsetof(MslSample, seed_t);
+  return msl_batch_reseed_seed_rollout(batch, seed, sizeof(MslSeed));
+}
+
+static int msl_standard_rollout_step_compare(MslBatch* batch, const uint8_t* samples_u8,
+                                             size_t sample_stride, int record,
+                                             const uint8_t* players, npy_intp player_count,
+                                             int profile_rl1, MslCompare* out) {
+  const uint8_t* row = samples_u8 + (size_t)record * sample_stride;
+  const uint8_t* seed = row + offsetof(MslSample, seed_t);
+  const uint8_t* prev_input = row + offsetof(MslSample, prev_input_t);
+  const uint8_t* input = row + offsetof(MslSample, input_t);
+  const MslCompare* ref = (const MslCompare*)(const void*)(row + offsetof(MslSample, ref_t1));
+  int err = msl_batch_step_input_replay_frame_rng(batch, seed, sizeof(MslSeed), prev_input,
+                                                  sizeof(MslInput), input, sizeof(MslInput));
+  if (err != 0) {
+    return -1;
+  }
+  err = msl_batch_write_compare(batch, (uint8_t*)out, sizeof(MslCompare));
+  if (err != 0) {
+    return -2;
+  }
+  return msl_standard_rollout_compare_code(out, ref, players, player_count, profile_rl1);
+}
+
+static int msl_put_long(PyObject* dict, const char* key, long value) {
+  PyObject* obj = PyLong_FromLong(value);
+  if (obj == NULL) {
+    return -1;
+  }
+  const int err = PyDict_SetItemString(dict, key, obj);
+  Py_DECREF(obj);
+  return err;
+}
+
+static PyObject* msl_standard_rollout_scan(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* samples_obj = NULL;
+  PyObject* players_obj = NULL;
+  int num_players = 0;
+  int max_records = 0;
+  int ucf_enabled = -1;
+  int ucf_cardinals = -1;
+  int profile_rl1 = 0;
+  if (!PyArg_ParseTuple(args, "OOiiiii", &samples_obj, &players_obj, &num_players, &max_records,
+                        &ucf_enabled, &ucf_cardinals, &profile_rl1)) {
+    return NULL;
+  }
+  PyArrayObject* samples =
+      require_contiguous_array_readonly(samples_obj, NPY_UINT8, 2, "samples_u8");
+  PyArrayObject* players_arr =
+      require_contiguous_array_readonly(players_obj, NPY_UINT8, 1, "players");
+  if (samples == NULL || players_arr == NULL) {
+    return NULL;
+  }
+  if (PyArray_DIM(samples, 1) < (npy_intp)sizeof(MslSample)) {
+    PyErr_SetString(PyExc_ValueError, "samples_u8 second dim too small for MslSample");
+    return NULL;
+  }
+  if (num_players <= 0 || num_players > MSL_MAX_PLAYERS) {
+    PyErr_SetString(PyExc_ValueError, "num_players out of range");
+    return NULL;
+  }
+  const uint8_t* players = (const uint8_t*)PyArray_DATA(players_arr);
+  const npy_intp player_count = PyArray_DIM(players_arr, 0);
+  for (npy_intp i = 0; i < player_count; i++) {
+    if (players[i] >= (uint8_t)num_players) {
+      PyErr_SetString(PyExc_ValueError, "player index out of range");
+      return NULL;
+    }
+  }
+
+  const int total_records = (int)PyArray_DIM(samples, 0);
+  int n = total_records;
+  if (max_records > 0 && n > max_records) {
+    n = max_records;
+  }
+  int* hist = (int*)PyMem_RawCalloc((size_t)n + 1u, sizeof(int));
+  if (hist == NULL) {
+    PyErr_NoMemory();
+    return NULL;
+  }
+  MslBatch* batch = msl_batch_create(1, num_players);
+  if (batch == NULL) {
+    PyMem_RawFree(hist);
+    PyErr_SetString(PyExc_RuntimeError, "msl_batch_create failed");
+    return NULL;
+  }
+  if (ucf_enabled >= 0) {
+    (void)msl_batch_set_ucf_enabled(batch, ucf_enabled != 0);
+  }
+  if (ucf_cardinals >= 0) {
+    (void)msl_batch_set_ucf_cardinals_1_0_enabled(batch, ucf_cardinals != 0);
+  }
+
+  const uint8_t* samples_u8 = (const uint8_t*)PyArray_DATA(samples);
+  const size_t sample_stride = (size_t)PyArray_STRIDE(samples, 0);
+  MslCompare out;
+  int best_len = 0;
+  int best_start = 0;
+  int best_end_excl = 0;
+  int cur_start = 0;
+  int cur_len = 0;
+  int needs_seed = 1;
+  int mismatch_fields[7] = {0};
+  int mismatch_fields_seeded[7] = {0};
+  int ignored_first = 0;
+  int ignored_first_seeded = 0;
+  int err = 0;
+
+  for (int j = 0; j < n;) {
+    if (needs_seed != 0) {
+      err = msl_standard_rollout_reseed_at(batch, samples_u8, sample_stride, cur_start);
+      if (err != 0) {
+        break;
+      }
+      needs_seed = 0;
+    }
+    const int attempt = msl_standard_rollout_step_compare(batch, samples_u8, sample_stride, j,
+                                                          players, player_count, profile_rl1, &out);
+    if (attempt < 0) {
+      err = attempt;
+      break;
+    }
+    if ((attempt & 0x100) != 0) {
+      ignored_first++;
+    }
+    const int code = attempt & 0xFF;
+    if (code == 0) {
+      cur_len++;
+      if (cur_len > best_len) {
+        best_len = cur_len;
+        best_start = cur_start;
+        best_end_excl = cur_start + cur_len;
+      }
+      j++;
+      continue;
+    }
+    if (cur_len > 0) {
+      hist[cur_len]++;
+    }
+    if (code >= 1 && code <= 6) {
+      mismatch_fields[code]++;
+    }
+
+    cur_start = j;
+    cur_len = 0;
+    err = msl_standard_rollout_reseed_at(batch, samples_u8, sample_stride, j);
+    if (err != 0) {
+      break;
+    }
+    const int retry = msl_standard_rollout_step_compare(batch, samples_u8, sample_stride, j,
+                                                        players, player_count, profile_rl1, &out);
+    if (retry < 0) {
+      err = retry;
+      break;
+    }
+    if ((retry & 0x100) != 0) {
+      ignored_first_seeded++;
+    }
+    const int retry_code = retry & 0xFF;
+    if (retry_code == 0) {
+      cur_len = 1;
+      if (cur_len > best_len) {
+        best_len = cur_len;
+        best_start = cur_start;
+        best_end_excl = cur_start + cur_len;
+      }
+      j++;
+      continue;
+    }
+    if (retry_code >= 1 && retry_code <= 6) {
+      mismatch_fields_seeded[retry_code]++;
+    }
+    cur_start = j + 1;
+    cur_len = 0;
+    j++;
+    needs_seed = 1;
+  }
+
+  if (err == 0 && cur_len > 0) {
+    hist[cur_len]++;
+  }
+  msl_batch_destroy(batch);
+  if (err != 0) {
+    PyMem_RawFree(hist);
+    PyErr_Format(PyExc_RuntimeError, "standard_rollout_scan failed: %d", err);
+    return NULL;
+  }
+
+  PyObject* result = PyDict_New();
+  PyObject* hist_dict = PyDict_New();
+  PyObject* mismatch_list = PyList_New(6);
+  PyObject* mismatch_seeded_list = PyList_New(6);
+  if (result == NULL || hist_dict == NULL || mismatch_list == NULL ||
+      mismatch_seeded_list == NULL) {
+    Py_XDECREF(result);
+    Py_XDECREF(hist_dict);
+    Py_XDECREF(mismatch_list);
+    Py_XDECREF(mismatch_seeded_list);
+    PyMem_RawFree(hist);
+    return NULL;
+  }
+  for (int len = 1; len <= n; len++) {
+    if (hist[len] == 0) {
+      continue;
+    }
+    PyObject* key = PyLong_FromLong((long)len);
+    PyObject* val = PyLong_FromLong((long)hist[len]);
+    if (key == NULL || val == NULL || PyDict_SetItem(hist_dict, key, val) != 0) {
+      Py_XDECREF(key);
+      Py_XDECREF(val);
+      Py_DECREF(result);
+      Py_DECREF(hist_dict);
+      Py_DECREF(mismatch_list);
+      Py_DECREF(mismatch_seeded_list);
+      PyMem_RawFree(hist);
+      return NULL;
+    }
+    Py_DECREF(key);
+    Py_DECREF(val);
+  }
+  PyMem_RawFree(hist);
+  for (int i = 0; i < 6; i++) {
+    PyObject* a = PyLong_FromLong((long)mismatch_fields[i + 1]);
+    PyObject* b = PyLong_FromLong((long)mismatch_fields_seeded[i + 1]);
+    if (a == NULL || b == NULL) {
+      Py_XDECREF(a);
+      Py_XDECREF(b);
+      Py_DECREF(result);
+      Py_DECREF(hist_dict);
+      Py_DECREF(mismatch_list);
+      Py_DECREF(mismatch_seeded_list);
+      return NULL;
+    }
+    PyList_SET_ITEM(mismatch_list, i, a);
+    PyList_SET_ITEM(mismatch_seeded_list, i, b);
+  }
+  if (msl_put_long(result, "best_len", best_len) != 0 ||
+      msl_put_long(result, "best_start_record", best_start) != 0 ||
+      msl_put_long(result, "best_end_record_excl", best_end_excl) != 0 ||
+      msl_put_long(result, "ignored_first", ignored_first) != 0 ||
+      msl_put_long(result, "ignored_first_seeded", ignored_first_seeded) != 0 ||
+      PyDict_SetItemString(result, "streak_histogram", hist_dict) != 0 ||
+      PyDict_SetItemString(result, "first_mismatch_counts", mismatch_list) != 0 ||
+      PyDict_SetItemString(result, "first_mismatch_counts_seeded", mismatch_seeded_list) != 0) {
+    Py_DECREF(result);
+    Py_DECREF(hist_dict);
+    Py_DECREF(mismatch_list);
+    Py_DECREF(mismatch_seeded_list);
+    return NULL;
+  }
+  Py_DECREF(hist_dict);
+  Py_DECREF(mismatch_list);
+  Py_DECREF(mismatch_seeded_list);
+  return result;
 }
 
 static PyMethodDef methods[] = {
@@ -7777,6 +8044,9 @@ static PyMethodDef methods[] = {
      "slpz_unorder_events(data, sizes) -> bytes. Native .slpz event payload unshuffle."},
     {"standard_rollout_compare", msl_standard_rollout_compare, METH_VARARGS,
      "standard_rollout_compare(out_compare, ref_compare, players_u8, profile_rl1) -> int code"},
+    {"standard_rollout_scan", msl_standard_rollout_scan, METH_VARARGS,
+     "standard_rollout_scan(samples_u8, players_u8, num_players, max_records, ucf_enabled, "
+     "ucf_cardinals_enabled, profile_rl1) -> dict"},
     {"write_gamestate", msl_write_gamestate, METH_VARARGS,
      "write_gamestate(handle, viewpoint_players[batch], out_bytes)"},
     {"write_terminal", msl_write_terminal, METH_VARARGS,
