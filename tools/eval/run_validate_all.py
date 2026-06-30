@@ -4,46 +4,31 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
-import subprocess
-import sys
-from collections.abc import Callable
-from dataclasses import dataclass
+import os
+from pathlib import Path
 
-from tools.eval import run_one_step_suite_eval, run_rollout_suite_eval
-
-
-def _run_main(name: str, main: Callable[[], None], args: list[str]) -> None:
-    old_argv = sys.argv
-    try:
-        sys.argv = [name, *args]
-        main()
-    finally:
-        sys.argv = old_argv
+from tools.eval import run_combined_suite_eval, run_one_step_suite_eval, run_rollout_suite_eval
+from tools.eval.run_longest_rollout_streaks import _parse_csv, _validate_discrete_fields
+from tools.eval.run_one_step_eval import Reporter
+from tools.eval.validation_exceptions import load_validation_exceptions
+from tools.eval.validation_profile import get_validation_profile, validation_profile_names
+from tools.slippi.slpz import resolve_replay_path
+from tools.slippi.suite_io import load_suite, repo_root
 
 
-@dataclass(frozen=True)
-class _ReportJob:
-    name: str
-    module: str
-    args: list[str]
-    main: Callable[[], None] | None = None
+def _resolve_worker_count(requested: int, task_count: int) -> int:
+    if int(requested) > 0:
+        return max(1, int(requested))
+    return max(1, min(16, int(os.cpu_count() or 1), int(task_count) if task_count else 1))
 
 
-def _run_subprocess(job: _ReportJob) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-m", job.module, *job.args],
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
+def _task_key(task: dict) -> tuple:
+    return (
+        str(task["slp_path"]),
+        tuple(int(p) for p in task["ports"]),
+        bool(task["ucf_enabled"]),
+        bool(task["ucf_cardinals_1_0_enabled"]),
     )
-
-
-def _replay_completed_process(result: subprocess.CompletedProcess[str]) -> None:
-    if result.stdout:
-        print(result.stdout, end="")
-    if result.stderr:
-        print(result.stderr, end="", file=sys.stderr)
 
 
 def main() -> None:
@@ -54,6 +39,9 @@ def main() -> None:
     ap.add_argument("--sheik-suite", default="")
     ap.add_argument("--chunk", type=int, default=4096)
     ap.add_argument("--fields", default="action_id,animation_index,on_ground,hitlag,hitstun,state_flags")
+    ap.add_argument("--profile", default="rl1_gameplay", choices=validation_profile_names())
+    ap.add_argument("--exceptions", default="replays/validation_exceptions.json")
+    ap.add_argument("--float-top", type=int, default=3)
     ap.add_argument("--one-step-out", default="reports/validation/one_step_suite_eval.txt")
     ap.add_argument("--rollout-out", default="reports/validation/rollout_suite_eval.txt")
     ap.add_argument("--agg-one-step-out", default="reports/validation/aggregate_recent_one_step_suite_eval.txt")
@@ -62,131 +50,129 @@ def main() -> None:
     ap.add_argument("--doubles-rollout-out", default="reports/validation/doubles_recent_rollout_suite_eval.txt")
     ap.add_argument("--sheik-one-step-out", default="reports/validation/sheik_one_step.txt")
     ap.add_argument("--sheik-rollout-out", default="reports/validation/sheik_rollout.txt")
-    ap.add_argument("--workers", type=int, default=1, help="Parallel report worker subprocesses.")
+    ap.add_argument("--workers", type=int, default=0, help="Parallel replay workers (0 = auto, capped at 16).")
     args = ap.parse_args()
 
-    one_step_common = ["--chunk", str(int(args.chunk))]
-    rollout_common = ["--fields", str(args.fields)]
+    root = repo_root()
+    fields = _validate_discrete_fields(_parse_csv(str(args.fields)))
+    validation_profile = get_validation_profile(args.profile)
+    exceptions_path = (root / args.exceptions).resolve()
+    exceptions = load_validation_exceptions(exceptions_path)
+    float_fields = run_rollout_suite_eval._float_compare_fields()
+    float_top_scan = max(0, int(args.float_top)) * 8
 
-    jobs = [
-        _ReportJob(
-            name="run_one_step_suite_eval",
-            module="tools.eval.run_one_step_suite_eval",
-            main=run_one_step_suite_eval.main,
-            args=["--suite", args.suite, *one_step_common, "--out", args.one_step_out, "--quiet"],
-        ),
-        _ReportJob(
-            name="run_rollout_suite_eval",
-            module="tools.eval.run_rollout_suite_eval",
-            main=run_rollout_suite_eval.main,
-            args=["--suite", args.suite, *rollout_common, "--out", args.rollout_out, "--quiet"],
-        ),
-        _ReportJob(
-            name="run_one_step_suite_eval",
-            module="tools.eval.run_one_step_suite_eval",
-            main=run_one_step_suite_eval.main,
-            args=[
-                "--suite",
-                args.agg_suite,
-                *one_step_common,
-                "--out",
-                args.agg_one_step_out,
-                "--quiet",
-            ],
-        ),
-        _ReportJob(
-            name="run_rollout_suite_eval",
-            module="tools.eval.run_rollout_suite_eval",
-            main=run_rollout_suite_eval.main,
-            args=[
-                "--suite",
-                args.agg_suite,
-                *rollout_common,
-                "--out",
-                args.agg_rollout_out,
-                "--quiet",
-            ],
-        ),
+    suite_specs: list[tuple[str, str, str]] = [
+        (args.suite, args.one_step_out, args.rollout_out),
+        (args.agg_suite, args.agg_one_step_out, args.agg_rollout_out),
     ]
     if args.sheik_suite:
-        jobs.extend(
-            [
-                _ReportJob(
-                    name="run_one_step_suite_eval",
-                    module="tools.eval.run_one_step_suite_eval",
-                    main=run_one_step_suite_eval.main,
-                    args=[
-                        "--suite",
-                        args.sheik_suite,
-                        *one_step_common,
-                        "--out",
-                        args.sheik_one_step_out,
-                        "--quiet",
-                    ],
-                ),
-                _ReportJob(
-                    name="run_rollout_suite_eval",
-                    module="tools.eval.run_rollout_suite_eval",
-                    main=run_rollout_suite_eval.main,
-                    args=[
-                        "--suite",
-                        args.sheik_suite,
-                        *rollout_common,
-                        "--out",
-                        args.sheik_rollout_out,
-                        "--quiet",
-                    ],
-                ),
-            ]
-        )
+        suite_specs.append((args.sheik_suite, args.sheik_one_step_out, args.sheik_rollout_out))
     if args.doubles_suite:
-        jobs.extend(
-            [
-                _ReportJob(
-                    name="run_one_step_suite_eval",
-                    module="tools.eval.run_one_step_suite_eval",
-                    main=run_one_step_suite_eval.main,
-                    args=[
-                        "--suite",
-                        args.doubles_suite,
-                        *one_step_common,
-                        "--out",
-                        args.doubles_one_step_out,
-                        "--quiet",
-                    ],
+        suite_specs.append((args.doubles_suite, args.doubles_one_step_out, args.doubles_rollout_out))
+
+    suite_rows: list[dict] = []
+    unique_tasks: list[dict] = []
+    task_index: dict[tuple, int] = {}
+    for suite_arg, one_step_out, rollout_out in suite_specs:
+        suite_path = (root / suite_arg).resolve()
+        suite = load_suite(suite_path)
+        replay_paths = [resolve_replay_path((root / entry.replay).resolve()) for entry in suite.replays]
+        indices: list[int] = []
+        for replay_path, entry in zip(replay_paths, suite.replays, strict=True):
+            display_path = run_combined_suite_eval._display_path(replay_path, root=root)
+            task = {
+                "root": str(root),
+                "dataset_label": str(replay_path),
+                "slp_path": str(replay_path),
+                "ports": [int(p) for p in entry.ports],
+                "chunk": int(args.chunk),
+                "profile": validation_profile.name,
+                "ucf_enabled": bool(suite.ucf_enabled),
+                "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
+                "debug_mismatch": (),
+                "debug_limit": 10,
+                "debug_float": (),
+                "debug_float_limit": 10,
+                "fields": list(fields),
+                "players_csv": None,
+                "max_records": 0,
+                "float_fields": list(float_fields),
+                "float_top_scan": int(float_top_scan),
+                "exception_probe_limit": run_rollout_suite_eval._exception_probe_limit(
+                    dataset=display_path, exceptions=exceptions
                 ),
-                _ReportJob(
-                    name="run_rollout_suite_eval",
-                    module="tools.eval.run_rollout_suite_eval",
-                    main=run_rollout_suite_eval.main,
-                    args=[
-                        "--suite",
-                        args.doubles_suite,
-                        *rollout_common,
-                        "--out",
-                        args.doubles_rollout_out,
-                        "--quiet",
-                    ],
-                ),
-            ]
+            }
+            key = _task_key(task)
+            idx = task_index.get(key)
+            if idx is None:
+                idx = len(unique_tasks)
+                task_index[key] = idx
+                unique_tasks.append(task)
+            indices.append(idx)
+        suite_rows.append(
+            {
+                "suite_arg": suite_arg,
+                "suite_name": suite.name,
+                "one_step_out": one_step_out,
+                "rollout_out": rollout_out,
+                "replay_paths": replay_paths,
+                "task_indices": indices,
+                "ucf_enabled": bool(suite.ucf_enabled),
+                "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
+            }
         )
 
-    workers = max(1, int(args.workers))
-    if workers == 1:
-        for job in jobs:
-            assert job.main is not None
-            _run_main(job.name, job.main, job.args)
-        return
+    workers = _resolve_worker_count(int(args.workers), len(unique_tasks))
+    if workers == 1 or len(unique_tasks) <= 1:
+        unique_results = [run_combined_suite_eval._combined_dataset_task(task) for task in unique_tasks]
+    else:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+            unique_results = list(executor.map(run_combined_suite_eval._combined_dataset_task, unique_tasks))
+    for result, task in zip(unique_results, unique_tasks, strict=True):
+        result["ucf_enabled"] = task["ucf_enabled"]
+        result["ucf_cardinals_1_0_enabled"] = task["ucf_cardinals_1_0_enabled"]
 
-    results: list[subprocess.CompletedProcess[str] | None] = [None for _ in jobs]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(workers, len(jobs))) as executor:
-        future_to_index = {executor.submit(_run_subprocess, job): i for i, job in enumerate(jobs)}
-        for future in concurrent.futures.as_completed(future_to_index):
-            results[future_to_index[future]] = future.result()
+    for suite_row in suite_rows:
+        task_results = [unique_results[i] for i in suite_row["task_indices"]]
+        one_reporter = Reporter(Path(str(suite_row["one_step_out"])), echo=False)
+        try:
+            run_one_step_suite_eval.emit_one_step_suite_report(
+                reporter=one_reporter,
+                root=root,
+                suite_arg=str(suite_row["suite_arg"]),
+                suite_name=str(suite_row["suite_name"]),
+                replay_paths=suite_row["replay_paths"],
+                task_results=task_results,
+                validation_profile=validation_profile,
+                ucf_enabled=bool(suite_row["ucf_enabled"]),
+                ucf_cardinals_1_0_enabled=bool(suite_row["ucf_cardinals_1_0_enabled"]),
+                include_header=True,
+            )
+        finally:
+            one_reporter.close()
 
-    for result in results:
-        assert result is not None
-        _replay_completed_process(result)
+        rollout_reporter = Reporter(Path(str(suite_row["rollout_out"])), echo=False)
+        try:
+            run_rollout_suite_eval.emit_rollout_suite_report(
+                reporter=rollout_reporter,
+                root=root,
+                suite_arg=str(suite_row["suite_arg"]),
+                suite_name=str(suite_row["suite_name"]),
+                replay_paths=suite_row["replay_paths"],
+                fields=fields,
+                validation_profile=validation_profile,
+                exceptions_path=exceptions_path,
+                exceptions=exceptions,
+                per_dataset_payload=[dict(result["rollout_payload"]) for result in task_results],
+                players_csv=None,
+                max_records=0,
+                float_top=int(args.float_top),
+                ucf_enabled=bool(suite_row["ucf_enabled"]),
+                ucf_cardinals_1_0_enabled=bool(suite_row["ucf_cardinals_1_0_enabled"]),
+                include_header=True,
+            )
+        finally:
+            rollout_reporter.close()
 
 
 if __name__ == "__main__":

@@ -278,6 +278,166 @@ def print_rollout_dataset_report(*, reporter: Reporter, row: dict, overlay: dict
         )
 
 
+def _display_exception_path(exceptions_path: Path, *, root: Path) -> str:
+    try:
+        return exceptions_path.relative_to(root).as_posix()
+    except ValueError:
+        return exceptions_path.as_posix()
+
+
+def emit_rollout_suite_report(
+    *,
+    reporter: Reporter,
+    root: Path,
+    suite_arg: str,
+    suite_name: str,
+    replay_paths: list[Path],
+    fields: tuple[str, ...],
+    validation_profile,
+    exceptions_path: Path,
+    exceptions: ValidationExceptions,
+    per_dataset_payload: list[dict],
+    players_csv: str | None,
+    max_records: int,
+    float_top: int,
+    ucf_enabled: bool | None,
+    ucf_cardinals_1_0_enabled: bool | None,
+    include_header: bool,
+) -> None:
+    payload = {
+        "suite": suite_name,
+        "suite_path": str(Path(suite_arg)),
+        "datasets_dir": "",
+        "ucf_enabled": bool(ucf_enabled),
+        "ucf_cardinals_1_0_enabled": bool(ucf_cardinals_1_0_enabled),
+        "fields": list(fields),
+        "profile": validation_profile.name,
+        "ignored_lanes": [lane.label for lane in validation_profile.ignored_lanes],
+        "players_csv": players_csv,
+        "max_records": int(max_records),
+        "per_dataset": per_dataset_payload,
+    }
+    summary = summarize_rollout_payload(payload)
+    suite_summary = summary["suite_summary"]
+    dataset_overlays: dict[str, dict] = {}
+    suite_exception_totals = {
+        "accepted_total": 0,
+        "accepted_seeded_total": 0,
+        "stale_total": 0,
+        "accepted_float_total": 0,
+    }
+    suite_float_only: list[dict] = []
+    suite_float_downstream: list[dict] = []
+    by_payload_dataset = {str(row["dataset"]): row for row in per_dataset_payload}
+    for row in summary["dataset_summaries"]:
+        dataset = str(row["dataset"])
+        raw = by_payload_dataset.get(dataset, {})
+        overlay = _dataset_exception_overlay(
+            dataset=dataset,
+            first_mismatch_rows=list(raw.get("first_mismatch_rows", [])),
+            exceptions=exceptions,
+        )
+        raw_total = int(row["first_mismatch_total"])
+        accepted_total = int(overlay["accepted_total"])
+        accepted_seeded_total = int(overlay["accepted_seeded_total"])
+        overlay["status"] = _rollout_status(
+            raw_total=raw_total,
+            accepted_total=accepted_total,
+            stale_total=len(overlay["stale"]),
+        )
+        float_overlay = _float_summary(
+            dataset=dataset,
+            rows_by_field=dict(raw.get("float_rows", {})),
+            exceptions=exceptions,
+            top=int(float_top),
+        )
+        overlay["float"] = float_overlay
+        suite_exception_totals["accepted_total"] += accepted_total
+        suite_exception_totals["accepted_seeded_total"] += accepted_seeded_total
+        suite_exception_totals["stale_total"] += len(overlay["stale"])
+        suite_exception_totals["accepted_float_total"] += int(float_overlay["accepted_float_exception_total"])
+        suite_float_only.extend(float_overlay["float_only"])
+        suite_float_downstream.extend(float_overlay["downstream"])
+        dataset_overlays[dataset] = overlay
+
+    if include_header:
+        for line in _report_header(root=root, suite=suite_arg, suite_name=suite_name):
+            reporter.print(line)
+        reporter.print()
+
+    reporter.print(
+        f"suite: {suite_name}  replays: {len(replay_paths)}  "
+        f"ucf_enabled: {ucf_enabled}  ucf_cardinals_1_0_enabled: {ucf_cardinals_1_0_enabled}"
+    )
+    reporter.print(f"fields: {','.join(str(x) for x in summary['fields'])}")
+    reporter.print(f"validation.profile: {validation_profile.name}")
+    for lane in validation_profile.ignored_lanes:
+        reporter.print(f"validation.profile.ignored: {lane.label} reason={lane.reason} exception={lane.exception}")
+    reporter.print(
+        f"validation.exceptions: {_display_exception_path(exceptions_path, root=root)} "
+        "mode=report-overlay canonical_raw_metrics_unchanged"
+    )
+
+    for row in summary["dataset_summaries"]:
+        overlay = dataset_overlays.get(str(row["dataset"]), {})
+        print_rollout_dataset_report(reporter=reporter, row=row, overlay=overlay, float_top=int(float_top))
+
+    reporter.print()
+    reporter.print("== suite summary ==")
+    reporter.print(f"overall.rollout.streak_count: {suite_summary['total_streaks']}")
+    reporter.print(f"overall.rollout.streak_len.median: {suite_summary['median_streak_len']}")
+    reporter.print(f"overall.rollout.streak_len.p90: {suite_summary['p90_streak_len']}")
+    reporter.print(f"overall.rollout.streak_len.p95: {suite_summary['p95_streak_len']}")
+    reporter.print(f"overall.rollout.streak_len.max: {suite_summary['max_streak_len']}")
+    reporter.print(f"overall.rollout.best_len.max: {suite_summary['max_best_len']}")
+    reporter.print(f"overall.rollout.first_mismatch_total: {suite_summary['first_mismatch_total']}")
+    reporter.print(f"overall.rollout.first_mismatch_seeded_total: {suite_summary['first_mismatch_seeded_total']}")
+    if suite_exception_totals["accepted_total"]:
+        reporter.print(f"overall.rollout.approved_exception_total: {suite_exception_totals['accepted_total']}")
+    if suite_exception_totals["accepted_seeded_total"]:
+        reporter.print(
+            "overall.rollout.approved_exception_seeded_total: "
+            f"{suite_exception_totals['accepted_seeded_total']}"
+        )
+    reporter.print(
+        "overall.rollout.status: "
+        f"{_format_status(_rollout_status(raw_total=int(suite_summary['first_mismatch_total']), accepted_total=suite_exception_totals['accepted_total'], stale_total=suite_exception_totals['stale_total']))}"
+    )
+    if suite_exception_totals["stale_total"]:
+        reporter.print(f"overall.rollout.stale_exception_total: {suite_exception_totals['stale_total']}")
+    if suite_exception_totals["accepted_float_total"]:
+        reporter.print(f"overall.rollout.approved_float_exception_total: {suite_exception_totals['accepted_float_total']}")
+    suite_float_only = _top_float_fields(suite_float_only, top=int(float_top))
+    suite_float_downstream = _top_float_fields(suite_float_downstream, top=int(float_top))
+    if suite_float_only:
+        reporter.print("overall.rollout.float_top_errors:")
+        for i, float_row in enumerate(suite_float_only, start=1):
+            reporter.print(f"  {i}. {_format_float_row(float_row)}")
+    if suite_float_downstream:
+        reporter.print("overall.rollout.float_top_downstream:")
+        for i, float_row in enumerate(suite_float_downstream, start=1):
+            reporter.print(f"  {i}. {_format_float_row(float_row)}")
+    ignored_suite: dict[str, int] = {}
+    ignored_seeded_suite: dict[str, int] = {}
+    for row in summary["dataset_summaries"]:
+        for k, v in dict(row.get("ignored_first_mismatch_field_counts", {})).items():
+            ignored_suite[k] = ignored_suite.get(k, 0) + int(v)
+        for k, v in dict(row.get("ignored_first_mismatch_field_counts_seeded", {})).items():
+            ignored_seeded_suite[k] = ignored_seeded_suite.get(k, 0) + int(v)
+    if ignored_suite:
+        reporter.print(
+            "overall.rollout.ignored_first_mismatch_top:",
+            " ".join(f"{k}:{v}" for k, v in sorted(ignored_suite.items(), key=lambda kv: (-kv[1], kv[0]))[:8]),
+        )
+    if ignored_seeded_suite:
+        reporter.print(
+            "overall.rollout.ignored_first_mismatch_seeded_top:",
+            " ".join(
+                f"{k}:{v}" for k, v in sorted(ignored_seeded_suite.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
+            ),
+        )
+
+
 def _scan_dataset_payload_task(task: dict) -> dict:
     root = Path(str(task["root"]))
     dataset_label = Path(str(task["dataset_label"]))
@@ -447,149 +607,26 @@ def main() -> None:
         with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
             per_dataset_payload = list(executor.map(_scan_dataset_payload_task, tasks))
 
-    payload = {
-        "suite": suite.name,
-        "suite_path": str(Path(args.suite)),
-        "datasets_dir": "",
-        "ucf_enabled": bool(suite.ucf_enabled),
-        "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
-        "fields": list(fields),
-        "profile": validation_profile.name,
-        "ignored_lanes": [lane.label for lane in validation_profile.ignored_lanes],
-        "players_csv": None if args.players is None else str(args.players),
-        "max_records": int(args.max_records),
-        "per_dataset": per_dataset_payload,
-    }
-    summary = summarize_rollout_payload(payload)
-    suite_summary = summary["suite_summary"]
-    dataset_overlays: dict[str, dict] = {}
-    suite_exception_totals = {
-        "accepted_total": 0,
-        "accepted_seeded_total": 0,
-        "stale_total": 0,
-        "accepted_float_total": 0,
-    }
-    suite_float_only: list[dict] = []
-    suite_float_downstream: list[dict] = []
-    by_payload_dataset = {str(row["dataset"]): row for row in per_dataset_payload}
-    for row in summary["dataset_summaries"]:
-        dataset = str(row["dataset"])
-        raw = by_payload_dataset.get(dataset, {})
-        overlay = _dataset_exception_overlay(
-            dataset=dataset,
-            first_mismatch_rows=list(raw.get("first_mismatch_rows", [])),
-            exceptions=exceptions,
-        )
-        raw_total = int(row["first_mismatch_total"])
-        accepted_total = int(overlay["accepted_total"])
-        accepted_seeded_total = int(overlay["accepted_seeded_total"])
-        overlay["status"] = _rollout_status(
-            raw_total=raw_total,
-            accepted_total=accepted_total,
-            stale_total=len(overlay["stale"]),
-        )
-        float_overlay = _float_summary(
-            dataset=dataset,
-            rows_by_field=dict(raw.get("float_rows", {})),
-            exceptions=exceptions,
-            top=int(args.float_top),
-        )
-        overlay["float"] = float_overlay
-        suite_exception_totals["accepted_total"] += accepted_total
-        suite_exception_totals["accepted_seeded_total"] += accepted_seeded_total
-        suite_exception_totals["stale_total"] += len(overlay["stale"])
-        suite_exception_totals["accepted_float_total"] += int(float_overlay["accepted_float_exception_total"])
-        suite_float_only.extend(float_overlay["float_only"])
-        suite_float_downstream.extend(float_overlay["downstream"])
-        dataset_overlays[dataset] = overlay
-
     reporter = Reporter(args.out, echo=not bool(args.quiet))
     try:
-        if args.out is not None:
-            for line in _report_header(root=root, suite=args.suite, suite_name=suite.name):
-                reporter.print(line)
-            reporter.print()
-
-        reporter.print(
-            f"suite: {suite.name}  replays: {len(replay_paths)}  "
-            f"ucf_enabled: {suite.ucf_enabled}  ucf_cardinals_1_0_enabled: {suite.ucf_cardinals_1_0_enabled}"
+        emit_rollout_suite_report(
+            reporter=reporter,
+            root=root,
+            suite_arg=args.suite,
+            suite_name=suite.name,
+            replay_paths=replay_paths,
+            fields=fields,
+            validation_profile=validation_profile,
+            exceptions_path=exceptions_path,
+            exceptions=exceptions,
+            per_dataset_payload=per_dataset_payload,
+            players_csv=None if args.players is None else str(args.players),
+            max_records=int(args.max_records),
+            float_top=int(args.float_top),
+            ucf_enabled=suite.ucf_enabled,
+            ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
+            include_header=args.out is not None,
         )
-        reporter.print(f"fields: {','.join(str(x) for x in summary['fields'])}")
-        reporter.print(f"validation.profile: {validation_profile.name}")
-        for lane in validation_profile.ignored_lanes:
-            reporter.print(f"validation.profile.ignored: {lane.label} reason={lane.reason} exception={lane.exception}")
-        reporter.print(
-            f"validation.exceptions: {Path(args.exceptions).as_posix()} "
-            "mode=report-overlay canonical_raw_metrics_unchanged"
-        )
-
-        for row in summary["dataset_summaries"]:
-            overlay = dataset_overlays.get(str(row["dataset"]), {})
-            print_rollout_dataset_report(
-                reporter=reporter,
-                row=row,
-                overlay=overlay,
-                float_top=int(args.float_top),
-            )
-
-        reporter.print()
-        reporter.print("== suite summary ==")
-        reporter.print(f"overall.rollout.streak_count: {suite_summary['total_streaks']}")
-        reporter.print(f"overall.rollout.streak_len.median: {suite_summary['median_streak_len']}")
-        reporter.print(f"overall.rollout.streak_len.p90: {suite_summary['p90_streak_len']}")
-        reporter.print(f"overall.rollout.streak_len.p95: {suite_summary['p95_streak_len']}")
-        reporter.print(f"overall.rollout.streak_len.max: {suite_summary['max_streak_len']}")
-        reporter.print(f"overall.rollout.best_len.max: {suite_summary['max_best_len']}")
-        reporter.print(f"overall.rollout.first_mismatch_total: {suite_summary['first_mismatch_total']}")
-        reporter.print(
-            f"overall.rollout.first_mismatch_seeded_total: {suite_summary['first_mismatch_seeded_total']}"
-        )
-        if suite_exception_totals["accepted_total"]:
-            reporter.print(f"overall.rollout.approved_exception_total: {suite_exception_totals['accepted_total']}")
-        if suite_exception_totals["accepted_seeded_total"]:
-            reporter.print(
-                "overall.rollout.approved_exception_seeded_total: "
-                f"{suite_exception_totals['accepted_seeded_total']}"
-            )
-        reporter.print(
-            "overall.rollout.status: "
-            f"{_format_status(_rollout_status(raw_total=int(suite_summary['first_mismatch_total']), accepted_total=suite_exception_totals['accepted_total'], stale_total=suite_exception_totals['stale_total']))}"
-        )
-        if suite_exception_totals["stale_total"]:
-            reporter.print(f"overall.rollout.stale_exception_total: {suite_exception_totals['stale_total']}")
-        if suite_exception_totals["accepted_float_total"]:
-            reporter.print(
-                f"overall.rollout.approved_float_exception_total: {suite_exception_totals['accepted_float_total']}"
-            )
-        suite_float_only = _top_float_fields(suite_float_only, top=int(args.float_top))
-        suite_float_downstream = _top_float_fields(suite_float_downstream, top=int(args.float_top))
-        if suite_float_only:
-            reporter.print("overall.rollout.float_top_errors:")
-            for i, float_row in enumerate(suite_float_only, start=1):
-                reporter.print(f"  {i}. {_format_float_row(float_row)}")
-        if suite_float_downstream:
-            reporter.print("overall.rollout.float_top_downstream:")
-            for i, float_row in enumerate(suite_float_downstream, start=1):
-                reporter.print(f"  {i}. {_format_float_row(float_row)}")
-        ignored_suite: dict[str, int] = {}
-        ignored_seeded_suite: dict[str, int] = {}
-        for row in summary["dataset_summaries"]:
-            for k, v in dict(row.get("ignored_first_mismatch_field_counts", {})).items():
-                ignored_suite[k] = ignored_suite.get(k, 0) + int(v)
-            for k, v in dict(row.get("ignored_first_mismatch_field_counts_seeded", {})).items():
-                ignored_seeded_suite[k] = ignored_seeded_suite.get(k, 0) + int(v)
-        if ignored_suite:
-            reporter.print(
-                "overall.rollout.ignored_first_mismatch_top:",
-                " ".join(f"{k}:{v}" for k, v in sorted(ignored_suite.items(), key=lambda kv: (-kv[1], kv[0]))[:8]),
-            )
-        if ignored_seeded_suite:
-            reporter.print(
-                "overall.rollout.ignored_first_mismatch_seeded_top:",
-                " ".join(
-                    f"{k}:{v}" for k, v in sorted(ignored_seeded_suite.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
-                ),
-            )
     finally:
         reporter.close()
 

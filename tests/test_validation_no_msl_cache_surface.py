@@ -19,6 +19,7 @@ NORMAL_VALIDATION_TARGETS = (
 NORMAL_VALIDATION_MODULES = (
     "tools/eval/run_one_step_suite_eval.py",
     "tools/eval/run_rollout_suite_eval.py",
+    "tools/eval/run_combined_suite_eval.py",
     "tools/eval/run_validate_all.py",
     "tools/eval/run_heldout_validation.py",
 )

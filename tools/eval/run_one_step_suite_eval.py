@@ -43,7 +43,7 @@ def _display_path(path: Path, *, root: Path) -> str:
         return str(resolved)
 
 
-def _evaluate_dataset_task(task: dict) -> tuple[list[str], EvalSummary]:
+def _evaluate_dataset_task(task: dict) -> dict:
     from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
     dataset_label = Path(str(task["dataset_label"]))
@@ -80,7 +80,7 @@ def _evaluate_dataset_task(task: dict) -> tuple[list[str], EvalSummary]:
         )
     finally:
         runtime.close()
-    return capture.lines, summary
+    return {"one_step_lines": capture.lines, "one_step_summary": summary}
 
 
 def _report_header(*, root: Path, suite: str, suite_name: str) -> list[str]:
@@ -91,6 +91,100 @@ def _report_header(*, root: Path, suite: str, suite_name: str) -> list[str]:
         "# Validation input: direct .slp/.slpz replay ingest; no .msl cache is read or written.",
         "# Regenerate data artifacts: uv run python -m tools.extraction.build_data (chars default to the registry)",
     ]
+
+
+def emit_one_step_suite_report(
+    *,
+    reporter: Reporter,
+    root: Path,
+    suite_arg: str,
+    suite_name: str,
+    replay_paths: list[Path],
+    task_results: list[dict],
+    validation_profile,
+    ucf_enabled: bool | None,
+    ucf_cardinals_1_0_enabled: bool | None,
+    include_header: bool,
+) -> None:
+    if include_header:
+        for line in _report_header(root=root, suite=suite_arg, suite_name=suite_name):
+            reporter.print(line)
+        reporter.print()
+
+    reporter.print(
+        f"suite: {suite_name}  replays: {len(replay_paths)}  "
+        f"ucf_enabled: {ucf_enabled}  ucf_cardinals_1_0_enabled: {ucf_cardinals_1_0_enabled}"
+    )
+    reporter.print(f"validation.profile: {validation_profile.name}")
+    for lane in validation_profile.ignored_lanes:
+        reporter.print(f"validation.profile.ignored: {lane.label} reason={lane.reason} exception={lane.exception}")
+
+    suite_mismatches: dict[str, int] | None = None
+    suite_strict_mismatches: dict[str, int] | None = None
+    suite_ignored_mismatches: dict[str, int] | None = None
+    suite_totals = {
+        "total_records": 0,
+        "total_player_frames": 0,
+        "total_state_flags": 0,
+        "total_item_slots": 0,
+        "float_norm_sum": 0.0,
+        "float_norm_count": 0,
+    }
+
+    for replay_path, result in zip(replay_paths, task_results, strict=True):
+        summary: EvalSummary = result["one_step_summary"]
+        reporter.print()
+        reporter.print(f"== {_display_path(replay_path, root=root)} ==")
+        for line in result["one_step_lines"]:
+            reporter.print(line)
+
+        if suite_mismatches is None:
+            suite_mismatches = {k: 0 for k in summary.mismatches.keys()}
+            suite_strict_mismatches = {k: 0 for k in summary.strict_mismatches.keys()}
+            suite_ignored_mismatches = {k: 0 for k in summary.ignored_mismatches.keys()}
+        for k, v in summary.mismatches.items():
+            suite_mismatches[k] += v
+        assert suite_strict_mismatches is not None
+        for k, v in summary.strict_mismatches.items():
+            suite_strict_mismatches[k] += v
+        assert suite_ignored_mismatches is not None
+        for k, v in summary.ignored_mismatches.items():
+            suite_ignored_mismatches[k] += v
+        suite_totals["total_records"] += summary.total_records
+        suite_totals["total_player_frames"] += summary.total_player_frames
+        suite_totals["total_state_flags"] += summary.total_state_flags
+        suite_totals["total_item_slots"] += summary.total_item_slots
+        suite_totals["float_norm_sum"] += summary.float_norm_sum
+        suite_totals["float_norm_count"] += summary.float_norm_count
+
+    if suite_mismatches is None or suite_strict_mismatches is None or suite_ignored_mismatches is None:
+        return
+
+    reporter.print()
+    reporter.print("== suite summary ==")
+    suite_summary = EvalSummary(
+        total_records=suite_totals["total_records"],
+        total_player_frames=suite_totals["total_player_frames"],
+        total_state_flags=suite_totals["total_state_flags"],
+        total_item_slots=suite_totals["total_item_slots"],
+        mismatches=suite_mismatches,
+        strict_mismatches=suite_strict_mismatches,
+        ignored_mismatches=suite_ignored_mismatches,
+        profile_name=validation_profile.name,
+        float_norm_sum=float(suite_totals["float_norm_sum"]),
+        float_norm_count=int(suite_totals["float_norm_count"]),
+    )
+    mismatches_total, checks_total = _discrete_mismatch_total(suite_summary, profile=validation_profile)
+    strict_total, strict_checks = _strict_discrete_mismatch_total(suite_summary)
+    reporter.print(f"overall.discrete_mismatch: {mismatches_total} / {checks_total}")
+    reporter.print(f"overall.strict_discrete_mismatch: {strict_total} / {strict_checks}")
+    reporter.print(f"overall.ignored_discrete_mismatch: {sum(suite_ignored_mismatches.values())}")
+    overall_float = (
+        suite_summary.float_norm_sum / suite_summary.float_norm_count
+        if suite_summary.float_norm_count > 0
+        else 0.0
+    )
+    reporter.print(f"overall.float_norm_mae_p95: {overall_float:.8f}")
 
 
 
@@ -149,30 +243,6 @@ def main() -> None:
 
     reporter = Reporter(args.out, echo=not bool(args.quiet))
     try:
-        if args.out is not None:
-            for line in _report_header(root=root, suite=args.suite, suite_name=suite.name):
-                reporter.print(line)
-            reporter.print()
-
-        reporter.print(
-            f"suite: {suite.name}  replays: {len(replay_paths)}  "
-            f"ucf_enabled: {suite.ucf_enabled}  ucf_cardinals_1_0_enabled: {suite.ucf_cardinals_1_0_enabled}"
-        )
-        reporter.print(f"validation.profile: {validation_profile.name}")
-        for lane in validation_profile.ignored_lanes:
-            reporter.print(f"validation.profile.ignored: {lane.label} reason={lane.reason} exception={lane.exception}")
-        suite_mismatches: dict[str, int] | None = None
-        suite_strict_mismatches: dict[str, int] | None = None
-        suite_ignored_mismatches: dict[str, int] | None = None
-        suite_totals = {
-            "total_records": 0,
-            "total_player_frames": 0,
-            "total_state_flags": 0,
-            "total_item_slots": 0,
-            "float_norm_sum": 0.0,
-            "float_norm_count": 0,
-        }
-
         num_players = len(suite.replays[0].ports) if suite.replays else 2
         if any(len(entry.ports) != num_players for entry in suite.replays):
             raise SystemExit("error: mixed num_players suites are not supported by shared one-step eval runtime")
@@ -198,60 +268,18 @@ def main() -> None:
         else:
             with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
                 task_results = list(executor.map(_evaluate_dataset_task, tasks))
-
-        for replay_path, (lines, summary) in zip(replay_paths, task_results, strict=True):
-            reporter.print()
-            reporter.print(f"== {_display_path(replay_path, root=root)} ==")
-            for line in lines:
-                reporter.print(line)
-
-            if suite_mismatches is None:
-                suite_mismatches = {k: 0 for k in summary.mismatches.keys()}
-                suite_strict_mismatches = {k: 0 for k in summary.strict_mismatches.keys()}
-                suite_ignored_mismatches = {k: 0 for k in summary.ignored_mismatches.keys()}
-            for k, v in summary.mismatches.items():
-                suite_mismatches[k] += v
-            assert suite_strict_mismatches is not None
-            for k, v in summary.strict_mismatches.items():
-                suite_strict_mismatches[k] += v
-            assert suite_ignored_mismatches is not None
-            for k, v in summary.ignored_mismatches.items():
-                suite_ignored_mismatches[k] += v
-            suite_totals["total_records"] += summary.total_records
-            suite_totals["total_player_frames"] += summary.total_player_frames
-            suite_totals["total_state_flags"] += summary.total_state_flags
-            suite_totals["total_item_slots"] += summary.total_item_slots
-            suite_totals["float_norm_sum"] += summary.float_norm_sum
-            suite_totals["float_norm_count"] += summary.float_norm_count
-
-        if suite_mismatches is None or suite_strict_mismatches is None or suite_ignored_mismatches is None:
-            return
-
-        reporter.print()
-        reporter.print("== suite summary ==")
-        suite_summary = EvalSummary(
-            total_records=suite_totals["total_records"],
-            total_player_frames=suite_totals["total_player_frames"],
-            total_state_flags=suite_totals["total_state_flags"],
-            total_item_slots=suite_totals["total_item_slots"],
-            mismatches=suite_mismatches,
-            strict_mismatches=suite_strict_mismatches,
-            ignored_mismatches=suite_ignored_mismatches,
-            profile_name=validation_profile.name,
-            float_norm_sum=float(suite_totals["float_norm_sum"]),
-            float_norm_count=int(suite_totals["float_norm_count"]),
+        emit_one_step_suite_report(
+            reporter=reporter,
+            root=root,
+            suite_arg=args.suite,
+            suite_name=suite.name,
+            replay_paths=replay_paths,
+            task_results=task_results,
+            validation_profile=validation_profile,
+            ucf_enabled=suite.ucf_enabled,
+            ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
+            include_header=args.out is not None,
         )
-        mismatches_total, checks_total = _discrete_mismatch_total(suite_summary, profile=validation_profile)
-        strict_total, strict_checks = _strict_discrete_mismatch_total(suite_summary)
-        reporter.print(f"overall.discrete_mismatch: {mismatches_total} / {checks_total}")
-        reporter.print(f"overall.strict_discrete_mismatch: {strict_total} / {strict_checks}")
-        reporter.print(f"overall.ignored_discrete_mismatch: {sum(suite_ignored_mismatches.values())}")
-        overall_float = (
-            suite_summary.float_norm_sum / suite_summary.float_norm_count
-            if suite_summary.float_norm_count > 0
-            else 0.0
-        )
-        reporter.print(f"overall.float_norm_mae_p95: {overall_float:.8f}")
     finally:
         reporter.close()
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable
 
+from tools.eval.run_heldout_validation import STAGE_NAMES, load_heldout_index
 from tools.eval.run_longest_rollout_streaks import (
     _parse_players,
     _scan_dataset_streaks,
@@ -160,7 +161,9 @@ def _select_case(case: tuple[str, str, str]) -> dict:
     raise SystemExit(f"case replay {replay_key!r} not found in {suite_rel}")
 
 
-def _profile_top(profile: cProfile.Profile, *, limit: int) -> list[dict]:
+def _profile_top(profile: cProfile.Profile | None, *, limit: int) -> list[dict]:
+    if profile is None or limit <= 0:
+        return []
     stats = pstats.Stats(profile)
     root = repo_root().resolve()
     rows = []
@@ -190,7 +193,9 @@ def _profile_top(profile: cProfile.Profile, *, limit: int) -> list[dict]:
     return rows[:limit]
 
 
-def _native_profile_times(profile: cProfile.Profile) -> dict[str, float]:
+def _native_profile_times(profile: cProfile.Profile | None) -> dict[str, float]:
+    if profile is None:
+        return {}
     stats = pstats.Stats(profile)
     out: dict[str, float] = defaultdict(float)
     names = {
@@ -226,22 +231,24 @@ def _patched_native_timers(timer: PhaseTimer, mapping: dict[str, str]):
             setattr(msl_binding, name, old)
 
 
-def _dataset_build(case: dict) -> tuple[object, dict]:
+def _dataset_build(case: dict, *, collect_profile: bool, profile_top_limit: int) -> tuple[object, dict]:
     from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
     timer = PhaseTimer()
-    profile = cProfile.Profile()
+    profile = cProfile.Profile() if collect_profile else None
     wall0 = time.perf_counter()
     cpu0 = time.process_time()
     with _patched_dataset_timers(timer):
-        profile.enable()
+        if profile is not None:
+            profile.enable()
         dataset = build_dataset_from_slp(
             slp_path=str(case["replay"]),
             ports=list(case["ports"]),
             ucf_enabled=bool(case["ucf_enabled"]),
             ucf_cardinals_1_0_enabled=bool(case["ucf_cardinals_1_0_enabled"]),
         )
-        profile.disable()
+        if profile is not None:
+            profile.disable()
     wall = time.perf_counter() - wall0
     cpu = time.process_time() - cpu0
     known = sum(timer.wall.values())
@@ -253,11 +260,19 @@ def _dataset_build(case: dict) -> tuple[object, dict]:
         "phase_wall_s": dict(sorted(timer.wall.items())),
         "phase_cpu_s": dict(sorted(timer.cpu.items())),
         "dataset_other_wall_s": max(0.0, wall - known),
-        "profile_top_tottime": _profile_top(profile, limit=25),
+        "profile_top_tottime": _profile_top(profile, limit=profile_top_limit),
     }
 
 
-def _one_step(case: dict, dataset, *, chunk: int, profile_name: str) -> dict:
+def _one_step(
+    case: dict,
+    dataset,
+    *,
+    chunk: int,
+    profile_name: str,
+    collect_profile: bool,
+    profile_top_limit: int,
+) -> dict:
     runtime = create_one_step_eval_runtime(
         batch_size=min(max(1, chunk), max(1, int(dataset.header["num_records"]))),
         num_players=int(dataset.header["num_players"]),
@@ -266,7 +281,7 @@ def _one_step(case: dict, dataset, *, chunk: int, profile_name: str) -> dict:
     )
     capture = CaptureReporter()
     timer = PhaseTimer()
-    profile = cProfile.Profile()
+    profile = cProfile.Profile() if collect_profile else None
     wall0 = time.perf_counter()
     cpu0 = time.process_time()
     try:
@@ -278,7 +293,8 @@ def _one_step(case: dict, dataset, *, chunk: int, profile_name: str) -> dict:
                 "write_compare": "one_step_native_write_compare",
             },
         ):
-            profile.enable()
+            if profile is not None:
+                profile.enable()
             summary = evaluate_dataset(
                 dataset_path=Path(case["replay"]),
                 dataset=dataset,
@@ -290,7 +306,8 @@ def _one_step(case: dict, dataset, *, chunk: int, profile_name: str) -> dict:
                 reporter=capture,  # type: ignore[arg-type]
                 print_profile=False,
             )
-            profile.disable()
+            if profile is not None:
+                profile.disable()
     finally:
         runtime.close()
     wall = time.perf_counter() - wall0
@@ -308,15 +325,23 @@ def _one_step(case: dict, dataset, *, chunk: int, profile_name: str) -> dict:
         "python_compare_other_wall_s": max(0.0, wall - sum(timer.wall.values())),
         "native_profile_tottime_s": native,
         "summary": asdict(summary),
-        "profile_top_tottime": _profile_top(profile, limit=25),
+        "profile_top_tottime": _profile_top(profile, limit=profile_top_limit),
     }
 
 
-def _rollout(case: dict, dataset, *, fields: tuple[str, ...], profile_name: str) -> dict:
+def _rollout(
+    case: dict,
+    dataset,
+    *,
+    fields: tuple[str, ...],
+    profile_name: str,
+    collect_profile: bool,
+    profile_top_limit: int,
+) -> dict:
     players = _parse_players(None, num_players=int(dataset.header["num_players"]))
     profile_obj = get_validation_profile(profile_name)
     timer = PhaseTimer()
-    profile = cProfile.Profile()
+    profile = cProfile.Profile() if collect_profile else None
     wall0 = time.perf_counter()
     cpu0 = time.process_time()
     with _patched_native_timers(
@@ -327,7 +352,8 @@ def _rollout(case: dict, dataset, *, fields: tuple[str, ...], profile_name: str)
             "write_compare": "rollout_native_write_compare",
         },
     ):
-        profile.enable()
+        if profile is not None:
+            profile.enable()
         result = _scan_dataset_streaks(
             dataset_path=Path(case["replay"]),
             ds=dataset,
@@ -338,7 +364,8 @@ def _rollout(case: dict, dataset, *, fields: tuple[str, ...], profile_name: str)
             ucf_cardinals_1_0_enabled=bool(case["ucf_cardinals_1_0_enabled"]),
             profile=profile_obj,
         )
-        profile.disable()
+        if profile is not None:
+            profile.disable()
     wall = time.perf_counter() - wall0
     cpu = time.process_time() - cpu0
     fmt0 = time.perf_counter()
@@ -354,12 +381,122 @@ def _rollout(case: dict, dataset, *, fields: tuple[str, ...], profile_name: str)
         "python_scan_other_wall_s": max(0.0, wall - sum(timer.wall.values())),
         "native_profile_tottime_s": native,
         "summary": asdict(result),
-        "profile_top_tottime": _profile_top(profile, limit=25),
+        "profile_top_tottime": _profile_top(profile, limit=profile_top_limit),
     }
 
 
+def _stage_name(stage_id: object) -> str:
+    if stage_id is None:
+        return ""
+    try:
+        value = int(stage_id)
+    except (TypeError, ValueError):
+        return str(stage_id)
+    return STAGE_NAMES.get(value, str(value))
+
+
+def _character_bucket(characters: object) -> str:
+    if not isinstance(characters, dict) or not characters:
+        return ""
+    return ",".join(f"{k}:{v}" for k, v in sorted((str(k), str(v)) for k, v in characters.items()))
+
+
+def _suite_cases(suite_rel: str) -> list[dict]:
+    root = repo_root()
+    suite = load_suite(root / suite_rel)
+    cases = []
+    for index, entry in enumerate(suite.replays):
+        replay_path = resolve_replay_path((root / entry.replay).resolve())
+        cases.append(
+            {
+                "label": f"{suite.name}_{index:03d}_{Path(str(entry.replay)).stem}",
+                "suite": suite_rel,
+                "suite_name": suite.name,
+                "replay": str(replay_path),
+                "ports": [int(p) for p in entry.ports],
+                "ucf_enabled": bool(suite.ucf_enabled),
+                "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
+                "stage_id": entry.stage_id,
+                "stage": _stage_name(entry.stage_id),
+                "characters": entry.characters or {},
+                "character_bucket": _character_bucket(entry.characters),
+            }
+        )
+    return cases
+
+
+def _all_requested_cases(args: argparse.Namespace) -> list[dict]:
+    cases: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add_case(case: dict) -> None:
+        key = (str(case["suite_name"]), str(case["replay"]))
+        if key in seen:
+            return
+        seen.add(key)
+        cases.append(case)
+
+    for raw in args.case:
+        label, suite, replay_key = raw.split(":", 2)
+        add_case(_select_case((label, suite, replay_key)))
+    for suite in args.suite:
+        for case in _suite_cases(suite):
+            add_case(case)
+    for index in args.heldout_index:
+        for suite_path in load_heldout_index(repo_root() / index):
+            try:
+                suite_rel = suite_path.relative_to(repo_root()).as_posix()
+            except ValueError:
+                suite_rel = suite_path.as_posix()
+            for case in _suite_cases(suite_rel):
+                add_case(case)
+    if not cases:
+        for case_def in DEFAULT_CASES:
+            add_case(_select_case(case_def))
+    return cases
+
+
+def _records_per_sec(records: int, wall_s: float) -> float:
+    return float(records) / wall_s if wall_s > 0.0 else 0.0
+
+
+def _write_outliers(rows: list[dict], out_dir: Path, *, top: int) -> None:
+    specs = (
+        ("slowest_total_wall", lambda r: -float(r["total_wall_s"])),
+        ("worst_total_records_per_sec", lambda r: float(r["total_records_per_sec"])),
+        ("worst_build_records_per_sec", lambda r: float(r["build_records_per_sec"])),
+        ("worst_one_step_records_per_sec", lambda r: float(r["one_step_records_per_sec"])),
+        ("worst_rollout_records_per_sec", lambda r: float(r["rollout_records_per_sec"])),
+    )
+    columns = (
+        "rank",
+        "suite_name",
+        "label",
+        "replay",
+        "stage",
+        "character_bucket",
+        "records",
+        "build_wall_s",
+        "one_step_wall_s",
+        "rollout_wall_s",
+        "total_wall_s",
+        "build_records_per_sec",
+        "one_step_records_per_sec",
+        "rollout_records_per_sec",
+        "total_records_per_sec",
+    )
+    for name, key_fn in specs:
+        ranked = sorted(rows, key=key_fn)[: max(0, int(top))]
+        with (out_dir / f"{name}.tsv").open("w", encoding="utf-8") as f:
+            f.write("\t".join(columns) + "\n")
+            for rank, row in enumerate(ranked, start=1):
+                payload = dict(row)
+                payload["rank"] = rank
+                f.write("\t".join(str(payload[col]) for col in columns) + "\n")
+
+
 def main() -> None:
-    ap = argparse.ArgumentParser(description="One-replay validation performance benchmark.")
+    ap = argparse.ArgumentParser(description="Replay-level validation performance benchmark.")
     ap.add_argument("--out-dir", type=Path, default=Path("reports/triage/validation_perf"))
     ap.add_argument("--chunk", type=int, default=4096)
     ap.add_argument(
@@ -368,25 +505,46 @@ def main() -> None:
     )
     ap.add_argument("--profile", default="rl1_gameplay")
     ap.add_argument("--case", action="append", default=[])
+    ap.add_argument("--suite", action="append", default=[], help="Benchmark every replay in a suite JSON.")
+    ap.add_argument(
+        "--heldout-index",
+        action="append",
+        default=[],
+        help="Benchmark every replay in every suite listed by a heldout index JSON.",
+    )
+    ap.add_argument("--profile-top-limit", type=int, default=0)
+    ap.add_argument("--outlier-top", type=int, default=20)
     args = ap.parse_args()
 
     fields = _validate_discrete_fields(tuple(x.strip() for x in args.fields.split(",") if x.strip()))
-    cases = []
-    if args.case:
-        for raw in args.case:
-            label, suite, replay_key = raw.split(":", 2)
-            cases.append((label, suite, replay_key))
-    else:
-        cases = list(DEFAULT_CASES)
+    cases = _all_requested_cases(args)
+    collect_profile = int(args.profile_top_limit) > 0
 
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = []
-    for case_def in cases:
-        case = _select_case(case_def)
-        dataset, build = _dataset_build(case)
-        one = _one_step(case, dataset, chunk=int(args.chunk), profile_name=str(args.profile))
-        rollout = _rollout(case, dataset, fields=fields, profile_name=str(args.profile))
+    for case in cases:
+        dataset, build = _dataset_build(
+            case,
+            collect_profile=collect_profile,
+            profile_top_limit=int(args.profile_top_limit),
+        )
+        one = _one_step(
+            case,
+            dataset,
+            chunk=int(args.chunk),
+            profile_name=str(args.profile),
+            collect_profile=collect_profile,
+            profile_top_limit=int(args.profile_top_limit),
+        )
+        rollout = _rollout(
+            case,
+            dataset,
+            fields=fields,
+            profile_name=str(args.profile),
+            collect_profile=collect_profile,
+            profile_top_limit=int(args.profile_top_limit),
+        )
         payload = {
             "case": case,
             "dataset_build": build,
@@ -398,9 +556,13 @@ def main() -> None:
         rows.append(
             {
                 "label": case["label"],
+                "suite_name": case["suite_name"],
                 "replay": str(Path(case["replay"]).relative_to(repo_root())),
+                "stage": case.get("stage", ""),
+                "character_bucket": case.get("character_bucket", ""),
                 "records": build["records"],
                 "build_wall_s": build["wall_s"],
+                "build_records_per_sec": _records_per_sec(build["records"], build["wall_s"]),
                 "parse_decompress_s": build["phase_wall_s"].get("replay_parse_decompress", 0.0),
                 "parse_peppi_s": build["phase_wall_s"].get("replay_parse_peppi", 0.0),
                 "arrow_numpy_s": build["phase_wall_s"].get("arrow_numpy_extract", 0.0),
@@ -409,11 +571,13 @@ def main() -> None:
                 "data_load_s": build["phase_wall_s"].get("data_load", 0.0),
                 "build_other_s": build["dataset_other_wall_s"],
                 "one_step_wall_s": one["wall_s"],
+                "one_step_records_per_sec": _records_per_sec(build["records"], one["wall_s"]),
                 "one_step_native_reseed_s": one["phase_wall_s"].get("one_step_native_reseed", 0.0),
                 "one_step_native_step_s": one["phase_wall_s"].get("one_step_native_step", 0.0),
                 "one_step_native_write_s": one["phase_wall_s"].get("one_step_native_write_compare", 0.0),
                 "one_step_python_compare_s": one["python_compare_other_wall_s"],
                 "rollout_wall_s": rollout["wall_s"],
+                "rollout_records_per_sec": _records_per_sec(build["records"], rollout["wall_s"]),
                 "rollout_native_reseed_s": rollout["phase_wall_s"].get("rollout_native_reseed", 0.0),
                 "rollout_native_step_s": rollout["phase_wall_s"].get("rollout_native_step", 0.0),
                 "rollout_native_write_s": rollout["phase_wall_s"].get("rollout_native_write_compare", 0.0),
@@ -421,6 +585,10 @@ def main() -> None:
                 "report_format_s": one["report_format_wall_s"] + rollout["report_format_wall_s"],
             }
         )
+        rows[-1]["total_wall_s"] = (
+            rows[-1]["build_wall_s"] + rows[-1]["one_step_wall_s"] + rows[-1]["rollout_wall_s"]
+        )
+        rows[-1]["total_records_per_sec"] = _records_per_sec(build["records"], rows[-1]["total_wall_s"])
 
     tsv = out_dir / "summary.tsv"
     columns = tuple(rows[0].keys()) if rows else ()
@@ -428,6 +596,7 @@ def main() -> None:
         f.write("\t".join(columns) + "\n")
         for row in rows:
             f.write("\t".join(str(row[col]) for col in columns) + "\n")
+    _write_outliers(rows, out_dir, top=int(args.outlier_top))
     print(tsv)
     for row in rows:
         print(

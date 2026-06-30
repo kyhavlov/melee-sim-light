@@ -43,7 +43,9 @@ DISRUPTIVE_ROWS_IN ?= $(DISRUPTIVE_OUT_DIR)/rows.tsv
 ARGS ?=
 TEST_ARGS ?=
 TEST_WORKERS ?= auto
-VALIDATE_WORKERS ?= 4
+VALIDATE_WORKERS ?= 0
+HELDOUT_WORKERS ?= 0
+HELDOUT_SUITE_WORKERS ?= 0
 VERBOSE ?=
 CLANG_FORMAT ?= clang-format
 CC ?= cc
@@ -170,7 +172,7 @@ validate-all: build
 	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --doubles-suite "$(DOUBLES_SUITE)" --sheik-suite "$(SHEIK_SUITE)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --doubles-one-step-out "$(DOUBLES_ONE_STEP_OUT)" --doubles-rollout-out "$(DOUBLES_ROLLOUT_OUT)" --sheik-one-step-out "$(SHEIK_ONE_STEP_OUT)" --sheik-rollout-out "$(SHEIK_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
 
 validate-heldout: build
-	@$(PY) -m tools.eval.run_heldout_validation --index "$(HELDOUT_INDEX)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --out-dir "$(HELDOUT_OUT_DIR)" --summary-out "$(HELDOUT_SUMMARY_OUT)"
+	@$(PY) -m tools.eval.run_heldout_validation --index "$(HELDOUT_INDEX)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --out-dir "$(HELDOUT_OUT_DIR)" --summary-out "$(HELDOUT_SUMMARY_OUT)" --workers "$(HELDOUT_WORKERS)" --suite-workers "$(HELDOUT_SUITE_WORKERS)"
 
 # Always writes to ROLLOUT_JSON (independent of OUT=...).
 rollout-capture: build

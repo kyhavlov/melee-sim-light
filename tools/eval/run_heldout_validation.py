@@ -3,13 +3,16 @@ from __future__ import annotations
 """Run held-out validation suites and write a normalized cross-suite summary."""
 
 import argparse
+import concurrent.futures
 import json
+import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools.eval import run_one_step_suite_eval, run_rollout_suite_eval
+from tools.eval import run_combined_suite_eval
 from tools.slippi.suite_io import load_suite, repo_root
 
 
@@ -42,6 +45,29 @@ def _run_main(name: str, main, args: list[str]) -> None:
         main()
     finally:
         sys.argv = old_argv
+
+
+def _resolve_suite_worker_count(requested: int, task_count: int) -> int:
+    if int(requested) > 0:
+        return max(1, int(requested))
+    return max(1, min(3, int(os.cpu_count() or 1), int(task_count) if task_count else 1))
+
+
+def _run_subprocess(args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "tools.eval.run_combined_suite_eval", *args],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+
+def _replay_completed_process(result: subprocess.CompletedProcess[str]) -> None:
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
 
 
 def load_heldout_index(path: Path) -> list[Path]:
@@ -188,6 +214,13 @@ def main() -> None:
     ap.add_argument("--out-dir", default="reports/validation/heldout")
     ap.add_argument("--summary-out", default="reports/validation/heldout/summary.txt")
     ap.add_argument("--summary-only", action="store_true")
+    ap.add_argument("--workers", type=int, default=0)
+    ap.add_argument(
+        "--suite-workers",
+        type=int,
+        default=0,
+        help="Parallel held-out suite workers (0 = auto, capped at 3).",
+    )
     args = ap.parse_args()
 
     out_dir = repo_root() / args.out_dir
@@ -195,38 +228,45 @@ def main() -> None:
     suites = load_heldout_index(repo_root() / args.index)
     if not args.summary_only:
         validate_heldout_corpus(suites)
+        suite_tasks: list[list[str]] = []
+        for suite_path in suites:
+            suite = load_suite(suite_path)
+            one_step_out, rollout_out = _report_paths(out_dir, suite.name)
+            suite_tasks.append(
+                [
+                    "--suite",
+                    suite_cli_arg(suite_path),
+                    "--chunk",
+                    str(int(args.chunk)),
+                    "--fields",
+                    args.fields,
+                    "--one-step-out",
+                    str(one_step_out),
+                    "--rollout-out",
+                    str(rollout_out),
+                    "--workers",
+                    str(int(args.workers)),
+                ]
+            )
+        suite_workers = _resolve_suite_worker_count(int(args.suite_workers), len(suite_tasks))
+        if suite_workers == 1 or len(suite_tasks) <= 1:
+            for task_args in suite_tasks:
+                _run_main("run_combined_suite_eval", run_combined_suite_eval.main, task_args)
+        else:
+            results: list[subprocess.CompletedProcess[str] | None] = [None for _ in suite_tasks]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=suite_workers) as executor:
+                future_to_index = {
+                    executor.submit(_run_subprocess, task_args): i for i, task_args in enumerate(suite_tasks)
+                }
+                for future in concurrent.futures.as_completed(future_to_index):
+                    results[future_to_index[future]] = future.result()
+            for result in results:
+                assert result is not None
+                _replay_completed_process(result)
     rows: list[HeldoutReport] = []
     for suite_path in suites:
         suite = load_suite(suite_path)
-        suite_arg = suite_cli_arg(suite_path)
         one_step_out, rollout_out = _report_paths(out_dir, suite.name)
-        if not args.summary_only:
-            _run_main(
-                "run_one_step_suite_eval",
-                run_one_step_suite_eval.main,
-                [
-                    "--suite",
-                    suite_arg,
-                    "--chunk",
-                    str(int(args.chunk)),
-                    "--out",
-                    str(one_step_out),
-                    "--quiet",
-                ],
-            )
-            _run_main(
-                "run_rollout_suite_eval",
-                run_rollout_suite_eval.main,
-                [
-                    "--suite",
-                    suite_arg,
-                    "--fields",
-                    args.fields,
-                    "--out",
-                    str(rollout_out),
-                    "--quiet",
-                ],
-            )
         rows.append(summarize_suite(suite_path, one_step_out, rollout_out))
 
     print(write_summary(rows, repo_root() / args.summary_out), end="")
