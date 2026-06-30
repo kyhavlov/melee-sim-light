@@ -136,18 +136,16 @@ One-step and rollout direct commands:
 
 ```bash
 uv run python -m tools.eval.run_one_step_suite_eval \
-  --suite replays/suites/fox_falco_fd_ucf084_recent.json \
-  --datasets-dir datasets
+  --suite replays/suites/fox_falco_fd_ucf084_recent.json
 
 uv run python -m tools.eval.run_rollout_suite_eval \
   --suite replays/suites/fox_falco_fd_ucf084_recent.json \
-  --datasets-dir datasets \
   --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags \
   --out reports/validation/rollout_suite_eval.txt
 ```
 
-Pass `--cached-datasets` only when intentionally reading existing `.msl` cache
-files from `--datasets-dir`.
+Normal validation reads `.slp/.slpz` replay files directly. The `.msl` cache path
+is no longer supported by validation commands.
 
 ## Seed / Schema Changes
 
@@ -159,30 +157,8 @@ If you touch seed/state/schema surfaces such as:
 - `tools/slippi/make_dataset_from_slp.py`
 
 then run validation normally; it rebuilds the seed rows in memory from the
-suite `.slp` files. Use `preprocess_suite` only when you specifically need to
-refresh or inspect persistent `.msl` cache files. `preprocess_suite` tracks
-dataset schema, preprocessing source files, replay stat metadata, and extracted
-`data/` artifacts, so unchanged datasets are skipped while stale datasets are
-rebuilt:
-
-```bash
-uv run python -m tools.slippi.preprocess_suite \
-  --suite replays/suites/fox_falco_fd_ucf084_recent.json \
-  --datasets-dir datasets
-```
-
-Use `--force` only when you intentionally want to rebuild every dataset in the
-suite. Datasets created before per-dataset cache metadata are rebuilt by
-default once so source/data signatures are guaranteed; `--trust-legacy-cache`
-is only for explicit local migration when you know those artifacts are current.
-Stale/forced rebuilds run in parallel by default (`--workers 0`, capped at 32).
-Pin the worker count only when profiling or isolating a local issue:
-
-```bash
-make preprocess
-make preprocess-aggregate
-make preprocess-aggregate PREPROCESS_WORKERS=1
-```
+suite `.slp/.slpz` files. Do not rebuild or compare against persistent `.msl`
+cache files; that validation surface has been removed.
 
 Native preprocessing derivations use process-wide generated table roots. For non-default generated
 data, set `MSL_DATA_DIR` before importing/initializing the native binding; compatibility
@@ -193,15 +169,11 @@ For profiling the default no-cache path explicitly:
 
 ```bash
 uv run python -m tools.eval.run_one_step_suite_eval \
-  --suite replays/suites/fox_falco_fd_ucf084_recent.json \
-  --datasets-dir datasets
+  --suite replays/suites/fox_falco_fd_ucf084_recent.json
 
 uv run python -m tools.eval.run_rollout_suite_eval \
-  --suite replays/suites/fox_falco_fd_ucf084_recent.json \
-  --datasets-dir datasets
+  --suite replays/suites/fox_falco_fd_ucf084_recent.json
 ```
-
-To compare against the persistent cache path, add `--cached-datasets`.
 
 ## Rollout Triage
 

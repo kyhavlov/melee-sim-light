@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import functools
 import json
 import struct
@@ -13,7 +12,7 @@ import numpy as np
 import pyarrow as pa
 from peppi_py import _read_slippi
 
-from tools.eval.dataset import Dataset, HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, write_dataset
+from tools.eval.dataset import Dataset, HEADER_DTYPE, MAGIC, SAMPLE_DTYPE
 from tools.slippi.action_state_tables import load_action_state_tables
 from tools.slippi.hitstun import hitstun_u16_from_misc_as_and_state_flags3
 from tools.slippi.item_article_data import item_article_kind_set, item_article_values_by_sim_char
@@ -3745,48 +3744,6 @@ def build_dataset_from_slp(
     return _main_impl(a)
 
 
-def write_dataset_from_slp(
-    *,
-    slp_path: str,
-    out_path: str,
-    ports: list[int] | None = None,
-    ucf_enabled: bool = True,
-    ucf_cardinals_1_0_enabled: bool = False,
-) -> None:
-    """
-    Build a dataset from a single .slp/.slpz and write it to the `.msl` cache format.
-
-    ports: optional list of 1-based ports to include (e.g. [1,2]).
-    """
-    ds = build_dataset_from_slp(
-        slp_path=slp_path,
-        ports=ports,
-        ucf_enabled=ucf_enabled,
-        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-    )
-    write_dataset(out_path, num_players=int(ds.header["num_players"]), samples=ds.samples)
-    print(f"Wrote {ds.samples.shape[0]} samples to {out_path} from {slp_path}")
-
-
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--slp", required=True, help="Path to .slp or .slpz file")
-    ap.add_argument("--out", required=True, help="Output .msl dataset path")
-    ap.add_argument(
-        "--ports",
-        default=None,
-        help="Comma-separated 1-based ports to include (e.g. '1,2' for singles). "
-        "If omitted, uses all HUMAN ports from game start.",
-    )
-    ap.add_argument("--ucf-enabled", action="store_true", default=True)
-    ap.add_argument("--no-ucf-enabled", dest="ucf_enabled", action="store_false")
-    ap.add_argument("--ucf-cardinals-1-0-enabled", action="store_true", default=False)
-    ap.add_argument(
-        "--no-ucf-cardinals-1-0-enabled", dest="ucf_cardinals_1_0_enabled", action="store_false"
-    )
-    args = ap.parse_args()
-    _main_impl(args)
-
 def _main_impl(args) -> Dataset:
     from tools.slippi.combat_history import (
         HITLIST_CD_INDEFINITE,
@@ -7178,11 +7135,4 @@ def _main_impl(args) -> Dataset:
     header["num_records"] = samples.shape[0]
     header["num_players"] = num_players
 
-    if getattr(args, "out", None):
-        write_dataset(str(args.out), num_players=num_players, samples=samples)
-        print(f"Wrote {n_samples} samples to {args.out} from {args.slp}")
     return Dataset(header=header, samples=samples)
-
-
-if __name__ == "__main__":
-    main()

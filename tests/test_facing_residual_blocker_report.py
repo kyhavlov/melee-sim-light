@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from tools.eval.facing_residual_blocker_report import (
     FacingResidualRow,
     build_summary,
@@ -108,25 +104,3 @@ def test_build_summary_groups_top_cluster_and_names_actions() -> None:
     blocker_row = summary["blocker_rows"][0]
     assert blocker_row["dataset"] == "d.msl"
     assert blocker_row["seed_action_name"] in {"WAIT", "DAMAGE_FLY_ROLL"}
-
-
-@pytest.mark.integration
-def test_facing_report_suite_smoke_when_local_datasets_exist() -> None:
-    pytest.importorskip("msl_binding")
-
-    suite_path = Path("replays/suites/fox_falco_fd_ucf084_recent.json")
-    ds_root = Path("datasets/fox_falco_fd_ucf084_recent")
-    if not ds_root.exists():
-        pytest.skip("missing local preprocessed datasets for suite (datasets/ is gitignored)")
-    if not any(ds_root.rglob("*.msl")):
-        pytest.skip("no .msl files found under datasets/fox_falco_fd_ucf084_recent")
-
-    from tools.eval.facing_residual_blocker_report import _iter_facing_residual_rows
-
-    rows = _iter_facing_residual_rows(suite_path, Path("datasets"))
-    summary = build_summary(rows, action_names=load_action_id_names(), top_n=5)
-
-    assert summary["row_count"] > 0
-    assert summary["top_ref_out"]
-    assert summary["top_clusters"]
-    assert summary["blocker_rows"]

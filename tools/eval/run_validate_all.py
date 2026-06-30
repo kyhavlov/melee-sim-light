@@ -52,7 +52,6 @@ def main() -> None:
     ap.add_argument("--agg-suite", required=True)
     ap.add_argument("--doubles-suite", default="")
     ap.add_argument("--sheik-suite", default="")
-    ap.add_argument("--datasets-dir", default="datasets")
     ap.add_argument("--chunk", type=int, default=4096)
     ap.add_argument("--fields", default="action_id,animation_index,on_ground,hitlag,hitstun,state_flags")
     ap.add_argument("--one-step-out", default="reports/validation/one_step_suite_eval.txt")
@@ -66,8 +65,8 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=1, help="Parallel report worker subprocesses.")
     args = ap.parse_args()
 
-    one_step_common = ["--datasets-dir", args.datasets_dir, "--chunk", str(int(args.chunk))]
-    rollout_common = ["--datasets-dir", args.datasets_dir, "--fields", str(args.fields)]
+    one_step_common = ["--chunk", str(int(args.chunk))]
+    rollout_common = ["--fields", str(args.fields)]
 
     jobs = [
         _ReportJob(

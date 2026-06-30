@@ -5,9 +5,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE
 from tools.eval.mismatch_taxonomy import ITEM_FIELD_TO_SUBFIELD, NATIVE_FIELD_CODE_TO_NAME, PLAYER_FIELDS, _load_binding
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite
+from tests.replay_dataset_loader import load_replay_dataset as read_dataset
 
 
 def _reference_events(seed: np.ndarray, ref: np.ndarray, out: np.ndarray, num_players: int) -> list[tuple[int, ...]]:

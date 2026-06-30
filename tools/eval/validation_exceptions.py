@@ -44,7 +44,13 @@ class ValidationExceptions:
 
 
 def _dataset_matches(pattern: str, dataset: str) -> bool:
-    return pattern == dataset or Path(pattern).name == Path(dataset).name
+    pattern_path = Path(pattern)
+    dataset_path = Path(dataset)
+    return (
+        pattern == dataset
+        or pattern_path.name == dataset_path.name
+        or pattern_path.with_suffix("").name == dataset_path.with_suffix("").name
+    )
 
 
 def _require_str(raw: Mapping[str, Any], key: str, *, source: str) -> str:

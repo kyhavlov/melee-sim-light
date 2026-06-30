@@ -1,4 +1,4 @@
-.PHONY: build build-native clean-native-shadow test test-parallel test-serial package-smoke preprocess preprocess-aggregate slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-sheik validate-all validate-heldout rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data viewer-build viewer fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
+.PHONY: build build-native clean-native-shadow test test-parallel test-serial package-smoke slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-sheik validate-all validate-heldout rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data viewer-build viewer fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -43,7 +43,6 @@ DISRUPTIVE_ROWS_IN ?= $(DISRUPTIVE_OUT_DIR)/rows.tsv
 ARGS ?=
 TEST_ARGS ?=
 TEST_WORKERS ?= auto
-PREPROCESS_WORKERS ?= 0
 VALIDATE_WORKERS ?= 4
 VERBOSE ?=
 CLANG_FORMAT ?= clang-format
@@ -133,12 +132,6 @@ test-serial: build
 package-smoke:
 	@$(PY) scripts/package_smoke.py
 
-preprocess:
-	@$(PY) -m tools.slippi.preprocess_suite --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --workers "$(PREPROCESS_WORKERS)"
-
-preprocess-aggregate:
-	@$(PY) -m tools.slippi.preprocess_suite --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --workers "$(PREPROCESS_WORKERS)"
-
 slpz-convert-suite:
 	@$(PY) -m tools.slippi.convert_replay_storage --suite "$(SUITE)" $(ARGS)
 
@@ -146,38 +139,38 @@ slpz-convert-validation:
 	@$(PY) -m tools.slippi.convert_replay_storage --all-validation-suites $(ARGS)
 
 validate: build
-	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" $(VALIDATE_OUT)
+	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SUITE)" --chunk "$(CHUNK)" $(VALIDATE_OUT)
 
 validate-aggregate: build
-	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --out "$(AGG_ONE_STEP_OUT)"
+	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(AGG_SUITE)" --chunk "$(CHUNK)" --out "$(AGG_ONE_STEP_OUT)"
 
 # Rollout text validation report (parallel to make validate); OUT=... controls report path.
 validate-rollout: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" $(ROLLOUT_OUT)
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SUITE)" --fields "$(FIELDS)" $(ROLLOUT_OUT)
 
 validate-rollout-aggregate: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(AGG_ROLLOUT_OUT)"
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(AGG_SUITE)" --fields "$(FIELDS)" --out "$(AGG_ROLLOUT_OUT)"
 
 # Fast Marth-focused iteration loop: the marth suite is the same replays the aggregate
 # suite carries (subset), preprocessed under datasets/marth - run these frequently while
 # debugging Marth, and validate-all (which covers the same rows via aggregate) less often.
 validate-marth: build
-	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(MARTH_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --out "$(MARTH_ONE_STEP_OUT)"
+	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(MARTH_SUITE)" --chunk "$(CHUNK)" --out "$(MARTH_ONE_STEP_OUT)"
 
 validate-rollout-marth: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(MARTH_SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(MARTH_ROLLOUT_OUT)"
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(MARTH_SUITE)" --fields "$(FIELDS)" --out "$(MARTH_ROLLOUT_OUT)"
 
 validate-sheik: build
-	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SHEIK_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --out "$(SHEIK_ONE_STEP_OUT)"
+	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SHEIK_SUITE)" --chunk "$(CHUNK)" --out "$(SHEIK_ONE_STEP_OUT)"
 
 validate-rollout-sheik: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SHEIK_SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(SHEIK_ROLLOUT_OUT)"
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SHEIK_SUITE)" --fields "$(FIELDS)" --out "$(SHEIK_ROLLOUT_OUT)"
 
 validate-all: build
-	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --doubles-suite "$(DOUBLES_SUITE)" --sheik-suite "$(SHEIK_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --doubles-one-step-out "$(DOUBLES_ONE_STEP_OUT)" --doubles-rollout-out "$(DOUBLES_ROLLOUT_OUT)" --sheik-one-step-out "$(SHEIK_ONE_STEP_OUT)" --sheik-rollout-out "$(SHEIK_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
+	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --doubles-suite "$(DOUBLES_SUITE)" --sheik-suite "$(SHEIK_SUITE)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --doubles-one-step-out "$(DOUBLES_ONE_STEP_OUT)" --doubles-rollout-out "$(DOUBLES_ROLLOUT_OUT)" --sheik-one-step-out "$(SHEIK_ONE_STEP_OUT)" --sheik-rollout-out "$(SHEIK_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
 
 validate-heldout: build
-	@$(PY) -m tools.eval.run_heldout_validation --index "$(HELDOUT_INDEX)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --out-dir "$(HELDOUT_OUT_DIR)" --summary-out "$(HELDOUT_SUMMARY_OUT)"
+	@$(PY) -m tools.eval.run_heldout_validation --index "$(HELDOUT_INDEX)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --out-dir "$(HELDOUT_OUT_DIR)" --summary-out "$(HELDOUT_SUMMARY_OUT)"
 
 # Always writes to ROLLOUT_JSON (independent of OUT=...).
 rollout-capture: build

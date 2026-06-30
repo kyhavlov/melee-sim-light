@@ -9,7 +9,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE
+from tests.replay_dataset_loader import load_replay_dataset as read_dataset
 
 MSL_BUTTON_Z = 0x0010
 MSL_BUTTON_R = 0x0020

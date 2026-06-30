@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_dataset_loader import load_replay_dataset as read_dataset
 from tools.slippi.make_dataset_from_slp import _derive_dream_whispy_wind_seed_lanes
 from tools.slippi.known_data_artifacts import dream_whispy_metadata
 

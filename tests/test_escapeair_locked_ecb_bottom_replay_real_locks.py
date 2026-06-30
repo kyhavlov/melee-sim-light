@@ -3,7 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE
+from tests.replay_dataset_loader import load_replay_dataset as read_dataset
 
 
 def _step_sample(sample: np.ndarray) -> np.void:

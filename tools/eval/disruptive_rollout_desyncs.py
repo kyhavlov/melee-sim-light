@@ -30,6 +30,7 @@ from tools.eval.mismatch_taxonomy import (
 )
 from tools.eval.run_longest_rollout_streaks import _parse_csv, _parse_players, _validate_discrete_fields
 from tools.eval.validation_profile import ValidationProfile, get_validation_profile, validation_profile_names
+from tools.slippi.slpz import resolve_replay_path
 from tools.slippi.suite_io import display_path_under_repo, dataset_path_for_suite_replay, load_suite, repo_root
 
 
@@ -575,6 +576,8 @@ def _scan_dataset(
     *,
     suite_name: str,
     dataset_path: Path,
+    replay_path: Path | None,
+    ports: tuple[int, ...],
     dataset_label: str,
     horizons: tuple[int, ...],
     discrete_fields: tuple[str, ...],
@@ -592,7 +595,19 @@ def _scan_dataset(
     stop_record: int = 0,
 ) -> list[DisruptiveRow]:
     binding = _load_binding()
-    ds = read_dataset(str(dataset_path))
+    if dataset_path.exists():
+        ds = read_dataset(str(dataset_path))
+    else:
+        if replay_path is None:
+            raise FileNotFoundError(dataset_path)
+        from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+
+        ds = build_dataset_from_slp(
+            slp_path=str(replay_path),
+            ports=[int(p) for p in ports],
+            ucf_enabled=bool(ucf_enabled),
+            ucf_cardinals_1_0_enabled=bool(ucf_cardinals_1_0_enabled),
+        )
     samples = ds.samples
     samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), int(samples.dtype.itemsize))
     ints, floats = binding.disruptive_scan(
@@ -635,6 +650,8 @@ def _scan_dataset_task(task: dict[str, Any]) -> list[DisruptiveRow]:
     return _scan_dataset(
         suite_name=str(task["suite_name"]),
         dataset_path=Path(str(task["dataset_path"])),
+        replay_path=Path(str(task["replay_path"])) if task.get("replay_path") else None,
+        ports=tuple(int(v) for v in task["ports"]),
         dataset_label=str(task["dataset_label"]),
         horizons=tuple(int(v) for v in task["horizons"]),
         discrete_fields=tuple(str(v) for v in task["discrete_fields"]),
@@ -826,8 +843,7 @@ def main() -> None:
         print(f"rows={len(all_rows)} clusters={len(clusters)}")
         return
 
-    dataset_paths: list[tuple[Path, str]] = []
-    missing: list[str] = []
+    dataset_paths: list[tuple[Path, str, Path, tuple[int, ...]]] = []
     for entry in suite.replays:
         ds_path = dataset_path_for_suite_replay(
             suite_name=suite.name,
@@ -837,23 +853,32 @@ def main() -> None:
         rel = display_path_under_repo(ds_path, root)
         if str(args.dataset_filter) and str(args.dataset_filter) not in rel:
             continue
-        if ds_path.exists():
-            dataset_paths.append((ds_path, rel))
-        else:
-            missing.append(rel)
-    if missing:
-        print(f"Missing {len(missing)} preprocessed dataset files for suite {suite.name}:")
-        for path in missing:
-            print(f"  {path}")
-        raise SystemExit(2)
+        dataset_paths.append(
+            (
+                ds_path,
+                rel,
+                resolve_replay_path((root / entry.replay).resolve()),
+                tuple(int(p) for p in entry.ports),
+            )
+        )
     if not dataset_paths:
         raise SystemExit("error: no datasets selected")
 
     action_names = load_action_id_names()
     tasks: list[dict[str, Any]] = []
     chunk_records = max(1, int(args.chunk_records))
-    for ds_path, rel in dataset_paths:
-        ds = read_dataset(str(ds_path))
+    for ds_path, rel, replay_path, ports in dataset_paths:
+        if ds_path.exists():
+            ds = read_dataset(str(ds_path))
+        else:
+            from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+
+            ds = build_dataset_from_slp(
+                slp_path=str(replay_path),
+                ports=[int(p) for p in ports],
+                ucf_enabled=bool(suite.ucf_enabled),
+                ucf_cardinals_1_0_enabled=bool(suite.ucf_cardinals_1_0_enabled),
+            )
         players = _parse_players(args.players, num_players=int(ds.header["num_players"]))
         total_records = int(ds.header["num_records"])
         usable_records = max(0, int(ds.samples.shape[0]) - max(horizons) + 1)
@@ -870,6 +895,8 @@ def main() -> None:
                 {
                     "suite_name": suite.name,
                     "dataset_path": str(ds_path),
+                    "replay_path": str(replay_path),
+                    "ports": list(ports),
                     "dataset_label": rel,
                     "horizons": horizons,
                     "discrete_fields": discrete_fields,

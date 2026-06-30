@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
@@ -8,6 +7,7 @@ import pytest
 
 from tests.test_platform_collision_runtime import _step_one_replay_row
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
 def _field_bytes(samples: np.ndarray, record: int, field: str, stride: int) -> np.ndarray:
@@ -109,7 +109,7 @@ def test_staling_history_prefers_fighter_instance_over_same_iid_item_control() -
 
 
 @pytest.mark.integration
-def test_specialn_laser_spawn_latches_live_blaster_attack_identity_replay_real(tmp_path: Path) -> None:
+def test_specialn_laser_spawn_latches_live_blaster_attack_identity_replay_real() -> None:
     # AGN has a fresh SpecialN laser that first appears in Slippi after Fox has already left
     # Blaster Loop. In source, Item_80268B18 -> it_8027B0C4 copies xD88/xD8C at the live
     # ftFx_SpecialN_CreateBlasterShot callback before that post-frame serialization point. The
@@ -124,19 +124,12 @@ def test_specialn_laser_spawn_latches_live_blaster_attack_identity_replay_real(t
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    from tools.slippi.make_dataset_from_slp import _main_impl
-
-    out_path = tmp_path / "AttachedGoodNaturedGuanaco.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
     samples = ds.samples
 
     first_visible_seed = samples[175]["seed_t"]
@@ -167,7 +160,7 @@ def test_specialn_laser_spawn_latches_live_blaster_attack_identity_replay_real(t
 
 
 @pytest.mark.integration
-def test_reflected_item_hit_advances_new_owner_stale_queue_replay_real(tmp_path: Path) -> None:
+def test_reflected_item_hit_advances_new_owner_stale_queue_replay_real() -> None:
     # EWT has a powershield-reflected laser that damages Falco at record 9898. The hit source is
     # item-owned in vanilla: plStale_UpdateStaleMovesFromItem uses the reflected item's current
     # owner plus its spawn-latched xD88/xD8C attack identity. This must advance Fox's stale queue
@@ -183,19 +176,12 @@ def test_reflected_item_hit_advances_new_owner_stale_queue_replay_real(tmp_path:
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    from tools.slippi.make_dataset_from_slp import _main_impl
-
-    out_path = tmp_path / "ElatedWearyTermite.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
     samples = ds.samples
 
     reflect_seed = samples[9898]["seed_t"]

@@ -423,10 +423,10 @@ Source/generation:
 - Runtime distinguishes two x14 consumers: JumpAerial entry uses the buffered x/y snapshot carried
   by `mv.co.damage.x14`, while the following JumpAerial Phys callback applies live drift from the
   current input and character aerial physics.
-- Cache contract: this semantic changed without changing `MslSeed` size when FlyReflectWall/Ceil
-  were added to the derived DamageFly-family x14 seed set. `tools/slippi/preprocess_suite.py`
-  cache version 5 is the first valid cache generation for FlyReflect x14 rows; older `.msl` caches
-  can pass record-size checks while silently missing the terminal buffered jump.
+- Legacy cache-era note: this semantic changed without changing `MslSeed` size when
+  FlyReflectWall/Ceil were added to the derived DamageFly-family x14 seed set. Cache version 5 was
+  the first valid `.msl` cache generation for FlyReflect x14 rows; older caches can pass
+  record-size checks while silently missing the terminal buffered jump.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_Damage_IASA,ftCo_DamageFly_Anim,ftCo_DamageFly_IASA}`.
@@ -454,9 +454,9 @@ Source/generation:
   receives the live source hitbox/item angle at damage entry.
 - Runtime damage entry in `src/combat.c` sets the same internal bit from the source knockback angle;
   reseed unpacks the bit into `MslStateSoA.damage_meteor_cancel_eligible_x1a`.
-- Cache contract: this semantic changed without changing `MslSeed` size, so
-  `tools/slippi/preprocess_suite.py` cache version 4 is the first valid cache generation for this
-  packed bit. Version 3 `.msl` files can pass record-size checks while silently missing x1A.
+- Legacy cache-era note: this semantic changed without changing `MslSeed` size, so cache version 4
+  was the first valid `.msl` cache generation for this packed bit. Version 3 `.msl` files can pass
+  record-size checks while silently missing x1A.
 - The retained runtime meteor-cancel escape branch is JumpAerial-only. SpecialHi admission remains
   an open source-owner boundary and must not be inferred from this seed bit alone.
 
@@ -859,8 +859,8 @@ Seed generation:
   appear on terminal Loop -> End and landing/entry rows. `x67D` only proves the latch when the
   derived B-edge action frame is inside the MSLFTSC1 cmd0 window (including the runtime latch-clear
   tail from `move_tables_special_cmd0_active_at_frame`).
-- `tools/slippi/preprocess_suite.py` cache version 22 is the first valid cache generation for this
-  seed lane and its expanded `MSLDSLT` record size.
+- Legacy cache-era note: cache version 22 was the first valid `.msl` generation for this seed lane
+  and its expanded `MSLDSLT` record size.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA}`.
@@ -1620,7 +1620,7 @@ Characters (Fox/Falco/Marth/Sheik):
       `ftCo_DamageFly_Coll` runs mpColl. FoD open-air and in-span platform contacts have focused
       negatives; hard-floor rows on other stages keep the normal previous-public-row
       reconstruction. This stack changes seed schema and same-record-size cache semantics:
-      `tools/slippi/preprocess_suite.py` cache version 21 is the first valid cache generation for
+      legacy cache version 21 is the first valid `.msl` generation for
       FoD visible-choice scheduler timer/RNG seed lanes; cache version 20 is the first valid cache
       generation for the CliffWait `mv.co.cliff.x8` stick-option latch seed lane; cache version 19
       is the first valid cache generation for FoD hidden-return scheduler timer seed lanes; cache

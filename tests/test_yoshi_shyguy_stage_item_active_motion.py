@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_dataset_loader import load_replay_dataset as read_dataset
 from tools.slippi.make_dataset_from_slp import (
     _derive_yoshi_shyguy_dyn_y_phase,
     _derive_yoshi_shyguy_native_lanes,
@@ -466,8 +467,6 @@ def test_yoshi_shyguy_low_damage_hitlag_resumes_state3_motion_cnm_601() -> None:
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
         "CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip("missing local replay dataset: CheeryNumbMonkey.msl")
 
     out, ref = _run_rollout_to_record(dataset_path, start_record=0, target_record=601)
     slot = 3
@@ -617,8 +616,6 @@ def test_yoshi_shyguy_state1_floor_contact_exports_reset_child_delta_pec(
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
         "PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip("missing local replay dataset: PhysicalElectricCapybara.msl")
 
     out, ref = _step_one_row(dataset_path, record)
     assert int(ref["items"][slot]["exists"]) == 1
@@ -650,8 +647,6 @@ def test_yoshi_shyguy_state1_non_floor_contact_keeps_dynamic_delta_pec() -> None
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
         "PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip("missing local replay dataset: PhysicalElectricCapybara.msl")
 
     out, ref = _step_one_row(dataset_path, 7580)
     slot = 0
@@ -798,8 +793,6 @@ def test_yoshi_shyguy_falling_state_blast_clear_replay_real_cnm_5275() -> None:
     dataset_path = (
         root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     out, ref = _step_one_row(dataset_path, 5275)
     slot = 3
@@ -836,8 +829,6 @@ def test_yoshi_shyguy_one_step_timer_zero_uses_next_frame_rng_pec_119() -> None:
     dataset_path = Path(
         "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[119]["seed_t"]
@@ -875,8 +866,6 @@ def test_yoshi_shyguy_one_step_timer_countdown_keeps_rng_seed_owned_pec_118() ->
     dataset_path = Path(
         "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[118]["seed_t"]
@@ -906,8 +895,6 @@ def test_yoshi_shyguy_rollout_advances_replay_rng_clock_until_spawn_cnm_2153() -
     dataset_path = (
         root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[2153]["seed_t"]
@@ -945,8 +932,6 @@ def test_yoshi_shyguy_rollout_rng_clock_clears_after_spawn_cnm_2153() -> None:
     dataset_path = (
         root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     out, _ref, clock_mode = _run_rollout_to_record(
@@ -971,8 +956,6 @@ def test_yoshi_shyguy_rollout_clock_stays_seed_owned_when_heiho_live_cnm_2162() 
     dataset_path = (
         root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed_rng = int(ds.samples[2162]["seed_t"]["frame_pre_random_seed"])
@@ -1017,8 +1000,6 @@ def test_yoshi_shyguy_rollout_uses_spawn_frame_rng_seed_lawful_meerkat_112() -> 
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[112]["seed_t"]
@@ -1059,8 +1040,6 @@ def test_yoshi_shyguy_spawn_seed_coexists_with_replay_frame_rng_owner_lawful_mee
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[record]["seed_t"]
@@ -1104,8 +1083,6 @@ def test_yoshi_shyguy_spawn_seed_coexists_with_opening_countdown_clock_dsg_74() 
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[74]["seed_t"]
@@ -1167,8 +1144,6 @@ def test_yoshi_shyguy_laser_item_hit_enters_damage_state(record: int, slot: int)
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     out, ref = _step_one_row(dataset_path, record)
     assert int(out["items"][slot]["exists"]) == 1
@@ -1276,8 +1251,6 @@ def test_yoshi_shyguy_fighter_hitbox_hit_enters_damage_state_cnm_592() -> None:
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     out, ref = _step_one_row(dataset_path, 592)
     slot = 3
@@ -1315,8 +1288,6 @@ def test_yoshi_shyguy_fighter_hitbox_hit_applies_attacker_deal_hitlag(record: in
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     out, ref = _step_one_row(dataset_path, record)
     assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker])
@@ -1340,8 +1311,6 @@ def test_yoshi_shyguy_fighter_hitbox_scaled_hurtbox_rejects_edge_near_miss(recor
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     out, ref = _step_one_row(dataset_path, record)
     assert int(out["hitlag"][0]) == 0
@@ -1373,8 +1342,6 @@ def test_yoshi_shyguy_return_flight_same_action_hitlist_rejects_rehit(record: in
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     out, ref = _step_one_row(dataset_path, record)
     assert int(out["hitlag"][0]) == 0
@@ -1398,8 +1365,6 @@ def test_yoshi_shyguy_return_flight_same_action_unproven_victim_does_not_seed_su
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[617]["seed_t"]
@@ -1418,8 +1383,6 @@ def test_yoshi_shyguy_fighter_hitbox_hit_is_stage_and_geometry_bounded() -> None
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[592]["seed_t"].copy()
 
@@ -1443,8 +1406,6 @@ def test_active_yoshi_shyguy_integrates_visible_velocity() -> None:
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     try:
         ds = read_dataset(str(dataset_path))
@@ -1496,8 +1457,6 @@ def test_yoshi_shyguy_fixed_ecb_wall_turn_replay_real_pec_946() -> None:
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     # A left-moving live Heiho passes near Yoshi's right wall. Vanilla integrates with the old
     # leftward speed, then the active Coll callback sees the Article ItemAttr.x40 fixed ECB touch
@@ -1524,8 +1483,6 @@ def test_yoshi_shyguy_active_turn_delay_is_prefix_causal_after_visible_flip_pec_
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[947]["seed_t"]
@@ -1549,8 +1506,6 @@ def test_yoshi_shyguy_fixed_ecb_wall_turn_negative_before_contact_pec_945() -> N
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     # Same item and wall approach one frame earlier: the fixed ECB bottom is still above the wall
     # top, so `it_80276308` does not own a turn yet.
@@ -1573,8 +1528,6 @@ def test_yoshi_shyguy_active_floor_contact_resets_anim_export_pec_1289() -> None
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     # A live state-1 Heiho descends until its fixed ECB crosses Yoshi's ground. Vanilla keeps the
     # already-integrated item position, but `it_8026DA70` returns true and the active Coll callback
@@ -1639,8 +1592,6 @@ def test_yoshi_shyguy_return_flight_generic_blast_clear_replay_real_pec_1294() -
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     # Low-damage state 4 is return flight, not ordinary active state 1. It inherits xDCC_flag.b3
     # from `it_802D8EC8`, so generic Item_802697D4 clears it on exact side/bottom blast bounds
@@ -1664,8 +1615,6 @@ def test_yoshi_shyguy_return_flight_generic_blast_clear_negative_before_bounds_p
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     # One frame earlier the same return-flight Shy Guy remains inside the exact side blast bound
     # after item integration, so the generic item destroy owner must not clear it yet.
@@ -1686,8 +1635,6 @@ def test_yoshi_shyguy_floor_reset_restarts_phase_lane_pec_1290() -> None:
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[1290]["seed_t"]
@@ -1713,8 +1660,6 @@ def test_yoshi_shyguy_fixed_ecb_floor_does_not_reset_when_already_below_floor_pe
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[996]["seed_t"]
@@ -1752,8 +1697,6 @@ def test_yoshi_shyguy_turn_cooldown_suppresses_repeat_wall_turn_pec_1835() -> No
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     seed = ds.samples[1835]["seed_t"]
@@ -1781,8 +1724,6 @@ def test_state4_yoshi_shyguy_integrates_visible_velocity() -> None:
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     try:
         ds = read_dataset(str(dataset_path))
@@ -1826,8 +1767,6 @@ def test_yoshi_shyguy_reconstructed_phase_handles_aobj_loop_rows() -> None:
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     try:
         ds = read_dataset(str(dataset_path))
@@ -1853,8 +1792,6 @@ def test_yoshi_shyguy_state3_zero_delay_rows_do_not_over_enter_state4() -> None:
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     try:
         ds = read_dataset(str(dataset_path))
@@ -1902,8 +1839,6 @@ def test_yoshi_shyguy_state3_zero_delay_enters_return_flight_replay_real(
     dataset_path = Path(
         "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
     seed = read_dataset(str(dataset_path)).samples[record]["seed_t"]
     assert int(seed["items"][slot]["type"]) == ITEM_KIND_HEIHO
     assert int(seed["items"][slot]["state"]) == 3
@@ -1937,8 +1872,6 @@ def test_yoshi_shyguy_first_visible_speed_marks_prefix_causal_speed_index_pec_50
         root
         / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
     samples = ds.samples.copy()

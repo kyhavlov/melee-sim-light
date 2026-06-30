@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +18,7 @@ from tools.slippi.known_data_artifacts import (
     stage_metadata_path_for_stage_id,
 )
 from tools.slippi.seed_history import load_shield_tilt_table_meta
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 from tests.test_colldata_ecb_substrate import (
     FLOOR_MODE_BOTTOM_SWEEP,
     FLOOR_MODE_ROOT_PROJECTION,
@@ -6578,7 +6578,7 @@ def test_fod_damageflytop_static_center_platform_enters_downbound_replay_real() 
 
 
 @pytest.mark.integration
-def test_fod_grounded_contact_derives_current_platform_height_replay_real(tmp_path: Path) -> None:
+def test_fod_grounded_contact_derives_current_platform_height_replay_real() -> None:
     # EWT record 4509 is PassiveStandF grounded on FoD's moving left platform. The Slippi
     # `fod_platform` event stream is sparse here, but the current grounded root Y and MSLSTG01
     # platform transform expose the same grIzumi current stage state causally at seed frame t.
@@ -6591,19 +6591,12 @@ def test_fod_grounded_contact_derives_current_platform_height_replay_real(tmp_pa
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    from tools.slippi.make_dataset_from_slp import _main_impl
-
-    out_path = tmp_path / "ElatedWearyTermite.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
     row = ds.samples[4509]
     p = 0
 
@@ -7274,9 +7267,7 @@ def test_fd_fall_escapeair_endpoint_floor_handoff_rejects_offspan_and_wrong_floo
 
 
 @pytest.mark.integration
-def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_real(
-    tmp_path: Path,
-) -> None:
+def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_real() -> None:
     # EWT record 10353 lands out of Fox/Falco aerial Side-B on FoD's left moving platform. The
     # sparse Slippi platform event stream has not exposed the current left-platform height yet, but
     # the same source collision step has already updated grIzumi/mpLib before
@@ -7293,19 +7284,12 @@ def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_rea
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    from tools.slippi.make_dataset_from_slp import _main_impl
-
-    out_path = tmp_path / "ElatedWearyTermite.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
     row = ds.samples[10353]
     p = 0
 
@@ -7946,7 +7930,6 @@ def test_fod_specialhi_ground_hold_air_launch_carries_colldata_floor_replay_real
     ],
 )
 def test_fod_soft_platform_airborne_regression_rows_stay_airborne(
-    tmp_path: Path,
     record: int,
     player: int,
     action_id: int,
@@ -7965,19 +7948,12 @@ def test_fod_soft_platform_airborne_regression_rows_stay_airborne(
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    from tools.slippi.make_dataset_from_slp import _main_impl
-
-    out_path = tmp_path / "ElatedWearyTermite.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
     row = ds.samples[record]
 
     assert int(row["seed_t"]["stage_id"]) == 2
@@ -7995,7 +7971,6 @@ def test_fod_soft_platform_airborne_regression_rows_stay_airborne(
 
 @pytest.mark.integration
 def test_fod_sustained_damagefly_reseed_uses_current_coll_root_replay_real(
-    tmp_path: Path,
 ) -> None:
     # PTE 7492 is sustained airborne DamageFlyTop over FoD's transformed center platform. Source
     # `ft_80081DD4` starts DamageFly_Coll by copying the current fighter root into CollData.cur_pos
@@ -8013,19 +7988,12 @@ def test_fod_sustained_damagefly_reseed_uses_current_coll_root_replay_real(
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    from tools.slippi.make_dataset_from_slp import _main_impl
-
-    out_path = tmp_path / "ParallelTemptingElk.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
     record = 7492
     p = 1
     row = ds.samples[record]
@@ -8055,9 +8023,7 @@ def test_fod_sustained_damagefly_reseed_uses_current_coll_root_replay_real(
 
 
 @pytest.mark.integration
-def test_nonfod_damagefly_reseed_keeps_previous_row_hard_floor_sweep_replay_real(
-    tmp_path: Path,
-) -> None:
+def test_nonfod_damagefly_reseed_keeps_previous_row_hard_floor_sweep_replay_real() -> None:
     # AGN 5208 is the non-FoD hard-floor boundary for the same seed lane. Here the public previous
     # row sweep is source-owned: the DamageFlyHi victim is already below FD floor height and vanilla
     # resolves the hard-floor contact into Passive. The FoD transformed-platform current-root
@@ -8071,19 +8037,12 @@ def test_nonfod_damagefly_reseed_keeps_previous_row_hard_floor_sweep_replay_real
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    from tools.slippi.make_dataset_from_slp import _main_impl
-
-    out_path = tmp_path / "AttachedGoodNaturedGuanaco.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
     record = 5208
     p = 0
     row = ds.samples[record]
@@ -8166,9 +8125,7 @@ def test_fod_visible_height_platform_grounded_rider_stays_on_platform_replay_rea
 
 
 @pytest.mark.integration
-def test_fod_prefix_platform_velocity_keeps_rollout_floor_transform_replay_real(
-    tmp_path: Path,
-) -> None:
+def test_fod_prefix_platform_velocity_keeps_rollout_floor_transform_replay_real() -> None:
     # PTE record 3318 seeds after grounded prefix contact on FoD's right moving platform. The
     # platform remains in the same grIzumi velocity phase after the fighter jumps away, so rollout
     # floor admission must keep advancing the transformed source line before collision.
@@ -8181,19 +8138,12 @@ def test_fod_prefix_platform_velocity_keeps_rollout_floor_transform_replay_real(
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    from tools.slippi.make_dataset_from_slp import _main_impl
-
-    out_path = tmp_path / "ParallelTemptingElk.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
     row = ds.samples[3318]
     p = 0
 
@@ -8215,7 +8165,7 @@ def test_fod_prefix_platform_velocity_keeps_rollout_floor_transform_replay_real(
 
 
 @pytest.mark.integration
-def test_fod_prefix_platform_velocity_stops_at_source_target_replay_real(tmp_path: Path) -> None:
+def test_fod_prefix_platform_velocity_stops_at_source_target_replay_real() -> None:
     # PTE record 5801 is hundreds of frames after the last replay-visible grounded contact on
     # FoD's right platform. Prefix-derived velocity must stop at the GrIz source target instead of
     # extrapolating indefinitely and making the platform non-solid at the later landing frame.
@@ -8228,19 +8178,12 @@ def test_fod_prefix_platform_velocity_stops_at_source_target_replay_real(tmp_pat
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    from tools.slippi.make_dataset_from_slp import _main_impl
-
-    out_path = tmp_path / "ParallelTemptingElk.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
     row = ds.samples[5801]
     p = 0
 
@@ -8257,7 +8200,7 @@ def test_fod_prefix_platform_velocity_stops_at_source_target_replay_real(tmp_pat
 
 
 @pytest.mark.integration
-def test_fod_same_step_platform_contact_defers_velocity_until_next_frame_pte(tmp_path: Path) -> None:
+def test_fod_same_step_platform_contact_defers_velocity_until_next_frame_pte() -> None:
     # PTE rec3257 lands on FoD's right height platform from a same-step reconstructed contact. The
     # current landing frame must use that current collision height without pre-advancing grIzumi,
     # then carry the next source-visible platform velocity into sustained LandingAirB/grounded
@@ -8274,19 +8217,12 @@ def test_fod_same_step_platform_contact_defers_velocity_until_next_frame_pte(tmp
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    from tools.slippi.make_dataset_from_slp import _main_impl
-
-    out_path = tmp_path / "ParallelTemptingElk.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
     p = 0
     row = ds.samples[3257]
 

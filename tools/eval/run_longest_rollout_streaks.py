@@ -508,8 +508,10 @@ def main() -> None:
         print(f"Missing {len(missing)} preprocessed dataset files for suite {suite.name}:")
         for p in missing:
             print(f"  {p}")
-        print("Run preprocessing first:")
-        print(f"  uv run python -m tools.slippi.preprocess_suite --suite {args.suite} --datasets-dir {args.datasets_dir}")
+        print(
+            "This legacy triage command still reads dataset files; normal validation now reads "
+            "suite replays directly. Port this command to replay-derived rows before using it."
+        )
         raise SystemExit(2)
 
     print(

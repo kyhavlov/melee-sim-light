@@ -337,7 +337,7 @@ Non-goals:
 
 Validation gates:
 
-- `uv run python -m tools.slippi.preprocess_suite --suite <sheik_suite> --datasets-dir datasets --workers <n>`
+- `make validate-sheik` and `make validate-rollout-sheik`
 - `make validate-marth` or equivalent existing controls remain clean if adding a new suite target is not ready.
 - Sheik one-step and rollout locator generation commands documented in worklog.
 - `sheik_demo_game` preprocessing/eval/locator output and action inventory

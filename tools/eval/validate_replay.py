@@ -56,7 +56,7 @@ def _parse_ports(value: str | None) -> list[int] | None:
 
 
 def _dataset_label(replay: Path) -> Path:
-    return replay.with_suffix(".msl")
+    return replay
 
 
 def _print_one_step(

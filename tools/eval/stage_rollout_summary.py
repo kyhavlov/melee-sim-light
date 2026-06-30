@@ -58,7 +58,7 @@ def parse_rollout_report(path: Path) -> dict[str, ReplayRolloutMetrics]:
     out: dict[str, ReplayRolloutMetrics] = {}
     current: dict[str, object] | None = None
     for line in path.read_text(encoding="utf-8").splitlines():
-        m = re.match(r"^== (.+\.msl) ==$", line)
+        m = re.match(r"^== (.+\.(?:slpz|slp|msl)) ==$", line)
         if m:
             if current and "first_total" in current:
                 metric = ReplayRolloutMetrics(
@@ -96,7 +96,7 @@ def parse_record_counts(path: Path) -> dict[str, int]:
     out: dict[str, int] = {}
     current: str | None = None
     for line in path.read_text(encoding="utf-8").splitlines():
-        m = re.match(r"^== (.+\.msl) ==$", line)
+        m = re.match(r"^== (.+\.(?:slpz|slp|msl)) ==$", line)
         if m:
             current = _replay_stem(m.group(1))
             continue

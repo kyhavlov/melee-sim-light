@@ -12,13 +12,14 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
+from tests.replay_dataset_loader import load_replay_dataset
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.slippi.suite_io import load_suite
 
 
 _AGG_VALID = "datasets/aggregate_recent/replays/validation/aggregate_recent"
 _AGG_CARDINAL = "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent"
 _PRIMARY_VALID = "datasets/fox_falco_fd_ucf084_recent/replays/validation"
-
 
 @dataclass(frozen=True)
 class _Case:
@@ -585,8 +586,8 @@ def test_motion_entry_instance_override_clears_after_one_step() -> None:
 
 def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
     # Population guard for the non-causal replay-facing lanes introduced by these owner passes.
-    # These counts are over validation datasets only; debug datasets are regenerated for test
-    # compatibility but are not part of the acceptance audit.
+    # These counts are over validation suite replays only; debug datasets are not part of the
+    # acceptance audit.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     owner_actions = {14, 15, 16, 17, 18, 19, 20, 21, 22, 24}
@@ -616,7 +617,7 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
         return "other"
 
     def count_lanes(
-        rel: str,
+        suite_name: str,
     ) -> tuple[
         int,
         int,
@@ -639,8 +640,11 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
         hidden_order_families: Counter[str] = Counter()
         hidden_order_ref_actions: Counter[int] = Counter()
         turn_transitions: set[tuple[int, int]] = set()
-        for dataset_path in (root / rel).glob("**/*.msl"):
-            ds = read_dataset(str(dataset_path))
+
+        suite = load_suite(root / "replays" / "suites" / f"{suite_name}.json")
+        for entry in suite.replays:
+            dataset_label = Path("datasets") / suite.name / Path(entry.replay).with_suffix(".msl")
+            ds = load_replay_dataset(dataset_label)
             for row in ds.samples:
                 num_players = int(ds.header["num_players"])
                 for p in range(num_players):
@@ -729,7 +733,7 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
         primary_hidden_order_families,
         primary_hidden_order_ref_actions,
         primary_turn_transitions,
-    ) = count_lanes(_PRIMARY_VALID)
+    ) = count_lanes("fox_falco_fd_ucf084_recent")
     (
         aggregate_turn,
         aggregate_locomotion_motion,
@@ -741,7 +745,7 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
         aggregate_hidden_order_families,
         aggregate_hidden_order_ref_actions,
         aggregate_turn_transitions,
-    ) = count_lanes("datasets/aggregate_recent/replays/validation")
+    ) = count_lanes("aggregate_recent")
 
     assert primary_turn == 8
     assert primary_locomotion_motion == 121
@@ -788,51 +792,48 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
         67: 8,
     }
     assert primary_turn_transitions == {(18, 24)}
-    # Aggregate population moves with the current canonical aggregate .msl set and seed schema. This
-    # is a direct seed-lane fixture census over cached datasets, not runtime output;
-    # validation_report_diff must stay clean when this guard is refreshed for schema/data updates.
-    assert aggregate_turn == 117
-    assert aggregate_locomotion_motion == 1871
-    assert aggregate_specialn == 157
-    assert aggregate_match_flow == 688
-    assert aggregate_guard_collision == 1940
-    assert aggregate_hidden_order == 11387
+    assert aggregate_turn == 158
+    assert aggregate_locomotion_motion == 2483
+    assert aggregate_specialn == 183
+    assert aggregate_match_flow == 968
+    assert aggregate_guard_collision == 2617
+    assert aggregate_hidden_order == 15118
     assert aggregate_attacklw3_runtime == 0
     assert aggregate_hidden_order_families == {
-        "attack": 720,
-        "cliff": 657,
-        "damage": 953,
-        "fox_falco_special": 906,
-        "grab_capture": 2000,
-        "jump_landing": 3580,
-        "locomotion": 2406,
-        "other": 165,
+        "attack": 1000,
+        "cliff": 950,
+        "damage": 1174,
+        "fox_falco_special": 1097,
+        "grab_capture": 2541,
+        "jump_landing": 4821,
+        "locomotion": 3320,
+        "other": 215,
     }
     assert dict(aggregate_hidden_order_ref_actions.most_common(25)) == {
-        43: 1395,
-        39: 895,
-        18: 709,
-        20: 551,
-        360: 538,
-        25: 462,
-        42: 415,
-        216: 366,
-        227: 355,
-        15: 349,
-        213: 339,
-        14: 294,
-        90: 292,
-        226: 275,
-        24: 274,
-        241: 269,
-        221: 269,
-        88: 210,
-        27: 184,
-        365: 166,
-        16: 164,
-        69: 144,
-        65: 140,
-        67: 121,
-        344: 118,
+        43: 1954,
+        39: 1110,
+        18: 977,
+        20: 704,
+        25: 605,
+        360: 604,
+        42: 571,
+        15: 506,
+        216: 459,
+        227: 425,
+        14: 411,
+        213: 397,
+        24: 367,
+        226: 354,
+        90: 344,
+        221: 285,
+        241: 285,
+        27: 274,
+        16: 260,
+        88: 239,
+        365: 219,
+        67: 186,
+        69: 172,
+        236: 170,
+        65: 168,
     }
     assert aggregate_turn_transitions == {(18, 24)}

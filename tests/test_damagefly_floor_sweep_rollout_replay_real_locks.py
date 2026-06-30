@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
 ACT_DAMAGE_FLY_HI = 0x0057
@@ -168,13 +168,12 @@ def _run_one_step_mutated_seed(
 
 
 def _run_rollout_records(
-    dataset_path: Path,
+    ds,
     start_record: int,
     target_records: tuple[int, ...],
     *,
     ucf_cardinals_1_0_enabled: bool = False,
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
     samples = ds.samples
     target_max = max(target_records)
     targets = set(target_records)
@@ -628,9 +627,7 @@ def test_fod_height_platform_damagefly_endpoint_contacts_stay_airborne(
 
 
 @pytest.mark.integration
-def test_fod_damagefly_rollout_uses_grizumi_collision_height_from_direct_events(
-    tmp_path: Path,
-) -> None:
+def test_fod_damagefly_rollout_uses_grizumi_collision_height_from_direct_events() -> None:
     # Replay-real rollout lock for EWT rec=4495 -> 4501 p0:
     # - Fox/Falco is tumbling downward onto FoD's moving left platform.
     # - Vanilla has already refreshed the platform collision line through grIzumi/mpLib and reaches
@@ -646,21 +643,15 @@ def test_fod_damagefly_rollout_uses_grizumi_collision_height_from_direct_events(
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    from tools.slippi.make_dataset_from_slp import _main_impl
-
-    out_path = tmp_path / "ElatedWearyTermite.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
 
     p = 0
-    by_record = _run_rollout_records(out_path, 4495, (4500, 4501), ucf_cardinals_1_0_enabled=True)
+    by_record = _run_rollout_records(ds, 4495, (4500, 4501), ucf_cardinals_1_0_enabled=True)
     ref_4500, out_4500 = by_record[4500]
     assert int(out_4500["action_id"][p]) == int(ref_4500["action_id"][p]) == ACT_DAMAGE_FLY_TOP
     assert int(out_4500["on_ground"][p]) == int(ref_4500["on_ground"][p]) == 0

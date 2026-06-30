@@ -171,7 +171,7 @@ def test_rollout_float_locator_reports_seeded_retry_float_residual(
     assert row.seeded_retry is True
 
 
-def test_rollout_float_locator_supports_in_memory_suite_without_cached_dataset(
+def test_rollout_float_locator_suite_reads_replay_directly(
     monkeypatch, tmp_path: Path
 ) -> None:
     suite_path = tmp_path / "suite.json"
@@ -215,15 +215,12 @@ def test_rollout_float_locator_supports_in_memory_suite_without_cached_dataset(
 
     payload = top_float_offenders.collect_suite_top_float_offenders(
         suite=suite_path,
-        datasets_dir=str(tmp_path / "missing-datasets"),
         fields=("pos_y",),
         chunk=16,
         top=3,
         mode="rollout",
-        in_memory_preprocess=True,
     )
 
     assert payload["mode"] == "rollout"
     assert calls["build"]["slp_path"] == str(replay.resolve())
     assert calls["collect"]["ds"] is dataset
-    assert not (tmp_path / "missing-datasets").exists()

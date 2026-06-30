@@ -439,7 +439,6 @@ def collect_dataset_top_rollout_float_offenders(
 def collect_suite_top_float_offenders(
     *,
     suite: Path,
-    datasets_dir: str,
     fields: tuple[str, ...],
     chunk: int,
     top: int,
@@ -448,7 +447,6 @@ def collect_suite_top_float_offenders(
     max_records: int = 0,
     threshold: float = 0.0,
     profile: str = "rl1_gameplay",
-    in_memory_preprocess: bool = False,
     dataset_filter: str = "",
 ) -> dict[str, object]:
     root = repo_root()
@@ -460,29 +458,22 @@ def collect_suite_top_float_offenders(
     }
 
     for entry in suite_obj.replays:
-        ds = dataset_path_for_suite_replay(
+        dataset_label = dataset_path_for_suite_replay(
             suite_name=suite_obj.name,
             replay_rel_path=entry.replay,
-            datasets_dir=datasets_dir,
         )
-        ds_rel = _dataset_rel(root, ds)
+        ds_rel = _dataset_rel(root, dataset_label)
         if dataset_filter and dataset_filter not in ds_rel and dataset_filter not in entry.replay:
             continue
-        dataset_obj: Dataset | None = None
-        if in_memory_preprocess:
-            dataset_obj = build_dataset_from_slp(
-                slp_path=str(resolve_replay_path((root / entry.replay).resolve())),
-                ports=[int(p) for p in entry.ports],
-                ucf_enabled=bool(suite_obj.ucf_enabled),
-                ucf_cardinals_1_0_enabled=bool(suite_obj.ucf_cardinals_1_0_enabled),
-            )
-        elif not ds.exists():
-            raise SystemExit(
-                f"error: missing dataset {ds_rel}; run preprocess or pass --in-memory-preprocess"
-            )
+        dataset_obj = build_dataset_from_slp(
+            slp_path=str(resolve_replay_path((root / entry.replay).resolve())),
+            ports=[int(p) for p in entry.ports],
+            ucf_enabled=bool(suite_obj.ucf_enabled),
+            ucf_cardinals_1_0_enabled=bool(suite_obj.ucf_cardinals_1_0_enabled),
+        )
         if mode == "one-step":
             per_ds = collect_dataset_top_float_offenders(
-                dataset_path=ds,
+                dataset_path=dataset_label,
                 ds=dataset_obj,
                 dataset_label=ds_rel,
                 fields=fields,
@@ -492,13 +483,9 @@ def collect_suite_top_float_offenders(
                 ucf_cardinals_1_0_enabled=bool(suite_obj.ucf_cardinals_1_0_enabled),
             )
         elif mode == "rollout":
-            num_players = (
-                int(dataset_obj.header["num_players"])
-                if dataset_obj is not None
-                else int(read_dataset_window(str(ds), 0, 1).header["num_players"])
-            )
+            num_players = int(dataset_obj.header["num_players"])
             per_ds = collect_dataset_top_rollout_float_offenders(
-                dataset_path=ds,
+                dataset_path=dataset_label,
                 ds=dataset_obj,
                 dataset_label=ds_rel,
                 fields=fields,
@@ -531,7 +518,7 @@ def collect_suite_top_float_offenders(
     return {
         "suite": suite_obj.name,
         "suite_path": str(suite.as_posix()),
-        "datasets_dir": str(datasets_dir),
+        "datasets_dir": "",
         "mode": str(mode),
         "fields": list(fields),
         "top_n": int(top),
@@ -606,7 +593,6 @@ def _write_tsv(path: Path, payload: dict[str, object]) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Collect suite top absolute float offenders.")
     ap.add_argument("--suite", type=Path, required=True)
-    ap.add_argument("--datasets-dir", default="datasets")
     ap.add_argument("--mode", choices=("one-step", "rollout"), default="one-step")
     ap.add_argument("--field", action="append", default=[])
     ap.add_argument("--chunk", type=int, default=4096)
@@ -616,11 +602,6 @@ def main() -> None:
     ap.add_argument("--threshold", type=float, default=0.0, help="Minimum absolute float error to report.")
     ap.add_argument("--profile", default="rl1_gameplay", choices=validation_profile_names())
     ap.add_argument("--dataset-filter", default="", help="Optional substring filter on dataset/replay path.")
-    ap.add_argument(
-        "--in-memory-preprocess",
-        action="store_true",
-        help="Build suite replays directly from .slp/.slpz instead of reading cached .msl datasets.",
-    )
     ap.add_argument("--json-out", type=Path, default=None)
     ap.add_argument("--tsv-out", type=Path, default=None)
     args = ap.parse_args()
@@ -629,7 +610,6 @@ def main() -> None:
 
     payload = collect_suite_top_float_offenders(
         suite=args.suite,
-        datasets_dir=str(args.datasets_dir),
         fields=fields,
         chunk=int(args.chunk),
         top=max(1, int(args.top)),
@@ -638,7 +618,6 @@ def main() -> None:
         max_records=int(args.max_records),
         threshold=float(args.threshold),
         profile=str(args.profile),
-        in_memory_preprocess=bool(args.in_memory_preprocess),
         dataset_filter=str(args.dataset_filter),
     )
 
@@ -650,7 +629,7 @@ def main() -> None:
 
     print(
         f"suite={payload['suite']} mode={payload['mode']} fields={','.join(fields)} top={payload['top_n']} "
-        f"datasets_dir={payload['datasets_dir']}"
+        "input=replays"
     )
     for field in fields:
         rows = payload["top_rows"][field]

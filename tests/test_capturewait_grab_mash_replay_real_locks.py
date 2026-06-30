@@ -5,8 +5,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tests.replay_dataset_loader import load_replay_dataset as read_dataset
+from tests.replay_dataset_loader import replay_dataset_available
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
 
 
@@ -115,8 +117,6 @@ def test_capturepulled_lw_phys_threshold_selects_capturewait_variant_before_owne
     # data/common/ft_common_data.json::capture_pulled_lw_air_delta_y
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
 
     seed, out, ref = _step_one_dataset_row(dataset_path, record)
     assert int(seed["action_id"][victim]) == 226
@@ -142,8 +142,6 @@ def test_capturepulled_lw_fresh_cross_floor_entry_selects_hi_before_lw_anchor() 
     #   fn_800DB230,fn_800DAC78,ftCo_CapturePulledLw_Phys}
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/InternalPowerlessWallaby.msl"
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     seed, out, ref = _step_one_dataset_row(dataset_path, 7312)
     victim = 0
@@ -172,8 +170,6 @@ def test_capturepulled_lw_fresh_dash_pull_non_landingfallspecial_stays_lw(
     # float residuals, so lock only the discrete owner.
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
 
     seed, out, ref = _step_one_dataset_row(dataset_path, record)
     owner = int(seed["grab_owner_port"][victim])
@@ -363,8 +359,6 @@ def test_capturewait_breakout_uses_pre_input_stick_and_carries_floor_wss() -> No
     # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
     root = Path(__file__).resolve().parents[1]
     ds_path = root / "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
-    if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
 
     ds = read_dataset(str(ds_path))
     for record, seed_action in ((5162, 227), (5303, 224)):
@@ -523,8 +517,6 @@ def test_fallspecial_keeps_landingfallspecial_despite_basic_landing_callback_cla
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
     root = Path(__file__).resolve().parents[1]
     ds_path = root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
-    if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
 
     seed, ref, out = _run_one_step_row(
         ds_path,
@@ -606,7 +598,7 @@ def test_capturewait_mash_trigger_rows_and_blocker_control_are_replay_exact() ->
     )
     modeled_path = root / modeled_rel
     blocker_path = root / blocker_rel
-    if not modeled_path.exists() or not blocker_path.exists():
+    if not replay_dataset_available(modeled_path) or not replay_dataset_available(blocker_path):
         pytest.skip("missing local datasets for capturewait mash replay locks")
 
     modeled = read_dataset(str(modeled_path)).samples[[8256, 8257, 8258, 8259]]
@@ -705,8 +697,6 @@ def test_capturewait_owner_earlier_first_steady_rows_are_replay_exact() -> None:
         ),
     )
     for dataset_path, record, victim_p, want_action, want_frame in cases:
-        if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_path}")
         _, ref_row, out_row = _run_one_step_row(dataset_path, record, victim_p)
         assert int(ref_row["action_id"][victim_p]) == want_action
         assert int(ref_row["action_frame"][victim_p]) == want_frame
@@ -732,8 +722,6 @@ def test_capturewait_first_steady_seed_reconstruction_keeps_visible_timer_bounda
         ),
     )
     for dataset_path, record, victim_p, want_frame in cases:
-        if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_path}")
         seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, victim_p)
         assert int(seed_row["action_id"][victim_p]) == 227  # CaptureWaitLw
         assert int(seed_row["action_frame"][victim_p]) == 1
@@ -757,8 +745,6 @@ def test_capturewait_expired_anim_rate_timer_resets_stale_replay_speed() -> None
         (root / "datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl", 859, 1),
     )
     for dataset_path, record, victim_p in cases:
-        if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_path}")
         seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, victim_p)
         assert int(seed_row["action_id"][victim_p]) == 227  # CaptureWaitLw
         assert float(seed_row["frame_speed_mul_f32"][victim_p]) == pytest.approx(2.0)

@@ -300,18 +300,7 @@ def evaluate_dataset(
     chunk = max(1, int(chunk))
 
     if dataset is None:
-        try:
-            ds = read_dataset(str(dataset_path))
-        except ValueError as e:
-            msg = str(e)
-            if "record_size mismatch" in msg:
-                reporter.print(f"error: {msg}")
-                reporter.print("hint: dataset schema changed; refresh cached datasets:")
-                reporter.print(
-                    "  uv run python -m tools.slippi.preprocess_suite --suite <suite.json> --datasets-dir <dir>"
-                )
-                raise
-            raise
+        ds = read_dataset(str(dataset_path))
     else:
         ds = dataset
     samples = ds.samples

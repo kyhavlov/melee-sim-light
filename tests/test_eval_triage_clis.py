@@ -471,6 +471,65 @@ def test_stage_rollout_summary_normalizes_by_records(tmp_path: Path) -> None:
     assert fod.top_replay_first_total == 8
 
 
+def test_stage_rollout_summary_parses_replay_report_labels(tmp_path: Path) -> None:
+    suite = tmp_path / "suite.json"
+    suite.write_text(
+        json.dumps(
+            {
+                "name": "synthetic",
+                "replays": [
+                    {"replay": "replays/a.slpz", "ports": [1, 2], "stage_id": 32},
+                    {"replay": "replays/b.slp", "ports": [1, 2], "stage_id": 2},
+                    {"replay": "replays/c.msl", "ports": [1, 2], "stage_id": 8},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    rollout = tmp_path / "rollout.txt"
+    rollout.write_text(
+        "\n".join(
+            [
+                "== replays/a.slpz ==",
+                "rollout.status: NOT-CLEAN",
+                "rollout.first_mismatch_total: 4",
+                "rollout.first_mismatch_seeded_total: 1",
+                "== replays/b.slp ==",
+                "rollout.status: NOT-CLEAN",
+                "rollout.first_mismatch_total: 8",
+                "rollout.first_mismatch_seeded_total: 2",
+                "== datasets/s/replays/c.msl ==",
+                "rollout.status: NOT-CLEAN",
+                "rollout.first_mismatch_total: 1",
+                "rollout.first_mismatch_seeded_total: 0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    one_step = tmp_path / "one_step.txt"
+    one_step.write_text(
+        "\n".join(
+            [
+                "== replays/a.slpz ==",
+                "Records: 1000  Players/scored per record: 2",
+                "== replays/b.slp ==",
+                "Records: 1000  Players/scored per record: 2",
+                "== datasets/s/replays/c.msl ==",
+                "Records: 500  Players/scored per record: 2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    rows = summarize_by_stage(suite_path=suite, rollout_report=rollout, one_step_report=one_step)
+
+    assert [(row.stage_id, row.replay_count, row.records) for row in rows] == [
+        (2, 1, 1000),
+        (32, 1, 1000),
+        (8, 1, 500),
+    ]
+
+
 def test_rollout_stage_segment_values_join_ground_ids_to_mslstg01_metadata() -> None:
     header = np.zeros((), dtype=HEADER_DTYPE)
     samples = np.zeros(2, dtype=SAMPLE_DTYPE)

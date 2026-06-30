@@ -183,7 +183,6 @@ def write_summary(rows: list[HeldoutReport], out: Path) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--index", default="replays/suites/heldout.json")
-    ap.add_argument("--datasets-dir", default="datasets")
     ap.add_argument("--chunk", type=int, default=4096)
     ap.add_argument("--fields", default="action_id,animation_index,on_ground,hitlag,hitstun,state_flags")
     ap.add_argument("--out-dir", default="reports/validation/heldout")
@@ -208,8 +207,6 @@ def main() -> None:
                 [
                     "--suite",
                     suite_arg,
-                    "--datasets-dir",
-                    args.datasets_dir,
                     "--chunk",
                     str(int(args.chunk)),
                     "--out",
@@ -223,8 +220,6 @@ def main() -> None:
                 [
                     "--suite",
                     suite_arg,
-                    "--datasets-dir",
-                    args.datasets_dir,
                     "--fields",
                     args.fields,
                     "--out",

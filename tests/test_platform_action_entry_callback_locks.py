@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import json
-from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
@@ -13,7 +12,7 @@ from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype
 from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, first_mismatch_values
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
 from tools.eval.validation_profile import get_validation_profile
-from tools.slippi.make_dataset_from_slp import _main_impl
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
 BUTTON_L = 0x0040
@@ -5322,7 +5321,7 @@ def test_fresh_guardon_nonshield_entry_does_not_platform_pass_same_callback() ->
 
 
 @pytest.mark.integration
-def test_fod_fall_coll_floor_skip_seed_carries_transformed_platform_pass(tmp_path: Path) -> None:
+def test_fod_fall_coll_floor_skip_seed_carries_transformed_platform_pass() -> None:
     # FoD Fall_Coll floor-skip seed owner:
     # - Fall_Coll routes through ft_800831CC with ftCo_80096CC8, the same soft-platform predicate
     #   used by Jump/JumpAerial. A down-held transformed-platform crossing writes hidden
@@ -5341,17 +5340,12 @@ def test_fod_fall_coll_floor_skip_seed_carries_transformed_platform_pass(tmp_pat
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    out_path = tmp_path / "ElatedWearyTermite.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports=None,
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=None,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
     record = 5954
     p = 1
     row = ds.samples[record]
@@ -6040,9 +6034,7 @@ def test_fod_match_start_initial_platform_height_rollout_lands_damage_on_side_pl
 
 
 @pytest.mark.integration
-def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner(
-    tmp_path: Path,
-) -> None:
+def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner() -> None:
     # FoD AttackAir_Coll shallow transformed-platform owner:
     # - AttackAir_Coll routes through ft_80082C74 -> mpColl_800471F8. During the extracted
     #   AttackAirN/Hi/Lw first HitCapsule create->clear phase, a shallow first contact with FoD's
@@ -6063,17 +6055,12 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner(
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    out_path = tmp_path / "ParallelTemptingElk.msl"
-    _main_impl(
-        Namespace(
-            slp=str(slp),
-            out=str(out_path),
-            ports="1,2",
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
-        )
+    ds = build_dataset_from_slp(
+        slp_path=str(slp),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
     )
-    ds = read_dataset(str(out_path))
 
     for record, action in ((1640, ACT_ATTACK_AIR_HI), (1641, ACT_ATTACK_AIR_HI), (1692, ACT_ATTACK_AIR_N)):
         row = ds.samples[record]

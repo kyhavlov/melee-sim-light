@@ -255,8 +255,7 @@ def test_damagefly_iasa_jump_buffer_parity_agg_1681_p1() -> None:
     assert int(row["ref_t1"]["on_ground"][0, p]) == 0
     if int(row["seed_t"]["damage_jump_buffer_x14"][0, p]) == 0:
         pytest.skip(
-            "stale cached dataset for damage_jump_buffer_x14; rebuild with "
-            "preprocess_suite --force"
+            "stale cached dataset for damage_jump_buffer_x14; use replay-derived rows"
         )
 
     binding = pytest.importorskip("msl_binding")
@@ -787,8 +786,8 @@ def test_state_flags_x221b_b5_clears_after_throw_release() -> None:
 
 @pytest.mark.integration
 def test_state_flags_x221c_b2_set_on_guard_reflect_entry() -> None:
-    # Schema note: this slice adds `seed_t.guard_reflect_timer_x18`; rebuild cached suite datasets
-    # with `uv run python -m tools.slippi.preprocess_suite --suite ... --datasets-dir datasets --force`.
+    # Schema note: this slice added `seed_t.guard_reflect_timer_x18`; cache-era local datasets
+    # from before that schema are stale and should not be used for validation.
     #
     # Cluster lock: GuardReflect entry sets fp->x221C_b2 ("Powershield Active Bool") alongside
     # fp->x221C_b1/fp->x221C_b3.
@@ -1570,13 +1569,11 @@ def test_action_frame_guard_setoff_hitlag_tail_uses_entry_rate() -> None:
 
     # Decomp ftCo_80092F2C uses (end_frame + 0.1f)/f for GuardSetOff anim rate.
     expected_seed_rate = (float(end_frame) + 0.1) / setoff_f
-    # NOTE(schema): this lock expects datasets rebuilt with `preprocess_suite --force` after
-    # Guard/seed-derivation schema updates (for example, guard_reflect_timer_x18).
+    # NOTE(schema): this lock expects rows derived after Guard/seed-derivation schema updates
+    # (for example, guard_reflect_timer_x18).
     if not np.isclose(seed_rate, expected_seed_rate, rtol=1e-6, atol=1e-6):
         pytest.skip(
-            "stale cached datasets for GuardSetOff frame_speed_mul; rebuild with "
-            "`uv run python -m tools.slippi.preprocess_suite --suite replays/suites/fox_falco_fd_ucf084_recent.json "
-            "--datasets-dir datasets --force`"
+            "stale cached datasets for GuardSetOff frame_speed_mul; use replay-derived rows"
         )
 
     binding = pytest.importorskip("msl_binding")

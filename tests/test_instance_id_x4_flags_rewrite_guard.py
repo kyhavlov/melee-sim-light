@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-from tools.eval.dataset import read_dataset
 from tools.slippi.action_state_tables import read_mslacid1_v3
+from tools.slippi.suite_io import load_suite
+from tests.replay_dataset_loader import load_replay_dataset as read_dataset
 
 
 @pytest.mark.integration
@@ -25,35 +25,22 @@ def test_suite_observed_actions_do_not_require_ft_800895E0_rewrite_paths() -> No
     0x71 or 0x62.
     """
 
-    ds_root = Path("datasets/fox_falco_fd_ucf084_recent")
-    if not ds_root.exists():
-        pytest.skip("missing local preprocessed datasets for suite (datasets/ is gitignored)")
-
     suite_path = Path("replays/suites/fox_falco_fd_ucf084_recent.json")
     if not suite_path.exists():
         pytest.skip("missing suite manifest: replays/suites/fox_falco_fd_ucf084_recent.json")
-    suite = json.loads(suite_path.read_text(encoding="utf-8"))
-    # Restrict this guard to the actual validation suite. Gitignored debug caches under datasets/
-    # may contain probe windows for unmodeled actions and should be locked by their focused tests.
-    msl_paths = sorted(
-        ds_root / Path(str(entry["replay"])).with_suffix(".msl")
-        for entry in suite.get("replays", [])
+    suite = load_suite(suite_path)
+    replay_labels = sorted(
+        Path("datasets") / suite.name / Path(entry.replay).with_suffix(".msl")
+        for entry in suite.replays
     )
-    if not msl_paths:
-        pytest.skip("no .msl files found under datasets/fox_falco_fd_ucf084_recent")
 
     fox_low = read_mslacid1_v3(Path("data/attack_id/move_id/fox.bin")).x4_flags_low
     falco_low = read_mslacid1_v3(Path("data/attack_id/move_id/falco.bin")).x4_flags_low
 
     bad: set[tuple[int, int, int]] = set()
 
-    for p in msl_paths:
-        try:
-            ds = read_dataset(str(p))
-        except ValueError as e:
-            # Dataset caches live under datasets/ and are gitignored. When the seed schema changes,
-            # local caches can become stale and fail the record_size check in read_dataset.
-            pytest.skip(f"stale local dataset cache (rerun preprocess_suite --force): {e}")
+    for p in replay_labels:
+        ds = read_dataset(str(p))
         s = ds.samples
         for field in ("seed_t", "ref_t1"):
             action = s[field]["action_id"][:, :2]

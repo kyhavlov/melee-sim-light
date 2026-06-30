@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from tools.eval import validate_replay
+from tools.eval import run_one_step_suite_eval
+from tools.eval.run_one_step_eval import EvalSummary
 from tools.eval.top_float_offenders import FloatOffender
 
 
@@ -62,8 +64,89 @@ def test_validate_replay_one_step_uses_in_memory_replay_without_temp_files(
     }
     eval_call = calls["eval"]
     assert eval_call["dataset"] is sentinel_dataset
-    assert eval_call["dataset_path"] == replay.resolve().with_suffix(".msl")
+    assert eval_call["dataset_path"] == replay.resolve()
     assert sorted(p.name for p in tmp_path.iterdir()) == ["game.slp"]
+
+
+def test_one_step_suite_uses_replay_identity_for_reports_and_io(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    replay = tmp_path / "game.slp"
+    replay.write_bytes(b"not a real slp; suite eval is monkeypatched")
+    suite_path = tmp_path / "suite.json"
+    suite_path.write_text(
+        json.dumps(
+            {
+                "name": "direct_replay_test",
+                "ucf_enabled": True,
+                "ucf_cardinals_1_0_enabled": False,
+                "replays": [
+                    {
+                        "replay": str(replay),
+                        "ports": [1, 2],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls: dict[str, object] = {}
+    sentinel_dataset = SimpleNamespace(header={"num_records": 3, "num_players": 2})
+
+    class FakeRuntime:
+        def close(self) -> None:
+            calls["closed"] = True
+
+    def fake_build_dataset_from_slp(**kwargs):
+        calls["build"] = kwargs
+        return sentinel_dataset
+
+    def fake_create_runtime(**kwargs):
+        calls["runtime"] = kwargs
+        return FakeRuntime()
+
+    def fake_evaluate_dataset(**kwargs):
+        calls["eval"] = kwargs
+        kwargs["reporter"].print("suite one-step ok")
+        return EvalSummary(
+            total_records=0,
+            total_player_frames=0,
+            total_state_flags=0,
+            total_item_slots=0,
+            mismatches={},
+            strict_mismatches={},
+            ignored_mismatches={},
+            profile_name="rl1_gameplay",
+            float_norm_sum=0.0,
+            float_norm_count=0,
+        )
+
+    import tools.slippi.make_dataset_from_slp as make_dataset_from_slp
+
+    monkeypatch.setattr(make_dataset_from_slp, "build_dataset_from_slp", fake_build_dataset_from_slp)
+    monkeypatch.setattr(run_one_step_suite_eval, "create_one_step_eval_runtime", fake_create_runtime)
+    monkeypatch.setattr(run_one_step_suite_eval, "evaluate_dataset", fake_evaluate_dataset)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_one_step_suite_eval",
+            "--suite",
+            str(suite_path),
+            "--workers",
+            "1",
+            "--quiet",
+        ],
+    )
+
+    run_one_step_suite_eval.main()
+
+    assert calls["build"]["slp_path"] == str(replay.resolve())
+    assert not str(calls["build"]["slp_path"]).endswith(".msl")
+    eval_call = calls["eval"]
+    assert eval_call["dataset"] is sentinel_dataset
+    assert Path(eval_call["dataset_path"]) == replay.resolve()
+    assert not replay.with_suffix(".msl").exists()
 
 
 def test_validate_replay_legacy_slp_path_resolves_to_slpz(
@@ -149,7 +232,7 @@ def test_validate_replay_rollout_prints_report_overlay_fields(
                 "version": 1,
                 "rollout_first_mismatch_exceptions": [
                     {
-                        "dataset": "game.msl",
+                        "dataset": str(replay.resolve()),
                         "record": 12,
                         "player": 0,
                         "field": "action_id",
@@ -164,7 +247,7 @@ def test_validate_replay_rollout_prints_report_overlay_fields(
                 ],
                 "rollout_float_annotations": [
                     {
-                        "dataset": "game.msl",
+                        "dataset": str(replay.resolve()),
                         "record": 20,
                         "player": 0,
                         "field": "percent",
@@ -191,7 +274,7 @@ def test_validate_replay_rollout_prints_report_overlay_fields(
 
     fake_dataset = SimpleNamespace(header={"num_players": 2})
     fake_streaks = SimpleNamespace(
-        dataset=replay.resolve().with_suffix(".msl"),
+        dataset=replay.resolve(),
         num_records=30,
         max_records_used=30,
         players=(0, 1),

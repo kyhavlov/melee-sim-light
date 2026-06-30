@@ -25,7 +25,7 @@ def main() -> None:
     ap.add_argument(
         "--datasets-dir",
         default="datasets",
-        help="Datasets cache dir (as used by tools.slippi.preprocess_suite)",
+        help="Legacy datasets cache dir for this dataset-only triage helper.",
     )
     ap.add_argument(
         "--seed-only",
@@ -80,4 +80,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

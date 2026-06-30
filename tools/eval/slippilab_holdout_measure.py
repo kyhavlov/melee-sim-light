@@ -12,8 +12,6 @@ import argparse
 import csv
 import json
 import re
-import subprocess
-import sys
 import time
 import urllib.request
 from collections import Counter, defaultdict
@@ -328,11 +326,6 @@ def _write_suite(
     return suite_path
 
 
-def _run(cmd: list[str], *, root: Path) -> None:
-    print("+", " ".join(cmd), flush=True)
-    subprocess.run(cmd, cwd=root, check=True)
-
-
 def _run_eval(
     *,
     suite_path: Path,
@@ -342,52 +335,9 @@ def _run_eval(
     workers: int,
     force: bool,
 ) -> None:
-    root = repo_root()
-    preprocess = [
-        sys.executable,
-        "-m",
-        "tools.slippi.preprocess_suite",
-        "--suite",
-        str(suite_path),
-        "--datasets-dir",
-        str(datasets_dir),
-        "--workers",
-        str(workers),
-    ]
-    if force:
-        preprocess.append("--force")
-    _run(preprocess, root=root)
-    _run(
-        [
-            sys.executable,
-            "-m",
-            "tools.eval.run_rollout_suite_eval",
-            "--suite",
-            str(suite_path),
-            "--datasets-dir",
-            str(datasets_dir),
-            "--fields",
-            fields,
-            "--out",
-            str(out_dir / "rollout_report.txt"),
-        ],
-        root=root,
-    )
-    _run(
-        [
-            sys.executable,
-            "-m",
-            "tools.eval.locate_rollout_desyncs",
-            "--suite",
-            str(suite_path),
-            "--datasets-dir",
-            str(datasets_dir),
-            "--fields",
-            fields,
-            "--out",
-            str(out_dir / "rollout_locate.tsv"),
-        ],
-        root=root,
+    raise SystemExit(
+        "slippilab_holdout_measure --evaluate used the removed .msl cache pipeline. "
+        "Rebuild this tool on direct replay validation before using it again."
     )
 
 
