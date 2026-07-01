@@ -2759,54 +2759,18 @@ def _derive_landing_fallspecial_allow_interrupt_seed_lane(
     - Carry the hidden FallSpecial allow bit across a FallSpecial run, and copy it onto the
       subsequent LandingFallSpecial run.
     """
-    action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    char_ids = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
-    out = np.zeros(int(action.shape[0]), dtype=np.uint8)
-    ACT_FALL_SPECIAL = 0x0023
-    ACT_FALL_SPECIAL_F = 0x0024
-    ACT_FALL_SPECIAL_B = 0x0025
-    ACT_LANDING_FALL_SPECIAL = 0x002B
-    ACT_ESCAPE_AIR = 0x00EC
-    fall_actions = {ACT_FALL_SPECIAL, ACT_FALL_SPECIAL_F, ACT_FALL_SPECIAL_B}
-    _empty: dict[int, tuple[int, int]] = {}
-    fallspecial_allow = 0
-    lfs_allow = 0
-    prev = -1
-    for i, raw in enumerate(action):
-        cur = int(raw)
-        if i == 0 or cur != prev:
-            origin_allow = origin_allow_by_char.get(int(char_ids[i]), _empty)
-            if cur in fall_actions:
-                # EscapeAir_Anim enters FallSpecial with allow_interrupt=false. Known special
-                # freefall origins carry their callsite bool; remaining common enters reach
-                # FallSpecial through ftCo_FallSpecial_Enter's true path.
-                # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Enter
-                if prev == ACT_ESCAPE_AIR:
-                    fallspecial_allow = 0
-                else:
-                    fallspecial_allow = int(origin_allow.get(prev, (1, 0))[0])
-                lfs_allow = 0
-            elif cur == ACT_LANDING_FALL_SPECIAL:
-                if prev in fall_actions:
-                    lfs_allow = 1 if fallspecial_allow != 0 else 0
-                elif prev in origin_allow:
-                    # Some replay rows publish the LandingFallSpecial directly from the special's
-                    # visible state (same-frame landing): the origin's DIRECT-landing callsite
-                    # bool applies (Firefox/Firebird HiFall/HiBound true; Illusion
-                    # SpecialAirSEnd_Coll false; marth-style SpecialHi false).
-                    lfs_allow = int(origin_allow[prev][1])
-                else:
-                    # Direct EscapeAir_Coll and SpecialAirSEnd_Coll both pass false.
-                    lfs_allow = 0
-            else:
-                fallspecial_allow = 0
-                lfs_allow = 0
-        if cur in fall_actions:
-            out[i] = np.uint8(1 if fallspecial_allow != 0 else 0)
-        elif cur == ACT_LANDING_FALL_SPECIAL:
-            out[i] = np.uint8(1 if lfs_allow != 0 else 0)
-        prev = cur
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_landing_fallspecial_allow_interrupt is required; run `make build`"
+        ) from exc
+
+    return msl_binding.derive_landing_fallspecial_allow_interrupt(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
+        origin_allow_by_char,
+    )
 
 
 def _derive_jab_rapid_count_seed_lane(

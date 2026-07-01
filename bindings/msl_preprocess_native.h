@@ -84,6 +84,8 @@ PyObject* msl_derive_illusion_seed_position_updates_py(PyObject* self, PyObject*
 PyObject* msl_trim_stale_hitlist_seed_bridge_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_attacker_shield_ground_kb_vel_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_guardsetoff_frame_speed_overrides_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_frame_speed_mul_f32_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_landing_fallspecial_allow_interrupt_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_shield_contact_seed_bridge_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_rebound_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_mpcoll_wall_seed_lanes_py(PyObject* self, PyObject* args);

@@ -9462,6 +9462,11 @@ static PyMethodDef methods[] = {
     {"derive_guardsetoff_frame_speed_overrides", msl_derive_guardsetoff_frame_speed_overrides_py,
      METH_VARARGS,
      "derive_guardsetoff_frame_speed_overrides(replay fields, LUTs, constants) -> float32[:,4]"},
+    {"derive_frame_speed_mul_f32", msl_derive_frame_speed_mul_f32_py, METH_VARARGS,
+     "derive_frame_speed_mul_f32(timebase replay columns and source tables) -> float32[:]"},
+    {"derive_landing_fallspecial_allow_interrupt",
+     msl_derive_landing_fallspecial_allow_interrupt_py, METH_VARARGS,
+     "derive_landing_fallspecial_allow_interrupt(action_id, char_id, origin table) -> uint8[:]"},
     {"derive_shield_contact_seed_bridge", msl_derive_shield_contact_seed_bridge_py, METH_VARARGS,
      "derive_shield_contact_seed_bridge(hitlist arrays, replay fields, LUTs, constants) -> "
      "(shield_hit_int_damage, shield_damage_taken)"},
