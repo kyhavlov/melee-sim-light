@@ -14,6 +14,7 @@ from tools.slippi.known_data_artifacts import (
 from tools.slippi.make_dataset_from_slp import (
     _derive_jab_rapid_count_seed_lane,
     _derive_landing_fallspecial_allow_interrupt_seed_lane,
+    _derive_fod_floor_skip_segments,
     _fod_platform_heights_from_frames,
     _fod_platform_heights_with_ground_contact,
     _fod_visible_choice_lanes,
@@ -631,6 +632,62 @@ def test_fod_platform_ground_contact_without_transform_does_not_invent_velocity(
     assert np.all(out_v == 0)
     assert np.all(out_vel == 0.0)
     assert np.all(out_vel_v == 0)
+
+
+def _synthetic_fod_escapeair_platform_crossing(
+    *,
+    main_y: int = -80,
+    prev_main_y: int = -80,
+    platform_height_valid: int = 1,
+) -> tuple[np.ndarray, int]:
+    from tools.slippi.make_dataset_from_slp import _fod_platform_height_transform_records
+
+    transforms = _fod_platform_height_transform_records(Path("data"))
+    line_id, (platform_id, coeff, local_y) = next(iter(transforms.items()))
+    height = np.float32(20.0)
+    world_y = np.float32(float(local_y) + float(height) * float(coeff))
+    pos_x = np.float32(-35.0 if int(platform_id) == 1 else 35.0)
+    platform_heights = np.zeros((1, 2), dtype=np.float32)
+    platform_valid = np.zeros((1, 2), dtype=np.uint8)
+    platform_heights[0, int(platform_id)] = height
+    platform_valid[0, int(platform_id)] = np.uint8(platform_height_valid)
+    out = _derive_fod_floor_skip_segments(
+        action_id_u16=np.asarray([[0x00EC]], dtype=np.uint16),
+        action_frame_u16=np.asarray([[1]], dtype=np.uint16),
+        char_id_u8=np.asarray([[1]], dtype=np.uint8),
+        on_ground_u8=np.asarray([[0]], dtype=np.uint8),
+        pos_x_f32=np.asarray([[pos_x]], dtype=np.float32),
+        pos_y_f32=np.asarray([[np.float32(float(world_y) + 1.0)]], dtype=np.float32),
+        speed_y_self_f32=np.asarray([[-2.5]], dtype=np.float32),
+        speed_y_attack_f32=np.asarray([[0.0]], dtype=np.float32),
+        prev_main_y_i8=np.asarray([[prev_main_y]], dtype=np.int8),
+        main_y_i8=np.asarray([[main_y]], dtype=np.int8),
+        platform_height_f32=platform_heights,
+        platform_height_valid_u8=platform_valid,
+        platform_air_land_stick_y_threshold=0.3,
+        floor_skip_frames=3,
+    )
+    return out, int(line_id)
+
+
+def test_fod_floor_skip_native_publishes_escapeair_transformed_platform_crossing() -> None:
+    # Synthetic mirror of the source owner used by the replay path: an airborne EscapeAir callback
+    # with down held crosses a live FoD transformed platform and seeds CollData.floor_skip.
+    out, line_id = _synthetic_fod_escapeair_platform_crossing()
+
+    assert int(out[0, 0]) == line_id
+
+
+def test_fod_floor_skip_native_rejects_escapeair_crossing_without_down_input() -> None:
+    out, _line_id = _synthetic_fod_escapeair_platform_crossing(main_y=80, prev_main_y=80)
+
+    assert int(out[0, 0]) == 0xFFFF
+
+
+def test_fod_floor_skip_native_rejects_invalid_platform_height() -> None:
+    out, _line_id = _synthetic_fod_escapeair_platform_crossing(platform_height_valid=0)
+
+    assert int(out[0, 0]) == 0xFFFF
 
 
 def test_item_common_data_exports_shield_bounce_threshold_source() -> None:

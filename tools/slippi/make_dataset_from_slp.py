@@ -513,15 +513,9 @@ def _derive_fod_floor_skip_segments(
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
     data/stages/bin/griz.bin::MSLSTG01 platform_transforms
     """
-
-    n_samples, players = action_id_u16.shape
-    out = np.full((n_samples, players), np.uint16(0xFFFF), dtype=np.uint16)
-    if n_samples == 0:
-        return out
-
     stage_path = stage_metadata_path_for_stage_id(2, Path(data_root))
     if stage_path is None:
-        return out
+        return np.full(action_id_u16.shape, np.uint16(0xFFFF), dtype=np.uint16)
     stage = read_mslstg01_v7(stage_path)
     transforms = [
         rec
@@ -531,7 +525,7 @@ def _derive_fod_floor_skip_segments(
         and float(rec.height_coeff) != 0.0
     ]
     if not transforms:
-        return out
+        return np.full(action_id_u16.shape, np.uint16(0xFFFF), dtype=np.uint16)
 
     data_root_path = Path(data_root)
     data_root_text = str(data_root_path)
@@ -557,261 +551,86 @@ def _derive_fod_floor_skip_segments(
     )
     active_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 127.0))
     jump_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 80.0))
-    active_skip = [0xFFFF] * players
-    active_skip_remaining = [0] * players
-    active_skip_from_shallow_attackair = [False] * players
-    max_line_id = max((int(rec.line_id) for rec in transforms), default=-1)
-    transform_platform_by_line = np.full(max_line_id + 1, -1, dtype=np.int16)
-    transform_height_coeff_by_line = np.zeros(max_line_id + 1, dtype=np.float32)
-    transform_local_y_by_line = np.zeros(max_line_id + 1, dtype=np.float32)
     segment_y_by_line = {int(seg.line_id): float(seg.y0) for seg in stage.segments}
-    transform_record_by_line = {}
-    for rec in transforms:
-        line_id = int(rec.line_id)
-        transform_platform_by_line[line_id] = np.int16(int(rec.platform_id))
-        transform_height_coeff_by_line[line_id] = np.float32(float(rec.height_coeff))
-        transform_local_y_by_line[line_id] = np.float32(float(segment_y_by_line.get(line_id, 0.0)))
-        transform_record_by_line[line_id] = rec
-    jump_skip_root_clearance = float(max(0, int(floor_skip_frames)))
-    # Source `mpColl_LoadECB_inline` tightens the desired ECB envelope with midpoint +/- 1.0f.
-    # Reconstructing hidden CollData.floor_skip from post-frame rows has only root/current samples,
-    # so the transformed-platform lookup uses bounded ECB-unit envelopes instead of row ids.
-    transformed_platform_skip_lookup_slop = FOD_TRANSFORMED_PLATFORM_SKIP_LOOKUP_SLOP
-    # Active AttackAir/EscapeAir transformed-platform skip carry is reconstructed from the same
-    # source floor-skip lifetime: p_ftCommonData->x470 frames plus the one-ECB-unit tightened
-    # mpColl_LoadECB_inline envelope used by the runtime owner.
-    # refs/melee/src/melee/ft/types.h::ftCommonData::x470
-    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044628_Floor}
-    active_skip_platform_root_clearance = jump_skip_root_clearance + FOD_SKIP_ECB_VERTICAL_UNIT
     hard_floor_segments = [
         seg
         for seg in stage.segments
         if int(seg.kind_id) == 0 and bool(seg.fighter_solid) and not bool(int(seg.flags) & 1)
     ]
-    hard_floor_root_crossing = np.zeros((n_samples, players), dtype=np.bool_)
-    if hard_floor_segments:
-        # Prefix-causal mirror of the runtime mpColl first-crossing boundary after a live FoD
-        # platform-skip owner. This is vectorized over all frames/slots so preprocessing does not run
-        # a per-row Python floor-candidate search in the seed loop. Static hard floors are generated
-        # MSLSTG01 segments; dynamic transformed platforms stay on the separate owner above.
-        # refs/melee/src/melee/mp/mplib.c::{mpCheckFloor,mpLib_8004DD90_Floor}
-        # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
-        root_x = np.asarray(pos_x_f32, dtype=np.float32)
-        root_y0 = np.asarray(pos_y_f32, dtype=np.float32)
-        root_y1 = (
-            root_y0
-            + np.asarray(speed_y_self_f32, dtype=np.float32)
-            + np.asarray(speed_y_attack_f32, dtype=np.float32)
-        )
-        descending = root_y1 < root_y0
-        for seg in hard_floor_segments:
-            x0 = float(seg.x0)
-            x1 = float(seg.x1)
-            dx = x1 - x0
-            if abs(dx) <= FOD_STAGE_LINE_DX_EPSILON:
-                continue
-            lo_x = min(x0, x1) - FOD_FLOOR_X_END_CLAMP
-            hi_x = max(x0, x1) + FOD_FLOOR_X_END_CLAMP
-            in_x = (root_x >= lo_x) & (root_x <= hi_x)
-            t = (root_x - x0) / dx
-            world_y = float(seg.y0) + ((float(seg.y1) - float(seg.y0)) * t)
-            hard_floor_root_crossing |= (
-                descending & in_x & (root_y0 > (world_y + FOD_FLOOR_Y_BIAS)) & (root_y1 < world_y)
-            )
+    max_action = int(np.max(action_id_u16, initial=0))
+    for by_char in (
+        attackair_actions_by_char,
+        shallow_attackair_actions_by_char,
+        escapeair_actions_by_char,
+        jump_skip_actions_by_char,
+        fall_skip_actions_by_char,
+        attackair_first_phase_by_char_action,
+    ):
+        for inner in by_char.values():
+            if inner:
+                max_action = max(max_action, max(int(a) for a in inner))
+    lut_width = max_action + 1
 
-    def active_skip_platform_root_clear(fi: int, slot: int, line_id: int) -> bool:
-        if line_id < 0 or line_id > max_line_id:
-            return False
-        pid = int(transform_platform_by_line[line_id])
-        if pid < 0 or not int(platform_height_valid_u8[fi, pid]):
-            return False
-        rec = transform_record_by_line.get(line_id)
-        if rec is None:
-            return False
-        if float(pos_y_f32[fi, slot]) <= 0.0:
-            return False
-        x = float(pos_x_f32[fi, slot])
-        if x < min(float(rec.x0), float(rec.x1)) - active_skip_platform_root_clearance:
-            return False
-        if x > max(float(rec.x0), float(rec.x1)) + active_skip_platform_root_clearance:
-            return False
-        world_y = float(transform_local_y_by_line[line_id]) + float(
-            platform_height_f32[fi, pid]
-        ) * float(transform_height_coeff_by_line[line_id])
-        return float(pos_y_f32[fi, slot]) < world_y - active_skip_platform_root_clearance
+    def _lut_from_actions(*maps: dict[int, set[int] | frozenset[int]]) -> np.ndarray:
+        lut = np.zeros((256, lut_width), dtype=np.uint8)
+        for mp in maps:
+            for cid, actions in mp.items():
+                if 0 <= int(cid) < 256:
+                    for action in actions:
+                        if 0 <= int(action) < lut_width:
+                            lut[int(cid), int(action)] = np.uint8(1)
+        return lut
 
-    def transform_endpoint_contact(fi: int, slot: int, rec: Any) -> bool:
-        x = float(pos_x_f32[fi, slot])
-        return min(abs(x - float(rec.x0)), abs(x - float(rec.x1))) <= active_skip_platform_root_clearance
+    phase_start = np.full((256, lut_width), np.int16(-1), dtype=np.int16)
+    phase_stop = np.full((256, lut_width), np.int16(-1), dtype=np.int16)
+    for cid, by_action in attackair_first_phase_by_char_action.items():
+        if not (0 <= int(cid) < 256):
+            continue
+        for action, phase in by_action.items():
+            if 0 <= int(action) < lut_width:
+                phase_start[int(cid), int(action)] = np.int16(int(phase[0]))
+                phase_stop[int(cid), int(action)] = np.int16(int(phase[1]))
 
-    def attackair_shallow_first_contact(fi: int, slot: int, rec: Any) -> bool:
-        x = float(pos_x_f32[fi, slot])
-        if x < min(float(rec.x0), float(rec.x1)) - transformed_platform_skip_lookup_slop:
-            return False
-        if x > max(float(rec.x0), float(rec.x1)) + transformed_platform_skip_lookup_slop:
-            return False
-        pid = int(rec.platform_id)
-        if not int(platform_height_valid_u8[fi, pid]):
-            return False
-        world_y = float(segment_y_by_line.get(int(rec.line_id), 0.0)) + float(
-            platform_height_f32[fi, pid]
-        ) * float(rec.height_coeff)
-        y0 = float(pos_y_f32[fi, slot])
-        y1 = y0 + float(speed_y_self_f32[fi, slot]) + float(speed_y_attack_f32[fi, slot])
-        prev_depth = world_y - y0
-        return (
-            prev_depth > FOD_FLOOR_Y_BIAS
-            and prev_depth <= (2.0 * FOD_SKIP_ECB_VERTICAL_UNIT)
-            and y1 < world_y
-        )
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_fod_floor_skip_segments is required; run `make build`"
+        ) from exc
 
-    _empty: frozenset[int] = frozenset()
-
-    def attackair_first_hitbox_phase(cid: int, action_id: int, action_frame: int) -> bool:
-        phase = attackair_first_phase_by_char_action.get(cid, {}).get(int(action_id))
-        if phase is None:
-            return False
-        return int(action_frame) >= phase[0] and int(action_frame) < phase[1]
-
-    for fi in range(n_samples):
-        for slot in range(players):
-            if int(on_ground_u8[fi, slot]) != 0:
-                active_skip[slot] = 0xFFFF
-                active_skip_from_shallow_attackair[slot] = False
-                continue
-            action_id = int(action_id_u16[fi, slot])
-            cid = int(char_id_u8[fi, slot])
-            # Per-char action sets: the same numeric id is a different MotionState row per
-            # character (de-spacie pass; the old fox/falco intersection was applied
-            # char-blind to every row).
-            active_skip_actions = (
-                attackair_actions_by_char.get(cid, _empty) | escapeair_actions_by_char.get(cid, _empty)
-            )
-            common_air_skip_actions = (
-                jump_skip_actions_by_char.get(cid, _empty) | fall_skip_actions_by_char.get(cid, _empty)
-            )
-            shallow_attackair_actions = shallow_attackair_actions_by_char.get(cid, _empty)
-            if action_id not in active_skip_actions and action_id not in common_air_skip_actions:
-                active_skip[slot] = 0xFFFF
-                active_skip_remaining[slot] = 0
-                active_skip_from_shallow_attackair[slot] = False
-                continue
-            if action_id in active_skip_actions:
-                down_held = (
-                    int(main_y_i8[fi, slot]) <= active_down_threshold_i8
-                    and int(prev_main_y_i8[fi, slot]) <= active_down_threshold_i8
-                )
-            else:
-                down_held = (
-                    int(main_y_i8[fi, slot]) <= jump_down_threshold_i8
-                    or int(prev_main_y_i8[fi, slot]) <= jump_down_threshold_i8
-                )
-            if active_skip[slot] != 0xFFFF:
-                if action_id in active_skip_actions:
-                    # Source CollData.floor_skip is not exposed by Slippi. Once a down-held
-                    # transformed-platform pass-through or shallow AttackAir_Coll ECB contact has
-                    # selected the hidden floor-skip line,
-                    # keep that hidden owner internally until the airborne callback leaves the active
-                    # aerial family, lands, or consumes the first hard-floor crossing after the moving
-                    # platform pass. Do not serialize it on every intermediate aerial frame: direct
-                    # reseeds only need the skip on the initial transformed-platform pass and on the
-                    # later hard-floor crossing frame that consumes the source owner.
-                    # refs/melee/src/melee/mp/mpcoll.c::{
-                    #   mpColl_800471F8,mpColl_80044628_Floor,mpUpdateFloorSkip}
-                    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
-                    line_id = int(active_skip[slot])
-                    rec = transform_record_by_line.get(line_id)
-                    if (
-                        rec is not None
-                        and action_id in shallow_attackair_actions
-                        and attackair_first_hitbox_phase(
-                            cid, action_id, int(action_frame_u16[fi, slot])
-                        )
-                        and attackair_shallow_first_contact(fi, slot, rec)
-                    ):
-                        active_skip_from_shallow_attackair[slot] = True
-                    if (down_held or active_skip_from_shallow_attackair[slot]) and active_skip_platform_root_clear(
-                        fi, slot, line_id
-                    ):
-                        out[fi, slot] = active_skip[slot]
-                    elif bool(hard_floor_root_crossing[fi, slot]):
-                        out[fi, slot] = active_skip[slot]
-                        active_skip[slot] = 0xFFFF
-                        active_skip_remaining[slot] = 0
-                        active_skip_from_shallow_attackair[slot] = False
-                    continue
-                line_id = int(active_skip[slot])
-                pid = (
-                    int(transform_platform_by_line[line_id])
-                    if line_id <= max_line_id
-                    else -1
-                )
-                jump_below_root = False
-                if pid >= 0 and int(platform_height_valid_u8[fi, pid]):
-                    world_y = float(transform_local_y_by_line[line_id]) + float(
-                        platform_height_f32[fi, pid]
-                    ) * float(transform_height_coeff_by_line[line_id])
-                    jump_below_root = (
-                        float(pos_y_f32[fi, slot]) <= world_y - jump_skip_root_clearance
-                    )
-                if down_held:
-                    active_skip_remaining[slot] = int(floor_skip_frames)
-                    if not jump_below_root:
-                        continue
-                    out[fi, slot] = active_skip[slot]
-                    continue
-                if active_skip_remaining[slot] > 0:
-                    if not jump_below_root:
-                        active_skip_remaining[slot] -= 1
-                        continue
-                    out[fi, slot] = active_skip[slot]
-                    active_skip_remaining[slot] -= 1
-                    continue
-                active_skip[slot] = 0xFFFF
-                active_skip_from_shallow_attackair[slot] = False
-            x = float(pos_x_f32[fi, slot])
-            y0 = float(pos_y_f32[fi, slot])
-            y1 = y0 + float(speed_y_self_f32[fi, slot]) + float(speed_y_attack_f32[fi, slot])
-            if y1 > y0:
-                continue
-            for rec in transforms:
-                pid = int(rec.platform_id)
-                if not int(platform_height_valid_u8[fi, pid]):
-                    continue
-                if x < min(float(rec.x0), float(rec.x1)) - transformed_platform_skip_lookup_slop:
-                    continue
-                if x > max(float(rec.x0), float(rec.x1)) + transformed_platform_skip_lookup_slop:
-                    continue
-                world_y = float(segment_y_by_line.get(int(rec.line_id), 0.0)) + float(
-                    platform_height_f32[fi, pid]
-                ) * float(rec.height_coeff)
-                if down_held and (
-                    y0 >= world_y - transformed_platform_skip_lookup_slop
-                    and y1 <= world_y + transformed_platform_skip_lookup_slop
-                ):
-                    line_id = int(rec.line_id)
-                    active_skip[slot] = line_id
-                    active_skip_remaining[slot] = int(floor_skip_frames)
-                    active_skip_from_shallow_attackair[slot] = False
-                    if action_id in active_skip_actions:
-                        if action_id not in attackair_actions_by_char.get(cid, _empty) or transform_endpoint_contact(
-                            fi, slot, rec
-                        ):
-                            out[fi, slot] = active_skip[slot]
-                    else:
-                        if float(pos_y_f32[fi, slot]) <= world_y - jump_skip_root_clearance:
-                            out[fi, slot] = active_skip[slot]
-                    break
-                if (
-                    action_id in shallow_attackair_actions
-                    and attackair_first_hitbox_phase(cid, action_id, int(action_frame_u16[fi, slot]))
-                    and attackair_shallow_first_contact(fi, slot, rec)
-                ):
-                    active_skip[slot] = int(rec.line_id)
-                    active_skip_remaining[slot] = int(floor_skip_frames)
-                    active_skip_from_shallow_attackair[slot] = True
-                    break
-    return out
+    return msl_binding.derive_fod_floor_skip_segments(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(action_frame_u16, dtype=np.uint16),
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
+        np.ascontiguousarray(on_ground_u8, dtype=np.uint8),
+        np.ascontiguousarray(pos_x_f32, dtype=np.float32),
+        np.ascontiguousarray(pos_y_f32, dtype=np.float32),
+        np.ascontiguousarray(speed_y_self_f32, dtype=np.float32),
+        np.ascontiguousarray(speed_y_attack_f32, dtype=np.float32),
+        np.ascontiguousarray(prev_main_y_i8, dtype=np.int8),
+        np.ascontiguousarray(main_y_i8, dtype=np.int8),
+        np.ascontiguousarray(platform_height_f32, dtype=np.float32),
+        np.ascontiguousarray(platform_height_valid_u8, dtype=np.uint8),
+        np.array([int(rec.line_id) for rec in transforms], dtype=np.uint16),
+        np.array([int(rec.platform_id) for rec in transforms], dtype=np.uint8),
+        np.array([float(rec.x0) for rec in transforms], dtype=np.float64),
+        np.array([float(rec.x1) for rec in transforms], dtype=np.float64),
+        np.array([float(rec.height_coeff) for rec in transforms], dtype=np.float64),
+        np.array([float(segment_y_by_line.get(int(rec.line_id), 0.0)) for rec in transforms], dtype=np.float64),
+        np.array([float(seg.x0) for seg in hard_floor_segments], dtype=np.float64),
+        np.array([float(seg.y0) for seg in hard_floor_segments], dtype=np.float64),
+        np.array([float(seg.x1) for seg in hard_floor_segments], dtype=np.float64),
+        np.array([float(seg.y1) for seg in hard_floor_segments], dtype=np.float64),
+        _lut_from_actions(attackair_actions_by_char, escapeair_actions_by_char),
+        _lut_from_actions(attackair_actions_by_char),
+        _lut_from_actions(jump_skip_actions_by_char, fall_skip_actions_by_char),
+        _lut_from_actions(shallow_attackair_actions_by_char),
+        phase_start,
+        phase_stop,
+        active_down_threshold_i8,
+        jump_down_threshold_i8,
+        int(floor_skip_frames),
+    )
 
 
 def _derive_sheik_vanish_floor_skip_segments(
@@ -935,27 +754,27 @@ def _fod_platform_motion_with_ground_contact(
     refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
     data/stages/bin/griz.bin::MSLSTG01 platform_transforms
     """
-    out_h = np.asarray(heights, dtype=np.float32).copy()
-    out_v = np.asarray(valid, dtype=np.uint8).copy()
-    event_fresh = None if event_fresh_u8 is None else np.asarray(event_fresh_u8, dtype=np.uint8)
-    on_ground = np.asarray(post_on_ground_u8, dtype=np.uint8)
-    ground_id = np.asarray(post_ground_id_u16, dtype=np.uint16)
-    pos_y = np.asarray(post_pos_y_f32, dtype=np.float32)
-    if out_h.shape != out_v.shape or out_h.ndim != 2 or out_h.shape[1] != 2:
+    heights_arr = np.ascontiguousarray(heights, dtype=np.float32)
+    valid_arr = np.ascontiguousarray(valid, dtype=np.uint8)
+    event_fresh = None if event_fresh_u8 is None else np.ascontiguousarray(event_fresh_u8, dtype=np.uint8)
+    on_ground = np.ascontiguousarray(post_on_ground_u8, dtype=np.uint8)
+    ground_id = np.ascontiguousarray(post_ground_id_u16, dtype=np.uint16)
+    pos_y = np.ascontiguousarray(post_pos_y_f32, dtype=np.float32)
+    if heights_arr.shape != valid_arr.shape or heights_arr.ndim != 2 or heights_arr.shape[1] != 2:
         raise ValueError("FoD platform height arrays must have shape [frames, 2]")
     if on_ground.shape != ground_id.shape or on_ground.shape != pos_y.shape:
         raise ValueError("FoD grounded-contact arrays must have matching shapes")
-    if on_ground.shape[0] != out_h.shape[0]:
+    if on_ground.shape[0] != heights_arr.shape[0]:
         raise ValueError("FoD grounded-contact frame count must match height frame count")
-    if event_fresh is not None and event_fresh.shape != out_h.shape:
+    if event_fresh is not None and event_fresh.shape != heights_arr.shape:
         raise ValueError("FoD event-fresh array must match height shape")
     next_on_ground = (
-        None if next_post_on_ground_u8 is None else np.asarray(next_post_on_ground_u8, dtype=np.uint8)
+        None if next_post_on_ground_u8 is None else np.ascontiguousarray(next_post_on_ground_u8, dtype=np.uint8)
     )
     next_ground_id = (
-        None if next_post_ground_id_u16 is None else np.asarray(next_post_ground_id_u16, dtype=np.uint16)
+        None if next_post_ground_id_u16 is None else np.ascontiguousarray(next_post_ground_id_u16, dtype=np.uint16)
     )
-    next_pos_y = None if next_post_pos_y_f32 is None else np.asarray(next_post_pos_y_f32, dtype=np.float32)
+    next_pos_y = None if next_post_pos_y_f32 is None else np.ascontiguousarray(next_post_pos_y_f32, dtype=np.float32)
     if (next_on_ground is None) != (next_ground_id is None) or (next_on_ground is None) != (
         next_pos_y is None
     ):
@@ -966,205 +785,52 @@ def _fod_platform_motion_with_ground_contact(
         if next_on_ground.shape != on_ground.shape:
             raise ValueError("FoD next-post grounded-contact arrays must match seed frame shape")
 
-    out_vel = np.zeros_like(out_h, dtype=np.float32)
-    out_vel_valid = np.zeros_like(out_v, dtype=np.uint8)
-    out_source = np.zeros_like(out_v, dtype=np.uint8)
-    cur = out_h[0].astype(np.float32, copy=True)
-    cur_valid = np.zeros(2, dtype=np.uint8)
-    cur_vel = np.zeros(2, dtype=np.float32)
-    cur_vel_valid = np.zeros(2, dtype=np.uint8)
-    last_obs_h = np.zeros(2, dtype=np.float32)
-    last_obs_frame = np.full(2, -1, dtype=np.int32)
-    has_obs = np.zeros(2, dtype=np.uint8)
-    contact_owned = np.zeros(2, dtype=np.uint8)
-    def advance_height(h: np.float32, vel: np.float32) -> tuple[np.float32, bool]:
-        if motion_params is None:
-            return np.float32(h + vel), True
-        home = float(motion_params["home_height"])
-        max_h = float(motion_params["max_height"])
-        min_visible = float(motion_params["min_visible_height"])
-        hidden = float(motion_params["hidden_target_height"])
-        target = max_h
-        if float(vel) < 0.0:
-            target = hidden if float(h) <= min_visible + abs(float(vel)) * 4.0 else min_visible
-        elif float(vel) > 0.0:
-            target = home if float(h) < home else max_h
-        nxt = np.float32(float(h) + float(vel))
-        if float(vel) > 0.0 and float(nxt) >= target:
-            return np.float32(target), False
-        if float(vel) < 0.0 and float(nxt) <= target:
-            return np.float32(target), False
-        return nxt, True
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_fod_platform_motion_with_ground_contact is required; run `make build`"
+        ) from exc
 
-    for fi in range(out_h.shape[0]):
-        current_contact_this_frame = np.zeros(2, dtype=np.uint8)
-        source_this_frame = np.zeros(2, dtype=np.uint8)
-        direct_event_height_this_frame = np.full(2, np.nan, dtype=np.float32)
-        frame_start_obs_frame = last_obs_frame.copy()
-        frame_start_obs_h = last_obs_h.copy()
-        frame_start_has_obs = has_obs.copy()
-        # Replay FoD events, when present, are direct current grIzumi state for this frame. They
-        # override grounded-contact fallback; the contact path exists only for sparse/missing event
-        # streams. The helper above carries valid event values forward, so consume only fresh event
-        # rows here (or value changes for older callers that do not provide a fresh mask).
-        for platform_id in range(2):
-            if not int(out_v[fi, platform_id]):
-                continue
-            event_h = np.float32(out_h[fi, platform_id])
-            fresh_event = (
-                bool(int(event_fresh[fi, platform_id]))
-                if event_fresh is not None
-                else not (
-                    int(cur_valid[platform_id]) and abs(float(event_h - cur[platform_id])) <= 1e-6
-                )
-            )
-            if not fresh_event:
-                continue
-            source_this_frame[platform_id] |= np.uint8(0x01)
-            direct_event_height_this_frame[platform_id] = event_h
-            same_height = int(cur_valid[platform_id]) and abs(float(event_h - cur[platform_id])) <= 1e-6
-            predicted_motion = (
-                same_height
-                and int(cur_vel_valid[platform_id])
-                and float(cur_vel[platform_id]) < -1e-6
-            )
-            if predicted_motion:
-                # The previous frame's grIzumi hidden-descent velocity advanced `cur` to this fresh
-                # event height at the end of the last seed row. That event confirms the continuing
-                # source motion for the current row; it is not a stop boundary. Upward direct-event
-                # carry needs a separate Landing/CollData owner because current Landing rows can
-                # still reject the platform handoff even when the platform's JObj is moving.
-                pass
-            elif same_height:
-                cur_vel[platform_id] = np.float32(0.0)
-                cur_vel_valid[platform_id] = np.uint8(0)
-            elif int(has_obs[platform_id]) and fi > int(last_obs_frame[platform_id]):
-                delta = np.float32(
-                    (float(event_h) - float(last_obs_h[platform_id]))
-                    / float(fi - int(last_obs_frame[platform_id]))
-                )
-                if np.isfinite(delta) and abs(float(delta)) > 1e-6:
-                    cur_vel[platform_id] = delta
-                    cur_vel_valid[platform_id] = np.uint8(1)
-                else:
-                    cur_vel[platform_id] = np.float32(0.0)
-                    cur_vel_valid[platform_id] = np.uint8(0)
-            else:
-                cur_vel[platform_id] = np.float32(0.0)
-                cur_vel_valid[platform_id] = np.uint8(0)
-            cur[platform_id] = event_h
-            cur_valid[platform_id] = np.uint8(1)
-            last_obs_h[platform_id] = event_h
-            last_obs_frame[platform_id] = np.int32(fi)
-            has_obs[platform_id] = np.uint8(1)
-            contact_owned[platform_id] = np.uint8(0)
+    if line_transforms:
+        items = sorted(line_transforms.items())
+        line_ids = np.array([line_id for line_id, _ in items], dtype=np.uint16)
+        platform_ids = np.array([rec[0] for _, rec in items], dtype=np.uint8)
+        height_coeff = np.array([rec[1] for _, rec in items], dtype=np.float64)
+        local_y = np.array([rec[2] for _, rec in items], dtype=np.float64)
+    else:
+        line_ids = np.zeros(0, dtype=np.uint16)
+        platform_ids = np.zeros(0, dtype=np.uint8)
+        height_coeff = np.zeros(0, dtype=np.float64)
+        local_y = np.zeros(0, dtype=np.float64)
 
-        for slot in range(on_ground.shape[1]):
-            if not int(on_ground[fi, slot]):
-                continue
-            rec = line_transforms.get(int(ground_id[fi, slot]))
-            if rec is None:
-                continue
-            platform_id, height_coeff, local_y = rec
-            y = float(pos_y[fi, slot])
-            if not np.isfinite(y) or height_coeff == 0.0:
-                continue
-            h = np.float32((y - local_y) / height_coeff)
-            derived_velocity = False
-            if int(frame_start_has_obs[platform_id]) and fi > int(frame_start_obs_frame[platform_id]):
-                # A fresh direct grIzumi event can arrive in the same frame as a grounded fighter
-                # contact. The event is source-current height, but the grounded root is the
-                # post-refresh mpLib line that should drive rider motion. Derive velocity from the
-                # previous frame-start source observation before the direct event masks it.
-                # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
-                # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
-                delta = np.float32(
-                    (float(h) - float(frame_start_obs_h[platform_id]))
-                    / float(fi - int(frame_start_obs_frame[platform_id]))
-                )
-                cur_vel[platform_id] = delta
-                cur_vel_valid[platform_id] = np.uint8(1)
-                derived_velocity = True
-            else:
-                direct_event_h = direct_event_height_this_frame[platform_id]
-                if np.isfinite(float(direct_event_h)) and abs(float(h - direct_event_h)) > 1e-6:
-                    cur_vel[platform_id] = np.float32(float(h) - float(direct_event_h))
-                    cur_vel_valid[platform_id] = np.uint8(1)
-                    derived_velocity = True
-            if not derived_velocity and int(has_obs[platform_id]) and fi > int(last_obs_frame[platform_id]):
-                delta = np.float32(
-                    (float(h) - float(last_obs_h[platform_id]))
-                    / float(fi - int(last_obs_frame[platform_id]))
-                )
-                if np.isfinite(delta):
-                    cur_vel[platform_id] = delta
-                    cur_vel_valid[platform_id] = np.uint8(1)
-                    derived_velocity = True
-            if not derived_velocity and not int(contact_owned[platform_id]):
-                cur_vel[platform_id] = np.float32(0.0)
-                cur_vel_valid[platform_id] = np.uint8(0)
-            cur[platform_id] = h
-            cur_valid[platform_id] = np.uint8(1)
-            last_obs_h[platform_id] = h
-            last_obs_frame[platform_id] = np.int32(fi)
-            has_obs[platform_id] = np.uint8(1)
-            contact_owned[platform_id] = np.uint8(1)
-            current_contact_this_frame[platform_id] = np.uint8(1)
-            source_this_frame[platform_id] |= np.uint8(0x02)
+    use_motion_params = motion_params is not None
+    home = float(0.0 if motion_params is None else motion_params["home_height"])
+    max_h = float(0.0 if motion_params is None else motion_params["max_height"])
+    min_visible = float(0.0 if motion_params is None else motion_params["min_visible_height"])
+    hidden = float(0.0 if motion_params is None else motion_params["hidden_target_height"])
 
-        if next_on_ground is not None:
-            for slot in range(next_on_ground.shape[1]):
-                if not int(next_on_ground[fi, slot]):
-                    continue
-                rec = line_transforms.get(int(next_ground_id[fi, slot]))
-                if rec is None:
-                    continue
-                platform_id, height_coeff, local_y = rec
-                y = float(next_pos_y[fi, slot])
-                if not np.isfinite(y) or height_coeff == 0.0:
-                    continue
-                if int(current_contact_this_frame[platform_id]):
-                    continue
-                if int(cur_vel_valid[platform_id]) and abs(float(cur_vel[platform_id])) > 1e-6:
-                    continue
-                # The post-frame grounded root already includes mpLib_8004DD90_Floor's +0.0001
-                # floor bias, and the replay-seeded one-step will run that projection again from
-                # the hidden transformed line. Invert both biases for same-step hidden-height seeds
-                # so replay-real one-step contact lands on the post-frame root.
-                # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-                h = np.float32((y - local_y - (2.0 * FOD_FLOOR_Y_BIAS)) / height_coeff)
-                if int(cur_valid[platform_id]) and abs(float(h - cur[platform_id])) <= 1e-6:
-                    continue
-                cur[platform_id] = h
-                cur_valid[platform_id] = np.uint8(1)
-                cur_vel[platform_id] = np.float32(0.0)
-                cur_vel_valid[platform_id] = np.uint8(0)
-                last_obs_h[platform_id] = h
-                last_obs_frame[platform_id] = np.int32(fi)
-                has_obs[platform_id] = np.uint8(1)
-                contact_owned[platform_id] = np.uint8(1)
-                source_this_frame[platform_id] |= np.uint8(0x04)
-
-        for platform_id in range(2):
-            if int(cur_valid[platform_id]):
-                out_h[fi, platform_id] = cur[platform_id]
-                out_v[fi, platform_id] = np.uint8(1)
-            if int(cur_vel_valid[platform_id]):
-                out_vel[fi, platform_id] = cur_vel[platform_id]
-                out_vel_valid[fi, platform_id] = np.uint8(1)
-            out_source[fi, platform_id] = source_this_frame[platform_id]
-
-        for platform_id in range(2):
-            if int(cur_valid[platform_id]) and int(cur_vel_valid[platform_id]):
-                cur[platform_id], keep_velocity = advance_height(
-                    cur[platform_id],
-                    cur_vel[platform_id],
-                )
-                if not keep_velocity:
-                    cur_vel_valid[platform_id] = np.uint8(0)
-    if return_source:
-        return out_h, out_v, out_vel, out_vel_valid, out_source
-    return out_h, out_v, out_vel, out_vel_valid
+    return msl_binding.derive_fod_platform_motion_with_ground_contact(
+        heights_arr,
+        valid_arr,
+        None if event_fresh is None else event_fresh,
+        on_ground,
+        ground_id,
+        pos_y,
+        None if next_on_ground is None else next_on_ground,
+        None if next_ground_id is None else next_ground_id,
+        None if next_pos_y is None else next_pos_y,
+        line_ids,
+        platform_ids,
+        height_coeff,
+        local_y,
+        int(use_motion_params),
+        home,
+        max_h,
+        min_visible,
+        hidden,
+        int(return_source),
+    )
 
 
 def _fod_hidden_return_timers(
@@ -3956,36 +3622,18 @@ def _main_impl(args) -> Dataset:
         # x60 provenance through same-action active rows and clear it on visible 369<->371 swaps.
         # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
         #   ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim,ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
-        act_counter_ground = np.uint16(369)
-        act_counter_air = np.uint16(371)
-        live = (
-            (char_id_u8 == np.uint8(18))
-            & ((action_id_u16 == act_counter_ground) | (action_id_u16 == act_counter_air))
-            & ((state_flags_u8[:, 2] & np.uint8(0x80)) != 0)
+        try:
+            import msl_binding  # type: ignore
+        except ImportError as exc:
+            raise RuntimeError(
+                "native msl_binding.derive_marth_counter_hitlag_floor_active is required; run `make build`"
+            ) from exc
+
+        return msl_binding.derive_marth_counter_hitlag_floor_active(
+            np.ascontiguousarray(char_id_u8, dtype=np.uint8),
+            np.ascontiguousarray(action_id_u16, dtype=np.uint16),
+            np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
         )
-        out = np.zeros(action_id_u16.shape[0], dtype=np.uint8)
-        active_floor = np.uint8(0)
-        prev_live = False
-        prev_action = np.uint16(0)
-        for i in range(action_id_u16.shape[0]):
-            if not bool(live[i]):
-                active_floor = np.uint8(0)
-                prev_live = False
-                prev_action = action_id_u16[i]
-                continue
-            action = action_id_u16[i]
-            swapped = prev_live and (
-                (prev_action == act_counter_ground and action == act_counter_air)
-                or (prev_action == act_counter_air and action == act_counter_ground)
-            )
-            if swapped:
-                active_floor = np.uint8(0)
-            elif not prev_live:
-                active_floor = np.uint8(1)
-            out[i] = active_floor
-            prev_live = True
-            prev_action = action
-        return out
 
     def _derive_sheik_vanish_travel_timer(
         *,
