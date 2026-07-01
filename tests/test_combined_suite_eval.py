@@ -9,7 +9,8 @@ from pathlib import Path
 from tools.eval import run_combined_suite_eval, run_heldout_validation, run_one_step_suite_eval
 from tools.eval import run_rollout_suite_eval, run_validate_all
 from tools.eval import top_float_offenders, validate_replay
-from tools.eval.run_one_step_eval import EvalSummary
+from tools.eval.one_step_report import EvalSummary
+from tools.eval.streaming_validation import ValidationStreaks
 from tools.slippi.suite_io import repo_root
 
 
@@ -148,6 +149,185 @@ def test_combined_rollout_float_rows_do_not_call_legacy_python_collector(
             "1",
         ],
     )
+
+
+def test_combined_normal_task_uses_validation_buffers_not_dataset(monkeypatch) -> None:
+    from tools.slippi import make_dataset_from_slp
+
+    class FakeBuffers:
+        num_records = 7
+        num_players = 2
+
+    def fail_dataset_builder(**_kwargs):
+        raise AssertionError("normal combined validation must not build Dataset rows")
+
+    def fake_buffer_builder(**_kwargs):
+        return FakeBuffers()
+
+    def fake_one_step(**_kwargs):
+        return _fake_result(
+            {
+                "slp_path": str(repo_root() / REPLAY_A),
+                "profile": "rl1_gameplay",
+            }
+        )["one_step_summary"]
+
+    def fake_rollout(**_kwargs):
+        return (
+            ValidationStreaks(
+                dataset=str(repo_root() / REPLAY_A),
+                num_records=7,
+                max_records_used=7,
+                players=(0, 1),
+                fields=("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags"),
+                best_len=7,
+                best_start_record=0,
+                best_end_record_excl=7,
+                best_start_seed_frame_id=0,
+                best_end_ref_frame_id_inclusive=6,
+                streak_histogram={7: 1},
+                first_mismatch_field_counts={},
+                first_mismatch_field_counts_seeded={},
+                ignored_first_mismatch_field_counts={},
+                ignored_first_mismatch_field_counts_seeded={},
+                profile_name="rl1_gameplay",
+            ),
+            {},
+            [],
+        )
+
+    monkeypatch.setattr(make_dataset_from_slp, "build_dataset_from_slp", fail_dataset_builder)
+    monkeypatch.setattr(make_dataset_from_slp, "build_validation_buffers_from_slp", fake_buffer_builder)
+    monkeypatch.setattr(run_combined_suite_eval, "evaluate_validation_buffers", fake_one_step)
+    monkeypatch.setattr(run_combined_suite_eval, "scan_validation_buffers_with_native_float_rows", fake_rollout)
+
+    result = run_combined_suite_eval._combined_dataset_task(
+        {
+            "root": str(repo_root()),
+            "dataset_label": str(repo_root() / REPLAY_A),
+            "slp_path": str(repo_root() / REPLAY_A),
+            "ports": [1, 2],
+            "chunk": 64,
+            "profile": "rl1_gameplay",
+            "ucf_enabled": True,
+            "ucf_cardinals_1_0_enabled": True,
+            "debug_mismatch": (),
+            "debug_float": (),
+            "players_csv": None,
+            "fields": ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags"),
+            "max_records": 0,
+            "float_fields": (),
+            "float_top_scan": 0,
+            "exception_probe_limit": 0,
+        }
+    )
+
+    assert result["rollout_payload"]["best_len"] == 7
+
+
+def test_combined_exception_rows_stay_on_validation_buffers(monkeypatch) -> None:
+    from tools.slippi import make_dataset_from_slp
+
+    class FakeBuffers:
+        num_records = 7
+        num_players = 2
+
+    def fail_dataset_builder(**_kwargs):
+        raise AssertionError("exception overlay must not rebuild Dataset rows in normal combined validation")
+
+    def fake_buffer_builder(**_kwargs):
+        return FakeBuffers()
+
+    def fake_one_step(**_kwargs):
+        return _fake_result(
+            {
+                "slp_path": str(repo_root() / REPLAY_A),
+                "profile": "rl1_gameplay",
+            }
+        )["one_step_summary"]
+
+    def fake_rollout(**kwargs):
+        assert kwargs["first_mismatch_probe_limit"] == 5
+        return (
+            ValidationStreaks(
+                dataset=str(repo_root() / REPLAY_A),
+                num_records=7,
+                max_records_used=7,
+                players=(0, 1),
+                fields=("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags"),
+                best_len=1,
+                best_start_record=0,
+                best_end_record_excl=1,
+                best_start_seed_frame_id=0,
+                best_end_ref_frame_id_inclusive=0,
+                streak_histogram={1: 1},
+                first_mismatch_field_counts={"action_id": 1},
+                first_mismatch_field_counts_seeded={},
+                ignored_first_mismatch_field_counts={},
+                ignored_first_mismatch_field_counts_seeded={},
+                profile_name="rl1_gameplay",
+            ),
+            {},
+            [
+                {
+                    "dataset": str(repo_root() / REPLAY_A),
+                    "record": 0,
+                    "seed_frame": 0,
+                    "ref_frame": 1,
+                    "player": 0,
+                    "field": "action_id",
+                    "subindex": None,
+                    "seed": 0,
+                    "out": 1,
+                    "ref": 2,
+                    "streak_start_record": 0,
+                    "streak_len": 0,
+                    "seeded_break": False,
+                }
+            ],
+        )
+
+    monkeypatch.setattr(make_dataset_from_slp, "build_dataset_from_slp", fail_dataset_builder)
+    monkeypatch.setattr(make_dataset_from_slp, "build_validation_buffers_from_slp", fake_buffer_builder)
+    monkeypatch.setattr(run_combined_suite_eval, "evaluate_validation_buffers", fake_one_step)
+    monkeypatch.setattr(run_combined_suite_eval, "scan_validation_buffers_with_native_float_rows", fake_rollout)
+
+    result = run_combined_suite_eval._combined_dataset_task(
+        {
+            "root": str(repo_root()),
+            "dataset_label": str(repo_root() / REPLAY_A),
+            "slp_path": str(repo_root() / REPLAY_A),
+            "ports": [1, 2],
+            "chunk": 64,
+            "profile": "rl1_gameplay",
+            "ucf_enabled": True,
+            "ucf_cardinals_1_0_enabled": True,
+            "debug_mismatch": (),
+            "debug_float": (),
+            "players_csv": None,
+            "fields": ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags"),
+            "max_records": 0,
+            "float_fields": (),
+            "float_top_scan": 0,
+            "exception_probe_limit": 5,
+        }
+    )
+
+    assert result["rollout_payload"]["first_mismatch_rows"][0]["field"] == "action_id"
+
+
+def test_normal_combined_validation_source_has_no_dataset_materialization_calls() -> None:
+    modules = (
+        run_combined_suite_eval,
+        __import__("tools.eval.run_validate_all", fromlist=[""]),
+        __import__("tools.eval.streaming_validation", fromlist=[""]),
+    )
+    forbidden = ("build_dataset_from_slp", "read_dataset", "SAMPLE_DTYPE", ".msl")
+    for module in modules:
+        source = Path(module.__file__).read_text()
+        for token in forbidden:
+            assert token not in source, f"{module.__name__} must not reference {token!r} on normal path"
+        assert "Dataset" not in source.replace("_combined_dataset_task", "")
 
 
 def test_validate_all_evaluates_duplicate_replay_once_and_emits_each_report(tmp_path: Path, monkeypatch) -> None:

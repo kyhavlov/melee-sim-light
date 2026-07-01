@@ -6,25 +6,35 @@ import argparse
 import concurrent.futures
 import json
 import os
-from dataclasses import asdict
 from pathlib import Path
 
 from tools.eval import run_one_step_suite_eval, run_rollout_suite_eval
-from tools.eval.run_longest_rollout_streaks import (
-    _parse_csv,
-    _parse_players,
-    _scan_dataset_streaks_with_native_float_rows,
-    _validate_discrete_fields,
-)
-from tools.eval.run_one_step_eval import (
-    Reporter,
-    create_one_step_eval_runtime,
-    evaluate_dataset,
+from tools.eval.one_step_report import Reporter
+from tools.eval.streaming_validation import (
+    default_players,
+    evaluate_validation_buffers,
+    scan_validation_buffers_with_native_float_rows,
 )
 from tools.eval.validation_exceptions import load_validation_exceptions
 from tools.eval.validation_profile import get_validation_profile, validation_profile_names
 from tools.slippi.slpz import resolve_replay_path
 from tools.slippi.suite_io import load_suite, repo_root
+
+
+_STANDARD_ROLLOUT_FIELDS = ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags")
+
+
+def _parse_csv(s: str) -> tuple[str, ...]:
+    return tuple(x.strip() for x in s.split(",") if x.strip() != "")
+
+
+def _validate_discrete_fields(fields: tuple[str, ...]) -> tuple[str, ...]:
+    if tuple(fields) != _STANDARD_ROLLOUT_FIELDS:
+        raise SystemExit(
+            "error: combined streaming validation supports the standard rollout field set only: "
+            + ",".join(_STANDARD_ROLLOUT_FIELDS)
+        )
+    return tuple(fields)
 
 
 class _CaptureReporter:
@@ -53,7 +63,7 @@ def _display_path(path: Path, *, root: Path) -> str:
 
 
 def _combined_dataset_task(task: dict, collect_stats: bool = False) -> dict:
-    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+    from tools.slippi.make_dataset_from_slp import build_validation_buffers_from_slp
 
     if collect_stats:
         import time
@@ -62,7 +72,7 @@ def _combined_dataset_task(task: dict, collect_stats: bool = False) -> dict:
         build_start = time.perf_counter()
     root = Path(str(task["root"]))
     dataset_label = Path(str(task["dataset_label"]))
-    ds = build_dataset_from_slp(
+    buffers = build_validation_buffers_from_slp(
         slp_path=str(task["slp_path"]),
         ports=[int(p) for p in task["ports"]],
         ucf_enabled=bool(task["ucf_enabled"]),
@@ -71,46 +81,37 @@ def _combined_dataset_task(task: dict, collect_stats: bool = False) -> dict:
     if collect_stats:
         build_wall_s = time.perf_counter() - build_start
 
-    records = int(ds.header["num_records"])
-    num_players = int(ds.header["num_players"])
-    runtime = create_one_step_eval_runtime(
-        batch_size=max(1, min(int(task["chunk"]), max(1, records))),
-        num_players=num_players,
-        ucf_enabled=bool(task["ucf_enabled"]),
-        ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
-    )
+    records = int(buffers.num_records)
+    num_players = int(buffers.num_players)
     one_capture = _CaptureReporter()
     if collect_stats:
         one_step_start = time.perf_counter()
-    try:
-        one_summary = evaluate_dataset(
-            dataset_path=dataset_label,
-            dataset=ds,
-            chunk=int(task["chunk"]),
-            runtime=runtime,
-            profile=str(task["profile"]),
-            ucf_enabled=bool(task["ucf_enabled"]),
-            ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
-            reporter=one_capture,  # type: ignore[arg-type]
-            print_profile=False,
-            debug_mismatch=tuple(task["debug_mismatch"]),
-            debug_limit=int(task["debug_limit"]),
-            debug_float=tuple(task["debug_float"]),
-            debug_float_limit=int(task["debug_float_limit"]),
-        )
-    finally:
-        runtime.close()
+    if tuple(task["debug_mismatch"]) or tuple(task["debug_float"]):
+        raise ValueError("combined streaming validation does not support one-step debug mismatch modes")
+    one_summary = evaluate_validation_buffers(
+        dataset_path=dataset_label,
+        buffers=buffers,
+        chunk=int(task["chunk"]),
+        profile=str(task["profile"]),
+        ucf_enabled=bool(task["ucf_enabled"]),
+        ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
+        reporter=one_capture,  # type: ignore[arg-type]
+        print_profile=False,
+    )
     if collect_stats:
         one_step_wall_s = time.perf_counter() - one_step_start
 
-    players = _parse_players(task["players_csv"], num_players=num_players)
+    players = default_players(buffers, task["players_csv"])
     float_top = int(task.get("float_top_scan", 0))
     rollout_dataset_label = _display_path(dataset_label, root=root)
     if collect_stats:
         rollout_start = time.perf_counter()
-    streaks, float_rows = _scan_dataset_streaks_with_native_float_rows(
+    exception_probe_limit = int(task.get("exception_probe_limit", 0))
+    if exception_probe_limit > 0 and int(task["max_records"]) > 0:
+        exception_probe_limit = min(exception_probe_limit, int(task["max_records"]))
+    streaks, float_rows, first_rows = scan_validation_buffers_with_native_float_rows(
         dataset_path=dataset_label,
-        ds=ds,
+        buffers=buffers,
         fields=tuple(task["fields"]),
         players=players,
         max_records=int(task["max_records"]),
@@ -121,28 +122,8 @@ def _combined_dataset_task(task: dict, collect_stats: bool = False) -> dict:
         float_top=float_top,
         float_threshold=0.0,
         float_dataset_label=rollout_dataset_label,
+        first_mismatch_probe_limit=exception_probe_limit,
     )
-    first_rows: list[dict] = []
-    exception_probe_limit = int(task.get("exception_probe_limit", 0))
-    if exception_probe_limit > 0:
-        max_records = int(task["max_records"])
-        if max_records > 0:
-            exception_probe_limit = min(exception_probe_limit, max_records)
-        first_rows = [
-            asdict(row)
-            for row in run_rollout_suite_eval._locate_dataset_rollout_desyncs(
-                dataset_path=dataset_label,
-                dataset_label=rollout_dataset_label,
-                ds=ds,
-                fields=tuple(task["fields"]),
-                players=players,
-                max_records=exception_probe_limit,
-                row_limit=None,
-                ucf_enabled=bool(task["ucf_enabled"]),
-                ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
-                profile=str(task["profile"]),
-            )
-        ]
     result = {
         "one_step_lines": one_capture.lines,
         "one_step_summary": one_summary,
@@ -213,7 +194,7 @@ def _combined_dataset_shard(shard: list[tuple[int, dict]], collect_stats: bool =
 
         init_start = time.perf_counter()
     import msl_binding  # type: ignore
-    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp  # noqa: F401
+    from tools.slippi.make_dataset_from_slp import build_validation_buffers_from_slp  # noqa: F401
 
     # Touch the native module once per worker so init/import cost is charged to the shard, not a
     # particular replay.

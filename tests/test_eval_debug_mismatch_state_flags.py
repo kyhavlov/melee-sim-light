@@ -47,15 +47,15 @@ class _FakeBinding:
         return None
 
     def one_step_summary_finish(self, _summary_handle: object) -> dict[str, object]:
-        import tools.eval.run_one_step_eval as eval_mod
+        from tools.eval.one_step_report import DISCRETE_FIELDS, FLOAT_FIELDS
 
         return {
-            "mismatches": [0 for _ in eval_mod._DISCRETE_FIELDS],
-            "strict_mismatches": [0 for _ in eval_mod._DISCRETE_FIELDS],
+            "mismatches": [0 for _ in DISCRETE_FIELDS],
+            "strict_mismatches": [0 for _ in DISCRETE_FIELDS],
             "ignored_state_flags_4_0x80": 0,
             "float_metrics": {
                 field: {"mae": 0.0, "p95": 0.0, "max": 0.0, "count": 0}
-                for field in eval_mod._FLOAT_FIELDS
+                for field in FLOAT_FIELDS
             },
             "float_norm_sum": 0.0,
             "float_norm_count": 0,

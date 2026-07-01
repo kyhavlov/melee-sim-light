@@ -10,7 +10,7 @@ import pytest
 
 from tools.eval import validate_replay
 from tools.eval import run_one_step_suite_eval
-from tools.eval.run_one_step_eval import EvalSummary
+from tools.eval.one_step_report import EvalSummary
 
 
 def test_validate_replay_parse_ports_defaults_and_sorts() -> None:
@@ -25,19 +25,19 @@ def test_validate_replay_one_step_uses_in_memory_replay_without_temp_files(
     replay = tmp_path / "game.slp"
     replay.write_bytes(b"not a real slp; build is monkeypatched")
     calls: dict[str, object] = {}
-    sentinel_dataset = object()
+    sentinel_buffers = object()
 
-    def fake_build_dataset_from_slp(**kwargs):
+    def fake_build_validation_buffers_from_slp(**kwargs):
         calls["build"] = kwargs
-        return sentinel_dataset
+        return sentinel_buffers
 
-    def fake_evaluate_dataset(**kwargs):
+    def fake_evaluate_validation_buffers(**kwargs):
         calls["eval"] = kwargs
         kwargs["reporter"].print("one-step ok")
         return None
 
-    monkeypatch.setattr(validate_replay, "build_dataset_from_slp", fake_build_dataset_from_slp)
-    monkeypatch.setattr(validate_replay, "evaluate_dataset", fake_evaluate_dataset)
+    monkeypatch.setattr(validate_replay, "build_validation_buffers_from_slp", fake_build_validation_buffers_from_slp)
+    monkeypatch.setattr(validate_replay, "evaluate_validation_buffers", fake_evaluate_validation_buffers)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -62,7 +62,7 @@ def test_validate_replay_one_step_uses_in_memory_replay_without_temp_files(
         "ucf_cardinals_1_0_enabled": False,
     }
     eval_call = calls["eval"]
-    assert eval_call["dataset"] is sentinel_dataset
+    assert eval_call["buffers"] is sentinel_buffers
     assert eval_call["dataset_path"] == replay.resolve()
     assert sorted(p.name for p in tmp_path.iterdir()) == ["game.slp"]
 
@@ -90,21 +90,13 @@ def test_one_step_suite_uses_replay_identity_for_reports_and_io(
         encoding="utf-8",
     )
     calls: dict[str, object] = {}
-    sentinel_dataset = SimpleNamespace(header={"num_records": 3, "num_players": 2})
+    sentinel_buffers = SimpleNamespace(num_records=3, num_players=2)
 
-    class FakeRuntime:
-        def close(self) -> None:
-            calls["closed"] = True
-
-    def fake_build_dataset_from_slp(**kwargs):
+    def fake_build_validation_buffers_from_slp(**kwargs):
         calls["build"] = kwargs
-        return sentinel_dataset
+        return sentinel_buffers
 
-    def fake_create_runtime(**kwargs):
-        calls["runtime"] = kwargs
-        return FakeRuntime()
-
-    def fake_evaluate_dataset(**kwargs):
+    def fake_evaluate_validation_buffers(**kwargs):
         calls["eval"] = kwargs
         kwargs["reporter"].print("suite one-step ok")
         return EvalSummary(
@@ -122,9 +114,8 @@ def test_one_step_suite_uses_replay_identity_for_reports_and_io(
 
     import tools.slippi.make_dataset_from_slp as make_dataset_from_slp
 
-    monkeypatch.setattr(make_dataset_from_slp, "build_dataset_from_slp", fake_build_dataset_from_slp)
-    monkeypatch.setattr(run_one_step_suite_eval, "create_one_step_eval_runtime", fake_create_runtime)
-    monkeypatch.setattr(run_one_step_suite_eval, "evaluate_dataset", fake_evaluate_dataset)
+    monkeypatch.setattr(make_dataset_from_slp, "build_validation_buffers_from_slp", fake_build_validation_buffers_from_slp)
+    monkeypatch.setattr(run_one_step_suite_eval, "evaluate_validation_buffers", fake_evaluate_validation_buffers)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -143,7 +134,7 @@ def test_one_step_suite_uses_replay_identity_for_reports_and_io(
     assert calls["build"]["slp_path"] == str(replay.resolve())
     assert not str(calls["build"]["slp_path"]).endswith(".msl")
     eval_call = calls["eval"]
-    assert eval_call["dataset"] is sentinel_dataset
+    assert eval_call["buffers"] is sentinel_buffers
     assert Path(eval_call["dataset_path"]) == replay.resolve()
     assert not replay.with_suffix(".msl").exists()
 
@@ -156,16 +147,16 @@ def test_validate_replay_legacy_slp_path_resolves_to_slpz(
     compressed_replay.write_bytes(b"not a real slpz; build is monkeypatched")
     calls: dict[str, object] = {}
 
-    def fake_build_dataset_from_slp(**kwargs):
+    def fake_build_validation_buffers_from_slp(**kwargs):
         calls["build"] = kwargs
         return object()
 
-    def fake_evaluate_dataset(**kwargs):
+    def fake_evaluate_validation_buffers(**kwargs):
         kwargs["reporter"].print("legacy path ok")
         return None
 
-    monkeypatch.setattr(validate_replay, "build_dataset_from_slp", fake_build_dataset_from_slp)
-    monkeypatch.setattr(validate_replay, "evaluate_dataset", fake_evaluate_dataset)
+    monkeypatch.setattr(validate_replay, "build_validation_buffers_from_slp", fake_build_validation_buffers_from_slp)
+    monkeypatch.setattr(validate_replay, "evaluate_validation_buffers", fake_evaluate_validation_buffers)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -336,14 +327,18 @@ def test_validate_replay_rollout_prints_report_overlay_fields(
             )
         ]
 
-    monkeypatch.setattr(validate_replay, "build_dataset_from_slp", fake_build_dataset_from_slp)
+    import tools.eval.locate_rollout_desyncs as locate_rollout_desyncs
+    import tools.eval.run_longest_rollout_streaks as run_longest_rollout_streaks
+    import tools.slippi.make_dataset_from_slp as make_dataset_from_slp
+
+    monkeypatch.setattr(make_dataset_from_slp, "build_dataset_from_slp", fake_build_dataset_from_slp)
     monkeypatch.setattr(
-        validate_replay,
+        run_longest_rollout_streaks,
         "_scan_dataset_streaks_with_native_float_rows",
         fake_scan_dataset_streaks_with_native_float_rows,
     )
     monkeypatch.setattr(
-        validate_replay,
+        locate_rollout_desyncs,
         "_locate_dataset_rollout_desyncs",
         fake_locate_dataset_rollout_desyncs,
     )

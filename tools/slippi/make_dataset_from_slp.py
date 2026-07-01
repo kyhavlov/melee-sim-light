@@ -12,7 +12,7 @@ import numpy as np
 import pyarrow as pa
 from peppi_py import _read_slippi
 
-from tools.eval.dataset import Dataset, HEADER_DTYPE, MAGIC, SAMPLE_DTYPE
+from tools.eval.dataset import COMPARE_DTYPE, Dataset, HEADER_DTYPE, INPUT_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 from tools.slippi.action_state_tables import load_action_state_tables
 from tools.slippi.hitstun import hitstun_u16_from_misc_as_and_state_flags3
 from tools.slippi.item_article_data import item_article_kind_set, item_article_values_by_sim_char
@@ -53,6 +53,105 @@ def _load_json_file(path: Path) -> Any:
 
 def _load_bytes_file(path: Path) -> bytes:
     return _load_bytes_file_cached(_path_cache_key(path))
+
+
+@dataclass
+class ValidationReplayBuffers:
+    seed_t: np.ndarray
+    prev_input_t: np.ndarray
+    input_t: np.ndarray
+    ref_t1: np.ndarray
+    num_players: int
+
+    @property
+    def num_records(self) -> int:
+        return int(self.seed_t.shape[0])
+
+    def seed_u8(self) -> np.ndarray:
+        return self.seed_t.view(np.uint8).reshape(self.num_records, self.seed_t.dtype.itemsize)
+
+    def prev_input_u8(self) -> np.ndarray:
+        return self.prev_input_t.view(np.uint8).reshape(
+            self.num_records, self.prev_input_t.dtype.itemsize
+        )
+
+    def input_u8(self) -> np.ndarray:
+        return self.input_t.view(np.uint8).reshape(self.num_records, self.input_t.dtype.itemsize)
+
+    def ref_u8(self) -> np.ndarray:
+        return self.ref_t1.view(np.uint8).reshape(self.num_records, self.ref_t1.dtype.itemsize)
+
+
+class _SampleParts:
+    def __init__(self, n: int) -> None:
+        self.seed_t = np.zeros(n, dtype=SEED_DTYPE)
+        self.prev_input_t = np.zeros(n, dtype=INPUT_DTYPE)
+        self.input_t = np.zeros(n, dtype=INPUT_DTYPE)
+        self.ref_t1 = np.zeros(n, dtype=COMPARE_DTYPE)
+        self.shape = (n,)
+
+    def __getitem__(self, key: str) -> np.ndarray:
+        if key == "seed_t":
+            return self.seed_t
+        if key == "prev_input_t":
+            return self.prev_input_t
+        if key == "input_t":
+            return self.input_t
+        if key == "ref_t1":
+            return self.ref_t1
+        raise KeyError(key)
+
+    def as_buffers(self, *, num_players: int) -> ValidationReplayBuffers:
+        return ValidationReplayBuffers(
+            seed_t=self.seed_t,
+            prev_input_t=self.prev_input_t,
+            input_t=self.input_t,
+            ref_t1=self.ref_t1,
+            num_players=int(num_players),
+        )
+
+    def seed_u8(self) -> np.ndarray:
+        return self.seed_t.view(np.uint8).reshape(self.shape[0], self.seed_t.dtype.itemsize)
+
+    def prev_input_u8(self) -> np.ndarray:
+        return self.prev_input_t.view(np.uint8).reshape(
+            self.shape[0], self.prev_input_t.dtype.itemsize
+        )
+
+    def input_u8(self) -> np.ndarray:
+        return self.input_t.view(np.uint8).reshape(self.shape[0], self.input_t.dtype.itemsize)
+
+    def ref_u8(self) -> np.ndarray:
+        return self.ref_t1.view(np.uint8).reshape(self.shape[0], self.ref_t1.dtype.itemsize)
+
+
+@dataclass(frozen=True)
+class _ManifestPreprocessTables:
+    manifest_chars: tuple[tuple[int, str], ...]
+    char_landing_air_lag_frames: dict[int, dict[str, int]]
+    char_fallspecial_origin_lag: dict[int, dict[int, float]]
+    char_fallspecial_origin_allow_interrupt: dict[int, dict[int, tuple[int, int]]]
+    char_walk_divisors: dict[int, tuple[float, float, float]]
+    char_walk_max: dict[int, float]
+    char_run_scaling: dict[int, float]
+    char_gr_friction: dict[int, float]
+    char_gr_friction_lut: np.ndarray
+    char_rebound_anim_numerator_frames: dict[int, float]
+    rebound_numerator_lut: np.ndarray
+    char_walljump_setup_x_delta_threshold: dict[int, float]
+    active_shield_hit_lut: np.ndarray
+    sheik_char_id: int
+    zelda_char_id: int
+    sheik_vanish_travel_frames: int
+    sheik_vanish_ground_contact_min_frames: float
+    sheik_chain_release_min_frames: int
+
+
+def _env_damage_int(dmg: float) -> int:
+    if float(dmg) == 0.0:
+        return 0
+    i = int(dmg)
+    return i if i != 0 else 1
 
 
 def _load_character_attrs(data_root: Path, name: str) -> dict[str, Any]:
@@ -114,6 +213,175 @@ def require_replay_chars_in_manifest(
             f"{sorted(manifest_ids)} - regenerate data with `make build_data` "
             "(registry-driven) or add the character to tools/extraction/char_registry.py first"
         )
+
+
+@functools.lru_cache(maxsize=None)
+def _manifest_preprocess_tables(data_root_text: str) -> _ManifestPreprocessTables:
+    data_root = Path(data_root_text)
+    manifest_chars = tuple(manifest_registry_chars(data_root))
+    char_landing_air_lag_frames: dict[int, dict[str, int]] = {}
+    char_fallspecial_origin_lag: dict[int, dict[int, float]] = {}
+    char_fallspecial_origin_allow_interrupt: dict[int, dict[int, tuple[int, int]]] = {}
+    char_walk_divisors: dict[int, tuple[float, float, float]] = {}
+    char_walk_max: dict[int, float] = {}
+    char_run_scaling: dict[int, float] = {}
+    char_gr_friction: dict[int, float] = {}
+    char_rebound_anim_numerator_frames: dict[int, float] = {}
+    char_walljump_setup_x_delta_threshold: dict[int, float] = {}
+    char_active_shield_hit_int_damage: dict[int, dict[int, dict[int, int]]] = {}
+    sheik_char_id = -1
+    zelda_char_id = -1
+    sheik_vanish_travel_frames = 0
+    sheik_vanish_ground_contact_min_frames = 0.0
+    sheik_chain_release_min_frames = 0
+
+    for cid, key in manifest_chars:
+        attrs = _load_character_attrs(data_root, key)
+        if key == "sheik":
+            sheik_char_id = int(cid)
+            sheik_vanish_travel_frames = int(attrs.get("sheik_vanish_travel_frames", 0))
+            sheik_vanish_ground_contact_min_frames = float(
+                attrs.get("sheik_vanish_ground_contact_min_frames", 0.0)
+            )
+            sheik_chain_release_min_frames = int(attrs.get("sheik_chain_release_min_frames", 0))
+        elif key == "zelda":
+            zelda_char_id = int(cid)
+        move_file = _load_moves_file(data_root, key)
+        move_data = move_file["moves"]
+        special_move_data = move_file.get("specials_by_msid", {})
+        char_landing_air_lag_frames[int(cid)] = {
+            "airn": int(attrs["landing_airn_lag_frames"]),
+            "airf": int(attrs["landing_airf_lag_frames"]),
+            "airb": int(attrs["landing_airb_lag_frames"]),
+            "airhi": int(attrs["landing_airhi_lag_frames"]),
+            "airlw": int(attrs["landing_airlw_lag_frames"]),
+        }
+        origin_lag: dict[int, float] = {}
+        origin_allow_interrupt: dict[int, tuple[int, int]] = {}
+        owners_tbl = read_mslmso01_v1(data_root / "motion_state" / "owners" / f"{key}.bin")
+        if "illusion_landing_lag_frames" in attrs or "firefox_landing_lag_frames" in attrs:
+            from tools.extraction.extract_motion_state_owners import FX_SPECIAL_KIND_VALUES
+
+            illusion_kind = FX_SPECIAL_KIND_VALUES["SPECIAL_AIR_S_END"]
+            firefox_kinds = {
+                FX_SPECIAL_KIND_VALUES["SPECIAL_AIR_HI"],
+                FX_SPECIAL_KIND_VALUES["SPECIAL_HI_FALL"],
+                FX_SPECIAL_KIND_VALUES["SPECIAL_HI_BOUND"],
+            }
+            for a in range(len(owners_tbl.fx_special_kind)):
+                k = int(owners_tbl.fx_special_kind[a])
+                if k == illusion_kind and "illusion_landing_lag_frames" in attrs:
+                    origin_lag[a] = float(attrs["illusion_landing_lag_frames"])
+                    origin_allow_interrupt[a] = (1, 0)
+                elif k in firefox_kinds and "firefox_landing_lag_frames" in attrs:
+                    origin_lag[a] = float(attrs["firefox_landing_lag_frames"])
+                    direct_kinds = {
+                        FX_SPECIAL_KIND_VALUES["SPECIAL_HI_FALL"],
+                        FX_SPECIAL_KIND_VALUES["SPECIAL_HI_BOUND"],
+                    }
+                    origin_allow_interrupt[a] = (1, 1 if k in direct_kinds else 0)
+        if "specialhi_landing_lag_frames" in attrs:
+            sm_path = data_root / "special_msids" / f"{key}.json"
+            if sm_path.exists():
+                sm = _load_json_file(sm_path)
+                up_msids = set()
+                for up_key in ("up_air", "up_ground"):
+                    main = (sm.get(up_key) or {}).get("main") or {}
+                    for v in main.values():
+                        if isinstance(v, int):
+                            up_msids.add(int(v))
+                for a in range(len(owners_tbl.submotion_id)):
+                    if int(owners_tbl.submotion_id[a]) in up_msids:
+                        origin_lag[a] = float(attrs["specialhi_landing_lag_frames"])
+                        origin_allow_interrupt[a] = (0, 0)
+        char_fallspecial_origin_lag[int(cid)] = origin_lag
+        char_fallspecial_origin_allow_interrupt[int(cid)] = origin_allow_interrupt
+        char_walk_divisors[int(cid)] = (
+            float(attrs["slow_walk_max"]),
+            float(attrs["mid_walk_point"]),
+            float(attrs["fast_walk_min"]),
+        )
+        char_walk_max[int(cid)] = float(attrs["walk_max_vel"])
+        char_run_scaling[int(cid)] = float(attrs["run_animation_scaling"])
+        char_gr_friction[int(cid)] = float(attrs["gr_friction"])
+        char_rebound_anim_numerator_frames[int(cid)] = float(attrs["rebound_anim_numerator_frames"])
+        char_walljump_setup_x_delta_threshold[int(cid)] = float(
+            attrs["walljump_setup_x_delta_threshold"]
+        )
+        active_int_damage_by_anim: dict[int, dict[int, int]] = {}
+        for move in [*move_data.values(), *special_move_data.values()]:
+            submotion_id = int(move.get("submotion_id", -1))
+            if submotion_id < 0:
+                continue
+            events = sorted(move.get("events", []), key=lambda ev: (int(ev.get("frame", 0)), ev.get("kind", "")))
+            events_by_frame: dict[int, list[dict]] = {}
+            max_frame = 0
+            for ev in events:
+                frame = int(ev.get("frame", 0))
+                events_by_frame.setdefault(frame, []).append(ev)
+                max_frame = max(max_frame, frame)
+            active_by_hitbox: dict[int, int] = {}
+            frame_damage: dict[int, int] = {}
+            for frame in range(0, max_frame + 2):
+                for ev in events_by_frame.get(frame, []):
+                    kind = ev.get("kind")
+                    if kind == "create_hitbox":
+                        hb = ev.get("data", {}).get("hitbox", {})
+                        hb_id = int(hb.get("hitbox_id", 0))
+                        active_by_hitbox[hb_id] = _env_damage_int(float(hb.get("damage", 0.0)))
+                    elif kind == "set_hitbox_damage":
+                        hb_id = int(ev.get("data", {}).get("idx", 0))
+                        if hb_id in active_by_hitbox:
+                            active_by_hitbox[hb_id] = _env_damage_int(
+                                float(ev.get("data", {}).get("damage", 0.0))
+                            )
+                    elif kind == "remove_hitbox":
+                        active_by_hitbox.pop(int(ev.get("data", {}).get("idx", 0)), None)
+                    elif kind == "clear_hitboxes":
+                        active_by_hitbox.clear()
+                frame_damage[frame] = max(active_by_hitbox.values(), default=0)
+            active_int_damage_by_anim[submotion_id] = frame_damage
+        char_active_shield_hit_int_damage[int(cid)] = active_int_damage_by_anim
+
+    max_anim_idx = max((max(v.keys(), default=0) for v in char_active_shield_hit_int_damage.values()), default=0)
+    max_active_frame = 0
+    for by_anim in char_active_shield_hit_int_damage.values():
+        for by_frame in by_anim.values():
+            if by_frame:
+                max_active_frame = max(max_active_frame, max(by_frame.keys()))
+    active_shield_hit_lut = np.zeros((256, max_anim_idx + 1, max_active_frame + 1), dtype=np.uint16)
+    for cid, by_anim in char_active_shield_hit_int_damage.items():
+        for anim_idx, by_frame in by_anim.items():
+            for frame, dmg in by_frame.items():
+                active_shield_hit_lut[int(cid) & 0xFF, int(anim_idx), int(frame)] = np.uint16(int(dmg))
+
+    char_gr_friction_lut = np.zeros(256, dtype=np.float32)
+    for cid, value in char_gr_friction.items():
+        char_gr_friction_lut[int(cid) & 0xFF] = np.float32(float(value))
+    rebound_numerator_lut = np.zeros(256, dtype=np.float32)
+    for cid, numerator in char_rebound_anim_numerator_frames.items():
+        rebound_numerator_lut[int(cid) & 0xFF] = np.float32(float(numerator))
+
+    return _ManifestPreprocessTables(
+        manifest_chars=manifest_chars,
+        char_landing_air_lag_frames=char_landing_air_lag_frames,
+        char_fallspecial_origin_lag=char_fallspecial_origin_lag,
+        char_fallspecial_origin_allow_interrupt=char_fallspecial_origin_allow_interrupt,
+        char_walk_divisors=char_walk_divisors,
+        char_walk_max=char_walk_max,
+        char_run_scaling=char_run_scaling,
+        char_gr_friction=char_gr_friction,
+        char_gr_friction_lut=char_gr_friction_lut,
+        char_rebound_anim_numerator_frames=char_rebound_anim_numerator_frames,
+        rebound_numerator_lut=rebound_numerator_lut,
+        char_walljump_setup_x_delta_threshold=char_walljump_setup_x_delta_threshold,
+        active_shield_hit_lut=active_shield_hit_lut,
+        sheik_char_id=sheik_char_id,
+        zelda_char_id=zelda_char_id,
+        sheik_vanish_travel_frames=sheik_vanish_travel_frames,
+        sheik_vanish_ground_contact_min_frames=sheik_vanish_ground_contact_min_frames,
+        sheik_chain_release_min_frames=sheik_chain_release_min_frames,
+    )
 
 
 @functools.lru_cache(maxsize=None)
@@ -2929,7 +3197,7 @@ def _derive_yoshi_shyguy_seed_lanes(
 
 def _structured_rows_as_bytes(rows: np.ndarray) -> np.ndarray:
     contiguous = np.ascontiguousarray(rows)
-    return contiguous.view(np.uint8).reshape(contiguous.shape[0], contiguous.dtype.itemsize)
+    return contiguous.view(np.uint8).reshape(contiguous.shape[0], -1)
 
 
 @functools.lru_cache(maxsize=1)
@@ -3000,7 +3268,8 @@ def _materialize_illusion_seed_positions(
     - Materialize seed item positions from the same causal `ghostEffectPos[1]` lane promoted into
       seed_t for runtime ownership.
     """
-    out = np.array(items_fixed, copy=True)
+    out = np.empty_like(items_fixed)
+    np.copyto(out, items_fixed)
     n_frames = int(out.shape[0])
     if n_frames <= 1:
         return out
@@ -3479,7 +3748,38 @@ def build_dataset_from_slp(
     return _main_impl(a)
 
 
-def _main_impl(args) -> Dataset:
+def build_validation_buffers_from_slp(
+    *,
+    slp_path: str,
+    ports: list[int] | None = None,
+    ucf_enabled: bool = True,
+    ucf_cardinals_1_0_enabled: bool = False,
+) -> ValidationReplayBuffers:
+    """Build native validation buffers from a replay without creating Dataset/SAMPLE_DTYPE rows."""
+
+    # TODO(validation-perf): this is the normal validation boundary, but it still
+    # delegates to _main_impl for replay-to-seed/ref derivation. Move the remaining
+    # owner-family derivation into native buffer construction and delete the
+    # replaced Python paths as they move: combat/staling/hitlist state, Whispy and
+    # other stage hidden lanes, animation/timebase leftovers, capture/guard/action
+    # seed history, and repeated Arrow/NumPy staging. The target shape is raw replay
+    # columns -> ValidationReplayBuffers/report payloads, with Dataset/SAMPLE_DTYPE
+    # retained only for explicit debug/oracle tooling.
+    class Args:
+        pass
+
+    a = Args()
+    a.slp = slp_path
+    a.out = None
+    a.ports = None if ports is None else ",".join(str(p) for p in ports)
+    a.ucf_enabled = bool(ucf_enabled)
+    a.ucf_cardinals_1_0_enabled = bool(ucf_cardinals_1_0_enabled)
+    a.validation_buffers = True
+
+    return _main_impl(a)
+
+
+def _main_impl(args) -> Dataset | ValidationReplayBuffers:
     from tools.slippi.combat_history import (
         HITLIST_CD_INDEFINITE,
         derive_combat_hitlist_seed_fields,
@@ -3625,7 +3925,8 @@ def _main_impl(args) -> Dataset:
     # prev_input_t := pre(i-1)
     # ref_t1  := post(i)
     n_samples = n_frames - 1
-    samples = np.zeros(n_samples, dtype=SAMPLE_DTYPE)
+    validation_buffers = bool(getattr(args, "validation_buffers", False))
+    samples = _SampleParts(n_samples) if validation_buffers else np.zeros(n_samples, dtype=SAMPLE_DTYPE)
     # Seed defaults for new internal fields.
     samples["seed_t"]["combo_victim_port"][:] = np.uint8(0xFF)
     samples["seed_t"]["grab_owner_port"][:] = np.uint8(0xFF)
@@ -3681,32 +3982,6 @@ def _main_impl(args) -> Dataset:
     end_frames = load_end_frame_tables(data_root)
     stage_segments: list[dict] = []
     stage_segments = _load_stage_segments_for_seed(stage_id=stage_id, data_root=data_root)
-    char_landing_air_lag_frames: dict[int, dict[str, int]] = {}
-    # Resolved per-char map: freefall ORIGIN action id -> LandingFallSpecial lag frames.
-    # Derived from extracted MotionState identity (owners fx_special_kind lane for the
-    # spacie illusion/firefox rows; special-msids x submotion lane for marth-style
-    # up-special freefall) - no raw action-id literals.
-    char_fallspecial_origin_lag: dict[int, dict[int, float]] = {}
-    char_fallspecial_origin_allow_interrupt: dict[int, dict[int, tuple[int, int]]] = {}
-    char_walk_divisors: dict[int, tuple[float, float, float]] = {}
-    char_walk_max: dict[int, float] = {}
-    char_run_scaling: dict[int, float] = {}
-    char_gr_friction: dict[int, float] = {}
-    char_rebound_anim_numerator_frames: dict[int, float] = {}
-    char_walljump_setup_x_delta_threshold: dict[int, float] = {}
-    char_active_shield_hit_int_damage: dict[int, dict[int, dict[int, int]]] = {}
-    sheik_char_id: int | None = None
-    zelda_char_id: int | None = None
-    sheik_vanish_travel_frames = 0
-    sheik_vanish_ground_contact_min_frames = 0.0
-    sheik_chain_release_min_frames = 0
-
-    def _get_env_dmg_local(dmg: float) -> int:
-        if float(dmg) == 0.0:
-            return 0
-        i = int(dmg)
-        return i if i != 0 else 1
-
     def _derive_marth_counter_hitlag_floor_active(
         *,
         char_id_u8: np.ndarray,
@@ -3803,130 +4078,22 @@ def _main_impl(args) -> Dataset:
     stale_weights = struct.unpack_from("<" + "f" * stale_weight_count, stale_weights_buf, 20)
 
     # Per-character attr maps for every supported character (data manifest = registry
-    # chars). The old hardcoded (1, 22) loop silently skipped marth: no aerial landing-lag
-    # map (L-cancel derivation disabled!), default walk/run/friction tables - the
-    # spacie-shaped preprocessor class of the de-spacie pass.
-    manifest_chars = manifest_registry_chars(data_root)
-    for cid, key in manifest_chars:
-        attrs = _load_character_attrs(data_root, key)
-        if key == "sheik":
-            sheik_char_id = int(cid)
-            sheik_vanish_travel_frames = int(attrs.get("sheik_vanish_travel_frames", 0))
-            sheik_vanish_ground_contact_min_frames = float(
-                attrs.get("sheik_vanish_ground_contact_min_frames", 0.0)
-            )
-            sheik_chain_release_min_frames = int(attrs.get("sheik_chain_release_min_frames", 0))
-        elif key == "zelda":
-            zelda_char_id = int(cid)
-        move_file = _load_moves_file(data_root, key)
-        move_data = move_file["moves"]
-        special_move_data = move_file.get("specials_by_msid", {})
-        char_landing_air_lag_frames[int(cid)] = {
-            "airn": int(attrs["landing_airn_lag_frames"]),
-            "airf": int(attrs["landing_airf_lag_frames"]),
-            "airb": int(attrs["landing_airb_lag_frames"]),
-            "airhi": int(attrs["landing_airhi_lag_frames"]),
-            "airlw": int(attrs["landing_airlw_lag_frames"]),
-        }
-        origin_lag: dict[int, float] = {}
-        # ftCo_80096900's allow_interrupt bool is callsite-owned, and an origin carries TWO
-        # bits because the freefall-entry callsite and the direct-landing callsite differ:
-        # (entry_allow, direct_lfs_allow) per origin action.
-        # - fox/falco Illusion end: Anim-end -> FallSpecial passes true, but the direct
-        #   SpecialAirSEnd_Coll landing passes false.
-        # - fox/falco Firefox HiFall/HiBound: both paths pass true.
-        # - marth-style ftMs_SpecialHi: both paths pass false.
-        # Same origin identity machinery as origin_lag (owners fx_special_kind lane /
-        # special msids - no raw FX ids).
-        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSEnd_Anim,ftFx_SpecialAirSEnd_Coll}
-        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c
-        # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c
-        origin_allow_interrupt: dict[int, tuple[int, int]] = {}
-        owners_tbl = read_mslmso01_v1(data_root / "motion_state" / "owners" / f"{key}.bin")
-        if "illusion_landing_lag_frames" in attrs or "firefox_landing_lag_frames" in attrs:
-            from tools.extraction.extract_motion_state_owners import FX_SPECIAL_KIND_VALUES
-
-            illusion_kind = FX_SPECIAL_KIND_VALUES["SPECIAL_AIR_S_END"]
-            firefox_kinds = {
-                FX_SPECIAL_KIND_VALUES["SPECIAL_AIR_HI"],
-                FX_SPECIAL_KIND_VALUES["SPECIAL_HI_FALL"],
-                FX_SPECIAL_KIND_VALUES["SPECIAL_HI_BOUND"],
-            }
-            for a in range(len(owners_tbl.fx_special_kind)):
-                k = int(owners_tbl.fx_special_kind[a])
-                if k == illusion_kind and "illusion_landing_lag_frames" in attrs:
-                    origin_lag[a] = float(attrs["illusion_landing_lag_frames"])
-                    origin_allow_interrupt[a] = (1, 0)
-                elif k in firefox_kinds and "firefox_landing_lag_frames" in attrs:
-                    origin_lag[a] = float(attrs["firefox_landing_lag_frames"])
-                    direct_kinds = {
-                        FX_SPECIAL_KIND_VALUES["SPECIAL_HI_FALL"],
-                        FX_SPECIAL_KIND_VALUES["SPECIAL_HI_BOUND"],
-                    }
-                    origin_allow_interrupt[a] = (1, 1 if k in direct_kinds else 0)
-        if "specialhi_landing_lag_frames" in attrs:
-            # Marth-style up-special freefall (ftMs_SpecialHi stores MarsAttributes x2C into
-            # mv.co.fallspecial.landing_lag): origins are the actions whose submotion is the
-            # char's up-special main msid (data/special_msids/<char>.json).
-            sm_path = data_root / "special_msids" / f"{key}.json"
-            if sm_path.exists():
-                sm = _load_json_file(sm_path)
-                up_msids = set()
-                for up_key in ("up_air", "up_ground"):
-                    main = (sm.get(up_key) or {}).get("main") or {}
-                    for v in main.values():
-                        if isinstance(v, int):
-                            up_msids.add(int(v))
-                for a in range(len(owners_tbl.submotion_id)):
-                    if int(owners_tbl.submotion_id[a]) in up_msids:
-                        origin_lag[a] = float(attrs["specialhi_landing_lag_frames"])
-                        origin_allow_interrupt[a] = (0, 0)
-        char_fallspecial_origin_lag[int(cid)] = origin_lag
-        char_fallspecial_origin_allow_interrupt[int(cid)] = origin_allow_interrupt
-        char_walk_divisors[int(cid)] = (
-            float(attrs["slow_walk_max"]),
-            float(attrs["mid_walk_point"]),
-            float(attrs["fast_walk_min"]),
-        )
-        char_walk_max[int(cid)] = float(attrs["walk_max_vel"])
-        char_run_scaling[int(cid)] = float(attrs["run_animation_scaling"])
-        char_gr_friction[int(cid)] = float(attrs["gr_friction"])
-        char_rebound_anim_numerator_frames[int(cid)] = float(attrs["rebound_anim_numerator_frames"])
-        char_walljump_setup_x_delta_threshold[int(cid)] = float(attrs["walljump_setup_x_delta_threshold"])
-        active_int_damage_by_anim: dict[int, dict[int, int]] = {}
-        for move in [*move_data.values(), *special_move_data.values()]:
-            submotion_id = int(move.get("submotion_id", -1))
-            if submotion_id < 0:
-                continue
-            events = sorted(move.get("events", []), key=lambda ev: (int(ev.get("frame", 0)), ev.get("kind", "")))
-            events_by_frame: dict[int, list[dict]] = {}
-            max_frame = 0
-            for ev in events:
-                frame = int(ev.get("frame", 0))
-                events_by_frame.setdefault(frame, []).append(ev)
-                max_frame = max(max_frame, frame)
-            active_by_hitbox: dict[int, int] = {}
-            frame_damage: dict[int, int] = {}
-            for frame in range(0, max_frame + 2):
-                for ev in events_by_frame.get(frame, []):
-                    kind = ev.get("kind")
-                    if kind == "create_hitbox":
-                        hb = ev.get("data", {}).get("hitbox", {})
-                        hb_id = int(hb.get("hitbox_id", 0))
-                        active_by_hitbox[hb_id] = _get_env_dmg_local(float(hb.get("damage", 0.0)))
-                    elif kind == "set_hitbox_damage":
-                        hb_id = int(ev.get("data", {}).get("idx", 0))
-                        if hb_id in active_by_hitbox:
-                            active_by_hitbox[hb_id] = _get_env_dmg_local(
-                                float(ev.get("data", {}).get("damage", 0.0))
-                            )
-                    elif kind == "remove_hitbox":
-                        active_by_hitbox.pop(int(ev.get("data", {}).get("idx", 0)), None)
-                    elif kind == "clear_hitboxes":
-                        active_by_hitbox.clear()
-                frame_damage[frame] = max(active_by_hitbox.values(), default=0)
-            active_int_damage_by_anim[submotion_id] = frame_damage
-        char_active_shield_hit_int_damage[int(cid)] = active_int_damage_by_anim
+    # chars). Replay-invariant generated-data transforms are cached process-locally; the normal
+    # validation path should not rebuild move-event timelines and owner maps for every replay.
+    manifest_tables = _manifest_preprocess_tables(_path_cache_key(data_root))
+    manifest_chars = manifest_tables.manifest_chars
+    char_landing_air_lag_frames = manifest_tables.char_landing_air_lag_frames
+    char_fallspecial_origin_lag = manifest_tables.char_fallspecial_origin_lag
+    char_fallspecial_origin_allow_interrupt = manifest_tables.char_fallspecial_origin_allow_interrupt
+    char_walk_divisors = manifest_tables.char_walk_divisors
+    char_walk_max = manifest_tables.char_walk_max
+    char_run_scaling = manifest_tables.char_run_scaling
+    char_walljump_setup_x_delta_threshold = manifest_tables.char_walljump_setup_x_delta_threshold
+    sheik_char_id = manifest_tables.sheik_char_id
+    zelda_char_id = manifest_tables.zelda_char_id
+    sheik_vanish_travel_frames = manifest_tables.sheik_vanish_travel_frames
+    sheik_vanish_ground_contact_min_frames = manifest_tables.sheik_vanish_ground_contact_min_frames
+    sheik_chain_release_min_frames = manifest_tables.sheik_chain_release_min_frames
 
     # Guard-tilt table metadata (neutral frame + max frame) for decomp-shaped mv.co.guard.x8.
     shield_meta = load_shield_tilt_table_meta()
@@ -5476,25 +5643,11 @@ def _main_impl(args) -> Dataset:
     shield_stun_base = float(common["shield_stun_base"])
     shield_stun_ls_min = float(common["shield_stun_lightshield_min"])
     shield_stun_ls_max = float(common["shield_stun_lightshield_max"])
-    max_anim_idx = max((max(v.keys(), default=0) for v in char_active_shield_hit_int_damage.values()), default=0)
-    max_active_frame = 0
-    for by_anim in char_active_shield_hit_int_damage.values():
-        for by_frame in by_anim.values():
-            if by_frame:
-                max_active_frame = max(max_active_frame, max(by_frame.keys()))
-    active_shield_hit_lut = np.zeros((256, max_anim_idx + 1, max_active_frame + 1), dtype=np.uint16)
-    for cid, by_anim in char_active_shield_hit_int_damage.items():
-        for anim_idx, by_frame in by_anim.items():
-            for frame, dmg in by_frame.items():
-                active_shield_hit_lut[int(cid) & 0xFF, int(anim_idx), int(frame)] = np.uint16(int(dmg))
     max_end_msid = max((max(v.keys(), default=0) for v in end_frames.by_char_id.values()), default=40)
     end_frame_lut = np.zeros((256, max(max_end_msid, 40) + 1), dtype=np.float32)
     for cid, by_msid in end_frames.by_char_id.items():
         for msid, end_frame in by_msid.items():
             end_frame_lut[int(cid) & 0xFF, int(msid)] = np.float32(float(end_frame))
-    char_gr_friction_lut = np.zeros(256, dtype=np.float32)
-    for cid, value in char_gr_friction.items():
-        char_gr_friction_lut[int(cid) & 0xFF] = np.float32(float(value))
     try:
         import msl_binding  # type: ignore
     except ImportError as exc:
@@ -5513,7 +5666,7 @@ def _main_impl(args) -> Dataset:
         np.ascontiguousarray(hist.attack_id, dtype=np.uint16),
         np.ascontiguousarray(hist.stale_queue_index, dtype=np.uint8),
         np.ascontiguousarray(hist.stale_move_id, dtype=np.uint16),
-        active_shield_hit_lut,
+        manifest_tables.active_shield_hit_lut,
         end_frame_lut,
         np.asarray(stale_weights, dtype=np.float32),
         int(num_players),
@@ -5681,8 +5834,8 @@ def _main_impl(args) -> Dataset:
         np.ascontiguousarray(seed_guard_setoff_hitlag_damage_min, dtype=np.uint8),
         np.ascontiguousarray(seed_stale_queue_index, dtype=np.uint8),
         np.ascontiguousarray(seed_stale_move_id, dtype=np.uint16),
-        active_shield_hit_lut,
-        char_gr_friction_lut,
+        manifest_tables.active_shield_hit_lut,
+        manifest_tables.char_gr_friction_lut,
         np.asarray(stale_weights, dtype=np.float32),
         int(num_players),
         int(act_guard_set_off),
@@ -5742,7 +5895,17 @@ def _main_impl(args) -> Dataset:
     samples["seed_t"]["item_shyguy_delay_valid_u8"] = shyguy_delay_valid[:-1]
     samples["seed_t"]["item_shyguy_hitlag_u8"] = shyguy_hitlag[:-1]
     samples["seed_t"]["item_shyguy_hitlag_valid_u8"] = shyguy_hitlag_valid[:-1]
-    samples["seed_t"]["items"] = items_seed[:-1]
+    if validation_buffers:
+        import msl_binding
+
+        msl_binding.copy_validation_item_rows(
+            samples.seed_u8(),
+            samples.ref_u8(),
+            _structured_rows_as_bytes(items_seed[:-1]),
+            _structured_rows_as_bytes(items_fixed[1:]),
+        )
+    else:
+        samples["seed_t"]["items"] = items_seed[:-1]
     if int(stage_id) == int(_yoshi_shyguy_params().stage_id):
         seed_items = samples["seed_t"]["items"]
         live_seed_shyguy = np.any(
@@ -5890,7 +6053,8 @@ def _main_impl(args) -> Dataset:
     samples["seed_t"]["throw_pulse_consumed"] = throw_pulse_consumed
     samples["seed_t"]["throw_pulse_crossed_prev_frame"] = throw_pulse_crossed_prev
     samples["seed_t"]["throw_command_pending_pulse_frame"] = throw_command_pending_pulse_frame
-    samples["ref_t1"]["items"] = items_fixed[1:]
+    if not validation_buffers:
+        samples["ref_t1"]["items"] = items_fixed[1:]
 
     # is_dead in compare is derived from stocks in the evaluator too, but fill it here for completeness.
     samples["ref_t1"]["is_dead"] = (samples["ref_t1"]["stocks"] == 0).astype(np.uint8)
@@ -6725,7 +6889,7 @@ def _main_impl(args) -> Dataset:
         np.ascontiguousarray(hist.attack_id, dtype=np.uint16),
         np.ascontiguousarray(hist.stale_queue_index, dtype=np.uint8),
         np.ascontiguousarray(hist.stale_move_id, dtype=np.uint16),
-        np.ascontiguousarray(active_shield_hit_lut, dtype=np.uint16),
+        manifest_tables.active_shield_hit_lut,
         np.ascontiguousarray(stale_weights, dtype=np.float32),
         guard_lut,
         attack_lut,
@@ -6759,9 +6923,6 @@ def _main_impl(args) -> Dataset:
     rebound_anim_rate = np.zeros(
         (n_frames, samples["seed_t"]["rebound_anim_rate_f32"].shape[1]), dtype=np.float32
     )
-    rebound_numerator_lut = np.zeros(256, dtype=np.float32)
-    for cid, numerator in char_rebound_anim_numerator_frames.items():
-        rebound_numerator_lut[int(cid) & 0xFF] = np.float32(float(numerator))
     try:
         import msl_binding  # type: ignore
     except ImportError as exc:
@@ -6774,7 +6935,7 @@ def _main_impl(args) -> Dataset:
         np.ascontiguousarray(samples["seed_t"]["speed_ground_x_self"], dtype=np.float32),
         np.ascontiguousarray(samples["ref_t1"]["speed_ground_x_self"], dtype=np.float32),
         np.ascontiguousarray(samples["seed_t"]["frame_speed_mul_f32"], dtype=np.float32),
-        rebound_numerator_lut,
+        manifest_tables.rebound_numerator_lut,
         int(num_players),
         int(act_rebound_stop),
         int(act_rebound),
@@ -6845,6 +7006,9 @@ def _main_impl(args) -> Dataset:
     samples["seed_t"]["stage_dream_whispy_wind_dir_u8"] = dream_wind_dir
     samples["seed_t"]["stage_dream_whispy_wind_valid_u8"] = dream_wind_valid
     samples["seed_t"]["stage_dream_whispy_wind_timer_u16"] = dream_wind_timer
+
+    if validation_buffers:
+        return samples.as_buffers(num_players=int(num_players))
 
     header = np.zeros((), dtype=HEADER_DTYPE)
     header["magic"] = MAGIC

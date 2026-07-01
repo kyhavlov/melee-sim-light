@@ -5,14 +5,13 @@ import concurrent.futures
 import os
 from pathlib import Path
 
-from tools.eval.run_one_step_eval import (
+from tools.eval.one_step_report import (
     EvalSummary,
     Reporter,
-    _discrete_mismatch_total,
-    create_one_step_eval_runtime,
-    evaluate_dataset,
+    discrete_mismatch_total,
+    strict_discrete_mismatch_total,
 )
-from tools.eval.run_one_step_eval import _strict_discrete_mismatch_total
+from tools.eval.streaming_validation import evaluate_validation_buffers
 from tools.eval.validation_profile import get_validation_profile, validation_profile_names
 from tools.slippi.slpz import resolve_replay_path
 from tools.slippi.suite_io import load_suite, repo_root
@@ -44,9 +43,34 @@ def _display_path(path: Path, *, root: Path) -> str:
 
 
 def _evaluate_dataset_task(task: dict) -> dict:
-    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
-
     dataset_label = Path(str(task["dataset_label"]))
+    debug_mismatch = tuple(task["debug_mismatch"])
+    debug_float = tuple(task["debug_float"])
+    if not debug_mismatch and not debug_float:
+        from tools.slippi.make_dataset_from_slp import build_validation_buffers_from_slp
+
+        buffers = build_validation_buffers_from_slp(
+            slp_path=str(task["slp_path"]),
+            ports=[int(p) for p in task["ports"]],
+            ucf_enabled=bool(task["ucf_enabled"]),
+            ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
+        )
+        capture = _CaptureReporter()
+        summary = evaluate_validation_buffers(
+            dataset_path=dataset_label,
+            buffers=buffers,
+            chunk=int(task["chunk"]),
+            profile=str(task["profile"]),
+            ucf_enabled=bool(task["ucf_enabled"]),
+            ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
+            reporter=capture,  # type: ignore[arg-type]
+            print_profile=False,
+        )
+        return {"one_step_lines": capture.lines, "one_step_summary": summary}
+
+    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+    from tools.eval.run_one_step_eval import create_one_step_eval_runtime, evaluate_dataset
+
     dataset = build_dataset_from_slp(
         slp_path=str(task["slp_path"]),
         ports=[int(p) for p in task["ports"]],
@@ -73,9 +97,9 @@ def _evaluate_dataset_task(task: dict) -> dict:
             ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
             reporter=capture,  # type: ignore[arg-type]
             print_profile=False,
-            debug_mismatch=tuple(task["debug_mismatch"]),
+            debug_mismatch=debug_mismatch,
             debug_limit=int(task["debug_limit"]),
-            debug_float=tuple(task["debug_float"]),
+            debug_float=debug_float,
             debug_float_limit=int(task["debug_float_limit"]),
         )
     finally:
@@ -174,8 +198,8 @@ def emit_one_step_suite_report(
         float_norm_sum=float(suite_totals["float_norm_sum"]),
         float_norm_count=int(suite_totals["float_norm_count"]),
     )
-    mismatches_total, checks_total = _discrete_mismatch_total(suite_summary, profile=validation_profile)
-    strict_total, strict_checks = _strict_discrete_mismatch_total(suite_summary)
+    mismatches_total, checks_total = discrete_mismatch_total(suite_summary, profile=validation_profile)
+    strict_total, strict_checks = strict_discrete_mismatch_total(suite_summary)
     reporter.print(f"overall.discrete_mismatch: {mismatches_total} / {checks_total}")
     reporter.print(f"overall.strict_discrete_mismatch: {strict_total} / {strict_checks}")
     reporter.print(f"overall.ignored_discrete_mismatch: {sum(suite_ignored_mismatches.values())}")

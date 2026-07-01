@@ -8,29 +8,25 @@ Examples:
 """
 
 import argparse
-from dataclasses import asdict
 from pathlib import Path
 
-from tools.eval.locate_rollout_desyncs import _locate_dataset_rollout_desyncs
+from tools.eval.one_step_report import Reporter
 from tools.eval.rollout_metrics import summarize_rollout_payload
-from tools.eval.run_longest_rollout_streaks import (
+from tools.eval.run_rollout_suite_eval import (
     _parse_csv,
     _parse_players,
-    _scan_dataset_streaks_with_native_float_rows,
-    _validate_discrete_fields,
-)
-from tools.eval.run_rollout_suite_eval import (
     _dataset_exception_overlay,
     _exception_probe_limit,
     _float_compare_fields,
     _float_summary,
     _rollout_status,
+    _validate_discrete_fields,
     print_rollout_dataset_report,
 )
-from tools.eval.run_one_step_eval import Reporter, evaluate_dataset
+from tools.eval.streaming_validation import evaluate_validation_buffers, scan_validation_buffers_with_native_float_rows
 from tools.eval.validation_exceptions import load_validation_exceptions
 from tools.eval.validation_profile import get_validation_profile, validation_profile_names
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.slippi.make_dataset_from_slp import build_validation_buffers_from_slp
 from tools.slippi.slpz import resolve_replay_path
 
 
@@ -67,15 +63,15 @@ def _print_one_step(
     chunk: int,
     profile: str,
 ) -> None:
-    dataset = build_dataset_from_slp(
+    buffers = build_validation_buffers_from_slp(
         slp_path=str(replay),
         ports=ports,
         ucf_enabled=ucf_enabled,
         ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
     )
-    evaluate_dataset(
+    evaluate_validation_buffers(
         dataset_path=_dataset_label(replay),
-        dataset=dataset,
+        buffers=buffers,
         chunk=int(chunk),
         profile=profile,
         ucf_enabled=ucf_enabled,
@@ -116,37 +112,67 @@ def _print_rollout(
     exceptions_path: Path,
     float_top: int,
 ) -> None:
-    dataset = build_dataset_from_slp(
-        slp_path=str(replay),
-        ports=ports,
-        ucf_enabled=ucf_enabled,
-        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-    )
-    num_players = int(dataset.header["num_players"])
-    players = _parse_players(players_csv, num_players=num_players)
-    label = _dataset_label(replay)
-    float_top_scan = max(0, int(float_top)) * 8
-    dataset_label = str(label)
-    streaks, float_rows = _scan_dataset_streaks_with_native_float_rows(
-        dataset_path=label,
-        ds=dataset,
-        fields=fields,
-        players=players,
-        max_records=int(max_records),
-        ucf_enabled=ucf_enabled,
-        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-        profile=profile,
-        float_fields=_float_compare_fields() if float_top_scan > 0 else (),
-        float_top=float_top_scan,
-        float_threshold=0.0,
-        float_dataset_label=dataset_label,
-    )
     exceptions = load_validation_exceptions(exceptions_path)
+    label = _dataset_label(replay)
+    dataset_label = str(label)
     exception_probe_limit = _exception_probe_limit(dataset=dataset_label, exceptions=exceptions)
     if exception_probe_limit > 0 and int(max_records) > 0:
         exception_probe_limit = min(exception_probe_limit, int(max_records))
-    first_rows = []
-    if exception_probe_limit > 0:
+    standard_fields = ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags")
+    if tuple(fields) == standard_fields:
+        buffers = build_validation_buffers_from_slp(
+            slp_path=str(replay),
+            ports=ports,
+            ucf_enabled=ucf_enabled,
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        )
+        players = _parse_players(players_csv, num_players=int(buffers.num_players))
+        float_top_scan = max(0, int(float_top)) * 8
+        streaks, float_rows, first_rows = scan_validation_buffers_with_native_float_rows(
+            dataset_path=label,
+            buffers=buffers,
+            fields=fields,
+            players=players,
+            max_records=int(max_records),
+            ucf_enabled=ucf_enabled,
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+            profile=profile,
+            float_fields=_float_compare_fields() if float_top_scan > 0 else (),
+            float_top=float_top_scan,
+            float_threshold=0.0,
+            float_dataset_label=dataset_label,
+            first_mismatch_probe_limit=exception_probe_limit,
+        )
+    else:
+        from dataclasses import asdict
+
+        from tools.eval.locate_rollout_desyncs import _locate_dataset_rollout_desyncs
+        from tools.eval.run_longest_rollout_streaks import _scan_dataset_streaks_with_native_float_rows
+        from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+
+        dataset = build_dataset_from_slp(
+            slp_path=str(replay),
+            ports=ports,
+            ucf_enabled=ucf_enabled,
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        )
+        num_players = int(dataset.header["num_players"])
+        players = _parse_players(players_csv, num_players=num_players)
+        float_top_scan = max(0, int(float_top)) * 8
+        streaks, float_rows = _scan_dataset_streaks_with_native_float_rows(
+            dataset_path=label,
+            ds=dataset,
+            fields=fields,
+            players=players,
+            max_records=int(max_records),
+            ucf_enabled=ucf_enabled,
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+            profile=profile,
+            float_fields=_float_compare_fields() if float_top_scan > 0 else (),
+            float_top=float_top_scan,
+            float_threshold=0.0,
+            float_dataset_label=dataset_label,
+        )
         first_rows = [
             asdict(row)
             for row in _locate_dataset_rollout_desyncs(

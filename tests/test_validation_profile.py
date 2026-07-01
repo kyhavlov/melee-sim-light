@@ -259,15 +259,15 @@ class _FakeBinding:
     def one_step_summary_accumulate(
         self, _summary_handle: object, out_compare_bytes: np.ndarray, samples_u8: np.ndarray
     ) -> None:
-        import tools.eval.run_one_step_eval as eval_mod
+        from tools.eval.one_step_report import DISCRETE_FIELDS, FLOAT_FIELDS
 
         out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
         samples = samples_u8.view(SAMPLE_DTYPE).reshape(-1)
         ref = samples["ref_t1"]
         active = slice(0, self._num_players)
-        mismatches = [0 for _ in eval_mod._DISCRETE_FIELDS]
-        strict = [0 for _ in eval_mod._DISCRETE_FIELDS]
-        sf_idx = eval_mod._DISCRETE_FIELDS.index("state_flags")
+        mismatches = [0 for _ in DISCRETE_FIELDS]
+        strict = [0 for _ in DISCRETE_FIELDS]
+        sf_idx = DISCRETE_FIELDS.index("state_flags")
         xor = out["state_flags"][:, active, :].astype(np.uint16) ^ ref["state_flags"][
             :, active, :
         ].astype(np.uint16)
@@ -283,7 +283,7 @@ class _FakeBinding:
             "ignored_state_flags_4_0x80": ignored,
             "float_metrics": {
                 field: {"mae": 0.0, "p95": 0.0, "max": 0.0, "count": 0}
-                for field in eval_mod._FLOAT_FIELDS
+                for field in FLOAT_FIELDS
             },
             "float_norm_sum": 0.0,
             "float_norm_count": 0,

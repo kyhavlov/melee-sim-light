@@ -8,6 +8,7 @@ PyObject* msl_derive_instance_id_x2073_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_instance_id_counter_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_item_spawn_id_counter_py(PyObject* self, PyObject* args);
 PyObject* msl_fill_items_fixed_py(PyObject* self, PyObject* args);
+PyObject* msl_copy_validation_item_rows_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_staling_history_py(PyObject* self, PyObject* args);
 PyObject* msl_process_stick_i8_units_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_ucf_pad_buffer_state_py(PyObject* self, PyObject* args);

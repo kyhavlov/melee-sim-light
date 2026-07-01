@@ -7,7 +7,7 @@ import pytest
 
 import msl_binding
 from tools.eval.dataset import COMPARE_DTYPE
-from tools.eval.run_one_step_eval import _DISCRETE_FIELDS, _FLOAT_FIELDS
+from tools.eval.one_step_report import DISCRETE_FIELDS, FLOAT_FIELDS
 from tools.eval.validation_profile import get_validation_profile
 from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 from tools.slippi.suite_io import load_suite, repo_root
@@ -74,9 +74,9 @@ def _python_summary(out_bytes: np.ndarray, samples: np.ndarray, *, num_players: 
     out = out_bytes.view(COMPARE_DTYPE).reshape(-1)
     ref = samples["ref_t1"]
     active = slice(0, int(num_players))
-    mismatches = {field: 0 for field in _DISCRETE_FIELDS}
-    strict = {field: 0 for field in _DISCRETE_FIELDS}
-    for field in _DISCRETE_FIELDS[:18]:
+    mismatches = {field: 0 for field in DISCRETE_FIELDS}
+    strict = {field: 0 for field in DISCRETE_FIELDS}
+    for field in DISCRETE_FIELDS[:18]:
         count = int((out[field][:, active] != ref[field][:, active]).sum())
         mismatches[field] = count
         strict[field] = count
@@ -117,7 +117,7 @@ def _python_summary(out_bytes: np.ndarray, samples: np.ndarray, *, num_players: 
     float_metrics = {}
     norm_sum = 0.0
     norm_count = 0
-    for field in _FLOAT_FIELDS:
+    for field in FLOAT_FIELDS:
         if field.startswith("item_"):
             sub = field.replace("item_", "")
             mask = ref_items["exists"].astype(bool)
@@ -181,12 +181,12 @@ def test_native_one_step_summary_matches_python_oracle(
         out, samples, num_players=num_players, profile_name=profile_name
     )
 
-    assert dict(zip(_DISCRETE_FIELDS, native["mismatches"], strict=True)) == py_mismatch, label
-    assert dict(zip(_DISCRETE_FIELDS, native["strict_mismatches"], strict=True)) == py_strict, label
+    assert dict(zip(DISCRETE_FIELDS, native["mismatches"], strict=True)) == py_mismatch, label
+    assert dict(zip(DISCRETE_FIELDS, native["strict_mismatches"], strict=True)) == py_strict, label
     for ignored_label, value in py_ignored.items():
         if ignored_label == "state_flags[4]&0x80":
             assert int(native["ignored_state_flags_4_0x80"]) == value
-    for field in _FLOAT_FIELDS:
+    for field in FLOAT_FIELDS:
         metrics = native["float_metrics"][field]
         got = (f"{float(metrics['mae']):.6f}", f"{float(metrics['p95']):.6f}", f"{float(metrics['max']):.6f}")
         assert got == py_float[field], (label, field)

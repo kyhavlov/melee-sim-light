@@ -238,6 +238,50 @@ PyObject* msl_fill_items_fixed_py(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+PyObject* msl_copy_validation_item_rows_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* seed_obj = NULL;
+  PyObject* ref_obj = NULL;
+  PyObject* seed_items_obj = NULL;
+  PyObject* ref_items_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOOO", &seed_obj, &ref_obj, &seed_items_obj, &ref_items_obj)) {
+    return NULL;
+  }
+  PyArrayObject* seed = require_contiguous_array(seed_obj, NPY_UINT8, 2, "seed_u8");
+  PyArrayObject* ref = require_contiguous_array(ref_obj, NPY_UINT8, 2, "ref_u8");
+  PyArrayObject* seed_items =
+      require_contiguous_array(seed_items_obj, NPY_UINT8, 2, "seed_items_u8");
+  PyArrayObject* ref_items = require_contiguous_array(ref_items_obj, NPY_UINT8, 2, "ref_items_u8");
+  if (seed == NULL || ref == NULL || seed_items == NULL || ref_items == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(seed, 0);
+  const size_t items_bytes = sizeof(((MslSeed*)0)->items);
+  if (PyArray_DIM(ref, 0) != n || PyArray_DIM(seed_items, 0) != n ||
+      PyArray_DIM(ref_items, 0) != n || PyArray_DIM(seed, 1) < (npy_intp)sizeof(MslSeed) ||
+      PyArray_DIM(ref, 1) < (npy_intp)sizeof(MslCompare) ||
+      PyArray_DIM(seed_items, 1) != (npy_intp)items_bytes ||
+      PyArray_DIM(ref_items, 1) != (npy_intp)items_bytes) {
+    PyErr_SetString(PyExc_ValueError, "validation item copy buffers have incompatible shapes");
+    return NULL;
+  }
+  uint8_t* seed_u8 = (uint8_t*)PyArray_DATA(seed);
+  uint8_t* ref_u8 = (uint8_t*)PyArray_DATA(ref);
+  const uint8_t* seed_items_u8 = (const uint8_t*)PyArray_DATA(seed_items);
+  const uint8_t* ref_items_u8 = (const uint8_t*)PyArray_DATA(ref_items);
+  const size_t seed_stride = (size_t)PyArray_STRIDE(seed, 0);
+  const size_t ref_stride = (size_t)PyArray_STRIDE(ref, 0);
+  const size_t seed_items_stride = (size_t)PyArray_STRIDE(seed_items, 0);
+  const size_t ref_items_stride = (size_t)PyArray_STRIDE(ref_items, 0);
+  for (npy_intp i = 0; i < n; i++) {
+    MslSeed* seed_row = (MslSeed*)(void*)(seed_u8 + (size_t)i * seed_stride);
+    MslCompare* ref_row = (MslCompare*)(void*)(ref_u8 + (size_t)i * ref_stride);
+    memcpy(seed_row->items, seed_items_u8 + (size_t)i * seed_items_stride, items_bytes);
+    memcpy(ref_row->items, ref_items_u8 + (size_t)i * ref_items_stride, items_bytes);
+  }
+  Py_RETURN_NONE;
+}
+
 static inline uint8_t msl_py_u8_sat_inc_fe(uint8_t v) {
   return v < 0xFEu ? (uint8_t)(v + 1u) : 0xFEu;
 }

@@ -6,16 +6,12 @@ import os
 from dataclasses import asdict
 from pathlib import Path
 
-from tools.eval.dataset import COMPARE_DTYPE
-from tools.eval.locate_rollout_desyncs import _locate_dataset_rollout_desyncs
+from tools.eval.one_step_report import DISCRETE_FIELDS, Reporter
 from tools.eval.rollout_metrics import summarize_rollout_payload
-from tools.eval.run_longest_rollout_streaks import (
-    _parse_csv,
-    _parse_players,
-    _scan_dataset_streaks_with_native_float_rows,
-    _validate_discrete_fields,
+from tools.eval.streaming_validation import (
+    default_players,
+    scan_validation_buffers_with_native_float_rows,
 )
-from tools.eval.run_one_step_eval import Reporter
 from tools.eval.validation_exceptions import (
     ValidationExceptions,
     classify_float_row,
@@ -59,6 +55,22 @@ def _resolve_worker_count(requested: int, task_count: int) -> int:
     return max(1, min(8, int(os.cpu_count() or 1), int(task_count) if task_count else 1))
 
 
+def _parse_csv(s: str) -> tuple[str, ...]:
+    return tuple(x.strip() for x in s.split(",") if x.strip() != "")
+
+
+def _parse_players(players_csv: str | None, *, num_players: int) -> tuple[int, ...]:
+    if players_csv is None or players_csv.strip() == "":
+        return tuple(range(num_players))
+    out: list[int] = []
+    for part in _parse_csv(players_csv):
+        p = int(part)
+        if p < 0 or p >= num_players:
+            raise SystemExit(f"error: --players includes {p}, but dataset has num_players={num_players}")
+        out.append(p)
+    return tuple(sorted(set(out)))
+
+
 def _display_path(path: Path, *, root: Path) -> str:
     resolved = path.resolve()
     try:
@@ -68,12 +80,26 @@ def _display_path(path: Path, *, root: Path) -> str:
 
 
 def _float_compare_fields() -> tuple[str, ...]:
-    fields: list[str] = []
-    for name, (dt, _off) in COMPARE_DTYPE.fields.items():
-        base = dt.subdtype[0] if dt.subdtype is not None else dt
-        if base.fields is None and base.kind == "f":
-            fields.append(name)
-    return tuple(fields)
+    return (
+        "pos_x",
+        "pos_y",
+        "speed_air_x_self",
+        "speed_ground_x_self",
+        "speed_y_self",
+        "speed_x_attack",
+        "speed_y_attack",
+        "percent",
+        "shield_hp",
+    )
+
+
+def _validate_discrete_fields(fields: tuple[str, ...]) -> tuple[str, ...]:
+    if not fields:
+        raise SystemExit("error: --fields is empty")
+    missing = [f for f in fields if f not in DISCRETE_FIELDS]
+    if missing:
+        raise SystemExit(f"error: unknown or non-discrete compare fields: {', '.join(missing)}")
+    return fields
 
 
 def _dataset_exception_overlay(
@@ -440,7 +466,59 @@ def emit_rollout_suite_report(
 def _scan_dataset_payload_task(task: dict) -> dict:
     root = Path(str(task["root"]))
     dataset_label = Path(str(task["dataset_label"]))
+    exception_probe_limit = int(task.get("exception_probe_limit", 0))
+    standard_fields = ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags")
+    if tuple(task["fields"]) == standard_fields:
+        from tools.slippi.make_dataset_from_slp import build_validation_buffers_from_slp
+
+        buffers = build_validation_buffers_from_slp(
+            slp_path=str(task["slp_path"]),
+            ports=[int(p) for p in task["ports"]],
+            ucf_enabled=bool(task["ucf_enabled"]),
+            ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
+        )
+        players = default_players(buffers, task["players_csv"])
+        float_top = int(task.get("float_top_scan", 0))
+        display_label = _display_path(dataset_label, root=root)
+        if exception_probe_limit > 0 and int(task["max_records"]) > 0:
+            exception_probe_limit = min(exception_probe_limit, int(task["max_records"]))
+        s, float_rows, first_rows = scan_validation_buffers_with_native_float_rows(
+            dataset_path=dataset_label,
+            buffers=buffers,
+            fields=tuple(task["fields"]),
+            players=players,
+            max_records=int(task["max_records"]),
+            ucf_enabled=bool(task["ucf_enabled"]),
+            ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
+            profile=str(task["profile"]),
+            float_fields=tuple(task["float_fields"]) if float_top > 0 else (),
+            float_top=float_top,
+            float_threshold=0.0,
+            float_dataset_label=display_label,
+            first_mismatch_probe_limit=exception_probe_limit,
+        )
+        return {
+            "dataset": display_label,
+            "num_records": s.num_records,
+            "max_records_used": s.max_records_used,
+            "players": list(s.players),
+            "best_len": s.best_len,
+            "best_start_record": s.best_start_record,
+            "best_end_record_excl": s.best_end_record_excl,
+            "best_start_seed_frame_id": s.best_start_seed_frame_id,
+            "best_end_ref_frame_id_inclusive": s.best_end_ref_frame_id_inclusive,
+            "streak_histogram": s.streak_histogram,
+            "first_mismatch_field_counts": s.first_mismatch_field_counts,
+            "first_mismatch_field_counts_seeded": s.first_mismatch_field_counts_seeded,
+            "ignored_first_mismatch_field_counts": s.ignored_first_mismatch_field_counts,
+            "ignored_first_mismatch_field_counts_seeded": s.ignored_first_mismatch_field_counts_seeded,
+            "first_mismatch_rows": first_rows,
+            "float_rows": float_rows,
+        }
+
     from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+    from tools.eval.locate_rollout_desyncs import _locate_dataset_rollout_desyncs
+    from tools.eval.run_longest_rollout_streaks import _scan_dataset_streaks_with_native_float_rows
 
     ds = build_dataset_from_slp(
         slp_path=str(task["slp_path"]),
@@ -467,7 +545,6 @@ def _scan_dataset_payload_task(task: dict) -> dict:
         float_dataset_label=display_label,
     )
     first_rows: list[dict] = []
-    exception_probe_limit = int(task.get("exception_probe_limit", 0))
     if exception_probe_limit > 0:
         max_records = int(task["max_records"])
         if max_records > 0:

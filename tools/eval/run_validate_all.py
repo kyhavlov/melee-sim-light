@@ -7,12 +7,26 @@ import os
 from pathlib import Path
 
 from tools.eval import run_combined_suite_eval, run_one_step_suite_eval, run_rollout_suite_eval
-from tools.eval.run_longest_rollout_streaks import _parse_csv, _validate_discrete_fields
-from tools.eval.run_one_step_eval import Reporter
+from tools.eval.one_step_report import Reporter
 from tools.eval.validation_exceptions import load_validation_exceptions
 from tools.eval.validation_profile import get_validation_profile, validation_profile_names
 from tools.slippi.slpz import resolve_replay_path
 from tools.slippi.suite_io import load_suite, repo_root
+
+_STANDARD_ROLLOUT_FIELDS = ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags")
+
+
+def _parse_csv(s: str) -> tuple[str, ...]:
+    return tuple(x.strip() for x in s.split(",") if x.strip() != "")
+
+
+def _validate_discrete_fields(fields: tuple[str, ...]) -> tuple[str, ...]:
+    if tuple(fields) != _STANDARD_ROLLOUT_FIELDS:
+        raise SystemExit(
+            "error: validate-all supports the standard rollout field set only: "
+            + ",".join(_STANDARD_ROLLOUT_FIELDS)
+        )
+    return tuple(fields)
 
 
 def _resolve_worker_count(requested: int, task_count: int) -> int:
