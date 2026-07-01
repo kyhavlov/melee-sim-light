@@ -13,6 +13,11 @@
 #include "msl_preprocess_native.h"
 #include "data_dir.h"
 #include "msl_taxonomy_native.h"
+#include "msl_validation_buffers.h"
+#include "msl_validation_combat.h"
+#include "msl_validation_fighter_history.h"
+#include "msl_validation_items.h"
+#include "msl_validation_stage.h"
 
 #include "../src/alloc.h"
 #include "../src/api.h"
@@ -10238,8 +10243,41 @@ static PyMethodDef methods[] = {
      "derive_item_spawn_id_counter(item_exists, item_spawn_id) -> uint32[:]"},
     {"fill_items_fixed", msl_fill_items_fixed_py, METH_VARARGS,
      "fill_items_fixed(flat Arrow item fields, owner_map, out_items) -> None"},
-    {"copy_validation_item_rows", msl_copy_validation_item_rows_py, METH_VARARGS,
-     "copy_validation_item_rows(seed_u8, ref_u8, seed_items_u8, ref_items_u8) -> None"},
+    {"validation_copy_item_rows_with_illusion", msl_validation_copy_item_rows_with_illusion_py,
+     METH_VARARGS,
+     "validation_copy_item_rows_with_illusion(seed_u8, ref_u8, items_u8, replay fields, "
+     "illusion LUT, players) -> None"},
+    {"validation_derive_throw_laser_item_hitlist_buffers",
+     msl_validation_derive_throw_laser_item_hitlist_buffers_py, METH_VARARGS,
+     "validation_derive_throw_laser_item_hitlist_buffers(seed_u8, hitbox_mask_lut, players) -> "
+     "None"},
+    {"validation_init_static_buffers", msl_validation_init_static_buffers_py, METH_VARARGS,
+     "validation_init_static_buffers(seed_u8, ref_u8, frame_ids, frame_rng, stage_id, "
+     "num_players, is_teams, damage_ratio) -> None"},
+    {"validation_fill_static_player", msl_validation_fill_static_player_py, METH_VARARGS,
+     "validation_fill_static_player(seed_u8, ref_u8, slot, team, handicap, attack_ratio, "
+     "defense_ratio, scale_y) -> None"},
+    {"validation_fill_visible_player", msl_validation_fill_visible_player_py, METH_VARARGS,
+     "validation_fill_visible_player(seed_u8, prev_input_u8, input_u8, ref_u8, slot, stage_id, "
+     "source_port0, dmg flags, replay columns...) -> None"},
+    {"validation_project_post_cache", msl_validation_project_post_cache_py, METH_VARARGS,
+     "validation_project_post_cache(seed_u8, prev_input_u8, input_u8, ref_u8, post/input arrays, "
+     "num_players) -> None"},
+    {"validation_derive_staling_buffers", msl_validation_derive_staling_buffers_py, METH_VARARGS,
+     "validation_derive_staling_buffers(seed_u8, ref_u8, items_u8, anim_frame_f32, "
+     "prev_spawn_kinds, num_players) -> staling arrays"},
+    {"validation_finalized_frame_indices", msl_validation_finalized_frame_indices_py, METH_VARARGS,
+     "validation_finalized_frame_indices(frame_ids_i32) -> int32 keep indices"},
+    {"validation_derive_guard_input_prefix", msl_validation_derive_guard_input_prefix_py,
+     METH_VARARGS,
+     "validation_derive_guard_input_prefix(seed_u8, slot, input/post arrays, params) -> arrays"},
+    {"validation_derive_input_history_suffix", msl_validation_derive_input_history_suffix_py,
+     METH_VARARGS,
+     "validation_derive_input_history_suffix(seed_u8, slot, derived arrays, params) -> arrays"},
+    {"validation_derive_fighter_8006cda4_buffers",
+     msl_validation_derive_fighter_8006cda4_buffers_py, METH_VARARGS,
+     "validation_derive_fighter_8006cda4_buffers(seed_u8, ref_u8, roll_prob, players, "
+     "allow_grounded_kneebend) -> None"},
     {"derive_staling_history", msl_derive_staling_history_py, METH_VARARGS,
      "derive_staling_history(src_ports, char_id, action_id, action_frame, animation_index, "
      "percent, stocks, instance_id, last_hit_by, last_hit_by_instance[, item_exists, item_owner, "
@@ -10442,12 +10480,27 @@ static PyMethodDef methods[] = {
      "derive_item_hidden_callback_seed_lanes(seed/ref item fields, action fields, laser and "
      "shield-bounce LUTs) -> "
      "item hidden callback arrays"},
+    {"validation_derive_item_hidden_callback_buffers",
+     msl_validation_derive_item_hidden_callback_buffers_py, METH_VARARGS,
+     "validation_derive_item_hidden_callback_buffers(seed_u8, ref_u8, laser_lut, shield_lut, "
+     "players) -> None"},
+    {"validation_derive_item_reflect_damage_mul_buffers",
+     msl_validation_derive_item_reflect_damage_mul_buffers_py, METH_VARARGS,
+     "validation_derive_item_reflect_damage_mul_buffers(seed_u8, items_u8, replay fields, "
+     "reflector LUT, powershield mul, players) -> None"},
+    {"validation_derive_yoshi_shyguy_buffers", msl_validation_derive_yoshi_shyguy_buffers_py,
+     METH_VARARGS,
+     "validation_derive_yoshi_shyguy_buffers(seed_u8, items_u8, frame_rng, params...) -> None"},
     {"derive_yoshi_shyguy_seed_lanes", msl_derive_yoshi_shyguy_seed_lanes_py, METH_VARARGS,
      "derive_yoshi_shyguy_seed_lanes(item fields, params...) -> Shy Guy seed lanes"},
     {"derive_dream_whispy_wind_seed_lanes", msl_derive_dream_whispy_wind_seed_lanes_py,
      METH_VARARGS,
      "derive_dream_whispy_wind_seed_lanes(seed/input/ref bytes, players, stage, speed, eps) -> "
      "(dir,valid,timer)"},
+    {"validation_derive_dream_whispy_wind_seed_lanes",
+     msl_validation_derive_dream_whispy_wind_seed_lanes_py, METH_VARARGS,
+     "validation_derive_dream_whispy_wind_seed_lanes(seed/input/ref bytes, players, stage, speed, "
+     "eps) -> (dir,valid,timer)"},
     {"derive_illusion_seed_position_updates", msl_derive_illusion_seed_position_updates_py,
      METH_VARARGS,
      "derive_illusion_seed_position_updates(item fields, fighter fields, illusion LUT) -> "

@@ -5,6 +5,7 @@ import json
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -28,13 +29,36 @@ from tools.slippi.known_data_artifacts import (
 from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso01_v1
 from tools.slippi.rollback import finalized_frame_indices
 from tools.slippi.slpz import replay_path_for_peppi
-from tools.slippi.motion_state_owners import read_mslmso01_v1
 from tools.extraction.known_data_artifacts import read_mslftsc1_v1
 from tools.slippi.suite_io import team_attack_on_from_start
 
 
+def _ascontiguousarray(arr: Any, dtype: Any = None) -> np.ndarray:
+    if isinstance(arr, np.ndarray):
+        want = None if dtype is None else np.dtype(dtype)
+        if arr.flags.c_contiguous and (want is None or arr.dtype == want):
+            return arr
+    return np.ascontiguousarray(arr, dtype=dtype)
+
+
+@functools.lru_cache(maxsize=64)
+def _u8_lut_from_items(items: tuple[int, ...]) -> np.ndarray:
+    lut = np.zeros(65536, dtype=np.uint8)
+    for item in items:
+        lut[int(item) & 0xFFFF] = np.uint8(1)
+    return lut
+
+
+@functools.lru_cache(maxsize=64)
+def _u8_lut_from_pairs(pairs: tuple[tuple[int, int], ...]) -> np.ndarray:
+    lut = np.zeros(65536, dtype=np.uint8)
+    for key, value in pairs:
+        lut[int(key) & 0xFFFF] = np.uint8(value)
+    return lut
+
+
 def _path_cache_key(path: Path) -> str:
-    return str(Path(path).resolve())
+    return str(path)
 
 
 @functools.lru_cache(maxsize=None)
@@ -47,12 +71,21 @@ def _load_bytes_file_cached(path_text: str) -> bytes:
     return Path(path_text).read_bytes()
 
 
+@functools.lru_cache(maxsize=None)
+def _read_mslstg01_v7_cached(path_text: str):
+    return read_mslstg01_v7(Path(path_text))
+
+
 def _load_json_file(path: Path) -> Any:
     return _load_json_file_cached(_path_cache_key(path))
 
 
 def _load_bytes_file(path: Path) -> bytes:
     return _load_bytes_file_cached(_path_cache_key(path))
+
+
+def _read_mslstg01(path: Path):
+    return _read_mslstg01_v7_cached(_path_cache_key(path))
 
 
 @dataclass
@@ -445,11 +478,11 @@ def _derive_common_fall_blend_seed(
     except ImportError as exc:
         raise RuntimeError("native msl_binding.derive_common_fall_blend_seed is required; run `make build`") from exc
     return msl_binding.derive_common_fall_blend_seed(
-        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
-        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(speed_air_x_self_f32, dtype=np.float32),
-        np.ascontiguousarray(facing_dir_f32, dtype=np.float32),
-        np.ascontiguousarray(air_drift_max_by_char, dtype=np.float32),
+        _ascontiguousarray(char_id_u8, dtype=np.uint8),
+        _ascontiguousarray(action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(speed_air_x_self_f32, dtype=np.float32),
+        _ascontiguousarray(facing_dir_f32, dtype=np.float32),
+        _ascontiguousarray(air_drift_max_by_char, dtype=np.float32),
         float(threshold),
         float(lerp),
     )
@@ -476,10 +509,10 @@ def _derive_sheik_needle_seed_lanes(
         raise RuntimeError("native msl_binding.derive_sheik_needle_seed_lanes is required; run `make build`") from exc
     sheik_id = -1 if sheik_internal_id is None else int(sheik_internal_id)
     return msl_binding.derive_sheik_needle_seed_lanes(
-        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
-        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(action_frame_i16, dtype=np.int16),
-        np.ascontiguousarray(chain_article_present_u8, dtype=np.uint8),
+        _ascontiguousarray(char_id_u8, dtype=np.uint8),
+        _ascontiguousarray(action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(action_frame_i16, dtype=np.int16),
+        _ascontiguousarray(chain_article_present_u8, dtype=np.uint8),
         sheik_id,
     )
 
@@ -502,10 +535,10 @@ def _derive_sheik_chain_seed_lanes(
         raise RuntimeError("native msl_binding.derive_sheik_chain_seed_lanes is required; run `make build`") from exc
     sheik_id = -1 if sheik_internal_id is None else int(sheik_internal_id)
     return msl_binding.derive_sheik_chain_seed_lanes(
-        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
-        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(buttons_u16, dtype=np.uint16),
-        np.ascontiguousarray(hitlag_u16, dtype=np.uint16),
+        _ascontiguousarray(char_id_u8, dtype=np.uint8),
+        _ascontiguousarray(action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(buttons_u16, dtype=np.uint16),
+        _ascontiguousarray(hitlag_u16, dtype=np.uint16),
         sheik_id,
         int(b_mask),
         int(release_min_frames),
@@ -528,8 +561,8 @@ def _derive_zelda_twin_state_flags_2218(
         ) from exc
     zelda_id = -1 if zelda_internal_id is None else int(zelda_internal_id)
     return msl_binding.derive_zelda_twin_state_flags_2218(
-        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
-        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        _ascontiguousarray(char_id_u8, dtype=np.uint8),
+        _ascontiguousarray(state_flags_u8, dtype=np.uint8),
         zelda_id,
     )
 
@@ -578,7 +611,7 @@ def _load_stage_segments_for_seed_cached(stage_id: int, data_root_text: str) -> 
     stage_path = stage_metadata_path_for_stage_id(int(stage_id), data_root)
     if stage_path is None:
         return ()
-    stage = read_mslstg01_v7(stage_path)
+    stage = _read_mslstg01(stage_path)
     out: list[dict] = []
     for seg in stage.segments:
         out.append(
@@ -715,7 +748,7 @@ def _stage_ledge_floor_ids(*, stage_id: int, data_root: Path) -> tuple[int, int]
     stage_path = stage_metadata_path_for_stage_id(int(stage_id), data_root)
     if stage_path is None:
         return 0xFFFF, 0xFFFF
-    stage = read_mslstg01_v7(stage_path)
+    stage = _read_mslstg01(stage_path)
     left_id = 0xFFFF
     right_id = 0xFFFF
     best_left_x = float("inf")
@@ -783,7 +816,7 @@ def _fod_platform_height_transform_records(
     stage_path = stage_metadata_path_for_stage_id(2, Path(data_root))
     if stage_path is None:
         return {}
-    stage = read_mslstg01_v7(stage_path)
+    stage = _read_mslstg01(stage_path)
     segment_y_by_line = {int(seg.line_id): float(seg.y0) for seg in stage.segments}
     out: dict[int, tuple[int, float, float]] = {}
     for rec in stage.platform_transforms:
@@ -836,7 +869,7 @@ def _derive_fod_floor_skip_segments(
     stage_path = stage_metadata_path_for_stage_id(2, Path(data_root))
     if stage_path is None:
         return np.full(action_id_u16.shape, np.uint16(0xFFFF), dtype=np.uint16)
-    stage = read_mslstg01_v7(stage_path)
+    stage = _read_mslstg01(stage_path)
     transforms = [
         rec
         for rec in stage.platform_transforms
@@ -919,18 +952,18 @@ def _derive_fod_floor_skip_segments(
         ) from exc
 
     return msl_binding.derive_fod_floor_skip_segments(
-        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(action_frame_u16, dtype=np.uint16),
-        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
-        np.ascontiguousarray(on_ground_u8, dtype=np.uint8),
-        np.ascontiguousarray(pos_x_f32, dtype=np.float32),
-        np.ascontiguousarray(pos_y_f32, dtype=np.float32),
-        np.ascontiguousarray(speed_y_self_f32, dtype=np.float32),
-        np.ascontiguousarray(speed_y_attack_f32, dtype=np.float32),
-        np.ascontiguousarray(prev_main_y_i8, dtype=np.int8),
-        np.ascontiguousarray(main_y_i8, dtype=np.int8),
-        np.ascontiguousarray(platform_height_f32, dtype=np.float32),
-        np.ascontiguousarray(platform_height_valid_u8, dtype=np.uint8),
+        _ascontiguousarray(action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(action_frame_u16, dtype=np.uint16),
+        _ascontiguousarray(char_id_u8, dtype=np.uint8),
+        _ascontiguousarray(on_ground_u8, dtype=np.uint8),
+        _ascontiguousarray(pos_x_f32, dtype=np.float32),
+        _ascontiguousarray(pos_y_f32, dtype=np.float32),
+        _ascontiguousarray(speed_y_self_f32, dtype=np.float32),
+        _ascontiguousarray(speed_y_attack_f32, dtype=np.float32),
+        _ascontiguousarray(prev_main_y_i8, dtype=np.int8),
+        _ascontiguousarray(main_y_i8, dtype=np.int8),
+        _ascontiguousarray(platform_height_f32, dtype=np.float32),
+        _ascontiguousarray(platform_height_valid_u8, dtype=np.uint8),
         np.array([int(rec.line_id) for rec in transforms], dtype=np.uint16),
         np.array([int(rec.platform_id) for rec in transforms], dtype=np.uint8),
         np.array([float(rec.x0) for rec in transforms], dtype=np.float64),
@@ -1001,18 +1034,18 @@ def _derive_sheik_vanish_floor_skip_segments(
     platform_y1 = np.asarray([float(seg["y1"]) for seg in platform_rows], dtype=np.float32)
     sheik_id = -1 if sheik_internal_id is None else int(sheik_internal_id)
     return msl_binding.derive_sheik_vanish_floor_skip_segments(
-        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
-        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(on_ground_u8, dtype=np.uint8),
-        np.ascontiguousarray(ground_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(vanish_travel_timer_u8, dtype=np.uint8),
-        np.ascontiguousarray(pos_x_f32, dtype=np.float32),
-        np.ascontiguousarray(pos_y_f32, dtype=np.float32),
-        np.ascontiguousarray(platform_segments, dtype=np.uint16),
-        np.ascontiguousarray(platform_x0, dtype=np.float32),
-        np.ascontiguousarray(platform_y0, dtype=np.float32),
-        np.ascontiguousarray(platform_x1, dtype=np.float32),
-        np.ascontiguousarray(platform_y1, dtype=np.float32),
+        _ascontiguousarray(char_id_u8, dtype=np.uint8),
+        _ascontiguousarray(action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(on_ground_u8, dtype=np.uint8),
+        _ascontiguousarray(ground_id_u16, dtype=np.uint16),
+        _ascontiguousarray(vanish_travel_timer_u8, dtype=np.uint8),
+        _ascontiguousarray(pos_x_f32, dtype=np.float32),
+        _ascontiguousarray(pos_y_f32, dtype=np.float32),
+        _ascontiguousarray(platform_segments, dtype=np.uint16),
+        _ascontiguousarray(platform_x0, dtype=np.float32),
+        _ascontiguousarray(platform_y0, dtype=np.float32),
+        _ascontiguousarray(platform_x1, dtype=np.float32),
+        _ascontiguousarray(platform_y1, dtype=np.float32),
         sheik_id,
         int(travel_frames),
         float(ground_contact_min_frames),
@@ -1074,12 +1107,12 @@ def _fod_platform_motion_with_ground_contact(
     refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
     data/stages/bin/griz.bin::MSLSTG01 platform_transforms
     """
-    heights_arr = np.ascontiguousarray(heights, dtype=np.float32)
-    valid_arr = np.ascontiguousarray(valid, dtype=np.uint8)
-    event_fresh = None if event_fresh_u8 is None else np.ascontiguousarray(event_fresh_u8, dtype=np.uint8)
-    on_ground = np.ascontiguousarray(post_on_ground_u8, dtype=np.uint8)
-    ground_id = np.ascontiguousarray(post_ground_id_u16, dtype=np.uint16)
-    pos_y = np.ascontiguousarray(post_pos_y_f32, dtype=np.float32)
+    heights_arr = _ascontiguousarray(heights, dtype=np.float32)
+    valid_arr = _ascontiguousarray(valid, dtype=np.uint8)
+    event_fresh = None if event_fresh_u8 is None else _ascontiguousarray(event_fresh_u8, dtype=np.uint8)
+    on_ground = _ascontiguousarray(post_on_ground_u8, dtype=np.uint8)
+    ground_id = _ascontiguousarray(post_ground_id_u16, dtype=np.uint16)
+    pos_y = _ascontiguousarray(post_pos_y_f32, dtype=np.float32)
     if heights_arr.shape != valid_arr.shape or heights_arr.ndim != 2 or heights_arr.shape[1] != 2:
         raise ValueError("FoD platform height arrays must have shape [frames, 2]")
     if on_ground.shape != ground_id.shape or on_ground.shape != pos_y.shape:
@@ -1089,12 +1122,12 @@ def _fod_platform_motion_with_ground_contact(
     if event_fresh is not None and event_fresh.shape != heights_arr.shape:
         raise ValueError("FoD event-fresh array must match height shape")
     next_on_ground = (
-        None if next_post_on_ground_u8 is None else np.ascontiguousarray(next_post_on_ground_u8, dtype=np.uint8)
+        None if next_post_on_ground_u8 is None else _ascontiguousarray(next_post_on_ground_u8, dtype=np.uint8)
     )
     next_ground_id = (
-        None if next_post_ground_id_u16 is None else np.ascontiguousarray(next_post_ground_id_u16, dtype=np.uint16)
+        None if next_post_ground_id_u16 is None else _ascontiguousarray(next_post_ground_id_u16, dtype=np.uint16)
     )
-    next_pos_y = None if next_post_pos_y_f32 is None else np.ascontiguousarray(next_post_pos_y_f32, dtype=np.float32)
+    next_pos_y = None if next_post_pos_y_f32 is None else _ascontiguousarray(next_post_pos_y_f32, dtype=np.float32)
     if (next_on_ground is None) != (next_ground_id is None) or (next_on_ground is None) != (
         next_pos_y is None
     ):
@@ -1566,7 +1599,7 @@ def _derive_ledge_cooldown(*, action_id_u16: np.ndarray, hitlag_u16: np.ndarray,
     except ImportError as exc:
         raise RuntimeError("native msl_binding.derive_ledge_cooldown is required; run `make build`") from exc
     return msl_binding.derive_ledge_cooldown(
-        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
         np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1),
         int(common.get("ledge_cooldown_frames", 0)),
     )
@@ -1601,10 +1634,10 @@ def _derive_cliff_ledge_floor_segment_id(
         ) from exc
     left_floor, right_floor = _stage_ledge_floor_ids(stage_id=stage_id, data_root=data_root)
     return msl_binding.derive_cliff_ledge_floor_segment_id(
-        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(facing_u8, dtype=np.uint8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(ledge_cooldown_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(facing_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(np.asarray(ledge_cooldown_u8, dtype=np.uint8).reshape(-1)),
         int(left_floor),
         int(right_floor),
     )
@@ -1637,11 +1670,11 @@ def _derive_cliff_option_stick_latch_x8(
             "native msl_binding.derive_cliff_option_stick_latch_x8 is required; run `make build`"
         ) from exc
     return msl_binding.derive_cliff_option_stick_latch_x8(
-        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(main_x_i8, dtype=np.int8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(main_y_i8, dtype=np.int8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(c_x_i8, dtype=np.int8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(c_y_i8, dtype=np.int8).reshape(-1)),
+        _ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(main_x_i8, dtype=np.int8).reshape(-1)),
+        _ascontiguousarray(np.asarray(main_y_i8, dtype=np.int8).reshape(-1)),
+        _ascontiguousarray(np.asarray(c_x_i8, dtype=np.int8).reshape(-1)),
+        _ascontiguousarray(np.asarray(c_y_i8, dtype=np.int8).reshape(-1)),
         float(common["lstick_deadzone_x"]),
         float(common["lstick_deadzone_y"]),
         float(common["cliff_option_stick_threshold"]),
@@ -1672,7 +1705,7 @@ def _derive_match_flow_timer(*, action_id_u16: np.ndarray, port0: int, common: d
     except ImportError as exc:
         raise RuntimeError("native msl_binding.derive_match_flow_timer is required; run `make build`") from exc
     return msl_binding.derive_match_flow_timer(
-        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
         int(port0),
         int(common["dead_timer_frames"]),
         int(common["dead_up_star_initial_frames"]),
@@ -1944,7 +1977,7 @@ def _stage_respawn_points_y(*, stage_id: int, data_dir: str = "data") -> np.ndar
     stage_path = stage_metadata_path_for_stage_id(int(stage_id), Path(data_dir))
     if stage_path is None:
         return None
-    stage = read_mslstg01_v7(stage_path)
+    stage = _read_mslstg01(stage_path)
     if len(stage.respawn_points) < 4:
         raise ValueError(f"{stage_path}: expected 4 respawn_points entries")
 
@@ -2207,7 +2240,7 @@ def _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(
         np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
         np.asarray(char_id_u8, dtype=np.uint8).reshape(-1),
         np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1),
-        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        _ascontiguousarray(state_flags_u8, dtype=np.uint8),
         np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1),
         x9_lut,
         int(source_clear_init_frames),
@@ -2258,7 +2291,7 @@ def _derive_source_clear_grounded_damage_clear_phase_seed_lane(
         np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1),
         np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1),
         np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1),
-        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        _ascontiguousarray(state_flags_u8, dtype=np.uint8),
         np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1),
     )
 
@@ -2307,8 +2340,8 @@ def _derive_source_clear_processhit_damage_pending_phase_seed_lane(
             "native msl_binding.derive_source_clear_processhit_damage_pending_phase_seed_lane is required; run `make build`"
         ) from exc
     return msl_binding.derive_source_clear_processhit_damage_pending_phase_seed_lane(
-        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        _ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(state_flags_u8, dtype=np.uint8),
     )
 
 
@@ -2459,24 +2492,24 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
             "native msl_binding.derive_fighter_8006cda4_pre_gate_consume_count is required; run `make build`"
         ) from exc
     return msl_binding.derive_fighter_8006cda4_pre_gate_consume_count(
-        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(ref_action_id_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
-        np.ascontiguousarray(np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)),
-        np.ascontiguousarray(all_source_port0_u8, dtype=np.uint8),
-        np.ascontiguousarray(all_action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(all_action_frame_i16, dtype=np.int16),
-        np.ascontiguousarray(all_ref_action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(all_on_ground_u8, dtype=np.uint8),
-        np.ascontiguousarray(all_hitlag_u16, dtype=np.uint16),
-        np.ascontiguousarray(all_hitstun_u16, dtype=np.uint16),
-        np.ascontiguousarray(all_last_hit_by_u8, dtype=np.uint8),
-        np.ascontiguousarray(all_ref_last_hit_by_u8, dtype=np.uint8),
-        np.ascontiguousarray(np.asarray(frame_pre_random_seed_u32, dtype=np.uint32).reshape(-1)),
+        _ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)),
+        _ascontiguousarray(np.asarray(ref_action_id_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        _ascontiguousarray(np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(all_source_port0_u8, dtype=np.uint8),
+        _ascontiguousarray(all_action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(all_action_frame_i16, dtype=np.int16),
+        _ascontiguousarray(all_ref_action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(all_on_ground_u8, dtype=np.uint8),
+        _ascontiguousarray(all_hitlag_u16, dtype=np.uint16),
+        _ascontiguousarray(all_hitstun_u16, dtype=np.uint16),
+        _ascontiguousarray(all_last_hit_by_u8, dtype=np.uint8),
+        _ascontiguousarray(all_ref_last_hit_by_u8, dtype=np.uint8),
+        _ascontiguousarray(np.asarray(frame_pre_random_seed_u32, dtype=np.uint32).reshape(-1)),
         float(damagefly_roll_prob),
         int(victim_port),
         int(num_players),
@@ -2548,17 +2581,17 @@ def _derive_source_clear_terminal_phase_seed_lane(
             "native msl_binding.derive_source_clear_terminal_phase_seed_lane is required; run `make build`"
         ) from exc
     return msl_binding.derive_source_clear_terminal_phase_seed_lane(
-        np.ascontiguousarray(np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(last_attack_landed_u8, dtype=np.uint8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1)),
-        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
-        np.ascontiguousarray(np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)),
+        _ascontiguousarray(np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(np.asarray(last_attack_landed_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        _ascontiguousarray(np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)),
         cmd0_on,
         cmd0_off,
     )
@@ -2628,12 +2661,12 @@ def _derive_throw_pulse_seed_lanes(
     except ImportError as exc:
         raise RuntimeError("native msl_binding.derive_throw_pulse_seed_lanes is required; run `make build`") from exc
     return msl_binding.derive_throw_pulse_seed_lanes(
-        np.ascontiguousarray(seed_action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(seed_char_id_u8, dtype=np.uint8),
-        np.ascontiguousarray(seed_anim_frame_f32, dtype=np.float32),
-        np.ascontiguousarray(seed_frame_speed_mul_f32, dtype=np.float32),
-        np.ascontiguousarray(seed_hitstun_u16, dtype=np.uint16),
-        np.ascontiguousarray(seed_last_attack_landed_u8, dtype=np.uint8),
+        _ascontiguousarray(seed_action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(seed_char_id_u8, dtype=np.uint8),
+        _ascontiguousarray(seed_anim_frame_f32, dtype=np.float32),
+        _ascontiguousarray(seed_frame_speed_mul_f32, dtype=np.float32),
+        _ascontiguousarray(seed_hitstun_u16, dtype=np.uint16),
+        _ascontiguousarray(seed_last_attack_landed_u8, dtype=np.uint8),
         pulse_lut,
         pulse_count_lut,
         cmd1_lut,
@@ -2704,19 +2737,19 @@ def _derive_throw_laser_item_hitlist_seed_lanes(
     # - Falco kind 55 attached ThrowLw controls/positives (QGD:443/454, PRH:527/533/539): victims_1
     #   entries on hitboxes 2/3 coexist with still-eligible BODY callbacks on hitboxes 0/1. Runtime
     #   therefore treats the hitbox mask as a per-HitCapsule suppressor, not an item-wide latch.
-    hitbox_mask_lut = np.zeros(65536, dtype=np.uint8)
-    for item_kind, mask in throw_laser_hitbox_masks.items():
-        hitbox_mask_lut[int(item_kind) & 0xFFFF] = np.uint8(mask)
+    hitbox_mask_lut = _u8_lut_from_pairs(
+        tuple(sorted((int(k), int(v)) for k, v in throw_laser_hitbox_masks.items()))
+    )
     return msl_binding.derive_throw_laser_item_hitlist_seed_lanes(
-        np.ascontiguousarray(seed_action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(seed_grab_owner_port_u8, dtype=np.uint8),
-        np.ascontiguousarray(seed_instance_hit_by_u16, dtype=np.uint16),
-        np.ascontiguousarray(seed_instance_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(seed_items["exists"], dtype=np.uint8),
-        np.ascontiguousarray(seed_items["state"], dtype=np.uint8),
-        np.ascontiguousarray(seed_items["type"], dtype=np.uint16),
-        np.ascontiguousarray(seed_items["owner"], dtype=np.int8),
-        np.ascontiguousarray(seed_items["instance_id"], dtype=np.uint16),
+        _ascontiguousarray(seed_action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(seed_grab_owner_port_u8, dtype=np.uint8),
+        _ascontiguousarray(seed_instance_hit_by_u16, dtype=np.uint16),
+        _ascontiguousarray(seed_instance_id_u16, dtype=np.uint16),
+        _ascontiguousarray(seed_items["exists"], dtype=np.uint8),
+        _ascontiguousarray(seed_items["state"], dtype=np.uint8),
+        _ascontiguousarray(seed_items["type"], dtype=np.uint16),
+        _ascontiguousarray(seed_items["owner"], dtype=np.int8),
+        _ascontiguousarray(seed_items["instance_id"], dtype=np.uint16),
         hitbox_mask_lut,
         int(num_players),
     )
@@ -2757,8 +2790,8 @@ def _derive_landing_fallspecial_allow_interrupt_seed_lane(
         ) from exc
 
     return msl_binding.derive_landing_fallspecial_allow_interrupt(
-        np.ascontiguousarray(action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(char_id_u8, dtype=np.uint8),
+        _ascontiguousarray(action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(char_id_u8, dtype=np.uint8),
         origin_allow_by_char,
     )
 
@@ -2888,13 +2921,13 @@ def _derive_walk_retarget_tick_source_vel_seed_lane(
             "native msl_binding.derive_walk_retarget_tick_source_vel is required; run `make build`"
         ) from exc
     return msl_binding.derive_walk_retarget_tick_source_vel(
-        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(facing_dir1_i8, dtype=np.int8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(anim_frame_f32, dtype=np.float32).reshape(-1)),
-        np.ascontiguousarray(np.asarray(ref_action_frame_i16, dtype=np.int16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(speed_ground_x_self_f32, dtype=np.float32).reshape(-1)),
-        np.ascontiguousarray(np.asarray(walk_anim_source_vel_f32, dtype=np.float32).reshape(-1)),
+        _ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(np.asarray(facing_dir1_i8, dtype=np.int8).reshape(-1)),
+        _ascontiguousarray(np.asarray(anim_frame_f32, dtype=np.float32).reshape(-1)),
+        _ascontiguousarray(np.asarray(ref_action_frame_i16, dtype=np.int16).reshape(-1)),
+        _ascontiguousarray(np.asarray(speed_ground_x_self_f32, dtype=np.float32).reshape(-1)),
+        _ascontiguousarray(np.asarray(walk_anim_source_vel_f32, dtype=np.float32).reshape(-1)),
         slow,
         middle,
         fast,
@@ -3066,23 +3099,23 @@ def _fill_items_fixed(frames: pa.StructArray, n_frames: int, *, src_ports: list[
     except ImportError as exc:
         raise RuntimeError("native msl_binding.fill_items_fixed is required; run `make build`") from exc
     msl_binding.fill_items_fixed(
-        np.ascontiguousarray(_to_numpy(items_list.offsets), dtype=np.int32),
-        np.ascontiguousarray(_to_numpy(values.field("type")), dtype=np.uint16),
-        np.ascontiguousarray(_to_numpy(values.field("state")), dtype=np.uint8),
-        np.ascontiguousarray(_to_numpy(values.field("direction")), dtype=np.float32),
-        np.ascontiguousarray(_to_numpy(velocity.field("x")), dtype=np.float32),
-        np.ascontiguousarray(_to_numpy(velocity.field("y")), dtype=np.float32),
-        np.ascontiguousarray(_to_numpy(position.field("x")), dtype=np.float32),
-        np.ascontiguousarray(_to_numpy(position.field("y")), dtype=np.float32),
-        np.ascontiguousarray(_to_numpy(values.field("damage")), dtype=np.uint16),
-        np.ascontiguousarray(_to_numpy(values.field("timer")), dtype=np.float32),
-        np.ascontiguousarray(_to_numpy(values.field("id")), dtype=np.uint32),
-        np.ascontiguousarray(_to_numpy(misc.field("0")), dtype=np.uint8),
-        np.ascontiguousarray(_to_numpy(misc.field("1")), dtype=np.uint8),
-        np.ascontiguousarray(_to_numpy(misc.field("2")), dtype=np.uint8),
-        np.ascontiguousarray(_to_numpy(misc.field("3")), dtype=np.uint8),
-        np.ascontiguousarray(_to_numpy(values.field("owner")), dtype=np.int8),
-        np.ascontiguousarray(_to_numpy(values.field("instance_id")), dtype=np.uint16),
+        _ascontiguousarray(_to_numpy(items_list.offsets), dtype=np.int32),
+        _ascontiguousarray(_to_numpy(values.field("type")), dtype=np.uint16),
+        _ascontiguousarray(_to_numpy(values.field("state")), dtype=np.uint8),
+        _ascontiguousarray(_to_numpy(values.field("direction")), dtype=np.float32),
+        _ascontiguousarray(_to_numpy(velocity.field("x")), dtype=np.float32),
+        _ascontiguousarray(_to_numpy(velocity.field("y")), dtype=np.float32),
+        _ascontiguousarray(_to_numpy(position.field("x")), dtype=np.float32),
+        _ascontiguousarray(_to_numpy(position.field("y")), dtype=np.float32),
+        _ascontiguousarray(_to_numpy(values.field("damage")), dtype=np.uint16),
+        _ascontiguousarray(_to_numpy(values.field("timer")), dtype=np.float32),
+        _ascontiguousarray(_to_numpy(values.field("id")), dtype=np.uint32),
+        _ascontiguousarray(_to_numpy(misc.field("0")), dtype=np.uint8),
+        _ascontiguousarray(_to_numpy(misc.field("1")), dtype=np.uint8),
+        _ascontiguousarray(_to_numpy(misc.field("2")), dtype=np.uint8),
+        _ascontiguousarray(_to_numpy(misc.field("3")), dtype=np.uint8),
+        _ascontiguousarray(_to_numpy(values.field("owner")), dtype=np.int8),
+        _ascontiguousarray(_to_numpy(values.field("instance_id")), dtype=np.uint16),
         owner_map,
         out,
     )
@@ -3143,17 +3176,17 @@ def _derive_yoshi_shyguy_native_lanes(items_fixed: np.ndarray, *, stage_id: int)
     params = _yoshi_shyguy_params()
     common = _item_common_params()
     return msl_binding.derive_yoshi_shyguy_seed_lanes(
-        np.ascontiguousarray(items_fixed["exists"], dtype=np.uint8),
-        np.ascontiguousarray(items_fixed["type"], dtype=np.uint16),
-        np.ascontiguousarray(items_fixed["owner"], dtype=np.int8),
-        np.ascontiguousarray(items_fixed["state"], dtype=np.uint8),
-        np.ascontiguousarray(items_fixed["spawn_id"], dtype=np.uint32),
-        np.ascontiguousarray(items_fixed["instance_id"], dtype=np.uint16),
-        np.ascontiguousarray(items_fixed["vel_x"], dtype=np.float32),
-        np.ascontiguousarray(items_fixed["vel_y"], dtype=np.float32),
-        np.ascontiguousarray(items_fixed["pos_x"], dtype=np.float32),
-        np.ascontiguousarray(items_fixed["pos_y"], dtype=np.float32),
-        np.ascontiguousarray(items_fixed["damage"], dtype=np.uint16),
+        _ascontiguousarray(items_fixed["exists"], dtype=np.uint8),
+        _ascontiguousarray(items_fixed["type"], dtype=np.uint16),
+        _ascontiguousarray(items_fixed["owner"], dtype=np.int8),
+        _ascontiguousarray(items_fixed["state"], dtype=np.uint8),
+        _ascontiguousarray(items_fixed["spawn_id"], dtype=np.uint32),
+        _ascontiguousarray(items_fixed["instance_id"], dtype=np.uint16),
+        _ascontiguousarray(items_fixed["vel_x"], dtype=np.float32),
+        _ascontiguousarray(items_fixed["vel_y"], dtype=np.float32),
+        _ascontiguousarray(items_fixed["pos_x"], dtype=np.float32),
+        _ascontiguousarray(items_fixed["pos_y"], dtype=np.float32),
+        _ascontiguousarray(items_fixed["damage"], dtype=np.uint16),
         int(stage_id),
         int(params.stage_id),
         int(params.item_kind),
@@ -3196,8 +3229,14 @@ def _derive_yoshi_shyguy_seed_lanes(
 
 
 def _structured_rows_as_bytes(rows: np.ndarray) -> np.ndarray:
-    contiguous = np.ascontiguousarray(rows)
+    contiguous = _ascontiguousarray(rows)
     return contiguous.view(np.uint8).reshape(contiguous.shape[0], -1)
+
+
+def _structured_rows_as_writable_bytes(rows: np.ndarray) -> np.ndarray:
+    if not rows.flags.c_contiguous:
+        raise ValueError("structured row array must be C-contiguous for writable native access")
+    return rows.view(np.uint8).reshape(rows.shape[0], -1)
 
 
 @functools.lru_cache(maxsize=1)
@@ -3231,7 +3270,7 @@ def _derive_dream_whispy_wind_seed_lanes(
             "native msl_binding.derive_dream_whispy_wind_seed_lanes is required for preprocessing; "
             "run `make build`"
         ) from exc
-    return msl_binding.derive_dream_whispy_wind_seed_lanes(
+    return msl_binding.validation_derive_dream_whispy_wind_seed_lanes(
         _structured_rows_as_bytes(samples["seed_t"]),
         _structured_rows_as_bytes(samples["prev_input_t"]),
         _structured_rows_as_bytes(samples["input_t"]),
@@ -3274,33 +3313,62 @@ def _materialize_illusion_seed_positions(
     if n_frames <= 1:
         return out
 
-    try:
-        import msl_binding  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError(
-            "native msl_binding.derive_illusion_seed_position_updates is required; run `make build`"
-        ) from exc
-    illusion_lut = np.zeros(65536, dtype=np.uint8)
-    for item_kind in illusion_item_kinds:
-        illusion_lut[int(item_kind) & 0xFFFF] = np.uint8(1)
-    update_mask, update_x, update_y = msl_binding.derive_illusion_seed_position_updates(
-        np.ascontiguousarray(out["exists"], dtype=np.uint8),
-        np.ascontiguousarray(out["type"], dtype=np.uint16),
-        np.ascontiguousarray(out["owner"], dtype=np.int8),
-        np.ascontiguousarray(out["instance_id"], dtype=np.uint16),
-        np.ascontiguousarray(post_action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(post_hitlag_u8, dtype=np.uint8),
-        np.ascontiguousarray(post_instance_hit_by_u16, dtype=np.uint16),
-        np.ascontiguousarray(illusion_ghost_pos1_x, dtype=np.float32),
-        np.ascontiguousarray(illusion_ghost_pos1_y, dtype=np.float32),
-        illusion_lut,
-        int(num_players),
+    update_mask, update_x, update_y = _derive_illusion_seed_position_updates(
+        items_fixed=out,
+        illusion_ghost_pos1_x=illusion_ghost_pos1_x,
+        illusion_ghost_pos1_y=illusion_ghost_pos1_y,
+        post_action_id_u16=post_action_id_u16,
+        post_hitlag_u8=post_hitlag_u8,
+        post_instance_hit_by_u16=post_instance_hit_by_u16,
+        num_players=num_players,
+        illusion_item_kinds=illusion_item_kinds,
     )
     mask = update_mask != 0
     out["pos_x"][mask] = update_x[mask]
     out["pos_y"][mask] = update_y[mask]
 
     return out
+
+
+def _derive_illusion_seed_position_updates(
+    items_fixed: np.ndarray,
+    *,
+    illusion_ghost_pos1_x: np.ndarray,
+    illusion_ghost_pos1_y: np.ndarray,
+    post_action_id_u16: np.ndarray,
+    post_hitlag_u8: np.ndarray,
+    post_instance_hit_by_u16: np.ndarray,
+    num_players: int,
+    illusion_item_kinds: tuple[int, ...],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    n_frames = int(items_fixed.shape[0])
+    if n_frames <= 1:
+        shape = items_fixed["exists"].shape
+        return (
+            np.zeros(shape, dtype=np.uint8),
+            np.zeros(shape, dtype=np.float32),
+            np.zeros(shape, dtype=np.float32),
+        )
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_illusion_seed_position_updates is required; run `make build`"
+        ) from exc
+    illusion_lut = _u8_lut_from_items(tuple(int(k) for k in illusion_item_kinds))
+    return msl_binding.derive_illusion_seed_position_updates(
+        _ascontiguousarray(items_fixed["exists"], dtype=np.uint8),
+        _ascontiguousarray(items_fixed["type"], dtype=np.uint16),
+        _ascontiguousarray(items_fixed["owner"], dtype=np.int8),
+        _ascontiguousarray(items_fixed["instance_id"], dtype=np.uint16),
+        _ascontiguousarray(post_action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(post_hitlag_u8, dtype=np.uint8),
+        _ascontiguousarray(post_instance_hit_by_u16, dtype=np.uint16),
+        _ascontiguousarray(illusion_ghost_pos1_x, dtype=np.float32),
+        _ascontiguousarray(illusion_ghost_pos1_y, dtype=np.float32),
+        illusion_lut,
+        int(num_players),
+    )
 
 
 def derive_illusion_ghost_pos012(
@@ -3324,10 +3392,10 @@ def derive_illusion_ghost_pos012(
     except ImportError as exc:
         raise RuntimeError("native msl_binding.derive_illusion_ghost_pos012 is required; run `make build`") from exc
     return msl_binding.derive_illusion_ghost_pos012(
-        np.ascontiguousarray(post_action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(post_action_frame_i16, dtype=np.int16),
-        np.ascontiguousarray(post_pos_x, dtype=np.float32),
-        np.ascontiguousarray(post_pos_y, dtype=np.float32),
+        _ascontiguousarray(post_action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(post_action_frame_i16, dtype=np.int16),
+        _ascontiguousarray(post_pos_x, dtype=np.float32),
+        _ascontiguousarray(post_pos_y, dtype=np.float32),
     )
 
 def derive_illusion_ghost_pos01(
@@ -3384,12 +3452,12 @@ def _derive_item_attack_fields(
         raise RuntimeError("native msl_binding.derive_item_attack_fields is required; run `make build`") from exc
     laser_shot_kinds = _laser_shot_item_kinds(Path("data") / "items" / "lasers.bin")
     attack_id, attack_instance = msl_binding.derive_item_attack_fields(
-        np.ascontiguousarray(items_fixed["exists"], dtype=np.uint8),
-        np.ascontiguousarray(items_fixed["type"], dtype=np.uint16),
-        np.ascontiguousarray(items_fixed["owner"], dtype=np.int8),
-        np.ascontiguousarray(items_fixed["spawn_id"], dtype=np.uint32),
-        np.ascontiguousarray(fighter_attack_id, dtype=np.uint16),
-        np.ascontiguousarray(fighter_attack_instance, dtype=np.uint16),
+        _ascontiguousarray(items_fixed["exists"], dtype=np.uint8),
+        _ascontiguousarray(items_fixed["type"], dtype=np.uint16),
+        _ascontiguousarray(items_fixed["owner"], dtype=np.int8),
+        _ascontiguousarray(items_fixed["spawn_id"], dtype=np.uint32),
+        _ascontiguousarray(fighter_attack_id, dtype=np.uint16),
+        _ascontiguousarray(fighter_attack_instance, dtype=np.uint16),
         int(num_players),
         np.asarray(laser_shot_kinds, dtype=np.uint16),
     )
@@ -3430,17 +3498,17 @@ def _derive_item_reflect_damage_mul(
     except ImportError as exc:
         raise RuntimeError("native msl_binding.derive_item_reflect_damage_mul is required; run `make build`") from exc
     return msl_binding.derive_item_reflect_damage_mul(
-        np.ascontiguousarray(items_fixed["exists"], dtype=np.uint8),
-        np.ascontiguousarray(items_fixed["type"], dtype=np.uint16),
-        np.ascontiguousarray(items_fixed["owner"], dtype=np.int8),
-        np.ascontiguousarray(items_fixed["instance_id"], dtype=np.uint16),
-        np.ascontiguousarray(items_fixed["vel_x"], dtype=np.float32),
-        np.ascontiguousarray(items_fixed["vel_y"], dtype=np.float32),
-        np.ascontiguousarray(items_fixed["spawn_id"], dtype=np.uint32),
-        np.ascontiguousarray(post_action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(post_char_id_u8, dtype=np.uint8),
-        np.ascontiguousarray(post_state_flags_u8, dtype=np.uint8),
-        np.ascontiguousarray(reflector_damage_mul_lut, dtype=np.float32),
+        _ascontiguousarray(items_fixed["exists"], dtype=np.uint8),
+        _ascontiguousarray(items_fixed["type"], dtype=np.uint16),
+        _ascontiguousarray(items_fixed["owner"], dtype=np.int8),
+        _ascontiguousarray(items_fixed["instance_id"], dtype=np.uint16),
+        _ascontiguousarray(items_fixed["vel_x"], dtype=np.float32),
+        _ascontiguousarray(items_fixed["vel_y"], dtype=np.float32),
+        _ascontiguousarray(items_fixed["spawn_id"], dtype=np.uint32),
+        _ascontiguousarray(post_action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(post_char_id_u8, dtype=np.uint8),
+        _ascontiguousarray(post_state_flags_u8, dtype=np.uint8),
+        _ascontiguousarray(reflector_damage_mul_lut, dtype=np.float32),
         float(powershield_reflect_damage_mul),
         int(num_players),
     )
@@ -3504,33 +3572,29 @@ def _derive_item_hidden_callback_seed_lanes(
         raise RuntimeError(
             "native msl_binding.derive_item_hidden_callback_seed_lanes is required; run `make build`"
         ) from exc
-    laser_lut = np.zeros(65536, dtype=np.uint8)
-    for item_kind in laser_types:
-        laser_lut[int(item_kind) & 0xFFFF] = np.uint8(1)
-    shield_bounce_lut = np.zeros(65536, dtype=np.uint8)
-    for item_kind in shield_bounce_types:
-        shield_bounce_lut[int(item_kind) & 0xFFFF] = np.uint8(1)
+    laser_lut = _u8_lut_from_items(tuple(int(k) for k in laser_types))
+    shield_bounce_lut = _u8_lut_from_items(tuple(int(k) for k in shield_bounce_types))
     return msl_binding.derive_item_hidden_callback_seed_lanes(
-        np.ascontiguousarray(seed_items["exists"], dtype=np.uint8),
-        np.ascontiguousarray(seed_items["type"], dtype=np.uint16),
-        np.ascontiguousarray(seed_items["owner"], dtype=np.int8),
-        np.ascontiguousarray(seed_items["instance_id"], dtype=np.uint16),
-        np.ascontiguousarray(seed_items["spawn_id"], dtype=np.uint32),
-        np.ascontiguousarray(seed_items["direction"], dtype=np.float32),
-        np.ascontiguousarray(seed_items["vel_x"], dtype=np.float32),
-        np.ascontiguousarray(seed_items["vel_y"], dtype=np.float32),
-        np.ascontiguousarray(ref_items["exists"], dtype=np.uint8),
-        np.ascontiguousarray(ref_items["type"], dtype=np.uint16),
-        np.ascontiguousarray(ref_items["owner"], dtype=np.int8),
-        np.ascontiguousarray(ref_items["instance_id"], dtype=np.uint16),
-        np.ascontiguousarray(ref_items["spawn_id"], dtype=np.uint32),
-        np.ascontiguousarray(ref_items["vel_x"], dtype=np.float32),
-        np.ascontiguousarray(ref_items["vel_y"], dtype=np.float32),
-        np.ascontiguousarray(seed_action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(ref_action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(ref_hitlag_u16, dtype=np.uint16),
-        np.ascontiguousarray(ref_hitstun_u16, dtype=np.uint16),
-        np.ascontiguousarray(ref_instance_hit_by_u16, dtype=np.uint16),
+        _ascontiguousarray(seed_items["exists"], dtype=np.uint8),
+        _ascontiguousarray(seed_items["type"], dtype=np.uint16),
+        _ascontiguousarray(seed_items["owner"], dtype=np.int8),
+        _ascontiguousarray(seed_items["instance_id"], dtype=np.uint16),
+        _ascontiguousarray(seed_items["spawn_id"], dtype=np.uint32),
+        _ascontiguousarray(seed_items["direction"], dtype=np.float32),
+        _ascontiguousarray(seed_items["vel_x"], dtype=np.float32),
+        _ascontiguousarray(seed_items["vel_y"], dtype=np.float32),
+        _ascontiguousarray(ref_items["exists"], dtype=np.uint8),
+        _ascontiguousarray(ref_items["type"], dtype=np.uint16),
+        _ascontiguousarray(ref_items["owner"], dtype=np.int8),
+        _ascontiguousarray(ref_items["instance_id"], dtype=np.uint16),
+        _ascontiguousarray(ref_items["spawn_id"], dtype=np.uint32),
+        _ascontiguousarray(ref_items["vel_x"], dtype=np.float32),
+        _ascontiguousarray(ref_items["vel_y"], dtype=np.float32),
+        _ascontiguousarray(seed_action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(ref_action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(ref_hitlag_u16, dtype=np.uint16),
+        _ascontiguousarray(ref_hitstun_u16, dtype=np.uint16),
+        _ascontiguousarray(ref_instance_hit_by_u16, dtype=np.uint16),
         laser_lut,
         shield_bounce_lut,
         int(num_players),
@@ -3600,12 +3664,12 @@ def _derive_specialhi_rotate_model_seed_lane(
             "native msl_binding.derive_specialhi_rotate_model_seed_lane is required; run `make build`"
         ) from exc
     return msl_binding.derive_specialhi_rotate_model_seed_lane(
-        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
-        np.ascontiguousarray(np.asarray(facing_u8, dtype=np.uint8).reshape(-1)),
-        np.ascontiguousarray(np.asarray(pos_x_f32, dtype=np.float32).reshape(-1)),
-        np.ascontiguousarray(np.asarray(pos_y_f32, dtype=np.float32).reshape(-1)),
-        np.ascontiguousarray(np.asarray(speed_air_x_self_f32, dtype=np.float32).reshape(-1)),
-        np.ascontiguousarray(np.asarray(speed_y_self_f32, dtype=np.float32).reshape(-1)),
+        _ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        _ascontiguousarray(np.asarray(facing_u8, dtype=np.uint8).reshape(-1)),
+        _ascontiguousarray(np.asarray(pos_x_f32, dtype=np.float32).reshape(-1)),
+        _ascontiguousarray(np.asarray(pos_y_f32, dtype=np.float32).reshape(-1)),
+        _ascontiguousarray(np.asarray(speed_air_x_self_f32, dtype=np.float32).reshape(-1)),
+        _ascontiguousarray(np.asarray(speed_y_self_f32, dtype=np.float32).reshape(-1)),
         int(stage_id_u32),
         kind_id,
         x0,
@@ -3927,14 +3991,6 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
     n_samples = n_frames - 1
     validation_buffers = bool(getattr(args, "validation_buffers", False))
     samples = _SampleParts(n_samples) if validation_buffers else np.zeros(n_samples, dtype=SAMPLE_DTYPE)
-    # Seed defaults for new internal fields.
-    samples["seed_t"]["combo_victim_port"][:] = np.uint8(0xFF)
-    samples["seed_t"]["grab_owner_port"][:] = np.uint8(0xFF)
-    samples["seed_t"]["phantom_damage_source_port"][:] = np.uint8(0xFF)
-    samples["seed_t"]["item_reflect_transfer_port"][:] = np.uint8(0xFF)
-    samples["seed_t"]["item_hidden_body_hit_victim_port"][:] = np.uint8(0xFF)
-    samples["seed_t"]["floor_skip_segment_id_u16"][:] = np.uint16(0xFFFF)
-    samples["seed_t"]["floor_skip_segment_valid_u8"][:] = np.uint8(0)
 
     stage_id = int(game.start.get("stage", 0))
     is_teams = int(bool(game.start.get("is_teams", False)))
@@ -4005,9 +4061,9 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
             ) from exc
 
         return msl_binding.derive_marth_counter_hitlag_floor_active(
-            np.ascontiguousarray(char_id_u8, dtype=np.uint8),
-            np.ascontiguousarray(action_id_u16, dtype=np.uint16),
-            np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+            _ascontiguousarray(char_id_u8, dtype=np.uint8),
+            _ascontiguousarray(action_id_u16, dtype=np.uint16),
+            _ascontiguousarray(state_flags_u8, dtype=np.uint8),
         )
 
     def _derive_sheik_vanish_travel_timer(
@@ -4261,16 +4317,38 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
     reflector_damage_mul_lut[np.uint8(22)] = np.float32(
         _load_character_attrs(data_root, "falco")["reflector_damage_mul"]
     )
-    # Frame ids and seeds (visible seed state from frame i-1, ref from frame i).
-    samples["seed_t"]["frame_id"] = frame_ids[:-1]
-    samples["ref_t1"]["frame_id"] = frame_ids[1:]
-    samples["seed_t"]["frame_pre_random_seed"] = frame_pre_random_seed[:-1]
-    samples["ref_t1"]["frame_pre_random_seed"] = frame_pre_random_seed[1:]
+    if validation_buffers:
+        import msl_binding  # type: ignore
 
-    samples["seed_t"]["stage_id"] = stage_id
-    samples["seed_t"]["num_players"] = num_players
-    samples["seed_t"]["is_teams"] = is_teams
-    samples["seed_t"]["match_damage_ratio"] = np.float32(float(game.start.get("damage_ratio", 1.0)))
+        msl_binding.validation_init_static_buffers(
+            samples.seed_u8(),
+            samples.ref_u8(),
+            frame_ids,
+            frame_pre_random_seed,
+            int(stage_id),
+            int(num_players),
+            int(is_teams),
+            float(game.start.get("damage_ratio", 1.0)),
+        )
+    else:
+        # Seed defaults for new internal fields.
+        samples["seed_t"]["combo_victim_port"][:] = np.uint8(0xFF)
+        samples["seed_t"]["grab_owner_port"][:] = np.uint8(0xFF)
+        samples["seed_t"]["phantom_damage_source_port"][:] = np.uint8(0xFF)
+        samples["seed_t"]["item_reflect_transfer_port"][:] = np.uint8(0xFF)
+        samples["seed_t"]["item_hidden_body_hit_victim_port"][:] = np.uint8(0xFF)
+        samples["seed_t"]["floor_skip_segment_id_u16"][:] = np.uint16(0xFFFF)
+        samples["seed_t"]["floor_skip_segment_valid_u8"][:] = np.uint8(0)
+        # Frame ids and seeds (visible seed state from frame i-1, ref from frame i).
+        samples["seed_t"]["frame_id"] = frame_ids[:-1]
+        samples["ref_t1"]["frame_id"] = frame_ids[1:]
+        samples["seed_t"]["frame_pre_random_seed"] = frame_pre_random_seed[:-1]
+        samples["ref_t1"]["frame_pre_random_seed"] = frame_pre_random_seed[1:]
+
+        samples["seed_t"]["stage_id"] = stage_id
+        samples["seed_t"]["num_players"] = num_players
+        samples["seed_t"]["is_teams"] = is_teams
+        samples["seed_t"]["match_damage_ratio"] = np.float32(float(game.start.get("damage_ratio", 1.0)))
     if int(stage_id) == 2:
         fod_defaults = fountain_of_dreams_default_platform_heights(data_root)
         fod_motion_params = fountain_of_dreams_platform_motion_params(data_root)
@@ -4289,44 +4367,39 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
     # can advance the owner's stale queue through plStale_UpdateStaleMovesFromItem.
     items_fixed = _fill_items_fixed(frames, n_frames, src_ports=src_ports)
 
-    # Staling seed schema (PP#4):
-    # - Derive stale queue state strictly causally from replay history so one-step reseed can
-    #   apply staling multiplier deterministically.
-    from tools.slippi.staling_history import derive_staling_history
-
-    hist_initial = derive_staling_history(frames, src_ports=src_ports)
-    _derive_item_attack_fields(
-        items_fixed,
-        fighter_attack_id=hist_initial.attack_id,
-        fighter_attack_instance=hist_initial.attack_instance,
-        num_players=num_players,
-    )
-    hist = derive_staling_history(frames, src_ports=src_ports, items_fixed=items_fixed)
-    samples["seed_t"]["attack_id"][:, :num_players] = hist.attack_id[:-1, :]
-    samples["seed_t"]["attack_instance"][:, :num_players] = hist.attack_instance[:-1, :]
-    samples["seed_t"]["stale_queue_index"][:, :num_players] = hist.stale_queue_index[:-1, :]
-    samples["seed_t"]["stale_move_id"][:, :num_players, :] = hist.stale_move_id[:-1, :, :]
-    samples["seed_t"]["stale_attack_instance"][:, :num_players, :] = hist.stale_attack_instance[:-1, :, :]
-
-    samples["ref_t1"]["stage_id"] = stage_id
-    samples["ref_t1"]["num_players"] = num_players
-    samples["ref_t1"]["is_teams"] = is_teams
+    if not validation_buffers:
+        samples["ref_t1"]["stage_id"] = stage_id
+        samples["ref_t1"]["num_players"] = num_players
+        samples["ref_t1"]["is_teams"] = is_teams
 
     # Static team ids from game start (slot order follows src_ports list).
     for slot, port_1based in enumerate(src_ports):
         st = static_by_port.get(port_1based, PortStatic(team_id=0, char_id=0, handicap=9))
-        samples["seed_t"]["team_id"][:, slot] = np.uint8(st.team_id)
-        samples["ref_t1"]["team_id"][:, slot] = np.uint8(st.team_id)
-        samples["seed_t"]["handicap"][:, slot] = np.uint8(st.handicap)
         atk, df, scl = ratios_by_port.get(port_1based, (1.0, 1.0, 1.0))
-        samples["seed_t"]["attack_ratio"][:, slot] = np.float32(atk)
-        samples["seed_t"]["defense_ratio"][:, slot] = np.float32(df)
-        # Fighter model scale (decomp: fp->x34_scale.y) comes from game-start settings (player.model_scale).
-        samples["seed_t"]["fighter_scale_y"][:, slot] = np.float32(scl)
+        if validation_buffers:
+            msl_binding.validation_fill_static_player(
+                samples.seed_u8(),
+                samples.ref_u8(),
+                int(slot),
+                int(st.team_id),
+                int(st.handicap),
+                float(atk),
+                float(df),
+                float(scl),
+            )
+        else:
+            samples["seed_t"]["team_id"][:, slot] = np.uint8(st.team_id)
+            samples["ref_t1"]["team_id"][:, slot] = np.uint8(st.team_id)
+            samples["seed_t"]["handicap"][:, slot] = np.uint8(st.handicap)
+            samples["seed_t"]["attack_ratio"][:, slot] = np.float32(atk)
+            samples["seed_t"]["defense_ratio"][:, slot] = np.float32(df)
+            # Fighter model scale (decomp: fp->x34_scale.y) comes from game-start settings (player.model_scale).
+            samples["seed_t"]["fighter_scale_y"][:, slot] = np.float32(scl)
 
     # Fill inputs and per-port post state.
     post_action_id_u16 = np.zeros((n_frames, 4), dtype=np.uint16)
     post_state_age_all = np.zeros((n_frames, 4), dtype=np.int16)
+    post_anim_frame_f32_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_char_id_u8 = np.zeros((n_frames, 4), dtype=np.uint8)
     post_stocks_u8_all = np.zeros((n_frames, 4), dtype=np.uint8)
     match_flow_timer_u8_all = np.zeros((n_frames, 4), dtype=np.uint8)
@@ -4338,6 +4411,7 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         team_id_u8[slot] = np.uint8(st.team_id)
     post_pos_x_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_pos_y_all = np.zeros((n_frames, 4), dtype=np.float32)
+    post_pos_z_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_percent_all = np.zeros((n_frames, 4), dtype=np.float32)
     frame_speed_mul_all = np.zeros((n_frames, 4), dtype=np.float32)
     specialhi_rotate_model_all = np.zeros((n_frames, 4), dtype=np.float32)
@@ -4378,21 +4452,22 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         pre_l = _u8_from_float01(_to_numpy(pre.field("triggers_physical").field("l")).astype(np.float32))
         pre_r = _u8_from_float01(_to_numpy(pre.field("triggers_physical").field("r")).astype(np.float32))
 
-        # i=0..n_samples-1 corresponds to frame index (i+1) for current input and i for prev.
-        samples["prev_input_t"]["p"]["buttons"][:, slot] = pre_buttons_physical[:-1]
-        samples["input_t"]["p"]["buttons"][:, slot] = pre_buttons_physical[1:]
-        samples["prev_input_t"]["p"]["main_x"][:, slot] = pre_main_x[:-1]
-        samples["input_t"]["p"]["main_x"][:, slot] = pre_main_x[1:]
-        samples["prev_input_t"]["p"]["main_y"][:, slot] = pre_main_y[:-1]
-        samples["input_t"]["p"]["main_y"][:, slot] = pre_main_y[1:]
-        samples["prev_input_t"]["p"]["c_x"][:, slot] = pre_c_x[:-1]
-        samples["input_t"]["p"]["c_x"][:, slot] = pre_c_x[1:]
-        samples["prev_input_t"]["p"]["c_y"][:, slot] = pre_c_y[:-1]
-        samples["input_t"]["p"]["c_y"][:, slot] = pre_c_y[1:]
-        samples["prev_input_t"]["p"]["l"][:, slot] = pre_l[:-1]
-        samples["input_t"]["p"]["l"][:, slot] = pre_l[1:]
-        samples["prev_input_t"]["p"]["r"][:, slot] = pre_r[:-1]
-        samples["input_t"]["p"]["r"][:, slot] = pre_r[1:]
+        if not validation_buffers:
+            # i=0..n_samples-1 corresponds to frame index (i+1) for current input and i for prev.
+            samples["prev_input_t"]["p"]["buttons"][:, slot] = pre_buttons_physical[:-1]
+            samples["input_t"]["p"]["buttons"][:, slot] = pre_buttons_physical[1:]
+            samples["prev_input_t"]["p"]["main_x"][:, slot] = pre_main_x[:-1]
+            samples["input_t"]["p"]["main_x"][:, slot] = pre_main_x[1:]
+            samples["prev_input_t"]["p"]["main_y"][:, slot] = pre_main_y[:-1]
+            samples["input_t"]["p"]["main_y"][:, slot] = pre_main_y[1:]
+            samples["prev_input_t"]["p"]["c_x"][:, slot] = pre_c_x[:-1]
+            samples["input_t"]["p"]["c_x"][:, slot] = pre_c_x[1:]
+            samples["prev_input_t"]["p"]["c_y"][:, slot] = pre_c_y[:-1]
+            samples["input_t"]["p"]["c_y"][:, slot] = pre_c_y[1:]
+            samples["prev_input_t"]["p"]["l"][:, slot] = pre_l[:-1]
+            samples["input_t"]["p"]["l"][:, slot] = pre_l[1:]
+            samples["prev_input_t"]["p"]["r"][:, slot] = pre_r[:-1]
+            samples["input_t"]["p"]["r"][:, slot] = pre_r[1:]
 
         # --- Post-frame state (seed/ref)
         post_char_field = post.field("character")
@@ -4413,6 +4488,7 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         post_pos_y_all[:, slot] = post_pos_y
         # Slippi Z: prefer position.z when present, otherwise fall back to 0 (older schemas are 2D-only).
         post_pos_z = _post_position_z(post, n_frames)
+        post_pos_z_all[:, slot] = post_pos_z
         post_dir = _dir_to_facing(_to_numpy(post.field("direction")).astype(np.float32))
         post_percent = _to_numpy(post.field("percent")).astype(np.float32)
         post_percent_all[:, slot] = post_percent
@@ -4431,6 +4507,7 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         post_state_age = _i16_from_state_age(post_state_age_f32, n_frames)
         post_state_age_all[:, slot] = post_state_age
         post_anim_frame_f32 = _f32_from_state_age(post_state_age_f32, n_frames)
+        post_anim_frame_f32_all[:, slot] = post_anim_frame_f32
 
         hurtbox_state = _to_numpy(post.field("hurtbox_state")).astype(np.uint8)
         l_cancel = _to_numpy(post.field("l_cancel")).astype(np.uint8)
@@ -4470,14 +4547,66 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         speed_ground_x_self = _to_numpy(vel.field("self_x_ground")).astype(np.float32)
         post_instance_id_slot = _to_numpy(post.field("instance_id")).astype(np.uint16)
 
-        # Seed uses post at (i), ref uses post at (i+1).
-        samples["seed_t"]["char_id"][:, slot] = post_char[:-1]
-        samples["ref_t1"]["char_id"][:, slot] = post_char[1:]
+        port_1based = int(src_ports[slot])
+        dmg_x2225_b7, dmg_x2224_b2 = dmg_flags_by_port.get(port_1based, (0, 0))
+        if validation_buffers:
+            msl_binding.validation_fill_visible_player(
+                samples.seed_u8(),
+                samples.prev_input_u8(),
+                samples.input_u8(),
+                samples.ref_u8(),
+                int(slot),
+                int(stage_id),
+                int(port_1based - 1),
+                int(dmg_x2225_b7),
+                int(dmg_x2224_b2),
+                pre_buttons_physical,
+                pre_main_x,
+                pre_main_y,
+                pre_c_x,
+                pre_c_y,
+                pre_l,
+                pre_r,
+                post_char,
+                post_state,
+                post_state_age,
+                post_anim_frame_f32,
+                post_pos_x,
+                post_pos_y,
+                post_pos_z,
+                post_dir,
+                post_percent,
+                post_shield,
+                post_stocks,
+                post_jumps,
+                post_on_ground,
+                post_hitlag,
+                post_hitstun,
+                l_cancel,
+                hurtbox_state,
+                ground_id,
+                animation_index,
+                instance_hit_by,
+                instance_id,
+                last_attack_landed,
+                combo_count,
+                last_hit_by,
+                state_flags,
+                speed_air_x_self,
+                speed_ground_x_self,
+                speed_y_self,
+                speed_x_attack,
+                speed_y_attack,
+            )
+        else:
+            # Seed uses post at (i), ref uses post at (i+1).
+            samples["seed_t"]["char_id"][:, slot] = post_char[:-1]
+            samples["ref_t1"]["char_id"][:, slot] = post_char[1:]
 
-        samples["seed_t"]["action_id"][:, slot] = post_state[:-1]
-        samples["ref_t1"]["action_id"][:, slot] = post_state[1:]
-        samples["seed_t"]["action_frame"][:, slot] = post_state_age[:-1]
-        samples["ref_t1"]["action_frame"][:, slot] = post_state_age[1:]
+            samples["seed_t"]["action_id"][:, slot] = post_state[:-1]
+            samples["ref_t1"]["action_id"][:, slot] = post_state[1:]
+            samples["seed_t"]["action_frame"][:, slot] = post_state_age[:-1]
+            samples["ref_t1"]["action_frame"][:, slot] = post_state_age[1:]
         seed_prev_action_id, seed_prev_action_frame = derive_seed_prev_action_post(
             post_action_id_u16=post_state,
             post_action_frame_i16=post_state_age,
@@ -4632,73 +4761,51 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         )
         samples["seed_t"]["mpcoll_wall_kind_seed_u8"][:, slot] = wall_kind_seed[:-1]
         samples["seed_t"]["mpcoll_wall_id_seed_u16"][:, slot] = wall_id_seed[:-1]
-        samples["seed_t"]["anim_frame_f32"][:, slot] = post_anim_frame_f32[:-1]
+        if not validation_buffers:
+            samples["seed_t"]["anim_frame_f32"][:, slot] = post_anim_frame_f32[:-1]
 
-        samples["seed_t"]["pos_x"][:, slot] = post_pos_x[:-1]
-        samples["ref_t1"]["pos_x"][:, slot] = post_pos_x[1:]
-        samples["seed_t"]["pos_y"][:, slot] = post_pos_y[:-1]
-        samples["ref_t1"]["pos_y"][:, slot] = post_pos_y[1:]
-        samples["seed_t"]["pos_z"][:, slot] = post_pos_z[:-1]
-        # mpColl floor sweeps consume CollData.prev_pos -> cur_pos. On a teacher-forced
-        # one-step reseed, the frame-start visible position is replay frame t, but the engine's
-        # CollData previous position for rows already crossing/under the floor comes from replay
-        # history. Seed that previous post-frame position explicitly; runtime rollouts leave
-        # valid=0 and use the live frame-start snapshot.
-        # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-        #   ftCo_Damage_Coll,ftCo_DamageFly_Coll}
-        floor_prev_x = np.empty_like(post_pos_x[:-1])
-        floor_prev_x[0] = post_pos_x[0]
-        if floor_prev_x.shape[0] > 1:
-            floor_prev_x[1:] = post_pos_x[:-2]
-        floor_prev_y = np.empty_like(post_pos_y[:-1])
-        floor_prev_y[0] = post_pos_y[0]
-        if floor_prev_y.shape[0] > 1:
-            floor_prev_y[1:] = post_pos_y[:-2]
-        # Sustained airborne FoD DamageFly rows are a CollData lifetime exception to the generic
-        # "previous visible row" replay reconstruction above. Source ft_80081DD4 starts each
-        # DamageFly_Coll pass with:
-        #   coll.last_pos = coll.cur_pos; coll.cur_pos = fp.cur_pos
-        # before mpColl_800473CC. On FoD, the retained replay seed owner uses that
-        # callback-current root for sustained active DamageFly over transformed platforms and for
-        # already-below-main-floor hard-floor projection; focused hard-floor and open-air negatives
-        # keep ordinary DownBound/airborne outcomes intact. Non-FoD rows still use the normal
-        # previous-public-row sweep because current validation contains hard-floor contacts where
-        # that public previous-row sweep is source-owned.
-        #
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
-        # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
-        # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800473CC}
-        act_damage_fly_hi = np.uint16(0x0057)
-        act_damage_fly_roll = np.uint16(0x005B)
-        sustained_active_damagefly = (
-            (np.uint32(stage_id) == np.uint32(2))
-            &
-            (post_state[:-1] >= act_damage_fly_hi)
-            & (post_state[:-1] <= act_damage_fly_roll)
-            & (post_on_ground[:-1] == 0)
-            & (post_hitlag[:-1] == 0)
-            & (post_hitstun[:-1] > 0)
-        )
-        if sustained_active_damagefly.shape[0] > 1:
-            sustained_active_damagefly[1:] &= post_state[1:-1] == post_state[:-2]
-        if sustained_active_damagefly.shape[0] > 0:
-            sustained_active_damagefly[0] = False
-        floor_prev_x = np.where(sustained_active_damagefly, post_pos_x[:-1], floor_prev_x)
-        floor_prev_y = np.where(sustained_active_damagefly, post_pos_y[:-1], floor_prev_y)
-        samples["seed_t"]["floor_sweep_prev_pos_x_f32"][:, slot] = floor_prev_x
-        samples["seed_t"]["floor_sweep_prev_pos_y_f32"][:, slot] = floor_prev_y
-        samples["seed_t"]["floor_sweep_prev_pos_valid_u8"][:, slot] = np.uint8(1)
-        samples["seed_t"]["speed_air_x_self"][:, slot] = speed_air_x_self[:-1]
-        samples["ref_t1"]["speed_air_x_self"][:, slot] = speed_air_x_self[1:]
-        samples["seed_t"]["speed_ground_x_self"][:, slot] = speed_ground_x_self[:-1]
-        samples["ref_t1"]["speed_ground_x_self"][:, slot] = speed_ground_x_self[1:]
-        samples["seed_t"]["speed_y_self"][:, slot] = speed_y_self[:-1]
-        samples["ref_t1"]["speed_y_self"][:, slot] = speed_y_self[1:]
-        samples["seed_t"]["speed_x_attack"][:, slot] = speed_x_attack[:-1]
-        samples["ref_t1"]["speed_x_attack"][:, slot] = speed_x_attack[1:]
-        samples["seed_t"]["speed_y_attack"][:, slot] = speed_y_attack[:-1]
-        samples["ref_t1"]["speed_y_attack"][:, slot] = speed_y_attack[1:]
+            samples["seed_t"]["pos_x"][:, slot] = post_pos_x[:-1]
+            samples["ref_t1"]["pos_x"][:, slot] = post_pos_x[1:]
+            samples["seed_t"]["pos_y"][:, slot] = post_pos_y[:-1]
+            samples["ref_t1"]["pos_y"][:, slot] = post_pos_y[1:]
+            samples["seed_t"]["pos_z"][:, slot] = post_pos_z[:-1]
+            floor_prev_x = np.empty_like(post_pos_x[:-1])
+            floor_prev_x[0] = post_pos_x[0]
+            if floor_prev_x.shape[0] > 1:
+                floor_prev_x[1:] = post_pos_x[:-2]
+            floor_prev_y = np.empty_like(post_pos_y[:-1])
+            floor_prev_y[0] = post_pos_y[0]
+            if floor_prev_y.shape[0] > 1:
+                floor_prev_y[1:] = post_pos_y[:-2]
+            act_damage_fly_hi = np.uint16(0x0057)
+            act_damage_fly_roll = np.uint16(0x005B)
+            sustained_active_damagefly = (
+                (np.uint32(stage_id) == np.uint32(2))
+                & (post_state[:-1] >= act_damage_fly_hi)
+                & (post_state[:-1] <= act_damage_fly_roll)
+                & (post_on_ground[:-1] == 0)
+                & (post_hitlag[:-1] == 0)
+                & (post_hitstun[:-1] > 0)
+            )
+            if sustained_active_damagefly.shape[0] > 1:
+                sustained_active_damagefly[1:] &= post_state[1:-1] == post_state[:-2]
+            if sustained_active_damagefly.shape[0] > 0:
+                sustained_active_damagefly[0] = False
+            floor_prev_x = np.where(sustained_active_damagefly, post_pos_x[:-1], floor_prev_x)
+            floor_prev_y = np.where(sustained_active_damagefly, post_pos_y[:-1], floor_prev_y)
+            samples["seed_t"]["floor_sweep_prev_pos_x_f32"][:, slot] = floor_prev_x
+            samples["seed_t"]["floor_sweep_prev_pos_y_f32"][:, slot] = floor_prev_y
+            samples["seed_t"]["floor_sweep_prev_pos_valid_u8"][:, slot] = np.uint8(1)
+            samples["seed_t"]["speed_air_x_self"][:, slot] = speed_air_x_self[:-1]
+            samples["ref_t1"]["speed_air_x_self"][:, slot] = speed_air_x_self[1:]
+            samples["seed_t"]["speed_ground_x_self"][:, slot] = speed_ground_x_self[:-1]
+            samples["ref_t1"]["speed_ground_x_self"][:, slot] = speed_ground_x_self[1:]
+            samples["seed_t"]["speed_y_self"][:, slot] = speed_y_self[:-1]
+            samples["ref_t1"]["speed_y_self"][:, slot] = speed_y_self[1:]
+            samples["seed_t"]["speed_x_attack"][:, slot] = speed_x_attack[:-1]
+            samples["ref_t1"]["speed_x_attack"][:, slot] = speed_x_attack[1:]
+            samples["seed_t"]["speed_y_attack"][:, slot] = speed_y_attack[:-1]
+            samples["ref_t1"]["speed_y_attack"][:, slot] = speed_y_attack[1:]
         specialhi_rotate_model, specialhi_rotate_model_valid = _derive_specialhi_rotate_model_seed_lane(
             action_id_u16=post_state,
             facing_u8=post_dir,
@@ -4719,8 +4826,9 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         samples["seed_t"]["specialhi_rotate_model_f32"][:, slot] = specialhi_rotate_model[:-1]
         samples["seed_t"]["specialhi_rotate_model_valid_u8"][:, slot] = specialhi_rotate_model_valid[:-1]
 
-        samples["seed_t"]["facing"][:, slot] = post_dir[:-1]
-        samples["ref_t1"]["facing"][:, slot] = post_dir[1:]
+        if not validation_buffers:
+            samples["seed_t"]["facing"][:, slot] = post_dir[:-1]
+            samples["ref_t1"]["facing"][:, slot] = post_dir[1:]
         # fp->facing_dir1 seeded lane (signed).
         facing_dir1_post = _derive_facing_dir1_sign(facing_u8=post_dir, action_id_u16=post_state)
         samples["seed_t"]["facing_dir1"][:, slot] = facing_dir1_post[:-1]
@@ -4736,34 +4844,33 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         samples["seed_t"]["common_fall_blend_valid_u8"][:, slot] = common_fall_valid[:-1]
         samples["seed_t"]["common_fall_blend_x4_f32"][:, slot] = common_fall_x4[:-1]
         samples["seed_t"]["common_fall_blend_msid_u16"][:, slot] = common_fall_msid[:-1]
-        # Ground friction multiplier lane used by grounded-KB decay.
-        # Decomp source is ft_GetGroundFrictionMultiplier(fp); Slippi currently exposes no direct
-        # post-frame lane for this value in-suite, so seed explicit default identity.
-        samples["seed_t"]["ground_friction_mul"][:, slot] = np.float32(1.0)
+        if not validation_buffers:
+            # Ground friction multiplier lane used by grounded-KB decay. Slippi currently exposes no
+            # direct post-frame lane for this value in-suite, so seed explicit default identity.
+            samples["seed_t"]["ground_friction_mul"][:, slot] = np.float32(1.0)
         # Smash-charge gate lane (fp->smash_attrs.state == Charging) when present in schema.
         samples["seed_t"]["kb_smashcharge_active"][:, slot] = _derive_kb_smashcharge_active_from_post(
             post=post
         )[:-1]
-        samples["seed_t"]["on_ground"][:, slot] = post_on_ground[:-1]
-        samples["ref_t1"]["on_ground"][:, slot] = post_on_ground[1:]
+        if not validation_buffers:
+            samples["seed_t"]["on_ground"][:, slot] = post_on_ground[:-1]
+            samples["ref_t1"]["on_ground"][:, slot] = post_on_ground[1:]
 
-        samples["seed_t"]["percent"][:, slot] = post_percent[:-1]
-        samples["ref_t1"]["percent"][:, slot] = post_percent[1:]
-        port_1based = int(src_ports[slot])
-        dmg_x2225_b7, dmg_x2224_b2 = dmg_flags_by_port.get(port_1based, (0, 0))
-        samples["seed_t"]["dmg_x2225_b7"][:, slot] = np.uint8(dmg_x2225_b7)
-        samples["seed_t"]["dmg_x2224_b2"][:, slot] = np.uint8(dmg_x2224_b2)
-        samples["seed_t"]["shield_hp"][:, slot] = post_shield[:-1]
-        samples["ref_t1"]["shield_hp"][:, slot] = post_shield[1:]
-        samples["seed_t"]["stocks"][:, slot] = post_stocks[:-1]
-        samples["ref_t1"]["stocks"][:, slot] = post_stocks[1:]
-        samples["seed_t"]["jumps_left"][:, slot] = post_jumps[:-1]
-        samples["ref_t1"]["jumps_left"][:, slot] = post_jumps[1:]
+            samples["seed_t"]["percent"][:, slot] = post_percent[:-1]
+            samples["ref_t1"]["percent"][:, slot] = post_percent[1:]
+            samples["seed_t"]["dmg_x2225_b7"][:, slot] = np.uint8(dmg_x2225_b7)
+            samples["seed_t"]["dmg_x2224_b2"][:, slot] = np.uint8(dmg_x2224_b2)
+            samples["seed_t"]["shield_hp"][:, slot] = post_shield[:-1]
+            samples["ref_t1"]["shield_hp"][:, slot] = post_shield[1:]
+            samples["seed_t"]["stocks"][:, slot] = post_stocks[:-1]
+            samples["ref_t1"]["stocks"][:, slot] = post_stocks[1:]
+            samples["seed_t"]["jumps_left"][:, slot] = post_jumps[:-1]
+            samples["ref_t1"]["jumps_left"][:, slot] = post_jumps[1:]
 
-        samples["seed_t"]["hitlag"][:, slot] = post_hitlag[:-1]
-        samples["ref_t1"]["hitlag"][:, slot] = post_hitlag[1:]
-        samples["seed_t"]["hitstun"][:, slot] = post_hitstun[:-1]
-        samples["ref_t1"]["hitstun"][:, slot] = post_hitstun[1:]
+            samples["seed_t"]["hitlag"][:, slot] = post_hitlag[:-1]
+            samples["ref_t1"]["hitlag"][:, slot] = post_hitlag[1:]
+            samples["seed_t"]["hitstun"][:, slot] = post_hitstun[:-1]
+            samples["ref_t1"]["hitstun"][:, slot] = post_hitstun[1:]
         damage_time_since_hit_x18ac = derive_damage_time_since_hit_x18ac(
             action_id_u16=post_state,
             hitlag_u16=post_hitlag,
@@ -4816,10 +4923,11 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
             )[:-1]
         )
 
-        samples["seed_t"]["l_cancel"][:, slot] = l_cancel[:-1]
-        samples["ref_t1"]["l_cancel"][:, slot] = l_cancel[1:]
-        samples["seed_t"]["hurtbox_state"][:, slot] = hurtbox_state[:-1]
-        samples["ref_t1"]["hurtbox_state"][:, slot] = hurtbox_state[1:]
+        if not validation_buffers:
+            samples["seed_t"]["l_cancel"][:, slot] = l_cancel[:-1]
+            samples["ref_t1"]["l_cancel"][:, slot] = l_cancel[1:]
+            samples["seed_t"]["hurtbox_state"][:, slot] = hurtbox_state[:-1]
+            samples["ref_t1"]["hurtbox_state"][:, slot] = hurtbox_state[1:]
         (
             colanim_x198c,
             colanim_x1990,
@@ -4870,14 +4978,15 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         samples["seed_t"]["colanim_rebirth_fall_x1994_seed"][:, slot] = colanim_rebirth_fall_x1994[
             :-1
         ]
-        samples["seed_t"]["ground_id"][:, slot] = ground_id[:-1]
-        samples["ref_t1"]["ground_id"][:, slot] = ground_id[1:]
-        samples["seed_t"]["animation_index"][:, slot] = animation_index[:-1]
-        samples["ref_t1"]["animation_index"][:, slot] = animation_index[1:]
-        samples["seed_t"]["instance_hit_by"][:, slot] = instance_hit_by[:-1]
-        samples["ref_t1"]["instance_hit_by"][:, slot] = instance_hit_by[1:]
-        samples["seed_t"]["instance_id"][:, slot] = instance_id[:-1]
-        samples["ref_t1"]["instance_id"][:, slot] = instance_id[1:]
+        if not validation_buffers:
+            samples["seed_t"]["ground_id"][:, slot] = ground_id[:-1]
+            samples["ref_t1"]["ground_id"][:, slot] = ground_id[1:]
+            samples["seed_t"]["animation_index"][:, slot] = animation_index[:-1]
+            samples["ref_t1"]["animation_index"][:, slot] = animation_index[1:]
+            samples["seed_t"]["instance_hit_by"][:, slot] = instance_hit_by[:-1]
+            samples["ref_t1"]["instance_hit_by"][:, slot] = instance_hit_by[1:]
+            samples["seed_t"]["instance_id"][:, slot] = instance_id[:-1]
+            samples["ref_t1"]["instance_id"][:, slot] = instance_id[1:]
         # Seed fp+0x2073 compare byte used by ft_800895E0 to gate instance_id bumps.
         # Derived strictly causally from replay history in tools/slippi/seed_history.py.
         samples["seed_t"]["instance_id_x2073"][:, slot] = derive_instance_id_x2073(
@@ -4886,16 +4995,17 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
             action_frame_i16=post_state_age,
             data_dir="data",
         )[:-1]
-        samples["seed_t"]["last_attack_landed"][:, slot] = last_attack_landed[:-1]
-        samples["ref_t1"]["last_attack_landed"][:, slot] = last_attack_landed[1:]
-        samples["seed_t"]["combo_count"][:, slot] = combo_count[:-1]
-        samples["ref_t1"]["combo_count"][:, slot] = combo_count[1:]
-        samples["seed_t"]["source_port0"][:, slot] = np.uint8(port_1based - 1)
-        samples["seed_t"]["last_hit_by"][:, slot] = last_hit_by[:-1]
-        samples["ref_t1"]["last_hit_by"][:, slot] = last_hit_by[1:]
+        if not validation_buffers:
+            samples["seed_t"]["last_attack_landed"][:, slot] = last_attack_landed[:-1]
+            samples["ref_t1"]["last_attack_landed"][:, slot] = last_attack_landed[1:]
+            samples["seed_t"]["combo_count"][:, slot] = combo_count[:-1]
+            samples["ref_t1"]["combo_count"][:, slot] = combo_count[1:]
+            samples["seed_t"]["source_port0"][:, slot] = np.uint8(port_1based - 1)
+            samples["seed_t"]["last_hit_by"][:, slot] = last_hit_by[:-1]
+            samples["ref_t1"]["last_hit_by"][:, slot] = last_hit_by[1:]
 
-        samples["seed_t"]["state_flags"][:, slot, :] = state_flags[:-1, :]
-        samples["ref_t1"]["state_flags"][:, slot, :] = state_flags[1:, :]
+            samples["seed_t"]["state_flags"][:, slot, :] = state_flags[:-1, :]
+            samples["ref_t1"]["state_flags"][:, slot, :] = state_flags[1:, :]
         samples["seed_t"]["zelda_twin_state_flags_2218_u8"][:, slot] = (
             _derive_zelda_twin_state_flags_2218(
                 char_id_u8=post_char,
@@ -4916,121 +5026,181 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         # - x670/x671 tilt timers (dash flick / tap jump gates)
         # - TURN countdown + flip latch
         # -----------------------------
-        main_x_proc, main_y_proc, stick_x, stick_y = process_stick_i8_units(
-            pre_main_x,
-            pre_main_y,
-            ucf_enabled=ucf_enabled,
-            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-            deadzone_x=float(lstick_deadzone_x),
-            deadzone_y=float(lstick_deadzone_y),
-        )
-        c_x_proc, c_y_proc, _, cstick_y = process_stick_i8_units(
-            pre_c_x,
-            pre_c_y,
-            ucf_enabled=ucf_enabled,
-            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-            deadzone_x=float(lstick_deadzone_x),
-            deadzone_y=float(lstick_deadzone_y),
-        )
-
-        # Guard (shield) tilt state (mv.co.guard.x8 + mv.co.guard.x4) is seeded so shield bubble
-        # placement becomes stateful (tilt smoothing/inertia) under teacher-forced one-step eval.
         neutral_frame = neutral_lut[post_char]
         frame_max = frame_max_lut[post_char]
-        guard_tilt_x8_post, guard_tilt_x4_post = derive_guard_tilt_state(
-            stick_x,
-            stick_y,
-            facing=post_dir,
-            action_id=post_state,
-            action_frame=post_state_age,
-            neutral_frame=neutral_frame,
-            frame_max=frame_max,
-            guard_stick_lerp_x44c=guard_stick_lerp_x44c,
-            act_guard_on=act_guard_on,
-            act_guard=act_guard,
-            act_guard_reflect=act_guard_reflect,
-        )
-        samples["seed_t"]["guard_tilt_x8"][:, slot] = guard_tilt_x8_post[:-1]
-        samples["seed_t"]["guard_tilt_x4"][:, slot] = guard_tilt_x4_post[:-1]
-        prev_buttons = np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1]))
-        buttons_pressed = pre_buttons_physical & ~prev_buttons
+        if validation_buffers:
+            import msl_binding  # type: ignore
 
-        trigger_unit = np.maximum(pre_l, pre_r).astype(np.float32) / np.float32(255.0)
-        trigger_unit = np.where(
-            (pre_buttons_physical & np.uint16(button_mask_lr)) != 0, np.float32(1.0), trigger_unit
-        )
+            (
+                main_x_proc,
+                main_y_proc,
+                c_x_proc,
+                c_y_proc,
+                stick_x,
+                stick_y,
+                cstick_y,
+                trigger_unit,
+                buttons_pressed,
+                lr_press_timer,
+                lightshield_amount,
+                guard_setoff_hitlag_exit_phase,
+            ) = msl_binding.validation_derive_guard_input_prefix(
+                samples.seed_u8(),
+                int(slot),
+                pre_buttons_physical,
+                pre_main_x,
+                pre_main_y,
+                pre_c_x,
+                pre_c_y,
+                pre_l,
+                pre_r,
+                post_char,
+                post_state,
+                post_state_age,
+                post_dir,
+                post_shield,
+                post_hitlag,
+                state_flags,
+                neutral_frame,
+                frame_max,
+                int(ucf_enabled),
+                int(ucf_cardinals_1_0_enabled),
+                float(lstick_deadzone_x),
+                float(lstick_deadzone_y),
+                float(guard_stick_lerp_x44c),
+                int(button_mask_lr),
+                int(button_mask_z),
+                float(common["trigger_deadzone"]),
+                int(common["guard_x10_init_frames"]),
+                int(act_guard_on),
+                int(act_guard),
+                int(act_guard_off),
+                int(act_guard_reflect),
+                int(act_guard_set_off),
+                int(common["guard_special_enable_frames"]),
+                float(common["hitlag_dmg_mul"]),
+                float(common["hitlag_base"]),
+                int(common["powershield_reflect_frames"]),
+                int(common["powershield_reflect_total_frames"]),
+            )
+            lightshield_amount_all[:, slot] = lightshield_amount
+        else:
+            main_x_proc, main_y_proc, stick_x, stick_y = process_stick_i8_units(
+                pre_main_x,
+                pre_main_y,
+                ucf_enabled=ucf_enabled,
+                ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+                deadzone_x=float(lstick_deadzone_x),
+                deadzone_y=float(lstick_deadzone_y),
+            )
+            c_x_proc, c_y_proc, _, cstick_y = process_stick_i8_units(
+                pre_c_x,
+                pre_c_y,
+                ucf_enabled=ucf_enabled,
+                ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+                deadzone_x=float(lstick_deadzone_x),
+                deadzone_y=float(lstick_deadzone_y),
+            )
 
-        # Guard release lockout (mv.co.guard.xC/x10) + lightshield latch (fp->lightshield_amount).
-        # Derived strictly causally from replay history to support teacher-forced one-step reseed.
-        guard_release_latched_xc, guard_x10, lightshield_amount = derive_guard_release_lockout_and_lightshield(
-            action_id=post_state,
-            shield_hp=post_shield,
-            hitlag=post_hitlag,
-            buttons_held=pre_buttons_physical,
-            button_mask_lr=int(button_mask_lr),
-            button_mask_z=int(button_mask_z),
-            trigger_unit=trigger_unit,
-            trigger_deadzone=float(common["trigger_deadzone"]),
-            guard_x10_init_frames=int(common["guard_x10_init_frames"]),
-            act_guard_on=act_guard_on,
-            act_guard=act_guard,
-            act_guard_reflect=act_guard_reflect,
-            act_guard_set_off=act_guard_set_off,
-        )
-        samples["seed_t"]["guard_release_latched_xc"][:, slot] = guard_release_latched_xc[:-1]
-        samples["seed_t"]["guard_x10"][:, slot] = guard_x10[:-1]
-        samples["seed_t"]["lightshield_amount"][:, slot] = lightshield_amount[:-1]
-        lightshield_amount_all[:, slot] = lightshield_amount
-        guard_special_enable_timer_x1c = derive_guard_special_enable_timer_x1c(
-            action_id=post_state,
-            hitlag=post_hitlag,
-            state_flags_u8=post_state_flags_u8[:, slot, :],
-            guard_special_enable_frames=int(common["guard_special_enable_frames"]),
-            act_guard_on=act_guard_on,
-            act_guard=act_guard,
-            act_guard_off=act_guard_off,
-            act_guard_reflect=act_guard_reflect,
-            act_guard_set_off=act_guard_set_off,
-        )
-        samples["seed_t"]["guard_special_enable_timer_x1c"][:, slot] = (
-            guard_special_enable_timer_x1c[:-1]
-        )
-        guard_setoff_hitlag_damage_min = derive_guard_setoff_hitlag_damage_min(
-            action_id=post_state,
-            action_frame_i16=post_state_age,
-            hitlag=post_hitlag,
-            hitlag_dmg_mul=float(common["hitlag_dmg_mul"]),
-            hitlag_base=float(common["hitlag_base"]),
-            act_guard_set_off=act_guard_set_off,
-        )
-        samples["seed_t"]["guard_setoff_hitlag_damage_min"][:, slot] = guard_setoff_hitlag_damage_min[:-1]
-        guard_setoff_hitlag_exit_phase = derive_guard_setoff_hitlag_exit_phase(
-            action_id=post_state,
-            hitlag=post_hitlag,
-            act_guard_set_off=act_guard_set_off,
-        )
-        samples["seed_t"]["guard_setoff_hitlag_exit_phase_u8"][:, slot] = guard_setoff_hitlag_exit_phase[:-1]
-        samples["seed_t"]["guard_setoff_post_hitlag_owner_u8"][:, slot] = derive_guard_setoff_post_hitlag_owner(
-            action_id=post_state,
-            guard_setoff_hitlag_exit_phase_u8=guard_setoff_hitlag_exit_phase,
-            state_flags_221c_u8=state_flags[:, 3],
-            act_guard_set_off=act_guard_set_off,
-        )[:-1]
+            # Guard (shield) tilt state (mv.co.guard.x8 + mv.co.guard.x4) is seeded so shield bubble
+            # placement becomes stateful (tilt smoothing/inertia) under teacher-forced one-step eval.
+            guard_tilt_x8_post, guard_tilt_x4_post = derive_guard_tilt_state(
+                stick_x,
+                stick_y,
+                facing=post_dir,
+                action_id=post_state,
+                action_frame=post_state_age,
+                neutral_frame=neutral_frame,
+                frame_max=frame_max,
+                guard_stick_lerp_x44c=guard_stick_lerp_x44c,
+                act_guard_on=act_guard_on,
+                act_guard=act_guard,
+                act_guard_reflect=act_guard_reflect,
+            )
+            samples["seed_t"]["guard_tilt_x8"][:, slot] = guard_tilt_x8_post[:-1]
+            samples["seed_t"]["guard_tilt_x4"][:, slot] = guard_tilt_x4_post[:-1]
+            prev_buttons = np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1]))
+            buttons_pressed = pre_buttons_physical & ~prev_buttons
 
-        # x67F input-history timer:
-        # - resets on x668 LR-lane edge (digital LR, trigger lane, Z-mapped LR lane),
-        # - otherwise increments and saturates at 0xFF.
-        # refs/melee/src/melee/ft/fighter.c:1868-1890
-        # refs/melee/src/melee/ft/fighter.c:2078-2086
-        lr_press_timer = compute_lr_press_timer_x67f(
-            buttons=pre_buttons_physical,
-            trigger_unit=trigger_unit,
-            hitlag_frames=post_hitlag,
-            trigger_deadzone=float(common["trigger_deadzone"]),
-            button_mask_lr=button_mask_lr,
-            button_mask_z=button_mask_z,
-            start_timer=0xFF,
-        )
+            trigger_unit = np.maximum(pre_l, pre_r).astype(np.float32) / np.float32(255.0)
+            trigger_unit = np.where(
+                (pre_buttons_physical & np.uint16(button_mask_lr)) != 0,
+                np.float32(1.0),
+                trigger_unit,
+            )
+
+            guard_release_latched_xc, guard_x10, lightshield_amount = (
+                derive_guard_release_lockout_and_lightshield(
+                    action_id=post_state,
+                    shield_hp=post_shield,
+                    hitlag=post_hitlag,
+                    buttons_held=pre_buttons_physical,
+                    button_mask_lr=int(button_mask_lr),
+                    button_mask_z=int(button_mask_z),
+                    trigger_unit=trigger_unit,
+                    trigger_deadzone=float(common["trigger_deadzone"]),
+                    guard_x10_init_frames=int(common["guard_x10_init_frames"]),
+                    act_guard_on=act_guard_on,
+                    act_guard=act_guard,
+                    act_guard_reflect=act_guard_reflect,
+                    act_guard_set_off=act_guard_set_off,
+                )
+            )
+            samples["seed_t"]["guard_release_latched_xc"][:, slot] = guard_release_latched_xc[:-1]
+            samples["seed_t"]["guard_x10"][:, slot] = guard_x10[:-1]
+            samples["seed_t"]["lightshield_amount"][:, slot] = lightshield_amount[:-1]
+            lightshield_amount_all[:, slot] = lightshield_amount
+            guard_special_enable_timer_x1c = derive_guard_special_enable_timer_x1c(
+                action_id=post_state,
+                hitlag=post_hitlag,
+                state_flags_u8=post_state_flags_u8[:, slot, :],
+                guard_special_enable_frames=int(common["guard_special_enable_frames"]),
+                act_guard_on=act_guard_on,
+                act_guard=act_guard,
+                act_guard_off=act_guard_off,
+                act_guard_reflect=act_guard_reflect,
+                act_guard_set_off=act_guard_set_off,
+            )
+            samples["seed_t"]["guard_special_enable_timer_x1c"][:, slot] = (
+                guard_special_enable_timer_x1c[:-1]
+            )
+            guard_setoff_hitlag_damage_min = derive_guard_setoff_hitlag_damage_min(
+                action_id=post_state,
+                action_frame_i16=post_state_age,
+                hitlag=post_hitlag,
+                hitlag_dmg_mul=float(common["hitlag_dmg_mul"]),
+                hitlag_base=float(common["hitlag_base"]),
+                act_guard_set_off=act_guard_set_off,
+            )
+            samples["seed_t"]["guard_setoff_hitlag_damage_min"][:, slot] = (
+                guard_setoff_hitlag_damage_min[:-1]
+            )
+            guard_setoff_hitlag_exit_phase = derive_guard_setoff_hitlag_exit_phase(
+                action_id=post_state,
+                hitlag=post_hitlag,
+                act_guard_set_off=act_guard_set_off,
+            )
+            samples["seed_t"]["guard_setoff_hitlag_exit_phase_u8"][:, slot] = (
+                guard_setoff_hitlag_exit_phase[:-1]
+            )
+            samples["seed_t"]["guard_setoff_post_hitlag_owner_u8"][:, slot] = (
+                derive_guard_setoff_post_hitlag_owner(
+                    action_id=post_state,
+                    guard_setoff_hitlag_exit_phase_u8=guard_setoff_hitlag_exit_phase,
+                    state_flags_221c_u8=state_flags[:, 3],
+                    act_guard_set_off=act_guard_set_off,
+                )[:-1]
+            )
+
+            lr_press_timer = compute_lr_press_timer_x67f(
+                buttons=pre_buttons_physical,
+                trigger_unit=trigger_unit,
+                hitlag_frames=post_hitlag,
+                trigger_deadzone=float(common["trigger_deadzone"]),
+                button_mask_lr=button_mask_lr,
+                button_mask_z=button_mask_z,
+                start_timer=0xFF,
+            )
 
         # Seed fp->frame_speed_mul (float) for deterministic anim timebase stepping.
         #
@@ -5242,74 +5412,127 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
             ),
         )
         damage_tilt_timer_reset_post = damage_sdi_reset_post | damage_entry_reset_post
-        tilt_timer_x_pre, tilt_timer_x_post = compute_tilt_timer_axis_pre_post(
-            stick_x,
-            tilt_thresh=lstick_tilt_x_thresh,
-            override_post_mask=dash_entry,
-            override_post_value=0xFE,
-            reset_post_mask=damage_tilt_timer_reset_post,
-        )
-        # Fighter_8006A1BC decrements hitlag before Fighter_8006A360 can run the non-hitlag
-        # physics callback. `ftCommon_CheckFallFast` therefore cannot create a new fp->fall_fast
-        # latch while hitlag remains frozen above 1, but an already-latched fall_fast persists and
-        # the immediate hitlag-exit row may latch after the decrement.
-        # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-        # refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
-        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
-        fastfall_latch_callback_ok = fastfall_ok & (post_hitlag <= np.uint16(1))
-        tilt_timer_y_pre, tilt_timer_y_post, fall_fast_post = compute_tilt_timer_y_pre_post_with_fall_fast(
-            stick_y,
-            tilt_thresh=lstick_tilt_y_thresh,
-            jump_entry=jump_entry,
-            pre_input_jump_entry=pre_input_jump_entry,
-            fastfall_ok=fastfall_latch_callback_ok,
-            speed_y_self_post=speed_y_self,
-            on_ground_post=(post_on_ground != 0),
-            fastfall_stick_threshold=fastfall_stick_threshold,
-            fastfall_tilt_max_frames=fastfall_tilt_max_frames,
-            reset_post_mask=damage_tilt_timer_reset_post,
-        )
+        if validation_buffers:
+            import msl_binding  # type: ignore
 
-        # UCF 0.84 pad buffer state (strictly causal).
-        #
-        # Source tie-down + ordering note:
-        # - UCF gates sdrop-up on `player->input.stick_y_hold_time < 2` (offset 0x671):
-        #   refs/ucf/include/melee/asm/player.h
-        # - The decomp per-frame update for fp->x671_timer_lstick_tilt_y is:
-        #   refs/melee/src/melee/ft/fighter.c:1963-2008
-        # - UCF's injection applies cardinals before check_sdrop_up (refs/ucf/src/pad_buffer/pad_buffer.cpp),
-        #   but we haven't proven whether Melee updates stick_y_hold_time using pre/post-injection stick.
-        #   If shielddrop behavior is off later, revisit this ordering first.
-        #
-        # We model stick_y_hold_time with the x671-style timer after the per-frame input update,
-        # before action-entry overrides (`tilt_timer_y_pre`).
-        padbuf_index, padbuf_sdrop_up, padbuf_x, padbuf_y = derive_ucf_pad_buffer_state(
-            pre_main_x,
-            pre_main_y,
-            stick_y_hold_time=tilt_timer_y_pre,
-            ucf_enabled=ucf_enabled,
-            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-            lstick_deadzone_x=float(lstick_deadzone_x),
-            lstick_deadzone_y=float(lstick_deadzone_y),
-        )
-        samples["seed_t"]["ucf_padbuf_index"][:, slot] = padbuf_index[:-1]
-        samples["seed_t"]["ucf_padbuf_sdrop_up_frames"][:, slot] = padbuf_sdrop_up[:-1]
-        samples["seed_t"]["ucf_padbuf_stick_x"][:, slot, :] = padbuf_x[:-1, :]
-        samples["seed_t"]["ucf_padbuf_stick_y"][:, slot, :] = padbuf_y[:-1, :]
+            turn_frames = turn_frames_lut[post_char]
+            (
+                tilt_timer_y_pre,
+                tilt_timer_y_post,
+                fall_fast_post,
+                turn_has_turned,
+            ) = msl_binding.validation_derive_input_history_suffix(
+                samples.seed_u8(),
+                int(slot),
+                pre_buttons_physical,
+                pre_main_x,
+                pre_main_y,
+                stick_x,
+                stick_y,
+                cstick_y,
+                trigger_unit,
+                buttons_pressed,
+                post_state,
+                post_state_age,
+                post_dir,
+                post_hitlag,
+                speed_y_self,
+                post_on_ground,
+                damage_tilt_timer_reset_post,
+                float(lstick_tilt_x_thresh),
+                float(lstick_tilt_y_thresh),
+                float(fastfall_stick_threshold),
+                int(fastfall_tilt_max_frames),
+                float(tap_jump_threshold),
+                int(tap_jump_tilt_max_frames),
+                float(dash_run_jump_stick_y_threshold),
+                float(tap_jump_release_threshold),
+                float(dash_flick_abs),
+                int(dash_flick_tilt_max_frames),
+                turn_frames,
+                float(common["powershield_reflect_trigger_min"]),
+                int(button_mask_a),
+                int(button_mask_b),
+                int(button_mask_xy),
+                int(button_mask_dpad_up),
+                int(button_mask_dpad_down),
+                int(button_mask_lr),
+                int(button_mask_z),
+                int(act_guard_reflect),
+                int(act_kneebend),
+                int(act_dash),
+                int(act_run),
+                int(act_run_direct),
+                int(act_run_brake),
+                int(act_turn_run),
+                int(act_turn),
+                int(act_jump_f),
+                int(act_jump_b),
+                int(act_jump_aerial_f),
+                int(act_jump_aerial_b),
+                int(act_fall),
+                int(act_fall_f),
+                int(act_fall_b),
+                int(act_fall_aerial),
+                int(act_fall_aerial_f),
+                int(act_fall_aerial_b),
+                int(act_fall_special),
+                int(act_fall_special_f),
+                int(act_fall_special_b),
+                int(act_damage_fall),
+                int(act_attack_air_n),
+                int(act_attack_air_f),
+                int(act_attack_air_b),
+                int(act_attack_air_hi),
+                int(act_attack_air_lw),
+                int(act_escape_air),
+            )
+            post_turn_has_turned_u8[:, slot] = turn_has_turned
+        else:
+            tilt_timer_x_pre, tilt_timer_x_post = compute_tilt_timer_axis_pre_post(
+                stick_x,
+                tilt_thresh=lstick_tilt_x_thresh,
+                override_post_mask=dash_entry,
+                override_post_value=0xFE,
+                reset_post_mask=damage_tilt_timer_reset_post,
+            )
+            fastfall_latch_callback_ok = fastfall_ok & (post_hitlag <= np.uint16(1))
+            tilt_timer_y_pre, tilt_timer_y_post, fall_fast_post = (
+                compute_tilt_timer_y_pre_post_with_fall_fast(
+                    stick_y,
+                    tilt_thresh=lstick_tilt_y_thresh,
+                    jump_entry=jump_entry,
+                    pre_input_jump_entry=pre_input_jump_entry,
+                    fastfall_ok=fastfall_latch_callback_ok,
+                    speed_y_self_post=speed_y_self,
+                    on_ground_post=(post_on_ground != 0),
+                    fastfall_stick_threshold=fastfall_stick_threshold,
+                    fastfall_tilt_max_frames=fastfall_tilt_max_frames,
+                    reset_post_mask=damage_tilt_timer_reset_post,
+                )
+            )
+            padbuf_index, padbuf_sdrop_up, padbuf_x, padbuf_y = derive_ucf_pad_buffer_state(
+                pre_main_x,
+                pre_main_y,
+                stick_y_hold_time=tilt_timer_y_pre,
+                ucf_enabled=ucf_enabled,
+                ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+                lstick_deadzone_x=float(lstick_deadzone_x),
+                lstick_deadzone_y=float(lstick_deadzone_y),
+            )
+            samples["seed_t"]["ucf_padbuf_index"][:, slot] = padbuf_index[:-1]
+            samples["seed_t"]["ucf_padbuf_sdrop_up_frames"][:, slot] = padbuf_sdrop_up[:-1]
+            samples["seed_t"]["ucf_padbuf_stick_x"][:, slot, :] = padbuf_x[:-1, :]
+            samples["seed_t"]["ucf_padbuf_stick_y"][:, slot, :] = padbuf_y[:-1, :]
 
-        samples["seed_t"]["tilt_timer_x"][:, slot] = tilt_timer_x_post[:-1]
-        samples["seed_t"]["tilt_timer_y"][:, slot] = tilt_timer_y_post[:-1]
-        samples["seed_t"]["fall_fast"][:, slot] = fall_fast_post[:-1]
-        # Fastfall ownership at immediate hitlag-exit rows (decomp-shaped reseed lane):
-        # - Hitlag is decremented first in Fighter_8006A1BC, then Fighter_8006A360 runs the
-        #   non-hitlag callback/physics lane where ftCommon_CheckFallFast ownership applies.
-        # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
-        samples["seed_t"]["fall_fast_hitlag_exit_owner"][:, slot] = (
-            (post_hitlag[:-1] == np.uint16(1))
-            & fastfall_ok[:-1]
-            & (fall_fast_post[:-1] != 0)
-        ).astype(np.uint8)
+            samples["seed_t"]["tilt_timer_x"][:, slot] = tilt_timer_x_post[:-1]
+            samples["seed_t"]["tilt_timer_y"][:, slot] = tilt_timer_y_post[:-1]
+            samples["seed_t"]["fall_fast"][:, slot] = fall_fast_post[:-1]
+            samples["seed_t"]["fall_fast_hitlag_exit_owner"][:, slot] = (
+                (post_hitlag[:-1] == np.uint16(1))
+                & fastfall_ok[:-1]
+                & (fall_fast_post[:-1] != 0)
+            ).astype(np.uint8)
         run_x0 = derive_run_x0(
             action_id=post_state,
             hitlag_u16=post_hitlag,
@@ -5485,137 +5708,176 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         samples["seed_t"]["landing_fallspecial_allow_interrupt"][:, slot] = (
             landing_fallspecial_allow_interrupt[:-1]
         )
-        samples["seed_t"]["lr_press_timer"][:, slot] = lr_press_timer[:-1]
+        if not validation_buffers:
+            samples["seed_t"]["lr_press_timer"][:, slot] = lr_press_timer[:-1]
 
-        # x672 input-history timer (analog trigger hold timer) is seeded to support
-        # GuardReflect/powershield logic.
-        # Decomp update: refs/melee/src/melee/ft/fighter.c:2020-2050.
-        # Decomp override on GuardReflect entry: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:746-804.
-        is_guard_reflect = post_state == np.uint16(act_guard_reflect)
-        guard_reflect_entry = is_guard_reflect & ~np.concatenate(([False], is_guard_reflect[:-1]))
-        _, x672_post = compute_x672_trigger_timer_pre_post(
-            trigger_unit=trigger_unit,
-            trigger_min=float(common["powershield_reflect_trigger_min"]),
-            guard_reflect_entry=guard_reflect_entry,
-            start_timer_post=0xFE,
-        )
-        samples["seed_t"]["x672_input_timer"][:, slot] = x672_post[:-1]
+            is_guard_reflect = post_state == np.uint16(act_guard_reflect)
+            guard_reflect_entry = is_guard_reflect & ~np.concatenate(([False], is_guard_reflect[:-1]))
+            _, x672_post = compute_x672_trigger_timer_pre_post(
+                trigger_unit=trigger_unit,
+                trigger_min=float(common["powershield_reflect_trigger_min"]),
+                guard_reflect_entry=guard_reflect_entry,
+                start_timer_post=0xFE,
+            )
+            samples["seed_t"]["x672_input_timer"][:, slot] = x672_post[:-1]
 
-        # GuardReflect reflect timer (mv.co.guard.x14) as a strictly-causal internal countdown.
-        # Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50 and ::ftCo_80093BC0.
-        guard_reflect_timer_x14 = derive_guard_reflect_timer_x14(
-            action_id_u16=post_state,
-            hitlag_u16=post_hitlag,
-            act_guard_reflect=act_guard_reflect,
-            reflect_frames_x2a4=int(common["powershield_reflect_frames"]),
-        )
-        samples["seed_t"]["guard_reflect_timer_x14"][:, slot] = guard_reflect_timer_x14[:-1]
-        guard_reflect_timer_x18 = derive_guard_reflect_timer_x18(
-            action_id_u16=post_state,
-            hitlag_u16=post_hitlag,
-            act_guard_reflect=act_guard_reflect,
-            reflect_total_frames_x2b4=int(common["powershield_reflect_total_frames"]),
-        )
-        samples["seed_t"]["guard_reflect_timer_x18"][:, slot] = guard_reflect_timer_x18[:-1]
-        guard_reflect_origin_guardon = derive_guard_reflect_origin_guardon(
-            action_id_u16=post_state,
-            act_guard_reflect=act_guard_reflect,
-            act_guard_on=act_guard_on,
-            act_guard=act_guard,
-        )
-        samples["seed_t"]["guard_reflect_origin_guardon_u8"][:, slot] = guard_reflect_origin_guardon[:-1]
+            guard_reflect_timer_x14 = derive_guard_reflect_timer_x14(
+                action_id_u16=post_state,
+                hitlag_u16=post_hitlag,
+                act_guard_reflect=act_guard_reflect,
+                reflect_frames_x2a4=int(common["powershield_reflect_frames"]),
+            )
+            samples["seed_t"]["guard_reflect_timer_x14"][:, slot] = guard_reflect_timer_x14[:-1]
+            guard_reflect_timer_x18 = derive_guard_reflect_timer_x18(
+                action_id_u16=post_state,
+                hitlag_u16=post_hitlag,
+                act_guard_reflect=act_guard_reflect,
+                reflect_total_frames_x2b4=int(common["powershield_reflect_total_frames"]),
+            )
+            samples["seed_t"]["guard_reflect_timer_x18"][:, slot] = guard_reflect_timer_x18[:-1]
+            guard_reflect_origin_guardon = derive_guard_reflect_origin_guardon(
+                action_id_u16=post_state,
+                act_guard_reflect=act_guard_reflect,
+                act_guard_on=act_guard_on,
+                act_guard=act_guard,
+            )
+            samples["seed_t"]["guard_reflect_origin_guardon_u8"][:, slot] = (
+                guard_reflect_origin_guardon[:-1]
+            )
 
-        # Fighter per-frame input counters block.
-        # Decomp: refs/melee/src/melee/ft/fighter.c:1897-2094 (lb helper: refs/melee/src/melee/lb/lb_00CE.c:163-225).
-        x673, x674, x676_x, x2228_b7, x677_y, x679_x, x67A_y = compute_fighter_stick_input_counters(
-            stick_x_unit=stick_x,
-            stick_y_unit=stick_y,
-            tilt_thresh_x=lstick_tilt_x_thresh,
-            tilt_thresh_y=lstick_tilt_y_thresh,
-            start_timer=0xFE,
-        )
-        samples["seed_t"]["x673"][:, slot] = x673[:-1]
-        samples["seed_t"]["x674"][:, slot] = x674[:-1]
-        samples["seed_t"]["x676_x"][:, slot] = x676_x[:-1]
-        samples["seed_t"]["x2228_b7"][:, slot] = x2228_b7[:-1]
-        samples["seed_t"]["x677_y"][:, slot] = x677_y[:-1]
-        samples["seed_t"]["x679_x"][:, slot] = x679_x[:-1]
-        samples["seed_t"]["x67A_y"][:, slot] = x67A_y[:-1]
+            x673, x674, x676_x, x2228_b7, x677_y, x679_x, x67A_y = (
+                compute_fighter_stick_input_counters(
+                    stick_x_unit=stick_x,
+                    stick_y_unit=stick_y,
+                    tilt_thresh_x=lstick_tilt_x_thresh,
+                    tilt_thresh_y=lstick_tilt_y_thresh,
+                    start_timer=0xFE,
+                )
+            )
+            samples["seed_t"]["x673"][:, slot] = x673[:-1]
+            samples["seed_t"]["x674"][:, slot] = x674[:-1]
+            samples["seed_t"]["x676_x"][:, slot] = x676_x[:-1]
+            samples["seed_t"]["x2228_b7"][:, slot] = x2228_b7[:-1]
+            samples["seed_t"]["x677_y"][:, slot] = x677_y[:-1]
+            samples["seed_t"]["x679_x"][:, slot] = x679_x[:-1]
+            samples["seed_t"]["x67A_y"][:, slot] = x67A_y[:-1]
 
-        x675, x67B, x678 = compute_fighter_trigger_input_counters(
-            trigger_unit=trigger_unit,
-            trigger_min=float(common["powershield_reflect_trigger_min"]),
-            start_timer=0xFE,
-        )
-        samples["seed_t"]["x675"][:, slot] = x675[:-1]
-        samples["seed_t"]["x67B"][:, slot] = x67B[:-1]
-        samples["seed_t"]["x678"][:, slot] = x678[:-1]
+            x675, x67B, x678 = compute_fighter_trigger_input_counters(
+                trigger_unit=trigger_unit,
+                trigger_min=float(common["powershield_reflect_trigger_min"]),
+                start_timer=0xFE,
+            )
+            samples["seed_t"]["x675"][:, slot] = x675[:-1]
+            samples["seed_t"]["x67B"][:, slot] = x67B[:-1]
+            samples["seed_t"]["x678"][:, slot] = x678[:-1]
 
-        x67C, x67D, x67E, x680, x681, x682, x683, x684 = compute_fighter_button_timers(
-            buttons_pressed=buttons_pressed,
-            hitlag_frames=post_hitlag,
-            mask_a=button_mask_a,
-            mask_b=button_mask_b,
-            mask_xy=button_mask_xy,
-            mask_dpad_up=button_mask_dpad_up,
-            mask_dpad_down=button_mask_dpad_down,
-            mask_lr=button_mask_lr,
-            mask_z=button_mask_z,
-            start_timer=0xFF,
-        )
-        samples["seed_t"]["x67C"][:, slot] = x67C[:-1]
-        samples["seed_t"]["x67D"][:, slot] = x67D[:-1]
-        samples["seed_t"]["x67E"][:, slot] = x67E[:-1]
-        samples["seed_t"]["x680"][:, slot] = x680[:-1]
-        samples["seed_t"]["x681"][:, slot] = x681[:-1]
-        samples["seed_t"]["x682"][:, slot] = x682[:-1]
-        samples["seed_t"]["x683"][:, slot] = x683[:-1]
-        samples["seed_t"]["x684"][:, slot] = x684[:-1]
+            x67C, x67D, x67E, x680, x681, x682, x683, x684 = compute_fighter_button_timers(
+                buttons_pressed=buttons_pressed,
+                hitlag_frames=post_hitlag,
+                mask_a=button_mask_a,
+                mask_b=button_mask_b,
+                mask_xy=button_mask_xy,
+                mask_dpad_up=button_mask_dpad_up,
+                mask_dpad_down=button_mask_dpad_down,
+                mask_lr=button_mask_lr,
+                mask_z=button_mask_z,
+                start_timer=0xFF,
+            )
+            samples["seed_t"]["x67C"][:, slot] = x67C[:-1]
+            samples["seed_t"]["x67D"][:, slot] = x67D[:-1]
+            samples["seed_t"]["x67E"][:, slot] = x67E[:-1]
+            samples["seed_t"]["x680"][:, slot] = x680[:-1]
+            samples["seed_t"]["x681"][:, slot] = x681[:-1]
+            samples["seed_t"]["x682"][:, slot] = x682[:-1]
+            samples["seed_t"]["x683"][:, slot] = x683[:-1]
+            samples["seed_t"]["x684"][:, slot] = x684[:-1]
 
-        # KneeBend internals (jump_input source + short-hop latch) must be seeded to avoid
-        # mid-KneeBend reseed guessing in the simulator.
-        # Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:16-28 and :44-56.
-        kb_jump_in, kb_short = derive_kneebend_internals(
-            action_id=post_state,
-            buttons=pre_buttons_physical,
-            buttons_pressed=buttons_pressed,
-            stick_y_unit=stick_y,
-            cstick_y_unit=cstick_y,
-            tilt_timer_y=tilt_timer_y_pre,
-            tap_jump_threshold=tap_jump_threshold,
-            dash_run_jump_stick_y_threshold=dash_run_jump_stick_y_threshold,
-            tap_jump_tilt_max_frames=tap_jump_tilt_max_frames,
-            tap_jump_release_threshold=tap_jump_release_threshold,
-            act_kneebend=act_kneebend,
-            act_dash=act_dash,
-            act_run=act_run,
-            act_run_direct=act_run_direct,
-            act_run_brake=act_run_brake,
-            act_turn_run=act_turn_run,
-            button_mask_xy=button_mask_xy,
-        )
-        samples["seed_t"]["kneebend_jump_input"][:, slot] = kb_jump_in[:-1]
-        samples["seed_t"]["kneebend_is_short_hop"][:, slot] = kb_short[:-1]
+            kb_jump_in, kb_short = derive_kneebend_internals(
+                action_id=post_state,
+                buttons=pre_buttons_physical,
+                buttons_pressed=buttons_pressed,
+                stick_y_unit=stick_y,
+                cstick_y_unit=cstick_y,
+                tilt_timer_y=tilt_timer_y_pre,
+                tap_jump_threshold=tap_jump_threshold,
+                dash_run_jump_stick_y_threshold=dash_run_jump_stick_y_threshold,
+                tap_jump_tilt_max_frames=tap_jump_tilt_max_frames,
+                tap_jump_release_threshold=tap_jump_release_threshold,
+                act_kneebend=act_kneebend,
+                act_dash=act_dash,
+                act_run=act_run,
+                act_run_direct=act_run_direct,
+                act_run_brake=act_run_brake,
+                act_turn_run=act_turn_run,
+                button_mask_xy=button_mask_xy,
+            )
+            samples["seed_t"]["kneebend_jump_input"][:, slot] = kb_jump_in[:-1]
+            samples["seed_t"]["kneebend_is_short_hop"][:, slot] = kb_short[:-1]
 
-        # TURN internals are only meaningful in TURN frames; otherwise seed 0.
-        turn_frames = turn_frames_lut[post_char]
-        turn_frames_to_turn, turn_has_turned, turn_x8 = derive_turn_internals(
-            action_id=post_state,
-            action_frame_i16=post_state_age,
-            facing=post_dir,
-            stick_x_unit=stick_x,
-            tilt_timer_x=tilt_timer_x_pre,
-            dash_flick_abs=dash_flick_abs,
-            dash_flick_tilt_max_frames=dash_flick_tilt_max_frames,
-            turn_frames=turn_frames,
-            act_turn=act_turn,
-            act_turn_run=act_turn_run,
-        )
+            turn_frames = turn_frames_lut[post_char]
+            turn_frames_to_turn, turn_has_turned, turn_x8 = derive_turn_internals(
+                action_id=post_state,
+                action_frame_i16=post_state_age,
+                facing=post_dir,
+                stick_x_unit=stick_x,
+                tilt_timer_x=tilt_timer_x_pre,
+                dash_flick_abs=dash_flick_abs,
+                dash_flick_tilt_max_frames=dash_flick_tilt_max_frames,
+                turn_frames=turn_frames,
+                act_turn=act_turn,
+                act_turn_run=act_turn_run,
+            )
 
-        samples["seed_t"]["turn_frames_to_turn"][:, slot] = turn_frames_to_turn[:-1]
-        samples["seed_t"]["turn_has_turned"][:, slot] = turn_has_turned[:-1]
-        samples["seed_t"]["turn_x8"][:, slot] = turn_x8[:-1]
-        post_turn_has_turned_u8[:, slot] = turn_has_turned
+            samples["seed_t"]["turn_frames_to_turn"][:, slot] = turn_frames_to_turn[:-1]
+            samples["seed_t"]["turn_has_turned"][:, slot] = turn_has_turned[:-1]
+            samples["seed_t"]["turn_x8"][:, slot] = turn_x8[:-1]
+            post_turn_has_turned_u8[:, slot] = turn_has_turned
+
+    # Staling seed schema (PP#4):
+    # - Derive stale queue state strictly causally from replay history so one-step reseed can
+    #   apply staling multiplier deterministically.
+    if validation_buffers:
+        import msl_binding  # type: ignore
+
+        (
+            hist_attack_id,
+            hist_attack_instance,
+            hist_stale_queue_index,
+            hist_stale_move_id,
+            hist_stale_attack_instance,
+        ) = msl_binding.validation_derive_staling_buffers(
+            samples.seed_u8(),
+            samples.ref_u8(),
+            _structured_rows_as_writable_bytes(items_fixed),
+            post_anim_frame_f32_all,
+            np.asarray(_laser_shot_item_kinds(Path("data") / "items" / "lasers.bin"), dtype=np.uint16),
+            int(num_players),
+        )
+        hist = SimpleNamespace(
+            attack_id=hist_attack_id,
+            attack_instance=hist_attack_instance,
+            stale_queue_index=hist_stale_queue_index,
+            stale_move_id=hist_stale_move_id,
+            stale_attack_instance=hist_stale_attack_instance,
+        )
+    else:
+        from tools.slippi.staling_history import derive_staling_history
+
+        hist_initial = derive_staling_history(frames, src_ports=src_ports)
+        _derive_item_attack_fields(
+            items_fixed,
+            fighter_attack_id=hist_initial.attack_id,
+            fighter_attack_instance=hist_initial.attack_instance,
+            num_players=num_players,
+        )
+        hist = derive_staling_history(frames, src_ports=src_ports, items_fixed=items_fixed)
+        samples["seed_t"]["attack_id"][:, :num_players] = hist.attack_id[:-1, :]
+        samples["seed_t"]["attack_instance"][:, :num_players] = hist.attack_instance[:-1, :]
+        samples["seed_t"]["stale_queue_index"][:, :num_players] = hist.stale_queue_index[:-1, :]
+        samples["seed_t"]["stale_move_id"][:, :num_players, :] = hist.stale_move_id[:-1, :, :]
+        samples["seed_t"]["stale_attack_instance"][:, :num_players, :] = hist.stale_attack_instance[
+            :-1, :, :
+        ]
 
     # GuardSetOff frozen-hitlag frame-speed ownership (strictly causal):
     # - ftColl_80076CBC writes the defender's hidden x19A4 from the current shield-hit max int
@@ -5655,17 +5917,17 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
             "native msl_binding.derive_guardsetoff_frame_speed_overrides is required; run `make build`"
         ) from exc
     guardsetoff_rate = msl_binding.derive_guardsetoff_frame_speed_overrides(
-        np.ascontiguousarray(post_action_id_u16, dtype=np.uint16),
-        np.ascontiguousarray(post_hitlag_u16_all, dtype=np.uint16),
-        np.ascontiguousarray(post_state_age_all, dtype=np.int16),
-        np.ascontiguousarray(post_animation_index_u32_all, dtype=np.uint32),
-        np.ascontiguousarray(post_char_id_u8, dtype=np.uint8),
-        np.ascontiguousarray(post_state_flags_u8, dtype=np.uint8),
-        np.ascontiguousarray(post_shield_f32_all, dtype=np.float32),
-        np.ascontiguousarray(lightshield_amount_all, dtype=np.float32),
-        np.ascontiguousarray(hist.attack_id, dtype=np.uint16),
-        np.ascontiguousarray(hist.stale_queue_index, dtype=np.uint8),
-        np.ascontiguousarray(hist.stale_move_id, dtype=np.uint16),
+        _ascontiguousarray(post_action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(post_hitlag_u16_all, dtype=np.uint16),
+        _ascontiguousarray(post_state_age_all, dtype=np.int16),
+        _ascontiguousarray(post_animation_index_u32_all, dtype=np.uint32),
+        _ascontiguousarray(post_char_id_u8, dtype=np.uint8),
+        _ascontiguousarray(post_state_flags_u8, dtype=np.uint8),
+        _ascontiguousarray(post_shield_f32_all, dtype=np.float32),
+        _ascontiguousarray(lightshield_amount_all, dtype=np.float32),
+        _ascontiguousarray(hist.attack_id, dtype=np.uint16),
+        _ascontiguousarray(hist.stale_queue_index, dtype=np.uint8),
+        _ascontiguousarray(hist.stale_move_id, dtype=np.uint16),
         manifest_tables.active_shield_hit_lut,
         end_frame_lut,
         np.asarray(stale_weights, dtype=np.float32),
@@ -5733,31 +5995,42 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
                 last_hit_by_u8=samples["seed_t"]["last_hit_by"][:, slot],
             )
         )
-        samples["seed_t"]["fighter_8006cda4_pre_gate_consume_count"][:, slot] = (
-            _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
-                action_id_u16=samples["seed_t"]["action_id"][:, slot],
-                action_frame_i16=samples["seed_t"]["action_frame"][:, slot],
-                ref_action_id_u16=samples["ref_t1"]["action_id"][:, slot],
-                on_ground_u8=samples["seed_t"]["on_ground"][:, slot],
-                hitlag_u16=samples["seed_t"]["hitlag"][:, slot],
-                hitstun_u16=samples["seed_t"]["hitstun"][:, slot],
-                state_flags_u8=samples["seed_t"]["state_flags"][:, slot, :],
-                last_hit_by_u8=samples["seed_t"]["last_hit_by"][:, slot],
-                all_source_port0_u8=samples["seed_t"]["source_port0"][:, :num_players],
-                all_action_id_u16=samples["seed_t"]["action_id"][:, :num_players],
-                all_action_frame_i16=samples["seed_t"]["action_frame"][:, :num_players],
-                all_ref_action_id_u16=samples["ref_t1"]["action_id"][:, :num_players],
-                all_on_ground_u8=samples["seed_t"]["on_ground"][:, :num_players],
-                all_hitlag_u16=samples["seed_t"]["hitlag"][:, :num_players],
-                all_hitstun_u16=samples["seed_t"]["hitstun"][:, :num_players],
-                all_last_hit_by_u8=samples["seed_t"]["last_hit_by"][:, :num_players],
-                all_ref_last_hit_by_u8=samples["ref_t1"]["last_hit_by"][:, :num_players],
-                frame_pre_random_seed_u32=samples["seed_t"]["frame_pre_random_seed"],
-                damagefly_roll_prob=float(common["damagefly_roll_prob"]),
-                victim_port=slot,
-                num_players=num_players,
-                allow_grounded_kneebend=(int(stage_id) == 2),
+        if not validation_buffers:
+            samples["seed_t"]["fighter_8006cda4_pre_gate_consume_count"][:, slot] = (
+                _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
+                    action_id_u16=samples["seed_t"]["action_id"][:, slot],
+                    action_frame_i16=samples["seed_t"]["action_frame"][:, slot],
+                    ref_action_id_u16=samples["ref_t1"]["action_id"][:, slot],
+                    on_ground_u8=samples["seed_t"]["on_ground"][:, slot],
+                    hitlag_u16=samples["seed_t"]["hitlag"][:, slot],
+                    hitstun_u16=samples["seed_t"]["hitstun"][:, slot],
+                    state_flags_u8=samples["seed_t"]["state_flags"][:, slot, :],
+                    last_hit_by_u8=samples["seed_t"]["last_hit_by"][:, slot],
+                    all_source_port0_u8=samples["seed_t"]["source_port0"][:, :num_players],
+                    all_action_id_u16=samples["seed_t"]["action_id"][:, :num_players],
+                    all_action_frame_i16=samples["seed_t"]["action_frame"][:, :num_players],
+                    all_ref_action_id_u16=samples["ref_t1"]["action_id"][:, :num_players],
+                    all_on_ground_u8=samples["seed_t"]["on_ground"][:, :num_players],
+                    all_hitlag_u16=samples["seed_t"]["hitlag"][:, :num_players],
+                    all_hitstun_u16=samples["seed_t"]["hitstun"][:, :num_players],
+                    all_last_hit_by_u8=samples["seed_t"]["last_hit_by"][:, :num_players],
+                    all_ref_last_hit_by_u8=samples["ref_t1"]["last_hit_by"][:, :num_players],
+                    frame_pre_random_seed_u32=samples["seed_t"]["frame_pre_random_seed"],
+                    damagefly_roll_prob=float(common["damagefly_roll_prob"]),
+                    victim_port=slot,
+                    num_players=num_players,
+                    allow_grounded_kneebend=(int(stage_id) == 2),
+                )
             )
+    if validation_buffers:
+        import msl_binding
+
+        msl_binding.validation_derive_fighter_8006cda4_buffers(
+            samples.seed_u8(),
+            samples.ref_u8(),
+            float(common["damagefly_roll_prob"]),
+            int(num_players),
+            int(int(stage_id) == 2),
         )
 
     (
@@ -5821,19 +6094,19 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
             "native msl_binding.derive_attacker_shield_ground_kb_vel is required; run `make build`"
         ) from exc
     attacker_shield_ground_kb_vel = msl_binding.derive_attacker_shield_ground_kb_vel(
-        np.ascontiguousarray(seed_action_id, dtype=np.uint16),
-        np.ascontiguousarray(seed_attack_id, dtype=np.uint16),
-        np.ascontiguousarray(seed_anim_frame_f32, dtype=np.float32),
-        np.ascontiguousarray(seed_animation_index, dtype=np.uint32),
-        np.ascontiguousarray(seed_on_ground, dtype=np.uint8),
-        np.ascontiguousarray(seed_hitlag, dtype=np.uint16),
-        np.ascontiguousarray(seed_pos_x, dtype=np.float32),
-        np.ascontiguousarray(seed_char_id, dtype=np.uint8),
-        np.ascontiguousarray(seed_ground_friction_mul, dtype=np.float32),
-        np.ascontiguousarray(seed_lightshield_amount, dtype=np.float32),
-        np.ascontiguousarray(seed_guard_setoff_hitlag_damage_min, dtype=np.uint8),
-        np.ascontiguousarray(seed_stale_queue_index, dtype=np.uint8),
-        np.ascontiguousarray(seed_stale_move_id, dtype=np.uint16),
+        _ascontiguousarray(seed_action_id, dtype=np.uint16),
+        _ascontiguousarray(seed_attack_id, dtype=np.uint16),
+        _ascontiguousarray(seed_anim_frame_f32, dtype=np.float32),
+        _ascontiguousarray(seed_animation_index, dtype=np.uint32),
+        _ascontiguousarray(seed_on_ground, dtype=np.uint8),
+        _ascontiguousarray(seed_hitlag, dtype=np.uint16),
+        _ascontiguousarray(seed_pos_x, dtype=np.float32),
+        _ascontiguousarray(seed_char_id, dtype=np.uint8),
+        _ascontiguousarray(seed_ground_friction_mul, dtype=np.float32),
+        _ascontiguousarray(seed_lightshield_amount, dtype=np.float32),
+        _ascontiguousarray(seed_guard_setoff_hitlag_damage_min, dtype=np.uint8),
+        _ascontiguousarray(seed_stale_queue_index, dtype=np.uint8),
+        _ascontiguousarray(seed_stale_move_id, dtype=np.uint16),
         manifest_tables.active_shield_hit_lut,
         manifest_tables.char_gr_friction_lut,
         np.asarray(stale_weights, dtype=np.float32),
@@ -5847,66 +6120,108 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
 
     samples["seed_t"]["attacker_shield_ground_kb_vel"] = attacker_shield_ground_kb_vel
 
-    items_seed = _materialize_illusion_seed_positions(
-        items_fixed,
-        illusion_ghost_pos1_x=illusion_ghost_pos1_x,
-        illusion_ghost_pos1_y=illusion_ghost_pos1_y,
-        post_action_id_u16=post_action_id_u16,
-        post_hitlag_u8=post_hitlag_u16_all,
-        post_instance_hit_by_u16=post_instance_hit_by_u16_all,
-        num_players=num_players,
-        illusion_item_kinds=illusion_item_kinds,
-    )
-    item_reflect_damage_mul = _derive_item_reflect_damage_mul(
-        items_fixed,
-        post_action_id_u16=post_action_id_u16,
-        post_char_id_u8=post_char_id_u8,
-        post_state_flags_u8=post_state_flags_u8,
-        powershield_reflect_damage_mul=float(common["powershield_reflect_damage_mul"]),
-        reflector_damage_mul_lut=reflector_damage_mul_lut,
-        num_players=num_players,
-    )
-    samples["seed_t"]["item_reflect_damage_mul"] = item_reflect_damage_mul[:-1]
-    (
-        shyguy_prev_vel_y,
-        shyguy_prev_vel_y_valid,
-        shyguy_dyn_y_phase,
-        shyguy_dyn_y_phase_valid,
-        shyguy_timer,
-        shyguy_pattern,
-        shyguy_stage_valid,
-        shyguy_speed_index,
-        shyguy_speed_valid,
-        shyguy_delay,
-        shyguy_delay_valid,
-        shyguy_hitlag,
-        shyguy_hitlag_valid,
-    ) = _derive_yoshi_shyguy_native_lanes(items_fixed, stage_id=int(stage_id))
-    samples["seed_t"]["item_shyguy_prev_vel_y"] = shyguy_prev_vel_y[:-1]
-    samples["seed_t"]["item_shyguy_prev_vel_y_valid"] = shyguy_prev_vel_y_valid[:-1]
-    samples["seed_t"]["item_shyguy_dyn_y_phase_u8"] = shyguy_dyn_y_phase[:-1]
-    samples["seed_t"]["item_shyguy_dyn_y_phase_valid_u8"] = shyguy_dyn_y_phase_valid[:-1]
-    samples["seed_t"]["stage_yoshi_shyguy_timer_u16"] = shyguy_timer[:-1]
-    samples["seed_t"]["stage_yoshi_shyguy_pattern_u8"] = shyguy_pattern[:-1]
-    samples["seed_t"]["stage_yoshi_shyguy_valid_u8"] = shyguy_stage_valid[:-1]
-    samples["seed_t"]["item_shyguy_speed_index_u8"] = shyguy_speed_index[:-1]
-    samples["seed_t"]["item_shyguy_speed_index_valid_u8"] = shyguy_speed_valid[:-1]
-    samples["seed_t"]["item_shyguy_delay_u16"] = shyguy_delay[:-1]
-    samples["seed_t"]["item_shyguy_delay_valid_u8"] = shyguy_delay_valid[:-1]
-    samples["seed_t"]["item_shyguy_hitlag_u8"] = shyguy_hitlag[:-1]
-    samples["seed_t"]["item_shyguy_hitlag_valid_u8"] = shyguy_hitlag_valid[:-1]
+    if validation_buffers:
+        items_seed = None
+    else:
+        items_seed = _materialize_illusion_seed_positions(
+            items_fixed,
+            illusion_ghost_pos1_x=illusion_ghost_pos1_x,
+            illusion_ghost_pos1_y=illusion_ghost_pos1_y,
+            post_action_id_u16=post_action_id_u16,
+            post_hitlag_u8=post_hitlag_u16_all,
+            post_instance_hit_by_u16=post_instance_hit_by_u16_all,
+            num_players=num_players,
+            illusion_item_kinds=illusion_item_kinds,
+        )
+    if not validation_buffers:
+        item_reflect_damage_mul = _derive_item_reflect_damage_mul(
+            items_fixed,
+            post_action_id_u16=post_action_id_u16,
+            post_char_id_u8=post_char_id_u8,
+            post_state_flags_u8=post_state_flags_u8,
+            powershield_reflect_damage_mul=float(common["powershield_reflect_damage_mul"]),
+            reflector_damage_mul_lut=reflector_damage_mul_lut,
+            num_players=num_players,
+        )
+        samples["seed_t"]["item_reflect_damage_mul"] = item_reflect_damage_mul[:-1]
+    if not validation_buffers:
+        (
+            shyguy_prev_vel_y,
+            shyguy_prev_vel_y_valid,
+            shyguy_dyn_y_phase,
+            shyguy_dyn_y_phase_valid,
+            shyguy_timer,
+            shyguy_pattern,
+            shyguy_stage_valid,
+            shyguy_speed_index,
+            shyguy_speed_valid,
+            shyguy_delay,
+            shyguy_delay_valid,
+            shyguy_hitlag,
+            shyguy_hitlag_valid,
+        ) = _derive_yoshi_shyguy_native_lanes(items_fixed, stage_id=int(stage_id))
+        samples["seed_t"]["item_shyguy_prev_vel_y"] = shyguy_prev_vel_y[:-1]
+        samples["seed_t"]["item_shyguy_prev_vel_y_valid"] = shyguy_prev_vel_y_valid[:-1]
+        samples["seed_t"]["item_shyguy_dyn_y_phase_u8"] = shyguy_dyn_y_phase[:-1]
+        samples["seed_t"]["item_shyguy_dyn_y_phase_valid_u8"] = shyguy_dyn_y_phase_valid[:-1]
+        samples["seed_t"]["stage_yoshi_shyguy_timer_u16"] = shyguy_timer[:-1]
+        samples["seed_t"]["stage_yoshi_shyguy_pattern_u8"] = shyguy_pattern[:-1]
+        samples["seed_t"]["stage_yoshi_shyguy_valid_u8"] = shyguy_stage_valid[:-1]
+        samples["seed_t"]["item_shyguy_speed_index_u8"] = shyguy_speed_index[:-1]
+        samples["seed_t"]["item_shyguy_speed_index_valid_u8"] = shyguy_speed_valid[:-1]
+        samples["seed_t"]["item_shyguy_delay_u16"] = shyguy_delay[:-1]
+        samples["seed_t"]["item_shyguy_delay_valid_u8"] = shyguy_delay_valid[:-1]
+        samples["seed_t"]["item_shyguy_hitlag_u8"] = shyguy_hitlag[:-1]
+        samples["seed_t"]["item_shyguy_hitlag_valid_u8"] = shyguy_hitlag_valid[:-1]
     if validation_buffers:
         import msl_binding
 
-        msl_binding.copy_validation_item_rows(
+        illusion_lut = _u8_lut_from_items(tuple(int(k) for k in illusion_item_kinds))
+        msl_binding.validation_copy_item_rows_with_illusion(
             samples.seed_u8(),
             samples.ref_u8(),
-            _structured_rows_as_bytes(items_seed[:-1]),
-            _structured_rows_as_bytes(items_fixed[1:]),
+            _structured_rows_as_bytes(items_fixed),
+            _ascontiguousarray(post_action_id_u16, dtype=np.uint16),
+            _ascontiguousarray(post_hitlag_u16_all, dtype=np.uint16),
+            _ascontiguousarray(post_instance_hit_by_u16_all, dtype=np.uint16),
+            _ascontiguousarray(illusion_ghost_pos1_x, dtype=np.float32),
+            _ascontiguousarray(illusion_ghost_pos1_y, dtype=np.float32),
+            illusion_lut,
+            int(num_players),
         )
+        msl_binding.validation_derive_item_reflect_damage_mul_buffers(
+            samples.seed_u8(),
+            _structured_rows_as_bytes(items_fixed),
+            _ascontiguousarray(post_action_id_u16, dtype=np.uint16),
+            _ascontiguousarray(post_char_id_u8, dtype=np.uint8),
+            _ascontiguousarray(post_state_flags_u8, dtype=np.uint8),
+            _ascontiguousarray(reflector_damage_mul_lut, dtype=np.float32),
+            float(common["powershield_reflect_damage_mul"]),
+            int(num_players),
+        )
+        yoshi_params = _yoshi_shyguy_params()
+        if int(stage_id) == int(yoshi_params.stage_id):
+            yoshi_common = _item_common_params()
+            msl_binding.validation_derive_yoshi_shyguy_buffers(
+                samples.seed_u8(),
+                _structured_rows_as_bytes(items_fixed),
+                _ascontiguousarray(frame_pre_random_seed, dtype=np.uint32),
+                np.asarray(yoshi_params.vpos, dtype=np.float32),
+                np.asarray(yoshi_params.speed, dtype=np.float32),
+                np.asarray(yoshi_params.dyn_y_vel, dtype=np.float32),
+                int(stage_id),
+                int(yoshi_params.stage_id),
+                int(yoshi_params.item_kind),
+                int(yoshi_params.timer_reset),
+                int(yoshi_params.spawn_delay_step),
+                float(yoshi_params.state4_speed_mul),
+                float(yoshi_common["item_hitlag_damage_mul"]),
+                float(yoshi_common["item_hitlag_base"]),
+            )
     else:
+        assert items_seed is not None
         samples["seed_t"]["items"] = items_seed[:-1]
-    if int(stage_id) == int(_yoshi_shyguy_params().stage_id):
+    if (not validation_buffers) and int(stage_id) == int(_yoshi_shyguy_params().stage_id):
         seed_items = samples["seed_t"]["items"]
         live_seed_shyguy = np.any(
             (seed_items["exists"] != 0)
@@ -6056,8 +6371,9 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
     if not validation_buffers:
         samples["ref_t1"]["items"] = items_fixed[1:]
 
-    # is_dead in compare is derived from stocks in the evaluator too, but fill it here for completeness.
-    samples["ref_t1"]["is_dead"] = (samples["ref_t1"]["stocks"] == 0).astype(np.uint8)
+    if not validation_buffers:
+        # is_dead in compare is derived from stocks in the evaluator too, but fill it here for completeness.
+        samples["ref_t1"]["is_dead"] = (samples["ref_t1"]["stocks"] == 0).astype(np.uint8)
 
     # -----------------------------
     # Combat rehit latch internals (strictly causal)
@@ -6105,58 +6421,109 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
     pre_l = np.zeros((n_frames, 4), dtype=np.uint8)
     pre_r = np.zeros((n_frames, 4), dtype=np.uint8)
 
-    # Re-read the per-slot per-frame buffers from the Slippi payload again, but only for the
-    # fields needed by the strictly-causal combat history derivation. This keeps the logic local
-    # and avoids reverse-mapping from the (n_samples) packed sample arrays.
-    ports_struct = frames.field("ports")
-    for slot, port_name in enumerate(src_port_names):
-        leader = ports_struct.field(port_name).field("leader")
-        pre = leader.field("pre")
-        post = leader.field("post")
+    if validation_buffers:
+        import msl_binding  # type: ignore
 
-        pre_buttons[:, slot] = _to_numpy(pre.field("buttons_physical")).astype(np.uint16)
-        pre_main_x_2d[:, slot] = _to_numpy(pre.field("raw_analog_x")).astype(np.int8)
-        pre_main_y_2d[:, slot] = _to_numpy(pre.field("raw_analog_y")).astype(np.int8)
-        pre_l[:, slot] = _u8_from_float01(_to_numpy(pre.field("triggers_physical").field("l")).astype(np.float32))
-        pre_r[:, slot] = _u8_from_float01(_to_numpy(pre.field("triggers_physical").field("r")).astype(np.float32))
+        # Normal validation has already staged these replay-visible fields into compact C buffers.
+        # Project the full-frame views needed by later hidden/combat derivation from those buffers
+        # instead of walking the Arrow post/pre trees a second time.
+        post_anim_frame = post_anim_frame_f32_all
+        post_pos_z_2d = post_pos_z_all
+        msl_binding.validation_project_post_cache(
+            samples.seed_u8(),
+            samples.prev_input_u8(),
+            samples.input_u8(),
+            samples.ref_u8(),
+            post_team_id,
+            post_char_id,
+            post_action_id,
+            post_action_frame,
+            post_animation_index,
+            post_facing,
+            post_on_ground,
+            post_ground_id,
+            post_pos_x,
+            post_pos_y,
+            post_stocks,
+            post_shield_hp,
+            post_hurtbox_state,
+            post_instance_hit_by,
+            post_instance_id,
+            post_hitlag,
+            post_hitstun,
+            post_state_flags,
+            post_last_hit_by,
+            post_source_port0,
+            pre_buttons,
+            pre_main_x_2d,
+            pre_main_y_2d,
+            pre_l,
+            pre_r,
+            int(num_players),
+        )
+    else:
+        # Re-read the per-slot per-frame buffers from the Slippi payload again, but only for the
+        # fields needed by the strictly-causal combat history derivation. Normal validation uses
+        # the compact native validation buffer projection above.
+        ports_struct = frames.field("ports")
+        for slot, port_name in enumerate(src_port_names):
+            leader = ports_struct.field(port_name).field("leader")
+            pre = leader.field("pre")
+            post = leader.field("post")
 
-        post_team_id[:, slot] = samples["seed_t"]["team_id"][0, slot]
-        post_char_id[:, slot] = _to_numpy(post.field("character")).astype(np.uint8)
-        post_action_id[:, slot] = _to_numpy(post.field("state")).astype(np.uint16)
-        post_state_age_f32 = _to_numpy(post.field("state_age")).astype(np.float32)
-        post_action_frame[:, slot] = _i16_from_state_age(post_state_age_f32, n_frames)
-        post_anim_frame[:, slot] = _f32_from_state_age(post_state_age_f32, n_frames)
-        post_animation_index[:, slot] = _to_numpy(post.field("animation_index")).astype(np.uint32)
-        post_facing[:, slot] = _dir_to_facing(_to_numpy(post.field("direction")).astype(np.float32))
-        post_on_ground[:, slot] = _airborne_to_on_ground(_to_numpy(post.field("airborne")).astype(np.uint8), n_frames)
-        post_ground_id[:, slot] = _to_numpy(post.field("ground")).astype(np.uint16)
-        post_pos_x[:, slot] = _to_numpy(post.field("position").field("x")).astype(np.float32)
-        post_pos_y[:, slot] = _to_numpy(post.field("position").field("y")).astype(np.float32)
-        post_pos_z_2d[:, slot] = _post_position_z(post, n_frames)
-        post_stocks[:, slot] = _to_numpy(post.field("stocks")).astype(np.uint8)
-        post_shield_hp[:, slot] = _to_numpy(post.field("shield")).astype(np.float32)
-        post_hurtbox_state[:, slot] = _to_numpy(post.field("hurtbox_state")).astype(np.uint8)
-        post_instance_hit_by[:, slot] = _to_numpy(post.field("last_hit_by_instance")).astype(np.uint16)
-        post_instance_id[:, slot] = _to_numpy(post.field("instance_id")).astype(np.uint16)
-        post_hitlag[:, slot] = _u16_from_float_frames(_to_numpy(post.field("hitlag")).astype(np.float32), n_frames)
-        post_last_hit_by[:, slot] = _to_numpy(post.field("last_hit_by")).astype(np.uint8)
-        post_source_port0[:, slot] = np.uint8(int(src_ports[slot]) - 1)
-        sf = post.field("state_flags")
-        post_state_flags[:, slot, :] = np.stack(
-            [
-                _to_numpy(sf.field("0")).astype(np.uint8),
-                _to_numpy(sf.field("1")).astype(np.uint8),
-                _to_numpy(sf.field("2")).astype(np.uint8),
-                _to_numpy(sf.field("3")).astype(np.uint8),
-                _to_numpy(sf.field("4")).astype(np.uint8),
-            ],
-            axis=1,
-        )
-        post_hitstun[:, slot] = hitstun_u16_from_misc_as_and_state_flags3(
-            misc_as_f32=_to_numpy(post.field("misc_as")).astype(np.float32),
-            state_flags3_u8=post_state_flags[:, slot, 3],
-            n=n_frames,
-        )
+            pre_buttons[:, slot] = _to_numpy(pre.field("buttons_physical")).astype(np.uint16)
+            pre_main_x_2d[:, slot] = _to_numpy(pre.field("raw_analog_x")).astype(np.int8)
+            pre_main_y_2d[:, slot] = _to_numpy(pre.field("raw_analog_y")).astype(np.int8)
+            pre_l[:, slot] = _u8_from_float01(
+                _to_numpy(pre.field("triggers_physical").field("l")).astype(np.float32)
+            )
+            pre_r[:, slot] = _u8_from_float01(
+                _to_numpy(pre.field("triggers_physical").field("r")).astype(np.float32)
+            )
+
+            post_team_id[:, slot] = samples["seed_t"]["team_id"][0, slot]
+            post_char_id[:, slot] = _to_numpy(post.field("character")).astype(np.uint8)
+            post_action_id[:, slot] = _to_numpy(post.field("state")).astype(np.uint16)
+            post_state_age_f32 = _to_numpy(post.field("state_age")).astype(np.float32)
+            post_action_frame[:, slot] = _i16_from_state_age(post_state_age_f32, n_frames)
+            post_anim_frame[:, slot] = _f32_from_state_age(post_state_age_f32, n_frames)
+            post_animation_index[:, slot] = _to_numpy(post.field("animation_index")).astype(np.uint32)
+            post_facing[:, slot] = _dir_to_facing(_to_numpy(post.field("direction")).astype(np.float32))
+            post_on_ground[:, slot] = _airborne_to_on_ground(
+                _to_numpy(post.field("airborne")).astype(np.uint8), n_frames
+            )
+            post_ground_id[:, slot] = _to_numpy(post.field("ground")).astype(np.uint16)
+            post_pos_x[:, slot] = _to_numpy(post.field("position").field("x")).astype(np.float32)
+            post_pos_y[:, slot] = _to_numpy(post.field("position").field("y")).astype(np.float32)
+            post_pos_z_2d[:, slot] = _post_position_z(post, n_frames)
+            post_stocks[:, slot] = _to_numpy(post.field("stocks")).astype(np.uint8)
+            post_shield_hp[:, slot] = _to_numpy(post.field("shield")).astype(np.float32)
+            post_hurtbox_state[:, slot] = _to_numpy(post.field("hurtbox_state")).astype(np.uint8)
+            post_instance_hit_by[:, slot] = _to_numpy(post.field("last_hit_by_instance")).astype(
+                np.uint16
+            )
+            post_instance_id[:, slot] = _to_numpy(post.field("instance_id")).astype(np.uint16)
+            post_hitlag[:, slot] = _u16_from_float_frames(
+                _to_numpy(post.field("hitlag")).astype(np.float32), n_frames
+            )
+            post_last_hit_by[:, slot] = _to_numpy(post.field("last_hit_by")).astype(np.uint8)
+            post_source_port0[:, slot] = np.uint8(int(src_ports[slot]) - 1)
+            sf = post.field("state_flags")
+            post_state_flags[:, slot, :] = np.stack(
+                [
+                    _to_numpy(sf.field("0")).astype(np.uint8),
+                    _to_numpy(sf.field("1")).astype(np.uint8),
+                    _to_numpy(sf.field("2")).astype(np.uint8),
+                    _to_numpy(sf.field("3")).astype(np.uint8),
+                    _to_numpy(sf.field("4")).astype(np.uint8),
+                ],
+                axis=1,
+            )
+            post_hitstun[:, slot] = hitstun_u16_from_misc_as_and_state_flags3(
+                misc_as_f32=_to_numpy(post.field("misc_as")).astype(np.float32),
+                state_flags3_u8=post_state_flags[:, slot, 3],
+                n=n_frames,
+            )
 
     hidden_pos_z = _derive_grounded_overlap_hidden_pos_z(
         num_players=num_players,
@@ -6577,55 +6944,79 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         )
         samples["seed_t"]["grab_owner_port"][:, : int(num_players)] = grab_owner[:-1, :]
 
-    (
-        item_hitlist_victim_port,
-        item_hitlist_victim_cd,
-        item_hitlist_victim_hitbox_mask,
-        item_hitlist_victim_iid,
-    ) = _derive_throw_laser_item_hitlist_seed_lanes(
-        seed_action_id_u16=samples["seed_t"]["action_id"],
-        seed_grab_owner_port_u8=samples["seed_t"]["grab_owner_port"],
-        seed_instance_hit_by_u16=samples["seed_t"]["instance_hit_by"],
-        seed_instance_id_u16=samples["seed_t"]["instance_id"],
-        seed_items=samples["seed_t"]["items"],
-        num_players=num_players,
-        throw_laser_hitbox_masks=throw_laser_hitbox_masks,
-    )
-    samples["seed_t"]["item_hitlist_victim_port"] = item_hitlist_victim_port
-    samples["seed_t"]["item_hitlist_victim_cd"] = item_hitlist_victim_cd
-    samples["seed_t"]["item_hitlist_victim_hitbox_mask"] = item_hitlist_victim_hitbox_mask
-    samples["seed_t"]["item_hitlist_victim_iid"] = item_hitlist_victim_iid
-
-    (
-        item_reflect_transfer_port,
-        item_reflect_transfer_iid,
-        item_shield_bounce_valid,
-        item_shield_bounce_vel_x,
-        item_shield_bounce_vel_y,
-        item_hidden_body_hit_victim_port,
-        item_hidden_body_hit_hurt_height,
-        item_hidden_callback_flags,
-    ) = _derive_item_hidden_callback_seed_lanes(
-        seed_items=samples["seed_t"]["items"],
-        ref_items=samples["ref_t1"]["items"],
-        seed_action_id_u16=samples["seed_t"]["action_id"],
-        ref_action_id_u16=samples["ref_t1"]["action_id"],
-        seed_on_ground_u8=samples["seed_t"]["on_ground"],
-        ref_hitlag_u16=samples["ref_t1"]["hitlag"],
-        ref_hitstun_u16=samples["ref_t1"]["hitstun"],
-        ref_instance_hit_by_u16=samples["ref_t1"]["instance_hit_by"],
-        num_players=num_players,
-        laser_types=laser_item_types,
-        shield_bounce_types=shield_bounce_item_types,
-    )
-    samples["seed_t"]["item_reflect_transfer_port"] = item_reflect_transfer_port
-    samples["seed_t"]["item_reflect_transfer_iid"] = item_reflect_transfer_iid
-    samples["seed_t"]["item_shield_bounce_valid"] = item_shield_bounce_valid
-    samples["seed_t"]["item_shield_bounce_vel_x"] = item_shield_bounce_vel_x
-    samples["seed_t"]["item_shield_bounce_vel_y"] = item_shield_bounce_vel_y
-    samples["seed_t"]["item_hidden_body_hit_victim_port"] = item_hidden_body_hit_victim_port
-    samples["seed_t"]["item_hidden_body_hit_hurt_height"] = item_hidden_body_hit_hurt_height
-    samples["seed_t"]["item_hidden_callback_flags"] = item_hidden_callback_flags
+    if validation_buffers:
+        try:
+            import msl_binding  # type: ignore
+        except ImportError as exc:
+            raise RuntimeError(
+                "native validation item buffer derivation is required; run `make build`"
+            ) from exc
+        hitbox_mask_lut = _u8_lut_from_pairs(
+            tuple(sorted((int(k), int(v)) for k, v in throw_laser_hitbox_masks.items()))
+        )
+        msl_binding.validation_derive_throw_laser_item_hitlist_buffers(
+            _structured_rows_as_writable_bytes(samples["seed_t"]),
+            hitbox_mask_lut,
+            int(num_players),
+        )
+        laser_lut = _u8_lut_from_items(tuple(int(k) for k in laser_item_types))
+        shield_bounce_lut = _u8_lut_from_items(tuple(int(k) for k in shield_bounce_item_types))
+        msl_binding.validation_derive_item_hidden_callback_buffers(
+            _structured_rows_as_writable_bytes(samples["seed_t"]),
+            _structured_rows_as_bytes(samples["ref_t1"]),
+            laser_lut,
+            shield_bounce_lut,
+            int(num_players),
+        )
+    else:
+        (
+            item_hitlist_victim_port,
+            item_hitlist_victim_cd,
+            item_hitlist_victim_hitbox_mask,
+            item_hitlist_victim_iid,
+        ) = _derive_throw_laser_item_hitlist_seed_lanes(
+            seed_action_id_u16=samples["seed_t"]["action_id"],
+            seed_grab_owner_port_u8=samples["seed_t"]["grab_owner_port"],
+            seed_instance_hit_by_u16=samples["seed_t"]["instance_hit_by"],
+            seed_instance_id_u16=samples["seed_t"]["instance_id"],
+            seed_items=samples["seed_t"]["items"],
+            num_players=num_players,
+            throw_laser_hitbox_masks=throw_laser_hitbox_masks,
+        )
+        samples["seed_t"]["item_hitlist_victim_port"] = item_hitlist_victim_port
+        samples["seed_t"]["item_hitlist_victim_cd"] = item_hitlist_victim_cd
+        samples["seed_t"]["item_hitlist_victim_hitbox_mask"] = item_hitlist_victim_hitbox_mask
+        samples["seed_t"]["item_hitlist_victim_iid"] = item_hitlist_victim_iid
+        (
+            item_reflect_transfer_port,
+            item_reflect_transfer_iid,
+            item_shield_bounce_valid,
+            item_shield_bounce_vel_x,
+            item_shield_bounce_vel_y,
+            item_hidden_body_hit_victim_port,
+            item_hidden_body_hit_hurt_height,
+            item_hidden_callback_flags,
+        ) = _derive_item_hidden_callback_seed_lanes(
+            seed_items=samples["seed_t"]["items"],
+            ref_items=samples["ref_t1"]["items"],
+            seed_action_id_u16=samples["seed_t"]["action_id"],
+            ref_action_id_u16=samples["ref_t1"]["action_id"],
+            seed_on_ground_u8=samples["seed_t"]["on_ground"],
+            ref_hitlag_u16=samples["ref_t1"]["hitlag"],
+            ref_hitstun_u16=samples["ref_t1"]["hitstun"],
+            ref_instance_hit_by_u16=samples["ref_t1"]["instance_hit_by"],
+            num_players=num_players,
+            laser_types=laser_item_types,
+            shield_bounce_types=shield_bounce_item_types,
+        )
+        samples["seed_t"]["item_reflect_transfer_port"] = item_reflect_transfer_port
+        samples["seed_t"]["item_reflect_transfer_iid"] = item_reflect_transfer_iid
+        samples["seed_t"]["item_shield_bounce_valid"] = item_shield_bounce_valid
+        samples["seed_t"]["item_shield_bounce_vel_x"] = item_shield_bounce_vel_x
+        samples["seed_t"]["item_shield_bounce_vel_y"] = item_shield_bounce_vel_y
+        samples["seed_t"]["item_hidden_body_hit_victim_port"] = item_hidden_body_hit_victim_port
+        samples["seed_t"]["item_hidden_body_hit_hurt_height"] = item_hidden_body_hit_hurt_height
+        samples["seed_t"]["item_hidden_callback_flags"] = item_hidden_callback_flags
 
     pre_stick_x_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)
     pre_stick_y_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)
@@ -6804,13 +7195,13 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         hitlist_hb_valid,
         hitlist_hb_cd,
         hitlist_hb_iid,
-        np.ascontiguousarray(post_instance_id, dtype=np.uint16),
-        np.ascontiguousarray(post_instance_hit_by, dtype=np.uint16),
-        np.ascontiguousarray(post_last_hit_by, dtype=np.uint8),
-        np.ascontiguousarray(post_hitlag, dtype=np.uint16),
-        np.ascontiguousarray(post_hitstun, dtype=np.uint16),
-        np.ascontiguousarray(post_action_id, dtype=np.uint16),
-        np.ascontiguousarray(post_landing_fallspecial_allow_interrupt, dtype=np.uint8),
+        _ascontiguousarray(post_instance_id, dtype=np.uint16),
+        _ascontiguousarray(post_instance_hit_by, dtype=np.uint16),
+        _ascontiguousarray(post_last_hit_by, dtype=np.uint8),
+        _ascontiguousarray(post_hitlag, dtype=np.uint16),
+        _ascontiguousarray(post_hitstun, dtype=np.uint16),
+        _ascontiguousarray(post_action_id, dtype=np.uint16),
+        _ascontiguousarray(post_landing_fallspecial_allow_interrupt, dtype=np.uint8),
         int(num_players),
         int(act_attack_11),
         int(act_attack_lw4),
@@ -6861,14 +7252,12 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         (n_frames, samples["seed_t"]["combat_shield_damage_taken"].shape[1]), dtype=np.uint8
     )
 
-    guard_lut = np.zeros(65536, dtype=np.uint8)
-    guard_lut[guard_family_actions] = np.uint8(1)
-    attack_lut = np.zeros(65536, dtype=np.uint8)
-    attack_lut[attack_contact_actions] = np.uint8(1)
-    same_frame_lut = np.zeros(65536, dtype=np.uint8)
-    same_frame_lut[same_frame_contact_entry_actions] = np.uint8(1)
-    same_frame_special_lut = np.zeros(65536, dtype=np.uint8)
-    same_frame_special_lut[same_frame_special_contact_entry_actions] = np.uint8(1)
+    guard_lut = _u8_lut_from_items(tuple(int(k) for k in guard_family_actions))
+    attack_lut = _u8_lut_from_items(tuple(int(k) for k in attack_contact_actions))
+    same_frame_lut = _u8_lut_from_items(tuple(int(k) for k in same_frame_contact_entry_actions))
+    same_frame_special_lut = _u8_lut_from_items(
+        tuple(int(k) for k in same_frame_special_contact_entry_actions)
+    )
     try:
         import msl_binding  # type: ignore
     except ImportError as exc:
@@ -6878,19 +7267,19 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
         hitlist_hb_valid,
         hitlist_hb_cd,
         hitlist_hb_iid,
-        np.ascontiguousarray(post_action_id, dtype=np.uint16),
-        np.ascontiguousarray(post_hitlag, dtype=np.uint16),
-        np.ascontiguousarray(post_instance_id, dtype=np.uint16),
-        np.ascontiguousarray(post_shield_f32_all, dtype=np.float32),
-        np.ascontiguousarray(lightshield_amount_all, dtype=np.float32),
-        np.ascontiguousarray(post_animation_index_u32_all, dtype=np.uint32),
-        np.ascontiguousarray(post_state_age_all, dtype=np.int16),
-        np.ascontiguousarray(post_char_id_u8, dtype=np.uint8),
-        np.ascontiguousarray(hist.attack_id, dtype=np.uint16),
-        np.ascontiguousarray(hist.stale_queue_index, dtype=np.uint8),
-        np.ascontiguousarray(hist.stale_move_id, dtype=np.uint16),
+        _ascontiguousarray(post_action_id, dtype=np.uint16),
+        _ascontiguousarray(post_hitlag, dtype=np.uint16),
+        _ascontiguousarray(post_instance_id, dtype=np.uint16),
+        _ascontiguousarray(post_shield_f32_all, dtype=np.float32),
+        _ascontiguousarray(lightshield_amount_all, dtype=np.float32),
+        _ascontiguousarray(post_animation_index_u32_all, dtype=np.uint32),
+        _ascontiguousarray(post_state_age_all, dtype=np.int16),
+        _ascontiguousarray(post_char_id_u8, dtype=np.uint8),
+        _ascontiguousarray(hist.attack_id, dtype=np.uint16),
+        _ascontiguousarray(hist.stale_queue_index, dtype=np.uint8),
+        _ascontiguousarray(hist.stale_move_id, dtype=np.uint16),
         manifest_tables.active_shield_hit_lut,
-        np.ascontiguousarray(stale_weights, dtype=np.float32),
+        _ascontiguousarray(stale_weights, dtype=np.float32),
         guard_lut,
         attack_lut,
         same_frame_lut,
@@ -6928,13 +7317,13 @@ def _main_impl(args) -> Dataset | ValidationReplayBuffers:
     except ImportError as exc:
         raise RuntimeError("native msl_binding.derive_rebound_seed_lanes is required; run `make build`") from exc
     rebound_ground_accel_2, rebound_anim_rate = msl_binding.derive_rebound_seed_lanes(
-        np.ascontiguousarray(post_action_id, dtype=np.uint16),
-        np.ascontiguousarray(post_hitlag, dtype=np.uint16),
-        np.ascontiguousarray(post_on_ground, dtype=np.uint8),
-        np.ascontiguousarray(post_char_id, dtype=np.uint8),
-        np.ascontiguousarray(samples["seed_t"]["speed_ground_x_self"], dtype=np.float32),
-        np.ascontiguousarray(samples["ref_t1"]["speed_ground_x_self"], dtype=np.float32),
-        np.ascontiguousarray(samples["seed_t"]["frame_speed_mul_f32"], dtype=np.float32),
+        _ascontiguousarray(post_action_id, dtype=np.uint16),
+        _ascontiguousarray(post_hitlag, dtype=np.uint16),
+        _ascontiguousarray(post_on_ground, dtype=np.uint8),
+        _ascontiguousarray(post_char_id, dtype=np.uint8),
+        _ascontiguousarray(samples["seed_t"]["speed_ground_x_self"], dtype=np.float32),
+        _ascontiguousarray(samples["ref_t1"]["speed_ground_x_self"], dtype=np.float32),
+        _ascontiguousarray(samples["seed_t"]["frame_speed_mul_f32"], dtype=np.float32),
         manifest_tables.rebound_numerator_lut,
         int(num_players),
         int(act_rebound_stop),

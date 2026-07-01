@@ -238,54 +238,9 @@ PyObject* msl_fill_items_fixed_py(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
-PyObject* msl_copy_validation_item_rows_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* seed_obj = NULL;
-  PyObject* ref_obj = NULL;
-  PyObject* seed_items_obj = NULL;
-  PyObject* ref_items_obj = NULL;
-  if (!PyArg_ParseTuple(args, "OOOO", &seed_obj, &ref_obj, &seed_items_obj, &ref_items_obj)) {
-    return NULL;
-  }
-  PyArrayObject* seed = require_contiguous_array(seed_obj, NPY_UINT8, 2, "seed_u8");
-  PyArrayObject* ref = require_contiguous_array(ref_obj, NPY_UINT8, 2, "ref_u8");
-  PyArrayObject* seed_items =
-      require_contiguous_array(seed_items_obj, NPY_UINT8, 2, "seed_items_u8");
-  PyArrayObject* ref_items = require_contiguous_array(ref_items_obj, NPY_UINT8, 2, "ref_items_u8");
-  if (seed == NULL || ref == NULL || seed_items == NULL || ref_items == NULL) {
-    return NULL;
-  }
-  const npy_intp n = PyArray_DIM(seed, 0);
-  const size_t items_bytes = sizeof(((MslSeed*)0)->items);
-  if (PyArray_DIM(ref, 0) != n || PyArray_DIM(seed_items, 0) != n ||
-      PyArray_DIM(ref_items, 0) != n || PyArray_DIM(seed, 1) < (npy_intp)sizeof(MslSeed) ||
-      PyArray_DIM(ref, 1) < (npy_intp)sizeof(MslCompare) ||
-      PyArray_DIM(seed_items, 1) != (npy_intp)items_bytes ||
-      PyArray_DIM(ref_items, 1) != (npy_intp)items_bytes) {
-    PyErr_SetString(PyExc_ValueError, "validation item copy buffers have incompatible shapes");
-    return NULL;
-  }
-  uint8_t* seed_u8 = (uint8_t*)PyArray_DATA(seed);
-  uint8_t* ref_u8 = (uint8_t*)PyArray_DATA(ref);
-  const uint8_t* seed_items_u8 = (const uint8_t*)PyArray_DATA(seed_items);
-  const uint8_t* ref_items_u8 = (const uint8_t*)PyArray_DATA(ref_items);
-  const size_t seed_stride = (size_t)PyArray_STRIDE(seed, 0);
-  const size_t ref_stride = (size_t)PyArray_STRIDE(ref, 0);
-  const size_t seed_items_stride = (size_t)PyArray_STRIDE(seed_items, 0);
-  const size_t ref_items_stride = (size_t)PyArray_STRIDE(ref_items, 0);
-  for (npy_intp i = 0; i < n; i++) {
-    MslSeed* seed_row = (MslSeed*)(void*)(seed_u8 + (size_t)i * seed_stride);
-    MslCompare* ref_row = (MslCompare*)(void*)(ref_u8 + (size_t)i * ref_stride);
-    memcpy(seed_row->items, seed_items_u8 + (size_t)i * seed_items_stride, items_bytes);
-    memcpy(ref_row->items, ref_items_u8 + (size_t)i * ref_items_stride, items_bytes);
-  }
-  Py_RETURN_NONE;
-}
-
 static inline uint8_t msl_py_u8_sat_inc_fe(uint8_t v) {
   return v < 0xFEu ? (uint8_t)(v + 1u) : 0xFEu;
 }
-
 static inline uint8_t msl_py_u8_sat_inc_ff(uint8_t v) {
   return v < 0xFFu ? (uint8_t)(v + 1u) : 0xFFu;
 }
@@ -503,7 +458,6 @@ PyObject* msl_derive_combo_seed_fields_py(PyObject* self, PyObject* args) {
         }
       }
     }
-
     for (int p = 0; p < num_players; p++) {
       const uint8_t in_hitstun =
           (flags_p[(fi * width + p) * PyArray_DIM(state_flags, 2) + 3] & hitstun_mask_221c) != 0u;
@@ -7201,6 +7155,51 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
     memset(hitboxes, 0, sizeof(hitboxes));
     memset(caps, 0, sizeof(caps));
 
+    uint8_t frame_has_active_hitbox = 0u;
+    for (int p = 0; p < num_players && frame_has_active_hitbox == 0u; p++) {
+      const npy_intp pi = fi * width + p;
+      if (action_frame_p[pi] < 0 || anim_p[pi] > 0xFFFFu) {
+        continue;
+      }
+      uint16_t frame = (uint16_t)action_frame_p[pi];
+      if (anim_frame_p != NULL) {
+        float af_f = anim_frame_p[pi];
+        if (isfinite(af_f) && af_f >= 0.0f) {
+          if (frame_speed_p != NULL && (hitlag_p == NULL || hitlag_p[pi] == 0u)) {
+            af_f += frame_speed_p[pi];
+          }
+          if (af_f < 0.0f) af_f = 0.0f;
+          if (af_f > 65535.0f) af_f = 65535.0f;
+          frame = (uint16_t)floorf(af_f);
+        }
+      }
+      const MslHitboxEvent* events = NULL;
+      uint16_t event_count = 0;
+      if (hitboxes_get_events(char_p[pi], (uint16_t)anim_p[pi], &events, &event_count) != 0 ||
+          events == NULL)
+        continue;
+      const MslHitboxEvent* active[MSL_MAX_HITBOXES] = {0};
+      for (uint16_t ei = 0; ei < event_count; ei++) {
+        const MslHitboxEvent* ev = &events[ei];
+        if (ev->frame > frame) continue;
+        if (ev->kind == 1u) {
+          if (ev->hitbox_id == 0xFFu) {
+            memset(active, 0, sizeof(active));
+          } else if (ev->hitbox_id < MSL_MAX_HITBOXES) {
+            active[ev->hitbox_id] = NULL;
+          }
+        } else if (ev->hitbox_id < MSL_MAX_HITBOXES) {
+          active[ev->hitbox_id] = ev;
+        }
+      }
+      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
+        if (active[hb_id] != NULL) {
+          frame_has_active_hitbox = 1u;
+          break;
+        }
+      }
+    }
+
     for (int p = 0; p < num_players; p++) {
       const npy_intp pi = fi * width + p;
       const uint8_t cid = char_p[pi];
@@ -7242,7 +7241,7 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
 
       const MslHurtCap* hc = NULL;
       uint16_t hc_count = 0;
-      if (hurtcaps_get(cid, &hc, &hc_count) == 0 && hc != NULL) {
+      if (frame_has_active_hitbox != 0u && hurtcaps_get(cid, &hc, &hc_count) == 0 && hc != NULL) {
         if (hc_count > MSL_MAX_HURTCAPS) {
           hc_count = MSL_MAX_HURTCAPS;
         }
@@ -7344,7 +7343,8 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
       shield_y[p] = py;
       shield_z[p] = 0.0f;
       shield_r[p] = 0.0f;
-      if (stocks_p[pi] != 0u && msl_py_is_shield_active_action(action_p[pi])) {
+      if (frame_has_active_hitbox != 0u && stocks_p[pi] != 0u &&
+          msl_py_is_shield_active_action(action_p[pi])) {
         const float hp = shield_hp_p[pi];
         if (hp > 0.0f && common->start_shield_health > 0.0f) {
           const float trig =

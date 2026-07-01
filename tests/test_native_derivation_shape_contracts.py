@@ -4,6 +4,20 @@ import numpy as np
 import pytest
 
 
+@pytest.mark.parametrize("num_players", [-1, 5])
+def test_validation_native_wrappers_reject_invalid_num_players(num_players: int) -> None:
+    import msl_binding
+
+    with pytest.raises(ValueError, match="num_players out of range"):
+        msl_binding.validation_derive_fighter_8006cda4_buffers(
+            None, None, 0.0, num_players, 0
+        )
+    with pytest.raises(ValueError, match="num_players out of range"):
+        msl_binding.validation_derive_item_hidden_callback_buffers(
+            None, None, None, None, num_players
+        )
+
+
 def test_native_hitbox_prev_centers_rejects_extra_column_side_arrays() -> None:
     import msl_binding
 

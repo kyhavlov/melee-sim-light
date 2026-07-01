@@ -18,3 +18,9 @@ def test_finalized_frame_indices_handles_negative_ids() -> None:
     keep = finalized_frame_indices(frame_ids)
     assert frame_ids[keep].tolist() == [-123, -122, -121]
 
+
+def test_finalized_frame_indices_handles_reset_ordering() -> None:
+    frame_ids = np.asarray([10, 12, 11, 12], dtype=np.int32)
+    keep = finalized_frame_indices(frame_ids)
+    assert keep.tolist() == [0, 2, 3]
+    assert frame_ids[keep].tolist() == [10, 11, 12]
