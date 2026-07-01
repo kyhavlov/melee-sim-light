@@ -191,7 +191,7 @@ def emit_one_step_suite_report(
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--suite", required=True, help="Path to suite JSON (e.g. replays/suites/...)")
-    ap.add_argument("--chunk", type=int, default=4096)
+    ap.add_argument("--chunk", type=int, default=64)
     ap.add_argument(
         "--profile",
         default="rl1_gameplay",

@@ -44,13 +44,15 @@ class ValidationExceptions:
 
 
 def _dataset_matches(pattern: str, dataset: str) -> bool:
-    pattern_path = Path(pattern)
-    dataset_path = Path(dataset)
-    return (
-        pattern == dataset
-        or pattern_path.name == dataset_path.name
-        or pattern_path.with_suffix("").name == dataset_path.with_suffix("").name
-    )
+    if pattern == dataset:
+        return True
+    pattern_name = pattern.rsplit("/", 1)[-1]
+    dataset_name = dataset.rsplit("/", 1)[-1]
+    if pattern_name == dataset_name:
+        return True
+    pattern_stem = pattern_name.rsplit(".", 1)[0]
+    dataset_stem = dataset_name.rsplit(".", 1)[0]
+    return pattern_stem == dataset_stem
 
 
 def _require_str(raw: Mapping[str, Any], key: str, *, source: str) -> str:

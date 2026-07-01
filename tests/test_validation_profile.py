@@ -293,6 +293,16 @@ class _FakeBinding:
         assert self._summary is not None
         return self._summary
 
+    def one_step_eval_samples(
+        self, _handle: object, samples_u8: np.ndarray, num_players: int, profile_rl1: int
+    ) -> dict[str, object]:
+        summary = self.one_step_summary_create(int(samples_u8.shape[0]), int(num_players), int(profile_rl1))
+        out_compare_bytes = np.empty((int(samples_u8.shape[0]), int(COMPARE_DTYPE.itemsize)), dtype=np.uint8)
+        out_compare = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        out_compare[:] = self._out_compare[: out_compare.shape[0]]
+        self.one_step_summary_accumulate(summary, out_compare_bytes, samples_u8)
+        return self.one_step_summary_finish(summary)
+
 
 def test_one_step_profile_counts_state_flags_4_camera_bit_as_ignored_only(
     monkeypatch, tmp_path: Path

@@ -33,6 +33,40 @@ from tools.extraction.known_data_artifacts import read_mslftsc1_v1
 from tools.slippi.suite_io import team_attack_on_from_start
 
 
+def _path_cache_key(path: Path) -> str:
+    return str(Path(path).resolve())
+
+
+@functools.lru_cache(maxsize=None)
+def _load_json_file_cached(path_text: str) -> Any:
+    return json.loads(Path(path_text).read_text(encoding="utf-8"))
+
+
+@functools.lru_cache(maxsize=None)
+def _load_bytes_file_cached(path_text: str) -> bytes:
+    return Path(path_text).read_bytes()
+
+
+def _load_json_file(path: Path) -> Any:
+    return _load_json_file_cached(_path_cache_key(path))
+
+
+def _load_bytes_file(path: Path) -> bytes:
+    return _load_bytes_file_cached(_path_cache_key(path))
+
+
+def _load_character_attrs(data_root: Path, name: str) -> dict[str, Any]:
+    return _load_json_file(Path(data_root) / "characters" / f"{name}.json")
+
+
+def _load_moves_file(data_root: Path, name: str) -> dict[str, Any]:
+    return _load_json_file(Path(data_root) / "moves" / f"{name}.json")
+
+
+def _load_common_data(data_root: Path = Path("data")) -> dict[str, Any]:
+    return _load_json_file(Path(data_root) / "common" / "ft_common_data.json")
+
+
 def manifest_registry_chars(data_root: Path) -> list[tuple[int, str]]:
     """(internal_id, name) for every char in the data manifest, registry-verified.
 
@@ -82,7 +116,8 @@ def require_replay_chars_in_manifest(
         )
 
 
-def _load_u8_character_attr_lut(data_root: Path, key: str) -> np.ndarray:
+@functools.lru_cache(maxsize=None)
+def _load_u8_character_attr_lut_cached(data_root_text: str, key: str) -> np.ndarray:
     """Load a per-character uint8 attr from data/characters/<char>.json.
 
     Source owner: runtime-required character attrs are registry/manifest scoped. Keeping
@@ -90,9 +125,10 @@ def _load_u8_character_attr_lut(data_root: Path, key: str) -> np.ndarray:
     zero-valued hidden lanes when the runtime already has extracted character data.
     """
 
+    data_root = Path(data_root_text)
     lut = np.zeros(256, dtype=np.uint8)
     for char_id, name in manifest_registry_chars(data_root):
-        attrs = json.loads((data_root / "characters" / f"{name}.json").read_text())
+        attrs = _load_character_attrs(data_root, name)
         if key not in attrs:
             raise ValueError(f"missing required character attr {key!r} for {name}")
         value = int(attrs[key])
@@ -102,16 +138,26 @@ def _load_u8_character_attr_lut(data_root: Path, key: str) -> np.ndarray:
     return lut
 
 
-def _load_f32_character_attr_lut(data_root: Path, key: str) -> np.ndarray:
+def _load_u8_character_attr_lut(data_root: Path, key: str) -> np.ndarray:
+    return _load_u8_character_attr_lut_cached(_path_cache_key(data_root), str(key))
+
+
+@functools.lru_cache(maxsize=None)
+def _load_f32_character_attr_lut_cached(data_root_text: str, key: str) -> np.ndarray:
     """Load a per-character float attr from data/characters/<char>.json."""
 
+    data_root = Path(data_root_text)
     lut = np.zeros(256, dtype=np.float32)
     for char_id, name in manifest_registry_chars(data_root):
-        attrs = json.loads((data_root / "characters" / f"{name}.json").read_text())
+        attrs = _load_character_attrs(data_root, name)
         if key not in attrs:
             raise ValueError(f"missing required character attr {key!r} for {name}")
         lut[np.uint8(char_id)] = np.float32(float(attrs[key]))
     return lut
+
+
+def _load_f32_character_attr_lut(data_root: Path, key: str) -> np.ndarray:
+    return _load_f32_character_attr_lut_cached(_path_cache_key(data_root), str(key))
 
 
 def _derive_common_fall_blend_seed(
@@ -258,10 +304,12 @@ _STAGE_KIND_BY_ID = {
 }
 
 
-def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dict]:
+@functools.lru_cache(maxsize=None)
+def _load_stage_segments_for_seed_cached(stage_id: int, data_root_text: str) -> tuple[dict, ...]:
+    data_root = Path(data_root_text)
     stage_path = stage_metadata_path_for_stage_id(int(stage_id), data_root)
     if stage_path is None:
-        return []
+        return ()
     stage = read_mslstg01_v7(stage_path)
     out: list[dict] = []
     for seg in stage.segments:
@@ -280,7 +328,11 @@ def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dic
                 "y1": float(seg.y1),
             }
         )
-    return out
+    return tuple(out)
+
+
+def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dict]:
+    return list(_load_stage_segments_for_seed_cached(int(stage_id), _path_cache_key(data_root)))
 
 
 @functools.cache
@@ -332,7 +384,7 @@ def _move_submotion_ids_for_char(
     # ftCo submotion ids are shared, but resolving per char keeps non-spacie characters
     # on their own extracted tables).
     moves_path = Path(data_root_text) / "moves" / f"{char_name}.json"
-    payload = json.loads(moves_path.read_text(encoding="utf-8"))
+    payload = _load_json_file(moves_path)
     moves = payload.get("moves", {})
     selected: set[int] = set()
     for name in move_names:
@@ -353,7 +405,7 @@ def _attackair_first_hitbox_phase_by_char_action(
     for cid, ch in manifest_registry_chars(Path(data_root_text)):
         owners = read_mslmso01_v1(owner_dir / f"{ch}.bin")
         moves_path = Path(data_root_text) / "moves" / f"{ch}.json"
-        moves = json.loads(moves_path.read_text(encoding="utf-8")).get("moves", {})
+        moves = _load_json_file(moves_path).get("moves", {})
         phase_by_submotion: dict[int, tuple[int, int]] = {}
         for row in moves.values():
             if not isinstance(row, dict):
@@ -1067,7 +1119,7 @@ def _derive_grounded_overlap_hidden_pos_z(
         path = root / "characters" / f"{key}.json"
         if not path.exists():
             continue
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = _load_json_file(path)
         push_x[cid] = np.float32(float(data.get("pushbox_x", 0.0)))
         push_y[cid] = np.float32(float(data.get("pushbox_y", 0.0)))
 
@@ -1662,7 +1714,7 @@ def _load_throw_pulse_seed_tables(
     # Spacie-only by design: blaster article machinery (the laser pulse lanes have no
     # analog for article-less characters).
     for char_id, key in ((1, "fox"), (22, "falco")):
-        moves = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
+        moves = _load_moves_file(data_root, key)["moves"]
         shot_itkind_by_char[int(char_id)] = int(
             item_article_values_by_sim_char(data_root, "blaster_shot_itkind").get(int(char_id), 0)
         )
@@ -1687,6 +1739,7 @@ def _load_throw_pulse_seed_tables(
     return pulse_frames_by_char_action, cmd1_start_by_char_action, shot_itkind_by_char
 
 
+@functools.lru_cache(maxsize=None)
 def _load_specialn_loop_cmd0_windows(*, data_root) -> dict[tuple[int, int], tuple[int, int]]:
     """Load Fox/Falco SpecialN Loop raw cmd_var[0] windows from MSLFTSC1 script data.
 
@@ -1704,7 +1757,7 @@ def _load_specialn_loop_cmd0_windows(*, data_root) -> dict[tuple[int, int], tupl
     windows: dict[tuple[int, int], tuple[int, int]] = {}
     for char_id, key in ((1, "fox"), (22, "falco")):
         table = read_mslftsc1_v1(data_root / "scripts" / f"{key}.bin")
-        manifest = json.loads((data_root / "scripts" / f"{key}_manifest.json").read_text())
+        manifest = _load_json_file(data_root / "scripts" / f"{key}_manifest.json")
         kind_names = {int(row["id"]): str(row["name"]) for row in manifest.get("event_kinds", [])}
         for msid in (296, 299):
             entry = next((entry for entry in table.entries if int(entry.msid) == int(msid)), None)
@@ -1728,6 +1781,7 @@ def _load_specialn_loop_cmd0_windows(*, data_root) -> dict[tuple[int, int], tupl
     return windows
 
 
+@functools.lru_cache(maxsize=None)
 def _load_runbrake_cmd0_seed_tables(*, data_root) -> tuple[dict[int, int], dict[int, int]]:
     """Load RunBrake cmd_var[0] timing from extracted move scripts.
 
@@ -1739,7 +1793,7 @@ def _load_runbrake_cmd0_seed_tables(*, data_root) -> tuple[dict[int, int], dict[
     from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS_RB
 
     for char_id, key in ((info.internal_id, info.name) for info in _REGISTRY_CHARS_RB.values()):
-        moves = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
+        moves = _load_moves_file(data_root, key)["moves"]
         events = moves.get("ftCo_SM_RunBrake", {}).get("events", [])
         cmd0_on = sorted(
             int(ev.get("frame", 0))
@@ -1760,6 +1814,7 @@ def _load_runbrake_cmd0_seed_tables(*, data_root) -> tuple[dict[int, int], dict[
     return cmd0_on_by_char, cmd0_off_by_char
 
 
+@functools.lru_cache(maxsize=None)
 def _load_source_clear_terminal_followup_tables(
     *, data_root
 ) -> tuple[dict[tuple[int, int], int], dict[tuple[int, int], int]]:
@@ -1785,7 +1840,7 @@ def _load_source_clear_terminal_followup_tables(
     from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS_CA
 
     for char_id, key in ((info.internal_id, info.name) for info in _REGISTRY_CHARS_CA.values()):
-        moves = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
+        moves = _load_moves_file(data_root, key)["moves"]
         for action_id, move_name in action_to_move.items():
             events = moves.get(move_name, {}).get("events", [])
             cmd0_on = sorted(
@@ -1819,6 +1874,7 @@ def _load_source_clear_terminal_followup_tables(
     return cmd0_on_by_char_action, cmd0_off_by_char_action
 
 
+@functools.lru_cache(maxsize=None)
 def _load_action_x9_b1_tables(*, data_root) -> dict[int, np.ndarray]:
     """Load decomp MotionState.x9_b1 tables for supported chars from MSLACID1 v3.
 
@@ -2773,13 +2829,13 @@ def _yoshi_shyguy_params():
 
 @functools.lru_cache(maxsize=1)
 def _item_common_params() -> dict[str, float]:
-    return json.loads(Path("data/items/item_common.json").read_text(encoding="utf-8"))
+    return _load_json_file(Path("data/items/item_common.json"))
 
 
 @functools.lru_cache(maxsize=4)
 def _laser_shot_item_kinds(path: Path) -> tuple[int, ...]:
     """Read supported Fox/Falco laser shot item kinds from generated MSLLASR1 data."""
-    buf = path.read_bytes()
+    buf = _load_bytes_file(path)
     if len(buf) < 16 or buf[:8] != b"MSLLASR1":
         raise ValueError(f"{path}: invalid MSLLASR1 header")
     version = struct.unpack_from("<I", buf, 8)[0]
@@ -3353,6 +3409,50 @@ def _derive_smash_charge_seed_lanes(
     )
 
 
+def warm_validation_generated_data_cache(
+    *, data_root: Path = Path("data"), stage_ids: tuple[int, ...] = ()
+) -> None:
+    """Warm immutable generated-data readers before forked validation workers start."""
+
+    data_root = Path(data_root)
+    manifest_chars = manifest_registry_chars(data_root)
+    _load_common_data(data_root)
+    _item_common_params()
+    _dream_whispy_params()
+    _yoshi_shyguy_params()
+    _load_bytes_file(data_root / "staling" / "weights.bin")
+    _load_f32_character_attr_lut(data_root, "air_drift_max")
+    _load_u8_character_attr_lut(data_root, "turn_frames")
+
+    from tools.slippi.anim_timebase import load_end_frame_tables
+
+    load_end_frame_tables(data_root)
+    load_action_state_tables(str(data_root))
+    _load_action_x9_b1_tables(data_root=data_root)
+    _load_specialn_loop_cmd0_windows(data_root=data_root)
+    _load_runbrake_cmd0_seed_tables(data_root=data_root)
+    _load_source_clear_terminal_followup_tables(data_root=data_root)
+    item_article_kind_set(data_root, "blaster_shot_itkind")
+    item_article_kind_set(data_root, "needle_throw_itkind")
+    item_article_kind_set(data_root, "side_special_illusion_itkind")
+    item_article_values_by_sim_char(data_root, "blaster_shot_itkind")
+    _laser_shot_item_kinds(data_root / "items" / "lasers.bin")
+
+    for _cid, name in manifest_chars:
+        _load_character_attrs(data_root, name)
+        _load_moves_file(data_root, name)
+        special_msids = data_root / "special_msids" / f"{name}.json"
+        if special_msids.exists():
+            _load_json_file(special_msids)
+        script_manifest = data_root / "scripts" / f"{name}_manifest.json"
+        if script_manifest.exists():
+            _load_json_file(script_manifest)
+
+    for stage_id in sorted({int(s) for s in stage_ids if int(s) > 0}):
+        _load_stage_segments_for_seed(stage_id=stage_id, data_root=data_root)
+        _stage_respawn_points_y(stage_id=stage_id, data_dir=str(data_root))
+
+
 def build_dataset_from_slp(
     *,
     slp_path: str,
@@ -3544,7 +3644,8 @@ def _main_impl(args) -> Dataset:
             "melee-sim-light doubles validation currently supports Team Attack ON only"
         )
 
-    common = json.loads(Path("data/common/ft_common_data.json").read_text())
+    data_root = Path("data")
+    common = _load_common_data(data_root)
     lstick_deadzone_x = float(common["lstick_deadzone_x"])
     lstick_deadzone_y = float(common["lstick_deadzone_y"])
     lstick_tilt_x_thresh = float(common["lstick_tilt_x_thresh"])
@@ -3567,7 +3668,6 @@ def _main_impl(args) -> Dataset:
     common_fall_blend_threshold = float(common["common_fall_blend_air_drift_threshold"])
     common_fall_blend_lerp = float(common["common_fall_blend_lerp"])
 
-    data_root = Path("data")
     air_drift_max_by_char = _load_f32_character_attr_lut(data_root, "air_drift_max")
     laser_item_types = item_article_kind_set(data_root, "blaster_shot_itkind")
     needle_throw_item_types = item_article_kind_set(data_root, "needle_throw_itkind")
@@ -3698,7 +3798,7 @@ def _main_impl(args) -> Dataset:
             pos = pos - 1 if pos != 0 else 9
         return mult
 
-    stale_weights_buf = (data_root / "staling" / "weights.bin").read_bytes()
+    stale_weights_buf = _load_bytes_file(data_root / "staling" / "weights.bin")
     stale_weight_count = int(struct.unpack_from("<H", stale_weights_buf, 12)[0])
     stale_weights = struct.unpack_from("<" + "f" * stale_weight_count, stale_weights_buf, 20)
 
@@ -3708,7 +3808,7 @@ def _main_impl(args) -> Dataset:
     # spacie-shaped preprocessor class of the de-spacie pass.
     manifest_chars = manifest_registry_chars(data_root)
     for cid, key in manifest_chars:
-        attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
+        attrs = _load_character_attrs(data_root, key)
         if key == "sheik":
             sheik_char_id = int(cid)
             sheik_vanish_travel_frames = int(attrs.get("sheik_vanish_travel_frames", 0))
@@ -3718,7 +3818,7 @@ def _main_impl(args) -> Dataset:
             sheik_chain_release_min_frames = int(attrs.get("sheik_chain_release_min_frames", 0))
         elif key == "zelda":
             zelda_char_id = int(cid)
-        move_file = json.loads((data_root / "moves" / f"{key}.json").read_text())
+        move_file = _load_moves_file(data_root, key)
         move_data = move_file["moves"]
         special_move_data = move_file.get("specials_by_msid", {})
         char_landing_air_lag_frames[int(cid)] = {
@@ -3770,7 +3870,7 @@ def _main_impl(args) -> Dataset:
             # char's up-special main msid (data/special_msids/<char>.json).
             sm_path = data_root / "special_msids" / f"{key}.json"
             if sm_path.exists():
-                sm = json.loads(sm_path.read_text())
+                sm = _load_json_file(sm_path)
                 up_msids = set()
                 for up_key in ("up_air", "up_ground"):
                     main = (sm.get(up_key) or {}).get("main") or {}
@@ -3982,17 +4082,17 @@ def _main_impl(args) -> Dataset:
     turn_frames_lut = _load_u8_character_attr_lut(data_root, "turn_frames")
     reflector_release_lag_lut = np.zeros(256, dtype=np.uint8)
     reflector_release_lag_lut[np.uint8(1)] = np.uint8(
-        json.loads(Path("data/characters/fox.json").read_text())["reflector_release_lag_frames"]
+        _load_character_attrs(data_root, "fox")["reflector_release_lag_frames"]
     )
     reflector_release_lag_lut[np.uint8(22)] = np.uint8(
-        json.loads(Path("data/characters/falco.json").read_text())["reflector_release_lag_frames"]
+        _load_character_attrs(data_root, "falco")["reflector_release_lag_frames"]
     )
     reflector_damage_mul_lut = np.ones(256, dtype=np.float32)
     reflector_damage_mul_lut[np.uint8(1)] = np.float32(
-        json.loads(Path("data/characters/fox.json").read_text())["reflector_damage_mul"]
+        _load_character_attrs(data_root, "fox")["reflector_damage_mul"]
     )
     reflector_damage_mul_lut[np.uint8(22)] = np.float32(
-        json.loads(Path("data/characters/falco.json").read_text())["reflector_damage_mul"]
+        _load_character_attrs(data_root, "falco")["reflector_damage_mul"]
     )
     # Frame ids and seeds (visible seed state from frame i-1, ref from frame i).
     samples["seed_t"]["frame_id"] = frame_ids[:-1]
@@ -5702,8 +5802,8 @@ def _main_impl(args) -> Dataset:
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AC68
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcAngle
     # refs/melee/src/melee/it/items/itfoxillusion.c
-    fox_attrs = json.loads((data_root / "characters" / "fox.json").read_text())
-    falco_attrs = json.loads((data_root / "characters" / "falco.json").read_text())
+    fox_attrs = _load_character_attrs(data_root, "fox")
+    falco_attrs = _load_character_attrs(data_root, "falco")
     illusion_end_angle_by_char = {
         int(char_fox): int(fox_attrs["illusion_item_state1_angle"]),
         int(char_falco): int(falco_attrs["illusion_item_state1_angle"]),

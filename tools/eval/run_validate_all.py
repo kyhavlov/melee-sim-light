@@ -3,7 +3,6 @@ from __future__ import annotations
 """Run the standard validation report set."""
 
 import argparse
-import concurrent.futures
 import os
 from pathlib import Path
 
@@ -37,7 +36,7 @@ def main() -> None:
     ap.add_argument("--agg-suite", required=True)
     ap.add_argument("--doubles-suite", default="")
     ap.add_argument("--sheik-suite", default="")
-    ap.add_argument("--chunk", type=int, default=4096)
+    ap.add_argument("--chunk", type=int, default=64)
     ap.add_argument("--fields", default="action_id,animation_index,on_ground,hitlag,hitstun,state_flags")
     ap.add_argument("--profile", default="rl1_gameplay", choices=validation_profile_names())
     ap.add_argument("--exceptions", default="replays/validation_exceptions.json")
@@ -51,6 +50,7 @@ def main() -> None:
     ap.add_argument("--sheik-one-step-out", default="reports/validation/sheik_one_step.txt")
     ap.add_argument("--sheik-rollout-out", default="reports/validation/sheik_rollout.txt")
     ap.add_argument("--workers", type=int, default=0, help="Parallel replay workers (0 = auto, capped at 16).")
+    ap.add_argument("--stats-out", type=Path, default=None)
     args = ap.parse_args()
 
     root = repo_root()
@@ -85,6 +85,7 @@ def main() -> None:
                 "dataset_label": str(replay_path),
                 "slp_path": str(replay_path),
                 "ports": [int(p) for p in entry.ports],
+                "stage_id": int(entry.stage_id) if entry.stage_id is not None else 0,
                 "chunk": int(args.chunk),
                 "profile": validation_profile.name,
                 "ucf_enabled": bool(suite.ucf_enabled),
@@ -123,11 +124,13 @@ def main() -> None:
         )
 
     workers = _resolve_worker_count(int(args.workers), len(unique_tasks))
-    if workers == 1 or len(unique_tasks) <= 1:
-        unique_results = [run_combined_suite_eval._combined_dataset_task(task) for task in unique_tasks]
-    else:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
-            unique_results = list(executor.map(run_combined_suite_eval._combined_dataset_task, unique_tasks))
+    unique_results, shard_stats = run_combined_suite_eval.run_combined_dataset_tasks(
+        unique_tasks, workers=workers, collect_stats=args.stats_out is not None
+    )
+    if args.stats_out is not None:
+        run_combined_suite_eval.write_shard_stats(
+            Path(args.stats_out), workers=workers, task_count=len(unique_tasks), stats=shard_stats
+        )
     for result, task in zip(unique_results, unique_tasks, strict=True):
         result["ucf_enabled"] = task["ucf_enabled"]
         result["ucf_cardinals_1_0_enabled"] = task["ucf_cardinals_1_0_enabled"]

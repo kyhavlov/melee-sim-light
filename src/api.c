@@ -2367,6 +2367,15 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.seed_prev_action_id[idx] = seed->seed_prev_action_id[p];
       batch->state.seed_prev_action_frame[idx] = seed->seed_prev_action_frame[p];
+      // Frame-start previous motion-state cache:
+      // Fighter_procUpdate snapshots the current action before callbacks can change motion state,
+      // and one-step reseed must start from the replay-derived previous-action snapshot rather than
+      // whatever a reused batch lane simulated last. Keep the live cache aligned with
+      // seed_prev_action_* until the scheduler replaces it at the next frame start.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+      batch->state.prev_action_id[idx] = seed->seed_prev_action_id[p];
+      batch->state.prev_action_frame[idx] = seed->seed_prev_action_frame[p];
       batch->state.blaster_gun_spawned_this_frame[idx] = 0u;
       batch->state.sheik_vanish_smoke_accessory_pending[idx] = 0u;
       batch->state.illusion_ghost_pos0_x[idx] = seed->illusion_ghost_pos0_x[p];
@@ -2504,12 +2513,49 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
       batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
+      // GuardOn/GuardReflect entry latches are callback-local products used by the reflect item
+      // owner path during the current frame. They are not replay seed state; source callbacks arm
+      // them on GuardOn/GuardReflect entry, and action_update decays them after the frame.
+      // Reseed must not let a previous same-lane row's GuardOn entry feed a later row's
+      // powershield/reflect transfer.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_80091A4C,ftCo_8009370C,ftCo_8009388C}
+      batch->state.guard_on_entry_reflect_source_latch[idx] = 0u;
+      batch->state.guard_reflect_entered_this_frame[idx] = 0u;
       batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
       batch->state.guard_seed_shield_desc_active[idx] =
           ((seed->state_flags[p][MSL_STATE_FLAGS_221B_INDEX] &
             (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u)
               ? 1u
               : 0u;
+      uint8_t has_seeded_shield_contact =
+          (seed->combat_shield_hit_int_damage[p] != 0u || seed->combat_shield_damage_taken[p] != 0u)
+              ? 1u
+              : 0u;
+      for (uint8_t attacker = 0; attacker < MSL_MAX_PLAYERS && has_seeded_shield_contact == 0u;
+           ++attacker) {
+        for (uint8_t hb = 0; hb < MSL_MAX_HITBOXES; ++hb) {
+          if (seed->combat_shield_contact_hb_kind[attacker][hb][p] != 0u) {
+            has_seeded_shield_contact = 1u;
+            break;
+          }
+        }
+      }
+      // ShieldDesc geometry (`fp->x221B_b0` consumer) is a live collision-refresh product. When the
+      // seed exports neither an active ShieldDesc bit nor one-step shield-contact provenance, start
+      // with no live descriptor so a previous same-lane row's shield bubble cannot suppress stale
+      // dense HitCapsule trim before the current frame publishes a descriptor. Rows whose seed
+      // proves active ShieldDesc or x19A*/ShieldDesc contact keep the existing pre-refresh bridge
+      // until that geometry is promoted to an explicit seed lane.
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80078C70}
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+      if (batch->state.guard_seed_shield_desc_active[idx] == 0u &&
+          has_seeded_shield_contact == 0u) {
+        batch->state.shield_x[idx] = batch->state.pos_x[idx];
+        batch->state.shield_y[idx] = batch->state.pos_y[idx];
+        batch->state.shield_z[idx] = batch->state.pos_z[idx];
+        batch->state.shield_radius[idx] = 0.0f;
+      }
       batch->state.shine_jump_iasa_entered_this_frame[idx] = 0u;
       batch->state.shine_jump_preserved_desired_bottom[idx] = 0u;
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
@@ -2688,6 +2734,19 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.ledge_side[idx] = -1;
       batch->state.ledge_drop_floor_skip_segment_id[idx] = 0xFFFFu;
+      // Squat platform-pass countdown (`mv.co.squat.x0/x4`) is hidden per-action state. Reseed
+      // either reconstructs the source-owned consume row from visible x671/input evidence in
+      // locomotion.c, or starts with no armed countdown; it must not inherit a prior same-lane row.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA_inline
+      batch->state.squat_pass_x0[idx] = 0u;
+      batch->state.squat_pass_x4[idx] = 0u;
+      // x221C_u16_y transition floor is a hidden motion-transition carry, not replay-visible
+      // persistent state. Reseed lets state_flags.c reconstruct the current script-owned bit from
+      // the seeded action/animation frame; do not inherit a prior same-lane transition floor.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_80072C6C
+      batch->state.x221c_y_event_floor[idx] = 0u;
       if (batch->state.cliff_ledge_floor_segment_id != NULL) {
         const uint16_t seeded_cliff_floor = seed->cliff_ledge_floor_segment_id_u16[p];
         batch->state.cliff_ledge_floor_segment_id[idx] =
@@ -2732,6 +2791,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         }
         batch->state.fallspecial_landing_lag[idx] = landing_lag;
       }
+      // Motion-state command variables are hidden per-action state. Reseed starts from the
+      // replay-derived action snapshot, not the previous row that happened to occupy this batch
+      // lane; clear them before applying the narrow source-backed reconstructions below.
+      // refs/melee/src/melee/ft/types.h (Fighter::cmd_vars)
+      batch->state.special_cmd0[idx] = 0u;
+      batch->state.special_cmd1[idx] = 0u;
+      batch->state.special_cmd2[idx] = 0u;
       // Marth special cmd-var reconstruction (Slippi does not expose fp->cmd_vars):
       // Dolphin Slash phase lanes are source-owned hidden state. cmd_vars[0] is the script launch
       // pulse (frame 6). Descending after launch implies the Phys launch phase ended (cmd2) and

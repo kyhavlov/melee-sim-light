@@ -96,6 +96,27 @@ def test_one_step_reseed_clears_hitlag_input_edge_latches_between_chunks() -> No
     assert np.isclose(reused["speed_y_attack"][lane, 1], ref["speed_y_attack"][1])
 
 
+def test_one_step_reseed_clears_guard_reflect_entry_latches_between_chunks() -> None:
+    ds = _replay_dataset("replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz", (1, 2))
+    samples = ds.samples
+    capacity = 256
+    lane = 248
+    target_row = 2552
+
+    rows = np.full((capacity,), target_row, dtype=np.int64)
+    prior_rows = np.full((capacity,), target_row, dtype=np.int64)
+    prior_rows[lane] = 2296
+
+    fresh = _run_one_step_rows(samples, rows)
+    reused = _run_one_step_rows(samples, rows, prior_rows=prior_rows)
+    ref_item = samples["ref_t1"]["items"][target_row, 0]
+
+    assert reused["items"][lane, 0]["owner"] == fresh["items"][lane, 0]["owner"]
+    assert reused["items"][lane, 0]["instance_id"] == fresh["items"][lane, 0]["instance_id"]
+    assert int(reused["items"][lane, 0]["owner"]) == int(ref_item["owner"])
+    assert int(reused["items"][lane, 0]["instance_id"]) == int(ref_item["instance_id"])
+
+
 class _FakeBinding:
     def destroy(self, _handle) -> None:
         return None
@@ -108,6 +129,11 @@ class _FakeBinding:
 
     def write_compare(self, _handle, out_compare_bytes: np.ndarray) -> None:
         out_compare_bytes.fill(0)
+
+    def one_step_eval_samples(
+        self, _handle: object, _samples_u8: np.ndarray, _num_players: int, _profile_rl1: int
+    ) -> dict[str, object]:
+        return self.one_step_summary_finish(object())
 
     def one_step_summary_create(self, _total_records: int, _num_players: int, _profile_rl1: int) -> object:
         return object()

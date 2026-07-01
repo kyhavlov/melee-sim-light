@@ -8600,6 +8600,160 @@ static PyObject* msl_one_step_summary(PyObject* self, PyObject* args) {
   return result;
 }
 
+static PyObject* msl_one_step_eval_samples(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  PyObject* samples_obj = NULL;
+  int num_players = 0;
+  int profile_rl1 = 0;
+  if (!PyArg_ParseTuple(args, "OOii", &handle_obj, &samples_obj, &num_players, &profile_rl1)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  PyArrayObject* samples_arr =
+      require_contiguous_array_readonly(samples_obj, NPY_UINT8, 2, "samples_u8");
+  if (samples_arr == NULL) {
+    return NULL;
+  }
+  const int total_records = (int)PyArray_DIM(samples_arr, 0);
+  if (num_players <= 0 || num_players > MSL_MAX_PLAYERS) {
+    PyErr_SetString(PyExc_ValueError, "num_players out of range");
+    return NULL;
+  }
+  if (PyArray_DIM(samples_arr, 1) < (npy_intp)sizeof(MslSample)) {
+    PyErr_SetString(PyExc_ValueError, "samples_u8 second dim too small for MslSample");
+    return NULL;
+  }
+  const int capacity = msl_batch_batch_size(h->batch);
+  if (capacity <= 0) {
+    PyErr_SetString(PyExc_ValueError, "batch capacity must be positive");
+    return NULL;
+  }
+
+  PyObject* total_records_obj = PyLong_FromLong(total_records);
+  PyObject* num_players_obj = PyLong_FromLong(num_players);
+  PyObject* profile_rl1_obj = PyLong_FromLong(profile_rl1);
+  PyObject* create_args =
+      (total_records_obj != NULL && num_players_obj != NULL && profile_rl1_obj != NULL)
+          ? PyTuple_Pack(3, total_records_obj, num_players_obj, profile_rl1_obj)
+          : NULL;
+  Py_XDECREF(total_records_obj);
+  Py_XDECREF(num_players_obj);
+  Py_XDECREF(profile_rl1_obj);
+  if (create_args == NULL) {
+    return NULL;
+  }
+  PyObject* capsule = msl_one_step_summary_create(NULL, create_args);
+  Py_DECREF(create_args);
+  if (capsule == NULL) {
+    return NULL;
+  }
+
+  uint8_t* compare_bytes = (uint8_t*)PyMem_Malloc((size_t)capacity * sizeof(MslCompare));
+  uint8_t* seed_tail = (uint8_t*)PyMem_Malloc((size_t)capacity * sizeof(MslSeed));
+  if (compare_bytes == NULL || seed_tail == NULL) {
+    PyMem_Free(compare_bytes);
+    PyMem_Free(seed_tail);
+    Py_DECREF(capsule);
+    PyErr_NoMemory();
+    return NULL;
+  }
+
+  const uint8_t* samples_u8 = (const uint8_t*)PyArray_DATA(samples_arr);
+  const size_t sample_stride = (size_t)PyArray_STRIDE(samples_arr, 0);
+  const size_t seed_off = offsetof(MslSample, seed_t);
+  const size_t prev_input_off = offsetof(MslSample, prev_input_t);
+  const size_t input_off = offsetof(MslSample, input_t);
+  int offset = 0;
+  while (offset < total_records) {
+    const int chunk_n = (total_records - offset) < capacity ? (total_records - offset) : capacity;
+    const uint8_t* chunk_base = samples_u8 + (size_t)offset * sample_stride;
+    const uint8_t* seed_bytes = chunk_base + seed_off;
+    const uint8_t* prev_bytes = chunk_base + prev_input_off;
+    const uint8_t* input_bytes = chunk_base + input_off;
+    size_t seed_stride = sample_stride;
+    size_t prev_stride = sample_stride;
+    size_t input_stride = sample_stride;
+
+    if (chunk_n < capacity) {
+      for (int r = 0; r < chunk_n; r++) {
+        const MslSample* sample =
+            (const MslSample*)(const void*)(chunk_base + (size_t)r * sample_stride);
+        memcpy(seed_tail + (size_t)r * sizeof(MslSeed), &sample->seed_t, sizeof(MslSeed));
+        memcpy(h->prev_input_storage + (size_t)r * h->prev_input_storage_stride,
+               &sample->prev_input_t, sizeof(MslInput));
+        memcpy(h->input_storage + (size_t)r * h->input_storage_stride, &sample->input_t,
+               sizeof(MslInput));
+      }
+      for (int r = chunk_n; r < capacity; r++) {
+        memcpy(seed_tail + (size_t)r * sizeof(MslSeed), seed_tail, sizeof(MslSeed));
+        memcpy(h->prev_input_storage + (size_t)r * h->prev_input_storage_stride,
+               h->prev_input_storage, sizeof(MslInput));
+        memcpy(h->input_storage + (size_t)r * h->input_storage_stride, h->input_storage,
+               sizeof(MslInput));
+      }
+      seed_bytes = seed_tail;
+      prev_bytes = h->prev_input_storage;
+      input_bytes = h->input_storage;
+      seed_stride = sizeof(MslSeed);
+      prev_stride = h->prev_input_storage_stride;
+      input_stride = h->input_storage_stride;
+    }
+
+    int err = 0;
+    PyThreadState* py_thread_state = PyEval_SaveThread();
+    err = msl_batch_reseed_seed(h->batch, seed_bytes, seed_stride);
+    if (err == 0) {
+      err = msl_batch_step_input(h->batch, prev_bytes, prev_stride, input_bytes, input_stride);
+    }
+    if (err == 0) {
+      err = msl_batch_write_compare(h->batch, compare_bytes, sizeof(MslCompare));
+    }
+    PyEval_RestoreThread(py_thread_state);
+    if (err != 0) {
+      PyMem_Free(compare_bytes);
+      PyMem_Free(seed_tail);
+      Py_DECREF(capsule);
+      PyErr_Format(PyExc_RuntimeError, "one_step_eval_samples failed: %d", err);
+      return NULL;
+    }
+
+    npy_intp compare_dims[2] = {(npy_intp)chunk_n, (npy_intp)sizeof(MslCompare)};
+    npy_intp sample_dims[2] = {(npy_intp)chunk_n, (npy_intp)sample_stride};
+    PyObject* compare_arr = PyArray_SimpleNewFromData(2, compare_dims, NPY_UINT8, compare_bytes);
+    PyObject* sample_arr = PyArray_SimpleNewFromData(2, sample_dims, NPY_UINT8, (void*)chunk_base);
+    PyObject* accum_args = (compare_arr != NULL && sample_arr != NULL)
+                               ? PyTuple_Pack(3, capsule, compare_arr, sample_arr)
+                               : NULL;
+    PyObject* accum = accum_args != NULL ? msl_one_step_summary_accumulate(NULL, accum_args) : NULL;
+    Py_XDECREF(accum_args);
+    Py_XDECREF(compare_arr);
+    Py_XDECREF(sample_arr);
+    if (accum == NULL) {
+      PyMem_Free(compare_bytes);
+      PyMem_Free(seed_tail);
+      Py_DECREF(capsule);
+      return NULL;
+    }
+    Py_DECREF(accum);
+    offset += chunk_n;
+  }
+
+  PyMem_Free(compare_bytes);
+  PyMem_Free(seed_tail);
+  PyObject* finish_args = PyTuple_Pack(1, capsule);
+  Py_DECREF(capsule);
+  if (finish_args == NULL) {
+    return NULL;
+  }
+  PyObject* result = msl_one_step_summary_finish(NULL, finish_args);
+  Py_DECREF(finish_args);
+  return result;
+}
+
 static PyObject* msl_rollout_float_rows_to_py(const int* fields, const int* counts,
                                               MslRolloutFloatTopRow* rows, int field_count,
                                               int top) {
@@ -9109,6 +9263,8 @@ static PyMethodDef methods[] = {
      "one_step_summary_finish(summary) -> dict"},
     {"one_step_summary", msl_one_step_summary, METH_VARARGS,
      "one_step_summary(out_compare_u8, samples_u8, num_players, profile_rl1) -> dict"},
+    {"one_step_eval_samples", msl_one_step_eval_samples, METH_VARARGS,
+     "one_step_eval_samples(handle, samples_u8, num_players, profile_rl1) -> dict"},
     {"standard_rollout_scan", msl_standard_rollout_scan, METH_VARARGS,
      "standard_rollout_scan(samples_u8, players_u8, num_players, max_records, ucf_enabled, "
      "ucf_cardinals_enabled, profile_rl1, float_fields=(), float_top=0, float_threshold=0.0) -> "

@@ -239,6 +239,88 @@ def _scored_denom_for_field(
     )
 
 
+def _emit_summary_from_native(
+    *,
+    native_summary: dict,
+    reporter: Reporter,
+    validation_profile: ValidationProfile,
+    print_profile: bool,
+    num_records: int,
+    total_records: int,
+    total_player_frames: int,
+    total_state_flags: int,
+    total_item_slots: int,
+    num_players: int,
+) -> EvalSummary:
+    mismatches = {
+        field: int(value)
+        for field, value in zip(_DISCRETE_FIELDS, native_summary["mismatches"], strict=True)
+    }
+    strict_mismatches = {
+        field: int(value)
+        for field, value in zip(_DISCRETE_FIELDS, native_summary["strict_mismatches"], strict=True)
+    }
+    ignored_mismatches = {lane.label: 0 for lane in validation_profile.ignored_lanes}
+    for lane in validation_profile.ignored_lanes:
+        if lane.field == "state_flags" and lane.subindex == 4 and lane.bitmask == 0x80:
+            ignored_mismatches[lane.label] = int(native_summary["ignored_state_flags_4_0x80"])
+    float_metrics = native_summary["float_metrics"]
+    float_norm_sum = float(native_summary["float_norm_sum"])
+    float_norm_count = int(native_summary["float_norm_count"])
+    overall_float_norm = float_norm_sum / float_norm_count if float_norm_count > 0 else 0.0
+
+    if print_profile:
+        reporter.print(f"validation.profile: {validation_profile.name}")
+        for lane in validation_profile.ignored_lanes:
+            reporter.print(
+                f"validation.profile.ignored: {lane.label} reason={lane.reason} exception={lane.exception}"
+            )
+    reporter.print(
+        f"Records: {num_records}  Players/scored per record: {num_players}  Total player-frames: {total_player_frames}"
+    )
+    for k, v in mismatches.items():
+        denom = _scored_denom_for_field(
+            k,
+            total_records=total_records,
+            total_player_frames=total_player_frames,
+            total_state_flags=total_state_flags,
+            total_item_slots=total_item_slots,
+            num_players=num_players,
+            profile=validation_profile,
+        )
+        reporter.print(f"mismatch.{k}: {v} / {denom} ({v/denom:.6f})")
+    for k, v in ignored_mismatches.items():
+        denom = total_player_frames if k.startswith("state_flags[") else 0
+        if denom > 0:
+            reporter.print(f"ignored_mismatch.{k}: {v} / {denom} ({v/denom:.6f})")
+    for k in _FLOAT_FIELDS:
+        m = float_metrics[k]
+        reporter.print(
+            f"err.{k}: mae={float(m['mae']):.6f} p95={float(m['p95']):.6f} max={float(m['max']):.6f}"
+        )
+
+    summary = EvalSummary(
+        total_records=total_records,
+        total_player_frames=total_player_frames,
+        total_state_flags=total_state_flags,
+        total_item_slots=total_item_slots,
+        mismatches=mismatches,
+        strict_mismatches=strict_mismatches,
+        ignored_mismatches=ignored_mismatches,
+        profile_name=validation_profile.name,
+        float_norm_sum=float_norm_sum,
+        float_norm_count=float_norm_count,
+    )
+    mismatches_total, checks_total = _discrete_mismatch_total(summary, profile=validation_profile)
+    strict_total, strict_checks = _strict_discrete_mismatch_total(summary)
+    ignored_total = sum(ignored_mismatches.values())
+    reporter.print(f"overall.discrete_mismatch: {mismatches_total} / {checks_total}")
+    reporter.print(f"overall.strict_discrete_mismatch: {strict_total} / {strict_checks}")
+    reporter.print(f"overall.ignored_discrete_mismatch: {ignored_total}")
+    reporter.print(f"overall.float_norm_mae_p95: {overall_float_norm:.8f}")
+    return summary
+
+
 def _discrete_exact_pct(summary: EvalSummary) -> float:
     total_checks = 0
     total_mismatches = 0
@@ -362,12 +444,6 @@ def evaluate_dataset(
     prev_input_bytes = runtime.prev_input_bytes
     input_bytes = runtime.input_bytes
     out_compare_bytes = runtime.out_compare_bytes
-    summary_handle = binding.one_step_summary_create(
-        num_records,
-        num_players,
-        int(validation_profile.name == "rl1_gameplay"),
-    )
-
     # Views for vectorized comparisons.
     out_compare_view_full = runtime.out_compare_view
     sample_stride = int(samples.dtype.itemsize)
@@ -375,6 +451,36 @@ def evaluate_dataset(
     seed_off = int(samples.dtype.fields["seed_t"][1])
     prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
     input_off = int(samples.dtype.fields["input_t"][1])
+
+    if not debug_mismatch and not debug_float:
+        native_summary = binding.one_step_eval_samples(
+            handle,
+            samples_u8,
+            num_players,
+            int(validation_profile.name == "rl1_gameplay"),
+        )
+        if owns_runtime and runtime is not None:
+            runtime.close()
+        total_records = num_records
+        total_player_frames = total_records * num_players
+        return _emit_summary_from_native(
+            native_summary=native_summary,
+            reporter=reporter,
+            validation_profile=validation_profile,
+            print_profile=print_profile,
+            num_records=num_records,
+            total_records=total_records,
+            total_player_frames=total_player_frames,
+            total_state_flags=total_player_frames * 5,
+            total_item_slots=total_records * max_items,
+            num_players=num_players,
+        )
+
+    summary_handle = binding.one_step_summary_create(
+        num_records,
+        num_players,
+        int(validation_profile.name == "rl1_gameplay"),
+    )
 
     debug_fields: tuple[str, ...] = ()
     debug_left: dict[str, int] = {}
@@ -643,70 +749,18 @@ def evaluate_dataset(
     total_state_flags = total_player_frames * 5
     total_item_slots = total_records * max_items
     native_summary = binding.one_step_summary_finish(summary_handle)
-    mismatches = {
-        field: int(value)
-        for field, value in zip(_DISCRETE_FIELDS, native_summary["mismatches"], strict=True)
-    }
-    strict_mismatches = {
-        field: int(value)
-        for field, value in zip(_DISCRETE_FIELDS, native_summary["strict_mismatches"], strict=True)
-    }
-    ignored_mismatches = {lane.label: 0 for lane in validation_profile.ignored_lanes}
-    for lane in validation_profile.ignored_lanes:
-        if lane.field == "state_flags" and lane.subindex == 4 and lane.bitmask == 0x80:
-            ignored_mismatches[lane.label] = int(native_summary["ignored_state_flags_4_0x80"])
-    float_metrics = native_summary["float_metrics"]
-    float_norm_sum = float(native_summary["float_norm_sum"])
-    float_norm_count = int(native_summary["float_norm_count"])
-    overall_float_norm = float_norm_sum / float_norm_count if float_norm_count > 0 else 0.0
-
-    if print_profile:
-        reporter.print(f"validation.profile: {validation_profile.name}")
-        for lane in validation_profile.ignored_lanes:
-            reporter.print(f"validation.profile.ignored: {lane.label} reason={lane.reason} exception={lane.exception}")
-    reporter.print(
-        f"Records: {num_records}  Players/scored per record: {num_players}  Total player-frames: {total_player_frames}"
-    )
-    for k, v in mismatches.items():
-        denom = _scored_denom_for_field(
-            k,
-            total_records=total_records,
-            total_player_frames=total_player_frames,
-            total_state_flags=total_state_flags,
-            total_item_slots=total_item_slots,
-            num_players=num_players,
-            profile=validation_profile,
-        )
-        reporter.print(f"mismatch.{k}: {v} / {denom} ({v/denom:.6f})")
-    for k, v in ignored_mismatches.items():
-        denom = total_player_frames if k.startswith("state_flags[") else 0
-        if denom > 0:
-            reporter.print(f"ignored_mismatch.{k}: {v} / {denom} ({v/denom:.6f})")
-    for k in _FLOAT_FIELDS:
-        m = float_metrics[k]
-        reporter.print(
-            f"err.{k}: mae={float(m['mae']):.6f} p95={float(m['p95']):.6f} max={float(m['max']):.6f}"
-        )
-
-    summary = EvalSummary(
+    summary = _emit_summary_from_native(
+        native_summary=native_summary,
+        reporter=reporter,
+        validation_profile=validation_profile,
+        print_profile=print_profile,
+        num_records=num_records,
         total_records=total_records,
         total_player_frames=total_player_frames,
         total_state_flags=total_state_flags,
         total_item_slots=total_item_slots,
-        mismatches=mismatches,
-        strict_mismatches=strict_mismatches,
-        ignored_mismatches=ignored_mismatches,
-        profile_name=validation_profile.name,
-        float_norm_sum=float_norm_sum,
-        float_norm_count=float_norm_count,
+        num_players=num_players,
     )
-    mismatches_total, checks_total = _discrete_mismatch_total(summary, profile=validation_profile)
-    strict_total, strict_checks = _strict_discrete_mismatch_total(summary)
-    ignored_total = sum(ignored_mismatches.values())
-    reporter.print(f"overall.discrete_mismatch: {mismatches_total} / {checks_total}")
-    reporter.print(f"overall.strict_discrete_mismatch: {strict_total} / {strict_checks}")
-    reporter.print(f"overall.ignored_discrete_mismatch: {ignored_total}")
-    reporter.print(f"overall.float_norm_mae_p95: {overall_float_norm:.8f}")
 
     if debug_float_fields:
         reporter.print()

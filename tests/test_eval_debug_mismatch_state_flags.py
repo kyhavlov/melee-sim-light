@@ -62,6 +62,48 @@ class _FakeBinding:
         }
 
 
+class _FastPathOnlyBinding(_FakeBinding):
+    def __init__(self, out_compare: np.ndarray) -> None:
+        super().__init__(out_compare)
+        self.fast_path_calls = 0
+
+    def one_step_eval_samples(
+        self, _handle: object, _samples_u8: np.ndarray, _num_players: int, _profile_rl1: int
+    ) -> dict[str, object]:
+        self.fast_path_calls += 1
+        return self.one_step_summary_finish(object())
+
+    def reseed_seed(self, _handle, _seed_bytes) -> None:
+        raise AssertionError("normal one-step validation should use one_step_eval_samples")
+
+    def step_input(self, _handle, _prev_input_bytes, _input_bytes) -> None:
+        raise AssertionError("normal one-step validation should use one_step_eval_samples")
+
+    def write_compare(self, _handle, out_compare_bytes: np.ndarray) -> None:
+        raise AssertionError("normal one-step validation should use one_step_eval_samples")
+
+
+def test_normal_one_step_eval_uses_native_sample_fast_path(monkeypatch, tmp_path: Path) -> None:
+    import tools.eval.run_one_step_eval as eval_mod
+
+    samples = np.zeros((2,), dtype=SAMPLE_DTYPE)
+    binding = _FastPathOnlyBinding(samples["ref_t1"].copy())
+    monkeypatch.setattr(eval_mod, "_load_binding", lambda: binding)
+    monkeypatch.setattr(
+        eval_mod,
+        "read_dataset",
+        lambda _p: _FakeDataset(header={"num_players": 2}, samples=samples),
+    )
+
+    eval_mod.evaluate_dataset(
+        dataset_path=tmp_path / "synthetic.slpz",
+        chunk=1,
+        reporter=eval_mod.Reporter(echo=False),
+    )
+
+    assert binding.fast_path_calls == 1
+
+
 def test_debug_mismatch_state_flags_multidim(capsys, monkeypatch, tmp_path: Path) -> None:
     # This used to crash with "too many values to unpack" because `np.argwhere` on a
     # (records, players, bytes) diff returns 3 columns (r, p, byte).

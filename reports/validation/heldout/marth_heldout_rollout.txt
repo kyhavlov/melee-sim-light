@@ -77,13 +77,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:122
 == replays/heldout/marth/DisloyalPaltryHawk.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1377
-rollout.streak_count: 31
-rollout.streak_len.median: 208
+rollout.streak_count: 32
+rollout.streak_len.median: 169
 rollout.streak_len.p90: 479
 rollout.streak_len.p95: 688
 rollout.streak_len.max: 1377
-rollout.first_mismatch_total: 57
-rollout.first_mismatch_seeded_total: 44
+rollout.first_mismatch_total: 33
+rollout.first_mismatch_seeded_total: 19
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=63.0278 rec=3662 p=0 seed/ref/out=-75.3506/-77.8475/-14.8197 actions=35/35/35 category=unclassified
@@ -269,14 +269,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:980
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == suite summary ==
-overall.rollout.streak_count: 347
+overall.rollout.streak_count: 348
 overall.rollout.streak_len.median: 231
 overall.rollout.streak_len.p90: 739
 overall.rollout.streak_len.p95: 1078
 overall.rollout.streak_len.max: 1865
 overall.rollout.best_len.max: 1865
-overall.rollout.first_mismatch_total: 397
-overall.rollout.first_mismatch_seeded_total: 246
+overall.rollout.first_mismatch_total: 373
+overall.rollout.first_mismatch_seeded_total: 221
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=63.0278 rec=3662 p=0 seed/ref/out=-75.3506/-77.8475/-14.8197 actions=35/35/35 category=unclassified

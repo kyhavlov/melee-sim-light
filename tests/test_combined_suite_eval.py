@@ -43,7 +43,7 @@ def _write_suite(path: Path, *, name: str, replays: list[str]) -> None:
     )
 
 
-def _fake_result(task: dict) -> dict:
+def _fake_result(task: dict, **_kwargs) -> dict:
     label = repo_root().joinpath(Path(str(task["slp_path"]))).resolve()
     try:
         dataset = label.relative_to(repo_root()).as_posix()
@@ -157,7 +157,7 @@ def test_validate_all_evaluates_duplicate_replay_once_and_emits_each_report(tmp_
     _write_suite(suite_b, name="suite_b", replays=[REPLAY_A])
     calls: list[str] = []
 
-    def fake_task(task: dict) -> dict:
+    def fake_task(task: dict, **_kwargs) -> dict:
         calls.append(str(task["slp_path"]))
         return _fake_result(task)
 
@@ -235,6 +235,58 @@ def test_validate_all_keeps_one_step_suite_order_and_rollout_canonical_order(
     assert one_text.index(REPLAY_B) < one_text.index(REPLAY_A)
     # Existing rollout summaries are canonicalized by dataset path, not emitted in suite order.
     assert roll_text.index(REPLAY_A) < roll_text.index(REPLAY_B)
+
+
+def test_combined_dataset_tasks_partition_weighted_shards_deterministically(tmp_path: Path) -> None:
+    paths: list[Path] = []
+    for idx, size in enumerate([10, 90, 20, 80, 30]):
+        path = tmp_path / f"replay_{idx}.slpz"
+        path.write_bytes(b"x" * size)
+        paths.append(path)
+    tasks = [{"slp_path": str(path)} for path in paths]
+
+    shards = run_combined_suite_eval._partition_indexed_tasks(tasks, workers=2)
+
+    assert [[idx for idx, _ in shard] for shard in shards] == [[0, 1, 2], [3, 4]]
+    assert sorted(idx for shard in shards for idx, _ in shard) == list(range(len(tasks)))
+
+
+def test_shard_stats_are_stats_only(monkeypatch, tmp_path: Path) -> None:
+    suite = tmp_path / "small_suite.json"
+    _write_suite(suite, name="small_suite", replays=[REPLAY_A])
+    replay_path = repo_root() / REPLAY_A
+    task = {
+        "root": str(repo_root()),
+        "dataset_label": str(replay_path),
+        "slp_path": str(replay_path),
+        "ports": [1, 2],
+        "stage_id": 32,
+        "chunk": 64,
+        "profile": "rl1_gameplay",
+        "ucf_enabled": True,
+        "ucf_cardinals_1_0_enabled": True,
+        "debug_mismatch": (),
+        "debug_limit": 10,
+        "debug_float": (),
+        "debug_float_limit": 10,
+        "fields": ["action_id"],
+        "players_csv": None,
+        "max_records": 0,
+        "float_fields": [],
+        "float_top_scan": 0,
+        "exception_probe_limit": 0,
+    }
+    monkeypatch.setattr(run_combined_suite_eval, "_combined_dataset_task", _fake_result)
+
+    _, normal_stats = run_combined_suite_eval.run_combined_dataset_tasks(
+        [task], workers=1, collect_stats=False
+    )
+    _, measured_stats = run_combined_suite_eval.run_combined_dataset_tasks(
+        [task], workers=1, collect_stats=True
+    )
+
+    assert normal_stats == []
+    assert int(measured_stats[0]["result_bytes"]) > 0
 
 
 def _write_fake_heldout_reports(args: list[str]) -> subprocess.CompletedProcess[str]:
