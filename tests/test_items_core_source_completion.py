@@ -34,7 +34,7 @@ def test_item_slot_swap_keeps_public_and_hidden_item_lanes_together() -> None:
     # omission or duplicated swap can detach hidden source state from the public item lane.
     items_c = _read("src/items.c")
     match = re.search(
-        r"static inline void item_slot_swap\(.*?\n\}(?=\n\nstatic int)",
+        r"static inline void item_slot_swap\(.*?\n\}(?=\n\n)",
         items_c,
         flags=re.DOTALL,
     )

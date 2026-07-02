@@ -120,7 +120,7 @@ def test_msllasr1_laser_data_closes_fox_zero_kb_and_falco_kb_boundary() -> None:
 
 
 def test_laser_collision_scale_keeps_shield_admission_source_policy() -> None:
-    items = _read("src/items.c")
+    items = _read("src/items_spacies.c")
     body = _function_body(items, "laser_collision_offset_scale")
 
     assert "narrowed_temporary" not in body
@@ -132,7 +132,7 @@ def test_laser_collision_scale_keeps_shield_admission_source_policy() -> None:
 
 
 def test_laser_shield_bounce_uses_source_segment_threshold_not_old_hemisphere_proxy() -> None:
-    items = _read("src/items.c")
+    items = _read("src/items_spacies.c")
     assert re.search(r"\blaser_try_shield_bounce_velocity\s*\(", items) is None
 
     body = _function_body(items, "laser_try_shield_bounce_velocity_from_segment")
@@ -144,7 +144,7 @@ def test_laser_shield_bounce_uses_source_segment_threshold_not_old_hemisphere_pr
 
 
 def test_laser_runtime_keeps_source_order_for_spawn_collision_and_post_callbacks() -> None:
-    source = _read("src/items.c")
+    source = _read("src/items_spacies.c")
     body = _function_body(source, "lasers_update_and_collide")
 
     _assert_ordered(
@@ -164,7 +164,7 @@ def test_laser_runtime_keeps_source_order_for_spawn_collision_and_post_callbacks
 
 
 def test_projectile_reflect_comments_do_not_claim_proxy_closure() -> None:
-    items = _read("src/items.c")
+    items = _read("src/items_spacies.c")
     checked = "\n".join(
         [
             _read("agent_docs/systems/projectiles_reflect.md"),

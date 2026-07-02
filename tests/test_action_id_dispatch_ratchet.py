@@ -57,7 +57,8 @@ SPACIE_GATE_BASELINE = {
     # remaining gates are replay-validated rollout owner scoping in shared combat code.
     "api.c": 1,
     "combat.c": 12,
-    "items.c": 1,
+    "items.c": 0,
+    "items_spacies.c": 1,
     "locomotion.c": 0,
 }
 
