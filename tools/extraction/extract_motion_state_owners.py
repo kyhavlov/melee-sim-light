@@ -19,7 +19,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 18
+FORMAT_VERSION = 19
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -61,6 +61,14 @@ CLASS2_COMMON_AIRBORNE_COLL = 1 << 2
 CLASS2_COMMON_GROUNDED_B2DC_COLL = 1 << 3
 CLASS2_COMMON_GROUNDED_B4B0_COLL = 1 << 4
 CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA = 1 << 5
+CLASS2_WALK_ACTION = 1 << 6
+CLASS2_FALL_LIKE_ACTION = 1 << 7
+CLASS2_GUARD_STATE = 1 << 8
+CLASS2_CATCH_START_FLOOR_LOSS = 1 << 9
+CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS = 1 << 10
+CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE = 1 << 11
+CLASS2_LANDING_ROOT_FLOOR_SNAP = 1 << 12
+CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST = 1 << 13
 
 CLASS3_PHASE4_ATTACK_AIR_COLL = 1 << 0
 CLASS3_PHASE4_ESCAPE_AIR_COLL = 1 << 1
@@ -583,6 +591,7 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
 
 def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
     bits = 0
+    anim_cb = callbacks[0]
     iasa_cb = callbacks[1]
     coll_cb = callbacks[3]
     if iasa_cb in {
@@ -677,6 +686,90 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         # item/projectile, catch/throw/capture, and Fox/Falco bespoke special callbacks.
         # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}
         bits |= CLASS2_COMMON_AIRBORNE_COLL
+    if anim_cb == "ftCo_Walk_Anim" and iasa_cb == "ftCo_Walk_IASA" and coll_cb == "ftCo_Walk_Coll":
+        # WalkSlow/Middle/Fast are one source action family; runtime should consume the generated
+        # MotionState row instead of maintaining a local action-id list.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c
+        bits |= CLASS2_WALK_ACTION
+    if anim_cb in {"ftCo_Fall_Anim", "ftCo_FallAerial_Anim"} and iasa_cb in {
+        "ftCo_Fall_IASA",
+        "ftCo_FallAerial_IASA",
+    }:
+        # Runtime "fall-like" input gates intentionally exclude FallSpecial even though it shares
+        # common airborne collision/physics owners; the generated bit mirrors the source IASA
+        # family rather than a local action-id list.
+        # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Fall.c,ftCo_FallAerial.c}
+        bits |= CLASS2_FALL_LIKE_ACTION
+    if anim_cb.startswith("ftCo_Guard") and iasa_cb.startswith("ftCo_Guard") and coll_cb.startswith(
+        "ftCo_Guard"
+    ):
+        # GuardOn/Guard/GuardOff/GuardSetOff/GuardReflect share the shield-state collision family.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
+        bits |= CLASS2_GUARD_STATE
+    if anim_cb in {"ftCo_Catch_Anim", "ftCo_CatchDash_Anim"} and coll_cb in {
+        "ftCo_Catch_Coll",
+        "ftCo_CatchDash_Coll",
+    }:
+        # Catch/CatchDash floor-loss stays on the catch-start callback owner; later catch/throw/
+        # capture states should not enter this generic handoff.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Catch.c
+        bits |= CLASS2_CATCH_START_FLOOR_LOSS
+    if (
+        (bits & (CLASS2_COMMON_GROUNDED_COLL | CLASS2_COMMON_GROUNDED_B108_COLL |
+                 CLASS2_COMMON_GROUNDED_B2DC_COLL | CLASS2_COMMON_GROUNDED_B4B0_COLL)) != 0
+        or coll_cb == "ftCo_LandingAir_Coll"
+        or coll_cb in {"ftCo_EscapeF_Coll", "ftCo_EscapeB_Coll", "ftCo_EscapeN_Coll"}
+        or anim_cb in {
+            "ftCo_Attack11_Anim",
+            "ftCo_Attack12_Anim",
+            "ftCo_Attack13_Anim",
+            "ftCo_AttackDash_Anim",
+            "ftCo_AttackS3_Anim",
+            "ftCo_AttackHi3_Anim",
+            "ftCo_AttackLw3_Anim",
+            "ftCo_AttackS4_Anim",
+            "ftCo_AttackHi4_Anim",
+            "ftCo_AttackLw4_Anim",
+        }
+        or anim_cb == "ftCo_GuardReflect_Anim"
+    ):
+        # Broad source floor-loss handoff gate used by locomotion's post-collision pass. It is
+        # still generated from MotionState callback ownership, but keeps later airborne/damage/item/
+        # catch owners out of the common grounded handoff.
+        # refs/melee/src/melee/ft/ft_081B.c common grounded callbacks
+        bits |= CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS
+    if (
+        anim_cb in {"ftCo_CliffCatch_Anim", "ftCo_CliffWait_Anim"}
+        or (anim_cb == "ftCo_Fall_Anim" and iasa_cb == "ftCo_Fall_IASA")
+        or anim_cb in {"ftCo_Jump_Anim", "ftCo_JumpAerial_Anim", "ftCo_EscapeAir_Anim"}
+    ):
+        # Source-owned ledge-floor carry set for cliff/air states that can preserve the published
+        # CollData ledge floor owner across the next callback. This is MotionState identity only;
+        # live ledge segment/cooldown state remains runtime state.
+        # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_CliffCatch.c,ftCo_CliffWait.c,ftCo_Fall.c,ftCo_Jump.c,ftCo_JumpAerial.c,ftCo_EscapeAir.c}
+        bits |= CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE
+    if (
+        anim_cb == "ftCo_Wait_Anim"
+        or anim_cb == "ftCo_Landing_Anim"
+        or anim_cb == "ftCo_LandingAir_Anim"
+    ):
+        # Destination actions whose entry/collision owner is allowed to snap root Y to the current
+        # floor contact during locomotion's post-collision resolver.
+        # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Landing.c,ftCo_LandingAir.c}
+        bits |= CLASS2_LANDING_ROOT_FLOOR_SNAP
+    if (bits & CLASS2_WALK_ACTION) != 0 or anim_cb in {
+        "ftCo_Turn_Anim",
+        "ftCo_Dash_Anim",
+        "ftCo_Squat_Anim",
+        "ftCo_KneeBend_Anim",
+        "ftCo_GuardOn_Anim",
+        "ftCo_EscapeN_Anim",
+        "ftCo_Catch_Anim",
+        "ftCo_CatchDash_Anim",
+    }:
+        # Destination actions admitted by grounded Attack* IASA's Wait-tail interrupt policy.
+        # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Attack1.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackS4.c,ftCo_Wait.c}
+        bits |= CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST
     return bits
 
 
@@ -946,6 +1039,14 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "COMMON_GROUNDED_B4B0_COLL": CLASS2_COMMON_GROUNDED_B4B0_COLL,
         "COMMON_GROUNDED_B108_COLL": CLASS2_COMMON_GROUNDED_B108_COLL,
         "COMMON_GROUNDED_COLL": CLASS2_COMMON_GROUNDED_COLL,
+        "WALK_ACTION": CLASS2_WALK_ACTION,
+        "FALL_LIKE_ACTION": CLASS2_FALL_LIKE_ACTION,
+        "GUARD_STATE": CLASS2_GUARD_STATE,
+        "CATCH_START_FLOOR_LOSS": CLASS2_CATCH_START_FLOOR_LOSS,
+        "GROUND_LOCOMOTION_FLOOR_LOSS": CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS,
+        "CLIFF_LEDGE_FLOOR_PRESERVE": CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE,
+        "LANDING_ROOT_FLOOR_SNAP": CLASS2_LANDING_ROOT_FLOOR_SNAP,
+        "GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST": CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST,
     }
     classes3 = {
         "PHASE4_ATTACK_AIR_COLL": CLASS3_PHASE4_ATTACK_AIR_COLL,

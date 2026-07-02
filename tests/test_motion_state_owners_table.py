@@ -34,7 +34,15 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_COMMON_GROUNDED_B4B0_COLL,
     CLASS2_COMMON_GROUNDED_B108_COLL,
     CLASS2_COMMON_GROUNDED_COLL,
+    CLASS2_CATCH_START_FLOOR_LOSS,
+    CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE,
+    CLASS2_FALL_LIKE_ACTION,
     CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA,
+    CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST,
+    CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS,
+    CLASS2_GUARD_STATE,
+    CLASS2_LANDING_ROOT_FLOOR_SNAP,
+    CLASS2_WALK_ACTION,
     CLASS3_PHASE4_ATTACK_AIR_COLL,
     FX_SPECIAL_KIND_BY_SYMBOL,
     FX_SPECIAL_KIND_VALUES,
@@ -668,6 +676,9 @@ def test_motion_state_owner_phase3_common_owner_classes_exclude_later_families()
     # refs/melee/src/melee/ft/ft_081B.c common grounded wrappers and ft_80083F88.
     assert both_have2(0x000E, CLASS2_COMMON_GROUNDED_COLL)  # Wait
     assert both_have2(0x000F, CLASS2_COMMON_GROUNDED_COLL)  # WalkSlow
+    assert both_have2(0x000F, CLASS2_WALK_ACTION)
+    assert both_have2(0x0010, CLASS2_WALK_ACTION)
+    assert both_have2(0x0011, CLASS2_WALK_ACTION)
     assert both_have2(0x0014, CLASS2_COMMON_GROUNDED_COLL)  # Dash
     assert both_have2(0x0014, CLASS2_COMMON_GROUNDED_B108_COLL)
     assert both_have2(0x0018, CLASS2_COMMON_GROUNDED_B108_COLL)  # KneeBend
@@ -680,18 +691,45 @@ def test_motion_state_owner_phase3_common_owner_classes_exclude_later_families()
     assert not both_have2(0x002A, CLASS2_COMMON_GROUNDED_B108_COLL)
     assert both_have2(0x00B3, CLASS2_COMMON_GROUNDED_COLL)  # Guard
     assert both_have2(0x00B3, CLASS2_COMMON_GROUNDED_B108_COLL)
+    assert both_have2(0x00B2, CLASS2_GUARD_STATE)  # GuardOn
+    assert both_have2(0x00B6, CLASS2_GUARD_STATE)  # GuardReflect
     assert both_have2(0x00F5, CLASS2_COMMON_GROUNDED_COLL)  # Ottotto
     assert both_have2(0x00F5, CLASS2_COMMON_GROUNDED_B2DC_COLL)
+    assert both_have2(0x00D4, CLASS2_CATCH_START_FLOOR_LOSS)  # Catch
+    assert both_have2(0x00D6, CLASS2_CATCH_START_FLOOR_LOSS)  # CatchDash
+    assert not both_have2(0x00D5, CLASS2_CATCH_START_FLOOR_LOSS)  # CatchPull
+    for action_id in (0x000F, 0x0012, 0x0014, 0x0018, 0x00B2, 0x00EB, 0x00D4, 0x00D6):
+        assert both_have2(action_id, CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST), hex(
+            action_id
+        )
+    assert not both_have2(0x000E, CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST)  # Wait
+    assert not both_have2(0x0030, CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST)  # Attack100Loop
+
+    for action_id in (0x000E, 0x000F, 0x002A, 0x0046, 0x002C, 0x003A, 0x003F, 0x00B6):
+        assert both_have2(action_id, CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS), hex(action_id)
+    assert not both_have2(0x0030, CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS)  # Attack100Loop
+    assert not both_have2(0x00D4, CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS)  # Catch
+    assert not both_have2(0x0041, CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS)  # AttackAirN
 
     # Phase 3 airborne common owners:
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}.
     assert both_have2(0x0019, CLASS2_COMMON_AIRBORNE_COLL)  # JumpF
     assert both_have2(0x001B, CLASS2_COMMON_AIRBORNE_COLL)  # JumpAerialF
     assert both_have2(0x001D, CLASS2_COMMON_AIRBORNE_COLL)  # Fall
+    assert both_have2(0x001D, CLASS2_FALL_LIKE_ACTION)  # Fall
+    assert both_have2(0x0020, CLASS2_FALL_LIKE_ACTION)  # FallAerial
+    assert not both_have2(0x0023, CLASS2_FALL_LIKE_ACTION)  # FallSpecial
     assert both_have2(0x0023, CLASS2_COMMON_AIRBORNE_COLL)  # FallSpecial
     assert both_have2(0x00F4, CLASS2_COMMON_AIRBORNE_COLL)  # Pass
     assert both_have2(0x00FB, CLASS2_COMMON_AIRBORNE_COLL)  # MissFoot
     assert both_have2(0x0105, CLASS2_COMMON_AIRBORNE_COLL)  # CliffJump2Slow1
+    for action_id in (0x00FC, 0x00FD, 0x001D, 0x001E, 0x001F, 0x0019, 0x001B, 0x00EC):
+        assert both_have2(action_id, CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE), hex(action_id)
+    assert not both_have2(0x0020, CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE)  # FallAerial
+    assert not both_have2(0x0100, CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE)  # CliffAttackSlow
+    for action_id in (0x000E, 0x002A, 0x002B, 0x0046, 0x004A):
+        assert both_have2(action_id, CLASS2_LANDING_ROOT_FLOOR_SNAP), hex(action_id)
+    assert not both_have2(0x001D, CLASS2_LANDING_ROOT_FLOOR_SNAP)  # Fall
 
     # Hard Phase 3 exclusions: AttackAir, EscapeAir, Damage, item/projectile, catch/throw/capture,
     # and Fox/Falco bespoke special callbacks must not enter the narrow Phase 3 class word.
@@ -897,7 +935,7 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
         "ftCo_Landing_IASA",
     }
 
-    def expected_bits(iasa_cb: str, coll_cb: str) -> int:
+    def expected_bits(anim_cb: str, iasa_cb: str, coll_cb: str) -> int:
         bits = 0
         if iasa_cb in fresh_guardon_item_shielddesc_iasa:
             bits |= CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA
@@ -911,6 +949,72 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
             bits |= CLASS2_COMMON_GROUNDED_B4B0_COLL
         if coll_cb in common_airborne:
             bits |= CLASS2_COMMON_AIRBORNE_COLL
+        if anim_cb == "ftCo_Walk_Anim" and iasa_cb == "ftCo_Walk_IASA" and coll_cb == "ftCo_Walk_Coll":
+            bits |= CLASS2_WALK_ACTION
+        if anim_cb in {"ftCo_Fall_Anim", "ftCo_FallAerial_Anim"} and iasa_cb in {
+            "ftCo_Fall_IASA",
+            "ftCo_FallAerial_IASA",
+        }:
+            bits |= CLASS2_FALL_LIKE_ACTION
+        if (
+            anim_cb.startswith("ftCo_Guard")
+            and iasa_cb.startswith("ftCo_Guard")
+            and coll_cb.startswith("ftCo_Guard")
+        ):
+            bits |= CLASS2_GUARD_STATE
+        if anim_cb in {"ftCo_Catch_Anim", "ftCo_CatchDash_Anim"} and coll_cb in {
+            "ftCo_Catch_Coll",
+            "ftCo_CatchDash_Coll",
+        }:
+            bits |= CLASS2_CATCH_START_FLOOR_LOSS
+        if (
+            bits
+            & (
+                CLASS2_COMMON_GROUNDED_COLL
+                | CLASS2_COMMON_GROUNDED_B108_COLL
+                | CLASS2_COMMON_GROUNDED_B2DC_COLL
+                | CLASS2_COMMON_GROUNDED_B4B0_COLL
+            )
+            or coll_cb == "ftCo_LandingAir_Coll"
+            or coll_cb in {"ftCo_EscapeF_Coll", "ftCo_EscapeB_Coll", "ftCo_EscapeN_Coll"}
+            or anim_cb in {
+                "ftCo_Attack11_Anim",
+                "ftCo_Attack12_Anim",
+                "ftCo_Attack13_Anim",
+                "ftCo_AttackDash_Anim",
+                "ftCo_AttackS3_Anim",
+                "ftCo_AttackHi3_Anim",
+                "ftCo_AttackLw3_Anim",
+                "ftCo_AttackS4_Anim",
+                "ftCo_AttackHi4_Anim",
+                "ftCo_AttackLw4_Anim",
+            }
+            or anim_cb == "ftCo_GuardReflect_Anim"
+        ):
+            bits |= CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS
+        if (
+            anim_cb in {"ftCo_CliffCatch_Anim", "ftCo_CliffWait_Anim"}
+            or (anim_cb == "ftCo_Fall_Anim" and iasa_cb == "ftCo_Fall_IASA")
+            or anim_cb in {"ftCo_Jump_Anim", "ftCo_JumpAerial_Anim", "ftCo_EscapeAir_Anim"}
+        ):
+            bits |= CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE
+        if (
+            anim_cb == "ftCo_Wait_Anim"
+            or anim_cb == "ftCo_Landing_Anim"
+            or anim_cb == "ftCo_LandingAir_Anim"
+        ):
+            bits |= CLASS2_LANDING_ROOT_FLOOR_SNAP
+        if bits & CLASS2_WALK_ACTION or anim_cb in {
+            "ftCo_Turn_Anim",
+            "ftCo_Dash_Anim",
+            "ftCo_Squat_Anim",
+            "ftCo_KneeBend_Anim",
+            "ftCo_GuardOn_Anim",
+            "ftCo_EscapeN_Anim",
+            "ftCo_Catch_Anim",
+            "ftCo_CatchDash_Anim",
+        }:
+            bits |= CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST
         return bits
 
     # Exhaustive source-callback boundary for Phase 3 routing. Later-owner callbacks can still
@@ -920,9 +1024,11 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
         for action_id in range(len(table.class2_bits)):
             iasa_cb = symbols[int(table.iasa_cb_id[action_id])]
             coll_cb = symbols[int(table.coll_cb_id[action_id])]
-            assert int(table.class2_bits[action_id]) == expected_bits(iasa_cb, coll_cb), (
+            anim_cb = symbols[int(table.anim_cb_id[action_id])]
+            assert int(table.class2_bits[action_id]) == expected_bits(anim_cb, iasa_cb, coll_cb), (
                 label,
                 action_id,
+                anim_cb,
                 iasa_cb,
                 coll_cb,
             )
