@@ -4350,10 +4350,10 @@ def test_jumpaerial_hard_floor_runtime_authority_is_explicit_static_guard() -> N
     # above so a future refactor cannot silently remove that source-authority gate.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
     # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80047E14,mpColl_80044628_Floor}
-    src = Path("src/mpcoll_ground.c").read_text()
+    src = Path("src/mpcoll_floor_callbacks.c").read_text()
     helper = src[
-        src.index("static uint8_t msl_mpcoll_80047e14_common_air_hard_floor_bottom_sweep") :
-        src.index("static uint8_t msl_mpcoll_80047e14_flags6_root_floor_projection")
+        src.index("uint8_t msl_mpcoll_80047e14_common_air_hard_floor_bottom_sweep") :
+        src.index("uint8_t msl_mpcoll_80047e14_flags6_root_floor_projection")
     ]
     assert "mpcoll_floor_sweep_prev_root_is_runtime_owned(batch, idx)" in helper
     assert "MSL_ACT_JUMP_AERIAL_F" in helper
@@ -4371,10 +4371,10 @@ def test_fall_fast_same_hard_floor_bottom_sweep_is_bounded_static_guard() -> Non
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
     # refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
     # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80047F40,mpColl_80044628_Floor}
-    src = Path("src/mpcoll_ground.c").read_text()
+    src = Path("src/mpcoll_floor_callbacks.c").read_text()
     helper = src[
-        src.index("static uint8_t msl_mpcoll_80047e14_common_air_hard_floor_bottom_sweep") :
-        src.index("static uint8_t msl_mpcoll_80047e14_flags6_root_floor_projection")
+        src.index("uint8_t msl_mpcoll_80047e14_common_air_hard_floor_bottom_sweep") :
+        src.index("uint8_t msl_mpcoll_80047e14_flags6_root_floor_projection")
     ]
     assert "fall_fast_same_hard_floor_owner" in helper
     assert "fall_fast_platform_to_hard_floor_owner" in helper
@@ -6930,9 +6930,11 @@ def test_manual_stage_clip_traces_roll_out_to_collision_resolution_from_match_st
 
 
 def test_attackairlw_transformed_platform_owner_guards_stay_source_shaped() -> None:
-    source = (Path(__file__).resolve().parents[1] / "src/mpcoll_ground.c").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[1] / "src/mpcoll_floor.c").read_text(
+        encoding="utf-8"
+    )
     match = re.search(
-        r"static inline uint8_t mpcoll_attackairlw_air471f8_live_platform_publication_owner"
+        r"uint8_t mpcoll_attackairlw_air471f8_live_platform_publication_owner"
         r"\s*\([^)]*\)\s*\{(.*?)\n\}",
         source,
         flags=re.S,
@@ -6954,7 +6956,10 @@ def test_attackairlw_transformed_platform_owner_guards_stay_source_shaped() -> N
     assert "ftCo_AttackAir.c::ftCo_AttackAir_Coll" in source_window
     assert "mpColl_800471F8" in source_window
     assert "mpColl_80044628_Floor" in source_window
-    assert "!final_attackairlw_live_platform_publication_owner" in source
+    ground_source = (Path(__file__).resolve().parents[1] / "src/mpcoll_ground.c").read_text(
+        encoding="utf-8"
+    )
+    assert "!final_attackairlw_live_platform_publication_owner" in ground_source
 
 
 def _fd_fall_escapeair_ledge_seed(

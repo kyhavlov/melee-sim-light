@@ -57,7 +57,15 @@ def _phase5_owner_accounting(plan: str) -> dict[str, str]:
 
 
 def test_collision_inventory_accounts_for_every_retained_reject_and_suppression() -> None:
-    ground_c = _read("src/mpcoll_ground.c")
+    floor_sources = "\n".join(
+        _read(path)
+        for path in (
+            "src/mpcoll_ground.c",
+            "src/mpcoll_floor.c",
+            "src/mpcoll_floor_callbacks.c",
+        )
+    )
+    floor_h = _read("src/mpcoll_floor.h")
     plan = _read("agent_docs/core_collision_stage_clip_source_port_plan.md")
     historical_doc = _read("agent_docs/systems/collision.md")
 
@@ -66,13 +74,13 @@ def test_collision_inventory_accounts_for_every_retained_reject_and_suppression(
     assert "Live `src/mpcoll_ground.c` suppression inventory" not in plan
     token_to_section = _phase5_owner_accounting(plan)
 
-    reject_bits = sorted(set(re.findall(r"#define (MSL_MPCOLL_REJECT_[A-Z0-9_]+)", ground_c)))
+    reject_bits = sorted(set(re.findall(r"#define (MSL_MPCOLL_REJECT_[A-Z0-9_]+)", floor_h)))
     assert reject_bits
     for bit in reject_bits:
         assert bit in token_to_section, bit
 
     suppression_predicates = sorted(
-        set(re.findall(r"\bconst uint8_t (suppress_[A-Za-z0-9_]+)\b", ground_c))
+            set(re.findall(r"\bconst uint8_t (suppress_[A-Za-z0-9_]+)\b", floor_sources))
     )
     assert suppression_predicates
     for predicate in suppression_predicates:
@@ -104,7 +112,7 @@ def test_collision_inventory_accounts_for_every_retained_reject_and_suppression(
     }
     assert required_owner_families <= set(_phase5_owner_accounting(plan).values())
 
-    assert "MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY" not in ground_c
+    assert "MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY" not in floor_sources
     assert "MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY" in historical_doc
     assert "was deleted after the trace111 audit" in historical_doc
 
@@ -330,11 +338,11 @@ def test_phase2_mpcoll_substrate_is_not_routed_through_item_or_special_only_sour
 
 
 def test_specialhi_jobj_ecb_floor_owner_stays_launch_scoped_until_full_packet() -> None:
-    ground_c = _read("src/mpcoll_ground.c")
+    ecb_pose_c = _read("src/mpcoll_ecb_pose.c")
     helper_match = re.search(
-        r"static inline uint8_t mpcoll_ground_specialhi_uses_jobj_ecb"
+        r"uint8_t mpcoll_ground_specialhi_uses_jobj_ecb"
         r"\([^)]*\) \{(?P<body>.*?)\n\}",
-        ground_c,
+        ecb_pose_c,
         flags=re.DOTALL,
     )
     assert helper_match is not None
