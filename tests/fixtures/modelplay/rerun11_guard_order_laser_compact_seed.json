@@ -1,7 +1,7 @@
 {
   "schema": "modelplay_compact_seed_v1",
   "source": "reports/modelplay/20260410_rl_doubles_v27_7000_rerun11/trace.json",
-  "description": "Minimal self-contained seeds for rerun11 guard-order and fresh GuardOn laser-entry locks. These replace the old dependency on ignored datasets/**/replays/debug/** row 0.",
+  "description": "Minimal self-contained seeds for rerun11 guard-order and fresh GuardOn laser-entry locks. These replace the old dependency on ignored debug replay buffers row 0.",
   "cases": [
     {
       "name": "squatwait_guard_preempts_jump",

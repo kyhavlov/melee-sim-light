@@ -787,7 +787,7 @@ def test_state_flags_x221b_b5_clears_after_throw_release() -> None:
 
 @pytest.mark.integration
 def test_state_flags_x221c_b2_set_on_guard_reflect_entry() -> None:
-    # Schema note: this slice added `seed_t.guard_reflect_timer_x18`; cache-era local datasets
+    # Schema note: this slice added `seed_t.guard_reflect_timer_x18`; cache-era local validation buffers
     # from before that schema are stale and should not be used for validation.
     #
     # Cluster lock: GuardReflect entry sets fp->x221C_b2 ("Powershield Active Bool") alongside

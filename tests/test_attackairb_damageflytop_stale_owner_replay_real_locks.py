@@ -246,7 +246,7 @@ def test_attackairb_damageflytop_stale_owner_subset_rows(case: _Case) -> None:
 
 @pytest.mark.integration
 def test_phantom_pending_damage_with_invalid_source_is_cleared_at_reseed() -> None:
-    # The hidden phantom/tip-log damage carry is source-owned. Dataset contract uses
+    # The hidden phantom/tip-log damage carry is source-owned. Validation buffer contract uses
     # source=0xFF together with amount=0/timer=0 for "no pending phantom"; a positive amount with
     # invalid source must not become a source-less percent-only damage path.
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8

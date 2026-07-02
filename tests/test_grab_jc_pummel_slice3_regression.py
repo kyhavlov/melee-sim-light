@@ -117,7 +117,7 @@ def test_kneebend_jc_grab_enters_catch(dataset_name: str, record: int, attacker:
     row = ds.rows[record : record + 1]
     victim = 1 - attacker
 
-    # Dataset schema only carries seed_t/ref_t1 rows. seed_t is the replay-derived t-state.
+    # Validation buffer schema only carries seed_t/ref_t1 rows. seed_t is the replay-derived t-state.
     assert int(row["seed_t"]["action_id"][0, attacker]) == 24
     assert int(row["ref_t1"]["action_id"][0, attacker]) == 212
     assert int(row["ref_t1"]["hitlag"][0, attacker]) == 0

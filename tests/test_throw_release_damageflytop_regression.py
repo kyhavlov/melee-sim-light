@@ -14,7 +14,7 @@ from tests.replay_buffers_loader import load_replay_buffers
 def test_throw_release_transitions_thrownhi_to_damageflytop_record_444() -> None:
     # Locks in throw release -> detach -> apply throw hit -> DamageFly* state entry.
     #
-    # Dataset record chosen to match a common suite offender shape:
+    # replay-buffer record chosen to match a common suite offender shape:
     # - seed_t: p0=ThrowHi (221), p1=ThrownHi (241), grab_owner_port[p1]=0
     # - ref_t1: p1 transitions to DamageFlyTop (90)
     root = Path(__file__).resolve().parents[1]

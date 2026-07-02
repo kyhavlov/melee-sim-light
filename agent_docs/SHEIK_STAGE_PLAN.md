@@ -323,7 +323,7 @@ Expected changed surfaces:
 
 - `replays/validation/...`
 - `replays/suites/...`
-- generated `datasets/...` if committed policy allows validation replay addition
+- generated replay-buffer outputs only if a specific validation tool explicitly writes them
 - reports under `reports/triage/newchar_sheik/`
 - possibly validation report files if the official suite becomes part of committed validation
 

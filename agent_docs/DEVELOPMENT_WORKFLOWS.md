@@ -47,14 +47,13 @@ find ../melee-sim-light/refs -mindepth 1 -maxdepth 1 -printf '%f\n' |
   done
 ```
 
-Keep these local links out of `git status` with worktree-local excludes:
+Keep local ISO links out of `git status` with worktree-local excludes:
 
 ```bash
-printf '/datasets\n/_iso\n' >> "$(git rev-parse --git-path info/exclude)"
+printf '/_iso\n' >> "$(git rev-parse --git-path info/exclude)"
 ```
 
-`datasets/` can be a symlink for many commands, but hardlinks are safer because
-some triage/reporting tools intentionally print repo-relative dataset paths.
+Validation no longer uses a persistent row-cache directory.
 
 ## Core Validation
 
@@ -136,21 +135,21 @@ uv run python -m tools.eval.run_rollout_suite_eval \
   --out reports/validation/rollout_suite_eval.txt
 ```
 
-Normal validation reads `.slp/.slpz` replay files directly. The `.msl` cache path
-is no longer supported by validation commands.
+Normal validation reads `.slp/.slpz` replay files directly through
+`ValidationReplayBuffers`. Persistent row-cache validation commands are not
+supported.
 
 ## Seed / Schema Changes
 
 If you touch seed/state/schema surfaces such as:
 - `src/api.h`, `src/api.c`
 - `src/state.h`, `src/state.c`
-- `tools/eval/dataset.py`
 - `tools/slippi/seed_history.py`
 - `tools/slippi/validation_buffer_builder.py`
 
 then run validation normally; it rebuilds the seed rows in memory from the
-suite `.slp/.slpz` files. Do not rebuild or compare against persistent `.msl`
-cache files; that validation surface has been removed.
+suite `.slp/.slpz` files. Do not rebuild or compare against persistent row-cache
+files; that validation surface has been removed.
 
 Native preprocessing derivations use process-wide generated table roots. For non-default generated
 data, set `MSL_DATA_DIR` before importing/initializing the native binding; compatibility
@@ -186,8 +185,6 @@ make rollout-diff \
 Useful triage CLIs:
 
 ```bash
-uv run python -m tools.eval.top_triples --help
-uv run python -m tools.eval.diff_locate --help
 uv run python -m tools.eval.stage_rollout_summary --help
 uv run python -m tools.eval.benchmark_validation_replay --help
 ```
@@ -196,7 +193,7 @@ uv run python -m tools.eval.benchmark_validation_replay --help
 
 Use the active playback-only tooling under `tools/dolphin/`; do not use
 `tools/dolphin/legacy/` for new investigations. Current validation no longer
-uses Dataset/.msl row labels, so Dolphin probes should be launched from explicit
+uses legacy row-cache labels, so Dolphin probes should be launched from explicit
 replay paths plus record/player coordinates.
 
 For controlled vanilla experiments from authored Slippi pre-frame fields, use:

@@ -113,7 +113,8 @@ Collect before writing any code:
 1. `.slp` -> `.slpz` (`make slpz-convert-validation` / `slpz-convert-suite`),
    place under `replays/validation/<suite>/`, add
    `replays/suites/<suite>.json` (ports, chars, stage).
-2. `make preprocess SUITE=replays/suites/<suite>.json` into `datasets/`.
+2. Run validation directly from the replay suite; normal validation derives
+   `ValidationReplayBuffers` in memory and does not write row-cache files.
 3. Engine smoke: init/reseed/step/write_compare on sampled rows.
 4. Record the **first numbers** (one-step mismatch count + rollout
    first-breaks/median) with ZERO char-specific C — this is your baseline.
@@ -144,7 +145,7 @@ Collect before writing any code:
    current frame's Anim/script callback can run before IASA, re-check the
    extracted script table at the already-advanced animation frame before gating
    runtime behavior. Marth exposed this at
-   `QuestionableHarmfulPanther.msl:2131:p0`: seed RunBrake frame 14 carried
+   `QuestionableHarmfulPanther.slpz:2131:p0`: seed RunBrake frame 14 carried
    `runbrake_cmd0=1`, but the frame-15 `set_cmd_var(0,0)` script event had
    already cleared the `ftCo_RunBrake_IASA -> fn_800C9CEC` TurnRun gate. Add a
    replay negative on the clear frame and an adjacent positive before the clear.
@@ -198,7 +199,7 @@ Collect before writing any code:
    be part of the seed contract: `Fighter_8006A1BC` decrements hitlag before
    `Fighter_8006A360` resumes non-hitlag Anim/IASA callbacks, so frozen rows
    must not advance the hidden special lane. Sheik Chain hitlag at
-   `sheik_demo_game.msl:4625..4628:p0` exposed this after the Start timer was
+   `sheik_demo_game.slpz:4625..4628:p0` exposed this after the Start timer was
    otherwise source-correct. Source anchors:
    `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{ftSk_SpecialS_CheckInitChain,ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim,ftSk_SpecialS_IASA,ftSk_SpecialAirS_IASA}`;
    `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}`.
@@ -215,7 +216,7 @@ Collect before writing any code:
    row to reconstruct the callback rate, so BODY contact on the first
    post-entry Run frame may need a collision-pose bridge without changing the
    global action timebase. Marth exposed this at
-   `InternalPowerlessWallaby.msl:5292:p0`: replay-visible Run frame 1 crossed
+   `InternalPowerlessWallaby.slpz:5292:p0`: replay-visible Run frame 1 crossed
    the next integer pose in MSL and missed a vanilla UpAir BODY hit. Add a
    first-post-entry positive and adjacent controls; do not promote this into a
    broad live-fractional Run pose owner unless Dolphin/source evidence proves
@@ -244,7 +245,7 @@ Collect before writing any code:
    can latch after the decrement. Add a held-down hitlag-exit positive and a
    neutral-input hitlag-exit negative when a new character's attacks expose
    hitlag-frozen aerial rows; Marth exposed the negative at
-   `InternalPowerlessWallaby.msl:483:p1`. Source anchors:
+   `InternalPowerlessWallaby.slpz:483:p1`. Source anchors:
    `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}`,
    `refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0`, and
    `refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast`.
@@ -257,10 +258,10 @@ Collect before writing any code:
    airborne on both soft platforms and hard floors. Add both positives and
    negatives when porting a character whose start positions or ECBs exercise
    different legal-stage floor geometry. Marth exposed this at
-   `QuestionableHarmfulPanther.msl:90:p0` on a Dream Land platform and
-   `QuestionableHarmfulPanther.msl:3900:p0` on Dream Land's main hard floor;
-   existing downward positives include `ParallelTemptingElk.msl:2170:p1` and
-   `ShadyDecimalStarling.msl:571:p1`. Source anchors:
+   `QuestionableHarmfulPanther.slpz:90:p0` on a Dream Land platform and
+   `QuestionableHarmfulPanther.slpz:3900:p0` on Dream Land's main hard floor;
+   existing downward positives include `ParallelTemptingElk.slpz:2170:p1` and
+   `ShadyDecimalStarling.slpz:571:p1`. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
@@ -272,7 +273,7 @@ Collect before writing any code:
    `floor_y + 0.0001`. When adding a character, lock at least one official
    `Fall_Coll -> Landing_Enter_Basic` row on a legal-stage hard floor and keep
    the entry publication separate from later grounded correction residuals.
-   Marth exposed this on Dream Land at `QuestionableHarmfulPanther.msl:532:p1`.
+   Marth exposed this on Dream Land at `QuestionableHarmfulPanther.slpz:532:p1`.
    Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll`,
    `refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_80082B1C}`,
@@ -287,12 +288,12 @@ Collect before writing any code:
    producer. Add flat positives, same/connected-slope positives, and unlinked
    slope-remap negatives when a new character's ECB shape reaches ledges
    differently from Fox/Falco. Marth exposed flat positives at
-   `InternalPowerlessWallaby.msl:290:p0`,
-   `InternalPowerlessWallaby.msl:4210:p0`,
-   `ParallelFamiliarZebra.msl:7821:p0`, and
-   `QuestionableHarmfulPanther.msl:4388:p1`; the Yoshi slope boundary is
-   `LoudDullGoat.msl:3757..3758:p1` for the unlinked side-platform remap and
-   `MetallicUniqueGrouse.msl:{947:p1,1990:p0,3967:p1}` for same/connected floor
+   `InternalPowerlessWallaby.slpz:290:p0`,
+   `InternalPowerlessWallaby.slpz:4210:p0`,
+   `ParallelFamiliarZebra.slpz:7821:p0`, and
+   `QuestionableHarmfulPanther.slpz:4388:p1`; the Yoshi slope boundary is
+   `LoudDullGoat.slpz:3757..3758:p1` for the unlinked side-platform remap and
+   `MetallicUniqueGrouse.slpz:{947:p1,1990:p0,3967:p1}` for same/connected floor
    chain positives. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
@@ -340,8 +341,8 @@ Collect before writing any code:
    airborne, a positive where a current/same-step platform source lands, and a
    multi-create spacie fair negative so future characters do not inherit the
    pending owner through action id alone. Marth exposed this at
-   `InternalPowerlessWallaby.msl:{1550,1966,8480}`; the hard-floor
-   `VictoriousSpitefulAlpaca.msl:8175` row is a separate floor-publication
+   `InternalPowerlessWallaby.slpz:{1550,1966,8480}`; the hard-floor
+   `VictoriousSpitefulAlpaca.slpz:8175` row is a separate floor-publication
    audit and should not be folded into the height-platform rule. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
    `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`,
@@ -360,7 +361,7 @@ Collect before writing any code:
    below the floor, and an adjacent landing control where the JumpAerial
    callback ECB crosses even if the destination aerial ECB is already below.
    Marth-suite WWS exposed the no-hit boundary at
-   `WellWornSmallGoshawk.msl:679:p0`; `LawfulInsistentMeerkat.msl:4967:p0`
+   `WellWornSmallGoshawk.slpz:679:p0`; `LawfulInsistentMeerkat.slpz:4967:p0`
    remains the legitimate source-ECB landing control. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{ftCo_JumpAerial_IASA,ftCo_JumpAerial_Coll}`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
@@ -393,9 +394,9 @@ Collect before writing any code:
    reconstructed platform line may publish a landing. Add a no-current-source
    positive after the final clear, a no-current-source active-script positive,
    and current-source negatives on both side platforms. Marth exposed this at
-   `InternalPowerlessWallaby.msl:{1037,1038,9718}:p1` and
-   `VigorousRelievedLlama.msl:3110:p0`; current-source landing controls are
-   `InternalPowerlessWallaby.msl:{488,3095}:p1`. Source anchors:
+   `InternalPowerlessWallaby.slpz:{1037,1038,9718}:p1` and
+   `VigorousRelievedLlama.slpz:3110:p0`; current-source landing controls are
+   `InternalPowerlessWallaby.slpz:{488,3095}:p1`. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
    `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`,
    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
@@ -414,9 +415,9 @@ Collect before writing any code:
    platform. Keep same-frame `AttackAir* -> Fall` rows on the ordinary
    AttackAir/Fall callback path and add current-source landing negatives so this
    guard does not suppress real platform contacts. Sheik exposed the no-current
-   source boundary at `SnarlingHelplessBeaver.msl:2464:p0`; current-source and
-   same-frame controls came from `ZestyPreciousTurtle.msl` and
-   `ConstantStiffOtter.msl`. Source anchors:
+   source boundary at `SnarlingHelplessBeaver.slpz:2464:p0`; current-source and
+   same-frame controls came from `ZestyPreciousTurtle.slpz` and
+   `ConstantStiffOtter.slpz`. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_Coll}`,
    `refs/melee/src/melee/ft/ft_081B.c::ft_800831CC`,
@@ -432,7 +433,7 @@ Collect before writing any code:
    the official suite, and keep the boundary data-driven from
    `data/moves/<char>.json::moves.ftCo_SM_AttackAirLw.events` rather than a
    character/action hardcode. Falco DAir in the Marth suite exposed this at
-   `VigorousRelievedLlama.msl:{8576,8577,8578}:p1`. Source anchors:
+   `VigorousRelievedLlama.slpz:{8576,8577,8578}:p1`. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
    `refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4`,
    `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`,
@@ -450,8 +451,8 @@ Collect before writing any code:
    the mutable latch before collision. Add a positive connected-floor
    publication, a previous-callback negative, a no-source-endpoint negative,
    and a frame-start-fastfall negative. Marth exposed the positive at
-   `InternalPowerlessWallaby.msl:1240:p1` and the fastfall negative at
-   `ParallelFamiliarZebra.msl:5199:p1`. Source anchors:
+   `InternalPowerlessWallaby.slpz:1240:p1` and the fastfall negative at
+   `ParallelFamiliarZebra.slpz:5199:p1`. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}`,
    `refs/melee/src/melee/ft/ft_081B.c::ft_80083090`,
    `refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast`,
@@ -517,8 +518,8 @@ Collect before writing any code:
    that same platform id should remain airborne; the carried id is not a fresh
    floor acceptance. Keep true crossings and fastfall rows on the ordinary
    bottom-sweep path. Marth exposed the non-fastfall stale-carry boundary at
-   `WellWornSmallGoshawk.msl:5727..5729:p1`; aggregate fastfall
-   `DelayedSuperbGuanaco.msl:200:p1` protects the adjacent landing path.
+   `WellWornSmallGoshawk.slpz:5727..5729:p1`; aggregate fastfall
+   `DelayedSuperbGuanaco.slpz:200:p1` protects the adjacent landing path.
    Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll`,
    `refs/melee/src/melee/ft/ft_081B.c::ft_800831CC`,
@@ -535,10 +536,10 @@ Collect before writing any code:
    positive where the previous common-action pose admits BODY contact, plus
    adjacent GuardOn/GuardSetOff negatives so the entry-pose owner does not
    broaden steady shield rows. Marth exposed this at
-   `VictoriousSpitefulAlpaca.msl:4317:p0` (Dash frame-start pose, Fair hitbox
+   `VictoriousSpitefulAlpaca.slpz:4317:p0` (Dash frame-start pose, Fair hitbox
    0, hurtcap 6/bone 29); aggregate leak guards include
-   `MotionlessAggressiveJay.msl:734:p1` and
-   `PriceyPartialAlbatross.msl:5142:p0`. Source/proof anchors:
+   `MotionlessAggressiveJay.slpz:734:p1` and
+   `PriceyPartialAlbatross.slpz:5142:p0`. Source/proof anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0`,
    `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ChangeMotionState}`,
    `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`,
@@ -558,7 +559,7 @@ Collect before writing any code:
    authoritative unless their hurtcap list is absent. Add a no-early-hit
    positive and an adjacent same-family hit negative so the fix is a pose owner,
    not a broad shield suppressor. Marth exposed this at
-   `WellWornSmallGoshawk.msl:8444..8445:p1` (`EscapeN -> GuardOn` under Fox
+   `WellWornSmallGoshawk.slpz:8444..8445:p1` (`EscapeN -> GuardOn` under Fox
    NAir). Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,ftCo_GuardOn_Anim,ftCo_800925A4,ftCo_80091E78}`,
    `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`,
@@ -574,8 +575,8 @@ Collect before writing any code:
    Reconstruct the source-order publication from `mv.co.guard` lanes and the
    extracted `data/shields/<char>.bin::guard_on_xyz` current-pose trajectory,
    with adjacent rows proving no-contact and terminal-contact boundaries. Marth
-   exposed this at `QuestionableHarmfulPanther.msl:2597..2600:p1` and
-   `RipeWealthySeahorse.msl:4901..4905:p0`; Fox/Falco terminal no-contact rows
+   exposed this at `QuestionableHarmfulPanther.slpz:2597..2600:p1` and
+   `RipeWealthySeahorse.slpz:4901..4905:p0`; Fox/Falco terminal no-contact rows
    protect the shared path from becoming a broad terminal-GuardOn shield hit.
    Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800925A4,ftCo_80091E78}`,
@@ -619,9 +620,9 @@ Collect before writing any code:
    the frame outside the blaster loop, but remains a live-segment article callback
    when the owner starts the frame in SpecialNLoop even if it lands later that
    same frame. Marth exposed the hit
-   side at `RipeWealthySeahorse.msl:{365,10682}:p0`; Fox
-   `DistinctCaringCobra.msl:2231` remains the adjacent startup negative, and
-   `DelayedSuperbGuanaco.msl:10435` / `ThisVioletRaccoon.msl:1037` protect the
+   side at `RipeWealthySeahorse.slpz:{365,10682}:p0`; Fox
+   `DistinctCaringCobra.slpz:2231` remains the adjacent startup negative, and
+   `DelayedSuperbGuanaco.slpz:10435` / `ThisVioletRaccoon.slpz:1037` protect the
    `0x44` mature-endpoint post-loop negative. Source anchors:
    `refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,itFoxlaser_UnkMotion1_Phys,it_8029C4D4}`,
    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}`, and
@@ -641,7 +642,7 @@ Collect before writing any code:
    non-unit `fp->x34_scale.z`. Ordinary airborne `Fall` rows should stay on the
    seed-visible hurtcap-depth path unless a probe/seed lane proves that hidden
    transform owner. Marth exposed the trap at
-   `VictoriousSpitefulAlpaca.msl:2008:p0`, where a state0 Falco laser sits near
+   `VictoriousSpitefulAlpaca.slpz:2008:p0`, where a state0 Falco laser sits near
    Marth's high Fall cap2; broad Fall-as-Z-force logic incorrectly entered
    DamageAir while vanilla kept the laser and fighter alive. Keep positive laser
    BODY locks such as TBK/SDS, plus a high-cap no-hit negative, so future
@@ -659,9 +660,9 @@ Collect before writing any code:
    BODY attribution names the same source port from an older attacker instance.
    Add a positive first-Guard dense-latch row, plus negatives for continuing
    Guard and stale victim-iid rows. Marth exposed this at
-   `InternalPowerlessWallaby.msl:4229:p0`; controls include
-   `InternalPowerlessWallaby.msl:464:p0` (continuing Guard still takes BODY)
-   and `VictoriousSpitefulAlpaca.msl:5706:p0` (first Guard with stale dense
+   `InternalPowerlessWallaby.slpz:4229:p0`; controls include
+   `InternalPowerlessWallaby.slpz:464:p0` (continuing Guard still takes BODY)
+   and `VictoriousSpitefulAlpaca.slpz:5706:p0` (first Guard with stale dense
    victim iid still takes BODY). Source anchors:
    `data/scripts/<char>.bin::MSLFTSC1 AttackAirN create_hitbox/hit_group`,
    `refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_AttackAirN`,
@@ -679,7 +680,7 @@ Collect before writing any code:
    "proven current hitlag" guard: same MSLFTSC1 `AttackAirN` create lifetime,
    replay ShieldDesc contact marker, and current defender iid are enough to
    restore the source `HitCapsule` victim list for the first `Guard` row.
-   Marth exposed this at `RipeWealthySeahorse.msl:225:p0`.
+   Marth exposed this at `RipeWealthySeahorse.slpz:225:p0`.
    Damaging BODY hitlag tails have the same hidden-state shape. During hitlag,
    `Fighter_8006A360` skips the action script, so previous `x914` HitCapsules
    and their `victims_1` rings survive even if a one-step seed lacks explicit
@@ -689,7 +690,7 @@ Collect before writing any code:
    inserted the victim into every active same-group HitCapsule. Keep the bridge
    reseed-only, let authoritative per-HitCapsule empty seeds win, and add an
    adjacent first-hit positive plus an attribution-cleared negative. Marth Fair
-   exposed this at `MetallicUniqueGrouse.msl:2116:p0`.
+   exposed this at `MetallicUniqueGrouse.slpz:2116:p0`.
    **Dense hitlist seed bridges must follow script create/clear bands**:
    if a replay seed only has the legacy dense group victim lane, do not
    materialize that state into a newly-created HitCapsule just because a spacie
@@ -705,7 +706,7 @@ Collect before writing any code:
    earlier band must not suppress a later-band BODY contact when the extracted
    script has already crossed `clear_hitboxes` and no authoritative
    per-HitCapsule seed lane exists. Marth `AttackAirN` exposed this at
-   `InternalPowerlessWallaby.msl:477:p0`; adjacent `476/478` keep the
+   `InternalPowerlessWallaby.slpz:477:p0`; adjacent `476/478` keep the
    no-hit-before-band and seeded-hitlag-tail boundaries honest. Source anchors:
    `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`,
    `refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0`,
@@ -732,9 +733,9 @@ Collect before writing any code:
    adjacent one-frame-too-early negative, a no-visible-latch negative, and a
    non-Marth callback-order negative so this does not turn into "any Squat frame
    3 on a platform passes." Marth exposed this at
-   `LoudDullGoat.msl:90:p0` and `VictoriousSpitefulAlpaca.msl:91:p1` in
+   `LoudDullGoat.slpz:90:p0` and `VictoriousSpitefulAlpaca.slpz:91:p1` in
    free-running rollout, with the one-step latch case at
-   `VictoriousSpitefulAlpaca.msl:3269:p1`; `MediumVirtualPig.msl:2593:p0`
+   `VictoriousSpitefulAlpaca.slpz:3269:p1`; `MediumVirtualPig.slpz:2593:p0`
    proved the same-frame Squat-entry negative.
    Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C`,
@@ -765,7 +766,7 @@ Collect before writing any code:
    same-proc floor-loss positive, a carried-sweep Squat negative, and the
    following-Squat floor-loss control when a new character's pushbox or stage
    position reaches ledges differently. Marth-suite WWS exposed this at
-   `WellWornSmallGoshawk.msl:{2145,2146,8411}:p0`.
+   `WellWornSmallGoshawk.slpz:{2145,2146,8411}:p0`.
    Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA`,
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{ftCo_800D5FB0,ftCo_Squat_Coll}`,
@@ -795,8 +796,8 @@ Collect before writing any code:
    (`MSLMSO01`), not a local replay-row or action-id exception. Add positive
    rows where `CaptureJump` lands, and adjacent negatives proving
    `CapturePulled*`/`CaptureWait*` do not inherit the same floor-contact path.
-   Marth exposed this at `QuestionableHarmfulPanther.msl:3110:p0` and
-   `WellWornSmallGoshawk.msl:{5180,5322}:p0`. Source anchors:
+   Marth exposed this at `QuestionableHarmfulPanther.slpz:3110:p0` and
+   `WellWornSmallGoshawk.slpz:{5180,5322}:p0`. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_CaptureJump_Phys,ftCo_CaptureJump_Coll}`,
    `refs/melee/src/melee/ft/ft_081B.c::{ftCo_AirCatchHit_Coll,ft_80082B1C}`,
    and `data/motion_state/owners/<char>.bin::MSLMSO01`.
@@ -830,7 +831,7 @@ Collect before writing any code:
    strictly between 90 and 270 degrees. Do not collapse the KB sign and final
    facing into one lane when a new character's throw table differs from the
    spacies. Marth ThrowHi (raw angle 93) exposed this at
-   `QuestionableHarmfulPanther.msl:231..265:p0`: the wrong final facing mirrored
+   `QuestionableHarmfulPanther.slpz:231..265:p0`: the wrong final facing mirrored
    terminal DamageFlyTop hurtcaps and changed the later `AttackHi3` BODY contact.
    Add an in-range throw positive and an out-of-range adjacent throw negative for
    each new throw table family. Source anchors:
@@ -870,7 +871,7 @@ Collect before writing any code:
    world positions through `lb_8000B1CC` after AObj interpretation. Do not reuse
    integer SSANIM pose matrices for this delta just because the spacie rows are
    close: Marth CatchPull exposed a persistent X drift at
-   `QuestionableHarmfulPanther.msl:191..264:p0`. Add a steady pulled/wait
+   `QuestionableHarmfulPanther.slpz:191..264:p0`. Add a steady pulled/wait
    positive and a grounded connect negative for every new character with a remapped
    grab/capture anchor. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAADC,fn_800DAD18}`,
@@ -884,7 +885,7 @@ Collect before writing any code:
    If `uses_root_motion` is set, Phys has already consumed that TransN into
    `cur_pos` through `ft_80085030`, so adding it again will double-shift spacie
    root-motion attacks. Marth AttackS4 exposed this at
-   `ParallelFamiliarZebra.msl:1838:p0`: Dolphin selected the 14-damage hb0 sour
+   `ParallelFamiliarZebra.slpz:1838:p0`: Dolphin selected the 14-damage hb0 sour
    hit using a live sword JObj matrix equal to the extracted matrix plus the
    current TransN tail; without the tail MSL selected the 20-damage hb3 tipper.
    Add a motivating new-character positive and a root-motion negative (Fox/Falco
@@ -924,7 +925,7 @@ Collect before writing any code:
    Source `ftCo_8008DCE0` can clear `ground_or_air` inside the severe grounded
    branch and then sample the airborne DamageFlyRoll RNG gate. Classify these
    rows from the captured pre-damage action plus selected DmgLog HitCapsule
-   payload. Marth exposed this at `InternalPowerlessWallaby.msl:3983:p0`: the
+   payload. Marth exposed this at `InternalPowerlessWallaby.slpz:3983:p0`: the
    seed action is `Wait`, the submotion looks Fall-like, but source selected
    Marth `AttackLw3` hb0 (`damage=9`, `angle=30`, `kbg=40`, `bkb=40`) before
    the terminal roll gate. Add a positive, adjacent controls, and a mutation or
@@ -942,10 +943,10 @@ Collect before writing any code:
    `lbColl_80007ECC` collision-skeleton scale counterfactual, while
    root-authored standing Catch stays on the root-scaled pose path. Marth
    required this because standing Catch root bubbles should connect on
-   `VictoriousSpitefulAlpaca.msl:6788` / `RipeWealthySeahorse.msl:1811` but
+   `VictoriousSpitefulAlpaca.slpz:6788` / `RipeWealthySeahorse.slpz:1811` but
    should not over-admit simultaneous standing Catch at
-   `InternalPowerlessWallaby.msl:7737`; Marth root CatchDash still connects at
-   `InternalPowerlessWallaby.msl:7311`. Source anchors:
+   `InternalPowerlessWallaby.slpz:7737`; Marth root CatchDash still connects at
+   `InternalPowerlessWallaby.slpz:7311`. Source anchors:
    `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`,
    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_8007AD18}`,
    and `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC`.
@@ -983,13 +984,13 @@ Collect before writing any code:
    `Fall`: a bounded `mpColl_80047E14` / `mpColl_80044628_Floor` probe showed
    vanilla accepting/rejecting the same floor sweep from CommonFall-blended ECB
    bottoms, not from the raw neutral Fall table, and the Battlefield hard-floor
-   boundary (`ToughOutlyingChicken.msl:3812/3813`) proved the scalar extent blend
+   boundary (`ToughOutlyingChicken.slpz:3812/3813`) proved the scalar extent blend
    was still too low. Do not promote that to a shared free-running collision
    rule without aggregate controls or a direct `mpColl_LoadECB_inline` /
    `mpCollInterpolateECB` probe.
-   Marth UAir exposed the strong positive on `LoudDullGoat.msl:4539:p0`;
-   aggregate Falco rows `DistinctCaringCobra.msl:5573:p1` and
-   `ImpassionedAlarmedTarsier.msl:6428:p1` exposed the tight no-hit and
+   Marth UAir exposed the strong positive on `LoudDullGoat.slpz:4539:p0`;
+   aggregate Falco rows `DistinctCaringCobra.slpz:5573:p1` and
+   `ImpassionedAlarmedTarsier.slpz:6428:p1` exposed the tight no-hit and
    entry-tick positive controls. Add a motivating positive plus adjacent
    no-hit/entry-phase controls before adjusting hitbox endpoints. Source
    anchors:
@@ -1004,7 +1005,7 @@ Collect before writing any code:
     `x221C_b6` clears. Catch input is before grounded A-attacks, so raw Z
     synthesis (`held_inputs` LR plus `input.x668` A) must enter Catch instead
     of being consumed as Attack11. Marth exposed this at
-    `VictoriousSpitefulAlpaca.msl:387:p0`. Add a positive with Z/LR+A catch
+    `VictoriousSpitefulAlpaca.slpz:387:p0`. Add a positive with Z/LR+A catch
     input and a negative where only A remains and the row still falls through to
     Attack11. Source anchors:
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA`,
@@ -1045,7 +1046,7 @@ cover most of it.
      special it can enter is Up-B through the `x686 == 0` up+B presence lane.
      Do not let diagonal B become Side-B/Neutral-B/Down-B from KneeBend just
      because Wait resolves those directions. Sheik exposed this with
-     `sheik_demo_game.msl:{1259,1786}:p0`.
+     `sheik_demo_game.slpz:{1259,1786}:p0`.
    - Grounded resolution order is source order: SpecialS -> up -> neutral
      (D6824) -> down (D68C0). Watch same-frame races (Run_IASA dispatches
      before RunBrake entry — the brake entry frame honors Run's chain).
@@ -1068,7 +1069,7 @@ cover most of it.
    Grounded Side-B may also have common pre-dispatch `ftCo_SpecialS_CheckInput`
    / `doEnter` velocity writes before the character-specific enter callback.
    Audit the complete entry path with probe/decomp before retaining runtime
-   behavior: Marth `LoudDullGoat.msl:713:p1` proved both the common xB8 damping
+   behavior: Marth `LoudDullGoat.slpz:713:p1` proved both the common xB8 damping
    and a later vanilla `0.25x` write before S1 physics. Modeling only the first
    write regressed rollout, so the owner must be completed through script /
    action-entry data rather than copied as a local partial constant.
@@ -1277,12 +1278,12 @@ Process rules learned the hard way (apply to ALL ports):
   UCF 0.84's tumble component hooking the DamageFall IASA compare.
 - **Validation reports must be regenerated after ANY seed-derivation change.**
   Normal validation derives seed lanes directly from replay files; rerun the
-  affected validation suites instead of relying on cache regeneration.
+  affected validation suites instead of relying on stale derived artifacts.
 - **Baseline-stash attribution before repinning stale locks.** When
-  newly-runnable tests fail (e.g. after building local debug datasets from
+  newly-runnable tests fail (e.g. after adding local debug replays from
   `replays/debug/*.slp`), prove provenance before touching pins: stash the
-  working diff, rebuild, rerun the failures, and if needed rebuild one
-  dataset under baseline preprocessing. Repin only rows proven to now match
+  working diff, rebuild, rerun the failures, and compare against a baseline
+  validation-buffer build when needed. Repin only rows proven to now match
   ref (or otherwise source-backed); xfail with a documented reason what
   cannot be honestly repinned; never blindly re-anchor a "known divergence"
   test to whatever the current build emits.
@@ -1363,8 +1364,8 @@ B-reverse, and airdodge-through-stage kills. You MUST:
 - Counter/absorb intercepts: fail closed when geometry is missing.
 - A witness that contradicts the disassembly usually means a UCF gecko
   (refs/ucf), not a hidden lane.
-- Seed-derivation changes require `make preprocess` on every suite before any
-  measurement means anything.
+- Seed-derivation changes require rerunning the affected validation suites
+  before any measurement means anything.
 - GrabMash-family callbacks read fp inputs one serialized row behind the
   post-frame row they affect; anim-rate writes are post-advance (the engine's
   pre-input callback phase models the deferral — do not add another).

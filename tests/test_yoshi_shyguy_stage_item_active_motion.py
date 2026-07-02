@@ -1411,7 +1411,7 @@ def test_active_yoshi_shyguy_integrates_visible_velocity() -> None:
         ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
-            raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
+            raise AssertionError(f"stale validation buffer derivation: rebuild native bindings and rerun validation: {exc}")
         raise
     record = 1235
     row = ds.rows[record]
@@ -1487,7 +1487,7 @@ def test_yoshi_shyguy_active_turn_delay_is_prefix_causal_after_visible_flip_pec_
     ds = load_replay_buffers(str(dataset_path))
     seed = ds.rows[947]["seed_t"]
     assert int(seed["item_shyguy_delay_valid_u8"][0]) == 1, (
-        "stale local dataset cache: rerun forced aggregate preprocess for "
+        "stale validation buffer derivation: rebuild native bindings and rerun validation for "
         "active Shy Guy turn-delay derivation"
     )
     # The previous visible frame flipped this Heiho's exported X velocity. Preprocessing can
@@ -1639,7 +1639,7 @@ def test_yoshi_shyguy_floor_reset_restarts_phase_lane_pec_1290() -> None:
     ds = load_replay_buffers(str(dataset_path))
     seed = ds.rows[1290]["seed_t"]
     assert int(seed["item_shyguy_dyn_y_phase_u8"][1]) == 0, (
-        "stale local dataset cache: rerun forced aggregate preprocess for "
+        "stale validation buffer derivation: rebuild native bindings and rerun validation for "
         "active Shy Guy floor-reset phase derivation"
     )
 
@@ -1701,7 +1701,7 @@ def test_yoshi_shyguy_turn_cooldown_suppresses_repeat_wall_turn_pec_1835() -> No
     ds = load_replay_buffers(str(dataset_path))
     seed = ds.rows[1835]["seed_t"]
     assert int(seed["item_shyguy_delay_u16"][1]) == 20, (
-        "stale local dataset cache: rerun forced aggregate preprocess for "
+        "stale validation buffer derivation: rebuild native bindings and rerun validation for "
         "active Shy Guy turn-delay derivation"
     )
 
@@ -1729,7 +1729,7 @@ def test_state4_yoshi_shyguy_integrates_visible_velocity() -> None:
         ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
-            raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
+            raise AssertionError(f"stale validation buffer derivation: rebuild native bindings and rerun validation: {exc}")
         raise
     record = 614
     row = ds.rows[record]
@@ -1772,7 +1772,7 @@ def test_yoshi_shyguy_reconstructed_phase_handles_aobj_loop_rows() -> None:
         ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
-            raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
+            raise AssertionError(f"stale validation buffer derivation: rebuild native bindings and rerun validation: {exc}")
         raise
 
     # State 4 row 667 is after the x24 return-flight prefix. The raw active-frame modulo phase
@@ -1797,7 +1797,7 @@ def test_yoshi_shyguy_state3_zero_delay_rows_do_not_over_enter_state4() -> None:
         ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
-            raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
+            raise AssertionError(f"stale validation buffer derivation: rebuild native bindings and rerun validation: {exc}")
         raise
 
     items_for_derivation = np.empty(
@@ -1824,7 +1824,7 @@ def test_yoshi_shyguy_state3_zero_delay_rows_do_not_over_enter_state4() -> None:
             or int(seed["item_shyguy_delay_valid_u8"][1]) != int(fresh_delay_valid[record, 1])
         ):
             raise AssertionError(
-                "stale local dataset cache: rerun forced aggregate preprocess for "
+                "stale validation buffer derivation: rebuild native bindings and rerun validation for "
                 "Shy Guy repeated-damage x24 derivation"
             )
         out, ref = _step_one_row(dataset_path, record)

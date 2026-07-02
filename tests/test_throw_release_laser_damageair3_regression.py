@@ -15,7 +15,7 @@ def test_throw_release_victim_enters_damageair3_and_hitlag_record_454() -> None:
     # Locks in a suite offender where a ThrownLw victim transitions into DamageAir* with hitlag on
     # the throw-release frame.
     #
-    # Dataset record:
+    # replay-buffer record:
     # - seed_t: p0=ThrowLw (0xDE), p1=ThrownLw (0xF2), grab_owner_port[p1]=0
     # - ref_t1: p1=DamageAir3 (0x56), hitlag=4
     root = Path(__file__).resolve().parents[1]

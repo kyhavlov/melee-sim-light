@@ -158,6 +158,6 @@ def test_guardon_guard_action_frame_stays_minus1_with_no_submotion(case: _Action
 # - QuerulousGrandDinosaur.slpz rec=2571 p=1
 # Both are Guard snapshots (aid=179, anim=-1/frame=-1) where out transitions to GuardSetOff
 # (aid=181, anim=40/frame=0) while replay ref remains Guard (179). They also appear in
-# seed==ref action_id top_triples as ref->out=179->181 (count=2 suite-wide).
+# seed==ref action_id top cluster as ref->out=179->181 (count=2 suite-wide).
 # This is a broader Guard IASA/release timing mismatch, not the no-submotion GuardOn->Guard
 # shape issue locked above.

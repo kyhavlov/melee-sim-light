@@ -82,6 +82,12 @@ Current target domain:
   candidate searches, state maps, or repeated JSON/data reads to seed generation. New seed-lane
   derivation must use native C (`bindings/msl_preprocess_native.c` / `msl_binding`) or include timing
   proof that the Python path is negligible.
+- Normal validation is expected to be fast enough for frequent local use. Treat major validation
+  wall-time or single-core throughput regressions as performance bugs.
+- Normal validation must run from replay-derived `ValidationReplayBuffers` and native validation /
+  preprocessing helpers. Python may schedule suites and format reports, but it must not reintroduce
+  wide row materialization, persistent validation caches, or per-frame/per-row derivation loops in
+  the normal validate-all / heldout path.
 
 ## Required Last-Mile Behavior
 

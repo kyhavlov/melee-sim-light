@@ -1688,7 +1688,7 @@ def test_guardreflect_expired_x14_no_submotion_body_uses_guardon_hurtcaps_gat_11
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(
-                f"stale required validation dataset cache: rerun forced aggregate preprocess for {dataset_path}"
+                f"stale validation buffer derivation: rebuild native bindings and rerun validation for {dataset_path}"
             ) from exc
         raise
 
@@ -1729,7 +1729,7 @@ def test_guardreflect_active_x14_no_submotion_without_guardon_provenance_stays_n
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(
-                f"stale required validation dataset cache: rerun forced aggregate preprocess for {dataset_path}"
+                f"stale validation buffer derivation: rebuild native bindings and rerun validation for {dataset_path}"
             ) from exc
         raise
     seed = ds.rows["seed_t"][record : record + 1].copy()
@@ -1771,7 +1771,7 @@ def test_guardreflect_active_x14_no_guardon_allows_later_seeded_shield_ewt_1218(
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(
-                f"stale required validation dataset cache: rerun forced aggregate preprocess for {dataset_path}"
+                f"stale validation buffer derivation: rebuild native bindings and rerun validation for {dataset_path}"
             ) from exc
         raise
 
@@ -2921,7 +2921,7 @@ def test_fox_catch_dynamic_tail_chain_keeps_dair_body_timing_mgs(
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(
-                f"stale required validation dataset cache: rerun forced aggregate preprocess for {dataset_path}"
+                f"stale validation buffer derivation: rebuild native bindings and rerun validation for {dataset_path}"
             ) from exc
         raise
     attacker = 0
@@ -3130,7 +3130,7 @@ def test_attackairn_wait_rollout_bridge_not_used_by_ordinary_one_step_his_2752()
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(
-                f"stale required validation dataset cache: rerun forced aggregate preprocess for {dataset_path}"
+                f"stale validation buffer derivation: rebuild native bindings and rerun validation for {dataset_path}"
             ) from exc
         raise
     record = 2752

@@ -122,9 +122,8 @@ Validation cadence:
 
 - After each retained owner, run focused tests and cheap checks.
 - Run full validation after schema/data-contract changes.
-- Suite validation builds seed rows directly from `.slp` files by default; force preprocess primary
-  + aggregate only when persistent `.msl` cache encoding/metadata or cache regeneration is part of
-  the change being validated.
+- Suite validation builds seed rows directly from replay files; persistent
+  row-cache validation was deleted and should not be reintroduced.
 - Do not refresh validation reports for test-only changes. If gameplay/runtime logic changes,
   reports must be generator-produced and validation deltas must be compared against the cycle
   baseline.

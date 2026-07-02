@@ -423,10 +423,9 @@ Source/generation:
 - Runtime distinguishes two x14 consumers: JumpAerial entry uses the buffered x/y snapshot carried
   by `mv.co.damage.x14`, while the following JumpAerial Phys callback applies live drift from the
   current input and character aerial physics.
-- Legacy cache-era note: this semantic changed without changing `MslSeed` size when
-  FlyReflectWall/Ceil were added to the derived DamageFly-family x14 seed set. Cache version 5 was
-  the first valid `.msl` cache generation for FlyReflect x14 rows; older caches can pass
-  record-size checks while silently missing the terminal buffered jump.
+- Validation-buffer note: this semantic changed without changing `MslSeed` size when
+  FlyReflectWall/Ceil were added to the derived DamageFly-family x14 seed set. Rerun validation
+  from replay files after touching this owner; persistent row-cache compatibility was deleted.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_Damage_IASA,ftCo_DamageFly_Anim,ftCo_DamageFly_IASA}`.
@@ -454,9 +453,8 @@ Source/generation:
   receives the live source hitbox/item angle at damage entry.
 - Runtime damage entry in `src/combat.c` sets the same internal bit from the source knockback angle;
   reseed unpacks the bit into `MslStateSoA.damage_meteor_cancel_eligible_x1a`.
-- Legacy cache-era note: this semantic changed without changing `MslSeed` size, so cache version 4
-  was the first valid `.msl` cache generation for this packed bit. Version 3 `.msl` files can pass
-  record-size checks while silently missing x1A.
+- Validation-buffer note: this semantic changed without changing `MslSeed` size. Rerun validation
+  from replay files after touching this owner; persistent row-cache compatibility was deleted.
 - The retained runtime meteor-cancel escape branch is JumpAerial-only. SpecialHi admission remains
   an open source-owner boundary and must not be inferred from this seed bit alone.
 
@@ -674,7 +672,7 @@ Source/generation:
   `tools/slippi/validation_buffer_builder.py` after frame-rate/ECB-lock derivation.
 - Uses extracted `data/ecb/*` tables and generated `MSLMSO01` motion-state collision classes.
 - Dolphin probe artifact `reports/triage/active_damage_agn794_forensic/` confirms that
-  `AttachedGoodNaturedGuanaco.msl:794` enters visible `DamageFlyTop` hitlag from `AttackAirLw`
+  `AttachedGoodNaturedGuanaco.slpz:794` enters visible `DamageFlyTop` hitlag from `AttackAirLw`
   while the loaded CollData ECB still matches the pre-Damage AttackAir pose. Broader pre-Damage
   action families are not admitted by this lane until separately probed.
 
@@ -769,9 +767,8 @@ Source/generation:
   when `grStory_801E3418` reaches the spawn callback. This replaces the old synthetic `+0x10000`
   Shy Guy rollout clock. It is a replay hidden-stream reconstruction lane, not a free-running
   stage scheduler or global RNG consumer-order closure.
-- Suite `.msl` cache metadata version `3` invalidates older Yoshi no-live-Heiho cache rows with the
-  same record size but stale `frame_pre_random_seed` semantics. Forced preprocessing regenerates the
-  corrected cache metadata and sample payload.
+- Normal validation derives this lane from replay files into `ValidationReplayBuffers`; persistent
+  row-cache metadata was deleted.
 - `reseed_seed_rollout()` always advances `frame_id` during validation rollout so frame-indexed
   stage/object owners consume the current simulated frame rather than the reseed row. The immediate
   source-backed owner is Yoshi's Story Randall: `data/stages/bin/grst.bin::MSLSTG01`
@@ -859,8 +856,8 @@ Seed generation:
   appear on terminal Loop -> End and landing/entry rows. `x67D` only proves the latch when the
   derived B-edge action frame is inside the MSLFTSC1 cmd0 window (including the runtime latch-clear
   tail from `move_tables_special_cmd0_active_at_frame`).
-- Legacy cache-era note: cache version 22 was the first valid `.msl` generation for this seed lane
-  and its expanded `MSLDSLT` record size.
+- Validation-buffer note: this lane expands `MslSeed`; persistent row-cache compatibility was
+  deleted, so validation must be rerun from replay files after changes.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA}`.
@@ -891,9 +888,8 @@ Runtime consumption:
 - `src/sheik_specials.c` decrements the lane inside the Sheik Vanish travel Anim owner. Free-running
   runtime initializes the same timer on Vanish travel entry from extracted Sheik attrs.
 
-Cache/regeneration:
-- This lane expands `MslSeed` and `tools/eval/dataset.py::SEED_DTYPE`. Sheik datasets generated
-  before the lane must be regenerated before Sheik one-step/rollout validation can be trusted.
+Validation-buffer contract:
+- This lane expands `MslSeed`. Rerun validation from replay files after touching it.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{ftSk_SpecialHi_80113838,ftSk_SpecialHi_80113A30,ftSk_SpecialHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Anim}`.
@@ -938,16 +934,10 @@ Runtime consumption:
   fighter/item state. This is a probe-backed hidden HSD stream reconstruction for replay reseeds,
   not a free-running gameplay override.
 
-Cache/regeneration:
-- These lanes expand `MslSeed` and `tools/eval/dataset.py::SEED_DTYPE`. Cache version 24 is the
-  first valid cache generation for Sheik datasets that include Needle count/timer lanes; older
-  `.msl` files must be regenerated before Sheik one-step/rollout validation is trusted.
-- Cache version 25 is the first valid cache generation for Needle End shoot-frame
-  `seed_t.frame_pre_random_seed` reconstruction; older same-record-size `.msl` files have stale
-  Y-jitter RNG semantics.
-- Cache version 29 is the first valid cache generation for stored Needle count persistence across
-  non-SpecialN Sheik actions; older same-record-size `.msl` files can under-seed later Needle
-  volleys after a cancel or movement gap.
+Validation-buffer contract:
+- These lanes expand `MslSeed`. Rerun validation from replay files after touching Needle
+  count/timer lanes, Needle End shoot-frame `seed_t.frame_pre_random_seed` reconstruction, or
+  stored Needle count persistence across non-SpecialN Sheik actions.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{doEnter,ftSk_SpecialNLoop_Anim,doIasa,ftSk_SpecialNEnd_Anim,shootNeedles}`.
@@ -997,11 +987,9 @@ Runtime consumption:
   MotionState callbacks. The compact runtime x0 saturates rather than wrapping because source x0 is
   an integer and only threshold comparisons are needed in the lite runtime.
 
-Cache/regeneration:
-- These lanes expand `MslSeed` and `tools/eval/dataset.py::SEED_DTYPE`. Cache version 26 is the
-  first valid cache generation for Sheik datasets that include Chain x0/latch lanes. Cache version
-  27 is the first generation whose Chain lanes honor hitlag-frozen callback ownership. Older
-  `.msl` files must be regenerated before Sheik one-step/rollout validation is trusted.
+Validation-buffer contract:
+- These lanes expand `MslSeed`. Rerun validation from replay files after touching Chain x0/latch
+  lanes or hitlag-frozen callback ownership.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{ftSk_SpecialS_CheckInitChain,ftSk_SpecialS_Anim,ftSk_SpecialAirS_Anim,ftSk_SpecialS_IASA,ftSk_SpecialAirS_IASA,ftSk_SpecialS_80111830,ftSk_SpecialS_80111988,ftSk_SpecialS_80111DF8,ftSk_SpecialS_80111EB4}`.
@@ -1043,16 +1031,14 @@ Runtime consumption:
   reseed. Characters with mask `0` still serialize the lanes for diagnostics/future audited owners,
   but runtime stays on the existing deterministic action-frame reconstruction.
 
-Cache/regeneration:
-- This lane expands `MslSeed` and `tools/eval/dataset.py::SEED_DTYPE`; cache version 23 is the
-  first valid suite-cache generation. Stale `.msl` datasets must be regenerated before one-step or
-  rollout validation is trusted.
+Validation-buffer contract:
+- This lane expands `MslSeed`; rerun validation from replay files after touching it.
 
 Decomp/probe contract:
 - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner`
 - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll`
 - `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}`
-- Pushed Ishiiruka Fall-floor probe for Sheik `StiffLustrousZebra.msl:3696:p0` and adjacent
+- Pushed Ishiiruka Fall-floor probe for Sheik `StiffLustrousZebra.slpz:3696:p0` and adjacent
   CommonFall controls.
 
 ## Replay Seed Contract: Marth Counter Hitlag Floor Provenance
@@ -1081,10 +1067,9 @@ Runtime consumption:
 - Free-running runtime sets or loses the same owner through the real Counter Anim and ground/air
   swap paths. The seed lane is only a replay-prefix reconstruction for one-step/validation starts.
 
-Cache/regeneration:
-- This lane expands `MslSeed` and `tools/eval/dataset.py::SEED_DTYPE`. Any stale `.msl` datasets
-  built before the lane must be regenerated; record-size-compatible caches are not a substitute for
-  this provenance because `0` has gameplay meaning.
+Validation-buffer contract:
+- This lane expands `MslSeed`; rerun validation from replay files after touching it because `0` has
+  gameplay meaning.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim,ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}`.
@@ -1100,7 +1085,7 @@ Runtime/default:
 - This counter is not reconstructed from currently live items during rollout. Itemless gaps must
   preserve the historical counter so future item `(instance_id, spawn_id, type)` fixed-slot ordering
   matches replay.
-- Reseed falls back to `max(live item spawn_id) + 1` only for stale datasets/tests where the explicit
+- Reseed falls back to `max(live item spawn_id) + 1` only for test/debug inputs where the explicit
   seed lane is absent or below the live lower bound.
 
 Seed generation:
@@ -1619,38 +1604,13 @@ Characters (Fox/Falco/Marth/Sheik):
       `coll.last_pos = coll.cur_pos; coll.cur_pos = fp.cur_pos` setup before
       `ftCo_DamageFly_Coll` runs mpColl. FoD open-air and in-span platform contacts have focused
       negatives; hard-floor rows on other stages keep the normal previous-public-row
-      reconstruction. This stack changes seed schema and same-record-size cache semantics:
-      legacy cache version 21 is the first valid `.msl` generation for
-      FoD visible-choice scheduler timer/RNG seed lanes; cache version 20 is the first valid cache
-      generation for the CliffWait `mv.co.cliff.x8` stick-option latch seed lane; cache version 19
-      is the first valid cache generation for FoD hidden-return scheduler timer seed lanes; cache
-      version 18 is the first valid cache
-      generation for FoD grounded KneeBend severe-airborne DamageFlyRoll seed-lane reconstruction;
-      cache version 17 is the first valid cache generation for sustained FoD DamageFly current-root
-      floor-sweep previous-position reconstruction; cache version 16 is the first valid cache
-      generation for
-      FoD same-step platform-contact deferred velocity seed lanes; cache version 15 is the first
-      valid cache generation for
-      grounded Dash/basic-attack severe-airborne DamageFlyRoll seed-lane reconstruction; cache
-      version 14 is the first valid cache generation for
-      deriving FoD grounded-contact platform velocity when a direct platform event and a grounded
-      contact expose different same-frame grIzumi heights; cache version 13 is the first valid
-      cache generation for preserving FoD direct-event platform velocity when a fresh event confirms
-      the previous grIzumi-predicted height; cache version 12 is the first valid cache generation for
-      cliff-owned Damage* entry `ledge_cooldown` reconstruction (`ftCo_8008E908` setting
-      `x2064_ledgeCooldown` while old `x221D_b7` is still live); cache version 11 is the first
-      valid cache generation for attacker-side `smash_attrs` release seed lanes (`smash_charge_state`,
-      `smash_charge_frames`, `smash_charge_hold_frames_max`,
-      `smash_charge_saved_rate_fp_q16_16`) used by released grounded-smash HitCapsule damage;
-      cache version 10 is the first valid cache generation for grounded DamageHi/N/Lw participation
-      in the hidden grounded-overlap `pos_z` lane; cache version 9 is the first valid cache
-      generation for the Catch-family DamageFlyRoll pre-gate stream-phase lane extension; cache
-      version 8 is the first valid cache generation for the FoD platform height source lane; cache
-      version 7 is the first valid cache generation for the AttackAirHi/shallow-AttackAir FoD
-      floor-skip semantics plus common-air walljump hidden phase setup/carry seeds derived from
-      source `pos_delta.x`; older `.msl` caches can pass record-size checks while missing these
-      hidden owners. The cache signature also hashes `bindings/msl_preprocess_native.c` for native
-      seed-lane semantic changes.
+      reconstruction. This stack changes seed schema and validation-buffer semantics for FoD
+      visible-choice scheduler timer/RNG seed lanes, CliffWait `mv.co.cliff.x8`, FoD hidden-return
+      scheduler timer lanes, severe-airborne DamageFlyRoll reconstruction, same-step platform
+      contact deferred velocity, `ledge_cooldown`, smash-charge release seed lanes,
+      grounded-overlap `pos_z`, Catch-family DamageFlyRoll stream phase, FoD platform height, and
+      FoD floor-skip/common-air walljump hidden phase setup. Rerun validation from replay files
+      after touching these owners.
     - `cliff_ledge_floor_segment_id_u16[4]` for the hidden Cliff/CollData ledge floor owner on
       immediate cliff-exit prefixes. Native seed preprocessing reconstructs it only from
       prefix-visible Cliff action + facing + generated MSLSTG01 ledge floor metadata, carries it
@@ -1980,7 +1940,7 @@ Characters (Fox/Falco/Marth/Sheik):
 
 Notes:
 - `animation_index` in Slippi post-frames includes `0xFFFFFFFF` as a sentinel; treat that as “no animation”.
-- Item reference ordering in `.msl` datasets is **sorted by item `instance_id`**, then `id`, then `type`. The sim should follow the same stable ordering for its fixed 15 slots.
+- Item reference ordering in validation buffers is **sorted by item `instance_id`**, then `id`, then `type`. The sim should follow the same stable ordering for its fixed 15 slots.
 
 ## `data/anims/<char>.tracks.bin` (SSANIMT1 v3)
 

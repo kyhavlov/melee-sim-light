@@ -1589,7 +1589,7 @@ Prefer completing these projects in order rather than “patching symptoms” in
      remains the pointer-change boundary, matching `src/hitlist.c`.
      Same-frame victim action-entry rows are excluded because the dense fallback lacks per-HitCapsule
      clear/copy provenance for the new victim action frame. Replay locks:
-     `PutridJoyousOryx.msl:4092` is the late LandingFallSpecial positive; `HungryImportantSnake.msl:7485`
+     `PutridJoyousOryx.slpz:4092` is the late LandingFallSpecial positive; `HungryImportantSnake.slpz:7485`
      is the same dense-seed shape on LandingFallSpecial entry and must still admit BODY hitlag.
      Source anchors:
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`,
@@ -1600,7 +1600,7 @@ Prefer completing these projects in order rather than “patching symptoms” in
      that field clear. This lets rollout trim only stale dense-seed entries on later active-snapshot
      frames when a neutral Guard victim is otherwise blocked by a replay seed that cannot prove the
      current `HitCapsule.victims_1` owner. It does not erase authoritative per-HitCapsule victims_1
-     seeds. Positive/negative locks: `PositiveRevolvingHyena.msl:6822..6831`.
+     seeds. Positive/negative locks: `PositiveRevolvingHyena.slpz:6822..6831`.
      Source anchors:
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80076ED8}`,
      `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`,
@@ -1629,8 +1629,8 @@ Prefer completing these projects in order rather than “patching symptoms” in
      HitCapsule source are aligned. Runtime therefore admits only rollout-advanced DamageFlyRoll
      rows whose selected DmgLog source is a live strong AttackAirB capsule; ordinary one-step
      reseeds and visible AttackAirB-vs-AttackAirB shapes without that source provenance remain on
-     the seed-owned path. Lock: `AttachedGoodNaturedGuanaco.msl:2694`; aggregate control:
-     `Game_20260509T152622.msl:3756`.
+     the seed-owned path. Lock: `AttachedGoodNaturedGuanaco.slpz:2694`; aggregate control:
+     `Game_20260509T152622.slpz:3756`.
      Source anchors:
      `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`,
      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
@@ -1648,7 +1648,7 @@ Prefer completing these projects in order rather than “patching symptoms” in
      pre-gate `HSD_Randi` callsites once each before `ftCo_8008DCE0` samples the DamageFlyRoll
      `HSD_Randf` gate. Create-edge weak BAir rows, strong BAir rows, non-cap2 hurtcaps, one-step
      seed-owned rows, and visible Reflector-end/Back-Air action shapes without selected source
-     provenance remain negative controls. Lock: `FavorableSuperficialPig.msl`.
+     provenance remain negative controls. Lock: `FavorableSuperficialPig.slpz`.
      Source anchors:
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078538,ftColl_8007A06C,ftColl_80076ED8}`,
      `refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80078538`,
@@ -1664,7 +1664,7 @@ Prefer completing these projects in order rather than “patching symptoms” in
      same-source hitlag horizon and releases once hitstun reaches that horizon. The owner is the
      source dynamic part chain, not the attacker/victim character pair; Falco's corresponding
      hurtcap slot is not part 18 and stays on ordinary BODY selection. Lock:
-     `AttachedGoodNaturedGuanaco.msl:7047/7048`.
+     `AttachedGoodNaturedGuanaco.slpz:7047/7048`.
      Source anchors:
      `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`,
      `refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}`,
@@ -1681,8 +1681,8 @@ Prefer completing these projects in order rather than “patching symptoms” in
      cannot fall through the generic persisted-wall branch; they must use the explicit
      DamageFly-hitlag same-side wall persistence owner with CollData env evidence. Existing
      DamageFlyRoll/FlyReflectWall controls keep the positive wall-hug path. Lock:
-     `AttachedGoodNaturedGuanaco.msl:7163/7164/7263`; aggregate control:
-     `GracefulAttachedTurtle.msl:3113`.
+     `AttachedGoodNaturedGuanaco.slpz:7163/7164/7263`; aggregate control:
+     `GracefulAttachedTurtle.slpz:3113`.
      Source anchors:
      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}`,
      `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}`,
@@ -1696,7 +1696,7 @@ Prefer completing these projects in order rather than “patching symptoms” in
      live stale queue under-publishes the recoil by 0.09 at AGG:2390, which later makes AGG:2491
      fall one frame early. This split is bounded to x221C_b2 GuardSetOff recoil and the extracted
      low-damage AttackAirLw create payload; it is not a character-pair or record predicate. Lock:
-     `AttachedGoodNaturedGuanaco.msl:2390/2491`.
+     `AttachedGoodNaturedGuanaco.slpz:2390/2491`.
      Source anchors:
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_8007ABD0}`,
      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C`,
@@ -1715,7 +1715,7 @@ Prefer completing these projects in order rather than “patching symptoms” in
      AttackLw3 negative: the dense seed names an old DamageAir instance, but source
      `ftColl_800768A0` clears the AttackLw3 HitCapsule before the later ShieldDesc hit enters
      GuardSetOff.
-     Positive/negative locks: `Game_20260509T152622.msl:2048..2064` and the existing TBK/GAT
+     Positive/negative locks: `Game_20260509T152622.slpz:2048..2064` and the existing TBK/GAT
      GuardReflect final/expired-x14 controls.
      Source anchors:
      `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`,
@@ -1742,9 +1742,9 @@ Prefer completing these projects in order rather than “patching symptoms” in
      raise generic BODY hit-status, because broad x198C=1 hitstun reseeding regresses unrelated
      contacts. Runtime rollouts seeded before the dense lane can also prove the same owner from a
      terminal same-source DamageFlyTop victim whose `instance_hit_by` differs from the entering
-     Shine instance. Aerial SpecialLwStart remains excluded; `QuerulousGrandDinosaur.msl:235`
+     Shine instance. Aerial SpecialLwStart remains excluded; `QuerulousGrandDinosaur.slpz:235`
      proves the same dense/x198C shape can still be a real aerial Shine hit. Positive lock:
-     `DistinctCaringCobra.msl:6431`.
+     `DistinctCaringCobra.slpz:6431`.
      Source anchors:
      `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter`,
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`,
@@ -1758,8 +1758,8 @@ Prefer completing these projects in order rather than “patching symptoms” in
      retained suppressor is limited to grounded SpecialLwStart entry, later attacker slot, earlier
      grounded Turn defender with `turn_has_turned=1`, and no defender hitlag/hitstun; pre-turn
      Turn (`turn_has_turned=0`) and aerial SpecialLwStart remain on the normal BODY path. Locks:
-     `DistinctCaringCobra.msl:3864` positive no-hit, `HilariousVillainousGiraffe.msl:5200` and
-     `TubbyCurlyHerring.msl:3376` same-shape hit controls.
+     `DistinctCaringCobra.slpz:3864` positive no-hit, `HilariousVillainousGiraffe.slpz:5200` and
+     `TubbyCurlyHerring.slpz:3376` same-shape hit controls.
      Source anchors:
      `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`,
      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Anim_Inner`,
@@ -1774,7 +1774,7 @@ Prefer completing these projects in order rather than “patching symptoms” in
      fresh HitCapsule cannot damage it until a later pair phase. Ordinary aerial Shine entries stay
      on the normal BODY path; aggregate controls prove those hits are real. The victim family is
      table-backed by MSLMSO01 `DAMAGE_*_COLL` classes. Lock: doubles
-     `Game_20260509T152622.msl:3154`.
+     `Game_20260509T152622.slpz:3154`.
      Source anchors:
      `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`,
      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA`,
@@ -1785,8 +1785,8 @@ Prefer completing these projects in order rather than “patching symptoms” in
      (`data/hurtcaps/fox.bin` cap12 / FtPart 18), the replay-proven false-contact owner that still
      needs full source-order dynamic/AObj state. Non-tail DamageAir2 hurtcaps remain on the normal
      `lbColl_8000805C` / `lbColl_80006E58` matrix-radius BODY path, so valid cap2 contacts are
-     admitted while TBK's tail contacts stay suppressed. Locks: `DelayedSuperbGuanaco.msl:5004->5041`
-     rollout positive, `TreasuredBackKangaroo.msl:1575/5265` tail-contact negatives.
+     admitted while TBK's tail contacts stay suppressed. Locks: `DelayedSuperbGuanaco.slpz:5004->5041`
+     rollout positive, `TreasuredBackKangaroo.slpz:1575/5265` tail-contact negatives.
      Source anchors:
      `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter`,
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`,
@@ -1945,7 +1945,7 @@ This section is **suite-grounded**: it is intended to be regenerated any time th
 If the status labels in the generated tables conflict with the “Roadmap Status” section above, assume the tables are stale and regenerate/update them.
 
 How to regenerate (no extraction / no preprocess):
-- Action/animation coverage should be derived from `ValidationReplayBuffers` for the suite entries, not from Dataset/.msl files.
+- Action/animation coverage should be derived from `ValidationReplayBuffers` for the suite entries, not from row-cache files.
 
 Terminology / identity (Slippi ↔ GALE01 ↔ this repo):
 - `action_id`: GALE01 `FtMotionId` / `ftCommon_MotionState` (plus character-specific motions starting at `ftCo_MS_Count`).
@@ -2466,7 +2466,7 @@ Grounded motion-entry timing notes:
   root-motion owned it clamps `fp->gr_vel` to `co_attrs.dash_run_terminal_velocity`. For
   `Dash -> Turn` this clamp runs before `ftCo_Dash_IASA` falls through to the terminal scalar, so
   super-terminal Dash rows scalar from the terminal velocity rather than the replay-visible
-  super-terminal Dash carry. `QuerulousGrandDinosaur.msl:8609:p0` is the rollout-critical clamp
+  super-terminal Dash carry. `QuerulousGrandDinosaur.slpz:8609:p0` is the rollout-critical clamp
   lock.
   Refs: `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
@@ -2475,8 +2475,8 @@ Grounded motion-entry timing notes:
   locomotion IASA callback before Phys, so an A press can enter AttackDash and run
   `ftCo_AttackDash_Phys -> ft_80085030` in the same fighter update. Runtime restores that narrow
   entry Phys velocity immediately after the source-shaped AttackDash entry tick; it is not a
-  generic AttackDash position nudge. `TreasuredBackKangaroo.msl:2399:p1` locks the former stationary
-  Dash->AttackDash frame, and `PositiveRevolvingHyena.msl:9954:p1` locks the matching Run entry
+  generic AttackDash position nudge. `TreasuredBackKangaroo.slpz:2399:p1` locks the former stationary
+  Dash->AttackDash frame, and `PositiveRevolvingHyena.slpz:9954:p1` locks the matching Run entry
   frame that gates a downstream DownBound BODY contact.
   Refs: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
   `refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Run.c,ftCo_RunDirect.c}`,
@@ -2490,8 +2490,8 @@ Grounded motion-entry timing notes:
   the floor-span admission resolves generated platform-transform lines through the existing
   `stage_collision_floor_line_world` packet. This closes FoD rows where the carried platform line's
   static template span is nowhere near the live grIzumi/mpLib platform, without adding a
-  post-collision AttackDash/knockdown bridge. `ParallelTemptingElk.msl:10970` locks the transformed
-  stale-DownWait positive; `FavorableSuperficialPig.msl:9392` remains the same-frame
+  post-collision AttackDash/knockdown bridge. `ParallelTemptingElk.slpz:10970` locks the transformed
+  stale-DownWait positive; `FavorableSuperficialPig.slpz:9392` remains the same-frame
   DamageFall->DownBound negative.
   Refs: `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}`,
   `refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}`,
@@ -2517,7 +2517,7 @@ Grounded motion-entry timing notes:
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_ThrownF_Phys,ftCo_ThrownF_Coll}`,
   `refs/melee/src/melee/ft/ft_081B.c::{ft_80085004,ft_80085030}`,
   `refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c}`.
-- The replay-real late Dash->Turn row `QuerulousGrandDinosaur.msl:5968:p0` exercises this ordering:
+- The replay-real late Dash->Turn row `QuerulousGrandDinosaur.slpz:5968:p0` exercises this ordering:
   the prior direct Dash IASA shortcut entered Turn with one fewer motion-entry bundle, while the
   decomp-shaped path reaches the same Turn through the callback-owned Dash end / destination
   selector ordering and matches the `x2088` instance id.
@@ -2726,7 +2726,7 @@ GuardSetOff active-hitlag SDI:
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}`
 - Validation posture: this source-complete active-hitlag slice improves aggregate rollout
   best/max/first/streak and one-step float/discrete totals. It also shifts
-  `DelayedSuperbGuanaco.msl` median-only rollout distribution (`245 -> 199`) while DSG hard
+  `DelayedSuperbGuanaco.slpz` median-only rollout distribution (`245 -> 199`) while DSG hard
   rollout metrics improve (`first 40 -> 38`, `non-seeded 19 -> 17`, `streak_count 39 -> 37`), so
   the median drop is documented as a distribution-only tradeoff rather than a replay-count red.
 
@@ -2765,7 +2765,7 @@ GuardSetOff -> Guard overlap nudge:
 - Stopped non-loop fighter AObj terminal pose:
   - `HSD_AObjInterpretAnim` sets `AOBJ_NO_ANIM` once a non-looping fighter animation reaches
     `end_frame`, but BODY collision still samples the stopped JObj local SRT via `lb_8000B1CC`.
-  - Native probe evidence on Falco `DamageFlyHi` (`DistinctCaringCobra.msl:8565`) shows the high
+  - Native probe evidence on Falco `DamageFlyHi` (`DistinctCaringCobra.slpz:8565`) shows the high
     hurtcap JObjs at `curr_frame=end_frame=29`, `AOBJ_NO_ANIM`, carrying the final loaded FObj
     `p1` local SRT, not the pre-stop interpolated frame-28 value. The extractor/native bake path
     mirrors that terminal value for generated `data/anims/{fox,falco}*.bin` so active-hitstun
@@ -3132,8 +3132,8 @@ Fox/Falco special-owner split (2026-04-17):
     closes free-running `JumpB` pass-through rows that start before the replay-prefix seed lane is
     serialized. Replay-prefix FoD rows also reconstruct active `CollData.floor_skip` for
     `Fall_Coll`/`Jump_Coll` because `ft_800831CC` and `ft_800835B0` pass the same
-    `ftCo_80096CC8` soft-platform predicate as JumpAerial. `ElatedWearyTermite.msl:5954` and
-    `ParallelTemptingElk.msl:1510` lock that carry after a down-held transformed-platform pass;
+    `ftCo_80096CC8` soft-platform predicate as JumpAerial. `ElatedWearyTermite.slpz:5954` and
+    `ParallelTemptingElk.slpz:1510` lock that carry after a down-held transformed-platform pass;
     adjacent FoD AttackAir rows remain separate evidence for the deeper ECB-bottom or
     scheduler-phase owner rather than this common-air floor-skip lane. Sources:
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll`,
@@ -3145,7 +3145,7 @@ Fox/Falco special-owner split (2026-04-17):
     direct Slippi `fod_platform` current-height events, current grounded-contact reconstruction,
     and same-step contact reconstruction. Runtime transformed-platform trust uses that source bitmask
     to distinguish current grIzumi/mpLib platform heights from stale sparse carries without enabling
-    the free-running FoD scheduler on teacher-forced replay seeds. `ParallelTemptingElk.msl:9136`
+    the free-running FoD scheduler on teacher-forced replay seeds. `ParallelTemptingElk.slpz:9136`
     locks the low-left-platform same-step contact row. When a rollout seed starts while a side
     platform is parked at the generated hidden target, preprocessing may also seed the current
     hidden-return countdown from the next source-visible upward platform height. Runtime installs
@@ -3155,7 +3155,7 @@ Fox/Falco special-owner split (2026-04-17):
     `grIzumi_801CC358` lower-visible-stop boundary: when the platform reaches the generated
     `min_visible_height`, source publishes that final movement frame before the next wait phase
     installs `xC6`, so the later hidden-descent choice samples the following frame-start HSD value.
-    `MilkyGracefulStingray.msl:720/1729` locks both the first visible descent and the later hidden
+    `MilkyGracefulStingray.slpz:720/1729` locks both the first visible descent and the later hidden
     descent decision without shifting ordinary home/max-height waits. Sources:
     `refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358`,
     `refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C`, and
@@ -3167,8 +3167,8 @@ Fox/Falco special-owner split (2026-04-17):
     seed row representation), and runtime consumes it only while the platform is still at home in
     phase 0. This is not a generic FoD replay-seed bridge: sparse carried heights with no direct
     home/downward episode do not set it, and same-step collision still needs normal platform-source
-    bits. `MilkyGracefulStingray.msl:5344` is the positive; clearing the lane leaves AttackAirLw
-    airborne with the platform still high, while `ElatedWearyTermite.msl` lower-visible-stop locks
+    bits. `MilkyGracefulStingray.slpz:5344` is the positive; clearing the lane leaves AttackAirLw
+    airborne with the platform still high, while `ElatedWearyTermite.slpz` lower-visible-stop locks
     keep the ordinary signed wait boundary from broadening to unrelated visible waits. Sources:
     `refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358` and
     `refs/slippi-ssbm-asm/Recording/SendFrameStart.s`.
@@ -3176,7 +3176,7 @@ Fox/Falco special-owner split (2026-04-17):
     height belongs to the current landing frame, while the next grIzumi delta becomes valid only
     after that frame. Runtime promotes that deferred velocity during post-frame transient cleanup so
     sustained grounded riders follow the moving platform without pre-advancing the landing callback.
-    `ParallelTemptingElk.msl:3257->3352` locks that boundary.
+    `ParallelTemptingElk.slpz:3257->3352` locks that boundary.
     Replay-frame stage playback preserves finite extracted FoD platform velocity when either the
     same platform's current-height source bit is present or a first Landing/LandingAir/DamageAir
     floor callback is geometrically consuming that exact generated platform line. The velocity lane
@@ -3190,8 +3190,8 @@ Fox/Falco special-owner split (2026-04-17):
     `LandingAir*` callbacks still preserve their carried hard-floor CollData unless a same-step
     contact bit, a fresh action-entry handoff, or live grIzumi velocity within the current CollData
     ECB lift envelope proves the side platform is the callback-local floor owner;
-    `ElatedWearyTermite.msl:838` locks the stale no-snap boundary and
-    `ElatedWearyTermite.msl:1537->1538` locks the live moving-platform release retry.
+    `ElatedWearyTermite.slpz:838` locks the stale no-snap boundary and
+    `ElatedWearyTermite.slpz:1537->1538` locks the live moving-platform release retry.
     Source-owned FoD heights that are within generated grIzumi initial/target constants snap the
     transformed collision line to the extracted constant before mpLib floor projection. This is not
     a generic platform-y clamp: it covers named JObj poses from `MSLSTG01` (`platform_transform`
@@ -3201,7 +3201,7 @@ Fox/Falco special-owner split (2026-04-17):
     initial side-platform heights even when the sparse Slippi platform event/contact lane is not yet
     marked valid. `grIzumi_801CCBDC` initializes the side-platform JObjs from stage data before the
     first match frame and before later random target/phase updates; this is narrower than enabling
-    the hidden scheduler from an arbitrary replay seed. `MilkyGracefulStingray.msl:442` locks the
+    the hidden scheduler from an arbitrary replay seed. `MilkyGracefulStingray.slpz:442` locks the
     initial-height side-platform Damage landing, while later invalid sparse rows still require
     explicit source height/velocity evidence. Sources:
     `refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}` and
@@ -3865,7 +3865,7 @@ Fox/Falco special-owner split (2026-04-17):
       `item_shield_bounce_valid` seed lane plus the free-running bounce-normal predicate. This is
       not a broad shield-contact closure; carried-laser rows without ShieldBounced source proof
       remain on the reduced settled-point shield proxy.
-    - Replay-real positive lock: `GracefulAttachedTurtle.msl:773` now enters GuardSetOff and clears
+    - Replay-real positive lock: `GracefulAttachedTurtle.slpz:773` now enters GuardSetOff and clears
       the Falco laser article. Existing keepalive controls (`GAT:2276`, `GAT:5280`) remain live.
     Sources: `refs/melee/src/melee/it/item.c::Item_80269DC8`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim,it_8029C4D4,itFoxLaser_Logic94_ShieldBounced,itFoxLaser_Logic94_HitShield}`,
@@ -3876,8 +3876,8 @@ Fox/Falco special-owner split (2026-04-17):
       owned by item position vs victim position; otherwise it is owned by item velocity sign.
       Runtime loads `x78_float` from `data/items/item_common.json::item_damage_facing_velocity_threshold`
       and applies the same position/velocity split for `combat_apply_item_hit`.
-    - Replay-real locks: `GracefulAttachedTurtle.msl:{923,3386}` cover ordinary item-hit facing
-      directions, and `HungryImportantSnake.msl:1673` covers the stationary Phantasm item case where
+    - Replay-real locks: `GracefulAttachedTurtle.slpz:{923,3386}` cover ordinary item-hit facing
+      directions, and `HungryImportantSnake.slpz:1673` covers the stationary Phantasm item case where
       item position and owner root are on opposite sides of the victim.
     Sources: `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C`,
     `refs/melee/src/melee/it/types.h::ItemCommonData::x78_float`.
@@ -3890,15 +3890,15 @@ Fox/Falco special-owner split (2026-04-17):
       frame. Runtime preserves the frame-start Side-B motion for the
       `ftFx_SpecialS_CheckGhostRemove` lifetime gate so the current item tick is not prematurely
       destroyed.
-    - Replay-real locks: `DistinctCaringCobra.msl:{4762,4764}` cover BODY-hit state transition and
-      expiry through victim hitlag; `HilariousVillainousGiraffe.msl:6975` and
-      `ImpassionedAlarmedTarsier.msl:7712` cover same-step owner-exit lifetime ticks.
+    - Replay-real locks: `DistinctCaringCobra.slpz:{4762,4764}` cover BODY-hit state transition and
+      expiry through victim hitlag; `HilariousVillainousGiraffe.slpz:6975` and
+      `ImpassionedAlarmedTarsier.slpz:7712` cover same-step owner-exit lifetime ticks.
     Sources: `refs/melee/src/melee/it/item.c::{OnGiveDamageThink,checkHitLag}`,
     `refs/melee/src/melee/it/items/itfoxillusion.c::{
     itFoxIllusion_Logic14_DmgDealt,itFoxillusion_UnkMotion0_Anim,itFoxillusion_UnkMotion2_Anim}`,
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_CheckGhostRemove`.
   - Illusion / Phantasm same-callback BODY pose ownership:
-    - `DependentSteelGrouse.msl:296` starts the defender in just-entered `RunBrake`
+    - `DependentSteelGrouse.slpz:296` starts the defender in just-entered `RunBrake`
       (`action_frame=0`); `ftCo_RunBrake_IASA` can enter `Squat` through
       `ftCo_800D5FB0 -> ftCo_Squat_Enter` before the still-live Falco Phantasm article resolves
       BODY collision in the item/fighter pass. The accepted BODY candidate is owned by
@@ -3916,8 +3916,8 @@ Fox/Falco special-owner split (2026-04-17):
       that bounded GuardSetOff platform-edge owner; direct global intermediate `instance_id` parity
       still has unrelated gaps, but the later Phantasm spawn copies the corrected owner identity
       through `it_8027B070`, giving replay-real `instance_hit_by` at the BODY contact.
-    - Replay-real locks: `DependentSteelGrouse.msl:296` covers the RunBrake-pose BODY hit and item
-      attribution; `DependentSteelGrouse.msl:{295,297}` cover adjacent non-early and post-hit
+    - Replay-real locks: `DependentSteelGrouse.slpz:296` covers the RunBrake-pose BODY hit and item
+      attribution; `DependentSteelGrouse.slpz:{295,297}` cover adjacent non-early and post-hit
       controls.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
     ftCo_RunBrake_Anim,ftCo_RunBrake_IASA}`,
@@ -3942,10 +3942,10 @@ Fox/Falco special-owner split (2026-04-17):
       `ftCo_SpecialS_CheckInput` call and applies its terminal `p_ftCommonData->x54` ground-velocity
       scalar before the entered SpecialSStart physics callback runs. That Dash-only callback tail
       is modeled separately from Wait/Run grounded Side-B entry.
-    - Replay-real lock: `FavorableSuperficialPig.msl:1613` covers Run -> SpecialSStart/Main/End;
+    - Replay-real lock: `FavorableSuperficialPig.slpz:1613` covers Run -> SpecialSStart/Main/End;
       without xB8 damping the rollout carries a large positive X residual through the whole
       Illusion/Phantasm sequence.
-      `Game_20260514T181413.msl:1532` covers Dash -> SpecialSStart clearing the residual Dash
+      `Game_20260514T181413.slpz:1532` covers Dash -> SpecialSStart clearing the residual Dash
       velocity through the Dash-IASA terminal scalar plus SpecialSStart friction.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{
     ftCo_SpecialS_CheckInput,doEnter}`,
@@ -3976,7 +3976,7 @@ Fox/Falco special-owner split (2026-04-17):
       until the generic transformed packet/x44 path is modeled. MAJ:8919 locks the admitted static
       endpoint crossing; IAT:9157 and STM:1213 lock the already-at-endpoint and nonzero-MapJoint
       negatives.
-    - `Game_20260514T181413.msl:{531,1522,2361,2559,2560}` cover the retained replay-real
+    - `Game_20260514T181413.slpz:{531,1522,2361,2559,2560}` cover the retained replay-real
       positives and adjacent controls. The remaining `rec2463+` percent residual is a larger
       live `ifMagnify`/camera-target owner gap; it is not classified as exact RNG.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
@@ -4011,9 +4011,9 @@ Fox/Falco special-owner split (2026-04-17):
       `ftFx_SpecialN_CheckRemoveBlaster` and clears the item. The simulator no longer carries a
       generic one-frame gun linger after the owner exits the SpecialN family. Throw-side blaster gun
       lifetime remains cmd-var-owned by `ftFx_Throw_Anim` and its `cmd_vars[1]` switch.
-    - Replay-real locks: `BlondHardHippopotamus.msl:666` and
-      `PositiveRevolvingHyena.msl:8222` cover stale SpecialNEnd gun clear; `PRH:2460` and
-      `ImpassionedAlarmedTarsier.msl:140` cover active SpecialAirNLoop gun retention while adjacent
+    - Replay-real locks: `BlondHardHippopotamus.slpz:666` and
+      `PositiveRevolvingHyena.slpz:8222` cover stale SpecialNEnd gun clear; `PRH:2460` and
+      `ImpassionedAlarmedTarsier.slpz:140` cover active SpecialAirNLoop gun retention while adjacent
       stale/end guns are cleared.
     Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
     ftFx_SpecialNEnd_Anim,ftFx_SpecialN_CheckRemoveBlaster,ftFx_Throw_Anim}`,
@@ -4023,8 +4023,8 @@ Fox/Falco special-owner split (2026-04-17):
       routing through `Fighter_ProcessHit` damage. Runtime now lets the BODY geometry path test
       disabled fighter capsules, then clears the laser without changing fighter hitlag, hitstun, or
       source lanes.
-    - Replay-real locks: `PositiveRevolvingHyena.msl:{4757,4778}` cover disabled hurtcap contact
-      clearing the Falco laser without damage; `TreasuredBackKangaroo.msl:197` remains a vulnerable
+    - Replay-real locks: `PositiveRevolvingHyena.slpz:{4757,4778}` cover disabled hurtcap contact
+      clearing the Falco laser without damage; `TreasuredBackKangaroo.slpz:197` remains a vulnerable
       zero-KB laser BODY-hit negative control.
     - Fresh taxonomy after this slice: primary total `611` (down from `615`);
       `F14c=10`, `F14d=2`, `F15a=11`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`.
@@ -4041,9 +4041,9 @@ Fox/Falco special-owner split (2026-04-17):
       generic fighter-parent item spawn path copies the owner fighter's `fp->x2088` into xDA8.
       These rows now route to the existing adjacent fighter instance-counter owner
       (`F12b_adjacent_instance_counter_order`) instead of `F16b_blaster_article_identity`.
-    - Replay row evidence: `BlondHardHippopotamus.msl:94`, `HungryImportantSnake.msl:3056`,
-      `ImpassionedAlarmedTarsier.msl:2847`, `MotionlessAggressiveJay.msl:5759`,
-      `PositiveRevolvingHyena.msl:2441`, and `TubbyCurlyHerring.msl:7410` all have pure gun
+    - Replay row evidence: `BlondHardHippopotamus.slpz:94`, `HungryImportantSnake.slpz:3056`,
+      `ImpassionedAlarmedTarsier.slpz:2847`, `MotionlessAggressiveJay.slpz:5759`,
+      `PositiveRevolvingHyena.slpz:2441`, and `TubbyCurlyHerring.slpz:7410` all have pure gun
       xDA8 mismatches while the item article identity fields match the blaster gun. Aggregate
       taxonomy after the hard move keeps total `5401` but reduces `F16b` from `35` to `26` and
       moves the 9 pure-xDA8 rows to `F12b`.
@@ -4057,8 +4057,8 @@ Fox/Falco special-owner split (2026-04-17):
       consume the fresh article or advance combo/source bookkeeping; front-side victims still
       resolve through the normal BODY path. The discriminator is tied to the throw-side laser
       velocity from `ftFx_Throw_Anim`'s hold-joint launch vector, not to dataset row identity.
-    - Replay-real locks: `BlondHardHippopotamus.msl:{527,1206}` cover non-projectile-side carry,
-      `BlondHardHippopotamus.msl:480` covers the front-side first-pulse consume control, and
+    - Replay-real locks: `BlondHardHippopotamus.slpz:{527,1206}` cover non-projectile-side carry,
+      `BlondHardHippopotamus.slpz:480` covers the front-side first-pulse consume control, and
       `BHH:937` is now covered by the later same-character callback phase rather than this carry
       slice.
     - Fresh taxonomy after this slice: primary total `611` unchanged;
@@ -4079,7 +4079,7 @@ Fox/Falco special-owner split (2026-04-17):
       frame-20 crossing. Runtime now re-emits only this ThrowHi frame-20 crossed-prev state1 shot
       when the owner does not already have a live state1 throw shot; existing article carry/despawn
       rows stay on the normal lifetime owner.
-    - Replay-real locks: `BlondHardHippopotamus.msl:{938,1673,4337}` cover the recovered frame-20
+    - Replay-real locks: `BlondHardHippopotamus.slpz:{938,1673,4337}` cover the recovered frame-20
       article spawn, while `BHH:1208` (owner already has a state1 throw shot) remains the adjacent
       negative control. `BHH:937` moved to the later same-character item callback phase.
     - Fresh taxonomy after this slice: primary total `611` unchanged;
@@ -4099,8 +4099,8 @@ Fox/Falco special-owner split (2026-04-17):
     - Runtime suppresses only Falco ThrowHi state1 BODY contact on current or crossed-prev frame 24,
       requires the high-hitlag carry phase after runtime timer tick, and leaves the lower-hitlag
       follow-up handoff, Fox frame-18/frame-20, and active damage rows on the normal BODY path.
-    - Replay-real locks: `GracefulAttachedTurtle.msl:3426` and
-      `TreasuredBackKangaroo.msl:5090` cover the positive frame-24 carry rows; `GAT:3427` covers
+    - Replay-real locks: `GracefulAttachedTurtle.slpz:3426` and
+      `TreasuredBackKangaroo.slpz:5090` cover the positive frame-24 carry rows; `GAT:3427` covers
       the lower-hitlag handoff that must consume normally, and `BHH:1208` remains the negative Fox
       frame-20 control. `BHH:937` moved to the later same-character item callback phase.
     - Fresh taxonomy after this slice and the handoff refinement: primary total `595` (down from
@@ -4124,9 +4124,9 @@ Fox/Falco special-owner split (2026-04-17):
       floor-only. Laser articles crossing FD wall or ceiling segments set `lifeTimer=1` through the
       same callback path. PPA `1159 -> 1161` locks the left-wall-under-ledge boundary that otherwise
       leaves an expired laser alive long enough to shift later item instance/slot identity.
-    - Replay-real locks: `DistinctCaringCobra.msl:7619` covers late-Dash damage/clear,
-      `BlondHardHippopotamus.msl:5148` covers Dash-to-Turn item clear without damage entry, and
-      `HilariousVillainousGiraffe.msl:1024` covers AttackHi3 damage/clear. Adjacent no-hit
+    - Replay-real locks: `DistinctCaringCobra.slpz:7619` covers late-Dash damage/clear,
+      `BlondHardHippopotamus.slpz:5148` covers Dash-to-Turn item clear without damage entry, and
+      `HilariousVillainousGiraffe.slpz:1024` covers AttackHi3 damage/clear. Adjacent no-hit
       controls `DCC:7618`, `BHH:5147`, and `HVG:1023` keep the branch from becoming a generic
       grounded sweep.
     - Fresh taxonomy after this slice: primary total `611` unchanged;
@@ -4144,8 +4144,8 @@ Fox/Falco special-owner split (2026-04-17):
       hits: `coll_distance < p_ftCommonData->x7A8` starts victim hitlag and item attribution without
       percent, KB, damage-state entry, stale update, or projectile consume. Damage input is still
       normalized through the item-hit path (`it_80272460`) before hitlag is calculated.
-    - Replay-real locks: `TubbyCurlyHerring.msl:8969` covers JumpAerialF hitlag-only attribution
-      with the Falco laser alive, and `ImpassionedAlarmedTarsier.msl:1580` covers the same lane
+    - Replay-real locks: `TubbyCurlyHerring.slpz:8969` covers JumpAerialF hitlag-only attribution
+      with the Falco laser alive, and `ImpassionedAlarmedTarsier.slpz:1580` covers the same lane
       during SpecialAirNLoop. Adjacent no-contact controls `TCH:8968` and `IAT:1579` stay baseline,
       while following full BODY-hit controls `TCH:8970` and `IAT:1581` still consume the projectile
       and enter damage.
@@ -4168,13 +4168,13 @@ Fox/Falco special-owner split (2026-04-17):
       anim advances `foxlaser.scale` once per item anim update, so BODY sweeps must use the
       previous post-frame scale for x58 and the current post-anim scale for x4C. Using the current
       scale for both ends over-extends trailing laser BODY segments and creates false consumes.
-    - Replay-real locks: `BlondHardHippopotamus.msl:641` and
-      `ImpassionedAlarmedTarsier.msl:1792` cover false trailing BODY consumes that now stay alive;
+    - Replay-real locks: `BlondHardHippopotamus.slpz:641` and
+      `ImpassionedAlarmedTarsier.slpz:1792` cover false trailing BODY consumes that now stay alive;
       adjacent controls `BHH:640` and `IAT:1791` stay alive, and `IAT:1793` still performs the
-      following full BODY hit. `GracefulAttachedTurtle.msl:7215` is a negative sentinel proving this
+      following full BODY hit. `GracefulAttachedTurtle.slpz:7215` is a negative sentinel proving this
       is not the rejected unscaled-offset fallback.
     - JumpAerial dynamic-tail shallow BODY uses the same extracted item HitCapsule identity instead
-      of a generic cap12 suppressor. `ThisVioletRaccoon.msl:9511` is a trailing-half Falco-laser
+      of a generic cap12 suppressor. `ThisVioletRaccoon.slpz:9511` is a trailing-half Falco-laser
       hb2/hb3 cap12/FtPart-18 shallow candidate and waits for the deeper `9512` BODY hit;
       `TVR:11488` is a younger hb1 cap12 candidate and remains BODY-eligible. This is bounded by
       `MSLLASR1` state0 hitbox offsets and `data/hurtcaps/{fox,falco}.bin` cap12 -> FtPart 18, not
@@ -4203,8 +4203,8 @@ Fox/Falco special-owner split (2026-04-17):
       unscaled/authored offset contact remains a real item BODY consume.
     - This slice is deliberately not a generic Passive or hit-status shortcut: Falco type-55
       Passive laser contacts remain on the normal BODY consume path.
-    - Replay-real locks: `TreasuredBackKangaroo.msl:6197` covers the Fox-laser scaled false-positive
-      keepalive, and the negative sentinel `PositiveRevolvingHyena.msl:3886` proves Falco-laser
+    - Replay-real locks: `TreasuredBackKangaroo.slpz:6197` covers the Fox-laser scaled false-positive
+      keepalive, and the negative sentinel `PositiveRevolvingHyena.slpz:3886` proves Falco-laser
       Passive contact still consumes.
     - Fresh taxonomy after this slice: primary total `587` (down from `595`);
       `F14c=0`, `F14d=0`, `F15a=10`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`,
@@ -4224,7 +4224,7 @@ Fox/Falco special-owner split (2026-04-17):
     x4C endpoint in x58 before rebuilding current collision state. Runtime keeps main-state rows on
     the existing ghost[1] point owner until their remaining hitlist/callback discriminator is
     exposed, and only admits the ghost[2]->ghost[1] sweep for Fox Illusion end-state rows.
-    Replay-real locks: `DistinctCaringCobra.msl:4761` covers the missing Fox Illusion BODY hit, and
+    Replay-real locks: `DistinctCaringCobra.slpz:4761` covers the missing Fox Illusion BODY hit, and
     adjacent `DCC:4760` proves the lane does not hit the preceding AttackAir entry row. Seed-history
     coverage proves `derive_illusion_ghost_pos012` carries ghost[2] from the previous ghost[1].
     Fresh taxonomy after this slice: primary total `611` unchanged;
@@ -4243,26 +4243,26 @@ Fox/Falco special-owner split (2026-04-17):
       `ftFx_SpecialN_GetBlasterAction`; `itFoxblaster_UnkMotion8_Anim` therefore reaches the
       `blaster_action == 9` clear path and consumes the stale gun while preserving already-spawned
       laser shots.
-    - Replay-real locks: `PriceyPartialAlbatross.msl:1185` covers `SpecialAirNEnd -> DeadDown`
+    - Replay-real locks: `PriceyPartialAlbatross.slpz:1185` covers `SpecialAirNEnd -> DeadDown`
       stale-gun clear with the live laser compacted into slot 0, and adjacent row
-      `PriceyPartialAlbatross.msl:1184` keeps the pre-death SpecialAirNEnd gun alive.
+      `PriceyPartialAlbatross.slpz:1184` keeps the pre-death SpecialAirNEnd gun alive.
     Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
     ftFx_SpecialN_GetBlasterAction,ftFx_SpecialN_CheckRemoveBlaster}`,
     `refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim`,
     `refs/melee/src/melee/ft/ftmotionstates.c`,
     `refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState`.
   - Rebirth blaster-gun spawn fallout:
-    - `TubbyCurlyHerring.msl:3062` was closed by the match-flow owner: RebirthWait IASA now enters
+    - `TubbyCurlyHerring.slpz:3062` was closed by the match-flow owner: RebirthWait IASA now enters
       `SpecialAirNStart` through the priority aerial-special branch and applies the RebirthWait
       exit x1994/x198C colanim write before the destination row. The remaining blaster-gun article
       state/animation details are no longer routed through `F04_match_flow_rebirth`; future gun
       state-machine parity belongs to `F19_specialn_blaster_article`.
-    - `DistinctCaringCobra.msl:546` is also not a blaster article identity owner: a pre-combat debug
+    - `DistinctCaringCobra.slpz:546` is also not a blaster article identity owner: a pre-combat debug
       step enters `FX_SPECIAL_AIR_N_START` and spawns the Falco gun, then combat moves the player to
       `DamageAir2`; the reference goes straight to `DamageAir2` with no gun. That false-gun row is
       action-entry / combat-order fallout and routes to `F09c_aerial_action_entry_adjacency`.
-    - Pure laser `item_instance_id` echoes at `HungryImportantSnake.msl:6603` and
-      `PutridJoyousOryx.msl:2235` are not independent slot-compaction owners. In both rows the
+    - Pure laser `item_instance_id` echoes at `HungryImportantSnake.slpz:6603` and
+      `PutridJoyousOryx.slpz:2235` are not independent slot-compaction owners. In both rows the
       mismatching slot is explained by the neighboring old-laser consume/keepalive disagreement, so
       these pure laser instance rows route to `F16d_item_body_lifetime`.
     - Fresh taxonomy after the Dead* lifetime slice plus these hard moves: primary total `611`;
@@ -4277,7 +4277,7 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA`,
     `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`.
   - SpecialN landing gun/shot slot echo hard move:
-    - `HungryImportantSnake.msl:6603/6604` and `PutridJoyousOryx.msl:2235` are SpecialN Loop /
+    - `HungryImportantSnake.slpz:6603/6604` and `PutridJoyousOryx.slpz:2235` are SpecialN Loop /
       AirLoop -> Landing handoff rows where the blaster gun and shot slots echo across the action
       transition. They do not represent an independent item BODY consume-vs-persist owner:
       `HIS:6603` has a gun in slot 0 and the shot identity moving through slots 1/2 while p0 enters
@@ -4296,7 +4296,7 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic`,
     `refs/slippi-ssbm-asm/Recording/SendItemInfo.s`.
   - Guard-context pure blaster-gun xDA8 hard move:
-    - `AttachedGoodNaturedGuanaco.msl:124` is not a reflect owner-transfer row: the type-75
+    - `AttachedGoodNaturedGuanaco.slpz:124` is not a reflect owner-transfer row: the type-75
       blaster gun has matching existence/type/state/owner and only `item_instance_id`
       (`item->xDA8_short`) differs while the peer guard context is adjacent. This is the same
       generic fighter-parent item xDA8 / instance-counter owner as the earlier pure blaster-gun
@@ -4320,7 +4320,7 @@ Fox/Falco special-owner split (2026-04-17):
       not a replay-exact ShieldBounced closure in this package. It stays on the visible negative
       path until explicit ShieldBounced/live normal-owner provenance replaces the broader
       shield-contact inference.
-    - Replay-real locks: `AttachedGoodNaturedGuanaco.msl:428` and `AGG:3345` cover the positive
+    - Replay-real locks: `AttachedGoodNaturedGuanaco.slpz:428` and `AGG:3345` cover the positive
       spawn-frame transfer rows.
     - Fresh taxonomy after this slice: primary total `583` (down from `587`);
       `F14c=0`, `F14d=0`, `F15a=6` (down from `10`), `F15b=8`, `F16a=0`, `F16b=0`,
@@ -4458,8 +4458,8 @@ Fox/Falco special-owner split (2026-04-17):
       plus attacker/defender hitlag proves the ShieldDesc path did not accept, because accepted
       shield contact suppresses BODY. The seed lane stores that accept/miss result for one-step
       reseeds only; normal rollouts keep using live geometry.
-    - Replay-real locks: `PositiveRevolvingHyena.msl:11352` covers the accepted GuardSetOff lane,
-      and `ImpassionedAlarmedTarsier.msl:3702` covers the BODY-hit negative where a broad shield
+    - Replay-real locks: `PositiveRevolvingHyena.slpz:11352` covers the accepted GuardSetOff lane,
+      and `ImpassionedAlarmedTarsier.slpz:3702` covers the BODY-hit negative where a broad shield
       rim proxy would falsely enter GuardSetOff.
     Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076ED8}`,
     `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC`.
@@ -4586,7 +4586,7 @@ Fox/Falco special-owner split (2026-04-17):
       lightshield scale and must not promote `lbColl_80006E58`'s broadphase extent into a final
       ShieldDesc accept. FSP `3874 -> 3875` locks the negative shine/GuardOn boundary, and clearing
       the hidden latch on the same seed restores the false GuardSetOff hit.
-    - Dolphin probe evidence: `PositiveRevolvingHyena.msl:11352` accepts ShieldDesc with Falco's
+    - Dolphin probe evidence: `PositiveRevolvingHyena.slpz:11352` accepts ShieldDesc with Falco's
       shield center at roughly `(39.718, 9.900, 0.598)`, matching Guard frame 0 after Falco's
       model scale. The old runtime used frame 10 without model scaling and missed before falling
       into BODY.
@@ -4663,7 +4663,7 @@ Fox/Falco special-owner split (2026-04-17):
     - Runtime keeps ordinary state0 Fox/Falco laser vs airborne `Fall` rows on the seed-visible
       endpoint path unless a future seed lane/probe proves the non-unit x34_scale.z owner for item
       BODY. This preserves TBK/SDS/PPA ordinary BODY/shallow-packet locks while rejecting the Marth
-      high-cap over-admission in `VictoriousSpitefulAlpaca.msl:2008`.
+      high-cap over-admission in `VictoriousSpitefulAlpaca.slpz:2008`.
     - The same-owner branch is still guarded by the item victim-ring surface: if the defender
       already carries the same owner attack id (`last_attack_landed == item_attack_id`), the row
       stays on the existing keepalive path, matching `it_8026FAC4` / `lbColl_80008688` victim-list
@@ -4674,11 +4674,11 @@ Fox/Falco special-owner split (2026-04-17):
       approximation barely overlaps. This is not a generic low-leg or Fall suppressor: adjacent
       state0 hb2/hb3 low-leg packets remain BODY-eligible, and same-attack live-shot carry rows
       stay eligible through the victim-ring/source-attack gate above.
-    - Replay-real locks: `TreasuredBackKangaroo.msl:2901` covers the positive BODY hit and laser
+    - Replay-real locks: `TreasuredBackKangaroo.slpz:2901` covers the positive BODY hit and laser
       consume without broad x34_scale.z inference; adjacent `TBK:2900` stays alive;
-      `VictoriousSpitefulAlpaca.msl:2008` protects the Marth high-cap no-hit boundary;
-      `ShadyDecimalStarling.msl:148/149` locks the hb1 shallow miss followed by the hb2 BODY
-      consume; `PriceyPartialAlbatross.msl:4124` protects the same-attack victim-ring negative;
+      `VictoriousSpitefulAlpaca.slpz:2008` protects the Marth high-cap no-hit boundary;
+      `ShadyDecimalStarling.slpz:148/149` locks the hb1 shallow miss followed by the hb2 BODY
+      consume; `PriceyPartialAlbatross.slpz:4124` protects the same-attack victim-ring negative;
       `PPA:4140` protects the same-attack hb1/cap11 positive.
     - Reflected-laser callback latch: if a seed row exposes a Fox/Falco laser whose public facing
       and live velocity disagree, the missing source state is the pending reflected-angle/item
@@ -4707,8 +4707,8 @@ Fox/Falco special-owner split (2026-04-17):
     - The retained branch stays on scaled laser hitcap positions and does not revive the rejected
       unscaled-offset fallback. High/head-only caps remain on the exact path after `TBK:4136`
       proved broad all-cap radius promotion is a false consume.
-    - Replay-real locks: `GracefulAttachedTurtle.msl:7215` is the positive BODY consume; adjacent
-      `GAT:7214` stays alive; high-cap negative `TreasuredBackKangaroo.msl:4136` stays on Turn with
+    - Replay-real locks: `GracefulAttachedTurtle.slpz:7215` is the positive BODY consume; adjacent
+      `GAT:7214` stays alive; high-cap negative `TreasuredBackKangaroo.slpz:4136` stays on Turn with
       the laser alive; the previous-scale test now keeps `GAT:7214` as the unscaled-fallback
       sentinel.
     - Fresh taxonomy after this slice: primary total `528` (down from `543`);
@@ -6533,7 +6533,7 @@ BODY collision-space residual split and rejected seed bridge:
 - Forensic support now decodes active Dolphin engine-dump HitCapsule/HurtCapsule records into
   extracted row JSON (`tools/dolphin/engine_dump_io.py`, `tools/dolphin/extract_engine_dump_rows.py`)
   so the next capture can compare engine `x58/x4C`, hurtcap `a_pos/b_pos`, radii, flags, and
-  offsets directly against `tools/eval/run_forensic_rows.py` closest-pair output.
+  offsets directly against replay-buffer hard-row locks or focused triage output.
 - `reports/triage/20260416_bhh1599_*_dolphin_primitive_dump` confirms the active playback dump
   records the correct post-frame primitive payloads, but it is a post-collision snapshot: the frame
   where the hit appears already has the defender in `DamageFlyN`/hitlag. It can confirm the
@@ -7008,7 +7008,7 @@ BODY collision-space residual split and rejected seed bridge:
   point for large TransN root movement. `mpColl_80043754` splits callback motion at the 6-unit
   root/ECB threshold; when `mpColl_8004ACE4` cannot project the carried floor at an intermediate
   substep, it stops the callback there before `ftFx_SpecialS_GroundToAir` enters aerial Side-B.
-  FoD `ElatedWearyTermite.msl:7115` locks that grounded substep publication, while the adjacent
+  FoD `ElatedWearyTermite.slpz:7115` locks that grounded substep publication, while the adjacent
   already-aerial Side-B row stays on the normal airborne root step. Sources:
   `data/motion_state/owners/{fox,falco}.bin::MSLMSO01 coll_cb_by_action`,
   `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialS_Coll,ftFx_SpecialS_GroundToAir}`,
@@ -7049,7 +7049,7 @@ BODY collision-space residual split and rejected seed bridge:
   `mpColl_80046904`; wall collision therefore needs the side/bottom/top candidate envelope
   (`mpColl_80045B74_LeftWall -> mpColl_80046224_LeftWall`,
   `mpColl_80044E10_RightWall -> mpColl_800454A4_RightWall`) rather than the point-only wall
-  fallback. Dream Land `FlippantEnchantedHorse.msl:7692..7699` locks Start -> Main and Main -> End
+  fallback. Dream Land `FlippantEnchantedHorse.slpz:7692..7699` locks Start -> Main and Main -> End
   wall-envelope publication. This grants Side-B the source Push/Hug bits from mpColl, but it is not
   a common-air walljump callback and has no same-callback `ftWallJump_8008169C` consumer. Sources:
   `data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class_bits`,

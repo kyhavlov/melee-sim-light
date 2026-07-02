@@ -20,8 +20,7 @@ def test_guardsetoff_ground_push_target_pm1_and_negative() -> None:
     # Replay-real lock for grounded GuardSetOff pushback ownership:
     # - ftColl_80076CBC writes x19A4/specialn_facing_dir on shield contact.
     # - ftCo_80092F2C computes the grounded GuardSetOff push and writes fp->gr_vel.
-    # This uses a committed validation-suite row instead of the old ignored
-    # replays/validation/** cache row, so local debug cache regeneration cannot affect it.
+    # This uses a committed validation-suite row instead of an ignored debug replay row.
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
     root = Path(__file__).resolve().parents[1]

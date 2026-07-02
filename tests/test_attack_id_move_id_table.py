@@ -39,7 +39,7 @@ def test_attack_id_binary_exports_motionstate_x9_b1() -> None:
 
     # Fighter_ChangeMotionState seeds dmg.x18C8 from MotionState.x9_b1.
     # GuardOn carries `(1 << 22) | (1 << 23)` in the raw +0x8 word, while Guard carries
-    # only `(1 << 23)`. This locks the x9_b1 bit mapping used by dataset preprocessing.
+    # only `(1 << 23)`. This locks the x9_b1 bit mapping used by validation preprocessing.
     # refs/melee/src/melee/ft/ftmotionstates.c::{ftCo_MS_GuardOn,ftCo_MS_Guard}
     # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
     assert int(fox.x9_b1[178]) == 1

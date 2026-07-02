@@ -132,7 +132,7 @@ def test_wait_iasa_neutral_stick_does_not_enter_squat() -> None:
     dz_y = float(common["lstick_deadzone_y"])
 
     # Replay-real neutral Wait frame: no crouch input, and ref/out should remain Wait.
-    # Dataset: AGG rec=156 p=1.
+    # Replay-buffer row: AGG rec=156 p=1.
     ds = load_replay_buffers(str(dataset_path))
     row = ds.rows[156:157]
     p = 1

@@ -31,9 +31,9 @@ Extract it from a valid SSBM ISO:
 uv run python -m melee_sim.extract_data --iso /path/to/SSBM.iso [--out-dir /path/to/my-msl-data]
 ```
 
-By default, the extraction command creates a `.msl/` directory where the command is run
+By default, the extraction command creates a `data/` directory where the command is run
 and can be run again in place when data needs to be refreshed. `EnvBatch()`
-loads `.msl/` by default. To use another data root, set `MSL_DATA_DIR` or
+loads source-checkout `data/` by default. To use another data root, set `MSL_DATA_DIR` or
 pass `data_dir`:
 
 ```bash
@@ -44,9 +44,8 @@ MSL_DATA_DIR=/path/to/data uv run python train.py
 env = msl.EnvBatch(batch_size=1024, data_dir="/path/to/data")
 ```
 
-Source checkouts also fall back to `data/` when `.msl/` is absent. The resolved
-data directory is process-global native runtime state, so choose it before
-creating simulator batches.
+The resolved data directory is process-global native runtime state, so choose it
+before creating simulator batches.
 
 ## Minimal Step Loop
 
@@ -224,8 +223,7 @@ Prerequisites:
 
 - Emscripten activated so `emcc` is on `PATH`, for the WASM build
 - Node.js/npm available for the renderer build
-- extracted simulator data; defaults to `.msl/` when present, or set
-  `MSL_DATA_DIR`
+- extracted simulator data; defaults to source-checkout `data/`, or set `MSL_DATA_DIR`
 - network access on the first build to download character display assets
 
 ```bash
@@ -264,7 +262,7 @@ Core runtime calls:
 Data root:
 
 - Direct C callers should set `MSL_DATA_DIR` before `msl_batch_create()` when
-  using extracted data from `.msl/` or another non-default directory.
+  using extracted data from a non-default directory.
 - If `MSL_DATA_DIR` is unset, native loaders fall back to source-checkout
   `data/`.
 - The resolved data root is process-global native state; choose it before

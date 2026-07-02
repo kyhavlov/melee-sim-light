@@ -397,7 +397,7 @@ def _parse_action_id_to_motion_state_word_u32(
 ) -> dict[int, int]:
     """Parse decomp MotionState tables into action_id -> raw MotionState +0x8 word.
 
-    The +0x8 word stores FtMoveId in the high byte plus MotionState x9 bitfields. Dataset
+    The +0x8 word stores FtMoveId in the high byte plus MotionState x9 bitfields. Validation
     preprocessing needs x9_b1 for the Fighter_ChangeMotionState source-clear timer owner.
 
     Decomp pointers (GALE01):
