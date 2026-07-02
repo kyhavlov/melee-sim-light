@@ -13,7 +13,6 @@ This directory holds long-lived project docs and scratch notes for agents workin
 - `SSANIM_AXIS_BASIS.md` - animation basis and pose-axis notes.
 - `AGENT_META_NOTES.md` - process guidance, not gameplay authority.
 - `LONG_WORK_PROMPT.md` - reusable long-work prompt text.
-- `dolphin_tooling/` - Dolphin engine-dump and local source reference notes.
 
 ## Archived Context
 

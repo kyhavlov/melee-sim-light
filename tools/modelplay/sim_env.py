@@ -54,11 +54,6 @@ MATCH_CONFIG_DTYPE = np.dtype(
 GAMESTATE_PLAYER_DTYPE = msl_dtypes.gamestate_player_dtype()
 GAMESTATE_DTYPE = msl_dtypes.gamestate_dtype()
 
-# Deprecated names are kept for existing modelplay callers while the backing
-# native API has moved from RL observation rows to gamestate rows.
-RL_PLAYER_OBS_DTYPE = GAMESTATE_PLAYER_DTYPE
-RL_OBS_DTYPE = GAMESTATE_DTYPE
-
 
 @dataclass
 class EnvOutput:
@@ -230,9 +225,6 @@ class SimSession:
         out = EnvOutput(gamestates=games, needs_reset=self._needs_reset)
         self._needs_reset = False
         return out
-
-    def current_rl_observation(self, viewpoint_port: int) -> np.void:
-        return self.current_gamestate(viewpoint_port)
 
     def current_gamestate(self, viewpoint_port: int) -> np.void:
         viewpoint = np.array([viewpoint_port - 1], dtype=np.uint8)

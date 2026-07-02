@@ -191,10 +191,9 @@ uv run python -m tools.eval.benchmark_validation_replay --help
 
 ## Dolphin Probes
 
-Use the active playback-only tooling under `tools/dolphin/`; do not use
-`tools/dolphin/legacy/` for new investigations. Current validation no longer
-uses legacy row-cache labels, so Dolphin probes should be launched from explicit
-replay paths plus record/player coordinates.
+Use the active playback-only tooling under `tools/dolphin/`. Current validation
+no longer uses legacy row-cache labels, so Dolphin probes should be launched
+from explicit replay paths plus record/player coordinates.
 
 For controlled vanilla experiments from authored Slippi pre-frame fields, use:
 

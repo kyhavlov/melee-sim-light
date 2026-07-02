@@ -8,6 +8,7 @@ Use the lower-level dump/extract tools directly for new probes:
 ```bash
 uv run python -m tools.dolphin.dolphin_engine_dump --help
 uv run python -m tools.dolphin.extract_engine_dump_rows --help
+uv run python -m tools.dolphin.slp_scenario_probe --help
 ```
 
 Probe outputs should stay under `reports/triage/`.

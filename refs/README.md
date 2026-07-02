@@ -11,7 +11,7 @@ The contents are gitignored but should be present locally.
 | `melee-anim-rs/` | local checkout | Animation reference/visualizer (HSDLib-derived) for inspecting bone/joint behavior (secondary reference) |
 | `slippi-ssbm-asm/` | https://github.com/project-slippi/slippi-ssbm-asm | Slippi ASM modifications - includes UCF and other gameplay-affecting changes |
 | `slippi-wiki/` | https://github.com/project-slippi/slippi-wiki | Slippi replay format specification |
-| `Ishiiruka/` | https://github.com/project-slippi/Ishiiruka | Slippi Dolphin fork - useful for understanding how Slippi logs game state |
+| `Ishiiruka/` | git submodule | Pinned Slippi Dolphin fork with local engine-dump probe support |
 | `ucf/` | https://github.com/AltimorTASDK/UCF | UCF source code (pad buffer / 1.0 cardinals logic, etc.) |
 | `melee-disc/` | Extracted from SSBM.iso | Game filesystem (files/, sys/) - raw .dat file access |
 | `datasheet/` | slippi-wiki ID spreadsheet | Local export of character/stage/item IDs, action states, struct offsets, character attributes |
@@ -25,11 +25,17 @@ cd refs/
 git clone https://github.com/doldecomp/melee.git
 git clone https://github.com/project-slippi/slippi-ssbm-asm.git
 git clone https://github.com/project-slippi/slippi-wiki.git
-git clone https://github.com/project-slippi/Ishiiruka.git
 git clone https://github.com/UnclePunch/UCF.git ucf
 ```
 
-Or if you have existing checkouts, symlink or copy them here.
+Initialize the pinned Ishiiruka probe checkout through git submodules:
+
+```bash
+git submodule update --init refs/Ishiiruka
+```
+
+Or if you have existing non-submodule checkouts for the other references,
+symlink or copy them here.
 
 ## Usage
 
@@ -45,21 +51,22 @@ When investigating desyncs or implementing new game mechanics:
 
 3. **Slippi Wiki (`slippi-wiki/`)**: Reference for replay file format (`SPEC.md`) when debugging replay parsing issues.
 
-4. **Ishiiruka (`Ishiiruka/`)**: Useful for understanding what values Slippi logs and how they relate to internal game state.
+4. **Ishiiruka (`Ishiiruka/`)**: Useful for engine-dump probes and for understanding what values Slippi logs.
 
 5. **UCF (`ucf/`)**: Useful when the Slippi/UCF ASM patch is hard to read (blobs/Gecko), and you want a clean reference implementation (e.g. `apply_cardinals`).
 
 ## Quick Links (Common Investigations)
 
 - Strict replay validation / exact prefix:
-  - `tools/slippi/preprocess_suite.py`
   - `tools/eval/run_one_step_suite_eval.py`
+  - `tools/eval/run_rollout_suite_eval.py`
 - ISO-derived stage collision extraction (authoritative stage geometry):
   - `tools/extraction/extract_stage_collision.py`
   - `_iso/` (output from `tools/extraction/iso_extract.py`)
 - Playback engine-dump forensic rows (for “what did the game do on this exact frame window?”):
-  - `tools/dolphin/forensic_row_dump.py` (single-row capture + extraction)
+  - `tools/dolphin/dolphin_engine_dump.py` (single dump capture)
   - `tools/dolphin/extract_engine_dump_rows.py` (dump window extraction)
+  - `tools/dolphin/slp_scenario_probe.py` (patched replay windows)
 - Slippi post-frame field meanings (what the replay actually records):
   - `slippi-ssbm-asm/Recording/SendGamePostFrame.asm`
 
@@ -112,42 +119,22 @@ git -C refs/Ishiiruka show v3.3.1:Data/Sys/GameSettings/GALE01r2.ini | rg -n \"U
 Key takeaway from this investigation class:
 - The authoritative “was it active in netplay?” answer comes from the Ishiiruka `GALE01r2.ini` for that release, not from any single repository alone.
 
-## Game Memory Debugging (Dolphin + dolphin-memory-engine)
+## Engine-Dump Probes
 
 For some desyncs, decomp/asm is not enough to quickly answer “what did the game do on this exact frame?”
-In those cases, it can be useful to run Dolphin locally and read memory directly to confirm state values
-like `Fighter` fields, `motion_id`, `anim_id`, ECB inputs, etc.
-
-This repo sometimes uses:
-- A locally downloaded Slippi-based AppImage (gitignored): `Slippi_Online-x86_64-ExiAI.AppImage`
-- A locally extracted AppImage tree (gitignored): `squashfs-root/` or `dolphin-emu-ExiAI/`
-- A local Dolphin “home” dir used for headless runs (gitignored): `.local_ExiAI/`
-
-These are intentionally kept out of git; they are environment setup artifacts.
-
-### Recommended workflow
-
-1) Extract the AppImage (one-time):
+Use the pinned Ishiiruka submodule and the active playback dump tools under `tools/dolphin/`.
 
 ```bash
-chmod +x Slippi_Online-x86_64-ExiAI.AppImage
-./Slippi_Online-x86_64-ExiAI.AppImage --appimage-extract
+git submodule update --init refs/Ishiiruka
+cmake --build refs/Ishiiruka/build_probe
+uv run python -m tools.dolphin.dolphin_engine_dump --help
+uv run python -m tools.dolphin.extract_engine_dump_rows --help
+uv run python -m tools.dolphin.slp_scenario_probe --help
 ```
 
-2) Run the extracted Dolphin binary (avoid wrapper name issues when tools try to attach):
-
-```bash
-./squashfs-root/usr/bin/dolphin-emu
-```
-
-3) Use `dolphin-memory-engine` (DME) to read state:
-   - DME can attach to the running Dolphin process and expose a simple memory read API.
-   - When investigating a sim/replay mismatch, prefer reading game-side values that correspond to
-     the replay fields (e.g. `motion_id` vs replay `action`, `anim_id` vs replay `animation_index`).
-
-Notes:
-- Dolphin will run indefinitely; scripts should explicitly terminate the process when done.
-- Keep any investigation scripts under `tools/` and prefer writing outputs to `/tmp/` to avoid polluting the repo.
+Probe outputs should stay under `reports/triage/`. Do not add new process-memory
+probe scripts; the old live-memory path was deleted in favor of replay playback
+engine dumps.
 
 ## Community Resources
 
