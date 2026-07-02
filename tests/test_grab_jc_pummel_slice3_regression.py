@@ -6,10 +6,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE_REL = "replays/validation/cardinal_1.0_recent"
 _BUTTON_A = 0x0100
 _BUTTON_Z = 0x0010
 _BUTTON_L = 0x0040
@@ -55,10 +56,10 @@ def _grab_attempt_edge(row: np.ndarray, port: int) -> bool:
 
 
 def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     row = samples[record : record + 1]
 
@@ -68,7 +69,7 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -100,8 +101,8 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
 @pytest.mark.parametrize(
     ("dataset_name", "record", "attacker"),
     [
-        ("GracefulAttachedTurtle.msl", 212, 0),
-        ("TreasuredBackKangaroo.msl", 401, 0),
+        ("GracefulAttachedTurtle.slpz", 212, 0),
+        ("TreasuredBackKangaroo.slpz", 401, 0),
     ],
 )
 def test_kneebend_jc_grab_enters_catch(dataset_name: str, record: int, attacker: int) -> None:
@@ -109,11 +110,11 @@ def test_kneebend_jc_grab_enters_catch(dataset_name: str, record: int, attacker:
     dataset_rel = f"{_BASE_REL}/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     victim = 1 - attacker
 
     # Dataset schema only carries seed_t/ref_t1 rows. seed_t is the replay-derived t-state.
@@ -132,14 +133,14 @@ def test_kneebend_jc_grab_enters_catch(dataset_name: str, record: int, attacker:
 @pytest.mark.integration
 def test_landing_iasa_z_grab_enters_catch_gracefulattachedturtle_8231() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.msl"
+    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[8231 : 8232]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[8231 : 8232]
     attacker = 0
 
     # Landing IASA delegates into the grounded Wait subset after the lag gate, and that subset
@@ -162,8 +163,8 @@ def test_landing_iasa_z_grab_enters_catch_gracefulattachedturtle_8231() -> None:
 @pytest.mark.parametrize(
     ("dataset_name", "attacker", "victim", "record_attacker_enter", "record_victim_enter", "record_anim_end"),
     [
-        ("GracefulAttachedTurtle.msl", 0, 1, 370, 374, 397),
-        ("TreasuredBackKangaroo.msl", 0, 1, 410, 414, 437),
+        ("GracefulAttachedTurtle.slpz", 0, 1, 370, 374, 397),
+        ("TreasuredBackKangaroo.slpz", 0, 1, 410, 414, 437),
     ],
 )
 def test_catchwait_pummel_loop_and_anim_end_returns(
@@ -178,11 +179,11 @@ def test_catchwait_pummel_loop_and_anim_end_returns(
     dataset_rel = f"{_BASE_REL}/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
 
     row_a = samples[record_attacker_enter : record_attacker_enter + 1]
     assert int(row_a["seed_t"]["action_id"][0, attacker]) == 216
@@ -235,10 +236,10 @@ def test_catchwait_pummel_loop_and_anim_end_returns(
 @pytest.mark.integration
 def test_replay_catchattack_capture_damage_entry_and_return_lock() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.msl"
+    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
     attacker = 0
@@ -246,8 +247,8 @@ def test_replay_catchattack_capture_damage_entry_and_return_lock() -> None:
     record_victim_enter = 374
     record_anim_end = 397
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
 
     # Replay lock: CatchAttack -> CaptureDamageLw entry frame.
     row_v = samples[record_victim_enter : record_victim_enter + 1]

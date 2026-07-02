@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 _KNEE_BEND = 24  # MSL_ACT_KNEE_BEND (the grounded jumpsquat = ground jump)
 
@@ -33,11 +34,11 @@ def _one_step(binding, num_players, row):
 
 def _load_demo():
     root = Path(__file__).resolve().parents[1]
-    rel = "datasets/sheik/replays/validation/sheik/sheik_demo_game.msl"
+    rel = "replays/validation/sheik/sheik_demo_game.slpz"
     path = root / rel
     if not path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
-    return read_dataset(str(path))
+        pytest.skip(f"missing local replay: {rel}")
+    return load_replay_buffers(str(path))
 
 
 @pytest.mark.integration
@@ -49,8 +50,8 @@ def test_grounded_jump_is_available_with_zero_jumps_left() -> None:
     # Before the fix the sim gated KneeBend on jumps_left>0, so these grounded jumps were dropped.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
     ds = _load_demo()
-    samples = ds.samples
-    num_players = int(ds.header["num_players"])
+    samples = ds.rows
+    num_players = int(ds.num_players)
     n = int(samples.shape[0])
     binding = importlib.import_module("msl_binding")
 
@@ -85,8 +86,8 @@ def test_airborne_jump_still_requires_jumps_left_adjacent_negative() -> None:
     # jumps_left==0 frame whose reference does not enter KneeBend and assert the sim does not either.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c (air jump gates on x1968_jumpsUsed)
     ds = _load_demo()
-    samples = ds.samples
-    num_players = int(ds.header["num_players"])
+    samples = ds.rows
+    num_players = int(ds.num_players)
     n = int(samples.shape[0])
     binding = importlib.import_module("msl_binding")
 

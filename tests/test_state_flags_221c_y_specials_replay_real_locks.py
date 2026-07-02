@@ -26,11 +26,11 @@ def test_fox_illusion_ground_to_air_clears_skipped_x221c_u16_y_opcode52() -> Non
     _skip_if_required_artifacts_missing(root)
     dataset = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ElatedWearyTermite.slpz"
     )
     if not dataset.exists():
-        pytest.skip(f"missing local dataset: {dataset.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset.relative_to(root)}")
 
     # Positive control: ordinary grounded SpecialS entry starts at frame 0, crosses the opcode-52
     # command, and publishes the visible fp+0x221C high-byte bit0.

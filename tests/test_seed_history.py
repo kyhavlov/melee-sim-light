@@ -43,12 +43,12 @@ from tools.slippi.seed_history import (
     derive_kneebend_internals,
     derive_turn_internals,
 )
-from tools.slippi.make_dataset_from_slp import derive_illusion_ghost_pos01, derive_illusion_ghost_pos012
-from tools.slippi.make_dataset_from_slp import _derive_attackdash_x0_seed_lane
-from tools.slippi.make_dataset_from_slp import _derive_mpcoll_wall_seed_lanes
-from tools.slippi.make_dataset_from_slp import _derive_passivewall_timer
-from tools.slippi.make_dataset_from_slp import _derive_grounded_overlap_hidden_pos_z
-from tools.eval.dataset import read_dataset
+from tools.slippi.validation_buffer_items import derive_illusion_ghost_pos01, derive_illusion_ghost_pos012
+from tools.slippi.validation_buffer_seed import _derive_attackdash_x0_seed_lane
+from tools.slippi.validation_buffer_seed import _derive_mpcoll_wall_seed_lanes
+from tools.slippi.validation_buffer_seed import _derive_passivewall_timer
+from tools.slippi.validation_buffer_stage import _derive_grounded_overlap_hidden_pos_z
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def test_compute_tilt_timer_axis_basic_sequence() -> None:
@@ -864,7 +864,7 @@ def test_derive_frame_speed_mul_landing_fallspecial_origin_specific_lag() -> Non
         char_landing_air_lag_frames={1: {"airn": 15, "airf": 22, "airb": 20, "airhi": 18, "airlw": 18}},
         char_fallspecial_origin_lag={
             # Resolved origin->lag map (fox): illusion end row + the firefox freefall rows,
-            # as make_dataset_from_slp now derives from the owners fx_special_kind lane.
+            # as validation buffer builder now derives from the owners fx_special_kind lane.
             1: {0x0160: 20.0, 0x0164: 18.0, 0x0166: 18.0, 0x0167: 18.0}
         },
     )
@@ -888,7 +888,7 @@ def test_derive_frame_speed_mul_landing_fallspecial_origin_specific_lag() -> Non
         char_landing_air_lag_frames={1: {"airn": 15, "airf": 22, "airb": 20, "airhi": 18, "airlw": 18}},
         char_fallspecial_origin_lag={
             # Resolved origin->lag map (fox): illusion end row + the firefox freefall rows,
-            # as make_dataset_from_slp now derives from the owners fx_special_kind lane.
+            # as validation buffer builder now derives from the owners fx_special_kind lane.
             1: {0x0160: 20.0, 0x0164: 18.0, 0x0166: 18.0, 0x0167: 18.0}
         },
     )
@@ -2236,7 +2236,7 @@ def test_derive_colanim_internals_is_causal_wrt_future_frames() -> None:
 
 
 def test_derive_colanim_seed_lanes_are_prefix_invariant() -> None:
-    # Seed lanes added by derive_colanim_internals in make_dataset_from_slp:
+    # Seed lanes added by derive_colanim_internals in validation buffer builder:
     # - seed_t.colanim_hit_status_x198c
     # - seed_t.colanim_timer_x1990
     # - seed_t.colanim_timer_x1994
@@ -2720,14 +2720,12 @@ def test_guardon_body_admission_hitlist_uses_raw_source_port_mapping() -> None:
     # so replay-only BODY admission must compare last_hit_by against source_port0, not local slot.
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by raw controller-port lane)
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
-    ds = read_dataset(str(dataset_path))
+    dataset_path = root / "replays/validation/sheik/RuralReasonableRat.slpz"
+    ds = load_replay_buffers(str(dataset_path))
     rec = 2973
     attacker = 1
     defender = 0
-    samples = ds.samples
+    samples = ds.rows
     cur = samples[rec]["seed_t"]
     nxt = samples[rec + 1]["seed_t"]
 
@@ -2786,7 +2784,7 @@ def test_guardon_body_admission_hitlist_uses_raw_source_port_mapping() -> None:
 
 
 def test_seed_bridge_trim_preserves_authoritative_per_hitbox_hitlist() -> None:
-    from tools.slippi.make_dataset_from_slp import _seed_bridge_trim_indefinite_lanes
+    from tools.slippi.validation_buffer_seed import _seed_bridge_trim_indefinite_lanes
 
     group_cd = np.zeros((2, 4, 8, 4), dtype=np.uint16)
     group_iid = np.zeros((2, 4, 8, 4), dtype=np.uint16)

@@ -1,7 +1,0 @@
-dataset	record	seed_frame	ref_frame	p	field	seed	out	ref
-datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl	5207	5084	5085	0	action_id	87	199	87
-datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl	2221	2098	2099	0	action_id	25	88	25
-datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl	285	162	163	1	action_id	90	86	90
-datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl	8222	8099	8100	1	action_id	43	90	43
-datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl	9530	9407	9408	1	action_id	29	42	29
-datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl	5247	5124	5125	0	action_id	90	85	90

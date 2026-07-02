@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
@@ -15,13 +16,13 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -55,14 +56,14 @@ def _rollout_to_record(dataset_path: Path, start_record: int, target_record: int
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert start_record <= target_record
     assert int(samples.shape[0]) > target_record
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -96,10 +97,10 @@ def _rollout_to_record(dataset_path: Path, start_record: int, target_record: int
 def test_kneebend_takeoff_frame_jump_iasa_can_enter_jumpaerial_dcc_4643() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     # Source ordering lock:
     # - ftCo_KneeBend_Anim enters JumpF/B in the anim callback once startup completes.
@@ -137,10 +138,10 @@ def test_fresh_run_tapjump_kneebend_does_not_reconsume_kneebend_iasa_tvr_5857() 
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl"
+        / "replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     # Source callback-order lock:
     # - ftCo_Run_IASA enters KneeBend through fn_800CAF78 on this tap-jump row.
@@ -174,10 +175,10 @@ def test_attacklw3_anim_end_buffered_kneebend_does_not_latch_short_hop_cnm_4433(
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     # Source callback-order lock:
     # - AttackLw3_Anim exits through ftCo_800D638C, then the destination SquatWait_IASA can enter
@@ -206,10 +207,10 @@ def test_attacklw3_anim_end_buffered_kneebend_does_not_latch_short_hop_cnm_4433(
 def test_kneebend_takeoff_frame_release_keeps_full_jump_dcc_9255() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     # Source ordering lock:
     # - ftCo_KneeBend_Anim enters JumpF before ftCo_KneeBend_IASA can call
@@ -241,10 +242,10 @@ def test_kneebend_takeoff_frame_release_keeps_full_jump_dcc_9255() -> None:
 def test_kneebend_seeded_short_hop_still_uses_hop_velocity_his_154() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+        root / "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     # Negative boundary: the takeoff-frame latch suppression must not erase a real short-hop bit
     # that was already produced by an earlier KneeBend_IASA frame and carried in the seed.
@@ -270,10 +271,10 @@ def test_kneebend_seeded_short_hop_still_uses_hop_velocity_his_154() -> None:
 def test_kneebend_dash_run_stick_threshold_seed_latches_short_hop_dcc_1989() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     # Seed bridge lock:
     # - p1 entered KneeBend from the Dash/Run-family IASA path. That path calls fn_800CAF78,

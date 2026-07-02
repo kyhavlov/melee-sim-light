@@ -5,30 +5,31 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 def _dataset_path() -> Path:
     root = Path(__file__).resolve().parents[1]
     return (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
 
 
 def _aggregate_fsp_path() -> Path:
     root = Path(__file__).resolve().parents[1]
-    return root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    return root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
 
 
 def _aggregate_his_path() -> Path:
     root = Path(__file__).resolve().parents[1]
-    return root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    return root / "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
 
 
 def _aggregate_pec_path() -> Path:
     root = Path(__file__).resolve().parents[1]
-    return root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    return root / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
 
 
 def _run_row(binding, row: np.ndarray) -> np.ndarray:
@@ -58,17 +59,16 @@ def _run_row(binding, row: np.ndarray) -> np.ndarray:
         binding.destroy(handle)
 
 
-def _run_rollout_to_record(binding, samples: np.ndarray, start_record: int, target_record: int) -> np.ndarray:
+def _run_rollout_to_record(binding, ds, start_record: int, target_record: int) -> np.ndarray:
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     handle = binding.init(batch_size=1, num_players=2)
     try:
@@ -77,13 +77,11 @@ def _run_rollout_to_record(binding, samples: np.ndarray, start_record: int, targ
         input_bytes = np.empty((1, input_stride), dtype=np.uint8)
         out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
 
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, target_record + 1):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_bytes)
         return out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
@@ -106,10 +104,10 @@ def test_specialairhi_launch_hitbox_xrotn_qgd_target_window_stays_replay_exact()
     # - Victim hurtcaps already match replay-real rows without an extra correction.
     dataset_path = _dataset_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
 
     # target-1 / target / target+1 around the first real recent-suite front door
@@ -137,10 +135,10 @@ def test_specialairhi_launch_hitbox_xrotn_qgd_target_window_stays_replay_exact()
 def test_specialairhi_launch_hitbox_xrotn_qgd_target_precombat_hitbox_matches_probe() -> None:
     dataset_path = _dataset_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[9389:9390]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[9389:9390]
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -191,10 +189,10 @@ def test_specialairhi_dense_hitlist_stale_gap_admits_qgd_launch_body() -> None:
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     dataset_path = _dataset_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
 
     defender = 1
@@ -207,7 +205,7 @@ def test_specialairhi_dense_hitlist_stale_gap_admits_qgd_launch_body() -> None:
     assert int(samples["seed_t"]["combat_hitlist_hb_valid"][target_record, attacker, 0]) == 1
     assert int(samples["seed_t"]["combat_hitlist_hb_cd"][target_record, attacker, 0, defender]) == 0
 
-    got = _run_rollout_to_record(binding, samples, start_record, target_record)
+    got = _run_rollout_to_record(binding, ds, start_record, target_record)
     ref = samples["ref_t1"][target_record]
 
     assert int(ref["action_id"][defender]) == 90  # DamageFlyTop in native.
@@ -228,10 +226,10 @@ def test_specialairhi_dense_hitlist_keeps_same_victim_fsp_suppression() -> None:
     # merely because this is a replay rollout or SpecialHi action.
     dataset_path = _aggregate_fsp_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
 
     attacker = 0
@@ -244,7 +242,7 @@ def test_specialairhi_dense_hitlist_keeps_same_victim_fsp_suppression() -> None:
         samples["seed_t"]["instance_id"][record, defender]
     )
 
-    got = _run_rollout_to_record(binding, samples, record, record)
+    got = _run_rollout_to_record(binding, ds, record, record)
     ref = samples["ref_t1"][record]
 
     assert int(got["action_id"][defender]) == int(ref["action_id"][defender]) == 90
@@ -266,10 +264,10 @@ def test_specialairhi_dense_hitlist_same_victim_without_source_admits_qgd_body()
     # lbColl_80008688 and tested by lbColl_8000ACFC.
     dataset_path = _dataset_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
 
     attacker = 1
@@ -288,7 +286,7 @@ def test_specialairhi_dense_hitlist_same_victim_without_source_admits_qgd_body()
     assert int(samples["seed_t"]["hitlag"][start_record, defender]) == 0
     assert int(samples["seed_t"]["hitstun"][start_record, defender]) == 0
 
-    got = _run_rollout_to_record(binding, samples, start_record, target_record)
+    got = _run_rollout_to_record(binding, ds, start_record, target_record)
     ref = samples["ref_t1"][target_record]
 
     assert int(ref["action_id"][defender]) == 90
@@ -308,10 +306,10 @@ def test_specialairhi_dense_hitlist_same_victim_without_source_admits_his_body()
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     dataset_path = _aggregate_his_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
 
     record = 8513
@@ -351,10 +349,10 @@ def test_specialairhi_dense_hitlist_same_source_downbound_suppresses_pec_rehit()
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     dataset_path = _aggregate_pec_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
 
     record = 6905
@@ -387,10 +385,10 @@ def test_specialairhi_dense_hitlist_same_source_downbound_suppresses_pec_rehit()
 def test_specialairhi_dense_hitlist_stale_gap_does_not_clear_real_qgd_body_seed() -> None:
     dataset_path = _dataset_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     attacker = 0
     defender = 1
 

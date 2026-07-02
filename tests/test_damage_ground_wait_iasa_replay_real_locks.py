@@ -11,8 +11,9 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
+from tools.eval.streaming_validation import _load_binding
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ class _DamageGroundWaitIasaCase:
     "case",
     [
         _DamageGroundWaitIasaCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=4036,
             player=1,
             expected_action_id=15,  # WalkSlow
@@ -38,7 +39,7 @@ class _DamageGroundWaitIasaCase:
             note="DamageHi1 grounded Wait_IASA walk branch",
         ),
         _DamageGroundWaitIasaCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=1948,
             player=0,
             expected_action_id=20,  # Dash
@@ -46,7 +47,7 @@ class _DamageGroundWaitIasaCase:
             note="DamageN1 grounded Wait_IASA dash branch",
         ),
         _DamageGroundWaitIasaCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=7260,
             player=0,
             expected_action_id=39,  # Squat
@@ -54,7 +55,7 @@ class _DamageGroundWaitIasaCase:
             note="DamageHi1 grounded Wait_IASA squat branch",
         ),
         _DamageGroundWaitIasaCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=4436,
             player=0,
             expected_action_id=39,  # Squat
@@ -62,7 +63,7 @@ class _DamageGroundWaitIasaCase:
             note="DamageHi1 grounded held-B neutral-X still falls through to Squat",
         ),
         _DamageGroundWaitIasaCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             record=8765,
             player=0,
             expected_action_id=18,  # Turn
@@ -70,7 +71,7 @@ class _DamageGroundWaitIasaCase:
             note="DamageN2 grounded Wait_IASA turn branch",
         ),
         _DamageGroundWaitIasaCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            dataset_rel="replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
             record=2081,
             player=1,
             expected_action_id=18,  # Turn
@@ -78,7 +79,7 @@ class _DamageGroundWaitIasaCase:
             note="DamageN1 anim-end Wait_IASA Turn does not run Turn_Anim again in the same frame",
         ),
         _DamageGroundWaitIasaCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             record=5068,
             player=0,
             expected_action_id=64,  # AttackLw4
@@ -86,7 +87,7 @@ class _DamageGroundWaitIasaCase:
             note="DamageHi3 grounded Wait_IASA keeps earlier grounded A-attack ownership before guard",
         ),
         _DamageGroundWaitIasaCase(
-            dataset_rel="datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl",
+            dataset_rel="replays/validation/marth/VictoriousSpitefulAlpaca.slpz",
             record=387,
             player=0,
             expected_action_id=212,  # Catch
@@ -108,13 +109,13 @@ def test_damage_ground_wait_iasa_replay_real_transition_locks(case: _DamageGroun
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = int(case.record)
     p = int(case.player)
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
 
     seed = row["seed_t"]
@@ -148,14 +149,14 @@ def test_grounded_damage_wait_iasa_plain_a_without_lr_stays_attack11_vsa_387() -
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    dataset_path = root / "replays/validation/marth/VictoriousSpitefulAlpaca.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     record = 387
     p = 0
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row["seed_t"][0]["action_id"][p]) == 78  # DamageN1
     assert int(row["ref_t1"][0]["action_id"][p]) == 212  # Catch with raw Z.
 
@@ -187,13 +188,13 @@ def test_grounded_damage_hitstun_jumpbuffer_rollout_enters_kneebend() -> None:
 
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -202,7 +203,7 @@ def test_grounded_damage_hitstun_jumpbuffer_rollout_enters_kneebend() -> None:
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -212,22 +213,19 @@ def test_grounded_damage_hitstun_jumpbuffer_rollout_enters_kneebend() -> None:
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     p = 0
     start_record = 167
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed(handle, seed_bytes)
         for record in range(start_record, 212):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             out_row = out_view[0].copy()
@@ -259,25 +257,24 @@ def test_grounded_damage_x14_live_lstick_keeps_full_hop_rollout_gat_9358() -> No
     _skip_if_required_artifacts_missing(root)
 
     dataset_path = root / (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -295,18 +292,16 @@ def test_grounded_damage_x14_live_lstick_keeps_full_hop_rollout_gat_9358() -> No
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, target_record + 1):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
         out_row = out_view[0].copy()
@@ -329,23 +324,22 @@ def test_grounded_damage_x14_without_live_lstick_still_uses_injected_xy_short_ho
     _skip_if_required_artifacts_missing(root)
 
     dataset_path = root / (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
     zero_prev = np.zeros((1,), dtype=samples["prev_input_t"].dtype)
     zero_input = np.zeros((1,), dtype=samples["input_t"].dtype)
     zero_prev_bytes = np.frombuffer(zero_prev.tobytes(order="C"), dtype=np.uint8).copy().reshape(
@@ -365,12 +359,12 @@ def test_grounded_damage_x14_without_live_lstick_still_uses_injected_xy_short_ho
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        seed_bytes[0, :] = samples_u8[9355, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[9355, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for _ in range(4):
             binding.step_input(handle, zero_prev_bytes, zero_input_bytes)

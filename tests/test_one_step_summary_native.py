@@ -6,10 +6,10 @@ import numpy as np
 import pytest
 
 import msl_binding
-from tools.eval.dataset import COMPARE_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE
 from tools.eval.one_step_report import DISCRETE_FIELDS, FLOAT_FIELDS
 from tools.eval.validation_profile import get_validation_profile
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 from tools.slippi.suite_io import load_suite, repo_root
 
 
@@ -18,18 +18,22 @@ def _suite_dataset(*, suite_rel: str, replay_name: str, limit: int):
     suite = load_suite(root / suite_rel)
     for entry in suite.replays:
         if Path(entry.replay).name == replay_name:
-            ds = build_dataset_from_slp(
+            ds = load_replay_buffers(
                 slp_path=str(root / entry.replay),
                 ports=[int(p) for p in entry.ports],
                 ucf_enabled=bool(suite.ucf_enabled),
                 ucf_cardinals_1_0_enabled=bool(suite.ucf_cardinals_1_0_enabled),
             )
-            samples = np.ascontiguousarray(ds.samples[:limit])
-            return suite, samples, int(ds.header["num_players"])
+            return suite, ds.rows[:limit], int(ds.num_players)
     raise AssertionError(f"{replay_name} not found in {suite_rel}")
 
 
-def _simulate_outputs(samples: np.ndarray, *, num_players: int, chunk: int, ucf_enabled: bool, ucf_cardinals: bool):
+def _group_u8(arr: np.ndarray) -> np.ndarray:
+    contiguous = np.ascontiguousarray(arr)
+    return contiguous.view(np.uint8).reshape(int(contiguous.shape[0]), int(contiguous.dtype.itemsize))
+
+
+def _simulate_outputs(samples, *, num_players: int, chunk: int, ucf_enabled: bool, ucf_cardinals: bool):
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -45,17 +49,15 @@ def _simulate_outputs(samples: np.ndarray, *, num_players: int, chunk: int, ucf_
     prev_bytes = np.empty((seed_bytes.shape[0], input_stride), dtype=np.uint8)
     input_bytes = np.empty((seed_bytes.shape[0], input_stride), dtype=np.uint8)
     chunk_out = np.empty((seed_bytes.shape[0], compare_stride), dtype=np.uint8)
-    samples_u8 = samples.view(np.uint8).reshape(samples.shape[0], int(samples.dtype.itemsize))
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    seed_u8 = _group_u8(samples["seed_t"])
+    prev_u8 = _group_u8(samples["prev_input_t"])
+    input_u8 = _group_u8(samples["input_t"])
     try:
         for off in range(0, int(samples.shape[0]), int(chunk)):
             n = min(int(chunk), int(samples.shape[0]) - off)
-            rows = samples_u8[off : off + n]
-            seed_bytes[:n] = rows[:, seed_off : seed_off + seed_stride]
-            prev_bytes[:n] = rows[:, prev_off : prev_off + input_stride]
-            input_bytes[:n] = rows[:, input_off : input_off + input_stride]
+            seed_bytes[:n] = seed_u8[off : off + n, :seed_stride]
+            prev_bytes[:n] = prev_u8[off : off + n, :input_stride]
+            input_bytes[:n] = input_u8[off : off + n, :input_stride]
             if n < seed_bytes.shape[0]:
                 seed_bytes[n:] = seed_bytes[0]
                 prev_bytes[n:] = prev_bytes[0]
@@ -145,13 +147,25 @@ def _python_summary(out_bytes: np.ndarray, samples: np.ndarray, *, num_players: 
     return mismatches, strict, ignored, float_metrics, f"{(norm_sum / norm_count):.8f}"
 
 
-def _native_summary(out: np.ndarray, samples: np.ndarray, *, num_players: int, profile_name: str):
-    samples_u8 = samples.view(np.uint8).reshape(samples.shape[0], int(samples.dtype.itemsize))
-    handle = msl_binding.one_step_summary_create(samples.shape[0], num_players, int(profile_name == "rl1_gameplay"))
-    for off in range(0, samples.shape[0], 333):
-        n = min(333, samples.shape[0] - off)
-        msl_binding.one_step_summary_accumulate(handle, out[off : off + n], samples_u8[off : off + n])
-    return msl_binding.one_step_summary_finish(handle)
+def _native_summary(samples, *, num_players: int, profile_name: str, ucf_enabled: bool, ucf_cardinals: bool):
+    handle = msl_binding.init(
+        batch_size=512,
+        num_players=int(num_players),
+        ucf_enabled=int(bool(ucf_enabled)),
+        ucf_cardinals_1_0_enabled=int(bool(ucf_cardinals)),
+    )
+    try:
+        return msl_binding.one_step_eval_buffers(
+            handle,
+            _group_u8(samples["seed_t"]),
+            _group_u8(samples["prev_input_t"]),
+            _group_u8(samples["input_t"]),
+            _group_u8(samples["ref_t1"]),
+            int(num_players),
+            int(profile_name == "rl1_gameplay"),
+        )
+    finally:
+        msl_binding.destroy(handle)
 
 
 @pytest.mark.parametrize(
@@ -176,7 +190,13 @@ def test_native_one_step_summary_matches_python_oracle(
         ucf_enabled=bool(suite.ucf_enabled),
         ucf_cardinals=bool(suite.ucf_cardinals_1_0_enabled),
     )
-    native = _native_summary(out, samples, num_players=num_players, profile_name=profile_name)
+    native = _native_summary(
+        samples,
+        num_players=num_players,
+        profile_name=profile_name,
+        ucf_enabled=bool(suite.ucf_enabled),
+        ucf_cardinals=bool(suite.ucf_cardinals_1_0_enabled),
+    )
     py_mismatch, py_strict, py_ignored, py_float, py_norm = _python_summary(
         out, samples, num_players=num_players, profile_name=profile_name
     )

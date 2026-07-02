@@ -7,11 +7,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
-_MARTH_BASE_REL = "datasets/marth/replays/validation/marth"
+_BASE_REL = "replays/validation/cardinal_1.0_recent"
+_MARTH_BASE_REL = "replays/validation/marth"
 _BUTTON_A = 0x0100
 
 _ACT_WAIT = 14
@@ -109,10 +110,10 @@ def _tracks_end_frame(tracks_path: Path, msid: int) -> float:
 
 
 def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
     row = samples[record : record + 1]
 
     binding = pytest.importorskip("msl_binding")
@@ -121,7 +122,7 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
     input_stride = _size_key(sizes, "input")
     compare_stride = _size_key(sizes, "compare")
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -153,17 +154,17 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
     ("dataset_name", "record", "p", "seed_action", "expected_action", "assert_action_frame", "require_a_edge"),
     [
         # AttackHi3 selection (baseline 56->14 cluster representative).
-        ("AttachedGoodNaturedGuanaco.msl", 841, 0, _ACT_WAIT, _ACT_ATTACK_HI3, True, True),
+        ("AttachedGoodNaturedGuanaco.slpz", 841, 0, _ACT_WAIT, _ACT_ATTACK_HI3, True, True),
         # AttackHi3 staying in-state.
-        ("GracefulAttachedTurtle.msl", 498, 0, _ACT_ATTACK_HI3, _ACT_ATTACK_HI3, False, False),
+        ("GracefulAttachedTurtle.slpz", 498, 0, _ACT_ATTACK_HI3, _ACT_ATTACK_HI3, False, False),
         # AttackDash selection (baseline 50->20 cluster representative).
-        ("AttachedGoodNaturedGuanaco.msl", 878, 0, _ACT_DASH, _ACT_ATTACK_DASH, True, True),
+        ("AttachedGoodNaturedGuanaco.slpz", 878, 0, _ACT_DASH, _ACT_ATTACK_DASH, True, True),
         # AttackDash staying in-state.
-        ("AttachedGoodNaturedGuanaco.msl", 2321, 1, _ACT_ATTACK_DASH, _ACT_ATTACK_DASH, False, False),
+        ("AttachedGoodNaturedGuanaco.slpz", 2321, 1, _ACT_ATTACK_DASH, _ACT_ATTACK_DASH, False, False),
         # Side tilt selection.
-        ("QuerulousGrandDinosaur.msl", 6240, 1, _ACT_WALK_SLOW, _ACT_ATTACK_S3, True, True),
+        ("QuerulousGrandDinosaur.slpz", 6240, 1, _ACT_WALK_SLOW, _ACT_ATTACK_S3, True, True),
         # Down tilt staying in-state.
-        ("TreasuredBackKangaroo.msl", 868, 0, _ACT_ATTACK_LW3, _ACT_ATTACK_LW3, False, False),
+        ("TreasuredBackKangaroo.slpz", 868, 0, _ACT_ATTACK_LW3, _ACT_ATTACK_LW3, False, False),
     ],
 )
 def test_ground_attack_selector_regression(
@@ -180,11 +181,11 @@ def test_ground_attack_selector_regression(
     dataset_rel = f"{_BASE_REL}/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     params = _load_common_params(root)
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == seed_action
     assert int(row["ref_t1"]["action_id"][0, p]) == expected_action
@@ -233,20 +234,20 @@ def test_marth_attacks3_angle_falls_back_to_neutral_when_variant_anim_missing_sd
     # data/anims/marth.tracks.bin::SSANIMT1
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = f"{_MARTH_BASE_REL}/StiffDraftyWalrus.msl"
+    dataset_rel = f"{_MARTH_BASE_REL}/StiffDraftyWalrus.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     assert _tracks_end_frame(root / "data/anims/marth.tracks.bin", _SM_ATTACK_S3_HI) == pytest.approx(
         0.0
     )
     assert _tracks_end_frame(root / "data/anims/marth.tracks.bin", _SM_ATTACK_S3) > 0.0
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 7895
     p = 0
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     assert int(row["seed_t"]["action_id"][0, p]) == _ACT_LANDING
     assert int(row["ref_t1"]["action_id"][0, p]) == _ACT_ATTACK_S3
     assert _a_press_edge(row, p)
@@ -328,15 +329,15 @@ def test_attackdash_wait_iasa_dash_transition_agg_2351_p1() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = f"{_BASE_REL}/AttachedGoodNaturedGuanaco.msl"
+    dataset_rel = f"{_BASE_REL}/AttachedGoodNaturedGuanaco.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 2351
     p = 1
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == _ACT_ATTACK_DASH
     assert int(row["ref_t1"]["action_id"][0, p]) == _ACT_DASH
@@ -372,15 +373,15 @@ def test_attacklw3_iasa_destination_walk_does_not_run_same_frame_guardon() -> No
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 3488
     p = 1
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == _ACT_ATTACK_LW3
     assert int(row["seed_t"]["action_frame"][0, p]) == 27
@@ -408,15 +409,15 @@ def test_attacklw3_downheld_stops_before_later_turn_walk_iasa_owner() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 362
     p = 1
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == _ACT_ATTACK_LW3
     assert int(row["ref_t1"]["action_id"][0, p]) == _ACT_ATTACK_LW3

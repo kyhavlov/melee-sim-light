@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -44,8 +44,8 @@ class _ThrowBHitCase:
     [
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=9960,
             thrower_p=1,
@@ -53,8 +53,8 @@ class _ThrowBHitCase:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=9962,
             thrower_p=1,
@@ -62,8 +62,8 @@ class _ThrowBHitCase:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "QuerulousGrandDinosaur.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.slpz"
             ),
             target_record=8293,
             thrower_p=1,
@@ -83,14 +83,14 @@ def test_throwb_suppressed_pulse_combo_bridge_target_pm1(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target = int(case.target_record)
     rows = (target - 1, target, target + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     seed = samples[target]["seed_t"]
     thrower = int(case.thrower_p)
@@ -116,21 +116,21 @@ def test_throwb_suppressed_pulse_combo_bridge_target_pm1(case: _Case) -> None:
     "case",
     [
         _ThrowBCallbackCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl",
+            dataset_rel="replays/validation/aggregate_recent/PutridJoyousOryx.slpz",
             target_record=3287,
             thrower_p=0,
             item_slot=1,
             note="Fox ThrowB first-command callback consumes article and advances combo",
         ),
         _ThrowBCallbackCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl",
+            dataset_rel="replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz",
             target_record=2121,
             thrower_p=1,
             item_slot=1,
             note="Falco ThrowB terminal callback consumes article and advances combo",
         ),
         _ThrowBCallbackCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            dataset_rel="replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
             target_record=8380,
             thrower_p=0,
             item_slot=1,
@@ -138,8 +138,8 @@ def test_throwb_suppressed_pulse_combo_bridge_target_pm1(case: _Case) -> None:
         ),
         _ThrowBCallbackCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "ImpassionedAlarmedTarsier.msl"
+                "replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.slpz"
             ),
             target_record=2116,
             thrower_p=1,
@@ -148,8 +148,8 @@ def test_throwb_suppressed_pulse_combo_bridge_target_pm1(case: _Case) -> None:
         ),
         _ThrowBCallbackCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "ImpassionedAlarmedTarsier.msl"
+                "replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.slpz"
             ),
             target_record=8093,
             thrower_p=1,
@@ -157,14 +157,14 @@ def test_throwb_suppressed_pulse_combo_bridge_target_pm1(case: _Case) -> None:
             note="Falco ThrowB startup same-frame hb0 callback destroys later article",
         ),
         _ThrowBCallbackCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            dataset_rel="replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
             target_record=5094,
             thrower_p=1,
             item_slot=1,
             note="Falco ThrowB startup same-frame hb0 callback destroys TCH article",
         ),
         _ThrowBCallbackCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            dataset_rel="replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
             target_record=9499,
             thrower_p=1,
             item_slot=1,
@@ -172,8 +172,8 @@ def test_throwb_suppressed_pulse_combo_bridge_target_pm1(case: _Case) -> None:
         ),
         _ThrowBCallbackCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=2522,
             thrower_p=1,
@@ -194,12 +194,12 @@ def test_throwb_callback_phase_item_and_scoreboard_locks(case: _ThrowBCallbackCa
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target = int(case.target_record)
-    assert int(samples.shape[0]) > target, f"dataset too short for lock row: record={target}"
+    assert int(samples.shape[0]) > target, f"replay too short for lock row: record={target}"
 
     seed = samples[target]["seed_t"]
     thrower = int(case.thrower_p)
@@ -221,8 +221,8 @@ def test_throwb_callback_phase_item_and_scoreboard_locks(case: _ThrowBCallbackCa
     [
         _ThrowBHitCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=9960,
             thrower_p=1,
@@ -231,8 +231,8 @@ def test_throwb_callback_phase_item_and_scoreboard_locks(case: _ThrowBCallbackCa
         ),
         _ThrowBHitCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=9962,
             thrower_p=1,
@@ -254,12 +254,12 @@ def test_throwb_no_live_shot_command_spawns_body_hit(case: _ThrowBHitCase) -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     target = int(case.target_record)
-    assert int(ds.samples.shape[0]) > target, f"dataset too short for lock row: record={target}"
-    seed = ds.samples[target]["seed_t"]
+    assert int(ds.rows.shape[0]) > target, f"replay too short for lock row: record={target}"
+    seed = ds.rows[target]["seed_t"]
     thrower = int(case.thrower_p)
     victim = int(case.victim_p)
     assert int(seed["action_id"][thrower]) == 220, case.note  # ThrowB

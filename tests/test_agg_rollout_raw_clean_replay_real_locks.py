@@ -6,12 +6,13 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 AGG = (
-    "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-    "AttachedGoodNaturedGuanaco.msl"
+    "replays/validation/cardinal_1.0_recent/"
+    "AttachedGoodNaturedGuanaco.slpz"
 )
 
 ACT_ATTACK_AIR_LW = 0x45
@@ -51,7 +52,7 @@ def _collision_contact_dtype() -> np.dtype:
 def _dataset_path(root: Path) -> Path:
     dataset_path = root / AGG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {AGG}")
+        pytest.skip(f"missing local replay: {AGG}")
     return dataset_path
 
 
@@ -64,8 +65,8 @@ def _run_rollout_records(
     dataset_path: Path, start_record: int, target_records: tuple[int, ...]
 ) -> dict[int, tuple[np.void, np.void, np.void]]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > max(target_records)
 
     sizes = binding.sizes()
@@ -80,7 +81,7 @@ def _run_rollout_records(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )

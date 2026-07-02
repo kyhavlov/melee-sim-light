@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 from tests.test_items_spawn_joint_replay_real_locks import (
     _skip_if_required_artifacts_missing,
@@ -54,7 +54,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
     "case",
     [
         _FastfallLockCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=3475,
             owner_port=0,
             seed_action=65,  # AttackAirN
@@ -66,7 +66,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             note="AttackAir post-hitlag fastfall bridge lock",
         ),
         _FastfallLockCase(
-            dataset_rel="datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            dataset_rel="replays/validation/marth/InternalPowerlessWallaby.slpz",
             target_record=483,
             owner_port=1,
             seed_action=65,  # AttackAirN
@@ -78,7 +78,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             note="AttackAir neutral-input hitlag exit does not inherit hitlag-frozen fastfall",
         ),
         _FastfallLockCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=3087,
             owner_port=0,
             seed_action=29,  # JumpF
@@ -90,7 +90,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             note="SpecialAirN entry fastfall clear lock",
         ),
         _FastfallLockCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=8486,
             owner_port=0,
             seed_action=358,  # SpecialHiFall
@@ -108,10 +108,10 @@ def test_fastfall_special_entry_target_pm1_both_players(case: _FastfallLockCase)
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     owner = int(case.owner_port)
 
     assert int(target["seed_t"]["action_id"][owner]) == int(case.seed_action), case.note

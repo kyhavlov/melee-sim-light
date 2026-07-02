@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.eval.dataset import SEED_DTYPE
+from tools.eval.validation_dtypes import SEED_DTYPE
 
 
 def test_no_allocations_after_init() -> None:

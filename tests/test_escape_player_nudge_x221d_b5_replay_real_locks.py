@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_WAIT = 0x000E
@@ -64,11 +65,11 @@ def test_escapef_x221d_b5_suppresses_self_player_nudge_but_peer_still_nudges() -
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    row = read_dataset(str(dataset_path)).samples[7448:7449]
+    row = load_replay_buffers(str(dataset_path)).rows[7448:7449]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
 
@@ -96,11 +97,11 @@ def test_non_escape_overlap_keeps_reciprocal_player_nudge_boundary() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    row = read_dataset(str(dataset_path)).samples[7448:7449]
+    row = load_replay_buffers(str(dataset_path)).rows[7448:7449]
     seed = row["seed_t"].copy()
     for p in (0, 1):
         seed["action_id"][0, p] = np.uint16(ACT_WAIT)
@@ -127,11 +128,11 @@ def test_guard_iasa_escape_entry_keeps_current_frame_player_nudge() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    row = read_dataset(str(dataset_path)).samples[10282:10283]
+    row = load_replay_buffers(str(dataset_path)).rows[10282:10283]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
     assert int(seed["action_id"][0]) == ACT_GUARD

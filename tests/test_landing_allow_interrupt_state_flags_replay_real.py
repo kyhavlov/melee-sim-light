@@ -5,8 +5,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slpz")
@@ -22,13 +23,13 @@ STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80
 def _run_one_step_from_slp(record: int, *, seed_mutator=None) -> tuple[np.void, np.void, np.void]:
     if not SELFPLAY_181413_SLP.exists():
         pytest.skip(f"missing local replay: {SELFPLAY_181413_SLP}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(SELFPLAY_181413_SLP),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     if seed_mutator is not None:
         seed_mutator(row["seed_t"])
     seed = row["seed_t"][0]
@@ -49,7 +50,7 @@ def _run_one_step_from_slp(record: int, *, seed_mutator=None) -> tuple[np.void, 
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -66,9 +67,9 @@ def _run_one_step_from_slp(record: int, *, seed_mutator=None) -> tuple[np.void, 
 
 def _run_one_step_from_dataset(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1].copy()
+        pytest.skip(f"missing local replay: {dataset_path}")
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1].copy()
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
 
@@ -87,7 +88,7 @@ def _run_one_step_from_dataset(dataset_path: Path, record: int) -> tuple[np.void
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -145,9 +146,9 @@ def test_early_attackairb_basic_landing_does_not_create_raw_allow_interrupt_self
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
     [
-        ("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl", 3693, 0),
-        ("datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl", 2340, 0),
-        ("datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl", 3492, 0),
+        ("replays/validation/sheik/StiffLustrousZebra.slpz", 3693, 0),
+        ("replays/validation/sheik/ToughOutlyingChicken.slpz", 2340, 0),
+        ("replays/validation/sheik/RuralReasonableRat.slpz", 3492, 0),
     ],
 )
 def test_late_sheik_attackairb_fall_carries_raw_allow_interrupt(
@@ -175,7 +176,7 @@ def test_sheik_attackairb_quiet_frame_before_fall_does_not_set_allow_interrupt()
     # crossed the source allow-interrupt command window in the runtime table, so the raw bit stays
     # quiet.
     seed, ref, out = _run_one_step_from_dataset(
-        Path("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl"), 3692
+        Path("replays/validation/sheik/StiffLustrousZebra.slpz"), 3692
     )
     p = 0
     assert int(seed["action_id"][p]) == ACT_ATTACK_AIR_B

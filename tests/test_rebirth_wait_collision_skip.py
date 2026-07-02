@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
 
 ACT_REBIRTH_WAIT = 13
 ACT_WAIT = 14

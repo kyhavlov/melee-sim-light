@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
-from tools.slippi.make_dataset_from_slp import _derive_match_flow_pending_rebirth_char_id
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.slippi.validation_buffer_fighter import _derive_match_flow_pending_rebirth_char_id
 from tools.slippi.suite_io import load_suite, team_attack_on_from_start
 
 

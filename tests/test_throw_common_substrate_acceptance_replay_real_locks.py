@@ -32,8 +32,8 @@ def _root() -> Path:
         _Case(
             name="throwf_attached_hit",
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.slpz"
             ),
             record=215,
             thrower=1,
@@ -43,8 +43,8 @@ def _root() -> Path:
         _Case(
             name="throwhi_release",
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "TreasuredBackKangaroo.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "TreasuredBackKangaroo.slpz"
             ),
             record=444,
             thrower=0,
@@ -54,8 +54,8 @@ def _root() -> Path:
         _Case(
             name="throwb_attached",
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             record=2509,
             thrower=1,
@@ -65,8 +65,8 @@ def _root() -> Path:
         _Case(
             name="throwlw_attached_pulse",
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "QuerulousGrandDinosaur.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.slpz"
             ),
             record=443,
             thrower=0,
@@ -80,7 +80,7 @@ def test_common_throw_substrate_rows_keep_core_attached_release_shape(case: _Cas
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, case.record, case.thrower)
 
@@ -108,12 +108,12 @@ def test_common_throw_substrate_throwb_keeps_intentional_combo_bridge_behavior()
     root = _root()
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     thrower = 1
     victim = 0

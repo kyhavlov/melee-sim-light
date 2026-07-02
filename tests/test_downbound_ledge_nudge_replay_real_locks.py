@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_row_bytes, replay_buffer_byte_views, replay_buffer_row_bytes
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
 
 
@@ -21,26 +22,22 @@ def _size(sizes: dict[str, int], key: str) -> int:
 
 def _run_one_step_row_ucf(ds_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     sizes = binding.sizes()
     seed_stride = _size(sizes, "seed")
     input_stride = _size(sizes, "input")
     compare_stride = _size(sizes, "compare")
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
-    raw = samples.view(np.uint8).reshape(len(samples), -1)
-    seed_bytes = np.array(raw[record : record + 1, seed_off : seed_off + seed_stride], copy=True)
-    prev_bytes = np.array(raw[record : record + 1, prev_off : prev_off + input_stride], copy=True)
-    input_bytes = np.array(raw[record : record + 1, input_off : input_off + input_stride], copy=True)
+    seed_bytes = replay_buffer_row_bytes(ds, "seed_t", record, seed_stride)
+    prev_bytes = replay_buffer_row_bytes(ds, "prev_input_t", record, input_stride)
+    input_bytes = replay_buffer_row_bytes(ds, "input_t", record, input_stride)
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -71,9 +68,9 @@ def test_downbound_d_overlap_nudge_exits_fd_left_ledge_to_fall() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    ds_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    ds_path = root / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {ds_path.relative_to(root)}")
 
     seed, ref, out = _run_one_step_row_ucf(ds_path, 8904)
     p = 1
@@ -91,9 +88,9 @@ def test_downbound_d_overlap_nudge_does_not_exit_before_ledge_boundary() -> None
     # earlier. This keeps the x450 ledge-exit owner from becoming a broad DownBound/Fall shortcut.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    ds_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    ds_path = root / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {ds_path.relative_to(root)}")
 
     seed, ref, out = _run_one_step_row_ucf(ds_path, 8903)
     p = 1

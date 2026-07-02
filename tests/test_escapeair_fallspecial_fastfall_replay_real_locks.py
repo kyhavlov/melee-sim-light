@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_WAIT = 0x000E
@@ -46,7 +47,7 @@ def _rollout_outputs(ds, start_record: int, stop_record: int) -> dict[int, np.vo
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    samples = ds.samples
+    samples = ds.rows
     seed_bytes = (
         samples[start_record : start_record + 1]["seed_t"]
         .view(np.uint8)
@@ -58,7 +59,7 @@ def _rollout_outputs(ds, start_record: int, stop_record: int) -> dict[int, np.vo
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -93,7 +94,7 @@ def _rollout_compare_records(ds, start_record: int, records: tuple[int, ...]) ->
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    samples = ds.samples
+    samples = ds.rows
     seed_bytes = (
         samples[start_record : start_record + 1]["seed_t"]
         .view(np.uint8)
@@ -105,7 +106,7 @@ def _rollout_compare_records(ds, start_record: int, records: tuple[int, ...]) ->
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -145,13 +146,13 @@ def test_escapeair_anim_end_fallspecial_preserves_fastfall_until_landing() -> No
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = 1
     start_record = 9883
     fallspecial_record = 9897
@@ -199,12 +200,12 @@ def test_marth_fallspecial_xc0_uses_fastfall_terminal_until_bottom_blast() -> No
     # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
     # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    dataset_path = root / "replays/validation/marth/VictoriousSpitefulAlpaca.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = 0
     start_record = 2571
     terminal_record = 2615
@@ -237,12 +238,12 @@ def test_marth_fallspecial_xc1_keeps_ordinary_terminal_negative() -> None:
     # api.c reconstructs mv.co.fallspecial.xC as 1. That path must continue using ordinary
     # `ca->terminal_vel` instead of inheriting the fast-fall-velocity terminal.
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/FemaleWorthyAlpaca.msl"
+    dataset_path = root / "replays/validation/marth/FemaleWorthyAlpaca.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = 1
     record = 5062
     seed = samples[record]["seed_t"]

@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_one_step(row: np.ndarray, num_players: int) -> tuple[np.ndarray, np.ndarray]:
@@ -44,26 +45,26 @@ def _run_one_step(row: np.ndarray, num_players: int) -> tuple[np.ndarray, np.nda
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             791,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             1036,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             130,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             2435,
             0,
         ),
@@ -74,12 +75,12 @@ def test_damageflytop_selection_regression(dataset_rel: str, record: int, p: int
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert record > 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])} record={record}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])} record={record}"
 
     row = samples[record : record + 1]
     prev_row = samples[record - 1]
@@ -93,6 +94,6 @@ def test_damageflytop_selection_regression(dataset_rel: str, record: int, p: int
     assert int(row["ref_t1"]["hitstun"][0, p]) > 0
     assert int(row["ref_t1"]["on_ground"][0, p]) == 0
 
-    out, ref = _run_one_step(row=row, num_players=int(ds.header["num_players"]))
+    out, ref = _run_one_step(row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["animation_index"][p]) == int(ref["animation_index"][p])

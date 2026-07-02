@@ -10,7 +10,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -85,8 +85,8 @@ def _is_damage_action(action_id: int) -> bool:
     [
         _BlasterGunLifetimeCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "BlondHardHippopotamus.msl"
+                "replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.slpz"
             ),
             record=666,
             owner_port=1,
@@ -95,8 +95,8 @@ def _is_damage_action(action_id: int) -> bool:
         ),
         _BlasterGunLifetimeCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PositiveRevolvingHyena.msl"
+                "replays/validation/aggregate_recent/"
+                "PositiveRevolvingHyena.slpz"
             ),
             record=8222,
             owner_port=1,
@@ -105,8 +105,8 @@ def _is_damage_action(action_id: int) -> bool:
         ),
         _BlasterGunLifetimeCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PositiveRevolvingHyena.msl"
+                "replays/validation/aggregate_recent/"
+                "PositiveRevolvingHyena.slpz"
             ),
             record=2460,
             owner_port=1,
@@ -115,8 +115,8 @@ def _is_damage_action(action_id: int) -> bool:
         ),
         _BlasterGunLifetimeCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "ImpassionedAlarmedTarsier.msl"
+                "replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.slpz"
             ),
             record=140,
             owner_port=0,
@@ -125,8 +125,8 @@ def _is_damage_action(action_id: int) -> bool:
         ),
         _BlasterGunLifetimeCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PriceyPartialAlbatross.msl"
+                "replays/validation/aggregate_recent/"
+                "PriceyPartialAlbatross.slpz"
             ),
             record=1184,
             owner_port=0,
@@ -135,8 +135,8 @@ def _is_damage_action(action_id: int) -> bool:
         ),
         _BlasterGunLifetimeCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PriceyPartialAlbatross.msl"
+                "replays/validation/aggregate_recent/"
+                "PriceyPartialAlbatross.slpz"
             ),
             record=1185,
             owner_port=0,
@@ -162,7 +162,7 @@ def test_blaster_gun_lifetime_replay_real_item_rows(case: _BlasterGunLifetimeCas
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, int(case.record), int(case.owner_port))
     owner = int(case.owner_port)
@@ -181,19 +181,19 @@ def test_blaster_gun_lifetime_replay_real_item_rows(case: _BlasterGunLifetimeCas
     "case",
     [
         _BlasterGunDamageExitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=2132,
             owner_port=1,
             note="GAT blaster gun stale carry on SpecialAirNLoop->DamageFlyTop transition",
         ),
         _BlasterGunDamageExitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=9611,
             owner_port=1,
             note="GAT blaster gun stale carry on SpecialAirNStart->DamageAir2 transition",
         ),
         _BlasterGunDamageExitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=4412,
             owner_port=1,
             note="TBK blaster gun stale carry on SpecialAirNLoop->DamageAir2 transition",
@@ -216,15 +216,15 @@ def test_blaster_gun_damage_exit_target_pm1_both_players_strict_lock(
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
     owner = int(case.owner_port)
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record]
     seed = target["seed_t"]
@@ -265,10 +265,10 @@ def test_same_frame_specialairn_gun_spawn_clears_when_damage_interrupts_pte_1019
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 1019
     owner = 0
@@ -292,10 +292,10 @@ def test_same_frame_damage_clear_requires_specialn_gun_spawn_source_pte_1019() -
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def no_b_button(_prev_input_t, input_t) -> None:
         input_t["p"]["buttons"][0, 0] = 0

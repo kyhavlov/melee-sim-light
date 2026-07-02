@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -18,15 +18,15 @@ def test_dataset_seeds_instance_id_x2073_and_reseed_respects_it() -> None:
     # - refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0 (lbz fp+0x2073; compare vs flags_low)
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / expected_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {expected_rel}")
+        pytest.skip(f"missing local replay: {expected_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
 
     # Lock a record where the field is nonzero (avoid trivial all-zero passes).
     record = 149
@@ -77,7 +77,7 @@ def test_dataset_seeds_instance_id_x2073_and_reseed_respects_it() -> None:
     seed_bytes = np.frombuffer(seed_mut.tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride).copy()
     out_int = np.zeros((1, internals_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_write_internals(handle, out_int)

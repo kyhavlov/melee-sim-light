@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_DAMAGE_FLY_ROLL = 0x005B
@@ -39,20 +40,20 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 def _dataset_path(root: Path) -> Path:
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _marth_dataset_path(root: Path) -> Path:
-    dataset_rel = "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    dataset_rel = "replays/validation/marth/VictoriousSpitefulAlpaca.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
@@ -63,8 +64,8 @@ def _binding_sizes():
 
 
 def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -> tuple[np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     ref = row["ref_t1"][0].copy()
 
     binding, seed_stride, input_stride, compare_stride = _binding_sizes()
@@ -77,7 +78,7 @@ def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -93,8 +94,8 @@ def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -
 
 
 def _debug_selected_body_hit_count(dataset_path: Path, record: int, seed: np.ndarray) -> int:
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     binding, seed_stride, input_stride, _compare_stride = _binding_sizes()
     seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
@@ -105,7 +106,7 @@ def _debug_selected_body_hit_count(dataset_path: Path, record: int, seed: np.nda
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -121,8 +122,8 @@ def _debug_selected_body_hit_count(dataset_path: Path, record: int, seed: np.nda
 def _rollout_records(
     dataset_path: Path, start_record: int, target_records: tuple[int, ...]
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_max = max(target_records)
     assert int(samples.shape[0]) > target_max
 
@@ -134,7 +135,7 @@ def _rollout_records(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -171,10 +172,10 @@ def test_downbound_x1994_timer_selects_post_anim_pose_for_attackdash_whiff_tbk_2
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     p = 0
-    seed = ds.samples[2402:2403]["seed_t"].copy()
+    seed = ds.rows[2402:2403]["seed_t"].copy()
     assert int(seed[0]["action_id"][p]) == ACT_DOWN_BOUND_D
     assert int(seed[0]["hurtbox_state"][p]) == 0
     assert int(seed[0]["colanim_hit_status_x198c"][p]) == 1
@@ -200,11 +201,11 @@ def test_damageflyroll_x1994_rollout_carries_to_downbound_pose_bridge_tbk() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     p = 0
     start = 2375
-    seed = ds.samples[start]["seed_t"]
+    seed = ds.rows[start]["seed_t"]
     assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_ROLL
     assert int(seed["colanim_hit_status_x198c"][p]) == 1
     assert int(seed["colanim_timer_x1994"][p]) > 0
@@ -234,10 +235,10 @@ def test_downbound_x1994_pose_bridge_clamps_terminal_pose_for_marth_vsa_651() ->
     root = Path(__file__).resolve().parents[1]
     _skip_if_marth_artifacts_missing(root)
     dataset_path = _marth_dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     defender = 1
-    seed = ds.samples[651:652]["seed_t"].copy()
+    seed = ds.rows[651:652]["seed_t"].copy()
     assert int(seed[0]["action_id"][defender]) == ACT_DOWN_BOUND_D
     assert int(seed[0]["action_frame"][defender]) == 24
     assert int(seed[0]["hurtbox_state"][defender]) == 0

@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
-from tools.slippi.make_dataset_from_slp import (
+from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
+from tools.slippi.validation_buffer_seed import (
     _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane,
 )
 

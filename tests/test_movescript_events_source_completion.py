@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from tests.test_hitbox_scale_flags import _populate_data_dir, _write_minimal_mslhitb1
-from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
 from tools.extraction.extract_fighter_hitboxes import _records_from_events
 from tools.extraction.extract_fighter_script_timeline import EVENT_IDS, _encode_payload
 from tools.extraction.known_data_artifacts import _decode_script_payload

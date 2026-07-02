@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_PASS = 88
@@ -26,14 +27,14 @@ def _run_one_step(ds, record: int, *, seed_mutator=None) -> np.void:
     compare_stride = int(sizes["compare"])
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     if seed_mutator is not None:
         seed_mutator(row)
 
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -54,9 +55,9 @@ def _run_one_step(ds, record: int, *, seed_mutator=None) -> np.void:
 @pytest.mark.parametrize(
     ("rel_path", "record", "port"),
     [
-        ("yoshis_story_recent/CheeryNumbMonkey.msl", 3031, 1),
-        ("battlefield_recent/MediumVirtualPig.msl", 5222, 0),
-        ("fountain_of_dreams_recent/ParallelTemptingElk.msl", 303, 0),
+        ("yoshis_story_recent/CheeryNumbMonkey.slpz", 3031, 1),
+        ("battlefield_recent/MediumVirtualPig.slpz", 5222, 0),
+        ("fountain_of_dreams_recent/ParallelTemptingElk.slpz", 303, 0),
     ],
 )
 def test_squat_speciallw_preempts_platform_pass(rel_path: str, record: int, port: int) -> None:
@@ -69,12 +70,12 @@ def test_squat_speciallw_preempts_platform_pass(rel_path: str, record: int, port
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation" / rel_path
+    dataset_path = root / "replays/validation" / rel_path
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     ref = row["ref_t1"]
     assert int(ref["action_id"][port]) == ACT_FX_SPECIAL_LW_START
     assert int(ref["on_ground"][port]) == 1
@@ -94,12 +95,12 @@ def test_squatwait_platform_pass_does_not_consume_without_speciallw_button() -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     def clear_b(row) -> None:
         mask = np.uint16(0xFFFF ^ BUTTON_B)
@@ -124,15 +125,15 @@ def test_squat_speciallw_preempts_down_attack_fallback() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl"
+        / "replays/validation/battlefield_recent/MediumVirtualPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 7743
     port = 1
-    ref = ds.samples[record]["ref_t1"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(ref["action_id"][port]) == ACT_FX_SPECIAL_LW_START
 
     out = _run_one_step(ds, record)
@@ -144,8 +145,8 @@ def test_squat_speciallw_preempts_down_attack_fallback() -> None:
 @pytest.mark.parametrize(
     ("rel_path", "record", "port"),
     [
-        ("yoshis_story_recent/PhysicalElectricCapybara.msl", 5191, 0),
-        ("yoshis_story_recent/PhysicalElectricCapybara.msl", 4847, 0),
+        ("yoshis_story_recent/PhysicalElectricCapybara.slpz", 5191, 0),
+        ("yoshis_story_recent/PhysicalElectricCapybara.slpz", 4847, 0),
     ],
 )
 def test_aerial_speciallw_preempts_escapeair_fallback(
@@ -161,12 +162,12 @@ def test_aerial_speciallw_preempts_escapeair_fallback(
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation" / rel_path
+    dataset_path = root / "replays/validation" / rel_path
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    ref = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    ref = ds.rows[record]["ref_t1"]
     assert int(ref["action_id"][port]) == ACT_FX_SPECIAL_AIR_LW_START
     assert int(ref["on_ground"][port]) == 0
 
@@ -179,10 +180,10 @@ def test_aerial_speciallw_preempts_escapeair_fallback(
 @pytest.mark.parametrize(
     ("rel_path", "record", "port"),
     [
-        ("yoshis_story_recent/CheeryNumbMonkey.msl", 614, 1),
-        ("battlefield_recent/MediumVirtualPig.msl", 3268, 1),
-        ("fountain_of_dreams_recent/ParallelTemptingElk.msl", 304, 0),
-        ("pokemon_stadium_recent/ThisVioletRaccoon.msl", 290, 0),
+        ("yoshis_story_recent/CheeryNumbMonkey.slpz", 614, 1),
+        ("battlefield_recent/MediumVirtualPig.slpz", 3268, 1),
+        ("fountain_of_dreams_recent/ParallelTemptingElk.slpz", 304, 0),
+        ("pokemon_stadium_recent/ThisVioletRaccoon.slpz", 290, 0),
     ],
 )
 def test_grounded_speciallw_start_iasa_platform_passes_to_air_start(
@@ -199,12 +200,12 @@ def test_grounded_speciallw_start_iasa_platform_passes_to_air_start(
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_80099F1C,ftCo_8009A184}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation" / rel_path
+    dataset_path = root / "replays/validation" / rel_path
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
     assert int(seed["action_id"][port]) == ACT_FX_SPECIAL_LW_START
@@ -225,12 +226,12 @@ def test_grounded_speciallw_start_platform_pass_requires_down_input_edge() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     def clear_down(row) -> None:
         row["input_t"]["p"]["main_y"][0, 1] = np.int8(0)

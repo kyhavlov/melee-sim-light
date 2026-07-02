@@ -5,11 +5,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
-_AGG_REL = "datasets/aggregate_recent/replays/validation/aggregate_recent"
+_BASE_REL = "replays/validation/cardinal_1.0_recent"
+_AGG_REL = "replays/validation/aggregate_recent"
 _BUTTON_Z = 0x0010
 _REQUIRED_ARTIFACTS = (
     "data/moves/fox.json",
@@ -34,10 +35,10 @@ def _button_edge(row: np.ndarray, port: int, mask: int) -> bool:
 
 
 def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     row = samples[record : record + 1]
 
@@ -47,7 +48,7 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -78,16 +79,16 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
 @pytest.mark.integration
 def test_replay_wait_to_catch_iasa_record_1176_lock() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE_REL}/AttachedGoodNaturedGuanaco.msl"
+    dataset_rel = f"{_BASE_REL}/AttachedGoodNaturedGuanaco.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
     port = 1
     record = 1176
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, port]) == 14
     assert int(row["seed_t"]["action_frame"][0, port]) == 0
@@ -111,17 +112,17 @@ def test_replay_wait_to_catch_iasa_record_1176_lock() -> None:
 @pytest.mark.integration
 def test_replay_catch_connect_escapeb_victim_record_6100_lock() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.msl"
+    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
     attacker = 0
     victim = 1
     record = 6100
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, attacker]) == 212
     assert int(row["seed_t"]["action_id"][0, victim]) == 234
@@ -146,17 +147,17 @@ def test_replay_catch_connect_escapeb_victim_record_6100_lock() -> None:
 @pytest.mark.integration
 def test_replay_capturepulled_to_capturewait_record_6101_lock() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.msl"
+    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
     attacker = 0
     victim = 1
     record = 6101
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # Replay-real lock for the CapturePulledLw -> CaptureWaitLw handoff:
     # - strict discrete parity on owner/victim action progression and no hitlag/hitstun side effects
@@ -194,17 +195,17 @@ def test_replay_capturepulled_to_capturewait_record_6101_lock() -> None:
 @pytest.mark.integration
 def test_replay_capturepulled_stays_pulled_record_408_negative_lock() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.msl"
+    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
     attacker = 0
     victim = 1
     record = 408
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # Negative lock: victim is already in CapturePulledLw and should remain there on t+1.
     # This guards the CapturePulled->CaptureWait snapshot bridge from over-broad application.
@@ -242,9 +243,9 @@ def test_replay_capturepulled_stays_pulled_record_408_negative_lock() -> None:
 @pytest.mark.parametrize(
     "dataset_name,record,owner,victim",
     [
-        ("GracefulAttachedTurtle.msl", 446, 0, 1),
-        ("TreasuredBackKangaroo.msl", 5771, 0, 1),
-        ("TreasuredBackKangaroo.msl", 5910, 0, 1),
+        ("GracefulAttachedTurtle.slpz", 446, 0, 1),
+        ("TreasuredBackKangaroo.slpz", 5771, 0, 1),
+        ("TreasuredBackKangaroo.slpz", 5910, 0, 1),
     ],
 )
 def test_replay_capturepulledhi_grounded_handoff_enters_capturewaitlw_strict_lock(
@@ -254,11 +255,11 @@ def test_replay_capturepulledhi_grounded_handoff_enters_capturewaitlw_strict_loc
     dataset_rel = f"{_BASE_REL}/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # Replay-real handoff shape:
     # - owner CatchPull frame-7 grounded -> CatchWait
@@ -313,17 +314,17 @@ def test_replay_capturepulledhi_grounded_handoff_enters_capturewaitlw_strict_loc
 @pytest.mark.integration
 def test_replay_capturepulledhi_grounded_handoff_resets_jump_count_from_floor_mask() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_AGG_REL}/MotionlessAggressiveJay.msl"
+    dataset_rel = f"{_AGG_REL}/MotionlessAggressiveJay.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
     owner = 1
     victim = 0
     record = 6470
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # Top disruptive rollout entry point: airborne CapturePulledHi still has one jump left in
     # seed, while the replay's grounded CaptureWaitLw result has two. The reset is owned by
@@ -369,12 +370,12 @@ def test_replay_capturepulledhi_grounded_handoff_resets_jump_count_from_floor_ma
 @pytest.mark.parametrize(
     "dataset_name,record,victim",
     [
-        ("BlondHardHippopotamus.msl", 508, 0),
-        ("BlondHardHippopotamus.msl", 557, 0),
-        ("BlondHardHippopotamus.msl", 1235, 1),
-        ("BlondHardHippopotamus.msl", 1278, 1),
-        ("BlondHardHippopotamus.msl", 4366, 1),
-        ("PutridJoyousOryx.msl", 290, 0),
+        ("BlondHardHippopotamus.slpz", 508, 0),
+        ("BlondHardHippopotamus.slpz", 557, 0),
+        ("BlondHardHippopotamus.slpz", 1235, 1),
+        ("BlondHardHippopotamus.slpz", 1278, 1),
+        ("BlondHardHippopotamus.slpz", 4366, 1),
+        ("PutridJoyousOryx.slpz", 290, 0),
     ],
 )
 def test_replay_capturepulledhi_fox_without_floor_mask_stays_capturewaithi(
@@ -384,11 +385,11 @@ def test_replay_capturepulledhi_fox_without_floor_mask_stays_capturewaithi(
     dataset_rel = f"{_AGG_REL}/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # These Fox rows exposed the old broad prior-ground shortcut: stale ground_id existed, but the
     # true mpColl_800477E0 floor-mask path does not fire, so the victim remains airborne
@@ -417,14 +418,14 @@ def test_replay_capturepulledhi_grounded_handoff_context_controls(
     record: int, victim: int, exp_ref_action: int
 ) -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.msl"
+    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row["seed_t"]["action_id"][0, victim]) == 223
     assert int(row["ref_t1"]["action_id"][0, victim]) == exp_ref_action
 

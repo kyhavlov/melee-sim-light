@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Diff two locate TSV outputs (from locate_discrete_mismatches --format tsv)."""
+"""Diff two legacy locate TSV outputs."""
 
 import argparse
 import json

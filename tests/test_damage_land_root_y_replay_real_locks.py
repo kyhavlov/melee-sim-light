@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_damagefly_downbound_state_selection_regression import _run_one_step_with_rollout
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class _DamageLandRootYCase:
     "case",
     [
         _DamageLandRootYCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=10670,
             p=1,
             expected_seed_action=90,
@@ -32,7 +32,7 @@ class _DamageLandRootYCase:
             note="DamageFlyLw -> PassiveStandB should snap root Y to the floor line on the contact frame",
         ),
         _DamageLandRootYCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=5063,
             p=0,
             expected_seed_action=91,
@@ -40,7 +40,7 @@ class _DamageLandRootYCase:
             note="DamageFlyTop -> Passive should inherit the callback-owned floor-root position",
         ),
         _DamageLandRootYCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=9985,
             p=0,
             expected_seed_action=86,
@@ -62,10 +62,10 @@ def test_damage_land_root_y_target_pm1_replay_real(case: _DamageLandRootYCase) -
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = case.p
 
     seed_target = samples[case.target_record]["seed_t"]

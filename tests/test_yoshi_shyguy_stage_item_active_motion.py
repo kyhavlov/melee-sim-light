@@ -5,9 +5,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
-from tests.replay_dataset_loader import load_replay_dataset as read_dataset
-from tools.slippi.make_dataset_from_slp import (
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
+from tools.slippi.validation_buffer_items import (
     _derive_yoshi_shyguy_dyn_y_phase,
     _derive_yoshi_shyguy_native_lanes,
     _derive_yoshi_shyguy_prev_vel_y,
@@ -34,11 +34,11 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
             1, seed_stride
@@ -74,12 +74,12 @@ def _run_rollout_to_record(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -464,8 +464,8 @@ def test_yoshi_shyguy_low_damage_hitlag_resumes_state3_motion_cnm_601() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
 
     out, ref = _run_rollout_to_record(dataset_path, start_record=0, target_record=601)
@@ -613,8 +613,8 @@ def test_yoshi_shyguy_state1_floor_contact_exports_reset_child_delta_pec(
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.slpz"
     )
 
     out, ref = _step_one_row(dataset_path, record)
@@ -644,8 +644,8 @@ def test_yoshi_shyguy_state1_non_floor_contact_keeps_dynamic_delta_pec() -> None
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.slpz"
     )
 
     out, ref = _step_one_row(dataset_path, 7580)
@@ -791,7 +791,7 @@ def test_yoshi_shyguy_falling_state_clears_on_generic_item_blast_bounds() -> Non
 def test_yoshi_shyguy_falling_state_blast_clear_replay_real_cnm_5275() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
     out, ref = _step_one_row(dataset_path, 5275)
@@ -827,12 +827,12 @@ def test_yoshi_shyguy_one_step_timer_zero_uses_next_frame_rng_pec_119() -> None:
     # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
     # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[119]["seed_t"]
-    ref = ds.samples[119]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[119]["seed_t"]
+    ref = ds.rows[119]["ref_t1"]
     assert int(seed["frame_pre_random_seed"]) == int(ref["frame_pre_random_seed"]), (
         "local dataset cache predates one-step frame RNG seed phase correction; rerun forced "
         "preprocess so no-live Shy Guy timer-zero rows carry the spawn-frame RNG seed"
@@ -864,12 +864,12 @@ def test_yoshi_shyguy_one_step_timer_countdown_keeps_rng_seed_owned_pec_118() ->
     # spawn callback, not for all timer-visible Yoshi rows.
     # refs/melee/src/melee/gr/grstory.c::grStory_801E3418
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[118]["seed_t"]
-    ref = ds.samples[118]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[118]["seed_t"]
+    ref = ds.rows[118]["ref_t1"]
     assert int(seed["frame_pre_random_seed"]) == int(ref["frame_pre_random_seed"]), (
         "local dataset cache predates one-step frame RNG seed phase correction; rerun forced "
         "preprocess so Yoshi no-live Shy Guy rows carry the corrected seed phase"
@@ -893,14 +893,14 @@ def test_yoshi_shyguy_rollout_advances_replay_rng_clock_until_spawn_cnm_2153() -
     # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[2153]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[2153]["seed_t"]
     assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_valid_u8"]) == 1
     assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_u32"]) == int(
-        ds.samples[2161]["seed_t"]["frame_pre_random_seed"]
+        ds.rows[2161]["seed_t"]["frame_pre_random_seed"]
     )
 
     out, ref = _run_rollout_to_record(dataset_path, start_record=2153, target_record=2161)
@@ -930,16 +930,16 @@ def test_yoshi_shyguy_rollout_rng_clock_clears_after_spawn_cnm_2153() -> None:
     # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     out, _ref, clock_mode = _run_rollout_to_record(
         dataset_path, start_record=2153, target_record=2162, return_clock_mode=True
     )
 
-    spawn_post_rng = int(ds.samples[2161]["ref_t1"]["frame_pre_random_seed"])
-    next_frame_rng = int(ds.samples[2162]["ref_t1"]["frame_pre_random_seed"])
+    spawn_post_rng = int(ds.rows[2161]["ref_t1"]["frame_pre_random_seed"])
+    next_frame_rng = int(ds.rows[2162]["ref_t1"]["frame_pre_random_seed"])
     assert clock_mode == 0
     assert int(out["frame_pre_random_seed"]) == spawn_post_rng
     assert int(out["frame_pre_random_seed"]) != next_frame_rng
@@ -954,11 +954,11 @@ def test_yoshi_shyguy_rollout_clock_stays_seed_owned_when_heiho_live_cnm_2162() 
     # refs/melee/src/melee/gr/grstory.c::grStory_801E3418
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed_rng = int(ds.samples[2162]["seed_t"]["frame_pre_random_seed"])
+    ds = load_replay_buffers(str(dataset_path))
+    seed_rng = int(ds.rows[2162]["seed_t"]["frame_pre_random_seed"])
     out, ref = _run_rollout_to_record(dataset_path, start_record=2162, target_record=2162)
 
     assert int(out["frame_pre_random_seed"]) == seed_rng
@@ -998,15 +998,15 @@ def test_yoshi_shyguy_rollout_uses_spawn_frame_rng_seed_lawful_meerkat_112() -> 
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl"
+        / "replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[112]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[112]["seed_t"]
     assert int(seed["stage_yoshi_shyguy_timer_u16"]) == 7
     assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_valid_u8"]) == 1
     assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_u32"]) == int(
-        ds.samples[119]["seed_t"]["frame_pre_random_seed"]
+        ds.rows[119]["seed_t"]["frame_pre_random_seed"]
     )
 
     out, ref = _run_rollout_to_record(dataset_path, start_record=112, target_record=119)
@@ -1038,14 +1038,14 @@ def test_yoshi_shyguy_spawn_seed_coexists_with_replay_frame_rng_owner_lawful_mee
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl"
+        / "replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_valid_u8"]) == 1
     assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_u32"]) == int(
-        ds.samples[target_record]["seed_t"]["frame_pre_random_seed"]
+        ds.rows[target_record]["seed_t"]["frame_pre_random_seed"]
     )
 
     out, ref, _clock_mode = _run_rollout_to_record(
@@ -1081,15 +1081,15 @@ def test_yoshi_shyguy_spawn_seed_coexists_with_opening_countdown_clock_dsg_74() 
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl"
+        / "replays/validation/yoshis_story_recent/DependentSteelGrouse.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[74]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[74]["seed_t"]
     assert int(seed["opening_input_lock_timer"][0]) > 0
     assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_valid_u8"]) == 1
     assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_u32"]) == int(
-        ds.samples[119]["seed_t"]["frame_pre_random_seed"]
+        ds.rows[119]["seed_t"]["frame_pre_random_seed"]
     )
 
     out, ref, clock_mode = _run_rollout_to_record(
@@ -1142,7 +1142,7 @@ def test_yoshi_shyguy_laser_item_hit_enters_damage_state(record: int, slot: int)
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
     out, ref = _step_one_row(dataset_path, record)
@@ -1249,7 +1249,7 @@ def test_yoshi_shyguy_fighter_hitbox_hit_enters_damage_state_cnm_592() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
     out, ref = _step_one_row(dataset_path, 592)
@@ -1286,7 +1286,7 @@ def test_yoshi_shyguy_fighter_hitbox_hit_applies_attacker_deal_hitlag(record: in
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
     out, ref = _step_one_row(dataset_path, record)
@@ -1309,7 +1309,7 @@ def test_yoshi_shyguy_fighter_hitbox_scaled_hurtbox_rejects_edge_near_miss(recor
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
     out, ref = _step_one_row(dataset_path, record)
@@ -1340,7 +1340,7 @@ def test_yoshi_shyguy_return_flight_same_action_hitlist_rejects_rehit(record: in
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
     out, ref = _step_one_row(dataset_path, record)
@@ -1363,11 +1363,11 @@ def test_yoshi_shyguy_return_flight_same_action_unproven_victim_does_not_seed_su
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[617]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[617]["seed_t"]
     out, ref = _step_one_row(dataset_path, 617)
     assert int(seed["items"][3]["state"]) == 4
     assert int(seed["items"][3]["damage"]) != 0
@@ -1381,10 +1381,10 @@ def test_yoshi_shyguy_fighter_hitbox_hit_is_stage_and_geometry_bounded() -> None
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[592]["seed_t"].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[592]["seed_t"].copy()
 
     far_seed = seed.copy()
     far_seed["items"][3]["pos_x"] = np.float32(80.0)
@@ -1404,17 +1404,17 @@ def test_active_yoshi_shyguy_integrates_visible_velocity() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
     try:
-        ds = read_dataset(str(dataset_path))
+        ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
         raise
     record = 1235
-    row = ds.samples[record]
+    row = ds.rows[record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
 
@@ -1455,7 +1455,7 @@ def test_yoshi_shyguy_fixed_ecb_wall_turn_replay_real_pec_946() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
     # A left-moving live Heiho passes near Yoshi's right wall. Vanilla integrates with the old
@@ -1481,11 +1481,11 @@ def test_yoshi_shyguy_active_turn_delay_is_prefix_causal_after_visible_flip_pec_
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[947]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[947]["seed_t"]
     assert int(seed["item_shyguy_delay_valid_u8"][0]) == 1, (
         "stale local dataset cache: rerun forced aggregate preprocess for "
         "active Shy Guy turn-delay derivation"
@@ -1504,7 +1504,7 @@ def test_yoshi_shyguy_fixed_ecb_wall_turn_negative_before_contact_pec_945() -> N
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
     # Same item and wall approach one frame earlier: the fixed ECB bottom is still above the wall
@@ -1526,7 +1526,7 @@ def test_yoshi_shyguy_active_floor_contact_resets_anim_export_pec_1289() -> None
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
     # A live state-1 Heiho descends until its fixed ECB crosses Yoshi's ground. Vanilla keeps the
@@ -1590,7 +1590,7 @@ def test_yoshi_shyguy_return_flight_generic_blast_clear_replay_real_pec_1294() -
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
     # Low-damage state 4 is return flight, not ordinary active state 1. It inherits xDCC_flag.b3
@@ -1613,7 +1613,7 @@ def test_yoshi_shyguy_return_flight_generic_blast_clear_negative_before_bounds_p
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
     # One frame earlier the same return-flight Shy Guy remains inside the exact side blast bound
@@ -1633,11 +1633,11 @@ def test_yoshi_shyguy_floor_reset_restarts_phase_lane_pec_1290() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[1290]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[1290]["seed_t"]
     assert int(seed["item_shyguy_dyn_y_phase_u8"][1]) == 0, (
         "stale local dataset cache: rerun forced aggregate preprocess for "
         "active Shy Guy floor-reset phase derivation"
@@ -1658,11 +1658,11 @@ def test_yoshi_shyguy_fixed_ecb_floor_does_not_reset_when_already_below_floor_pe
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[996]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[996]["seed_t"]
     slot = 2
     assert int(seed["items"][slot]["type"]) == ITEM_KIND_HEIHO
     assert int(seed["items"][slot]["state"]) == 1
@@ -1695,11 +1695,11 @@ def test_yoshi_shyguy_turn_cooldown_suppresses_repeat_wall_turn_pec_1835() -> No
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[1835]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[1835]["seed_t"]
     assert int(seed["item_shyguy_delay_u16"][1]) == 20, (
         "stale local dataset cache: rerun forced aggregate preprocess for "
         "active Shy Guy turn-delay derivation"
@@ -1722,17 +1722,17 @@ def test_state4_yoshi_shyguy_integrates_visible_velocity() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
     try:
-        ds = read_dataset(str(dataset_path))
+        ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
         raise
     record = 614
-    row = ds.samples[record]
+    row = ds.rows[record]
     seed = row["seed_t"]
 
     # refs/melee/src/melee/it/items/itheiho.c::itHeiho_UnkMotion4_Phys
@@ -1765,11 +1765,11 @@ def test_yoshi_shyguy_reconstructed_phase_handles_aobj_loop_rows() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
 
     try:
-        ds = read_dataset(str(dataset_path))
+        ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
@@ -1790,21 +1790,21 @@ def test_yoshi_shyguy_state3_zero_delay_rows_do_not_over_enter_state4() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
     try:
-        ds = read_dataset(str(dataset_path))
+        ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
         raise
 
     items_for_derivation = np.empty(
-        (int(ds.samples.shape[0]) + 1, 15), dtype=SEED_DTYPE["items"].base
+        (int(ds.rows.shape[0]) + 1, 15), dtype=SEED_DTYPE["items"].base
     )
-    items_for_derivation[:-1] = ds.samples["seed_t"]["items"]
-    items_for_derivation[-1] = ds.samples["ref_t1"][-1]["items"]
+    items_for_derivation[:-1] = ds.rows["seed_t"]["items"]
+    items_for_derivation[-1] = ds.rows["ref_t1"][-1]["items"]
     fresh_lanes = _derive_yoshi_shyguy_native_lanes(
         items_for_derivation, stage_id=STAGE_YOSHIS_STORY
     )
@@ -1815,7 +1815,7 @@ def test_yoshi_shyguy_state3_zero_delay_rows_do_not_over_enter_state4() -> None:
     # sufficient causal transition predicate.
     # refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,itHeiho_UnkMotion3_Phys,it_802D9168}
     for record in (6124, 6133):
-        row = ds.samples[record]
+        row = ds.rows[record]
         seed = row["seed_t"]
         assert int(seed["items"][1]["type"]) == ITEM_KIND_HEIHO
         assert int(seed["items"][1]["state"]) == 3
@@ -1837,9 +1837,9 @@ def test_yoshi_shyguy_state3_zero_delay_enters_return_flight_replay_real(
     record: int, slot: int
 ) -> None:
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
-    seed = read_dataset(str(dataset_path)).samples[record]["seed_t"]
+    seed = load_replay_buffers(str(dataset_path)).rows[record]["seed_t"]
     assert int(seed["items"][slot]["type"]) == ITEM_KIND_HEIHO
     assert int(seed["items"][slot]["state"]) == 3
     assert int(seed["item_shyguy_delay_valid_u8"][slot]) == 1
@@ -1870,11 +1870,11 @@ def test_yoshi_shyguy_first_visible_speed_marks_prefix_causal_speed_index_pec_50
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples.copy()
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows.copy()
     lanes = _derive_yoshi_shyguy_native_lanes(samples["seed_t"]["items"], stage_id=STAGE_YOSHIS_STORY)
     speed_index = lanes[7]
     speed_valid = lanes[8]
@@ -1907,7 +1907,7 @@ def test_yoshi_shyguy_first_visible_speed_marks_prefix_causal_speed_index_pec_50
     for target_record in (causal_record, 5119, 5159):
         out, ref = _run_rollout_samples_to_record(
             samples,
-            num_players=int(ds.header["num_players"]),
+            num_players=int(ds.num_players),
             start_record=causal_record,
             target_record=target_record,
         )
@@ -1925,12 +1925,12 @@ def test_yoshi_shyguy_first_visible_speed_marks_prefix_causal_speed_index_pec_50
 
 def test_yoshi_shyguy_state2_uses_item_max_fall_speed() -> None:
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
     record = 5264
     slot = 3
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     item = seed["items"][slot]
     assert int(item["type"]) == ITEM_KIND_HEIHO
     assert int(item["state"]) == 2

@@ -10,7 +10,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -27,21 +27,21 @@ class _SourceClearProcessHitCase:
     "case",
     [
         _SourceClearProcessHitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=5922,
             victim_port=0,
             expect_seed=0,
             note="negative control: landing-air row stays matched (GAT)",
         ),
         _SourceClearProcessHitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=6113,
             victim_port=0,
             expect_seed=0,
             note="negative control: special-air-n loop source owner stays matched (GAT)",
         ),
         _SourceClearProcessHitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=6137,
             victim_port=1,
             expect_seed=0,
@@ -65,15 +65,15 @@ def test_source_clear_processhit_damage_pending_phase_target_pm1_both_players_st
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
     victim = int(case.victim_port)
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record]
     seed = target["seed_t"]

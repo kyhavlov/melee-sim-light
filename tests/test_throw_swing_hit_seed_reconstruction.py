@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 _THROW_LW = 222
 _THROWN_LW = 242
@@ -45,13 +46,13 @@ def test_throwlw_swing_hit_seed_prevents_reseed_rehit_and_admits_first_hit() -> 
     #     over-suppress.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c (throw-swing create_hitbox vs grabbed victim)
     root = Path(__file__).resolve().parents[1]
-    rel = "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl"
+    rel = "replays/validation/sheik/AttractiveAnyClam.slpz"
     path = root / rel
     if not path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
-    ds = read_dataset(str(path))
-    samples = ds.samples
-    num_players = int(ds.header["num_players"])
+        pytest.skip(f"missing local replay: {rel}")
+    ds = load_replay_buffers(str(path))
+    samples = ds.rows
+    num_players = int(ds.num_players)
     n = int(samples.shape[0])
 
     binding = importlib.import_module("msl_binding")
@@ -188,11 +189,11 @@ def test_throw_swing_hit_seed_does_not_leak_outside_throw_context() -> None:
     # no-rehit cd==0xFFFF against a thrown victim) must never be present unless the owner is mid-throw.
     # This guards against over-seeding ordinary (non-throw) hitbox frames.
     root = Path(__file__).resolve().parents[1]
-    rel = "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl"
+    rel = "replays/validation/sheik/AttractiveAnyClam.slpz"
     path = root / rel
     if not path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
-    samples = read_dataset(str(path)).samples
+        pytest.skip(f"missing local replay: {rel}")
+    samples = load_replay_buffers(str(path)).rows
     n = int(samples.shape[0])
     throw_actions = set(range(219, 223))  # THROW_F..THROW_LW
     leaks = 0

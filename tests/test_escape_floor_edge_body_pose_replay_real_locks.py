@@ -25,10 +25,10 @@ def test_escape_roll_floor_edge_pose_feeds_body_hit_poy_4476() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+        root / "replays/validation/aggregate_recent/PutridJoyousOryx.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 4476)
     attacker = 0

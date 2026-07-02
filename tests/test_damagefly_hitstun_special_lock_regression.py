@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 BUTTON_B = 0x0200
@@ -14,12 +15,12 @@ ACT_THROWN_HI = 241
 ACT_FX_SPECIAL_AIR_LW_START = 365
 
 _AGG_DAMAGEFLY_JUMP_BUFFER_DATASET = (
-    "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-    "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    "replays/validation/"
+    "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
 )
 _THROWN_HI_RELEASE_DATASET = (
-    "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-    "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    "replays/validation/"
+    "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
 )
 
 
@@ -31,8 +32,8 @@ def _run_seed_with_input(
     input_t: np.ndarray,
 ) -> np.void:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > int(record)
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > int(record)
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -45,7 +46,7 @@ def _run_seed_with_input(
     input_bytes = np.frombuffer(input_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -69,12 +70,12 @@ def test_damagefly_hitstun_counter_blocks_shine_when_x221c_hitstun_bit_is_stale_
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _AGG_DAMAGEFLY_JUMP_BUFFER_DATASET
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_AGG_DAMAGEFLY_JUMP_BUFFER_DATASET}")
+        pytest.skip(f"missing local replay: {_AGG_DAMAGEFLY_JUMP_BUFFER_DATASET}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 1681
     p = 1
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
 
     seed = row["seed_t"].copy()
     inp = row["input_t"].copy()
@@ -104,12 +105,12 @@ def test_damagefly_hitstun_zero_stale_clear_boundary_still_allows_shine() -> Non
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _AGG_DAMAGEFLY_JUMP_BUFFER_DATASET
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_AGG_DAMAGEFLY_JUMP_BUFFER_DATASET}")
+        pytest.skip(f"missing local replay: {_AGG_DAMAGEFLY_JUMP_BUFFER_DATASET}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 1681
     p = 1
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
 
     seed = row["seed_t"].copy()
     prev = np.zeros((1,), dtype=INPUT_DTYPE)
@@ -134,12 +135,12 @@ def test_thrownhi_victim_input_cannot_enter_shine_before_throw_release_damage() 
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _THROWN_HI_RELEASE_DATASET
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_THROWN_HI_RELEASE_DATASET}")
+        pytest.skip(f"missing local replay: {_THROWN_HI_RELEASE_DATASET}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 444
     p = 1
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
 
     seed = row["seed_t"].copy()
     prev = row["prev_input_t"].copy()

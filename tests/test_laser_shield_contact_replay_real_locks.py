@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row, _skip_if_required_artifacts_missing
 
 
@@ -39,8 +40,8 @@ def _find_item_by_spawn(row, *, item_type: int, owner: int, instance_id: int, sp
 
 def _run_rollout_to_record(dataset_path: Path, start_record: int, target_record: int):
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert 0 <= start_record <= target_record < int(samples.shape[0])
 
     sizes = binding.sizes()
@@ -54,7 +55,7 @@ def _run_rollout_to_record(dataset_path: Path, start_record: int, target_record:
         .reshape(1, seed_stride)
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         out = None
@@ -85,64 +86,64 @@ def _run_rollout_to_record(dataset_path: Path, start_record: int, target_record:
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
             3116,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             773,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
             202,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
             259,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
             5631,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
             7294,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
             7327,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             5546,
             0,
         ),
         (
-            "datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl",
+            "replays/validation/sheik/ToughOutlyingChicken.slpz",
             3057,
             0,
         ),
         (
-            "datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl",
+            "replays/validation/sheik/ToughOutlyingChicken.slpz",
             3836,
             0,
         ),
         (
-            "datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl",
+            "replays/validation/sheik/ToughOutlyingChicken.slpz",
             7738,
             0,
         ),
         (
-            "datasets/sheik/replays/validation/sheik/PaleMajorEchidna.msl",
+            "replays/validation/sheik/PaleMajorEchidna.slpz",
             3118,
             0,
         ),
@@ -183,7 +184,7 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
 
@@ -263,12 +264,12 @@ def test_terminal_guardreflect_x10_samples_laser_before_next_segment_tvr() -> No
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 0
     seed_4127, ref_4127, out_4127 = _run_one_step_row(dataset_path, 4127, p)
@@ -295,10 +296,10 @@ def test_terminal_guardreflect_x10_samples_laser_before_next_segment_tvr() -> No
     assert float(out_4128["shield_hp"][p]) == pytest.approx(float(ref_4128["shield_hp"][p]), abs=5e-4)
     _assert_live_laser_set_matches_ref(out_row=out_4128, ref_row=ref_4128, record=4128)
 
-    gat_rel = "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    gat_rel = "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     gat_path = root / gat_rel
     if not gat_path.exists():
-        pytest.skip(f"missing local dataset: {gat_rel}")
+        pytest.skip(f"missing local replay: {gat_rel}")
     gat_seed, gat_ref, gat_out = _run_one_step_row(gat_path, 1163, p)
     assert int(gat_seed["action_id"][p]) == 182  # GuardReflect.
     assert int(gat_seed["seed_prev_action_id"][p]) == 182
@@ -333,10 +334,10 @@ def test_guardreflect_final_x14_reflectdesc_lifetime_without_shielddesc_overlap_
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
 
@@ -383,10 +384,10 @@ def test_dash_guardreflect_high_laser_reflectdesc_transfer_is_runtime_owned(
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def _clear_seeded_transfer(seed_t) -> None:
         seed_t["item_reflect_transfer_port"][0, 0] = 0xFF
@@ -425,10 +426,10 @@ def test_steady_guardreflect_does_not_reown_new_specialn_laser_spawn_frame() -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 6336, 0)
 
@@ -457,11 +458,11 @@ def test_steady_guardon_x2218_command_bit_keeps_birth_laser_out_of_hitshield() -
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-        "DelayedSuperbGuanaco.msl"
+        / "replays/validation/battlefield_recent/"
+        "DelayedSuperbGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 8216, 0)
 
@@ -498,11 +499,11 @@ def test_steady_guardon_x2218_command_bit_still_hits_when_guardon_pose_overlaps(
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "ShadyDecimalStarling.msl"
+        / "replays/validation/dream_land_recent/"
+        "ShadyDecimalStarling.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 3700, 0)
 
@@ -521,8 +522,8 @@ def test_steady_guardon_x2218_command_bit_still_hits_when_guardon_pose_overlaps(
     ("dataset_rel", "record", "owner", "item_type", "instance_id", "spawn_id"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.slpz",
             3594,
             1,
             54,
@@ -530,8 +531,8 @@ def test_steady_guardon_x2218_command_bit_still_hits_when_guardon_pose_overlaps(
             26,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.slpz",
             3599,
             1,
             54,
@@ -539,8 +540,8 @@ def test_steady_guardon_x2218_command_bit_still_hits_when_guardon_pose_overlaps(
             28,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "LoyalDishonestWren.msl",
+            "replays/validation/battlefield_recent/"
+            "LoyalDishonestWren.slpz",
             1407,
             1,
             54,
@@ -548,8 +549,8 @@ def test_steady_guardon_x2218_command_bit_still_hits_when_guardon_pose_overlaps(
             15,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             3441,
             0,
             54,
@@ -571,7 +572,7 @@ def test_upward_laser_stage_floor_crossing_does_not_preempt_article_delete(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, 0)
 
@@ -610,10 +611,10 @@ def test_downward_laser_stage_floor_crossing_preserves_lifetime_one_keepalive(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        root / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, 0)
     ref_item = _find_item_by_spawn(
@@ -640,11 +641,11 @@ def test_steady_guardreflect_clear_x2218_b1_reowns_new_specialn_laser_spawn_fram
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 3345, 0)
 
@@ -672,10 +673,10 @@ def test_wait_guardreflect_hitshield_requires_laser_overlap() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
 
@@ -700,10 +701,10 @@ def test_late_dash_guardreflect_hitshield_requires_reflectdesc_stage_x_overlap()
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
 
@@ -731,14 +732,14 @@ def test_late_dash_guardreflect_laser_shield_hit_rollout_crosses_maj7294() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 7286
     target_record = 7294
     assert int(samples.shape[0]) > target_record
@@ -754,7 +755,7 @@ def test_late_dash_guardreflect_laser_shield_hit_rollout_crosses_maj7294() -> No
         .reshape(1, seed_stride)
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         out = None
@@ -804,15 +805,15 @@ def test_wait_guardreflect_full_shield_laser_reflects_from_frame_start_wait_cnm1
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 1522
     target_record = 1524
     p = 0
@@ -829,7 +830,7 @@ def test_wait_guardreflect_full_shield_laser_reflects_from_frame_start_wait_cnm1
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         out = None
@@ -874,14 +875,14 @@ def test_late_dash_guardreflect_laser_shield_hit_rollout_crosses_maj259() -> Non
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 250
     target_record = 259
     assert int(samples.shape[0]) > target_record
@@ -897,7 +898,7 @@ def test_late_dash_guardreflect_laser_shield_hit_rollout_crosses_maj259() -> Non
         .reshape(1, seed_stride)
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         out = None
@@ -945,14 +946,14 @@ def test_guardon_origin_guardreflect_final_x14_rollout_enters_guardsetoff() -> N
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 9425
     target_record = 9479
     assert int(samples.shape[0]) > target_record
@@ -968,7 +969,7 @@ def test_guardon_origin_guardreflect_final_x14_rollout_enters_guardsetoff() -> N
         .reshape(1, seed_stride)
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         out = None
@@ -1018,10 +1019,10 @@ def test_guardreflect_shield_bounce_keepalive_uses_hidden_item_bounce_owner() ->
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 6337, p)
@@ -1060,11 +1061,11 @@ def test_pure_x2218_laser_can_hit_steady_guard_no_submotion_snapshot() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/"
+        "ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 3575, p)
@@ -1110,11 +1111,11 @@ def test_steady_guard_x2218_b1_laser_uses_hitcapsule_offsets() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-        "DelayedSuperbGuanaco.msl"
+        / "replays/validation/battlefield_recent/"
+        "DelayedSuperbGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 4129, p)
@@ -1147,16 +1148,16 @@ def test_steady_guard_x2218_b1_laser_uses_hitcapsule_offsets() -> None:
     ("dataset_rel", "record", "p", "item_slot", "seed_action"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             1524,
             0,
             5,
             14,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             543,
             0,
             0,
@@ -1179,7 +1180,7 @@ def test_seeded_pending_reflect_transfer_precedes_current_laser_collision(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
     seed_item = seed_row["items"][item_slot]
@@ -1217,44 +1218,44 @@ def test_seeded_pending_reflect_transfer_precedes_current_laser_collision(
     ("dataset_rel", "record", "p", "seed_laser_slot", "seed_action"),
     [
         (
-            "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl",
+            "replays/validation/marth/RipeWealthySeahorse.slpz",
             5279,
             0,
             1,
             178,
         ),
         (
-            "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl",
+            "replays/validation/marth/RipeWealthySeahorse.slpz",
             5280,
             0,
             1,
             178,
         ),
         (
-            "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl",
+            "replays/validation/marth/RipeWealthySeahorse.slpz",
             5281,
             0,
             1,
             178,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "PositiveRevolvingHyena.msl",
+            "replays/validation/aggregate_recent/"
+            "PositiveRevolvingHyena.slpz",
             131,
             1,
             1,
             182,
         ),
         (
-            "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl",
+            "replays/validation/doubles_recent/Game_20260509T152622.slpz",
             3578,
             1,
             1,
             182,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "HilariousVillainousGiraffe.msl",
+            "replays/validation/aggregate_recent/"
+            "HilariousVillainousGiraffe.slpz",
             7493,
             0,
             1,
@@ -1280,7 +1281,7 @@ def test_lightshield_no_submotion_guard_body_uses_frame_start_item_sample(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
     seed_item = seed_row["items"][seed_laser_slot]
@@ -1320,10 +1321,10 @@ def test_guardreflect_x18_expired_lightshield_body_uses_current_item_sample() ->
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 132, p)
@@ -1362,9 +1363,9 @@ def test_lightshield_no_submotion_guard_body_rollout_preserves_rws_laser() -> No
     # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,itFoxLaser_Logic94_HitShield}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    dataset_path = root / "replays/validation/marth/RipeWealthySeahorse.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     ref_5280, out_5280 = _run_rollout_to_record(dataset_path, 5278, 5280)
@@ -1397,10 +1398,10 @@ def test_high_flag_laser_steady_guard_does_not_hit_immediately() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 6517, p)
@@ -1436,9 +1437,9 @@ def test_guardreflect_late_x18_keepalive_does_not_false_hitshield_tvr() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl"
+    dataset_path = root / "replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 11276, p)
@@ -1466,10 +1467,10 @@ def test_high_flag_carried_falco_laser_steady_guard_stays_point_sample_stm() -> 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+        root / "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 7006, p)
@@ -1506,10 +1507,10 @@ def test_high_flag_fresh_scale_ramping_laser_still_enters_guardsetoff_dcc() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 6518, p)
@@ -1531,14 +1532,14 @@ def test_high_flag_fresh_scale_ramping_laser_still_enters_guardsetoff_dcc() -> N
     ("dataset_rel", "record", "p", "item_slot"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             5545,
             0,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/marth/FemaleWorthyAlpaca.msl",
+            "replays/validation/marth/FemaleWorthyAlpaca.slpz",
             4467,
             1,
             0,
@@ -1559,7 +1560,7 @@ def test_allow_interrupt_guard_current_segment_waits_for_source_scale_boundary(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
 
@@ -1590,7 +1591,7 @@ def test_allow_interrupt_guard_current_segment_waits_for_source_scale_boundary(
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "expected_flags"),
     [
-        ("datasets/sheik/replays/validation/sheik/PaleMajorEchidna.msl", 3855, 0, 0x24),
+        ("replays/validation/sheik/PaleMajorEchidna.slpz", 3855, 0, 0x24),
     ],
 )
 def test_sheik_guard_hold_high_flag_laser_current_segment_enters_guardsetoff(
@@ -1608,7 +1609,7 @@ def test_sheik_guard_hold_high_flag_laser_current_segment_enters_guardsetoff(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
 
@@ -1631,15 +1632,15 @@ def test_sheik_guard_hold_high_flag_laser_current_segment_enters_guardsetoff(
     ("dataset_rel", "record", "p", "item_slot"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "MotionlessAggressiveJay.msl",
+            "replays/validation/aggregate_recent/"
+            "MotionlessAggressiveJay.slpz",
             5398,
             1,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "PriceyPartialAlbatross.msl",
+            "replays/validation/aggregate_recent/"
+            "PriceyPartialAlbatross.slpz",
             5170,
             0,
             1,
@@ -1661,7 +1662,7 @@ def test_live_article_x2218_b1_steady_guard_laser_enters_guardsetoff(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
 
@@ -1700,10 +1701,10 @@ def test_landing_carried_laser_pure_x2218_steady_guard_stays_point_sample() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 2231, p)
@@ -1736,10 +1737,10 @@ def test_landing_carried_laser_point_sample_excludes_same_kind_reflect_transfer(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     item_slot = 1
@@ -1783,9 +1784,9 @@ def test_marth_pure_x2218_landing_laser_uses_mature_x58_x4c_segment(
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    dataset_path = root / "replays/validation/marth/RipeWealthySeahorse.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
@@ -1822,15 +1823,15 @@ def test_marth_pure_x2218_landing_laser_uses_mature_x58_x4c_segment(
     ("dataset_rel", "record", "p", "item_slot"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             10435,
             0,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             1037,
             0,
             1,
@@ -1851,7 +1852,7 @@ def test_b1_reflect_behavior_carried_laser_stays_point_sample(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
 
@@ -1894,11 +1895,11 @@ def test_b1_reflect_behavior_current_loop_laser_uses_live_segment_hhg_7494() -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     item_slot = 1
@@ -1931,11 +1932,11 @@ def test_landing_carried_laser_steady_guardon_live_article_stays_point_sample() 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 5877, p)
@@ -1970,9 +1971,9 @@ def test_guardon_command_behavior_root_x_laser_hits_only_after_current_segment_r
     # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl"
+    dataset_path = root / "replays/validation/sheik/TenseSameHummingbird.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     neg_seed, neg_ref, neg_out = _run_one_step_row(dataset_path, 9187, p)
@@ -2006,14 +2007,14 @@ def test_guardon_command_behavior_root_x_laser_hits_only_after_current_segment_r
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             3599,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             2571,
             1,
         ),
@@ -2032,7 +2033,7 @@ def test_falco_laser_steady_guard_no_submotion_snapshot_does_not_enter_guardseto
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
 

@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _track_root_flags(path: Path) -> dict[int, int]:
@@ -44,8 +45,8 @@ def _track_root_flags(path: Path) -> dict[int, int]:
 
 def _run_rollout_window(dataset_path: Path, *, start_record: int, window_records: tuple[int, ...]):
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > max(window_records)
 
     sizes = binding.sizes()
@@ -57,7 +58,7 @@ def _run_rollout_window(dataset_path: Path, *, start_record: int, window_records
     seed_bytes = samples[start_record : start_record + 1]["seed_t"].view("u1").reshape(1, seed_stride).copy()
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     outs = {}
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
@@ -104,10 +105,10 @@ def test_prh_attack11_from_squat_keeps_friction_and_does_not_chain_on_entry_a_ed
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack11,ftCo_Attack11_IASA}
     # refs/melee/src/melee/ft/ft_081B.c::ft_80085030
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     ds, outs = _run_rollout_window(
         dataset_path,
@@ -117,7 +118,7 @@ def test_prh_attack11_from_squat_keeps_friction_and_does_not_chain_on_entry_a_ed
 
     p = 0
     for rec in range(5014, 5024):
-        ref = ds.samples[rec : rec + 1]["ref_t1"][0]
+        ref = ds.rows[rec : rec + 1]["ref_t1"][0]
         out = outs[rec]
         assert int(out["action_id"][p]) == int(ref["action_id"][p]), rec
         assert int(out["action_frame"][p]) == int(ref["action_frame"][p]), rec

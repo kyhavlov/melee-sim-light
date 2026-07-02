@@ -11,7 +11,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_rollout_window_rows_with_trace,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _assert_fields_match_ref(*, out_row, ref_row, p: int) -> None:
@@ -59,18 +59,18 @@ def test_damagefly_meteor_cancel_jumpaerial_immediate_escape_doubles() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    dataset_rel = "replays/validation/doubles_recent/Game_20260509T152622.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 1140
     jump_record = 1146
     p = 3
     for rec in (start_record, jump_record - 1, jump_record, jump_record + 1):
-        assert int(samples.shape[0]) > rec, f"dataset too short for meteor-cancel lock: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for meteor-cancel lock: record={rec}"
 
     jump_seed = samples[jump_record]["seed_t"]
     assert int(jump_seed["action_id"][p]) == 88  # ftCo_MS_DamageFlyN
@@ -114,22 +114,22 @@ def test_illusion_main_dash_downward_hit_does_not_seed_meteor_cancel_x1a() -> No
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HilariousVillainousGiraffe.msl"
+        "replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 140
     hit_record = 528
     jump_record = 552
     p = 1
     source = 0
     for rec in (start_record, hit_record, jump_record):
-        assert int(samples.shape[0]) > rec, f"dataset too short for HVG lock: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for HVG lock: record={rec}"
 
     hit_seed = samples[hit_record]["seed_t"]
     jump_seed = samples[jump_record]["seed_t"]
@@ -179,15 +179,15 @@ def test_damageflyroll_jumpaerialf_attackairb_carry_target_and_controls_are_repl
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = 5747
     victim = 1
     attacker = 0
@@ -198,7 +198,7 @@ def test_damageflyroll_jumpaerialf_attackairb_carry_target_and_controls_are_repl
         (5753, 0),
     )
     for rec, _ in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for fix lock: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for fix lock: record={rec}"
 
     seed_t = samples[target_record]["seed_t"]
     ref_t1 = samples[target_record]["ref_t1"]
@@ -225,12 +225,12 @@ def test_damageflyroll_jumpaerialf_attackairb_carry_target_and_controls_are_repl
         # Explicit broader-family negative control:
         # - same JumpAerialF <- AttackAirB carry shape, but no damage entry this frame.
         neg_rel = (
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz"
         )
         neg_path = root / neg_rel
         if not neg_path.exists():
-            pytest.skip(f"missing local dataset: {neg_rel}")
+            pytest.skip(f"missing local replay: {neg_rel}")
         neg_record = 6490
         neg_victim = 0
         trace_path = root / f"reports/triage/agn_jumpaerialf_attackairb_carry_{neg_record}.tsv"
@@ -263,20 +263,20 @@ def test_damagefly_jump_buffer_rollout_carry_feeds_later_damageflyroll_qgd() -> 
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 5715
     jump_record = 5745
     roll_record = 5747
     for rec in (start_record, jump_record - 1, jump_record, roll_record):
-        assert int(samples.shape[0]) > rec, f"dataset too short for rollout lock: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for rollout lock: record={rec}"
 
     jump_seed = samples[jump_record : jump_record + 1]["seed_t"][0]
     assert int(jump_seed["action_id"][1]) == 88  # ftCo_MS_DamageFlyN

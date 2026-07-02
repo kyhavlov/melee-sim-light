@@ -6,12 +6,13 @@ import numpy as np
 import pytest
 
 from tests.test_items_spawn_joint_replay_real_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
+from tools.eval.streaming_validation import _load_binding
 
 
-_HVG = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl")
-_CNM = Path("datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl")
+_HVG = Path("replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz")
+_CNM = Path("replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz")
 
 
 def _contact_dtype() -> np.dtype:
@@ -39,22 +40,15 @@ def _contact_dtype() -> np.dtype:
 
 
 def _byte_views(ds):
-    samples = ds.samples
-    stride = int(samples.dtype.itemsize)
-    u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), stride)
-    return (
-        u8,
-        int(samples.dtype.fields["seed_t"][1]),
-        int(samples.dtype.fields["prev_input_t"][1]),
-        int(samples.dtype.fields["input_t"][1]),
-    )
+    views = replay_buffer_byte_views(ds)
+    return views.seed_t, views.prev_input_t, views.input_t
 
 
 def _rollout_rows(dataset_path: Path, start_record: int, end_record: int):
     binding = _load_binding()
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    samples_u8, seed_off, prev_input_off, input_off = _byte_views(ds)
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    seed_u8, prev_input_u8, input_u8 = _byte_views(ds)
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -68,15 +62,13 @@ def _rollout_rows(dataset_path: Path, start_record: int, end_record: int):
     contact_bytes = np.zeros((1, contact_dtype.itemsize), dtype=np.uint8)
 
     rows = {}
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, end_record + 1):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_bytes)
             binding.debug_write_collision_contacts(handle, contact_bytes)
@@ -102,7 +94,7 @@ def test_common_air_left_walljump_uses_frame_start_pos_delta_for_setup() -> None
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _HVG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rows = _rollout_rows(dataset_path, 4650, 4672)
     p = 0
@@ -151,7 +143,7 @@ def test_yoshi_common_air_right_walljump_entry_uses_scaled_transn_anchor() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _CNM
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rows = _rollout_rows(dataset_path, 5255, 5283)
     p = 0

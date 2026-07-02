@@ -5,17 +5,18 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_DCC = Path("datasets/aggregate_recent/replays/debug/fd_mixed_recent/DistinctCaringCobra.msl")
-_HVG = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl")
-_TCH = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl")
-_QGD = Path("datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl")
+_DCC = Path("replays/validation/fd_mixed_recent/DistinctCaringCobra.slpz")
+_HVG = Path("replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz")
+_TCH = Path("replays/validation/aggregate_recent/TubbyCurlyHerring.slpz")
+_QGD = Path("replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz")
 _PTE = Path(
-    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
 )
-_GAT_DOUBLES = Path("datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl")
+_GAT_DOUBLES = Path("replays/validation/doubles_recent/Game_20260509T152622.slpz")
 
 
 def _run_one_step(binding: object, row: np.ndarray, *, num_players: int) -> np.void:
@@ -111,11 +112,11 @@ def test_grounded_shine_start_terminal_damagefly_uses_dense_victim_seed() -> Non
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _DCC
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    row = ds.samples[6431:6432]
+    ds = load_replay_buffers(str(ds_path))
+    row = ds.rows[6431:6432]
     attacker = 1
     defender = 0
 
@@ -127,7 +128,7 @@ def test_grounded_shine_start_terminal_damagefly_uses_dense_victim_seed() -> Non
     assert int(row["seed_t"]["colanim_hit_status_x198c"][0, defender]) == 1
     assert int(row["seed_t"]["colanim_timer_x1994"][0, defender]) != 0
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id", "instance_hit_by"):
         assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
     assert float(out["percent"][defender]) == pytest.approx(float(row["ref_t1"]["percent"][0, defender]))
@@ -139,17 +140,17 @@ def test_grounded_shine_start_dense_seed_requires_explicit_victim_proof() -> Non
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _DCC
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    row = ds.samples[6431:6432].copy()
+    ds = load_replay_buffers(str(ds_path))
+    row = ds.rows[6431:6432].copy()
     attacker = 1
     defender = 0
     row["seed_t"]["combat_hitlist_cd"][0, attacker, 0, defender] = 0
     row["seed_t"]["combat_hitlist_victim_iid"][0, attacker, 0, defender] = 0
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     assert int(out["hitlag"][attacker]) > 0
     assert int(out["hitlag"][defender]) > 0
     assert float(out["percent"][defender]) > float(row["seed_t"]["percent"][0, defender])
@@ -171,11 +172,11 @@ def test_late_slot_grounded_shine_start_entry_does_not_hit_earlier_turn_defender
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _DCC
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    row = ds.samples[3864:3865]
+    ds = load_replay_buffers(str(ds_path))
+    row = ds.rows[3864:3865]
     attacker = 1
     defender = 0
 
@@ -188,7 +189,7 @@ def test_late_slot_grounded_shine_start_entry_does_not_hit_earlier_turn_defender
         float(row["seed_t"]["percent"][0, defender])
     )
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id", "instance_hit_by"):
         assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
     assert float(out["percent"][defender]) == pytest.approx(float(row["ref_t1"]["percent"][0, defender]))
@@ -209,11 +210,11 @@ def test_late_slot_grounded_shine_start_still_hits_pre_turn_internal_facing_cont
     root = Path(__file__).resolve().parents[1]
     ds_path = root / dataset_rel
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    row = ds.samples[record:record + 1]
+    ds = load_replay_buffers(str(ds_path))
+    row = ds.rows[record:record + 1]
     attacker = 1
     defender = 0
 
@@ -224,7 +225,7 @@ def test_late_slot_grounded_shine_start_still_hits_pre_turn_internal_facing_cont
     assert int(row["ref_t1"]["action_id"][0, defender]) == 90  # DamageFlyTop
     assert float(row["ref_t1"]["percent"][0, defender]) > float(row["seed_t"]["percent"][0, defender])
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id", "instance_hit_by"):
         assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
     assert float(out["percent"][defender]) == pytest.approx(float(row["ref_t1"]["percent"][0, defender]))
@@ -239,11 +240,11 @@ def test_aerial_shine_start_terminal_damagefly_still_hits_qgd_235() -> None:
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _QGD
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    row = ds.samples[235:236]
+    ds = load_replay_buffers(str(ds_path))
+    row = ds.rows[235:236]
     attacker = 0
     defender = 1
 
@@ -251,7 +252,7 @@ def test_aerial_shine_start_terminal_damagefly_still_hits_qgd_235() -> None:
     assert int(row["seed_t"]["action_id"][0, defender]) == 90
     assert int(row["seed_t"]["combat_hitlist_cd"][0, attacker, 0, defender]) == 0xFFFF
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id", "instance_hit_by"):
         assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
     assert int(out["hitlag"][attacker]) == int(row["ref_t1"]["hitlag"][0, attacker])
@@ -269,11 +270,11 @@ def test_aerial_shine_start_late_slot_grounded_attack_entry_uses_dense_victim_se
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _PTE
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    row = ds.samples[5419:5420]
+    ds = load_replay_buffers(str(ds_path))
+    row = ds.rows[5419:5420]
     attacker = 1
     defender = 0
 
@@ -286,7 +287,7 @@ def test_aerial_shine_start_late_slot_grounded_attack_entry_uses_dense_victim_se
         row["seed_t"]["instance_id"][0, defender]
     )
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id", "instance_hit_by"):
         assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
     assert float(out["percent"][defender]) == pytest.approx(float(row["ref_t1"]["percent"][0, defender]))
@@ -308,11 +309,11 @@ def test_aerial_shine_start_late_slot_active_damagefly_uses_pair_phase_owner() -
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _GAT_DOUBLES
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    row = ds.samples[3154:3155]
+    ds = load_replay_buffers(str(ds_path))
+    row = ds.rows[3154:3155]
     attacker = 1
     defender = 0
 
@@ -325,7 +326,7 @@ def test_aerial_shine_start_late_slot_active_damagefly_uses_pair_phase_owner() -
         row["seed_t"]["instance_hit_by"][0, defender]
     )
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id", "instance_hit_by"):
         assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
     assert int(out["hitlag"][attacker]) == int(row["ref_t1"]["hitlag"][0, attacker])
@@ -337,35 +338,35 @@ def test_aerial_shine_start_late_slot_grounded_attack_entry_rollout_uses_pair_ph
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _PTE
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     start = 5412
     target = 5419
     attacker = 1
     defender = 0
 
-    assert int(ds.samples[start]["seed_t"]["action_id"][defender]) == 67  # AttackAirB
-    assert int(ds.samples[target]["ref_t1"]["action_id"][attacker]) == 365
-    assert int(ds.samples[target]["ref_t1"]["action_id"][defender]) == 56
+    assert int(ds.rows[start]["seed_t"]["action_id"][defender]) == 67  # AttackAirB
+    assert int(ds.rows[target]["ref_t1"]["action_id"][attacker]) == 365
+    assert int(ds.rows[target]["ref_t1"]["action_id"][defender]) == 56
 
     out = _run_rollout_to_record(
         binding,
-        ds.samples,
+        ds.rows,
         start,
         target,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
         rollout_reseed=True,
     )
     for field in ("action_id", "action_frame", "hitlag", "hitstun"):
-        assert int(out[field][defender]) == int(ds.samples[target]["ref_t1"][field][defender]), field
+        assert int(out[field][defender]) == int(ds.rows[target]["ref_t1"][field][defender]), field
     assert float(out["percent"][defender]) == pytest.approx(
-        float(ds.samples[target]["ref_t1"]["percent"][defender])
+        float(ds.rows[target]["ref_t1"]["percent"][defender])
     )
-    assert int(out["hitlag"][attacker]) == int(ds.samples[target]["ref_t1"]["hitlag"][attacker])
+    assert int(out["hitlag"][attacker]) == int(ds.rows[target]["ref_t1"]["hitlag"][attacker])
 
 
 @pytest.mark.integration
@@ -382,33 +383,33 @@ def test_attacks4_guard_family_runtime_victim_latch_survives_late_payload_double
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _GAT_DOUBLES
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     start = 1179
     target = 2064
     attacker = 0
     defender = 2
 
-    assert int(ds.samples[target]["seed_t"]["action_id"][attacker]) == 56  # visible AttackHi3
-    assert int(ds.samples[target]["seed_t"]["animation_index"][attacker]) == 58  # AttackS4Hi script
-    assert int(ds.samples[target]["seed_t"]["action_id"][defender]) == 182  # GuardReflect
-    assert int(ds.samples[target]["ref_t1"]["action_id"][defender]) == 179  # Guard
+    assert int(ds.rows[target]["seed_t"]["action_id"][attacker]) == 56  # visible AttackHi3
+    assert int(ds.rows[target]["seed_t"]["animation_index"][attacker]) == 58  # AttackS4Hi script
+    assert int(ds.rows[target]["seed_t"]["action_id"][defender]) == 182  # GuardReflect
+    assert int(ds.rows[target]["ref_t1"]["action_id"][defender]) == 179  # Guard
 
     out = _run_rollout_to_record(
         binding,
-        ds.samples,
+        ds.rows,
         start,
         target,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id"):
-        assert int(out[field][defender]) == int(ds.samples[target]["ref_t1"][field][defender]), field
+        assert int(out[field][defender]) == int(ds.rows[target]["ref_t1"][field][defender]), field
     assert float(out["percent"][defender]) == pytest.approx(
-        float(ds.samples[target]["ref_t1"]["percent"][defender])
+        float(ds.rows[target]["ref_t1"]["percent"][defender])
     )
 
 
@@ -424,19 +425,19 @@ def test_single_payload_grounded_attack_guardreflect_dense_latch_clears_before_l
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80078C70}
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC}
     root = Path(__file__).resolve().parents[1]
-    ds_path = root / "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+    ds_path = root / "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz"
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     start = 11420
     target = 11421
     attacker = 1
     defender = 0
 
-    seed = ds.samples[start]["seed_t"]
-    target_seed = ds.samples[target]["seed_t"]
+    seed = ds.rows[start]["seed_t"]
+    target_seed = ds.rows[target]["seed_t"]
     assert int(seed["action_id"][attacker]) == 57  # AttackLw3.
     assert int(seed["animation_index"][attacker]) == 59  # ftCo_SM_AttackLw3.
     assert int(seed["action_id"][defender]) == 182  # GuardReflect.
@@ -453,15 +454,15 @@ def test_single_payload_grounded_attack_guardreflect_dense_latch_clears_before_l
 
     out = _run_rollout_to_record(
         binding,
-        ds.samples,
+        ds.rows,
         start,
         target,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
         rollout_reseed=True,
     )
-    ref = ds.samples[target]["ref_t1"]
+    ref = ds.rows[target]["ref_t1"]
     assert int(ref["action_id"][defender]) == 181  # GuardSetOff.
     assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 7
@@ -477,30 +478,30 @@ def test_attacks4_first_payload_guardreflect_still_shield_hits_cnm() -> None:
     # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
     root = Path(__file__).resolve().parents[1]
-    ds_path = root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    ds_path = root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     start = 0
     target = 646
     attacker = 0
     defender = 1
 
-    assert int(ds.samples[target]["seed_t"]["action_id"][attacker]) == 56
-    assert int(ds.samples[target]["seed_t"]["animation_index"][attacker]) == 58
-    assert int(ds.samples[target]["seed_t"]["action_frame"][attacker]) == 4
-    assert int(ds.samples[target]["seed_t"]["action_id"][defender]) == 182
-    assert int(ds.samples[target]["ref_t1"]["action_id"][defender]) == 181
+    assert int(ds.rows[target]["seed_t"]["action_id"][attacker]) == 56
+    assert int(ds.rows[target]["seed_t"]["animation_index"][attacker]) == 58
+    assert int(ds.rows[target]["seed_t"]["action_frame"][attacker]) == 4
+    assert int(ds.rows[target]["seed_t"]["action_id"][defender]) == 182
+    assert int(ds.rows[target]["ref_t1"]["action_id"][defender]) == 181
 
     out = _run_rollout_to_record(
-        binding, ds.samples, start, target, num_players=int(ds.header["num_players"])
+        binding, ds.rows, start, target, num_players=int(ds.num_players)
     )
     for field in ("action_id", "action_frame", "hitlag", "instance_id"):
-        assert int(out[field][defender]) == int(ds.samples[target]["ref_t1"][field][defender]), field
+        assert int(out[field][defender]) == int(ds.rows[target]["ref_t1"][field][defender]), field
     assert float(out["shield_hp"][defender]) == pytest.approx(
-        float(ds.samples[target]["ref_t1"]["shield_hp"][defender])
+        float(ds.rows[target]["ref_t1"]["shield_hp"][defender])
     )
 
 
@@ -510,27 +511,27 @@ def test_attacks4_runtime_victim_latch_does_not_suppress_specialhi_body_his() ->
     # source (visible AttackHi3, msid=58), but the victim is SpecialHi, not a Guard-family
     # shield/contact owner. The runtime victims_1 preservation must not suppress this real BODY hit.
     root = Path(__file__).resolve().parents[1]
-    ds_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    ds_path = root / "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     start = 0
     target = 1413
     attacker = 0
     defender = 1
 
-    assert int(ds.samples[target]["seed_t"]["action_id"][attacker]) == 56
-    assert int(ds.samples[target]["seed_t"]["animation_index"][attacker]) == 58
-    assert int(ds.samples[target]["seed_t"]["action_id"][defender]) == 359  # SpecialAirHi
-    assert int(ds.samples[target]["ref_t1"]["action_id"][defender]) == 90  # DamageFlyTop
+    assert int(ds.rows[target]["seed_t"]["action_id"][attacker]) == 56
+    assert int(ds.rows[target]["seed_t"]["animation_index"][attacker]) == 58
+    assert int(ds.rows[target]["seed_t"]["action_id"][defender]) == 359  # SpecialAirHi
+    assert int(ds.rows[target]["ref_t1"]["action_id"][defender]) == 90  # DamageFlyTop
 
     out = _run_rollout_to_record(
-        binding, ds.samples, start, target, num_players=int(ds.header["num_players"])
+        binding, ds.rows, start, target, num_players=int(ds.num_players)
     )
     for field in ("action_id", "hitlag", "hitstun", "instance_hit_by"):
-        assert int(out[field][defender]) == int(ds.samples[target]["ref_t1"][field][defender]), field
+        assert int(out[field][defender]) == int(ds.rows[target]["ref_t1"][field][defender]), field
     assert float(out["percent"][defender]) == pytest.approx(
-        float(ds.samples[target]["ref_t1"]["percent"][defender])
+        float(ds.rows[target]["ref_t1"]["percent"][defender])
     )

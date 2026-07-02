@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 # Button masks: src/buttons.h (Melee/HSD PAD bits)

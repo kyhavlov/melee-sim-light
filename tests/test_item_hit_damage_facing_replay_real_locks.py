@@ -3,7 +3,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -60,15 +61,15 @@ def test_item_hit_damage_entry_faces_away_when_owner_left_of_victim() -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[923:924]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[923:924]
     p = 0
 
     assert int(row["seed_t"]["action_id"][0, p]) == 14  # Dash
@@ -78,7 +79,7 @@ def test_item_hit_damage_entry_faces_away_when_owner_left_of_victim() -> None:
     assert int(row["ref_t1"]["facing"][0, p]) == 0
 
     binding = pytest.importorskip("msl_binding")
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["facing"][p]) == int(row["ref_t1"]["facing"][0, p])
 
@@ -93,15 +94,15 @@ def test_item_hit_damage_entry_faces_away_when_owner_right_of_victim() -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[3386:3387]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[3386:3387]
     p = 0
 
     assert int(row["seed_t"]["action_id"][0, p]) == 67  # AttackAirB
@@ -111,7 +112,7 @@ def test_item_hit_damage_entry_faces_away_when_owner_right_of_victim() -> None:
     assert int(row["ref_t1"]["facing"][0, p]) == 1
 
     binding = pytest.importorskip("msl_binding")
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["facing"][p]) == int(row["ref_t1"]["facing"][0, p])
 
@@ -128,15 +129,15 @@ def test_ordinary_live_falco_laser_body_damage_keeps_item_velocity_facing_dcc_39
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/"
-        "aggregate_recent/DistinctCaringCobra.msl"
+        "replays/validation/"
+        "aggregate_recent/DistinctCaringCobra.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[392:393]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[392:393]
     p = 0
     owner = 1
     slot = 0
@@ -154,7 +155,7 @@ def test_ordinary_live_falco_laser_body_damage_keeps_item_velocity_facing_dcc_39
     assert float(row["ref_t1"]["speed_x_attack"][0, p]) > 0.0
 
     binding = pytest.importorskip("msl_binding")
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["facing"][p]) == int(row["ref_t1"]["facing"][0, p])
     assert int(out["instance_hit_by"][p]) == int(row["ref_t1"]["instance_hit_by"][0, p])
@@ -175,13 +176,13 @@ def test_stationary_illusion_item_damage_uses_item_position_for_facing_his_1673(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_rel = "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[1673:1674]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[1673:1674]
     p = 0
     item = row["seed_t"]["items"][0, 0]
 
@@ -195,7 +196,7 @@ def test_stationary_illusion_item_damage_uses_item_position_for_facing_his_1673(
     assert float(row["ref_t1"]["speed_x_attack"][0, p]) > 0.0
 
     binding = pytest.importorskip("msl_binding")
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["hitlag"][p]) == int(row["ref_t1"]["hitlag"][0, p])
     assert int(out["hitstun"][p]) == int(row["ref_t1"]["hitstun"][0, p])
@@ -217,13 +218,13 @@ def test_fresh_illusion_spawn_keeps_steady_item_facing_owner_out_of_scope_dsg_11
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl"
+    dataset_rel = "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[11089:11090]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[11089:11090]
     p = 0
 
     assert int(row["seed_t"]["action_id"][0, p]) == 67  # AttackAirB
@@ -233,5 +234,5 @@ def test_fresh_illusion_spawn_keeps_steady_item_facing_owner_out_of_scope_dsg_11
     assert int(row["ref_t1"]["facing"][0, p]) == 0
 
     binding = pytest.importorskip("msl_binding")
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["facing"][p]) == int(row["ref_t1"]["facing"][0, p])

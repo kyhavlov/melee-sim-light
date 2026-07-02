@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
-from tools.eval.dataset import COMPARE_DTYPE
-from tools.eval.dataset import read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_GUARD = 179
@@ -32,13 +32,13 @@ def _dataset(rel_path: str) -> Path:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / rel_path
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
     return dataset_path
 
 
 def _run_rollout_to_record(dataset_path: Path, *, start_record: int, target_record: int):
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert start_record <= target_record
     assert int(samples.shape[0]) > target_record
 
@@ -50,7 +50,7 @@ def _run_rollout_to_record(dataset_path: Path, *, start_record: int, target_reco
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -90,12 +90,12 @@ def test_guardsetoff_anim_enter_guard_then_same_frame_guardoff_dcc_replay_lock()
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     #   ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_Guard_IASA,inlineC0}
     dataset_path = _dataset(
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     record = 4241
     p = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][p]) == ACT_GUARD_SET_OFF
     assert int(seed["guard_release_latched_xc"][p]) == 0
 
@@ -107,7 +107,7 @@ def test_guardsetoff_anim_enter_guard_then_same_frame_guardoff_dcc_replay_lock()
 @pytest.mark.integration
 def test_guardsetoff_same_frame_release_does_not_exit_before_anim_finishes() -> None:
     dataset_path = _dataset(
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     record = 4238
     p = 1
@@ -123,13 +123,13 @@ def test_guardreflect_terminal_snapshot_enters_guard_before_release_gat_replay_l
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     #   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardOn_Anim,ftCo_800928CC}
     dataset_path = _dataset(
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     record = 4834
     p = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][p]) == ACT_GUARD_REFLECT
     assert int(seed["guard_reflect_timer_x14"][p]) == 0
     assert int(seed["guard_reflect_timer_x18"][p]) == 0
@@ -143,13 +143,13 @@ def test_guardreflect_terminal_snapshot_enters_guard_before_release_gat_replay_l
 @pytest.mark.integration
 def test_guardreflect_terminal_snapshot_gate_does_not_mask_active_timer_contact() -> None:
     dataset_path = _dataset(
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     record = 9479
     p = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][p]) == ACT_GUARD_REFLECT
     assert int(seed["guard_reflect_timer_x14"][p]) == 1
     assert int(seed["guard_reflect_timer_x18"][p]) == 3
@@ -167,22 +167,22 @@ def test_same_frame_guardon_setoff_keeps_raw_x10_through_rollout_gat_859() -> No
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     #   ftCo_80091A4C,ftCo_800924C0,ftCo_800921DC,ftCo_80092F2C,ftCo_800925A4}
     dataset_path = _dataset(
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     start_record = 847
     target_record = 859
     p = 0
-    ds = read_dataset(str(dataset_path))
-    seed_start = ds.samples[start_record]["seed_t"]
-    target = ds.samples[target_record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_start = ds.rows[start_record]["seed_t"]
+    target = ds.rows[target_record]["seed_t"]
     assert int(seed_start["action_id"][p]) not in {
         ACT_GUARD_ON,
         ACT_GUARD,
         ACT_GUARD_SET_OFF,
         ACT_GUARD_REFLECT,
     }
-    assert int(ds.samples[start_record]["ref_t1"]["action_id"][p]) == ACT_GUARD_SET_OFF
+    assert int(ds.rows[start_record]["ref_t1"]["action_id"][p]) == ACT_GUARD_SET_OFF
     assert int(target["action_id"][p]) == ACT_GUARD
     assert int(target["guard_release_latched_xc"][p]) == 1
     assert int(target["guard_x10"][p]) == 1
@@ -211,13 +211,13 @@ def test_carried_guardsetoff_rows_still_consume_x10_before_guardoff_gat(
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     #   ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_800925A4,inlineC0}
     dataset_path = _dataset(
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     p = 0
-    ds = read_dataset(str(dataset_path))
-    seed_start = ds.samples[start_record]["seed_t"]
-    target = ds.samples[target_record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_start = ds.rows[start_record]["seed_t"]
+    target = ds.rows[target_record]["seed_t"]
     assert int(seed_start["action_id"][p]) == ACT_GUARD_SET_OFF
     assert int(seed_start["seed_prev_action_id"][p]) == ACT_GUARD_SET_OFF
     assert int(target["action_id"][p]) == ACT_GUARD
@@ -236,15 +236,15 @@ def test_carried_guardsetoff_rows_still_consume_x10_before_guardoff_gat(
     ("rel_path", "start_record", "target_record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "MediumVirtualPig.msl",
+            "replays/validation/battlefield_recent/"
+            "MediumVirtualPig.slpz",
             6175,
             6190,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "SweatyThisMallard.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "SweatyThisMallard.slpz",
             2440,
             2454,
             1,
@@ -262,12 +262,12 @@ def test_powershield_guardsetoff_terminal_release_keeps_ftco_80094138_x10_clear(
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     #   ftCo_80094138,ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_Guard_IASA}
     dataset_path = _dataset(rel_path)
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[target_record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[target_record]["seed_t"]
     assert int(seed["action_id"][p]) == ACT_GUARD_SET_OFF
     assert int(seed["guard_x10"][p]) > 0
     assert any(
-        int(ds.samples[r]["seed_t"]["state_flags"][p, 3]) & 0x20
+        int(ds.rows[r]["seed_t"]["state_flags"][p, 3]) & 0x20
         for r in range(start_record, target_record)
     )
 
@@ -286,15 +286,15 @@ def test_guardreflect_no_submotion_x18_does_not_consume_guard_catch_cdo_replay_l
     #   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardReflect_IASA}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
     dataset_path = _dataset(
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "CornyDelayedOkapi.msl"
+        "replays/validation/pokemon_stadium_recent/"
+        "CornyDelayedOkapi.slpz"
     )
     record = 1328
     p = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
-    cur_input = ds.samples[record]["input_t"]
-    prev_input = ds.samples[record]["prev_input_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
+    cur_input = ds.rows[record]["input_t"]
+    prev_input = ds.rows[record]["prev_input_t"]
     assert int(seed["action_id"][p]) == ACT_GUARD_REFLECT
     assert int(seed["action_frame"][p]) <= -2
     assert int(seed["guard_reflect_timer_x14"][p]) > 0
@@ -315,14 +315,14 @@ def test_guardreflect_no_submotion_x18_only_allows_guard_catch_tch_replay_lock()
     #   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardReflect_IASA}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
     dataset_path = _dataset(
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
     record = 11792
     p = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
-    cur_input = ds.samples[record]["input_t"]
-    prev_input = ds.samples[record]["prev_input_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
+    cur_input = ds.rows[record]["input_t"]
+    prev_input = ds.rows[record]["prev_input_t"]
     assert int(seed["action_id"][p]) == ACT_GUARD_REFLECT
     assert int(seed["action_frame"][p]) <= -2
     assert int(seed["guard_reflect_timer_x14"][p]) == 0
@@ -344,13 +344,13 @@ def test_steady_guard_command_pose_keeps_birth_laser_out_of_hitshield_dsg_replay
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091E78,ftCo_80092450}
     # refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim}
     dataset_path = _dataset(
-        "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl"
+        "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz"
     )
     record = 7430
     p = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][p]) == ACT_GUARD
     assert int(seed["action_frame"][p]) < 0
     assert int(seed["state_flags"][p][0]) & 0x40
@@ -368,22 +368,22 @@ def test_steady_guard_command_pose_keeps_birth_laser_out_of_hitshield_dsg_replay
     ("rel_path", "record", "p", "seed_action"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             5588,
             1,
             ACT_FX_SPECIAL_HI_LANDING,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             6201,
             1,
             ACT_FX_SPECIAL_HI_LANDING,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             10583,
             1,
             ACT_FX_SPECIAL_LW_END,
@@ -400,8 +400,8 @@ def test_spacie_special_end_destination_wait_admits_guard_before_locomotion(
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwEnd_Anim
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     dataset_path = _dataset(rel_path)
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][p]) == seed_action
 
     _, ref_t1, out_t1 = _run_one_step_row(dataset_path, record, p)
@@ -414,14 +414,14 @@ def test_spacie_special_end_destination_wait_admits_guard_before_locomotion(
     ("rel_path", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             2487,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             8576,
             1,
         ),
@@ -436,8 +436,8 @@ def test_attacklw4_wait_iasa_admits_guard_without_locomotion_input(
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     dataset_path = _dataset(rel_path)
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][p]) == ACT_ATTACK_LW4
 
     _, ref_t1, out_t1 = _run_one_step_row(dataset_path, record, p)
@@ -450,29 +450,29 @@ def test_attacklw4_wait_iasa_admits_guard_without_locomotion_input(
     ("rel_path", "record", "p", "seed_x672"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             10422,
             0,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "PutridJoyousOryx.msl",
+            "replays/validation/aggregate_recent/"
+            "PutridJoyousOryx.slpz",
             6451,
             1,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "TubbyCurlyHerring.msl",
+            "replays/validation/aggregate_recent/"
+            "TubbyCurlyHerring.slpz",
             11674,
             0,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             7503,
             0,
             0,
@@ -493,8 +493,8 @@ def test_guardon_iasa_powershield_uses_frame_start_x672_replay_locks(
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
     # refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
     dataset_path = _dataset(rel_path)
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     seed = row["seed_t"]
     assert int(seed["action_id"][p]) == ACT_GUARD_ON
     assert int(seed["action_frame"][p]) < 0
@@ -518,32 +518,32 @@ def test_guardon_iasa_powershield_uses_frame_start_x672_replay_locks(
     ("rel_path", "record", "p", "seed_prev", "seed_x672"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             273,
             1,
             ACT_GUARD_ON,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "PositiveRevolvingHyena.msl",
+            "replays/validation/aggregate_recent/"
+            "PositiveRevolvingHyena.slpz",
             5877,
             0,
             ACT_GUARD_ON,
             2,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "FavorableSuperficialPig.msl",
+            "replays/validation/aggregate_recent/"
+            "FavorableSuperficialPig.slpz",
             869,
             0,
             ACT_ATTACK_12,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "HilariousVillainousGiraffe.msl",
+            "replays/validation/aggregate_recent/"
+            "HilariousVillainousGiraffe.slpz",
             8414,
             0,
             ACT_ATTACK_DASH,
@@ -555,8 +555,8 @@ def test_guardon_iasa_powershield_x672_window_negative_replay_lock(
     rel_path: str, record: int, p: int, seed_prev: int, seed_x672: int
 ) -> None:
     dataset_path = _dataset(rel_path)
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][p]) == ACT_GUARD_ON
     assert int(seed["seed_prev_action_id"][p]) == seed_prev
     assert int(seed["x672_input_timer"][p]) == seed_x672
@@ -576,18 +576,18 @@ def test_guardon_no_submotion_steady_shield_does_not_reenter_guardreflect_tvr() 
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     #   ftCo_GuardOn_Anim,ftCo_GuardOn_IASA,ftCo_80093694}
     dataset_path = _dataset(
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     record = 4031
     p = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][p]) == ACT_GUARD_ON
     assert int(seed["seed_prev_action_id"][p]) == ACT_GUARD_ON
     assert int(seed["action_frame"][p]) < 0
     assert int(seed["animation_index"][p]) == 0xFFFFFFFF
-    assert int(ds.samples[record]["input_t"]["p"]["buttons"][p]) & 0x0020  # R edge.
+    assert int(ds.rows[record]["input_t"]["p"]["buttons"][p]) & 0x0020  # R edge.
 
     _, ref_t1, out_t1 = _run_one_step_row(dataset_path, record, p)
     assert int(ref_t1["action_id"][p]) == ACT_GUARD_ON
@@ -609,16 +609,16 @@ def test_landing_guard_entry_uses_frame_start_x672_before_current_l_press_tvr() 
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
     dataset_path = _dataset(
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     target_record = 5891
     p = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[target_record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[target_record]["seed_t"]
     assert int(seed["action_id"][p]) == ACT_LANDING
     assert int(seed["x672_input_timer"][p]) == 254
-    assert int(ds.samples[target_record]["input_t"]["p"]["buttons"][p]) & 0x0040  # L edge.
+    assert int(ds.rows[target_record]["input_t"]["p"]["buttons"][p]) & 0x0040  # L edge.
 
     _, out_t1, ref_t1 = _run_rollout_to_record(
         dataset_path, start_record=5768, target_record=target_record
@@ -639,13 +639,13 @@ def test_fall_guard_entry_uses_post_deadzone_x650_for_x672_tvr() -> None:
     # refs/melee/src/melee/ft/fighter.c:1868-1890 and :2019-2050
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
     dataset_path = _dataset(
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     record = 9685
     p = 1
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     seed = row["seed_t"]
     assert int(seed["action_id"][p]) == ACT_FALL
     assert int(seed["x672_input_timer"][p]) == 2
@@ -669,12 +669,12 @@ def test_attacklw4_wait_iasa_catch_precedes_attack_restart_ldw_replay_lock() -> 
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     dataset_path = _dataset(
-        "datasets/aggregate_recent/replays/validation/battlefield_recent/LoyalDishonestWren.msl"
+        "replays/validation/battlefield_recent/LoyalDishonestWren.slpz"
     )
     record = 1150
     p = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][p]) == ACT_ATTACK_LW4
 
     _, ref_t1, out_t1 = _run_one_step_row(dataset_path, record, p)
@@ -687,15 +687,15 @@ def test_attacklw4_wait_iasa_catch_precedes_attack_restart_ldw_replay_lock() -> 
     ("rel_path", "record", "p", "seed_action"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             1670,
             1,
             ACT_ATTACK_LW4,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             9127,
             0,
             ACT_ATTACK_HI3,
@@ -713,9 +713,9 @@ def test_grounded_attack_wait_iasa_tap_jump_reaches_kneebend(
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     dataset_path = _dataset(rel_path)
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][p]) == seed_action
     assert int(ref["action_id"][p]) == ACT_KNEE_BEND
 

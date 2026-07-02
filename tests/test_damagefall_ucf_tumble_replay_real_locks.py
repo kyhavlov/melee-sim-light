@@ -5,16 +5,17 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
-MUG = "datasets/marth/replays/validation/marth/MetallicUniqueGrouse.msl"
+MUG = "replays/validation/marth/MetallicUniqueGrouse.slpz"
 GAT = (
-    "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-    "GracefulAttachedTurtle.msl"
+    "replays/validation/cardinal_1.0_recent/"
+    "GracefulAttachedTurtle.slpz"
 )
 QGD = (
-    "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-    "QuerulousGrandDinosaur.msl"
+    "replays/validation/cardinal_1.0_recent/"
+    "QuerulousGrandDinosaur.slpz"
 )
 
 ACT_DAMAGE_FALL = 0x0026
@@ -26,9 +27,9 @@ def _one_step(dataset_rel: str, record: int) -> tuple[np.void, np.void, np.void,
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = binding.sizes()
 
     def _field_bytes(field: str, stride: int) -> np.ndarray:
@@ -39,7 +40,7 @@ def _one_step(dataset_rel: str, record: int) -> tuple[np.void, np.void, np.void,
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )

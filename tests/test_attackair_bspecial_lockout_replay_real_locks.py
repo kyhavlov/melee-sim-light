@@ -19,10 +19,10 @@ def test_attackair_do_iasa_does_not_route_to_aerial_side_special_llw_4546() -> N
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/battlefield_recent/LoyalDishonestWren.msl"
+    dataset_rel = "replays/validation/battlefield_recent/LoyalDishonestWren.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 1
     seed, out, ref = _step_one_row(dataset_path, 4546)
@@ -46,10 +46,10 @@ def test_fall_still_routes_to_aerial_side_special_tch_9798() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_rel = "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 0
     seed, out, ref = _step_one_row(dataset_path, 9798)

@@ -9,24 +9,25 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 _DATASET = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
 )
 _BHH_DATASET = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
 )
 _MAJ_DATASET = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
 )
 _MGS_DATASET = (
-    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+    "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slpz"
 )
-_MARTH_VSA_DATASET = "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
-_MARTH_RWS_DATASET = "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
-_MARTH_IPW_DATASET = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+_MARTH_VSA_DATASET = "replays/validation/marth/VictoriousSpitefulAlpaca.slpz"
+_MARTH_RWS_DATASET = "replays/validation/marth/RipeWealthySeahorse.slpz"
+_MARTH_IPW_DATASET = "replays/validation/marth/InternalPowerlessWallaby.slpz"
 
 _ACT_CATCH = 212
 _ACT_CATCH_PULL = 213
@@ -42,30 +43,29 @@ _STAGE_FINAL_DESTINATION = 32
 
 def _run_rollout_row(ds_path: Path, *, start_record: int, target_record: int) -> np.void:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for rec in range(start_record, target_record + 1):
-            prev_input_bytes[0, :] = samples_u8[rec, prev_input_off : prev_input_off + input_stride]
-            input_bytes[0, :] = samples_u8[rec, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[rec, :input_stride]
+            input_bytes[0, :] = input_u8[rec, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_bytes)
     finally:
@@ -80,7 +80,7 @@ def test_catch_frame6_marginal_airborne_hurtcap_uses_collision_skeleton_scale() 
     _skip_if_required_artifacts_missing(root)
     ds_path = root / _DATASET
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {_DATASET}")
+        pytest.skip(f"missing local replay: {_DATASET}")
 
     victim = 0
     catcher = 1
@@ -107,7 +107,7 @@ def test_catch_collision_skeleton_scale_still_connects_nearby_positive() -> None
     _skip_if_required_artifacts_missing(root)
     ds_path = root / _DATASET
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {_DATASET}")
+        pytest.skip(f"missing local replay: {_DATASET}")
 
     catcher = 0
     victim = 1
@@ -144,7 +144,7 @@ def test_marth_root_authored_catch_keeps_source_reach_without_early_connect(
     _skip_if_required_artifacts_missing(root)
     ds_path = root / dataset
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {dataset}")
+        pytest.skip(f"missing local replay: {dataset}")
 
     catcher = 0
     victim = 1
@@ -185,7 +185,7 @@ def test_marth_root_catchdash_scale_distinction_residual_witness() -> None:
     _skip_if_required_artifacts_missing(root)
     ds_path = root / _MARTH_IPW_DATASET
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {_MARTH_IPW_DATASET}")
+        pytest.skip(f"missing local replay: {_MARTH_IPW_DATASET}")
 
     owner = 1
     victim = 0
@@ -223,10 +223,10 @@ def test_catch_first_enable_hitcapsule_collapses_x58_for_live_rollout_mgs_1791()
     _skip_if_required_artifacts_missing(root)
     ds_path = root / _MGS_DATASET
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {_MGS_DATASET}")
+        pytest.skip(f"missing local replay: {_MGS_DATASET}")
 
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
     start = 1785
     target = 1791
     catcher = 0
@@ -253,7 +253,7 @@ def test_catch_wall_obstruction_blocks_wall_separated_grabbable_capsule() -> Non
     _skip_if_required_artifacts_missing(root)
     ds_path = root / _DATASET
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {_DATASET}")
+        pytest.skip(f"missing local replay: {_DATASET}")
 
     catcher = 0
     victim = 1
@@ -329,7 +329,7 @@ def test_catch_collision_skeleton_scale_does_not_extend_small_model_reach(
     _skip_if_required_artifacts_missing(root)
     ds_path = root / dataset
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {dataset}")
+        pytest.skip(f"missing local replay: {dataset}")
 
     seed, ref, out = _run_one_step_row(ds_path, record, catcher)
 

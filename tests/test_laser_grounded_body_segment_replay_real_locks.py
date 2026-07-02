@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _one_step_out_ref(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
@@ -16,11 +17,11 @@ def _one_step_out_ref(dataset_path: Path, record: int) -> tuple[np.void, np.void
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = (
             np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8)
@@ -59,7 +60,7 @@ class _Case:
     note: str
 
 
-_AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
+_AGG = "replays/validation/aggregate_recent"
 
 
 @pytest.mark.integration
@@ -67,7 +68,7 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
     "case",
     [
         _Case(
-            dataset_rel=f"{_AGG}/DistinctCaringCobra.msl",
+            dataset_rel=f"{_AGG}/DistinctCaringCobra.slpz",
             record=7619,
             player=0,
             seed_action=20,  # Dash
@@ -76,7 +77,7 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="late Dash grounded laser segment admits BODY hit",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/BlondHardHippopotamus.msl",
+            dataset_rel=f"{_AGG}/BlondHardHippopotamus.slpz",
             record=5148,
             player=0,
             seed_action=20,  # Dash, then Turn before item collision
@@ -85,8 +86,8 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="Dash-to-Turn grounded laser segment clears item without damage entry",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=7215,
             player=0,
             seed_action=20,  # Dash, then Turn before item BODY collision
@@ -95,7 +96,7 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="Dash-to-Turn Falco laser uses established grounded BODY travel lane",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.msl",
+            dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.slpz",
             record=1024,
             player=1,
             seed_action=56,  # AttackHi3
@@ -104,8 +105,8 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="AttackHi3 grounded laser segment admits BODY hit",
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=3105,
             player=1,
             seed_action=43,  # LandingFallSpecial
@@ -114,8 +115,8 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="LandingFallSpecial exact flattened-Z laser BODY admits hit",
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/"
-            "yoshis_story_recent/CheeryNumbMonkey.msl",
+            dataset_rel="replays/validation/"
+            "yoshis_story_recent/CheeryNumbMonkey.slpz",
             record=184,
             player=0,
             seed_action=41,  # LandingAirN
@@ -124,8 +125,8 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="LandingAirN high-cap laser uses exact lbColl matrix-radius lane",
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/"
-            "yoshis_story_recent/CheeryNumbMonkey.msl",
+            dataset_rel="replays/validation/"
+            "yoshis_story_recent/CheeryNumbMonkey.slpz",
             record=250,
             player=0,
             seed_action=60,  # AttackS4
@@ -134,8 +135,8 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="AttackS4 high-cap laser uses exact lbColl matrix-radius lane",
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/"
-            "yoshis_story_recent/CheeryNumbMonkey.msl",
+            dataset_rel="replays/validation/"
+            "yoshis_story_recent/CheeryNumbMonkey.slpz",
             record=4719,
             player=0,
             seed_action=72,  # LandingAirB
@@ -144,8 +145,8 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="LandingAirB high-cap laser uses exact lbColl matrix-radius lane",
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/"
-            "fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            dataset_rel="replays/validation/"
+            "fountain_of_dreams_recent/ElatedWearyTermite.slpz",
             record=4216,
             player=0,
             seed_action=72,  # LandingAirB
@@ -154,7 +155,7 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="FoD LandingAirB high-cap laser uses exact lbColl matrix-radius lane",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/DistinctCaringCobra.msl",
+            dataset_rel=f"{_AGG}/DistinctCaringCobra.slpz",
             record=7618,
             player=0,
             seed_action=20,  # adjacent Dash no-hit frame
@@ -163,7 +164,7 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="adjacent late Dash negative keeps laser alive",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/BlondHardHippopotamus.msl",
+            dataset_rel=f"{_AGG}/BlondHardHippopotamus.slpz",
             record=5147,
             player=0,
             seed_action=20,  # adjacent pre-clear Dash frame
@@ -172,8 +173,8 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="adjacent Dash-to-Turn negative keeps laser alive",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=7214,
             player=0,
             seed_action=20,  # adjacent pre-Turn Dash frame
@@ -182,8 +183,8 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="adjacent Dash frame keeps Falco laser alive before grounded BODY contact",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             record=4136,
             player=0,
             seed_action=20,  # adjacent high-cap Dash-to-Turn no-hit
@@ -192,8 +193,8 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="high-cap Dash-to-Turn Falco laser stable-scale candidate stays rejected",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             record=4142,
             player=0,
             seed_action=20,  # fresh L edge still takes Dash_CheckInput Turn before guard.
@@ -202,7 +203,7 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="high-cap Dash-to-Turn with shield edge keeps laser alive",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.msl",
+            dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.slpz",
             record=1023,
             player=1,
             seed_action=56,  # adjacent AttackHi3 no-hit frame
@@ -211,8 +212,8 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="adjacent AttackHi3 negative keeps laser alive",
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=3104,
             player=1,
             seed_action=43,  # adjacent LandingFallSpecial no-hit frame
@@ -221,8 +222,8 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="adjacent LandingFallSpecial exact flattened-Z negative keeps laser alive",
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/"
-            "pokemon_stadium_recent/CornyDelayedOkapi.msl",
+            dataset_rel="replays/validation/"
+            "pokemon_stadium_recent/CornyDelayedOkapi.slpz",
             record=112,
             player=0,
             seed_action=20,  # Dash
@@ -249,7 +250,7 @@ def test_grounded_laser_body_segment_rows(case: _Case) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed, out, ref = _one_step_out_ref(dataset_path, case.record)
     p = case.player

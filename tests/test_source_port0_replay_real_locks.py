@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -18,15 +19,15 @@ def test_source_port0_maps_raw_slippi_last_hit_by_domain_on_noncontiguous_ports(
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     dataset_path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 134
     player = 0
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
 
@@ -42,7 +43,7 @@ def test_source_port0_maps_raw_slippi_last_hit_by_domain_on_noncontiguous_ports(
     compare_stride = int(sizes["compare"])
 
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(
             handle,

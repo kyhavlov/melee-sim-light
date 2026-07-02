@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_ATTACK_AIR_B = 0x0043
@@ -16,12 +17,12 @@ ACT_DAMAGE_FLY_TOP = 0x005A
 
 def _dataset_path(root: Path) -> Path:
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
@@ -60,11 +61,11 @@ def test_tbk_damageflytop_late_bair_live_source_supplies_pre_gate_count() -> Non
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     root = Path(__file__).resolve().parents[1]
-    ds = read_dataset(str(_dataset_path(root)))
+    ds = load_replay_buffers(str(_dataset_path(root)))
     record = 6929
     victim = 1
     attacker = 0
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"].copy()
 
     assert int(seed[0]["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
@@ -74,8 +75,8 @@ def test_tbk_damageflytop_late_bair_live_source_supplies_pre_gate_count() -> Non
     assert int(seed[0]["instance_hit_by"][victim]) != int(seed[0]["instance_id"][attacker])
 
     seed[0]["fighter_8006cda4_pre_gate_consume_count"][victim] = np.uint8(0)
-    out = _step_one_with_seed(seed, row, num_players=int(ds.header["num_players"]))
-    ref = ds.samples[record]["ref_t1"]
+    out = _step_one_with_seed(seed, row, num_players=int(ds.num_players))
+    ref = ds.rows[record]["ref_t1"]
 
     assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_DAMAGE_FLY_ROLL
     assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim])
@@ -89,11 +90,11 @@ def test_tbk_damageflytop_early_bair_selected_hitcapsule_source_supplies_pre_gat
     # owns the same Fighter_8006CDA4 pre-gate consume count as the replay seed lane. This lock keeps
     # the owner on HitCapsule provenance rather than a stale direct seed lane or generic action row.
     root = Path(__file__).resolve().parents[1]
-    ds = read_dataset(str(_dataset_path(root)))
+    ds = load_replay_buffers(str(_dataset_path(root)))
     record = 3907
     victim = 1
     attacker = 0
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"].copy()
 
     assert int(seed[0]["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
@@ -102,6 +103,6 @@ def test_tbk_damageflytop_early_bair_selected_hitcapsule_source_supplies_pre_gat
     assert int(seed[0]["fighter_8006cda4_pre_gate_consume_count"][victim]) == 2
 
     seed[0]["fighter_8006cda4_pre_gate_consume_count"][victim] = np.uint8(0)
-    out = _step_one_with_seed(seed, row, num_players=int(ds.header["num_players"]))
+    out = _step_one_with_seed(seed, row, num_players=int(ds.num_players))
 
     assert int(out["action_id"][victim]) == ACT_DAMAGE_FLY_ROLL

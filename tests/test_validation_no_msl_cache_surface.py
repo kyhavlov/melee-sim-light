@@ -56,7 +56,7 @@ def test_normal_validation_modules_do_not_expose_msl_cache_options() -> None:
 
 
 def test_preprocess_suite_cache_writer_is_deleted_from_normal_tooling() -> None:
-    from tools.slippi import make_dataset_from_slp
+    from tools.slippi import validation_buffer_builder
 
     assert not (ROOT / "tools/slippi/preprocess_suite.py").exists()
-    assert not hasattr(make_dataset_from_slp, "write_dataset_from_slp")
+    assert not hasattr(validation_buffer_builder, "write_replay_cache")

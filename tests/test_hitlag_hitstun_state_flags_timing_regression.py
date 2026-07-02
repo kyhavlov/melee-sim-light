@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -18,18 +19,18 @@ def test_hitlag_hitstun_state_flags_match_treasuredbackkangaroo_record_815_p0() 
     # on a damage-hit frame.
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / expected_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {expected_rel}")
+        pytest.skip(f"missing local replay: {expected_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 815
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     row = samples[record : record + 1]
     p = 0
@@ -44,7 +45,7 @@ def test_hitlag_hitstun_state_flags_match_treasuredbackkangaroo_record_815_p0() 
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -83,18 +84,18 @@ def test_hitlag_hitstun_state_flags_match_attachedgoodnaturedguanaco_record_178_
     # but the sim was not reflecting the associated fp+0x221A / fp+0x221C state_flags bits.
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / expected_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {expected_rel}")
+        pytest.skip(f"missing local replay: {expected_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 178
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     row = samples[record : record + 1]
     p = 1
@@ -109,7 +110,7 @@ def test_hitlag_hitstun_state_flags_match_attachedgoodnaturedguanaco_record_178_
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)

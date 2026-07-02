@@ -21,12 +21,12 @@ def test_falco_laser_airborne_fall_body_contact_stays_positive_without_broad_z_f
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 2901, 0)
     p = 0
@@ -52,12 +52,12 @@ def test_falco_laser_airborne_fall_body_keeps_adjacent_no_hit_alive() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 2900, 0)
     p = 0
@@ -83,10 +83,10 @@ def test_marth_fall_high_cap_laser_near_miss_does_not_infer_x34_scale_z() -> Non
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    dataset_rel = "replays/validation/marth/VictoriousSpitefulAlpaca.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 2008, 0)
     p = 0
@@ -114,10 +114,10 @@ def test_falco_laser_airborne_fall_z_lane_respects_same_attack_hitlist_carry() -
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 4124, 0)
     p = 0
@@ -142,10 +142,10 @@ def test_sds_falco_laser_airborne_fall_exact_lbcoll_keeps_edge_no_hit_alive() ->
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+    dataset_rel = "replays/validation/dream_land_recent/ShadyDecimalStarling.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     edge_seed, edge_ref, edge_out = _run_one_step_row(dataset_path, 148, 0)
     p = 0
@@ -179,10 +179,10 @@ def test_ppa_same_attack_low_leg_laser_body_remains_eligible() -> None:
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 4140, 0)
     p = 0
@@ -209,12 +209,12 @@ def test_tvr_jumpf_reflect_behavior_shallow_laser_contact_waits_for_deep_body() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     shallow_seed, shallow_ref, shallow_out = _run_one_step_row(dataset_path, 3905, 0)
     p = 0
@@ -248,12 +248,12 @@ def test_tvr_jumpaerial_tail_laser_shallow_contact_waits_for_deep_body() -> None
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     shallow_seed, shallow_ref, shallow_out = _run_one_step_row(dataset_path, 9511, 0)
     p = 0
@@ -293,10 +293,10 @@ def test_fox_laser_state0_script_damage_update_hits_for_two_damage_ppa() -> None
     # data/items/lasers.bin (MSLLASR1 v7 damage_update_* fields)
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed_pre, ref_pre, out_pre = _run_one_step_row(dataset_path, 1150, 1)
     assert int(seed_pre["items"][2]["type"]) == 54  # Fox laser.
@@ -323,10 +323,10 @@ def test_fox_laser_specialairn_landing_damagefall_body_uses_lbcoll_radius() -> N
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_GetBlasterAction
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PutridJoyousOryx.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 2235, 1)
     shooter = 0
@@ -350,10 +350,10 @@ def test_fox_laser_specialairn_loop_damagefall_radius_lane_keeps_adjacent_no_hit
     # lbColl hurt-radius lane must not admit the old laser before the landing handoff.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PutridJoyousOryx.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 2234, 1)
     shooter = 0

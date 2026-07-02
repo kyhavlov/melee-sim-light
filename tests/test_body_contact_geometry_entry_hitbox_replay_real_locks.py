@@ -11,10 +11,10 @@ from tests.test_items_spawn_joint_replay_real_locks import (
     _step_one_row,
 )
 from tests.test_combat_ownership_seed_guardrail_locks import _DEBUG_SHIELD_CANDIDATE_DTYPE
-from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
-from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
+from tools.eval.streaming_validation import _load_binding
 from tools.extraction.char_registry import CHAR_BY_INTERNAL_ID
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 _DEBUG_CONTACT_CLASSIFIED_DTYPE = np.dtype(
     [
@@ -48,8 +48,8 @@ _DEBUG_CONTACT_CLASSIFIED_DTYPE = np.dtype(
 
 
 def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -> tuple[np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     row = samples[record : record + 1]
     ref = row["ref_t1"][0]
 
@@ -68,7 +68,7 @@ def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -85,22 +85,22 @@ def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -
 def _rollout_window_with_seed(
     dataset_path: Path, start: int, stop: int, seed: np.ndarray
 ) -> tuple[np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
 
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples_u8, _seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    _seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -109,8 +109,8 @@ def _rollout_window_with_seed(
         for record in range(start, stop + 1):
             binding.step_input(
                 handle,
-                samples_u8[record : record + 1, prev_input_off : prev_input_off + input_stride].copy(),
-                samples_u8[record : record + 1, input_off : input_off + input_stride].copy(),
+                prev_input_u8[record : record + 1, :input_stride].copy(),
+                input_u8[record : record + 1, :input_stride].copy(),
             )
         binding.write_compare(handle, out_compare_bytes)
     finally:
@@ -120,8 +120,8 @@ def _rollout_window_with_seed(
 
 
 def _step_one_row_with_seed_one_step(dataset_path: Path, record: int, seed: np.ndarray) -> tuple[np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     row = samples[record : record + 1]
     ref = row["ref_t1"][0]
 
@@ -140,7 +140,7 @@ def _step_one_row_with_seed_one_step(dataset_path: Path, record: int, seed: np.n
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -155,37 +155,28 @@ def _step_one_row_with_seed_one_step(dataset_path: Path, record: int, seed: np.n
 
 
 def _dataset_byte_views(ds):
-    samples = ds.samples
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    return (
-        samples_u8,
-        int(samples.dtype.fields["seed_t"][1]),
-        int(samples.dtype.fields["prev_input_t"][1]),
-        int(samples.dtype.fields["input_t"][1]),
-    )
+    views = replay_buffer_byte_views(ds)
+    return views.seed_t, views.prev_input_t, views.input_t
 
 
 def _collect_contact_debug_for_row(dataset_path: Path, record: int) -> tuple[np.void, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
 
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
-    seed_bytes = samples_u8[record : record + 1, seed_off : seed_off + seed_stride].copy()
-    prev_input_bytes = samples_u8[
-        record : record + 1, prev_input_off : prev_input_off + input_stride
-    ].copy()
-    input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
+    seed_bytes = seed_u8[record : record + 1, :seed_stride].copy()
+    prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+    input_bytes = input_u8[record : record + 1, :input_stride].copy()
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -202,8 +193,8 @@ def _collect_contact_debug_for_row(dataset_path: Path, record: int) -> tuple[np.
 def _step_one_row_with_inputs(
     dataset_path: Path, record: int, prev_input: np.ndarray, cur_input: np.ndarray
 ) -> tuple[np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     row = samples[record : record + 1]
     ref = row["ref_t1"][0]
 
@@ -220,7 +211,7 @@ def _step_one_row_with_inputs(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -235,7 +226,7 @@ def _step_one_row_with_inputs(
 
 
 def _step_one_sample(ds, record: int) -> tuple[np.void, np.void, np.void]:
-    samples = ds.samples
+    samples = ds.rows
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
@@ -259,7 +250,7 @@ def _step_one_sample(ds, record: int) -> tuple[np.void, np.void, np.void]:
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -276,34 +267,32 @@ def _step_one_sample(ds, record: int) -> tuple[np.void, np.void, np.void]:
 def _run_dataset_rollout_records(
     ds_path: Path, *, start: int, records: tuple[int, ...], replay_frame_rng: bool = True
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > max(records)
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
     out_by_record: dict[int, tuple[np.void, np.void]] = {}
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+        seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, max(records) + 1):
-            seed_frame_bytes = samples_u8[record : record + 1, seed_off : seed_off + seed_stride].copy()
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            seed_frame_bytes = seed_u8[record : record + 1, :seed_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             if replay_frame_rng:
                 binding.step_input_replay_frame_rng(handle, seed_frame_bytes, prev_input_bytes, input_bytes)
             else:
@@ -390,38 +379,38 @@ def _commonfall_tick(x4: float, target: float, lerp: float) -> float:
 def _debug_commonfall_precombat_state_from_rollout(
     dataset_path: Path, *, start: int, target_record: int, player: int
 ) -> tuple[float, int]:
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(
-            handle, samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+            handle, seed_u8[start : start + 1, :seed_stride].copy()
         )
         for record in range(start, target_record):
             binding.step_input_replay_frame_rng(
                 handle,
-                samples_u8[record : record + 1, seed_off : seed_off + seed_stride].copy(),
-                samples_u8[record : record + 1, prev_input_off : prev_input_off + input_stride].copy(),
-                samples_u8[record : record + 1, input_off : input_off + input_stride].copy(),
+                seed_u8[record : record + 1, :seed_stride].copy(),
+                prev_input_u8[record : record + 1, :input_stride].copy(),
+                input_u8[record : record + 1, :input_stride].copy(),
             )
         binding.apply_replay_frame_rng(
             handle,
-            samples_u8[target_record : target_record + 1, seed_off : seed_off + seed_stride].copy(),
+            seed_u8[target_record : target_record + 1, :seed_stride].copy(),
         )
         binding.debug_step_input_pre_combat(
             handle,
-            samples_u8[target_record : target_record + 1, prev_input_off : prev_input_off + input_stride].copy(),
-            samples_u8[target_record : target_record + 1, input_off : input_off + input_stride].copy(),
+            prev_input_u8[target_record : target_record + 1, :input_stride].copy(),
+            input_u8[target_record : target_record + 1, :input_stride].copy(),
         )
         x4, msid = binding.debug_common_fall_blend_state(handle, 0, player)
     finally:
@@ -432,25 +421,25 @@ def _debug_commonfall_precombat_state_from_rollout(
 def _debug_commonfall_precombat_state_from_seed(
     dataset_path: Path, *, record: int, player: int
 ) -> tuple[float, int]:
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        binding.reseed_seed(handle, samples_u8[record : record + 1, seed_off : seed_off + seed_stride].copy())
+        binding.reseed_seed(handle, seed_u8[record : record + 1, :seed_stride].copy())
         binding.debug_step_input_pre_combat(
             handle,
-            samples_u8[record : record + 1, prev_input_off : prev_input_off + input_stride].copy(),
-            samples_u8[record : record + 1, input_off : input_off + input_stride].copy(),
+            prev_input_u8[record : record + 1, :input_stride].copy(),
+            input_u8[record : record + 1, :input_stride].copy(),
         )
         x4, msid = binding.debug_common_fall_blend_state(handle, 0, player)
     finally:
@@ -463,38 +452,36 @@ def _run_slp_rollout_records(
 ) -> dict[int, tuple[np.void, np.void]]:
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=ports,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
+    samples = ds.rows
     assert int(samples.shape[0]) > max(records)
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
     out_by_record: dict[int, tuple[np.void, np.void]] = {}
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+        seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, max(records) + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             if record in records:
                 binding.write_compare(handle, out_compare_bytes)
@@ -519,10 +506,10 @@ def test_stm_jumpaerialf_tail_only_bair_rejects_false_body_and_keeps_real_hit() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+        root / "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 773)
     assert int(seed["action_id"][0]) == 67  # AttackAirB.
@@ -557,10 +544,10 @@ def test_stm_pokemon_stadium_x44_body_gap_owners_are_payload_bounded() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+        root / "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     for record, defender, expected_action in ((976, 1, 14), (4224, 1, 26), (6646, 1, 25)):
         seed, out, ref = _step_one_row(dataset_path, record)
@@ -579,9 +566,9 @@ def test_stm_pokemon_stadium_x44_body_gap_owners_are_payload_bounded() -> None:
         assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender])
         assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     for record, defender, no_x44_action in ((4225, 1, 26), (6647, 1, 25)):
-        non_stadium_seed = ds.samples[record : record + 1]["seed_t"].copy()
+        non_stadium_seed = ds.rows[record : record + 1]["seed_t"].copy()
         non_stadium_seed["stage_id"][0] = np.uint32(32)  # Final Destination.
         out, _ref = _step_one_row_with_seed(dataset_path, record, non_stadium_seed)
         assert int(out["action_id"][defender]) == no_x44_action
@@ -599,9 +586,9 @@ def test_strong_dair_attacklw4_medium_sibling_owns_damage_height_teg_1532() -> N
     # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/TornEnchantingGiraffe.msl"
+    dataset_path = root / "replays/validation/sheik/TornEnchantingGiraffe.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 1532)
     assert int(seed["action_id"][0]) == 64  # AttackLw4.
@@ -620,13 +607,13 @@ def test_strong_dair_attacklw4_high_cap_stays_without_medium_sibling_teg_1532_ne
     # sibling is absent, the live hb0/cap2 high source remains authoritative and enters DamageFlyHi.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/TornEnchantingGiraffe.msl"
+    dataset_path = root / "replays/validation/sheik/TornEnchantingGiraffe.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     binding = _load_binding()
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[1532:1533]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[1532:1533]
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -644,7 +631,7 @@ def test_strong_dair_attacklw4_high_cap_stays_without_medium_sibling_teg_1532_ne
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -677,11 +664,11 @@ def test_tvr_specialhi_launch_x44_body_gap_owner_is_stage_and_payload_bounded() 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        / "ThisVioletRaccoon.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        / "ThisVioletRaccoon.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 12278)
     defender = 0
@@ -691,8 +678,8 @@ def test_tvr_specialhi_launch_x44_body_gap_owner_is_stage_and_payload_bounded() 
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 8
     assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
 
-    ds = read_dataset(str(dataset_path))
-    non_stadium_seed = ds.samples[12278:12279]["seed_t"].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    non_stadium_seed = ds.rows[12278:12279]["seed_t"].copy()
     non_stadium_seed["stage_id"][0] = np.uint32(32)  # Final Destination.
     out, _ref = _step_one_row_with_seed(dataset_path, 12278, non_stadium_seed)
     assert int(out["action_id"][defender]) == 369  # No x44 BODY hit.
@@ -714,18 +701,18 @@ def test_tvr_specialhi_launch_x44_body_gap_waits_for_aerial_reflector_turn_rollo
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        / "ThisVioletRaccoon.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        / "ThisVioletRaccoon.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     defender = 0
     attacker = 1
-    assert int(ds.samples[12277]["ref_t1"]["action_id"][defender]) == 366  # SpecialAirLwLoop.
-    assert int(ds.samples[12278]["seed_t"]["action_id"][defender]) == 366
-    assert int(ds.samples[12278]["ref_t1"]["action_id"][attacker]) == 356  # SpecialAirHi launch.
+    assert int(ds.rows[12277]["ref_t1"]["action_id"][defender]) == 366  # SpecialAirLwLoop.
+    assert int(ds.rows[12278]["seed_t"]["action_id"][defender]) == 366
+    assert int(ds.rows[12278]["ref_t1"]["action_id"][attacker]) == 356  # SpecialAirHi launch.
 
     rows = _run_dataset_rollout_records(dataset_path, start=0, records=(12277, 12278))
     out_12277, ref_12277 = rows[12277]
@@ -755,7 +742,7 @@ def test_attackairlw_sustained_tiplog_contact_defers_grounded_dash_damage_selfpl
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
@@ -797,13 +784,13 @@ def test_attackairlw_primary_hitbox_tiny_overlap_stays_full_body_damage_prh() ->
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[5032]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[5032]["seed_t"]
     out, ref = _step_one_row_with_seed_one_step(dataset_path, 5032, seed)
 
     attacker = 1
@@ -831,13 +818,13 @@ def test_attackairlw_commonfall_matrix_only_positive_rejects_false_body_ewt_1019
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[1019]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[1019]["seed_t"]
     out, ref = _step_one_row_with_seed_one_step(dataset_path, 1019, seed)
 
     attacker = 0
@@ -851,7 +838,7 @@ def test_attackairlw_commonfall_matrix_only_positive_rejects_false_body_ewt_1019
     assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
     assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
 
-    rollout, rollout_ref = _rollout_window_with_seed(dataset_path, 0, 1019, ds.samples[0]["seed_t"])
+    rollout, rollout_ref = _rollout_window_with_seed(dataset_path, 0, 1019, ds.rows[0]["seed_t"])
     assert int(rollout["action_id"][defender]) == int(rollout_ref["action_id"][defender]) == 29
     assert int(rollout["hitlag"][attacker]) == int(rollout_ref["hitlag"][attacker]) == 0
     assert int(rollout["hitlag"][defender]) == int(rollout_ref["hitlag"][defender]) == 0
@@ -868,7 +855,7 @@ def test_commonfall_transn_local_blend_rejects_false_body_dcc_5573() -> None:
     #   ftCo_Fall_Anim_Inner,ftCo_800CC988}
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
@@ -891,15 +878,15 @@ def test_commonfall_entry_tick_hidden_lane_iat_6425() -> None:
     #   ftCo_Fall_Anim,ftCo_Fall_Anim_Inner,ftCo_800CC988}
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        root / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     player = 1
     record = 6425
-    seed = ds.samples[record]["seed_t"]
+    seed = ds.rows[record]["seed_t"]
     enum_values = _action_id_enum_values(root)
     assert int(seed["action_id"][player]) == enum_values["MSL_ACT_FALL"]
     assert int(seed["action_frame"][player]) == 0
@@ -929,15 +916,15 @@ def test_commonfall_seeded_fall_frame1_does_not_apply_entry_tick_iat_6426() -> N
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        root / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     player = 1
     record = 6426
-    seed = ds.samples[record]["seed_t"]
+    seed = ds.rows[record]["seed_t"]
     enum_values = _action_id_enum_values(root)
     assert int(seed["action_id"][player]) == enum_values["MSL_ACT_FALL"]
     assert int(seed["action_frame"][player]) == 1
@@ -970,7 +957,7 @@ def test_commonfall_entry_tick_admits_attackairhi_iat_6428() -> None:
     #   ftCo_Fall_Anim_Inner,ftCo_800CC988}
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        root / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
@@ -997,12 +984,12 @@ def test_marth_uair_admits_commonfall_blended_body_pose_ldg_4539() -> None:
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     # reports/triage/marth_burndown_20260613T093537Z/batch15_ldg4539_collision_probe/
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
+    dataset_path = root / "replays/validation/marth/LoudDullGoat.slpz"
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[4539]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[4539]["seed_t"]
     out, ref = _step_one_row_with_seed_one_step(dataset_path, 4539, seed)
 
     defender = 0
@@ -1024,12 +1011,12 @@ def test_commonfall_blend_positive_requires_drift_target_ldg_4539() -> None:
     # publish the FallB leg pose that admits LDG:4539.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
+    dataset_path = root / "replays/validation/marth/LoudDullGoat.slpz"
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[4539]["seed_t"].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[4539]["seed_t"].copy()
     defender = 0
     seed["speed_air_x_self"][defender] = np.float32(0.0)
     out, _ref = _step_one_row_with_seed_one_step(dataset_path, 4539, seed)
@@ -1050,13 +1037,13 @@ def test_commonfall_entry_matrix_positive_still_admits_body_dcc_5574() -> None:
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[5574]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[5574]["seed_t"]
     out, ref = _step_one_row_with_seed_one_step(dataset_path, 5574, seed)
 
     attacker = 0
@@ -1092,41 +1079,39 @@ def test_grounded_attack_restart_clears_sustained_hitcapsule_latch_selfplay_1814
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     start = 0
     stop = 1349
     attacker = 0
     defender = 1
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, stop + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
 
@@ -1198,7 +1183,7 @@ def test_damagefly_terminal_fall_entry_does_not_block_same_frame_shine_entry_ppa
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+        / "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
@@ -1232,7 +1217,7 @@ def test_grounded_attack_restart_clear_applies_to_attackdash_tch() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing validation dataset: {dataset_path}")
@@ -1253,8 +1238,8 @@ def test_grounded_attack_restart_clear_applies_to_attackdash_tch() -> None:
 @pytest.mark.parametrize(
     ("dataset_name", "record", "defender"),
     [
-        ("DistinctCaringCobra.msl", 9272, 1),
-        ("TubbyCurlyHerring.msl", 3186, 1),
+        ("DistinctCaringCobra.slpz", 9272, 1),
+        ("TubbyCurlyHerring.slpz", 3186, 1),
     ],
 )
 def test_enable_edge_tiplog_phantom_rows_do_not_enter_damage(dataset_name: str, record: int, defender: int) -> None:
@@ -1268,9 +1253,9 @@ def test_enable_edge_tiplog_phantom_rows_do_not_enter_damage(dataset_name: str, 
     # refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8,ftColl_8007AD18}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent" / dataset_name
+    dataset_path = root / "replays/validation/aggregate_recent" / dataset_name
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _seed, out, ref = _step_one_row(dataset_path, record)
     for field in ("action_id", "animation_index", "hitlag", "hitstun"):
@@ -1293,9 +1278,9 @@ def test_specialairsstart_pre_anim_pose_rejects_dtilt_body_cnm_5292() -> None:
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    dataset_path = root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 5292)
     defender = 0
@@ -1324,9 +1309,9 @@ def test_damageflyhi_terminal_aobj_pose_selects_high_hurtcap_dcc_8565() -> None:
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 8565)
     defender = 1
@@ -1347,9 +1332,9 @@ def test_damageflyhi_terminal_aobj_pose_does_not_pre_admit_dcc_8564() -> None:
     # change must not become a broad DamageFlyHi hit admission shortcut.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 8564)
     defender = 1
@@ -1372,9 +1357,9 @@ def test_rebirth_fall_x1994_seed_expires_hurtbox_state_gat_9068() -> None:
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    dataset_path = root / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 9068)
     defender = 1
@@ -1393,12 +1378,12 @@ def test_rebirth_fall_x1994_seed_requires_rebirth_source_flag_gat_9068() -> None
     # broad "timer means clear hurtbox_state" shortcut for unrelated x1994 sources.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    dataset_path = root / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[9068:9069]["seed_t"].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[9068:9069]["seed_t"].copy()
     defender = 1
     assert int(seed[0]["colanim_rebirth_fall_x1994_seed"][defender]) == 1
     seed[0]["colanim_rebirth_fall_x1994_seed"][defender] = np.uint8(0)
@@ -1415,43 +1400,40 @@ def test_rebirth_fall_x1994_seed_fixes_gat_9063_rollout_window() -> None:
     # selection diverges into the high-scoring rollout blast radius.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    dataset_path = root / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     start = 9063
     stop = 9125
     defender = 1
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, stop + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             out = out_view[0].copy()
@@ -1474,14 +1456,14 @@ def test_guardreflect_peer_kneebend_nudge_requires_frame_start_grounded_tbk_1426
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[1426:1427]["seed_t"].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[1426:1427]["seed_t"].copy()
     assert int(seed[0]["action_id"][0]) == 182  # GuardReflect
     assert int(seed[0]["action_id"][1]) == 24  # KneeBend
     assert int(seed[0]["on_ground"][1]) == 1
@@ -1509,40 +1491,38 @@ def test_guardreflect_final_x14_shine_body_rollout_rejects_broad_shield_extent_t
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     start = 1403
     stop = 1427
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, stop + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
 
@@ -1565,42 +1545,38 @@ def test_guardreflect_final_x14_shine_precombat_shield_candidate_is_rejected_tbk
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     start = 1403
     target = 1427
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, target):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
 
-        prev_input_bytes = samples_u8[
-            target : target + 1, prev_input_off : prev_input_off + input_stride
-        ].copy()
-        input_bytes = samples_u8[target : target + 1, input_off : input_off + input_stride].copy()
+        prev_input_bytes = prev_input_u8[target : target + 1, :input_stride].copy()
+        input_bytes = input_u8[target : target + 1, :input_stride].copy()
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
         raw_cand, count_cand = binding.debug_shield_candidate_decisions(handle, 0, 128)
     finally:
@@ -1635,42 +1611,40 @@ def test_guardreflect_expired_x14_attackhi3_enable_edge_reaches_guardsetoff_tbk_
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     start = 3585
     stop = 3610
     attacker = 0
     defender = 1
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, stop + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
 
@@ -1701,10 +1675,10 @@ def test_guardreflect_expired_x14_no_submotion_body_uses_guardon_hurtcaps_gat_11
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 11085
     defender = 0
@@ -1742,23 +1716,23 @@ def test_guardreflect_active_x14_no_submotion_without_guardon_provenance_stays_n
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 11085
     defender = 0
     attacker = 1
     try:
-        ds = read_dataset(str(dataset_path))
+        ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(
                 f"stale required validation dataset cache: rerun forced aggregate preprocess for {dataset_path}"
             ) from exc
         raise
-    seed = ds.samples["seed_t"][record : record + 1].copy()
+    seed = ds.rows["seed_t"][record : record + 1].copy()
     seed["guard_reflect_timer_x14"][0, defender] = np.uint8(1)
     out, _ref = _step_one_row_with_seed(dataset_path, record, seed)
 
@@ -1786,14 +1760,14 @@ def test_guardreflect_active_x14_no_guardon_allows_later_seeded_shield_ewt_1218(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     try:
-        ds = read_dataset(str(dataset_path))
+        ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(
@@ -1801,13 +1775,13 @@ def test_guardreflect_active_x14_no_guardon_allows_later_seeded_shield_ewt_1218(
             ) from exc
         raise
 
-    samples = ds.samples
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     start = 1020
     target = 1218
@@ -1825,22 +1799,20 @@ def test_guardreflect_active_x14_no_guardon_allows_later_seeded_shield_ewt_1218(
     assert int(ref["action_id"][defender]) == 181  # GuardSetOff
     assert int(ref["hitlag"][defender]) == 6
 
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, target + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
         out = out_view[0].copy()
@@ -1865,41 +1837,39 @@ def test_guardreflect_expired_x14_rollout_orders_lower_body_before_later_shield_
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     start = 11080
     stop = 11086
     defender = 0
     attacker = 1
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, stop + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             out = out_view[0].copy()
@@ -1926,41 +1896,37 @@ def test_guardreflect_expired_x14_later_shield_candidate_reports_earlier_body_ga
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     start = 11080
     target = 11085
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, target):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
 
-        prev_input_bytes = samples_u8[
-            target : target + 1, prev_input_off : prev_input_off + input_stride
-        ].copy()
-        input_bytes = samples_u8[target : target + 1, input_off : input_off + input_stride].copy()
+        prev_input_bytes = prev_input_u8[target : target + 1, :input_stride].copy()
+        input_bytes = input_u8[target : target + 1, :input_stride].copy()
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
         raw_cand, count_cand = binding.debug_shield_candidate_decisions(handle, 0, 128)
     finally:
@@ -1990,15 +1956,15 @@ def test_guardreflect_x14_expiry_recreates_current_shielddesc_tch_5251() -> None
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 5251
     attacker = 0
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][record : record + 1].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][record : record + 1].copy()
     out, ref = _step_one_row_with_seed(dataset_path, record, seed)
 
     assert int(seed["action_id"][0, attacker]) == 69  # AttackAirHi
@@ -2024,14 +1990,14 @@ def test_guardreflect_current_shielddesc_requires_x14_expiry_boundary_tch_5251(x
     # ShieldDesc seed is absent.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 5251
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][record : record + 1].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][record : record + 1].copy()
     seed["combat_shield_contact_hb_kind"][:] = np.uint8(0)
     seed["guard_reflect_timer_x14"][0, defender] = np.uint8(x14)
     out, _ref = _step_one_row_with_seed(dataset_path, record, seed)
@@ -2048,14 +2014,14 @@ def test_guardreflect_already_expired_x14_seed_does_not_suppress_shield_damage_t
     # must not borrow x18 as a powershield no-damage owner.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 5251
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][record : record + 1].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][record : record + 1].copy()
     seed["guard_reflect_timer_x14"][0, defender] = np.uint8(0)
     seed["state_flags"][0, defender, 3] = np.uint8(int(seed["state_flags"][0, defender, 3]) & ~0x20)
     out, ref = _step_one_row_with_seed(dataset_path, record, seed)
@@ -2074,29 +2040,29 @@ def test_guardreflect_x14_expiry_rollout_reaches_jumpf_tch_5224() -> None:
     #   DamageAir3 divergence from the missed shield contact.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     start = 5224
     stop = 5284
     defender = 1
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -2104,10 +2070,8 @@ def test_guardreflect_x14_expiry_rollout_reaches_jumpf_tch_5224() -> None:
         binding.reseed_seed_rollout(handle, seed_bytes)
         seen_5251 = False
         for record in range(start, stop + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             out = out_view[0].copy()
@@ -2138,43 +2102,40 @@ def test_shieldbreakstand_furafura_entry_clears_colanim_hit_status_prh_11549_rol
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c::ftCo_80099010
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     start = 11549
     stop = 11565
     p = 0
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, stop + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             out = out_view[0].copy()
@@ -2196,43 +2157,40 @@ def test_landingairb_lcancel_rate_uses_hitlag_latched_lr_edge_fsp_6448_rollout()
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     start = 6448
     stop = 6470
     p = 1
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, stop + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             out = out_view[0].copy()
@@ -2257,9 +2215,9 @@ def test_attacks3_angle_variant_hitbox_events_apply_with_variant_pose_agg_5611()
     # data/moves/{fox,falco}.json::moves["ftCo_SM_AttackS3"].events
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    dataset_path = root / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 5611)
     attacker = 0
@@ -2280,9 +2238,9 @@ def test_attacks3_angle_variant_hitbox_events_do_not_pre_admit_agg_5610() -> Non
     # side-tilt-frame admission shortcut.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    dataset_path = root / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 5610)
     attacker = 0
@@ -2302,12 +2260,12 @@ def test_attacks3_angle_variant_hitbox_events_fix_rollout_agg_5577() -> None:
     # needing any row-local bridge.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    dataset_path = root / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -2316,7 +2274,7 @@ def test_attacks3_angle_variant_hitbox_events_fix_rollout_agg_5577() -> None:
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -2326,22 +2284,19 @@ def test_attacks3_angle_variant_hitbox_events_fix_rollout_agg_5577() -> None:
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     start_record = 5577
     defender = 1
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, 5612):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             out_row = out_view[0].copy()
@@ -2365,10 +2320,10 @@ def test_sustained_attackairn_edge_near_x7a8_still_enters_damage_qgd_8332() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        root / "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _seed, out, ref = _step_one_row(dataset_path, 8332)
     defender = 0
@@ -2391,13 +2346,13 @@ def test_enable_edge_x58_x4c_no_translation_sweep_tch_5010() -> None:
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_8007AD18}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = pytest.importorskip("tools.eval.dataset").read_dataset(str(dataset_path))
-    row = ds.samples[5010:5011]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[5010:5011]
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -2410,7 +2365,7 @@ def test_enable_edge_x58_x4c_no_translation_sweep_tch_5010() -> None:
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -2513,10 +2468,10 @@ def test_grounded_overlap_z_depth_rejects_false_attackdash_hhg_6740() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _seed, out, ref = _step_one_row(dataset_path, 6740)
     defender = 1
@@ -2538,13 +2493,13 @@ def test_landingairn_float_aobj_hurtcaps_reject_false_attackdash_tch_1816() -> N
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = pytest.importorskip("tools.eval.dataset").read_dataset(str(dataset_path))
-    row = ds.samples[1816:1817]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[1816:1817]
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -2557,7 +2512,7 @@ def test_landingairn_float_aobj_hurtcaps_reject_false_attackdash_tch_1816() -> N
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -2597,18 +2552,18 @@ def test_fox_attackdash_static_collision_pose_rejects_false_attackairhi_fsp_7078
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[7078:7079]["seed_t"].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[7078:7079]["seed_t"].copy()
     attacker = 0
     defender = 1
     assert int(seed["action_id"][0, attacker]) == 68  # AttackAirHi
     assert int(seed["action_id"][0, defender]) == 50  # AttackDash
-    assert int(ds.samples[7080]["ref_t1"]["action_id"][defender]) == 90  # DamageFlyTop.
+    assert int(ds.rows[7080]["ref_t1"]["action_id"][defender]) == 90  # DamageFlyTop.
     seed["combat_hitlist_cd"][0, attacker, :, defender] = np.uint16(0)
     seed["combat_hitlist_victim_iid"][0, attacker, :, defender] = np.uint16(0)
     seed["combat_hitlist_hb_valid"][0, attacker, :] = np.uint8(0)
@@ -2638,10 +2593,10 @@ def test_attackairlw_attackdash_allow_interrupt_tail_rejects_high_capsule_fsp_12
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 1270)
     attacker = 0
@@ -2667,12 +2622,12 @@ def test_fox_attackdash_static_collision_pose_rejects_false_attackairhi_fsp_7078
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -2681,13 +2636,13 @@ def test_fox_attackdash_static_collision_pose_rejects_false_attackairhi_fsp_7078
     start_record = 5391
     target_records = {7079, 7080}
     target_record = max(target_records)
-    seed = ds.samples[start_record : start_record + 1]["seed_t"].copy()
+    seed = ds.rows[start_record : start_record + 1]["seed_t"].copy()
     seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -2695,7 +2650,7 @@ def test_fox_attackdash_static_collision_pose_rejects_false_attackairhi_fsp_7078
         binding.reseed_seed_rollout(handle, seed_bytes)
         rows: dict[int, tuple[np.void, np.void]] = {}
         for record in range(start_record, target_record + 1):
-            row = ds.samples[record : record + 1]
+            row = ds.rows[record : record + 1]
             prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
                 1, input_stride
             )
@@ -2743,10 +2698,10 @@ def test_attackdash_post_hitbox_pre_iasa_pose_selects_downsmash_body_fsp_5765() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 5765)
     attacker = 0
@@ -2771,9 +2726,9 @@ def test_fox_jumpb_dynamic_chain_selects_attackairb_body_ppa_3182() -> None:
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 3182)
     defender = 0
@@ -2801,13 +2756,13 @@ def test_sheik_attackairb_same_group_selects_hb2_before_outer_hb3_tsh_3935() -> 
     # data/moves/{fox,falco,sheik}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl"
+    dataset_path = root / "replays/validation/sheik/TenseSameHummingbird.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 3935
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -2819,7 +2774,7 @@ def test_sheik_attackairb_same_group_selects_hb2_before_outer_hb3_tsh_3935() -> 
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -2852,10 +2807,10 @@ def test_sheik_attackairb_same_group_selects_hb2_before_outer_hb3_tsh_3935() -> 
 @pytest.mark.parametrize(
     ("dataset_name", "record", "defender"),
     [
-        ("FavorableSuperficialPig.msl", 1499, 1),
-        ("ImpassionedAlarmedTarsier.msl", 2161, 0),
-        ("ImpassionedAlarmedTarsier.msl", 6196, 1),
-        ("TubbyCurlyHerring.msl", 5740, 1),
+        ("FavorableSuperficialPig.slpz", 1499, 1),
+        ("ImpassionedAlarmedTarsier.slpz", 2161, 0),
+        ("ImpassionedAlarmedTarsier.slpz", 6196, 1),
+        ("TubbyCurlyHerring.slpz", 5740, 1),
     ],
 )
 def test_fox_jumpb_dynamic_chain_does_not_broaden_body_admission_controls(
@@ -2866,9 +2821,9 @@ def test_fox_jumpb_dynamic_chain_does_not_broaden_body_admission_controls(
     # generic JumpF/B pose flip or BODY tolerance.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent" / dataset_name
+    dataset_path = root / "replays/validation/aggregate_recent" / dataset_name
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _seed, out, ref = _step_one_row(dataset_path, record)
     for field in ("action_id", "animation_index", "hitlag", "hitstun"):
@@ -2891,9 +2846,9 @@ def test_fox_escapeair_dynamic_tail_chain_selects_marth_fair_tip_wws_2580() -> N
     # data/anims/fox.dyn.bin::SSDYNN01 collision_motion_state_ids(ftCo_SM_EscapeAir)
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    dataset_path = root / "replays/validation/marth/WellWornSmallGoshawk.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     for record in (2578, 2579):
         seed, out, ref = _step_one_row(dataset_path, record)
@@ -2956,10 +2911,10 @@ def test_fox_catch_dynamic_tail_chain_keeps_dair_body_timing_mgs(
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+        / "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     try:
         seed, out, ref = _step_one_row(dataset_path, record)
@@ -3002,10 +2957,10 @@ def test_late_attackairhi_hitcapsule_latch_rejects_false_wait_hit_fsp_7079() -> 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 7079)
     attacker = 0
@@ -3033,10 +2988,10 @@ def test_jumpf_tap_crossing_iasa_preempts_false_attacklw4_body_fsp_4852() -> Non
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 4852)
     attacker = 0
@@ -3058,10 +3013,10 @@ def test_jumpf_tap_crossing_iasa_requires_fresh_tap_threshold_crossing_fsp_2123(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 2123)
     defender = 0
@@ -3084,10 +3039,10 @@ def test_lbcoll_matrix_first_admits_grounded_attackhi3_row_ppa_2614() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+        root / "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 2614)
     defender = 1
@@ -3111,9 +3066,9 @@ def test_grounded_hidden_depth_carry_rejects_false_attackdash_tch_5649() -> None
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 5649)
     attacker = 1
@@ -3141,10 +3096,10 @@ def test_attackairn_neutral_hitcapsule_latch_suppresses_false_wait_hit_his_2752(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+        root / "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _seed, out, ref = _step_one_row(dataset_path, 2752)
     defender = 0
@@ -3165,13 +3120,13 @@ def test_attackairn_wait_rollout_bridge_not_used_by_ordinary_one_step_his_2752()
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+        root / "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     try:
-        ds = read_dataset(str(dataset_path))
+        ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             raise AssertionError(
@@ -3181,7 +3136,7 @@ def test_attackairn_wait_rollout_bridge_not_used_by_ordinary_one_step_his_2752()
     record = 2752
     attacker = 1
     defender = 0
-    seed = ds.samples["seed_t"][record : record + 1].copy()
+    seed = ds.rows["seed_t"][record : record + 1].copy()
     assert int(seed["combat_hitlist_cd"][0, attacker, 0, defender]) != 0
     seed["combat_hitlist_cd"][0, attacker, 0, defender] = np.uint16(0)
     seed["combat_hitlist_victim_iid"][0, attacker, 0, defender] = np.uint16(0)
@@ -3207,10 +3162,10 @@ def test_attackairn_stale_latch_wait_post_entry_and_jumpf_admit_real_hits_his(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+        root / "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, record)
     attacker = 1
@@ -3242,8 +3197,8 @@ def test_forensic_optional_attackairb_source_clear_landing_latch_suppresses_fals
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "reports/triage/mainline_selfplay_datasets/mainline_selfplay_20260514T083640/"
-        / "reports/triage/mainline_selfplay_replays/Game_20260514T083640.msl"
+        / "reports/triage/mainline_selfplay_replays/mainline_selfplay_20260514T083640/"
+        / "reports/triage/mainline_selfplay_replays/Game_20260514T083640.slpz"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing optional local self-play triage dataset: {dataset_path}")
@@ -3270,10 +3225,10 @@ def test_forensic_optional_attackairb_source_clear_landing_latch_suppresses_fals
 @pytest.mark.parametrize(
     ("dataset_name", "record", "defender"),
     [
-        ("DraftyHealthyHare.msl", 482, 1),
-        ("DraftyHealthyHare.msl", 9768, 1),
-        ("DraftyHealthyHare.msl", 9861, 1),
-        ("LoudDullGoat.msl", 5270, 0),
+        ("DraftyHealthyHare.slpz", 482, 1),
+        ("DraftyHealthyHare.slpz", 9768, 1),
+        ("DraftyHealthyHare.slpz", 9861, 1),
+        ("LoudDullGoat.slpz", 5270, 0),
     ],
 )
 def test_marth_aerial_static_spacie_tail_cap12_stays_suppressed(
@@ -3290,9 +3245,9 @@ def test_marth_aerial_static_spacie_tail_cap12_stays_suppressed(
     # data/hurtcaps/{fox,falco}.json cap12 -> FtPart 18
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth" / dataset_name
+    dataset_path = root / "replays/validation/marth" / dataset_name
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, record)
     attacker = 1 - defender
@@ -3318,9 +3273,9 @@ def test_marth_attackairn_no_submotion_lightshield_guard_static_pose_stays_quiet
     # data/hurtcaps/falco.json static Guard fallback capsules
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/BreakableMundaneElephant.msl"
+    dataset_path = root / "replays/validation/marth/BreakableMundaneElephant.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, record)
     defender = 0
@@ -3345,14 +3300,14 @@ def test_forensic_optional_attackairb_source_clear_landing_latch_requires_dense_
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "reports/triage/mainline_selfplay_datasets/mainline_selfplay_20260514T083640/"
-        / "reports/triage/mainline_selfplay_replays/Game_20260514T083640.msl"
+        / "reports/triage/mainline_selfplay_replays/mainline_selfplay_20260514T083640/"
+        / "reports/triage/mainline_selfplay_replays/Game_20260514T083640.slpz"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing optional local self-play triage dataset: {dataset_path}")
 
     try:
-        ds = read_dataset(str(dataset_path))
+        ds = load_replay_buffers(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
             pytest.skip(f"stale optional local self-play triage dataset: {dataset_path}")
@@ -3360,7 +3315,7 @@ def test_forensic_optional_attackairb_source_clear_landing_latch_requires_dense_
     record = 5136
     attacker = 1
     defender = 0
-    seed = ds.samples["seed_t"][record : record + 1].copy()
+    seed = ds.rows["seed_t"][record : record + 1].copy()
     seed["combat_hitlist_cd"][0, attacker, 0, defender] = np.uint16(0)
     seed["combat_hitlist_victim_iid"][0, attacker, 0, defender] = np.uint16(0)
 
@@ -3436,9 +3391,9 @@ def test_attackairb_source_clear_landing_dense_hitcapsule_suppression_synthetic(
 @pytest.mark.parametrize(
     ("dataset_name", "record", "defender", "expected_seed_action", "expected_ref_action"),
     [
-        ("DistinctCaringCobra.msl", 8844, 0, 15, 14),  # WalkSlow -> Wait
-        ("ImpassionedAlarmedTarsier.msl", 6287, 1, 20, 21),  # Dash -> Run
-        ("TubbyCurlyHerring.msl", 5842, 1, 41, 15),  # SquatRv -> WalkSlow
+        ("DistinctCaringCobra.slpz", 8844, 0, 15, 14),  # WalkSlow -> Wait
+        ("ImpassionedAlarmedTarsier.slpz", 6287, 1, 20, 21),  # Dash -> Run
+        ("TubbyCurlyHerring.slpz", 5842, 1, 41, 15),  # SquatRv -> WalkSlow
     ],
 )
 def test_same_frame_locomotion_entry_hurtcaps_use_previous_jobj_pose_for_body_collision(
@@ -3455,9 +3410,9 @@ def test_same_frame_locomotion_entry_hurtcaps_use_previous_jobj_pose_for_body_co
     # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent" / dataset_name
+    dataset_path = root / "replays/validation/aggregate_recent" / dataset_name
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, record)
     assert int(seed["action_id"][defender]) == expected_seed_action
@@ -3481,42 +3436,40 @@ def test_turn_to_walkslow_entry_hurtcaps_use_turn_pose_for_shine_body_iat_5052_r
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/"
+        "ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+    seed_u8, prev_input_u8, input_u8 = _dataset_byte_views(ds)
 
     start = 5052
     target = 5092
     attacker = 0
     defender = 1
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, target + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
     finally:
@@ -3550,9 +3503,9 @@ def test_marth_dash_to_guardon_uses_frame_start_dash_body_pose_vsa_4317() -> Non
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    dataset_path = root / "replays/validation/marth/VictoriousSpitefulAlpaca.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, contacts = _collect_contact_debug_for_row(dataset_path, 4317)
     defender = 0
@@ -3593,14 +3546,14 @@ def test_marth_attackairn_guardon_to_guard_dense_hitlist_suppresses_body_ipw_422
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    dataset_path = root / "replays/validation/marth/InternalPowerlessWallaby.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     attacker = 1
     defender = 0
-    seed = ds.samples[4229:4230]["seed_t"].copy()
+    seed = ds.rows[4229:4230]["seed_t"].copy()
     assert int(seed[0]["action_id"][attacker]) == 65  # AttackAirN
     assert int(seed[0]["action_id"][defender]) == 179  # Guard
     assert int(seed[0]["seed_prev_action_id"][defender]) == 178  # GuardOn
@@ -3634,15 +3587,15 @@ def test_marth_attackairn_stale_dense_guard_rows_still_allow_body_ipw_vsa() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     cases = [
-        ("InternalPowerlessWallaby.msl", 464, 0, 76),  # continuing Guard, current iid seed.
-        ("VictoriousSpitefulAlpaca.msl", 5706, 0, 77),  # first Guard, stale victim iid.
+        ("InternalPowerlessWallaby.slpz", 464, 0, 76),  # continuing Guard, current iid seed.
+        ("VictoriousSpitefulAlpaca.slpz", 5706, 0, 77),  # first Guard, stale victim iid.
     ]
     for dataset_name, record, defender, expected_action in cases:
-        dataset_path = root / "datasets/marth/replays/validation/marth" / dataset_name
+        dataset_path = root / "replays/validation/marth" / dataset_name
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_path}")
-        ds = read_dataset(str(dataset_path))
-        seed = ds.samples[record:record + 1]["seed_t"].copy()
+            pytest.skip(f"missing local replay: {dataset_path}")
+        ds = load_replay_buffers(str(dataset_path))
+        seed = ds.rows[record:record + 1]["seed_t"].copy()
         out, ref = _step_one_row_with_seed(dataset_path, record, seed)
         assert int(ref["action_id"][defender]) == expected_action
         for field in ("action_id", "hitlag", "hitstun", "instance_hit_by"):
@@ -3658,8 +3611,8 @@ def test_marth_attackairn_stale_dense_guard_rows_still_allow_body_ipw_vsa() -> N
 @pytest.mark.parametrize(
     ("dataset_name", "record", "defender", "expected_action"),
     [
-        ("MotionlessAggressiveJay.msl", 734, 1, 178),  # GuardOn stays no-hit.
-        ("PriceyPartialAlbatross.msl", 5142, 0, 181),  # GuardSetOff shield-hit path stays exact.
+        ("MotionlessAggressiveJay.slpz", 734, 1, 178),  # GuardOn stays no-hit.
+        ("PriceyPartialAlbatross.slpz", 5142, 0, 181),  # GuardSetOff shield-hit path stays exact.
     ],
 )
 def test_guardon_frame_start_body_pose_does_not_broaden_adjacent_shield_rows(
@@ -3667,9 +3620,9 @@ def test_guardon_frame_start_body_pose_does_not_broaden_adjacent_shield_rows(
 ) -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent" / dataset_name
+    dataset_path = root / "replays/validation/aggregate_recent" / dataset_name
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, record)
     assert int(seed["action_id"][defender]) in (20, expected_action)
@@ -3691,16 +3644,16 @@ def test_marth_run_source_velocity_branch_keeps_body_pose_on_ipw_5292_hit_frame(
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    dataset_path = root / "replays/validation/marth/InternalPowerlessWallaby.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = 5292
     defender = 0
     for rec in (target_record - 1, target_record, target_record + 1):
-        assert int(samples.shape[0]) > rec, f"dataset too short: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short: record={rec}"
 
     target_seed = samples[target_record]["seed_t"]
     assert int(target_seed["action_id"][defender]) == 21  # Run

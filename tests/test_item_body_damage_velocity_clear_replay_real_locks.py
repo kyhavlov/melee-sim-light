@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
@@ -16,11 +17,11 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = (
             np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8)
@@ -63,7 +64,7 @@ class _Case:
     note: str
 
 
-_BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE = "replays/validation/cardinal_1.0_recent"
 
 
 @pytest.mark.integration
@@ -71,7 +72,7 @@ _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
     "case",
     [
         _Case(
-            dataset_rel=f"{_BASE}/QuerulousGrandDinosaur.msl",
+            dataset_rel=f"{_BASE}/QuerulousGrandDinosaur.slpz",
             p=1,
             target_record=10113,
             prev_record=10112,
@@ -83,7 +84,7 @@ _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
             note="item BODY hit clears carried self X on SpecialAirHi -> DamageAir1 entry",
         ),
         _Case(
-            dataset_rel=f"{_BASE}/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel=f"{_BASE}/AttachedGoodNaturedGuanaco.slpz",
             p=0,
             target_record=429,
             prev_record=428,
@@ -106,11 +107,11 @@ def test_item_body_hit_damage_entry_velocity_clear_targets_pm1_and_negative(case
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
-    target = ds.samples[case.target_record]
+    target = ds.rows[case.target_record]
     p = case.p
     assert int(target["seed_t"]["action_id"][p]) == case.seed_action, case.note
     assert int(target["ref_t1"]["action_id"][p]) == case.ref_action, case.note
@@ -119,20 +120,20 @@ def test_item_body_hit_damage_entry_velocity_clear_targets_pm1_and_negative(case
     assert abs(float(out["speed_air_x_self"][p]) - float(ref["speed_air_x_self"][p])) <= 1e-6, case.note
     assert abs(float(out["speed_y_self"][p]) - float(ref["speed_y_self"][p])) <= 1e-6, case.note
 
-    prev = ds.samples[case.prev_record]
+    prev = ds.rows[case.prev_record]
     assert int(prev["seed_t"]["action_id"][p]) == case.seed_action, case.note
     out_prev, ref_prev = _step_one_row(dataset_path, case.prev_record)
     assert int(out_prev["action_id"][p]) == int(ref_prev["action_id"][p]), case.note
     assert int(out_prev["on_ground"][p]) == int(ref_prev["on_ground"][p]), case.note
 
-    nxt = ds.samples[case.next_record]
+    nxt = ds.rows[case.next_record]
     assert int(nxt["seed_t"]["action_id"][p]) == case.ref_action, case.note
     out_next, ref_next = _step_one_row(dataset_path, case.next_record)
     assert int(out_next["action_id"][p]) == int(ref_next["action_id"][p]), case.note
     assert abs(float(out_next["speed_air_x_self"][p]) - float(ref_next["speed_air_x_self"][p])) <= 1e-6, case.note
     assert abs(float(out_next["speed_y_self"][p]) - float(ref_next["speed_y_self"][p])) <= 1e-6, case.note
 
-    negative = ds.samples[case.negative_record]
+    negative = ds.rows[case.negative_record]
     assert int(negative["seed_t"]["action_id"][p]) == case.negative_action, case.note
     assert int(negative["ref_t1"]["action_id"][p]) == case.negative_action, case.note
     out_neg, ref_neg = _step_one_row(dataset_path, case.negative_record)

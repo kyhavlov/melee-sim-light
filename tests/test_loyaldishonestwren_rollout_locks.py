@@ -6,12 +6,13 @@ from typing import Callable
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 DATASET_REL = (
-    "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-    "LoyalDishonestWren.msl"
+    "replays/validation/battlefield_recent/"
+    "LoyalDishonestWren.slpz"
 )
 
 ACT_CATCH = 0x00D4
@@ -48,8 +49,8 @@ def _dataset():
     _skip_if_required_artifacts_missing(root)
     path = root / DATASET_REL
     if not path.exists():
-        pytest.skip(f"missing local dataset: {DATASET_REL}")
-    return read_dataset(str(path))
+        pytest.skip(f"missing local replay: {DATASET_REL}")
+    return load_replay_buffers(str(path))
 
 
 def _binding_sizes():
@@ -66,7 +67,7 @@ def _run_one_step(
     input_mutator: Callable | None = None,
 ) -> np.void:
     binding, seed_stride, input_stride, compare_stride = _binding_sizes()
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     if seed_mutator is not None:
         seed_mutator(row["seed_t"])
     if input_mutator is not None:
@@ -75,7 +76,7 @@ def _run_one_step(
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -94,11 +95,11 @@ def _run_one_step(
 
 def _run_rollout(ds, start_record: int, target_record: int) -> np.void:
     binding, seed_stride, input_stride, compare_stride = _binding_sizes()
-    samples = ds.samples
+    samples = ds.rows
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -127,11 +128,11 @@ def _run_rollout(ds, start_record: int, target_record: int) -> np.void:
 def test_damagefly_hitlag_exit_floor_contact_uses_live_lr_lane_owner_ldw_1330() -> None:
     ds = _dataset()
     p = 0
-    ref = ds.samples[1330]["ref_t1"]
+    ref = ds.rows[1330]["ref_t1"]
 
     out = _run_one_step(ds, 1330)
-    assert int(ds.samples[1330]["seed_t"]["action_id"][p]) == ACT_DAMAGE_FLY_N
-    assert int(ds.samples[1330]["seed_t"]["hitlag"][p]) == 1
+    assert int(ds.rows[1330]["seed_t"]["action_id"][p]) == ACT_DAMAGE_FLY_N
+    assert int(ds.rows[1330]["seed_t"]["hitlag"][p]) == 1
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DOWN_BOUND_U
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
 
@@ -166,11 +167,11 @@ def test_damagefly_hitlag_exit_floor_contact_uses_live_lr_lane_owner_ldw_1330() 
 def test_damageflytop_downbound_floor_loss_publishes_callback_substep_x_ldw_2556() -> None:
     ds = _dataset()
     p = 0
-    ref = ds.samples[2556]["ref_t1"]
+    ref = ds.rows[2556]["ref_t1"]
 
     out = _run_one_step(ds, 2556)
-    assert int(ds.samples[2556]["seed_t"]["action_id"][p]) == ACT_DOWN_BOUND_U
-    assert int(ds.samples[2556]["seed_t"]["seed_prev_action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(ds.rows[2556]["seed_t"]["action_id"][p]) == ACT_DOWN_BOUND_U
+    assert int(ds.rows[2556]["seed_t"]["seed_prev_action_id"][p]) == ACT_DAMAGE_FLY_TOP
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_FALL
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
 
@@ -188,10 +189,10 @@ def test_damageflytop_downbound_floor_loss_publishes_callback_substep_x_ldw_2556
 def test_catch_entry_preserves_source_kb_velocity_lane_ldw_2915() -> None:
     ds = _dataset()
     p = 0
-    ref = ds.samples[2915]["ref_t1"]
+    ref = ds.rows[2915]["ref_t1"]
 
     out = _run_one_step(ds, 2915)
-    assert int(ds.samples[2915]["seed_t"]["action_id"][p]) == 0x00B2  # GuardOn
+    assert int(ds.rows[2915]["seed_t"]["action_id"][p]) == 0x00B2  # GuardOn
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_CATCH
     assert float(out["speed_x_attack"][p]) == pytest.approx(float(ref["speed_x_attack"][p]))
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
@@ -209,7 +210,7 @@ def test_catch_entry_preserves_source_kb_velocity_lane_ldw_2915() -> None:
 def test_damagefly_473cc_uses_callback_entry_last_pos_ldw_3075() -> None:
     ds = _dataset()
     p = 0
-    ref = ds.samples[3075]["ref_t1"]
+    ref = ds.rows[3075]["ref_t1"]
 
     out = _run_rollout(ds, 2952, 3075)
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_N
@@ -222,7 +223,7 @@ def test_damagefly_473cc_uses_callback_entry_last_pos_ldw_3075() -> None:
 def test_jump_escapeair_uses_frame_start_mpcollprev_for_landing_ldw_3710() -> None:
     ds = _dataset()
     p = 0
-    ref = ds.samples[3710]["ref_t1"]
+    ref = ds.rows[3710]["ref_t1"]
 
     direct = _run_one_step(ds, 3710)
     assert int(direct["action_id"][p]) == ACT_ESCAPE_AIR
@@ -238,7 +239,7 @@ def test_jump_escapeair_uses_frame_start_mpcollprev_for_landing_ldw_3710() -> No
 def test_ldw_rollout_prefix_reaches_final_damageflytop_boundary_cleanly() -> None:
     ds = _dataset()
     p = 0
-    ref = ds.samples[3095]["ref_t1"]
+    ref = ds.rows[3095]["ref_t1"]
 
     out = _run_rollout(ds, 0, 3095)
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP

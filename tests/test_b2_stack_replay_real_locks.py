@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _root() -> Path:
@@ -16,15 +16,15 @@ def _dataset(path: str) -> Path:
     root = _root()
     ds_path = root / path
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {path}")
+        pytest.skip(f"missing local replay: {path}")
     return ds_path
 
 
 def _rows(ds_path: Path, rows: list[int]):
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     for rec in rows:
-        assert int(ds.samples.shape[0]) > rec, f"dataset too short for row {rec}"
-    return ds.samples
+        assert int(ds.rows.shape[0]) > rec, f"replay too short for row {rec}"
+    return ds.rows
 
 
 @pytest.mark.integration
@@ -37,8 +37,8 @@ def test_dash_catchdash_iasa_qgd_replay_real_lock() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D8A38,ftCo_800D8C54}
     ds_path = _dataset(
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     samples = _rows(ds_path, [5356, 5357, 5358, 5359])
     p = 0
@@ -71,8 +71,8 @@ def test_attackdash_shine_qgd_replay_real_lock() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
     ds_path = _dataset(
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     samples = _rows(ds_path, [9596, 9598, 9599, 9600])
     p = 0
@@ -113,8 +113,8 @@ def test_escapeair_jump_floor_handoff_agg_replay_real_lock() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{ftCo_80099A58,ftCo_EscapeAir_Coll}
     # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
     ds_path = _dataset(
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     samples = _rows(ds_path, [2575, 2576, 2577, 2578])
     p = 0
@@ -143,8 +143,8 @@ def test_passivewalljump_specialairs_qgd_replay_real_lock() -> None:
     #   inlineA0,ftCo_PassiveWall_Anim,ftCo_PassiveWall_IASA}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
     ds_path = _dataset(
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     samples = _rows(ds_path, [9259, 9260, 9261, 9262])
     p = 0

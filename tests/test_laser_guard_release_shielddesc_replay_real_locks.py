@@ -5,10 +5,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_DSG = Path("datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl")
+_DSG = Path("replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz")
 
 
 def _run_one_step(binding: object, row: np.ndarray, *, num_players: int) -> np.void:
@@ -83,11 +84,11 @@ def test_wait_shield_entry_laser_contact_uses_live_shielddesc() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _DSG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_DSG}")
+        pytest.skip(f"missing local replay: {_DSG}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[10535:10536]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[10535:10536]
     defender = 0
     slot = 0
 
@@ -96,7 +97,7 @@ def test_wait_shield_entry_laser_contact_uses_live_shielddesc() -> None:
     assert int(row["ref_t1"]["action_id"][0, defender]) == 181  # GuardSetOff
     assert int(row["ref_t1"]["items"][0, slot]["exists"]) == 0
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     for field in ("action_id", "animation_index", "action_frame", "hitlag", "state_flags"):
         np.testing.assert_array_equal(out[field][defender], row["ref_t1"][field][0, defender])
     assert float(out["shield_hp"][defender]) == pytest.approx(
@@ -113,11 +114,11 @@ def test_laser_before_wait_shield_entry_contact_stays_alive() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _DSG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_DSG}")
+        pytest.skip(f"missing local replay: {_DSG}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[10534:10535]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[10534:10535]
     defender = 0
     slot = 0
 
@@ -125,7 +126,7 @@ def test_laser_before_wait_shield_entry_contact_stays_alive() -> None:
     assert int(row["ref_t1"]["action_id"][0, defender]) == 14
     assert int(row["ref_t1"]["items"][0, slot]["exists"]) == 1
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     assert int(out["action_id"][defender]) == 14
     assert int(out["hitlag"][defender]) == 0
     assert int(out["items"][slot]["exists"]) == 1
@@ -137,15 +138,15 @@ def test_wait_shield_entry_laser_contact_rollout_lock() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _DSG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_DSG}")
+        pytest.skip(f"missing local replay: {_DSG}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     defender = 0
     slot = 0
 
-    out = _run_rollout_to_record(binding, samples, 10498, 10535, num_players=int(ds.header["num_players"]))
+    out = _run_rollout_to_record(binding, samples, 10498, 10535, num_players=int(ds.num_players))
     ref = samples[10535]["ref_t1"]
     assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 3

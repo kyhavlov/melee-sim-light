@@ -225,13 +225,13 @@ def main() -> int:
         "--left",
         required=True,
         type=Path,
-        help="left input JSON: engine_dump_rows.json or forensic_row_dump summary.json",
+        help="left input JSON: engine_dump_rows.json or compatible summary.json",
     )
     ap.add_argument(
         "--right",
         required=True,
         type=Path,
-        help="right input JSON: engine_dump_rows.json or forensic_row_dump summary.json",
+        help="right input JSON: engine_dump_rows.json or compatible summary.json",
     )
     ap.add_argument("--left-label", default="left")
     ap.add_argument("--right-label", default="right")

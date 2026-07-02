@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row, _skip_if_required_artifacts_missing
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -36,18 +36,18 @@ def test_ottotto_grounded_a_attack_rows_match_replay(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = int(case.record)
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
@@ -92,17 +92,17 @@ def test_ottotto_analog_shield_enters_guardon_without_endpoint_gate_feh() -> Non
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/"
-        "dream_land_recent/FlippantEnchantedHorse.msl"
+        "replays/validation/"
+        "dream_land_recent/FlippantEnchantedHorse.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 7441
     p = 0
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
     assert int(seed["action_id"][p]) == 245  # ftCo_MS_Ottotto
@@ -140,17 +140,17 @@ def test_ottotto_crouch_iasa_past_endpoint_enters_fall_feh_8688() -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/"
-        "dream_land_recent/FlippantEnchantedHorse.msl"
+        "replays/validation/"
+        "dream_land_recent/FlippantEnchantedHorse.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 8688
     p = 1
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
     assert int(seed["action_id"][p]) == 245  # ftCo_MS_Ottotto
@@ -192,15 +192,15 @@ def test_ottotto_crouch_iasa_entry_frame_nudge_enters_fall_wws_8411() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    dataset_rel = "replays/validation/marth/WellWornSmallGoshawk.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 8411
     p = 0
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
     assert int(seed["action_id"][p]) == 245  # ftCo_MS_Ottotto
@@ -243,15 +243,15 @@ def test_ottotto_crouch_iasa_carried_floor_sweep_stays_squat_wws_2145() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    dataset_rel = "replays/validation/marth/WellWornSmallGoshawk.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 2145
     p = 0
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
     assert int(seed["action_id"][p]) == 245  # ftCo_MS_Ottotto
@@ -285,15 +285,15 @@ def test_ottotto_crouch_iasa_carried_floor_sweep_stays_squat_wws_2145() -> None:
     ("dataset_rel", "record", "player", "expected_action"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "LawfulInsistentMeerkat.msl",
+            "replays/validation/yoshis_story_recent/"
+            "LawfulInsistentMeerkat.slpz",
             4822,
             1,
             39,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             3338,
             1,
             55,
@@ -311,7 +311,7 @@ def test_ottotto_crouch_endpoint_owner_does_not_affect_adjacent_controls(
 
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, player)
     assert int(seed["action_id"][player]) == 245  # ftCo_MS_Ottotto

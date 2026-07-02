@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -17,12 +18,12 @@ def test_landingfallspecial_keeps_ground_contact_one_step() -> None:
     # But sim previously dropped to airborne at t+1 (out.on_ground == 0).
     #
     # Representative records (seed==ref at t, ref stays grounded at t+1):
-    # - AttachedGoodNaturedGuanaco.msl record 438 p=1
-    # - GracefulAttachedTurtle.msl record 750 p=0
-    # - QuerulousGrandDinosaur.msl record 886 p=0
-    # - TreasuredBackKangaroo.msl record 356 p=0
+    # - AttachedGoodNaturedGuanaco.slpz record 438 p=1
+    # - GracefulAttachedTurtle.slpz record 750 p=0
+    # - QuerulousGrandDinosaur.slpz record 886 p=0
+    # - TreasuredBackKangaroo.slpz record 356 p=0
     root = Path(__file__).resolve().parents[1]
-    base = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+    base = "replays/validation/cardinal_1.0_recent"
 
     # Integration policy: skip if required ISO-derived data artifacts are missing locally.
     required = [
@@ -38,10 +39,10 @@ def test_landingfallspecial_keeps_ground_contact_one_step() -> None:
         pytest.skip(f"missing local data artifacts: {', '.join(missing)}")
 
     cases = [
-        (f"{base}/AttachedGoodNaturedGuanaco.msl", 438, 1),
-        (f"{base}/GracefulAttachedTurtle.msl", 750, 0),
-        (f"{base}/QuerulousGrandDinosaur.msl", 886, 0),
-        (f"{base}/TreasuredBackKangaroo.msl", 356, 0),
+        (f"{base}/AttachedGoodNaturedGuanaco.slpz", 438, 1),
+        (f"{base}/GracefulAttachedTurtle.slpz", 750, 0),
+        (f"{base}/QuerulousGrandDinosaur.slpz", 886, 0),
+        (f"{base}/TreasuredBackKangaroo.slpz", 356, 0),
     ]
 
     binding = importlib.import_module("msl_binding")
@@ -53,12 +54,12 @@ def test_landingfallspecial_keeps_ground_contact_one_step() -> None:
     for rel, record, p in cases:
         dataset_path = root / rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {rel}")
+            pytest.skip(f"missing local replay: {rel}")
 
-        ds = read_dataset(str(dataset_path))
-        samples = ds.samples
+        ds = load_replay_buffers(str(dataset_path))
+        samples = ds.rows
         num_records = int(samples.shape[0])
-        assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+        assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
         chunk_view = samples[record : record + 1]
         assert int(chunk_view.shape[0]) == 1
@@ -77,7 +78,7 @@ def test_landingfallspecial_keeps_ground_contact_one_step() -> None:
         assert int(chunk_view["ref_t1"]["hitlag"][0, p]) == 0
         assert int(chunk_view["ref_t1"]["hitstun"][0, p]) == 0
 
-        handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+        handle = binding.init(batch_size=1, num_players=int(ds.num_players))
         try:
             seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
             prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)

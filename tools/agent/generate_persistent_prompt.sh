@@ -214,9 +214,7 @@ Test hygiene rules (integration tests):
 - always destroy handles in finally
 
 Prohibited content in final diff:
-- Edits under tests/fixtures/guardrails/current_main/* (except when the task explicitly requests baseline refresh).
 - Baseline-fixture edits used to make preflight pass.
-- Edits to tests/fixtures/hard_row_lock_pack_seedref.json that are not tied to the final kept gameplay subset with explicit row-level/decomp justification.
 - C gameplay formulas that are replay-fit/approximation without decomp/data ownership (e.g., ad-hoc trigonometric mixes, unexplained epsilon nudges, fitted blend weights).
 - Runtime branches keyed on replay-snapshot ambiguity as shortcuts (e.g., no-submotion snapshot suppression, last_attack_landed fallback for gameplay ownership, seed-only carry suppression in src/*).
 - Unexpected cross-layer API/wrapper churn not required by the kept slice.
@@ -226,7 +224,7 @@ Required gates on final diff:
 - make test
 - make validate OUT=reports/validation/one_step_suite_eval.txt
 - make validate-rollout OUT=reports/validation/rollout_suite_eval.txt
-- make guardrail-preflight
+- uv run python -m tools.eval.validation_report_diff --before HEAD --after reports/validation --top 160
 - seed==ref new=0 for action_id/hitlag/hitstun/state_flags/instance_id/on_ground/ground_id
 - float top-key drift: pos_x new=0 gone=0, pos_y new=0 gone=0
 - mismatch.hitlag/hitstun non-increasing
@@ -235,9 +233,7 @@ Required gates on final diff:
 Diff hygiene:
 - Keep the final diff minimal and on-slice.
 - Do not keep unexpected files (e.g., wrapper/API/tooling not required by the slice) in the final diff; justify only if explicitly required by the kept slice.
-- Before returning final results, ensure disallowed paths have no staged/tracked edits:
-  - tests/fixtures/guardrails/current_main/*
-  - reports/triage/* (untracked artifacts are fine; never stage them)
+- Before returning final results, ensure reports/triage/* scratch artifacts are not staged.
 
 Return only when done, with:
 1) git diff --name-only

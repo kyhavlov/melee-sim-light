@@ -21,23 +21,24 @@ import pytest
 
 pytest.importorskip("msl_binding")
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset  # noqa: E402
+from tools.eval.validation_dtypes import COMPARE_DTYPE  # noqa: E402
+from tests.replay_buffers_loader import load_replay_buffers
 
-DATASET = Path("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+DATASET = Path("replays/validation/sheik/StiffLustrousZebra.slpz")
 DEMO_DATASET = Path(
-    "datasets/sheik_demo_triage/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+    "replays/validation/sheik/sheik_demo_game.slpz"
 )
 DEMO2_FULL_DATASET = Path(
-    "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+    "replays/validation/sheik/sheik_demo_game_2.slpz"
 )
-ZESTY_DATASET = Path("datasets/sheik/replays/validation/sheik/ZestyPreciousTurtle.msl")
-TENSE_DATASET = Path("datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl")
-RURAL_DATASET = Path("datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl")
+ZESTY_DATASET = Path("replays/validation/sheik/ZestyPreciousTurtle.slpz")
+TENSE_DATASET = Path("replays/validation/sheik/TenseSameHummingbird.slpz")
+RURAL_DATASET = Path("replays/validation/sheik/RuralReasonableRat.slpz")
 UNUSED_LIVELY_LOUSE_DATASET = Path(
-    "datasets/sheik/replays/validation/sheik/UnusedLivelyLouse.msl"
+    "replays/validation/sheik/UnusedLivelyLouse.slpz"
 )
 ATTRACTIVE_ANY_CLAM_DATASET = Path(
-    "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl"
+    "replays/validation/sheik/AttractiveAnyClam.slpz"
 )
 P_MARTH = 1
 ITEM_NEEDLE_THROWN = 79
@@ -46,7 +47,7 @@ ITEM_NEEDLE_HELD = 80
 
 def _require_dataset(dataset: Path = DATASET) -> None:
     if not dataset.exists():
-        pytest.skip(f"missing generated dataset {dataset}")
+        pytest.skip(f"missing generated replay {dataset}")
 
 
 def _run_row(
@@ -61,8 +62,8 @@ def _run_row(
     import msl_binding
 
     _require_dataset(dataset)
-    ds = read_dataset(str(dataset))
-    row = ds.samples[record : record + 1].copy()
+    ds = load_replay_buffers(str(dataset))
+    row = ds.rows[record : record + 1].copy()
     if mutate_item0_type is not None:
         row["seed_t"]["items"]["type"][0, 0] = np.uint16(mutate_item0_type)
     if mutate_item0_damage is not None:
@@ -101,7 +102,7 @@ def _run_rollout_records(
     import msl_binding
 
     _require_dataset(dataset)
-    ds = read_dataset(str(dataset))
+    ds = load_replay_buffers(str(dataset))
 
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -116,14 +117,14 @@ def _run_rollout_records(
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:
         seed_bytes = (
-            ds.samples[start_record : start_record + 1]["seed_t"]
+            ds.rows[start_record : start_record + 1]["seed_t"]
             .view(np.uint8)
             .reshape((1, seed_stride))
             .copy()
         )
         msl_binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, max_record + 1):
-            row = ds.samples[record : record + 1]
+            row = ds.rows[record : record + 1]
             frame_seed_bytes = row["seed_t"].view(np.uint8).reshape((1, seed_stride)).copy()
             prev_input_bytes = row["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy()
             input_bytes = row["input_t"].view(np.uint8).reshape((1, input_stride)).copy()
@@ -136,7 +137,7 @@ def _run_rollout_records(
     finally:
         msl_binding.destroy(handle)
 
-    return ds.samples, out
+    return ds.rows, out
 
 
 @pytest.mark.integration
@@ -260,7 +261,7 @@ def test_sheik_thrown_needle_fresh_attackdash_guardon_shielddesc_uses_model_scal
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0}
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
-    dataset = Path("datasets/sheik/replays/validation/sheik/BeautifulDistantWolverine.msl")
+    dataset = Path("replays/validation/sheik/BeautifulDistantWolverine.slpz")
     seed, ref, out = _run_row(3510, dataset=dataset)
     defender = 0
 

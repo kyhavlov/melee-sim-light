@@ -6,16 +6,17 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_one_step_action_and_anim(
     *, dataset_path: Path, record: int, player: int, expected_action_id: int, expected_anim_index: int
 ) -> None:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     view = samples[record : record + 1]
     assert int(view.shape[0]) == 1
@@ -26,7 +27,7 @@ def _run_one_step_action_and_anim(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -61,15 +62,15 @@ def _run_one_step_action_and_anim(
 def test_locomotion_parity_cluster1_walk_type_update_not_too_aggressive() -> None:
     # Cluster 1 representative:
     # - seed/ref = WalkSlow (15) but previous sim out = WalkMiddle (16)
-    # datasets/.../AttachedGoodNaturedGuanaco.msl record 1150 p=1
+    # replays/.../AttachedGoodNaturedGuanaco.slpz record 1150 p=1
     root = Path(__file__).resolve().parents[1]
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
 
     _run_one_step_action_and_anim(
         dataset_path=dataset_path,
@@ -84,15 +85,15 @@ def test_locomotion_parity_cluster1_walk_type_update_not_too_aggressive() -> Non
 def test_locomotion_parity_cluster2_turn_does_not_misfire_into_dash() -> None:
     # Cluster 2 representative:
     # - seed/ref = Turn (18) but previous sim out = Dash (20)
-    # datasets/.../GracefulAttachedTurtle.msl record 309 p=0
+    # replays/.../GracefulAttachedTurtle.slpz record 309 p=0
     root = Path(__file__).resolve().parents[1]
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
 
     _run_one_step_action_and_anim(
         dataset_path=dataset_path,
@@ -107,15 +108,15 @@ def test_locomotion_parity_cluster2_turn_does_not_misfire_into_dash() -> None:
 def test_locomotion_parity_cluster3_run_does_not_misfire_into_runbrake() -> None:
     # Cluster 3 representative:
     # - seed/ref = Run (21) but previous sim out = RunBrake (23)
-    # datasets/.../TreasuredBackKangaroo.msl record 7369 p=0
+    # replays/.../TreasuredBackKangaroo.slpz record 7369 p=0
     root = Path(__file__).resolve().parents[1]
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
 
     _run_one_step_action_and_anim(
         dataset_path=dataset_path,
@@ -132,15 +133,15 @@ def test_locomotion_parity_turn_to_dash_latch_on_turn_complete() -> None:
     #
     # Representative of the suite regression introduced by an earlier "same-frame only" model:
     # - seed = Turn (18), ref = Dash (20), previous sim out stayed Turn.
-    # datasets/.../AttachedGoodNaturedGuanaco.msl record 258 p=1
+    # replays/.../AttachedGoodNaturedGuanaco.slpz record 258 p=1
     root = Path(__file__).resolve().parents[1]
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
 
     _run_one_step_action_and_anim(
         dataset_path=dataset_path,
@@ -156,26 +157,26 @@ def test_locomotion_parity_turn_to_dash_latch_on_turn_complete() -> None:
     ("rel", "record", "player"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             99,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             97,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             97,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             311,
             1,
         ),
@@ -203,7 +204,7 @@ def test_locomotion_parity_dash_to_run_on_cmdvar0_enable_frame(rel: str, record:
 
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
 
     _run_one_step_action_and_anim(
         dataset_path=dataset_path,
@@ -219,26 +220,26 @@ def test_locomotion_parity_dash_to_run_on_cmdvar0_enable_frame(rel: str, record:
     ("rel", "record", "player"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             3086,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             641,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             1786,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             859,
             0,
         ),
@@ -256,7 +257,7 @@ def test_locomotion_parity_runbrake_iasa_enters_squat_on_down_hold(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
 
     _run_one_step_action_and_anim(
         dataset_path=dataset_path,

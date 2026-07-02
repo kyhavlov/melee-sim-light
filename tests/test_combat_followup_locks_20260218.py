@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -46,9 +47,9 @@ def _scalar_out(row_obj: np.ndarray, *, p: int, field: str) -> int:
 
 
 def _run_one_step_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
@@ -67,7 +68,7 @@ def _run_one_step_row(dataset_path: Path, record: int) -> tuple[np.void, np.void
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -85,38 +86,38 @@ def _run_one_step_row(dataset_path: Path, record: int) -> tuple[np.void, np.void
     [
         # Commit 2a3719d representative rows (KB lane ownership: int HitCapsule damage for KB path).
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             6342,
             1,
             ("action_id", "hitlag", "hitstun", "state_flags[1]", "state_flags[3]"),
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             10080,
             0,
             ("action_id", "hitlag", "hitstun", "state_flags[1]", "state_flags[3]"),
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             1283,
             1,
             ("action_id", "hitlag", "hitstun", "state_flags[1]", "state_flags[3]"),
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             5349,
             0,
             ("action_id", "hitlag", "hitstun", "state_flags[1]", "state_flags[3]"),
         ),
         # Commit 0cda0f9 representative rows (guard no-submotion body lane restore).
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             1616,
             0,
             ("action_id", "hitlag", "state_flags[1]"),
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             1616,
             1,
             ("action_id", "hitlag", "hitstun", "state_flags[1]", "state_flags[2]", "state_flags[3]"),
@@ -130,7 +131,7 @@ def test_followup_lock_rows_targeted_fields_match_ref(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record)
 
@@ -150,11 +151,11 @@ def test_followup_context_control_adjacent_rows_kb_lane() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 1
     # Pre-entry neighbor: stays neutral/unchanged.
@@ -180,11 +181,11 @@ def test_followup_context_control_adjacent_rows_guard_nosubmotion_lane() -> None
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 1
     # Pre-transition neighbor: remains in prior state with neutral damage lanes.
@@ -210,11 +211,11 @@ def test_followup_lock_row_guard_reflect_snapshot_exit_gat_6315_p0() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 6315
     p = 0
@@ -249,11 +250,11 @@ def test_followup_context_control_adjacent_guard_reflect_snapshot_gat_6314_p0() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 6314
     p = 0

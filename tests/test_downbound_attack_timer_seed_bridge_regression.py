@@ -9,7 +9,8 @@ import pytest
 from tests.test_combat_ownership_seed_guardrail_locks import (
     _assert_transition_lock_fields_match_ref,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 ACT_DOWN_BOUND_D = 191
 ACT_DOWN_ATTACK_D = 195
@@ -19,22 +20,22 @@ BUTTON_A = 0x0100
 
 _CASES: tuple[tuple[str, int, int], ...] = (
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+        "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
         2121,
         0,
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
         5847,
         0,
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
         10510,
         1,
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+        "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
         1830,
         0,
     ),
@@ -59,15 +60,15 @@ def test_downbound_attack_timer_seed_bridge_target_pm1_lock(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     lo = target_record - 1
     hi = target_record + 2
     assert lo >= 0
     assert int(samples.shape[0]) > hi - 1, (
-        f"dataset too short for lock row: record={target_record} num_records={int(samples.shape[0])}"
+        f"replay too short for lock row: record={target_record} num_records={int(samples.shape[0])}"
     )
     chunk = samples[lo:hi]
     assert int(chunk.shape[0]) == 3
@@ -77,7 +78,7 @@ def test_downbound_attack_timer_seed_bridge_target_pm1_lock(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=3, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=3, num_players=int(ds.num_players))
     try:
         seed_bytes = (
             np.frombuffer(chunk["seed_t"].tobytes(order="C"), dtype=np.uint8)
@@ -128,13 +129,13 @@ def test_downbound_pre_input_a_timer_beats_same_frame_roll_doubles_lock() -> Non
     binding = importlib.import_module("msl_binding")
 
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    dataset_rel = "replays/validation/doubles_recent/Game_20260509T152622.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 6713
     p = 1
     row = samples[record]
@@ -163,7 +164,7 @@ def test_downbound_pre_input_a_timer_beats_same_frame_roll_doubles_lock() -> Non
     seed_rows[1]["x67C"][p] = np.uint8(0xFF)
     seed_rows[1]["x683"][p] = np.uint8(0xFF)
 
-    handle = binding.init(batch_size=2, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=2, num_players=int(ds.num_players))
     try:
         seed_bytes = (
             np.frombuffer(seed_rows.tobytes(order="C"), dtype=np.uint8).reshape(2, seed_stride).copy()

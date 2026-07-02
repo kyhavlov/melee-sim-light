@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -32,11 +32,11 @@ def _step_one_row(dataset_path: Path, record: int, p: int) -> tuple[np.void, np.
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = (
             np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8)
@@ -73,15 +73,14 @@ def _step_one_row_with_rollout_at_record(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for record={record}"
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -89,11 +88,11 @@ def _step_one_row_with_rollout_at_record(
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
 
-    one_step_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    one_step_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
-        prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
-        input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+        seed_bytes[0, :] = seed_u8[record, :seed_stride]
+        prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+        input_bytes[0, :] = input_u8[record, :input_stride]
         binding.reseed_seed(one_step_handle, seed_bytes)
         binding.step_input(one_step_handle, prev_input_bytes, input_bytes)
         binding.write_compare(one_step_handle, out_compare_bytes)
@@ -102,13 +101,13 @@ def _step_one_row_with_rollout_at_record(
         binding.destroy(one_step_handle)
 
     start = max(0, int(record) - int(window_before))
-    rollout_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    rollout_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[start, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start, :seed_stride]
         binding.reseed_seed(rollout_handle, seed_bytes)
         for j in range(start, int(record) + 1):
-            prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
-            input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[j, :input_stride]
+            input_bytes[0, :] = input_u8[j, :input_stride]
             binding.step_input(rollout_handle, prev_input_bytes, input_bytes)
             if j == int(record):
                 binding.write_compare(rollout_handle, out_compare_bytes)
@@ -122,19 +121,19 @@ def _step_one_row_with_rollout_at_record(
 
 
 def _run_rollout_samples_to_record(
-    samples: np.ndarray, *, num_players: int, start_record: int, target_record: int
+    ds, *, num_players: int, start_record: int, target_record: int
 ) -> tuple[np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
+    samples = ds.rows
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -148,13 +147,11 @@ def _run_rollout_samples_to_record(
         ucf_cardinals_1_0_enabled=True,
     )
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(int(start_record), int(target_record) + 1):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
         out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
@@ -169,48 +166,48 @@ def _run_rollout_samples_to_record(
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             304,
             0,
             69,  # AttackAirLw
             74,  # LandingAirLw
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             319,
             1,
             65,  # AttackAirN
             70,  # LandingAirN
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             295,
             0,
             68,  # AttackAirHi
             73,  # LandingAirHi
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             739,
             0,
             68,  # AttackAirHi
             42,  # Landing (auto-cancel)
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             563,
             0,
             67,  # AttackAirB
             72,  # LandingAirB
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             288,
             0,
             68,  # AttackAirHi
@@ -225,7 +222,7 @@ def test_attackair_landing_rows_keep_contact_y_parity(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record, p)
 
@@ -248,16 +245,16 @@ def test_attackair_landing_rows_keep_contact_y_parity(
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             7702,
             1,
             66,  # AttackAirF
             71,  # LandingAirF
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             1310,
             1,
             86,  # DamageAir3
@@ -272,7 +269,7 @@ def test_attackair_landing_context_controls_keep_local_family(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record, p)
 
@@ -289,48 +286,48 @@ def test_attackair_landing_context_controls_keep_local_family(
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             3188,
             0,
             345,  # SpecialAirNLoop
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             3498,
             1,
             345,  # SpecialAirNLoop
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             6178,
             0,
             345,  # SpecialAirNLoop
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             4570,
             1,
             345,  # SpecialAirNLoop
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             8218,
             0,
             25,  # JumpF
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             6360,
             0,
             26,  # JumpB
@@ -345,7 +342,7 @@ def test_landing_basic_rows_keep_contact_y_parity_for_jump_and_specialairn_famil
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record, p)
 
@@ -379,11 +376,11 @@ def test_specialairnloop_basic_landing_uses_current_floor_normal_pte() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     seed, out, ref = _step_one_row(dataset_path, 306, p)
@@ -399,11 +396,11 @@ def test_basic_landing_current_floor_normal_keeps_flat_floor_control_gat() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     seed, out, ref = _step_one_row(dataset_path, 8218, p)
@@ -429,13 +426,13 @@ def test_landingfallspecial_rollout_uses_single_mplib_floor_bias_selfplay_181413
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
+    samples = ds.rows
     p = 1
     seed_285 = samples[285]["seed_t"]
     ref_286 = samples[286]["ref_t1"]
@@ -446,7 +443,7 @@ def test_landingfallspecial_rollout_uses_single_mplib_floor_bias_selfplay_181413
     assert float(ref_286["pos_y"][p]) == pytest.approx(0.0001, abs=1e-8)
 
     out, ref = _run_rollout_samples_to_record(
-        samples, num_players=int(ds.header["num_players"]), start_record=0, target_record=286
+        ds, num_players=int(ds.num_players), start_record=0, target_record=286
     )
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 43
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
@@ -459,40 +456,40 @@ def test_landingfallspecial_rollout_uses_single_mplib_floor_bias_selfplay_181413
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             1334,
             1,
             28,  # JumpAerialB
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             3486,
             0,
             28,  # JumpAerialB
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             2350,
             1,
             28,  # JumpAerialB
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             3306,
             1,
             28,  # JumpAerialB
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             5074,
             1,
             28,  # JumpAerialB
@@ -507,7 +504,7 @@ def test_landing_basic_rows_keep_contact_y_parity_for_jumpaerialb_family(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record, p)
 
@@ -529,24 +526,24 @@ def test_landing_basic_rows_keep_contact_y_parity_for_jumpaerialb_family(
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             1161,
             0,
             66,  # AttackAirF
             71,  # LandingAirF
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             4974,
             1,
             66,  # AttackAirF
             71,  # LandingAirF
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             1966,
             0,
             66,  # AttackAirF
@@ -561,7 +558,7 @@ def test_landing_airf_rows_keep_contact_y_parity_runtime_family(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, record, p)
 
@@ -600,8 +597,8 @@ def test_landing_airf_rows_keep_contact_y_parity_runtime_family(
     ),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             385,
             0,
             66,  # AttackAirF (pre-landing frame)
@@ -612,8 +609,8 @@ def test_landing_airf_rows_keep_contact_y_parity_runtime_family(
             0.0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             387,
             0,
             71,  # LandingAirF (post-landing frame)
@@ -640,7 +637,7 @@ def test_landing_airf_runtime_context_controls_stay_replay_real(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, record, p)
 
@@ -664,8 +661,8 @@ def test_landing_airf_runtime_context_controls_stay_replay_real(
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             10477,
             1,
             86,  # DamageAir3
@@ -680,7 +677,7 @@ def test_landing_basic_contact_y_context_controls_remain_outside_source_owner_sc
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record, p)
 
@@ -698,11 +695,11 @@ def test_fall_same_floor_final_publication_waits_one_frame_then_lands_qgd() -> N
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        / "QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     seed_9530, out_9530, ref_9530 = _step_one_row(dataset_path, 9530, p)
@@ -731,8 +728,8 @@ def test_fall_same_floor_final_publication_waits_one_frame_then_lands_qgd() -> N
     ("dataset_rel", "record", "p", "stage_id", "ground_id", "note"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "BlondHardHippopotamus.msl",
+            "replays/validation/aggregate_recent/"
+            "BlondHardHippopotamus.slpz",
             5729,
             1,
             32,
@@ -740,8 +737,8 @@ def test_fall_same_floor_final_publication_waits_one_frame_then_lands_qgd() -> N
             "FD center hard floor publishes ordinary Fall landing immediately",
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "DistinctCaringCobra.msl",
+            "replays/validation/aggregate_recent/"
+            "DistinctCaringCobra.slpz",
             6438,
             0,
             32,
@@ -749,8 +746,8 @@ def test_fall_same_floor_final_publication_waits_one_frame_then_lands_qgd() -> N
             "FD ledge Fall action-entry landing publishes immediately",
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             7758,
             1,
             28,
@@ -766,7 +763,7 @@ def test_fall_same_floor_final_publication_adjacent_landing_negatives(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record, p)
 
@@ -785,32 +782,32 @@ def test_fall_same_floor_final_publication_adjacent_landing_negatives(
     ("dataset_rel", "record", "p", "expected_seed_rate", "expected_ref_frame"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "FavorableSuperficialPig.msl",
+            "replays/validation/aggregate_recent/"
+            "FavorableSuperficialPig.slpz",
             9898,
             1,
             3.01,
             3,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "TubbyCurlyHerring.msl",
+            "replays/validation/aggregate_recent/"
+            "TubbyCurlyHerring.slpz",
             6133,
             0,
             3.01,
             3,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "DistinctCaringCobra.msl",
+            "replays/validation/aggregate_recent/"
+            "DistinctCaringCobra.slpz",
             8773,
             1,
             1.6722223,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "FavorableSuperficialPig.msl",
+            "replays/validation/aggregate_recent/"
+            "FavorableSuperficialPig.slpz",
             1540,
             0,
             1.6722223,
@@ -825,7 +822,7 @@ def test_landing_fallspecial_origin_specific_frame_speed_replay_real_locks(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record, p)
 
@@ -860,8 +857,8 @@ def test_landing_fallspecial_origin_specific_frame_speed_replay_real_locks(
     ),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "HungryImportantSnake.msl",
+            "replays/validation/aggregate_recent/"
+            "HungryImportantSnake.slpz",
             577,
             1,
             35,  # FallSpecial stays airborne on the main floor at af3.
@@ -872,8 +869,8 @@ def test_landing_fallspecial_origin_specific_frame_speed_replay_real_locks(
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "PositiveRevolvingHyena.msl",
+            "replays/validation/aggregate_recent/"
+            "PositiveRevolvingHyena.slpz",
             4321,
             1,
             43,  # FallSpecial lands on the adjacent ledge/seam floor at af3.
@@ -900,7 +897,7 @@ def test_fallspecial_af3_floor_callback_keeps_source_seam_handoff_residual(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record, p)
 
@@ -927,32 +924,32 @@ def test_fallspecial_af3_floor_callback_keeps_source_seam_handoff_residual(
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             10216,
             0,
             27,  # JumpAerialF
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             1255,
             0,
             236,  # EscapeAir
             43,  # LandingFallSpecial
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             2378,
             0,
             236,  # EscapeAir
             43,  # LandingFallSpecial
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             5671,
             0,
             27,  # JumpAerialF
@@ -967,7 +964,7 @@ def test_landing_rows_keep_self_vel_x_synced_with_ground_velocity(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record, p)
 
@@ -990,48 +987,48 @@ def test_landing_rows_keep_self_vel_x_synced_with_ground_velocity(
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             75,
             0,
             29,  # Fall
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             80,
             1,
             29,  # Fall
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             75,
             0,
             29,  # Fall
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             80,
             1,
             29,  # Fall
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             4561,
             0,
             29,  # Fall
             42,  # Landing
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             6426,
             1,
             29,  # Fall
@@ -1046,7 +1043,7 @@ def test_landing_contact_y_source_runtime_rows_fall_to_landing_keep_pos_y_parity
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, record, p)
 
@@ -1084,8 +1081,8 @@ def test_landing_contact_y_source_runtime_rows_fall_to_landing_keep_pos_y_parity
     ),
     [
         pytest.param(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             9531,
             1,
             29,  # Fall
@@ -1118,7 +1115,7 @@ def test_landing_contact_y_source_runtime_controls_stay_reseed_sensitive(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, record, p)
 

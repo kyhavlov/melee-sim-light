@@ -10,7 +10,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -27,8 +27,8 @@ class _DashIasaTurnCase:
     [
         _DashIasaTurnCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PutridJoyousOryx.msl"
+                "replays/validation/aggregate_recent/"
+                "PutridJoyousOryx.slpz"
             ),
             record=4828,
             player=0,
@@ -36,8 +36,8 @@ class _DashIasaTurnCase:
         ),
         _DashIasaTurnCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "MotionlessAggressiveJay.msl"
+                "replays/validation/aggregate_recent/"
+                "MotionlessAggressiveJay.slpz"
             ),
             record=8290,
             player=1,
@@ -45,8 +45,8 @@ class _DashIasaTurnCase:
         ),
         _DashIasaTurnCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "BlondHardHippopotamus.msl"
+                "replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.slpz"
             ),
             record=4230,
             player=0,
@@ -68,11 +68,11 @@ def test_dash_iasa_turn_terminal_friction_target_pm1_lock(case: _DashIasaTurnCas
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    samples = read_dataset(str(dataset_path)).samples
+    samples = load_replay_buffers(str(dataset_path)).rows
     for rec in (case.record - 1, case.record, case.record + 1):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[case.record]
     seed = target["seed_t"]
@@ -104,14 +104,14 @@ def test_dash_iasa_guardreflect_terminal_friction_bhh_lock() -> None:
 
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+        / "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     record = 241
     p = 1
-    samples = read_dataset(str(dataset_path)).samples
+    samples = load_replay_buffers(str(dataset_path)).rows
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
     assert int(seed["action_id"][p]) == 20  # Dash
@@ -140,14 +140,14 @@ def test_dash_iasa_analog_guardon_terminal_friction_agn_lock() -> None:
 
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     record = 3177
     p = 1
-    samples = read_dataset(str(dataset_path)).samples
+    samples = load_replay_buffers(str(dataset_path)).rows
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
     assert int(seed["action_id"][p]) == 20  # Dash
@@ -177,14 +177,14 @@ def test_run_to_guardon_does_not_use_dash_iasa_terminal_scalar_agn_lock() -> Non
 
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     record = 111
     p = 1
-    samples = read_dataset(str(dataset_path)).samples
+    samples = load_replay_buffers(str(dataset_path)).rows
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
     assert int(seed["action_id"][p]) == 21  # Run
@@ -221,14 +221,14 @@ def test_dash_iasa_terminal_scalar_same_frame_reflect_transfer_mja_lock() -> Non
     _skip_if_required_artifacts_missing(root)
 
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        root / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     record = 6274
     p = 1
-    samples = read_dataset(str(dataset_path)).samples
+    samples = load_replay_buffers(str(dataset_path)).rows
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
     assert int(seed["action_id"][p]) == 20  # Dash
@@ -255,15 +255,15 @@ def test_dash_iasa_later_guardreflect_shield_hit_gat_negative_lock() -> None:
 
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     record = 847
     p = 0
-    samples = read_dataset(str(dataset_path)).samples
+    samples = load_replay_buffers(str(dataset_path)).rows
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
     assert int(seed["action_id"][p]) == 20  # Dash

@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 from tools.modelplay.sim_env import build_match_config_array
 
 
@@ -155,8 +156,8 @@ def _step_once(seed: np.ndarray, prev_inp: np.ndarray, inp: np.ndarray) -> np.nd
 def _step_replay_record(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
     import msl_binding
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -166,7 +167,7 @@ def _step_replay_record(dataset_path: Path, record: int) -> tuple[np.void, np.vo
     inp = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         msl_binding.reseed_seed(handle, seed)
         msl_binding.step_input(handle, prev_inp, inp)
@@ -324,9 +325,9 @@ def test_landing_air_lw_floor_span_loss_enters_fall_feh_2318() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
     # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-    dataset_path = Path("datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl")
+    dataset_path = Path("replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz")
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed_before, out_before, ref_before = _step_replay_record(dataset_path, 2317)
     assert int(seed_before["action_id"][1]) == ACT_LANDING_AIR_LW
@@ -334,7 +335,7 @@ def test_landing_air_lw_floor_span_loss_enters_fall_feh_2318() -> None:
     assert int(out_before["action_id"][1]) == int(ref_before["action_id"][1]) == ACT_LANDING_AIR_LW
     assert int(out_before["on_ground"][1]) == int(ref_before["on_ground"][1]) == 1
 
-    moving_path = Path("datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl")
+    moving_path = Path("replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz")
     if moving_path.exists():
         moving_seed, moving_out, moving_ref = _step_replay_record(moving_path, 5743)
         assert int(moving_seed["action_id"][0]) == ACT_LANDING_AIR_LW

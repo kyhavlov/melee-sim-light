@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE
 from tools.modelplay.sim_env import (
     CHAR_FALCO,
     CHAR_FOX,
@@ -359,7 +359,6 @@ def test_modelplay_sim_session_sim_init_reset_without_dataset(monkeypatch: pytes
     monkeypatch.setattr("tools.modelplay.sim_env.input_array_to_controllers", lambda input_arr: {})
     try:
         session = SimSession(
-            dataset_path=None,
             start_mode="sim-init",
             char_ids=(CHAR_FOX, CHAR_FALCO),
             facing=(1, 0),
@@ -433,7 +432,6 @@ def test_modelplay_sim_session_uses_processed_controllers_after_step(
 
     try:
         session = SimSession(
-            dataset_path=None,
             start_mode="sim-init",
             char_ids=(CHAR_FOX, CHAR_FALCO),
             facing=(1, 0),

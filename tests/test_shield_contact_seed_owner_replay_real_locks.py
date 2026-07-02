@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_row_bytes, replay_buffer_byte_views, replay_buffer_row_bytes
 from tests.test_combat_ownership_seed_guardrail_locks import (
     _DEBUG_SHIELD_CANDIDATE_DTYPE,
     _run_one_step_row,
@@ -23,23 +24,22 @@ def _run_rollout_window(
 ):
     import msl_binding
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    seed_off = "seed_t"
+    prev_off = "prev_input_t"
+    input_off = "input_t"
 
-    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
-        raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
-        return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+    def field_bytes(record: int, group: str, stride: int) -> np.ndarray:
+        return replay_buffer_row_bytes(ds, group, record, stride)
 
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=int(ucf_enabled),
         ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
     )
@@ -71,14 +71,14 @@ def _run_rollout_window_with_seed_mutator(
 ):
     import msl_binding
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    prev_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    prev_off = "prev_input_t"
+    input_off = "input_t"
 
     seed_t = samples[start : start + 1]["seed_t"].copy()
     seed_mutator(seed_t)
@@ -86,13 +86,12 @@ def _run_rollout_window_with_seed_mutator(
         1, seed_stride
     )
 
-    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
-        raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
-        return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+    def field_bytes(record: int, group: str, stride: int) -> np.ndarray:
+        return replay_buffer_row_bytes(ds, group, record, stride)
 
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=int(ucf_enabled),
         ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
     )
@@ -123,23 +122,22 @@ def _run_rollout_records_replay_frame_rng(
 ) -> dict[int, tuple[np.void, np.void]]:
     import msl_binding
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    seed_off = "seed_t"
+    prev_off = "prev_input_t"
+    input_off = "input_t"
 
-    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
-        raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
-        return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+    def field_bytes(record: int, group: str, stride: int) -> np.ndarray:
+        return replay_buffer_row_bytes(ds, group, record, stride)
 
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=int(ucf_enabled),
         ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
     )
@@ -174,22 +172,21 @@ def _debug_replay_frame_shield_candidates(
 ) -> np.ndarray:
     import msl_binding
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    seed_off = "seed_t"
+    prev_off = "prev_input_t"
+    input_off = "input_t"
 
-    def field_bytes(off: int, stride: int) -> np.ndarray:
-        raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
-        return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+    def field_bytes(group: str, stride: int) -> np.ndarray:
+        return replay_buffer_row_bytes(ds, group, record, stride)
 
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=int(ucf_enabled),
         ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
     )
@@ -223,11 +220,11 @@ def test_guardreflect_final_x14_live_x18_blocks_early_attackairn_setoff_182447()
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "Game_20260515T182447_frozenps.msl"
+        / "replays/validation/aggregate_recent/"
+        "Game_20260515T182447_frozenps.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     ref, out = _run_rollout_window(
@@ -251,11 +248,11 @@ def test_guardreflect_final_x14_live_x18_next_callback_allows_attackairn_setoff_
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "Game_20260515T182447_frozenps.msl"
+        / "replays/validation/aggregate_recent/"
+        "Game_20260515T182447_frozenps.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     ref, out = _run_rollout_window(
@@ -273,8 +270,8 @@ def test_guardreflect_final_x14_live_x18_next_callback_allows_attackairn_setoff_
 def _run_one_step_row_with_mutators(dataset_path: Path, record: int, seed_mutator, input_mutator):
     import msl_binding
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -299,7 +296,7 @@ def _run_one_step_row_with_mutators(dataset_path: Path, record: int, seed_mutato
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         msl_binding.reseed_seed(handle, seed_bytes)
         msl_binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -319,10 +316,10 @@ def test_guard_shielddesc_seed_accepts_replay_proven_guardsetoff_contact() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
@@ -350,9 +347,9 @@ def test_specialhi_frozen_guard_dense_seed_does_not_suppress_live_shield_hit_dhh
     # data/motion_state/owners/marth.bin (MSLMSO01 SPECIALHI class on ftMs_SpecialAirHi)
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/DraftyHealthyHare.msl"
+    dataset_path = root / "replays/validation/marth/DraftyHealthyHare.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
@@ -399,10 +396,10 @@ def test_guard_shielddesc_seed_rejects_replay_proven_body_damage_contact() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
@@ -430,10 +427,10 @@ def test_guard_shielddesc_miss_preserves_current_hitcapsule_victim_latch_cheery(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
@@ -462,10 +459,10 @@ def test_guard_shielddesc_miss_without_victim_latch_can_fall_through_to_body() -
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
@@ -500,9 +497,9 @@ def test_attackairn_guard_release_shield_hitcapsule_latch_suppresses_body_rws() 
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    dataset_path = root / "replays/validation/marth/RipeWealthySeahorse.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
@@ -563,10 +560,10 @@ def test_guard_tilt_shielddesc_miss_uses_live_hurtcap_pose_cheery() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
@@ -612,10 +609,10 @@ def test_guard_shielddesc_runtime_pose_accepts_prh_rollout_contact() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     ref, out = _run_rollout_window(dataset_path, 11336, 11352)
@@ -639,11 +636,11 @@ def test_guardreflect_reflectdesc_can_transfer_laser_without_live_shielddesc_gat
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     ref, out = _run_rollout_window(dataset_path, 4706, 4829)
@@ -674,11 +671,11 @@ def test_guard_illusion_shielddesc_uses_current_root_x_hvg() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     ref, out = _run_rollout_window(dataset_path, 771, 894, ucf_enabled=True)
@@ -703,15 +700,15 @@ def test_guardsetoff_hitlag_reseed_carries_replay_proven_shield_hitlist() -> Non
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 1
     defender = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][10269]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][10269]
     assert int(seed["action_id"][attacker]) == 65  # AttackAirF.
     assert int(seed["action_id"][defender]) == 181  # GuardSetOff.
     assert int(seed["hitlag"][attacker]) == int(seed["hitlag"][defender]) == 2
@@ -756,18 +753,18 @@ def test_guardon_lightshield_latch_rejects_fsp_shine_rollout_contact() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][3874]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][3874]
     assert int(seed["action_id"][defender]) == 178  # GuardOn.
     assert float(seed["lightshield_amount"][defender]) == pytest.approx(1.0)
-    assert int(ds.samples["ref_t1"][3875]["action_id"][attacker]) == 365  # Shine start.
+    assert int(ds.rows["ref_t1"][3875]["action_id"][attacker]) == 365  # Shine start.
 
     ref, out = _run_rollout_window(
         dataset_path,
@@ -795,10 +792,10 @@ def test_guardon_lightshield_latch_boundary_requires_latched_amount() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
 
@@ -836,20 +833,20 @@ def test_attackairf_dense_hitlist_rollout_suppresses_guardon_reentry_hvg() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start = 7959
     target = 7970
     attacker = 1
     defender = 0
-    assert int(ds.samples["seed_t"][start]["action_id"][attacker]) == 24  # KneeBend
-    assert int(ds.samples["seed_t"][start]["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
-    assert int(ds.samples["seed_t"][start]["combat_hitlist_victim_iid"][attacker, 0, defender]) != int(
-        ds.samples["seed_t"][target]["instance_id"][defender]
+    assert int(ds.rows["seed_t"][start]["action_id"][attacker]) == 24  # KneeBend
+    assert int(ds.rows["seed_t"][start]["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
+    assert int(ds.rows["seed_t"][start]["combat_hitlist_victim_iid"][attacker, 0, defender]) != int(
+        ds.rows["seed_t"][target]["instance_id"][defender]
     )
 
     ref, out = _run_rollout_window(dataset_path, start, target)
@@ -865,22 +862,22 @@ def test_attackairf_dense_hitlist_rollout_suppresses_guardon_reentry_hvg() -> No
     ("dataset_rel", "record", "attacker", "defender"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             4591,
             0,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             3069,
             1,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             3070,
             1,
             0,
@@ -904,7 +901,7 @@ def test_guardon_shielddesc_miss_preserves_dense_hitlist_body_suppression(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, defender)
     assert int(seed["action_id"][defender]) == 178  # GuardOn.
@@ -945,11 +942,11 @@ def test_late_attackairf_frozen_guard_shield_miss_clears_stale_dense_hitlist() -
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 7980
     attacker = 1
@@ -999,11 +996,11 @@ def test_hvg_full_rollout_attackairf_and_fall_floor_boundaries_raw_clean() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     got = _run_rollout_records_replay_frame_rng(
         dataset_path,
@@ -1051,11 +1048,11 @@ def test_hvg_fall_terminal_hard_floor_landing_controls(record: int) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _seed, ref, out = _run_one_step_row(dataset_path, record, 0)
     assert int(ref["action_id"][0]) == 42
@@ -1075,10 +1072,10 @@ def test_doubles_later_fall_terminal_hard_floor_lands(record: int, player: int) 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+        / "replays/validation/doubles_recent/Game_20260509T152622.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, player)
     assert int(seed["seed_prev_action_id"][player]) == 29
@@ -1097,11 +1094,11 @@ def test_hvg_fall_terminal_hard_floor_shallow_bottom_stays_airborne() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _seed, ref, out = _run_one_step_row(dataset_path, 8747, 0)
     assert int(ref["action_id"][0]) == 29  # Fall.
@@ -1124,17 +1121,17 @@ def test_attackairlw_dense_hitlist_rollout_allows_fresh_guardon_shield_hit_prh()
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start = 8342
     target = 8343
     attacker = 1
     defender = 0
-    seed = ds.samples["seed_t"][start]
+    seed = ds.rows["seed_t"][start]
     assert int(seed["action_id"][attacker]) == 69  # AttackAirLw.
     assert int(seed["action_id"][defender]) == 178  # GuardOn.
     assert int(seed["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
@@ -1170,20 +1167,20 @@ def test_attackairn_stale_dense_hitlist_open_residual_agn_new_hit_not_retained()
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start = 5167
     target = 5168
     attacker = 1
     defender = 0
-    assert int(ds.samples["seed_t"][start]["action_id"][attacker]) == 65  # AttackAirN
-    assert int(ds.samples["seed_t"][start]["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
-    assert int(ds.samples["seed_t"][start]["combat_hitlist_victim_iid"][attacker, 0, defender]) != int(
-        ds.samples["seed_t"][target]["instance_id"][defender]
+    assert int(ds.rows["seed_t"][start]["action_id"][attacker]) == 65  # AttackAirN
+    assert int(ds.rows["seed_t"][start]["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
+    assert int(ds.rows["seed_t"][start]["combat_hitlist_victim_iid"][attacker, 0, defender]) != int(
+        ds.rows["seed_t"][target]["instance_id"][defender]
     )
 
     ref, out = _run_rollout_window(dataset_path, start, target)
@@ -1206,10 +1203,10 @@ def test_guardreflect_shielddesc_runtime_pose_rejects_high_dair_body_rollout_con
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     ref, out = _run_rollout_window(dataset_path, 1483, 1510)
@@ -1234,10 +1231,10 @@ def test_locomotion_guardreflect_entry_keeps_shielddesc_for_same_frame_dair_cont
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     ref, out = _run_rollout_window(dataset_path, 2201, 2217)
@@ -1264,10 +1261,10 @@ def test_dash_guardreflect_entry_keeps_shielddesc_for_same_frame_attackairb_cont
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+        / "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
@@ -1302,11 +1299,11 @@ def test_landing_guardreflect_entry_keeps_shielddesc_for_same_frame_attackairhi_
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        / "AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
@@ -1340,10 +1337,10 @@ def test_stm_active_guardreflect_strong_attackairlw_extent_enters_guardsetoff() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+        root / "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     rows = _run_rollout_records_replay_frame_rng(
@@ -1376,10 +1373,10 @@ def test_stm_guardon_attacks4_x44_reject_does_not_depend_on_stale_tilt_lane() ->
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+        root / "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     rows = _run_rollout_records_replay_frame_rng(
@@ -1414,10 +1411,10 @@ def test_direct_guardreflect_guardon_pose_age_reaches_late_attackairn_contact_cd
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+        root / "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
@@ -1453,11 +1450,11 @@ def test_expired_guardreflect_persistent_attackairlw_size_lane_hits_qgd() -> Non
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        / "QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
@@ -1490,11 +1487,11 @@ def test_carried_guardreflect_powershield_window_blocks_early_attackairb_hitshie
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        / "QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
 
@@ -1536,16 +1533,16 @@ def test_opposite_facing_final_x18_attackairb_shielddesc_still_enters_setoff_dsg
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-        "DelayedSuperbGuanaco.msl"
+        / "replays/validation/battlefield_recent/"
+        "DelayedSuperbGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][3559]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][3559]
     assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
     assert int(seed["action_id"][defender]) == 182  # GuardReflect.
     assert int(seed["guard_reflect_timer_x14"][defender]) == 0
@@ -1580,17 +1577,17 @@ def test_guardon_origin_guardreflect_x18_expiry_blocks_strong_nair_then_allows_s
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "SweatyThisMallard.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        "SweatyThisMallard.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed_blocked = ds.samples["seed_t"][9288]
-    seed_accept = ds.samples["seed_t"][9289]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_blocked = ds.rows["seed_t"][9288]
+    seed_accept = ds.rows["seed_t"][9289]
     assert int(seed_blocked["action_id"][attacker]) == 65  # AttackAirN.
     assert int(seed_blocked["animation_index"][attacker]) == 68  # ftCo_SM_AttackAirN.
     assert int(seed_blocked["action_id"][defender]) == 182  # GuardReflect.
@@ -1640,11 +1637,11 @@ def test_attackairb_terminal_damageflytop_source_attribution_suppresses_qgd_rehi
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     ref, out = _run_rollout_window(
@@ -1668,11 +1665,11 @@ def test_attackairb_terminal_damageflytop_horizon_allows_dcc_fresh_full_hit() ->
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "DistinctCaringCobra.msl"
+        / "replays/validation/aggregate_recent/"
+        "DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     ref, out = _run_rollout_window(
@@ -1697,14 +1694,14 @@ def test_guardreflect_x221c_b2_suppresses_fighter_shield_damage_his_lock() -> No
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_80092F2C}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     attacker = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[2090]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[2090]["seed_t"]
     assert int(seed["action_id"][attacker]) == 63  # AttackAirF
     assert int(seed["action_id"][defender]) == 182  # GuardReflect
     assert int(seed["guard_reflect_timer_x14"][defender]) == 0
@@ -1735,15 +1732,15 @@ def test_guardreflect_x221c_b2_suppresses_fod_rollout_shield_damage_pte_lock() -
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][1642]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][1642]
     assert int(seed["action_id"][defender]) == 182  # GuardReflect.
     assert int(seed["guard_reflect_timer_x14"][defender]) == 0
     assert int(seed["guard_reflect_timer_x18"][defender]) == 2
@@ -1778,11 +1775,11 @@ def test_guardreflect_same_frame_entry_does_not_drain_until_next_source_anim_pte
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
 
@@ -1810,9 +1807,9 @@ def test_guardreflect_same_frame_entry_does_not_drain_until_next_source_anim_pte
 @pytest.mark.parametrize(
     ("dataset_name", "record", "defender", "expected_prev", "expected_owner"),
     [
-        ("GracefulAttachedTurtle.msl", 943, 0, 14, 1),  # Wait -> GuardOn.
-        ("AttachedGoodNaturedGuanaco.msl", 3127, 1, 18, 0),  # Turn -> GuardOn.
-        ("AttachedGoodNaturedGuanaco.msl", 428, 1, 21, 1),  # Run -> GuardOn.
+        ("GracefulAttachedTurtle.slpz", 943, 0, 14, 1),  # Wait -> GuardOn.
+        ("AttachedGoodNaturedGuanaco.slpz", 3127, 1, 18, 0),  # Turn -> GuardOn.
+        ("AttachedGoodNaturedGuanaco.slpz", 428, 1, 21, 1),  # Run -> GuardOn.
     ],
 )
 def test_guardon_spawn_frame_laser_reflect_owner_uses_entry_source(
@@ -1829,10 +1826,10 @@ def test_guardon_spawn_frame_laser_reflect_owner_uses_entry_source(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent" / dataset_name
+        root / "replays/validation/cardinal_1.0_recent" / dataset_name
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, defender)
 
@@ -1850,8 +1847,8 @@ def test_guardon_spawn_frame_laser_reflect_owner_uses_entry_source(
 @pytest.mark.parametrize(
     ("dataset_name", "record", "defender", "expected_prev"),
     [
-        ("GracefulAttachedTurtle.msl", 9412, 0, 178),  # steady GuardOn.
-        ("QuerulousGrandDinosaur.msl", 3060, 1, 63),  # AttackAir -> GuardOn.
+        ("GracefulAttachedTurtle.slpz", 9412, 0, 178),  # steady GuardOn.
+        ("QuerulousGrandDinosaur.slpz", 3060, 1, 63),  # AttackAir -> GuardOn.
     ],
 )
 def test_guardon_spawn_frame_laser_non_reflect_source_does_not_block_hitshield(
@@ -1865,10 +1862,10 @@ def test_guardon_spawn_frame_laser_non_reflect_source_does_not_block_hitshield(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent" / dataset_name
+        root / "replays/validation/cardinal_1.0_recent" / dataset_name
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, defender)
 
@@ -1895,10 +1892,10 @@ def test_guard_body_phantom_x189c_timer_survives_guardsetoff_rollout() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     seed, ref, out = _run_one_step_row(dataset_path, 6830, defender)
@@ -1911,8 +1908,8 @@ def test_guard_body_phantom_x189c_timer_survives_guardsetoff_rollout() -> None:
     assert float(out["percent"][defender]) == pytest.approx(float(seed["percent"][defender]))
     assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
 
-    ds = read_dataset(str(dataset_path))
-    hidden_seed = ds.samples[6831]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    hidden_seed = ds.rows[6831]["seed_t"]
     assert float(hidden_seed["phantom_damage_pending_x1898"][defender]) == pytest.approx(4.5)
     assert int(hidden_seed["phantom_damage_timer_x189c"][defender]) == 4
     assert int(hidden_seed["phantom_damage_source_port"][defender]) == 1
@@ -1938,10 +1935,10 @@ def test_attackairb_dense_hitlist_rollout_trim_allows_late_guard_contact_prh() -
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     ref, out = _run_rollout_window(dataset_path, 6822, 6830)
@@ -1969,13 +1966,13 @@ def test_attackairb_dense_hitlist_trim_preserves_authoritative_per_hitbox_seed()
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[6830:6831].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[6830:6831].copy()
     attacker = 1
     defender = 0
     victim_iid = int(row["seed_t"]["instance_id"][0, defender])
@@ -2000,7 +1997,7 @@ def test_attackairb_dense_hitlist_trim_preserves_authoritative_per_hitbox_seed()
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -2027,13 +2024,13 @@ def test_guard_body_phantom_live_pose_gap_does_not_cover_nonzero_tilt_body() -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[6830:6831].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[6830:6831].copy()
     defender = 0
     row["seed_t"]["guard_tilt_x4"][0, defender] = np.float32(1.0)
 
@@ -2048,7 +2045,7 @@ def test_guard_body_phantom_live_pose_gap_does_not_cover_nonzero_tilt_body() -> 
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -2079,10 +2076,10 @@ def test_guardon_entry_shielddesc_current_pose_accepts_iat_attackairlw_rollout_c
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     ref, out = _run_rollout_window(dataset_path, 3831, 3847)
@@ -2111,10 +2108,10 @@ def test_same_step_landing_guardon_does_not_overextend_shielddesc_iat_attackairn
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
@@ -2153,15 +2150,15 @@ def test_marth_guardon_no_submotion_body_pose_replaces_stale_escape_hurtcaps_wws
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/marth/WellWornSmallGoshawk.msl"
+        root / "replays/validation/marth/WellWornSmallGoshawk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][8444]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][8444]
     assert int(seed["action_id"][attacker]) == 65  # AttackAirN.
     assert int(seed["action_id"][defender]) == 178  # GuardOn.
     assert int(seed["action_frame"][defender]) < 0
@@ -2202,10 +2199,10 @@ def test_guardon_entry_shielddesc_current_pose_rejects_steady_guardon_negative()
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     seed, ref, out = _run_one_step_row(dataset_path, 11242, defender)
@@ -2232,10 +2229,10 @@ def test_guardon_no_submotion_persistent_attackairb_sweep_does_not_use_entry_siz
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
@@ -2265,15 +2262,15 @@ def test_continuing_guardon_strong_attackairb_create_edge_uses_shielddesc_size_t
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][5992]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][5992]
 
     assert int(seed["action_id"][defender]) == 178  # GuardOn.
     assert int(seed["seed_prev_action_id"][defender]) == 178
@@ -2305,16 +2302,16 @@ def test_continuing_guardon_low_tilt_strong_attackairb_create_edge_does_not_use_
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][3996]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][3996]
 
     assert int(seed["action_id"][defender]) == 178  # GuardOn.
     assert int(seed["seed_prev_action_id"][defender]) == 178
@@ -2348,16 +2345,16 @@ def test_pstadium_guardon_weak_attackairb_hb1_x44_rejects_tvr() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][7908]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][7908]
 
     assert int(seed["stage_id"]) == 3  # Pokemon Stadium.
     assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
@@ -2395,18 +2392,18 @@ def test_cliff_end_guardon_marker_does_not_stale_carry_to_later_guardon_shield_h
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HilariousVillainousGiraffe.msl"
+        / "replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     defender = 0
     attacker = 1
-    assert int(ds.samples[1185]["seed_t"]["action_id"][defender]) == 255  # CliffClimbQuick.
-    assert int(ds.samples[1486]["seed_t"]["action_id"][defender]) == 178  # GuardOn.
-    assert int(ds.samples[1486]["seed_t"]["seed_prev_action_id"][defender]) == 178
+    assert int(ds.rows[1185]["seed_t"]["action_id"][defender]) == 255  # CliffClimbQuick.
+    assert int(ds.rows[1486]["seed_t"]["action_id"][defender]) == 178  # GuardOn.
+    assert int(ds.rows[1486]["seed_t"]["seed_prev_action_id"][defender]) == 178
 
     got = _run_rollout_records_replay_frame_rng(
         dataset_path,
@@ -2445,10 +2442,10 @@ def test_guardon_fresh_hitcapsule_shielddesc_size_accepts_prh_attackairlw_rollou
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
@@ -2481,10 +2478,10 @@ def test_damageflyroll_first_active_sdi_does_not_shift_iat_guardon_x20_rollout()
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     victim = 0
     defender = 1
@@ -2520,10 +2517,10 @@ def test_continuing_guardon_x20_pose_accepts_dsg_attackairlw_rollout_contact() -
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl"
+        root / "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
@@ -2555,14 +2552,14 @@ def test_neutral_current_guardon_x20_accepts_strong_attackairlw_tsh_rollout_cont
     # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl"
+    dataset_path = root / "replays/validation/sheik/TenseSameHummingbird.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][8649]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][8649]
     assert int(seed["action_id"][defender]) == 178  # GuardOn.
     assert int(seed["seed_prev_action_id"][defender]) == 178
     assert int(seed["guard_x10"][defender]) != 0
@@ -2606,14 +2603,14 @@ def test_sheik_nair_guardon_x10_uses_live_prev_action_not_stale_seed_prev_gra() 
     # data/moves/sheik.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/GlaringRosyAlpaca.msl"
+    dataset_path = root / "replays/validation/sheik/GlaringRosyAlpaca.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][4400]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][4400]
     assert int(seed["action_id"][attacker]) == 65  # AttackAirN.
     assert int(seed["animation_index"][attacker]) == 68
     assert int(seed["action_id"][defender]) == 178  # GuardOn.
@@ -2666,14 +2663,14 @@ def test_sheik_bair_guardon_x10_payload_uses_shielddesc_size_ugl() -> None:
     # data/moves/sheik.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/UselessGlassLoris.msl"
+    dataset_path = root / "replays/validation/sheik/UselessGlassLoris.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][757]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][757]
     assert int(seed["char_id"][attacker]) == 7  # Sheik.
     assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
     assert int(seed["animation_index"][attacker]) == 70
@@ -2713,9 +2710,9 @@ def test_sheik_bair_guardon_x10_payload_uses_shielddesc_size_ugl() -> None:
     # The supplemental size lane is not a generic Sheik BAir shortcut: WRA:3486 has the same
     # no-submotion GuardOn x10 family, but the live strong outer hb3 is still outside the source
     # ShieldDesc packet and must remain GuardOn.
-    negative_path = root / "datasets/sheik/replays/validation/sheik/WavyRundownAardvark.msl"
+    negative_path = root / "replays/validation/sheik/WavyRundownAardvark.slpz"
     if not negative_path.exists():
-        pytest.skip(f"missing local dataset: {negative_path}")
+        pytest.skip(f"missing local replay: {negative_path}")
 
     neg_got = _run_rollout_records_replay_frame_rng(
         negative_path,
@@ -2747,15 +2744,15 @@ def test_continuing_guardon_x20_extent_keeps_tilted_doubles_miss() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+        root / "replays/validation/doubles_recent/Game_20260509T152622.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 3
     attacker = 2
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][335]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][335]
 
     assert int(seed["action_id"][defender]) == 178
     assert int(seed["seed_prev_action_id"][defender]) == 178
@@ -2795,15 +2792,15 @@ def test_neutral_current_guardon_x20_extent_rejects_stale_angled_x8_doubles_miss
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+        root / "replays/validation/doubles_recent/Game_20260509T152622.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     attacker = 3
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][8027]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][8027]
 
     assert int(seed["action_id"][defender]) == 178  # GuardOn.
     assert int(seed["seed_prev_action_id"][defender]) == 178
@@ -2840,10 +2837,10 @@ def test_guardon_fresh_hitcapsule_shielddesc_size_keeps_far_attackairlw_negative
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+        / "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     seed, ref, out = _run_one_step_row(dataset_path, 1136, defender)
@@ -2867,10 +2864,10 @@ def test_guard_shielddesc_runtime_pose_keeps_iat_body_negative() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     ref, out = _run_rollout_window(dataset_path, 3686, 3702)
@@ -2894,10 +2891,10 @@ def test_guard_shielddesc_runtime_pose_keeps_dcc_body_rollout_negative() -> None
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     ref, out = _run_rollout_window(dataset_path, 9072, 9094)
@@ -2922,11 +2919,11 @@ def test_guardsetoff_active_hitlag_sdi_applies_floor_tangent_displacement() -> N
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        / "FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/"
+        / "FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     seed, ref, out = _run_one_step_row(dataset_path, 5348, defender)
@@ -2953,11 +2950,11 @@ def test_guardsetoff_active_hitlag_sdi_high_damage_x670_carry_displaces() -> Non
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        / "FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/"
+        / "FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     seed, ref, out = _run_one_step_row(dataset_path, 5349, defender)
@@ -2985,11 +2982,11 @@ def test_guardsetoff_active_hitlag_sdi_last_active_tick_still_displaces_feh() ->
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        / "FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/"
+        / "FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     seed, ref, out = _run_one_step_row(dataset_path, 11427, defender)
@@ -3012,11 +3009,11 @@ def test_guardsetoff_active_hitlag_sdi_requires_x670_window() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        / "FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/"
+        / "FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     seed, ref, out = _run_one_step_row(dataset_path, 5347, defender)
@@ -3044,11 +3041,11 @@ def test_replay_rollout_attackairb_create_edge_uses_live_shield_contact_feh_5346
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        / "FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/"
+        / "FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     got = _run_rollout_records_replay_frame_rng(
         dataset_path,
@@ -3070,8 +3067,8 @@ def test_replay_rollout_attackairb_create_edge_uses_live_shield_contact_feh_5346
     )
     assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[5346:5347]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[5346:5347]
     assert all(
         int(row["seed_t"]["combat_shield_contact_hb_kind"][0, attacker, hb, defender]) == 2
         for hb in range(3)
@@ -3114,11 +3111,11 @@ def test_attackairb_guard_lower_bound_seed_keeps_hb0_when_inside_shield_radius_d
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        / "DistinctCaringCobra.msl"
+        / "replays/validation/aggregate_recent/"
+        / "DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     got = _run_rollout_records_replay_frame_rng(
         dataset_path,
@@ -3135,8 +3132,8 @@ def test_attackairb_guard_lower_bound_seed_keeps_hb0_when_inside_shield_radius_d
         float(ref["speed_ground_x_self"][defender]), abs=1e-7
     )
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[9057:9058]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[9057:9058]
     attacker = 1
     assert all(
         int(row["seed_t"]["combat_shield_contact_hb_kind"][0, attacker, hb, defender]) == 2
@@ -3186,9 +3183,9 @@ def test_marth_guardon_terminal_no_submotion_shielddesc_uses_live_guardon_pose_q
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    dataset_path = root / "replays/validation/marth/QuestionableHarmfulPanther.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     got = _run_rollout_records_replay_frame_rng(
         dataset_path,
@@ -3209,8 +3206,8 @@ def test_marth_guardon_terminal_no_submotion_shielddesc_uses_live_guardon_pose_q
     assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
     assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert all(
         int(samples["seed_t"][record]["combat_shield_contact_hb_kind"][0, hb, defender]) == 1
         for record in (2597, 2598, 2599)
@@ -3228,9 +3225,9 @@ def test_marth_guardon_terminal_no_submotion_shielddesc_uses_live_guardon_pose_r
     # GuardOn enters GuardSetOff only on the row whose source shield-contact lane flips to true.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    dataset_path = root / "replays/validation/marth/RipeWealthySeahorse.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     got = _run_rollout_records_replay_frame_rng(
         dataset_path,
@@ -3264,15 +3261,15 @@ def test_falco_attackairb_guardon_lower_bound_x19a4_uses_live_damage_wgp_5380() 
     # data/moves/falco.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/WingedGorgeousPanther.msl"
+    dataset_path = root / "replays/validation/marth/WingedGorgeousPanther.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 5380
     attacker = 0
     defender = 1
-    ds = read_dataset(str(dataset_path))
-    seed_t = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_t = ds.rows[record]["seed_t"]
     assert int(seed_t["action_id"][attacker]) == 67  # Falco AttackAirB.
     assert int(seed_t["action_id"][defender]) == 178  # GuardOn no-submotion.
     assert int(seed_t["action_frame"][defender]) < 0
@@ -3305,16 +3302,16 @@ def test_falco_attackairb_guardon_weak_hb2_keeps_seeded_x19a4_fsp_3100() -> None
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 3100
     attacker = 1
     defender = 0
-    ds = read_dataset(str(dataset_path))
-    seed_t = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_t = ds.rows[record]["seed_t"]
     assert int(seed_t["action_id"][attacker]) == 67  # Falco AttackAirB.
     assert int(seed_t["action_id"][defender]) == 178  # GuardOn no-submotion.
     assert int(seed_t["action_frame"][defender]) < 0
@@ -3340,9 +3337,9 @@ def test_falco_attackairb_guardon_x19a4_requires_replay_proven_shielddesc_wgp_53
     # no-submotion GuardOn BAir packet must stay outside the GuardSetOff path.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/WingedGorgeousPanther.msl"
+    dataset_path = root / "replays/validation/marth/WingedGorgeousPanther.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
@@ -3370,9 +3367,9 @@ def test_settled_guard_x19a4_attacker_seed_rejects_x2218_b2_command_lane() -> No
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/ParallelFamiliarZebra.msl"
+    dataset_path = root / "replays/validation/marth/ParallelFamiliarZebra.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 2642
     attacker = 1
@@ -3412,9 +3409,9 @@ def test_settled_guard_x2218_b2_exact_x19a4_packet_sets_attacker_hitlag_qhp_3490
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    dataset_path = root / "replays/validation/marth/QuestionableHarmfulPanther.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 3490
     attacker = 1
@@ -3448,9 +3445,9 @@ def test_current_x19a4_packet_keeps_live_shield_hp_accumulator_toc_6840() -> Non
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl"
+    dataset_path = root / "replays/validation/sheik/ToughOutlyingChicken.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 6840
     attacker = 0
@@ -3479,9 +3476,9 @@ def test_current_x19a4_packet_keeps_live_shield_hp_accumulator_aac_6069() -> Non
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl"
+    dataset_path = root / "replays/validation/sheik/AttractiveAnyClam.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 6069
     defender = 0
@@ -3502,9 +3499,9 @@ def test_wgp_guardon_x19a4_rollout_reaches_later_guardsetoff_contact() -> None:
     # Guard instead of entering GuardSetOff.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/WingedGorgeousPanther.msl"
+    dataset_path = root / "replays/validation/marth/WingedGorgeousPanther.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     ref, out = _run_rollout_window(dataset_path, 5380, 6259)
@@ -3523,16 +3520,16 @@ def test_spacie_guardon_terminal_no_submotion_live_pose_does_not_force_seeded_no
     cases = (
         (
             root
-            / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "BlondHardHippopotamus.msl",
+            / "replays/validation/aggregate_recent/"
+            "BlondHardHippopotamus.slpz",
             3520,
             (3526, 3527),
             0,
         ),
         (
             root
-            / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "PositiveRevolvingHyena.msl",
+            / "replays/validation/aggregate_recent/"
+            "PositiveRevolvingHyena.slpz",
             270,
             (276, 277),
             1,
@@ -3541,7 +3538,7 @@ def test_spacie_guardon_terminal_no_submotion_live_pose_does_not_force_seeded_no
 
     for dataset_path, start, records, defender in cases:
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_path}")
+            pytest.skip(f"missing local replay: {dataset_path}")
         got = _run_rollout_records_replay_frame_rng(
             dataset_path,
             start,
@@ -3549,8 +3546,8 @@ def test_spacie_guardon_terminal_no_submotion_live_pose_does_not_force_seeded_no
             ucf_enabled=True,
             ucf_cardinals_1_0_enabled=True,
         )
-        ds = read_dataset(str(dataset_path))
-        samples = ds.samples
+        ds = load_replay_buffers(str(dataset_path))
+        samples = ds.rows
         for record in records:
             out, ref = got[record]
             assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
@@ -3579,17 +3576,17 @@ def test_attackairb_guardreflect_lower_bound_x19a4_uses_live_hitcapsule_damage_p
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 0
     defender = 1
     record = 3608
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"][0]
     assert int(seed["action_id"][attacker]) == 67
     assert int(seed["action_id"][defender]) == 182
@@ -3624,11 +3621,11 @@ def test_attackairb_guardreflect_lower_bound_x19a4_requires_active_guardreflect_
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
 
@@ -3663,11 +3660,11 @@ def test_guardsetoff_active_hitlag_sdi_stale_seed_carry_does_not_reconsume() -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        / "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        / "CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     seed, ref, out = _run_one_step_row(dataset_path, 8214, defender)
@@ -3696,11 +3693,11 @@ def test_guardsetoff_post_hitlag_asdi_applies_floor_tangent_displacement() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        / "AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     seed, ref, out = _run_one_step_row(dataset_path, 4047, defender)
@@ -3722,10 +3719,10 @@ def test_guardsetoff_post_hitlag_asdi_no_stick_negative() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     seed, ref, out = _run_one_step_row(dataset_path, 2235, defender)
@@ -3748,11 +3745,11 @@ def test_guardsetoff_post_hitlag_asdi_keeps_agn_rollout_from_capture_cascade() -
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        / "AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 1
     victim = 0
@@ -3778,14 +3775,14 @@ def test_marth_attackairf_shield_hit_uses_create_time_stale_damage_wws_5497() ->
     # refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    dataset_path = root / "replays/validation/marth/WellWornSmallGoshawk.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 1
     defender = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[5497]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[5497]["seed_t"]
     assert int(seed["action_id"][attacker]) == 66  # Marth AttackAirF
     assert int(seed["combat_shield_hit_int_damage"][defender]) == 6
     assert int(seed["combat_shield_damage_taken"][defender]) == 8
@@ -3815,14 +3812,14 @@ def test_guardsetoff_uses_latched_lightshield_for_released_trigger_shine_hvg_448
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,ftCo_80092F2C}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 0
     attacker = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[4489]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[4489]["seed_t"]
     assert int(seed["action_id"][defender]) == 182  # GuardReflect
     assert int(seed["action_id"][attacker]) == 39  # Squat -> same-frame shine start
     assert float(seed["lightshield_amount"][defender]) == pytest.approx(0.9159664, abs=1e-6)

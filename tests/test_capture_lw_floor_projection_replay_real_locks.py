@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_WAIT = 0x000E
@@ -45,27 +46,27 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 def _dataset_path(root: Path) -> Path:
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _cardinal_dataset_path(root: Path, name: str) -> Path:
-    dataset_rel = f"datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/{name}"
+    dataset_rel = f"replays/validation/cardinal_1.0_recent/{name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _aggregate_validation_dataset_path(root: Path, subdir: str, name: str) -> Path:
-    dataset_rel = f"datasets/aggregate_recent/replays/validation/{subdir}/{name}"
+    dataset_rel = f"replays/validation/{subdir}/{name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
@@ -76,8 +77,8 @@ def _binding_sizes():
 
 
 def _run_one_step_seed(dataset_path: Path, record: int, seed_mutator=None) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > record
 
     row = samples[record : record + 1]
@@ -93,7 +94,7 @@ def _run_one_step_seed(dataset_path: Path, record: int, seed_mutator=None) -> tu
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -112,8 +113,8 @@ def _run_rollout_record(dataset_path: Path, start_record: int, target_record: in
 def _run_rollout_records(
     dataset_path: Path, start_record: int, target_records: tuple[int, ...]
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert target_records
     target_max = max(target_records)
     targets = set(target_records)
@@ -126,7 +127,7 @@ def _run_rollout_records(
     ).copy().reshape(1, seed_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         out_by_record: dict[int, tuple[np.void, np.void]] = {}
@@ -158,7 +159,7 @@ def test_capturepulledlw_preserves_source_allow_interrupt_flag_dhh() -> None:
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 -> state_flags[0])
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = _aggregate_validation_dataset_path(root, "marth", "DraftyHealthyHare.msl")
+    dataset_path = _aggregate_validation_dataset_path(root, "marth", "DraftyHealthyHare.slpz")
 
     seed_4593, ref_4593, out_4593 = _run_one_step_seed(dataset_path, 4593)
     seed_4594, ref_4594, out_4594 = _run_one_step_seed(dataset_path, 4594)
@@ -172,7 +173,7 @@ def test_capturepulledlw_preserves_source_allow_interrupt_flag_dhh() -> None:
     assert out_4593["state_flags"][0].tolist() == ref_4593["state_flags"][0].tolist()
     assert out_4594["state_flags"][0].tolist() == ref_4594["state_flags"][0].tolist()
 
-    lim_path = _aggregate_validation_dataset_path(root, "yoshis_story_recent", "LawfulInsistentMeerkat.msl")
+    lim_path = _aggregate_validation_dataset_path(root, "yoshis_story_recent", "LawfulInsistentMeerkat.slpz")
     seed_lim, ref_lim, out_lim = _run_one_step_seed(lim_path, 2449)
     assert int(seed_lim["action_id"][0]) == ACT_DASH
     assert int(out_lim["action_id"][0]) == int(ref_lim["action_id"][0]) == ACT_CAPTURE_PULLED_LW
@@ -197,35 +198,35 @@ def test_capturepulledlw_floor_loss_handoff_uses_stage_line_and_vertical_carry_d
 
     cases = [
         (
-            _aggregate_validation_dataset_path(root, "marth", "ExtraLargeScaryHornet.msl"),
+            _aggregate_validation_dataset_path(root, "marth", "ExtraLargeScaryHornet.slpz"),
             440,
             1,
             ACT_CAPTURE_PULLED_LW,
             "Pokemon Stadium main floor keeps PulledLw",
         ),
         (
-            _aggregate_validation_dataset_path(root, "marth", "ExtraLargeScaryHornet.msl"),
+            _aggregate_validation_dataset_path(root, "marth", "ExtraLargeScaryHornet.slpz"),
             540,
             0,
             ACT_CAPTURE_PULLED_LW,
             "Pokemon Stadium main floor keeps PulledLw with CatchWait owner",
         ),
         (
-            _aggregate_validation_dataset_path(root, "marth", "InternalPowerlessWallaby.msl"),
+            _aggregate_validation_dataset_path(root, "marth", "InternalPowerlessWallaby.slpz"),
             7312,
             0,
             ACT_CAPTURE_PULLED_HI,
             "Fountain carried vertical separation enters PulledHi",
         ),
         (
-            _aggregate_validation_dataset_path(root, "marth", "MetallicUniqueGrouse.msl"),
+            _aggregate_validation_dataset_path(root, "marth", "MetallicUniqueGrouse.slpz"),
             2274,
             0,
             ACT_CAPTURE_PULLED_HI,
             "Yoshi ledge floor-loss enters PulledHi",
         ),
         (
-            root / "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl",
+            root / "replays/validation/sheik/AttractiveAnyClam.slpz",
             3836,
             1,
             ACT_CAPTURE_PULLED_HI,
@@ -246,19 +247,19 @@ def test_capturepulledlw_floor_loss_handoff_uses_stage_line_and_vertical_carry_d
     ("dataset_name", "record", "p", "note"),
     [
         (
-            "BeautifulDistantWolverine.msl",
+            "BeautifulDistantWolverine.slpz",
             2686,
             0,
             "Yoshi left ledge frame-1 CapturePulledLw Phys enters airborne PulledHi",
         ),
         (
-            "DrabMeanArmadillo.msl",
+            "DrabMeanArmadillo.slpz",
             2208,
             1,
             "Yoshi right ledge frame-1 CapturePulledLw Phys enters airborne PulledHi",
         ),
         (
-            "sheik_demo_game_2.msl",
+            "sheik_demo_game_2.slpz",
             5603,
             1,
             "Battlefield platform frame-1 CapturePulledLw Phys enters airborne PulledHi",
@@ -278,9 +279,9 @@ def test_sheik_capturepulledlw_frame1_floor_loss_enters_capturepulledhi(
     # data/stages/bin/*.bin::MSLSTG01 segment.{platform,ledge}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / f"datasets/sheik/replays/validation/sheik/{dataset_name}"
+    dataset_path = root / f"replays/validation/sheik/{dataset_name}"
     if not dataset_path.exists():
-      pytest.skip(f"missing local dataset: {dataset_path}")
+      pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _run_one_step_seed(dataset_path, record)
     assert int(seed["action_id"][p]) == ACT_CAPTURE_PULLED_LW, note
@@ -304,9 +305,9 @@ def test_capturepulledlw_platform_anchor_still_on_surface_stays_low_slz() -> Non
     # data/stages/bin/grnba.bin::MSLSTG01 platform segment 2
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl"
+    dataset_path = root / "replays/validation/sheik/StiffLustrousZebra.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     seed_2720, ref_2720, out_2720 = _run_one_step_seed(dataset_path, 2720)
@@ -372,7 +373,7 @@ def test_capturepulledhi_entry_uses_locked_floor_owner_for_same_frame_lw_handoff
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_path = _cardinal_dataset_path(root, "AttachedGoodNaturedGuanaco.msl")
+    dataset_path = _cardinal_dataset_path(root, "AttachedGoodNaturedGuanaco.slpz")
     p = 0
     seed, ref, out = _run_one_step_seed(dataset_path, 3204)
     assert int(seed["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_LOOP
@@ -383,7 +384,7 @@ def test_capturepulledhi_entry_uses_locked_floor_owner_for_same_frame_lw_handoff
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
     assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p]) == 2
 
-    dataset_path = _cardinal_dataset_path(root, "TreasuredBackKangaroo.msl")
+    dataset_path = _cardinal_dataset_path(root, "TreasuredBackKangaroo.slpz")
     p = 1
     seed, ref, out = _run_one_step_seed(dataset_path, 5861)
     assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_TOP
@@ -404,7 +405,7 @@ def test_agg_capture_entry_rollout_window_remains_exact_after_locked_floor_hando
     #   fn_800DAADC,ftCo_CapturePulledHi_Coll,fn_800DAECC,fn_800DAEEC}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = _cardinal_dataset_path(root, "AttachedGoodNaturedGuanaco.msl")
+    dataset_path = _cardinal_dataset_path(root, "AttachedGoodNaturedGuanaco.slpz")
 
     victim_p = 0
     owner_p = 1
@@ -574,7 +575,7 @@ def test_capturepulledlw_catchdash_connect_runs_immediate_floor_callbacks_qgd_ro
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpColl_800477E0}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = _cardinal_dataset_path(root, "QuerulousGrandDinosaur.msl")
+    dataset_path = _cardinal_dataset_path(root, "QuerulousGrandDinosaur.slpz")
 
     victim_p = 1
     owner_p = 0
@@ -639,7 +640,7 @@ def test_capturepulledlw_steady_phys_uses_live_jobj_delta_qhp_marth_rollout() ->
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _aggregate_validation_dataset_path(
-        root, "marth", "QuestionableHarmfulPanther.msl"
+        root, "marth", "QuestionableHarmfulPanther.slpz"
     )
 
     victim_p = 0
@@ -671,9 +672,9 @@ def test_capturepulledlw_steady_phys_uses_live_jobj_delta_qhp_marth_rollout() ->
 @pytest.mark.parametrize(
     ("dataset_name", "record", "victim_p", "seed_action"),
     [
-        ("QuerulousGrandDinosaur.msl", 4063, 1, ACT_ATTACK_HI4),
-        ("GracefulAttachedTurtle.msl", 7721, 0, 178),
-        ("TreasuredBackKangaroo.msl", 5726, 1, 187),
+        ("QuerulousGrandDinosaur.slpz", 4063, 1, ACT_ATTACK_HI4),
+        ("GracefulAttachedTurtle.slpz", 7721, 0, 178),
+        ("TreasuredBackKangaroo.slpz", 5726, 1, 187),
     ],
 )
 def test_capturepulledlw_immediate_floor_callback_rejects_ordinary_grounded_captures(
@@ -713,12 +714,12 @@ def test_grounded_capturepulledlw_catch_connect_does_not_run_lw_coll_prh_6851() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PositiveRevolvingHyena.msl"
+        "replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     victim_p = 1
     seed, ref, out = _run_one_step_seed(dataset_path, 6851)
@@ -745,7 +746,7 @@ def test_pass_floor_skip_capturepulledhi_floor_mask_ignores_dropped_platform_mgs
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _aggregate_validation_dataset_path(
-        root, "fountain_of_dreams_recent", "MilkyGracefulStingray.msl"
+        root, "fountain_of_dreams_recent", "MilkyGracefulStingray.slpz"
     )
 
     p = 1

@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 def _one_step_out_compare(*, ds, row) -> np.ndarray:
@@ -16,7 +17,7 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -39,17 +40,16 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
 
 def _rollout_window(*, ds, start_record: int, end_record_inclusive: int) -> dict[int, tuple[np.void, np.void]]:
     binding = pytest.importorskip("msl_binding")
-    samples = ds.samples
+    samples = ds.rows
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -57,14 +57,14 @@ def _rollout_window(*, ds, start_record: int, end_record_inclusive: int) -> dict
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         rows: dict[int, tuple[np.void, np.void]] = {}
         for record in range(start_record, end_record_inclusive + 1):
-            prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             rows[record] = (out_view[0].copy(), samples["ref_t1"][record].copy())
@@ -85,21 +85,21 @@ class _Case:
 _CASES = [
     _Case(
         name="dcc_attackairb_stale_owner_adj_pre",
-        dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+        dataset_rel="replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
         record=3151,
         p=0,
         family="dcc_damageflytop",
     ),
     _Case(
         name="dcc_attackairb_stale_owner_target",
-        dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+        dataset_rel="replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
         record=3152,
         p=0,
         family="dcc_damageflytop",
     ),
     _Case(
         name="dcc_attackairb_stale_owner_adj_post",
-        dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+        dataset_rel="replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
         record=3153,
         p=0,
         family="dcc_damageflytop",
@@ -107,8 +107,8 @@ _CASES = [
     _Case(
         name="qgd_attackairb_control_pre",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
         ),
         record=8637,
         p=1,
@@ -117,8 +117,8 @@ _CASES = [
     _Case(
         name="qgd_attackairb_phantom_contact",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
         ),
         record=8638,
         p=1,
@@ -127,8 +127,8 @@ _CASES = [
     _Case(
         name="qgd_attackairb_phantom_sdi",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
         ),
         record=8639,
         p=1,
@@ -137,8 +137,8 @@ _CASES = [
     _Case(
         name="qgd_attackairb_phantom_damage_expire",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
         ),
         record=8642,
         p=1,
@@ -147,8 +147,8 @@ _CASES = [
     _Case(
         name="tbk_attackairb_control_pre0",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=6993,
         p=1,
@@ -157,8 +157,8 @@ _CASES = [
     _Case(
         name="tbk_attackairb_control_pre1",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=6994,
         p=1,
@@ -185,11 +185,11 @@ def test_attackairb_damageflytop_stale_owner_subset_rows(case: _Case) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > case.record, f"dataset too short for record={case.record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > case.record, f"replay too short for record={case.record}"
     row = samples[case.record : case.record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
@@ -253,15 +253,15 @@ def test_phantom_pending_damage_with_invalid_source_is_cleared_at_reseed() -> No
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[8642:8643].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[8642:8643].copy()
     p = 1
     seed = row["seed_t"][0]
     assert float(seed["phantom_damage_pending_x1898"][p]) == pytest.approx(4.5, abs=1e-6)
@@ -288,11 +288,11 @@ def test_attackairb_damageflytop_stale_owner_rollout_reaches_dcc_followup_hit() 
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     rows = _rollout_window(ds=ds, start_record=3149, end_record_inclusive=3155)
 
     for record in range(3149, 3153):
@@ -322,13 +322,13 @@ def test_attackairb_damageflytop_rng_carry_maps_last_hit_by_raw_source_port() ->
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
     # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 3149
     rows = samples[start_record:3153].copy()
     rows["seed_t"][0]["source_port0"][1] = np.uint8(3)
@@ -338,11 +338,15 @@ def test_attackairb_damageflytop_rng_carry_maps_last_hit_by_raw_source_port() ->
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    sample_stride = int(samples.dtype.itemsize)
-    rows_u8 = rows.view(np.uint8).reshape(int(rows.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    seed_u8 = np.ascontiguousarray(rows["seed_t"]).view(np.uint8).reshape(
+        int(rows.shape[0]), seed_stride
+    )
+    prev_input_u8 = np.ascontiguousarray(rows["prev_input_t"]).view(np.uint8).reshape(
+        int(rows.shape[0]), input_stride
+    )
+    input_u8 = np.ascontiguousarray(rows["input_t"]).view(np.uint8).reshape(
+        int(rows.shape[0]), input_stride
+    )
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -350,13 +354,13 @@ def test_attackairb_damageflytop_rng_carry_maps_last_hit_by_raw_source_port() ->
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = rows_u8[0, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[0, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for i, record in enumerate(range(start_record, 3153)):
-            prev_input_bytes[0, :] = rows_u8[i, prev_input_off : prev_input_off + input_stride]
-            input_bytes[0, :] = rows_u8[i, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[i, :input_stride]
+            input_bytes[0, :] = input_u8[i, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             out = out_view[0].copy()

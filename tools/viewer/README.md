@@ -10,8 +10,7 @@ commands are repository-root relative unless stated otherwise.
 Prerequisites:
 
 - Emscripten (`emcc`) on `PATH` for WASM export of the sim
-- extracted simulator data; defaults to repository-root `.msl/` when present,
-  or set `MSL_DATA_DIR`
+- extracted simulator data; defaults to repository-root `data/`, or set `MSL_DATA_DIR`
 - npm dependencies installed under repository-root `tools/viewer/slippi-viewer`
 - network access on first build to fetch character display assets from Slippi Lab
 

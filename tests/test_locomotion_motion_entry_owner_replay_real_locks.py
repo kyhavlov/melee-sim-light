@@ -12,14 +12,15 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tests.replay_dataset_loader import load_replay_dataset
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 from tools.slippi.suite_io import load_suite
 
 
-_AGG_VALID = "datasets/aggregate_recent/replays/validation/aggregate_recent"
-_AGG_CARDINAL = "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent"
-_PRIMARY_VALID = "datasets/fox_falco_fd_ucf084_recent/replays/validation"
+_AGG_VALID = "replays/validation/aggregate_recent"
+_AGG_CARDINAL = "replays/validation/cardinal_1.0_recent"
+_PRIMARY_VALID = "replays/validation"
 
 @dataclass(frozen=True)
 class _Case:
@@ -35,13 +36,13 @@ class _Case:
     "case",
     [
         _Case(
-            dataset_rel=f"{_AGG_VALID}/DistinctCaringCobra.msl",
+            dataset_rel=f"{_AGG_VALID}/DistinctCaringCobra.slpz",
             record=3280,
             port=1,
             note="Turn first-tick jump inherits hidden facing_after",
         ),
         _Case(
-            dataset_rel=f"{_AGG_VALID}/ImpassionedAlarmedTarsier.msl",
+            dataset_rel=f"{_AGG_VALID}/ImpassionedAlarmedTarsier.slpz",
             record=6353,
             port=0,
             note="Turn first-tick jump hidden facing_after mirror case",
@@ -59,10 +60,10 @@ def test_turn_kneebend_hidden_facing_lane_replay_real_lock(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[case.record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[case.record]
     p = case.port
     assert int(row["seed_t"]["action_id"][p]) == 18, case.note  # Turn
     assert int(row["seed_t"]["action_frame"][p]) == 1, case.note
@@ -79,13 +80,13 @@ def test_turn_kneebend_hidden_facing_lane_replay_real_lock(case: _Case) -> None:
     "case",
     [
         _Case(
-            dataset_rel=f"{_AGG_VALID}/BlondHardHippopotamus.msl",
+            dataset_rel=f"{_AGG_VALID}/BlondHardHippopotamus.slpz",
             record=88,
             port=0,
             note="Dash->KneeBend does not populate the Turn hidden-facing lane",
         ),
         _Case(
-            dataset_rel=f"{_AGG_VALID}/DistinctCaringCobra.msl",
+            dataset_rel=f"{_AGG_VALID}/DistinctCaringCobra.slpz",
             record=121,
             port=1,
             note="later Turn->KneeBend phase does not consume the first-tick Turn lane",
@@ -102,10 +103,10 @@ def test_turn_kneebend_hidden_facing_lane_negative_locks(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[case.record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[case.record]
     p = case.port
     assert int(row["ref_t1"]["action_id"][p]) == 24, case.note  # KneeBend
     assert int(row["seed_t"]["turn_kneebend_facing_override_u8"][p]) == 0, case.note
@@ -124,15 +125,15 @@ def test_turnrun_exit_downstick_feeds_wait_squat_selector_replay_real_lock() -> 
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = f"{_AGG_VALID}/FavorableSuperficialPig.msl"
+    dataset_rel = f"{_AGG_VALID}/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 9690
     p = 1
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == 19  # TurnRun
     assert int(row["ref_t1"]["action_id"][p]) == 39  # Squat
     assert int(row["input_t"]["p"][p]["main_y"]) <= -73
@@ -152,15 +153,15 @@ def test_turnrun_anim_end_run_gate_uses_pre_input_then_wait_dash_replay_real_loc
     # refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_Spaghetti_8006AD10}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    dataset_rel = "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 2641
     p = 0
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == 19  # TurnRun
     assert int(row["seed_t"]["action_frame"][p]) == 19
     assert int(row["prev_input_t"]["p"][p]["main_x"]) > 0
@@ -179,10 +180,10 @@ def _run_turnrun_rollout_records(
     ucf_enabled: bool = False,
     ucf_cardinals_1_0_enabled: bool = False,
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_max = max(target_records)
-    assert int(samples.shape[0]) > target_max, f"dataset too short for record={target_max}"
+    assert int(samples.shape[0]) > target_max, f"replay too short for record={target_max}"
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -203,7 +204,7 @@ def _run_turnrun_rollout_records(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=int(ucf_enabled),
         ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
     )
@@ -240,15 +241,15 @@ def test_turnrun_midstate_pause_flips_and_resumes_after_ground_speed_stops_repla
     #   ftCo_TurnRun_Enter,ftCo_TurnRun_Anim}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = f"{_AGG_VALID}/FavorableSuperficialPig.msl"
+    dataset_rel = f"{_AGG_VALID}/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
-    pre_stop = ds.samples[9682]
+    pre_stop = ds.rows[9682]
     assert int(pre_stop["seed_t"]["action_id"][p]) == 19  # TurnRun
     assert int(pre_stop["seed_t"]["action_frame"][p]) == 13
     assert float(pre_stop["seed_t"]["speed_ground_x_self"][p]) != pytest.approx(0.0)
@@ -256,7 +257,7 @@ def test_turnrun_midstate_pause_flips_and_resumes_after_ground_speed_stops_repla
     _assert_transition_lock_fields_match_ref(out_row=pre_out, ref_row=pre_ref, record=9682, p=p)
     assert int(pre_out["facing"][p]) == int(pre_ref["facing"][p]) == 1
 
-    flip_seed = ds.samples[9683]
+    flip_seed = ds.rows[9683]
     assert int(flip_seed["seed_t"]["action_id"][p]) == 19
     assert int(flip_seed["seed_t"]["action_frame"][p]) == 13
     assert int(flip_seed["seed_t"]["facing"][p]) == 1
@@ -267,7 +268,7 @@ def test_turnrun_midstate_pause_flips_and_resumes_after_ground_speed_stops_repla
     assert int(flip_out["action_frame"][p]) == int(flip_ref["action_frame"][p]) == 13
     assert int(flip_out["facing"][p]) == int(flip_ref["facing"][p]) == 0
 
-    resume_seed = ds.samples[9684]
+    resume_seed = ds.rows[9684]
     assert int(resume_seed["seed_t"]["action_id"][p]) == 19
     assert int(resume_seed["seed_t"]["action_frame"][p]) == 13
     assert int(resume_seed["seed_t"]["facing"][p]) == 0
@@ -277,7 +278,7 @@ def test_turnrun_midstate_pause_flips_and_resumes_after_ground_speed_stops_repla
     assert int(resume_out["action_frame"][p]) == int(resume_ref["action_frame"][p]) == 14
     assert int(resume_out["facing"][p]) == int(resume_ref["facing"][p]) == 0
 
-    post_flip_accel_seed = ds.samples[9687]
+    post_flip_accel_seed = ds.rows[9687]
     assert int(post_flip_accel_seed["seed_t"]["action_id"][p]) == 19
     assert int(post_flip_accel_seed["seed_t"]["facing"][p]) == 0
     assert int(post_flip_accel_seed["seed_t"]["facing_dir1"][p]) == 1
@@ -311,38 +312,38 @@ def test_turnrun_midstate_pause_flips_and_resumes_after_ground_speed_stops_repla
     "case",
     [
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            dataset_rel="replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             record=3898,
             port=1,
             note="Battlefield TurnRun cmd1 pivot with post-rate x14 hidden latch",
         ),
         _Case(
-            dataset_rel=f"{_AGG_VALID}/FavorableSuperficialPig.msl",
+            dataset_rel=f"{_AGG_VALID}/FavorableSuperficialPig.slpz",
             record=2385,
             port=0,
             note="FD TurnRun cmd1 pivot at zero ground speed",
         ),
         _Case(
-            dataset_rel=f"{_AGG_VALID}/ImpassionedAlarmedTarsier.msl",
+            dataset_rel=f"{_AGG_VALID}/ImpassionedAlarmedTarsier.slpz",
             record=7755,
             port=1,
             note="FD TurnRun cmd1 pivot mirror at zero ground speed",
         ),
         _Case(
-            dataset_rel=f"{_AGG_CARDINAL}/QuerulousGrandDinosaur.msl",
+            dataset_rel=f"{_AGG_CARDINAL}/QuerulousGrandDinosaur.slpz",
             record=2344,
             port=0,
             note="cardinal TurnRun cmd1 pivot after command frame",
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            dataset_rel="replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
             record=8111,
             port=0,
             note="Pokemon Stadium TurnRun cmd1 pivot on transformed floor",
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            dataset_rel="replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
             record=9978,
             port=0,
             note="Pokemon Stadium later TurnRun cmd1 pivot on transformed floor",
@@ -363,10 +364,10 @@ def test_turnrun_cmd1_hidden_latch_flips_when_pivot_condition_already_satisfied(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[case.record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[case.record]
     p = case.port
     assert int(row["seed_t"]["action_id"][p]) == 19, case.note  # TurnRun
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == 19, case.note
@@ -384,19 +385,19 @@ def test_turnrun_cmd1_hidden_latch_flips_when_pivot_condition_already_satisfied(
     "case",
     [
         _Case(
-            dataset_rel=f"{_AGG_VALID}/HilariousVillainousGiraffe.msl",
+            dataset_rel=f"{_AGG_VALID}/HilariousVillainousGiraffe.slpz",
             record=760,
             port=0,
             note="same-frame p0/p1 motion-entry counter order swap",
         ),
         _Case(
-            dataset_rel=f"{_AGG_VALID}/ImpassionedAlarmedTarsier.msl",
+            dataset_rel=f"{_AGG_VALID}/ImpassionedAlarmedTarsier.slpz",
             record=4148,
             port=1,
             note="sticky same-frame motion-entry override across chained entry",
         ),
         _Case(
-            dataset_rel=f"{_AGG_CARDINAL}/TreasuredBackKangaroo.msl",
+            dataset_rel=f"{_AGG_CARDINAL}/TreasuredBackKangaroo.slpz",
             record=187,
             port=1,
             note="hidden prior global counter consumer before KneeBend entry",
@@ -414,10 +415,10 @@ def test_motion_entry_instance_order_lane_replay_real_lock(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[case.record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[case.record]
     p = case.port
     assert int(row["seed_t"]["motion_entry_instance_id_override_u16"][p]) == int(
         row["ref_t1"]["instance_id"][p]
@@ -441,15 +442,15 @@ def test_ordinary_single_motion_entry_uses_x2073_without_instance_override() -> 
     # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl"
+    dataset_rel = f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 88
     p = 1
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == 15  # WalkSlow
     assert int(row["ref_t1"]["action_id"][p]) == 20  # Dash
     assert int(row["seed_t"]["instance_id_counter"]) == int(row["ref_t1"]["instance_id"][p])
@@ -465,13 +466,13 @@ def test_ordinary_single_motion_entry_uses_x2073_without_instance_override() -> 
     "case",
     [
         _Case(
-            dataset_rel=f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel=f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.slpz",
             record=609,
             port=0,
             note="JumpF -> SpecialAirLwStart keeps hidden same-frame instance order",
         ),
         _Case(
-            dataset_rel=f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel=f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.slpz",
             record=124,
             port=0,
             note="JumpF -> SpecialAirNStart keeps hidden same-frame instance order",
@@ -488,10 +489,10 @@ def test_special_boundary_entries_keep_hidden_same_frame_instance_order(case: _C
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[case.record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[case.record]
     p = case.port
     assert int(row["seed_t"]["motion_entry_instance_id_override_u16"][p]) == int(
         row["ref_t1"]["instance_id"][p]
@@ -509,12 +510,12 @@ def test_specialn_loop_restart_uses_only_ft80089824_callback_lane() -> None:
     # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl"
+    dataset_path = root / f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    restart = ds.samples[2218]
+    ds = load_replay_buffers(str(dataset_path))
+    restart = ds.rows[2218]
     p = 0
     assert int(restart["seed_t"]["action_id"][p]) == 0x0159
     assert int(restart["ref_t1"]["action_id"][p]) == 0x0159
@@ -523,12 +524,12 @@ def test_specialn_loop_restart_uses_only_ft80089824_callback_lane() -> None:
         restart["ref_t1"]["instance_id"][p]
     )
 
-    steady_loop = ds.samples[2217]
+    steady_loop = ds.rows[2217]
     assert int(steady_loop["seed_t"]["action_id"][p]) == 0x0159
     assert int(steady_loop["ref_t1"]["action_id"][p]) == 0x0159
     assert int(steady_loop["seed_t"]["motion_entry_instance_id_override_u16"][p]) == 0
 
-    start_to_loop = ds.samples[100]
+    start_to_loop = ds.rows[100]
     assert int(start_to_loop["seed_t"]["action_id"][p]) == 0x0158
     assert int(start_to_loop["ref_t1"]["action_id"][p]) == 0x0159
     assert int(start_to_loop["seed_t"]["motion_entry_instance_id_override_u16"][p]) == 0
@@ -541,16 +542,16 @@ def test_motion_entry_instance_override_clears_after_one_step() -> None:
     # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl"
+    dataset_rel = f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 86
     p = 1
-    row0 = ds.samples[record]
-    row1 = ds.samples[record + 1]
+    row0 = ds.rows[record]
+    row1 = ds.rows[record + 1]
     assert int(row0["seed_t"]["action_id"][p]) == int(row0["ref_t1"]["action_id"][p])
     assert int(row1["seed_t"]["action_id"][p]) != int(row1["ref_t1"]["action_id"][p])
     assert int(row1["seed_t"]["motion_entry_instance_id_override_u16"][p]) == 0
@@ -570,7 +571,7 @@ def test_motion_entry_instance_override_clears_after_one_step() -> None:
     inp1_bytes = row1["input_t"].copy().reshape((1,)).view(np.uint8).reshape((1, input_stride)).copy()
     out_compare = np.zeros((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed0_bytes)
         binding.step_input(handle, prev0_bytes, inp0_bytes)
@@ -643,10 +644,9 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
 
         suite = load_suite(root / "replays" / "suites" / f"{suite_name}.json")
         for entry in suite.replays:
-            dataset_label = Path("datasets") / suite.name / Path(entry.replay).with_suffix(".msl")
-            ds = load_replay_dataset(dataset_label)
-            for row in ds.samples:
-                num_players = int(ds.header["num_players"])
+            ds = load_replay_buffers(root / entry.replay)
+            for row in ds.rows:
+                num_players = int(ds.num_players)
                 for p in range(num_players):
                     if int(row["seed_t"]["turn_kneebend_facing_override_u8"][p]) != 0:
                         turn_count += 1

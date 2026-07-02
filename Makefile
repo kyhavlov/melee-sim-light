@@ -1,7 +1,6 @@
-.PHONY: build build-native clean-native-shadow test test-parallel test-serial package-smoke slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-sheik validate-all validate-heldout rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data viewer-build viewer fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
+.PHONY: build build-native clean-native-shadow test test-parallel test-serial package-smoke slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-sheik validate-all validate-heldout rollout-summary rollout-diff build_data viewer-build viewer fmt fmt-check check dolphin-engine-dump dolphin-extract build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
 
 PY := uv run python
-DATASETS_DIR ?= datasets
 SUITE ?= replays/suites/fox_falco_fd_ucf084_recent.json
 AGG_SUITE ?= replays/suites/aggregate_recent.json
 DOUBLES_SUITE ?= replays/suites/doubles_recent.json
@@ -10,7 +9,6 @@ SHEIK_SUITE ?= replays/suites/sheik.json
 HELDOUT_INDEX ?= replays/suites/heldout.json
 CHUNK ?= 64
 OUT ?=
-FIELDS ?= action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 PRIMARY_ONE_STEP_OUT ?= reports/validation/one_step_suite_eval.txt
 PRIMARY_ROLLOUT_OUT ?= reports/validation/rollout_suite_eval.txt
 AGG_ONE_STEP_OUT ?= reports/validation/aggregate_recent_one_step_suite_eval.txt
@@ -29,17 +27,6 @@ ROLLOUT_AFTER ?= reports/triage/current_rollout_streaks.json
 ROLLOUT_TOP ?= 8
 ROLLOUT_SUMMARY_OUT ?=
 ROLLOUT_DIFF_OUT ?=
-ROLLOUT_LOCATE_TSV ?= reports/triage/current_rollout_desyncs.tsv
-ROLLOUT_LOCATE_BEFORE ?= reports/triage/baseline_rollout_desyncs.tsv
-ROLLOUT_LOCATE_AFTER ?= reports/triage/current_rollout_desyncs.tsv
-ROLLOUT_LOCATE_SUMMARY_JSON ?=
-ROLLOUT_LOCATE_DIFF_JSON ?=
-DISRUPTIVE_OUT_DIR ?= reports/triage/disruptive_rollout_desyncs
-DISRUPTIVE_HORIZONS ?= 10,20,60
-DISRUPTIVE_BATCH_SIZE ?= 512
-DISRUPTIVE_WORKERS ?= 8
-DISRUPTIVE_CHUNK_RECORDS ?= 1024
-DISRUPTIVE_ROWS_IN ?= $(DISRUPTIVE_OUT_DIR)/rows.tsv
 ARGS ?=
 TEST_ARGS ?=
 TEST_WORKERS ?= auto
@@ -83,13 +70,6 @@ endif
 ifneq ($(strip $(ROLLOUT_DIFF_OUT)),)
 ROLLOUT_DIFF_OUT_ARG := --out $(ROLLOUT_DIFF_OUT)
 endif
-ifneq ($(strip $(ROLLOUT_LOCATE_SUMMARY_JSON)),)
-ROLLOUT_LOCATE_SUMMARY_JSON_ARG := --json-out $(ROLLOUT_LOCATE_SUMMARY_JSON)
-endif
-ifneq ($(strip $(ROLLOUT_LOCATE_DIFF_JSON)),)
-ROLLOUT_LOCATE_DIFF_JSON_ARG := --json-out $(ROLLOUT_LOCATE_DIFF_JSON)
-endif
-
 ifeq ($(strip $(VERBOSE)),)
 BUILD_STDOUT := >/dev/null
 else
@@ -148,56 +128,37 @@ validate-aggregate: build
 
 # Rollout text validation report (parallel to make validate); OUT=... controls report path.
 validate-rollout: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SUITE)" --fields "$(FIELDS)" $(ROLLOUT_OUT)
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SUITE)" $(ROLLOUT_OUT)
 
 validate-rollout-aggregate: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(AGG_SUITE)" --fields "$(FIELDS)" --out "$(AGG_ROLLOUT_OUT)"
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(AGG_SUITE)" --out "$(AGG_ROLLOUT_OUT)"
 
 # Fast Marth-focused iteration loop: the marth suite is the same replays the aggregate
-# suite carries (subset), preprocessed under datasets/marth - run these frequently while
+# suite carries (subset), stored under replays/validation/marth - run these frequently while
 # debugging Marth, and validate-all (which covers the same rows via aggregate) less often.
 validate-marth: build
 	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(MARTH_SUITE)" --chunk "$(CHUNK)" --out "$(MARTH_ONE_STEP_OUT)"
 
 validate-rollout-marth: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(MARTH_SUITE)" --fields "$(FIELDS)" --out "$(MARTH_ROLLOUT_OUT)"
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(MARTH_SUITE)" --out "$(MARTH_ROLLOUT_OUT)"
 
 validate-sheik: build
 	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SHEIK_SUITE)" --chunk "$(CHUNK)" --out "$(SHEIK_ONE_STEP_OUT)"
 
 validate-rollout-sheik: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SHEIK_SUITE)" --fields "$(FIELDS)" --out "$(SHEIK_ROLLOUT_OUT)"
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SHEIK_SUITE)" --out "$(SHEIK_ROLLOUT_OUT)"
 
 validate-all: build
-	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --doubles-suite "$(DOUBLES_SUITE)" --sheik-suite "$(SHEIK_SUITE)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --doubles-one-step-out "$(DOUBLES_ONE_STEP_OUT)" --doubles-rollout-out "$(DOUBLES_ROLLOUT_OUT)" --sheik-one-step-out "$(SHEIK_ONE_STEP_OUT)" --sheik-rollout-out "$(SHEIK_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
+	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --doubles-suite "$(DOUBLES_SUITE)" --sheik-suite "$(SHEIK_SUITE)" --chunk "$(CHUNK)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --doubles-one-step-out "$(DOUBLES_ONE_STEP_OUT)" --doubles-rollout-out "$(DOUBLES_ROLLOUT_OUT)" --sheik-one-step-out "$(SHEIK_ONE_STEP_OUT)" --sheik-rollout-out "$(SHEIK_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
 
 validate-heldout: build
-	@$(PY) -m tools.eval.run_heldout_validation --index "$(HELDOUT_INDEX)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --out-dir "$(HELDOUT_OUT_DIR)" --summary-out "$(HELDOUT_SUMMARY_OUT)" --workers "$(HELDOUT_WORKERS)" --suite-workers "$(HELDOUT_SUITE_WORKERS)"
-
-# Always writes to ROLLOUT_JSON (independent of OUT=...).
-rollout-capture: build
-	@$(PY) -m tools.eval.run_longest_rollout_streaks --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(ROLLOUT_JSON)"
+	@$(PY) -m tools.eval.run_heldout_validation --index "$(HELDOUT_INDEX)" --chunk "$(CHUNK)" --out-dir "$(HELDOUT_OUT_DIR)" --summary-out "$(HELDOUT_SUMMARY_OUT)" --workers "$(HELDOUT_WORKERS)" --suite-workers "$(HELDOUT_SUITE_WORKERS)"
 
 rollout-summary:
 	@$(PY) -m tools.eval.summarize_rollout_streaks --in "$(ROLLOUT_JSON)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_SUMMARY_OUT_ARG)
 
 rollout-diff:
 	@$(PY) -m tools.eval.diff_rollout_streaks --before "$(ROLLOUT_BEFORE)" --after "$(ROLLOUT_AFTER)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_DIFF_OUT_ARG)
-
-rollout-locate: build
-	@$(PY) -m tools.eval.locate_rollout_desyncs --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(ROLLOUT_LOCATE_TSV)" $(ARGS)
-
-rollout-locate-summary:
-	@$(PY) -m tools.eval.summarize_rollout_locate --in "$(ROLLOUT_LOCATE_TSV)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_LOCATE_SUMMARY_JSON_ARG)
-
-rollout-locate-diff:
-	@$(PY) -m tools.eval.diff_rollout_locate --before "$(ROLLOUT_LOCATE_BEFORE)" --after "$(ROLLOUT_LOCATE_AFTER)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_LOCATE_DIFF_JSON_ARG)
-
-rollout-disruptive: build
-	@$(PY) -m tools.eval.disruptive_rollout_desyncs --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --horizons "$(DISRUPTIVE_HORIZONS)" --batch-size "$(DISRUPTIVE_BATCH_SIZE)" --workers "$(DISRUPTIVE_WORKERS)" --chunk-records "$(DISRUPTIVE_CHUNK_RECORDS)" --out-dir "$(DISRUPTIVE_OUT_DIR)" --top "$(ROLLOUT_TOP)" $(ARGS)
-
-rollout-disruptive-rerank:
-	@$(PY) -m tools.eval.disruptive_rollout_desyncs --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --horizons "$(DISRUPTIVE_HORIZONS)" --rows-in "$(DISRUPTIVE_ROWS_IN)" --out-dir "$(DISRUPTIVE_OUT_DIR)" --top "$(ROLLOUT_TOP)" $(ARGS)
 
 build_data:
 	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop
@@ -218,26 +179,11 @@ fmt-check:
 
 check: fmt-check test
 
-guardrail-baseline: build
-	@$(PY) -m tools.eval.generate_guardrail_baseline --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)"
-
-guardrail-preflight: build
-	@$(PY) -m tools.eval.run_guardrail_preflight --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)"
-
-guardrail-preflight-full: test
-	@$(PY) -m tools.eval.run_guardrail_preflight --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --skip-lock-pack
-
-forensic-rows: build
-	@$(PY) -m tools.eval.run_forensic_rows $(ARGS)
-
 dolphin-engine-dump:
 	@$(PY) -m tools.dolphin.dolphin_engine_dump $(ARGS)
 
 dolphin-extract:
 	@$(PY) -m tools.dolphin.extract_engine_dump_rows $(ARGS)
-
-dolphin-forensic-row:
-	@$(PY) -m tools.dolphin.forensic_row_dump $(ARGS)
 
 build-bench-sim:
 	@mkdir -p build/bench

@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_SQUAT = 39
@@ -20,21 +21,21 @@ def _size_key(sizes: dict[str, int], key: str) -> int:
 
 def _run_one_step(dataset_path: Path, record: int, *, row_mutator=None) -> np.void:
     msl_binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     sizes = msl_binding.sizes()
     seed_stride = _size_key(sizes, "seed")
     input_stride = _size_key(sizes, "input")
     compare_stride = _size_key(sizes, "compare")
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     if row_mutator is not None:
         row_mutator(row)
 
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -52,8 +53,8 @@ def _run_one_step(dataset_path: Path, record: int, *, row_mutator=None) -> np.vo
 
 
 def _row(dataset_path: Path, record: int) -> np.void:
-    ds = read_dataset(str(dataset_path))
-    return ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    return ds.rows[record]
 
 
 def _run_rollout_window(
@@ -64,21 +65,21 @@ def _run_rollout_window(
     row_mutator=None,
 ) -> np.void:
     msl_binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     sizes = msl_binding.sizes()
     seed_stride = _size_key(sizes, "seed")
     input_stride = _size_key(sizes, "input")
     compare_stride = _size_key(sizes, "compare")
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    rows = ds.samples[start_record : target_record + 1].copy()
+    rows = ds.rows[start_record : target_record + 1].copy()
     if row_mutator is not None:
         row_mutator(rows)
 
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -108,9 +109,9 @@ def test_squat_platform_pass_countdown_consumes_after_stick_release_marth_lock()
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA_inline
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    dataset_path = root / "replays/validation/marth/VictoriousSpitefulAlpaca.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 3269
     p = 1
@@ -130,9 +131,9 @@ def test_squat_platform_pass_countdown_consumes_after_stick_release_marth_lock()
 @pytest.mark.integration
 def test_squat_platform_pass_countdown_does_not_consume_one_frame_early_marth_lock() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    dataset_path = root / "replays/validation/marth/VictoriousSpitefulAlpaca.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 3268
     p = 1
@@ -151,11 +152,11 @@ def test_squat_platform_pass_countdown_preserves_held_down_spacie_positive_lock(
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        / "PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/"
+        / "PhysicalElectricCapybara.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 2257
     p = 0
@@ -174,9 +175,9 @@ def test_squat_platform_pass_countdown_preserves_held_down_spacie_positive_lock(
 @pytest.mark.integration
 def test_squat_platform_pass_countdown_requires_hidden_latch_negative_lock() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
+    dataset_path = root / "replays/validation/marth/VictoriousSpitefulAlpaca.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 3269
     p = 1
@@ -194,8 +195,8 @@ def test_squat_platform_pass_countdown_requires_hidden_latch_negative_lock() -> 
 @pytest.mark.parametrize(
     ("dataset_rel", "start_record", "target_record", "p"),
     [
-        ("datasets/marth/replays/validation/marth/LoudDullGoat.msl", 88, 90, 0),
-        ("datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl", 89, 91, 1),
+        ("replays/validation/marth/LoudDullGoat.slpz", 88, 90, 0),
+        ("replays/validation/marth/VictoriousSpitefulAlpaca.slpz", 89, 91, 1),
     ],
 )
 def test_squat_platform_pass_countdown_carries_after_stick_release_marth_rollout(
@@ -211,11 +212,11 @@ def test_squat_platform_pass_countdown_carries_after_stick_release_marth_rollout
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    start = ds.samples[start_record]
-    target = ds.samples[target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    start = ds.rows[start_record]
+    target = ds.rows[target_record]
     assert int(start["seed_t"]["action_id"][p]) == ACT_SQUAT
     assert int(start["seed_t"]["action_frame"][p]) == 1
     assert int(start["input_t"]["p"]["main_y"][p]) < -60
@@ -233,9 +234,9 @@ def test_squat_platform_pass_countdown_carries_after_stick_release_marth_rollout
 @pytest.mark.integration
 def test_squat_platform_pass_countdown_rollout_requires_armed_down_latch() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
+    dataset_path = root / "replays/validation/marth/LoudDullGoat.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
 
@@ -259,17 +260,17 @@ def test_squat_platform_pass_countdown_does_not_arm_on_same_frame_squat_entry_sp
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-        / "MediumVirtualPig.msl"
+        / "replays/validation/battlefield_recent/"
+        / "MediumVirtualPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 0
-    entry = ds.samples[2591]
-    early = ds.samples[2593]
-    consume = ds.samples[2594]
+    entry = ds.rows[2591]
+    early = ds.rows[2593]
+    consume = ds.rows[2594]
     assert int(entry["seed_t"]["action_id"][p]) == 200
     assert int(entry["ref_t1"]["action_id"][p]) == ACT_SQUAT
     assert int(early["seed_t"]["action_id"][p]) == ACT_SQUAT
@@ -293,11 +294,11 @@ def test_squat_platform_pass_countdown_no_hidden_latch_spacie_negative_lock() ->
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        / "PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/"
+        / "PhysicalElectricCapybara.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 2257
     p = 0

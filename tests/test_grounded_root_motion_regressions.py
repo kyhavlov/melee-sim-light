@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 BUTTON_L = 0x0040

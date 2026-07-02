@@ -2,11 +2,11 @@ import numpy as np
 import pytest
 
 import msl_binding
-from tools.eval.dataset import COMPARE_DTYPE
-from tools.slippi.make_dataset_from_slp import (
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tools.slippi.validation_buffer_builder import build_validation_buffers_from_slp
+from tools.slippi.validation_buffer_items import (
     _dream_whispy_params,
     _structured_rows_as_bytes,
-    build_dataset_from_slp,
 )
 from tools.slippi.suite_io import load_suite, repo_root
 from tools.slippi.slpz import resolve_replay_path
@@ -31,18 +31,25 @@ DREAM_LAND_REPLAYS = (
 )
 
 
-def _full_batch_whispy_oracle(samples: np.ndarray, *, num_players: int):
+def _full_batch_whispy_oracle(
+    *,
+    seed_t: np.ndarray,
+    prev_input_t: np.ndarray,
+    input_t: np.ndarray,
+    ref_t1: np.ndarray,
+    num_players: int,
+):
     params = _dream_whispy_params()
-    n = int(samples.shape[0])
+    n = int(seed_t.shape[0])
     out_dir = np.zeros(n, dtype=np.uint8)
     valid = np.zeros(n, dtype=np.uint8)
     timer = np.zeros(n, dtype=np.uint16)
     if n == 0:
         return out_dir, valid, timer
 
-    seed_bytes = _structured_rows_as_bytes(samples["seed_t"])
-    prev_input_bytes = _structured_rows_as_bytes(samples["prev_input_t"])
-    input_bytes = _structured_rows_as_bytes(samples["input_t"])
+    seed_bytes = _structured_rows_as_bytes(seed_t)
+    prev_input_bytes = _structured_rows_as_bytes(prev_input_t)
+    input_bytes = _structured_rows_as_bytes(input_t)
     compare_stride = int(msl_binding.sizes()["compare"])
     out_bytes = np.empty((n, compare_stride), dtype=np.uint8)
     handle = msl_binding.init(
@@ -59,8 +66,8 @@ def _full_batch_whispy_oracle(samples: np.ndarray, *, num_players: int):
         msl_binding.destroy(handle)
 
     out = out_bytes.view(COMPARE_DTYPE).reshape(n)
-    ref = samples["ref_t1"]
-    seed = samples["seed_t"]
+    ref = ref_t1
+    seed = seed_t
     stage_id = int(params.stage_id)
     wind_speed = float(params.wind_speed)
     eps = 0.025
@@ -132,32 +139,41 @@ def test_dream_whispy_chunked_sim_matches_full_batch_oracle(
     suite = load_suite(root / suite_rel)
     entry = next(e for e in suite.replays if e.replay.endswith(replay_name))
     replay_path = resolve_replay_path(root / entry.replay)
-    ds = build_dataset_from_slp(
+    buffers = build_validation_buffers_from_slp(
         slp_path=str(replay_path),
         ports=[int(p) for p in entry.ports],
         ucf_enabled=bool(suite.ucf_enabled),
         ucf_cardinals_1_0_enabled=bool(suite.ucf_cardinals_1_0_enabled),
     )
-    samples = ds.samples.copy()
+    seed_t = buffers.seed_t.copy()
+    prev_input_t = buffers.prev_input_t.copy()
+    input_t = buffers.input_t.copy()
+    ref_t1 = buffers.ref_t1.copy()
     for field in (
         "stage_dream_whispy_wind_dir_u8",
         "stage_dream_whispy_wind_valid_u8",
         "stage_dream_whispy_wind_timer_u16",
     ):
-        samples["seed_t"][field] = 0
+        seed_t[field] = 0
 
     params = _dream_whispy_params()
     native = msl_binding.derive_dream_whispy_wind_seed_lanes(
-        _structured_rows_as_bytes(samples["seed_t"]),
-        _structured_rows_as_bytes(samples["prev_input_t"]),
-        _structured_rows_as_bytes(samples["input_t"]),
-        _structured_rows_as_bytes(samples["ref_t1"]),
-        int(ds.header["num_players"]),
+        _structured_rows_as_bytes(seed_t),
+        _structured_rows_as_bytes(prev_input_t),
+        _structured_rows_as_bytes(input_t),
+        _structured_rows_as_bytes(ref_t1),
+        int(buffers.num_players),
         int(params.stage_id),
         float(params.wind_speed),
         0.025,
     )
-    oracle = _full_batch_whispy_oracle(samples, num_players=int(ds.header["num_players"]))
+    oracle = _full_batch_whispy_oracle(
+        seed_t=seed_t,
+        prev_input_t=prev_input_t,
+        input_t=input_t,
+        ref_t1=ref_t1,
+        num_players=int(buffers.num_players),
+    )
 
     for actual, expected in zip(native, oracle, strict=True):
         np.testing.assert_array_equal(actual, expected)

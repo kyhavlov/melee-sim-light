@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -31,15 +32,14 @@ def _step_one_row_with_rollout_at_record(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for record={record}"
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -47,11 +47,11 @@ def _step_one_row_with_rollout_at_record(
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
 
-    one_step_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    one_step_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
-        prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
-        input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+        seed_bytes[0, :] = seed_u8[record, :seed_stride]
+        prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+        input_bytes[0, :] = input_u8[record, :input_stride]
         binding.reseed_seed(one_step_handle, seed_bytes)
         binding.step_input(one_step_handle, prev_input_bytes, input_bytes)
         binding.write_compare(one_step_handle, out_compare_bytes)
@@ -60,13 +60,13 @@ def _step_one_row_with_rollout_at_record(
         binding.destroy(one_step_handle)
 
     start = max(0, int(record) - int(window_before))
-    rollout_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    rollout_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[start, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start, :seed_stride]
         binding.reseed_seed_rollout(rollout_handle, seed_bytes)
         for j in range(start, int(record) + 1):
-            prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
-            input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[j, :input_stride]
+            input_bytes[0, :] = input_u8[j, :input_stride]
             binding.step_input(rollout_handle, prev_input_bytes, input_bytes)
             if j == int(record):
                 binding.write_compare(rollout_handle, out_compare_bytes)
@@ -84,50 +84,50 @@ def _step_one_row_with_rollout_at_record(
     ("dataset_rel", "record", "p", "baseline_abs_pos_y"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "HilariousVillainousGiraffe.msl",
+            "replays/validation/aggregate_recent/"
+            "HilariousVillainousGiraffe.slpz",
             3833,
             1,
             1.006180,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             9368,
             0,
             4.308922,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             3083,
             0,
             3.359558,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             2905,
             0,
             3.799999,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             7904,
             0,
             3.799999,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             8473,
             1,
             3.799999,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             7079,
             0,
             2.826900,
@@ -141,7 +141,7 @@ def test_specialhi_holdair_launch_rows_clear_hold_velocity_and_improve_pos_y_err
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, record, p)
 
@@ -178,11 +178,11 @@ def test_specialhi_holdair_launch_uses_pre_input_stick_tch_3849() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "TubbyCurlyHerring.msl"
+        / "replays/validation/aggregate_recent/"
+        "TubbyCurlyHerring.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -190,16 +190,15 @@ def test_specialhi_holdair_launch_uses_pre_input_stick_tch_3849() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 3849
     p = 1
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -217,13 +216,11 @@ def test_specialhi_holdair_launch_uses_pre_input_stick_tch_3849() -> None:
     assert int(samples["input_t"]["p"][record]["main_y"][p]) == 86
 
     def run_with_current_input(main_x: int, main_y: int) -> np.void:
-        handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+        handle = binding.init(batch_size=1, num_players=int(ds.num_players))
         try:
-            seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            seed_bytes[0, :] = seed_u8[record, :seed_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             input_view = input_bytes.view(samples["input_t"].dtype).reshape((1,))
             input_view["p"][0]["main_x"][p] = np.int8(main_x)
             input_view["p"][0]["main_y"][p] = np.int8(main_y)
@@ -255,11 +252,11 @@ def test_specialhi_holdair_launch_hit_uses_current_instance_stale_queue_his_1764
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HungryImportantSnake.msl"
+        / "replays/validation/aggregate_recent/"
+        "HungryImportantSnake.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 1764
     attacker = 0
@@ -303,24 +300,24 @@ def test_specialhi_holdair_launch_hit_uses_current_instance_stale_queue_his_1764
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "HilariousVillainousGiraffe.msl",
+            "replays/validation/aggregate_recent/"
+            "HilariousVillainousGiraffe.slpz",
             3832,
             1,
             354,  # HoldAir one frame before launch with clamped/deadzoned horizontal stick
             354,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             9367,
             0,
             354,  # HoldAir one frame before launch
             354,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             7903,
             0,
             354,  # HoldAir one frame before launch
@@ -335,7 +332,7 @@ def test_specialhi_holdair_launch_context_controls_remain_replay_real(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, record, p)
 
@@ -355,11 +352,11 @@ def test_specialairhi_bound_entry_applies_extracted_horizontal_velocity_scalar_h
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HungryImportantSnake.msl"
+        / "replays/validation/aggregate_recent/"
+        "HungryImportantSnake.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, 559, p)
@@ -392,11 +389,11 @@ def test_specialairhi_bound_velocity_scalar_does_not_apply_before_bound_entry_hi
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HungryImportantSnake.msl"
+        / "replays/validation/aggregate_recent/"
+        "HungryImportantSnake.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, 558, p)
@@ -421,11 +418,11 @@ def test_specialhi_bound_airborne_phys_uses_root_y_and_air_friction_his(record: 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HungryImportantSnake.msl"
+        / "replays/validation/aggregate_recent/"
+        "HungryImportantSnake.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(

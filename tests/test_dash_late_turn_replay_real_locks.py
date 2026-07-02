@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -40,18 +40,18 @@ def test_dash_late_iasa_turn_qgd_replay_real_lock(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = int(case.record)
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     row = samples[record : record + 1]
     seed = row["seed_t"][0]

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 STAGE_FD = 32
@@ -96,19 +96,19 @@ def test_terminal_source_clear_timer_still_clears_outside_dead_flow() -> None:
     ("dataset_rel", "record", "p", "action_id"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz",
             3745,
             0,
             ACT_DEAD_RIGHT,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz",
             6026,
             0,
             ACT_DEAD_LEFT,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz",
             7037,
             1,
             ACT_DEAD_UP_FALL,
@@ -121,7 +121,7 @@ def test_replay_real_dead_flow_preserves_last_hit_by_on_terminal_x18c8(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, p)
     assert int(seed["action_id"][p]) == action_id

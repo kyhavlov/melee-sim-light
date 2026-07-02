@@ -10,7 +10,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_row_bytes
 
 
 ACT_THROW_LW = 222
@@ -44,16 +45,14 @@ _BODY_CONTACT_DTYPE = np.dtype(
 )
 
 
-def _field_bytes(samples, record: int, field: str, stride: int) -> np.ndarray:
-    off = int(samples.dtype.fields[field][1])
-    raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
-    return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+def _field_bytes(ds, record: int, field: str, stride: int) -> np.ndarray:
+    return replay_buffer_row_bytes(ds, field, record, stride)
 
 
 def _rollout_to(dataset_path: Path, start_record: int, target_record: int) -> tuple[np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -62,18 +61,18 @@ def _rollout_to(dataset_path: Path, start_record: int, target_record: int) -> tu
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        binding.reseed_seed_rollout(handle, _field_bytes(samples, start_record, "seed_t", seed_stride))
+        binding.reseed_seed_rollout(handle, _field_bytes(ds, start_record, "seed_t", seed_stride))
         for record in range(start_record, target_record + 1):
             binding.step_input_replay_frame_rng(
                 handle,
-                _field_bytes(samples, record, "seed_t", seed_stride),
-                _field_bytes(samples, record, "prev_input_t", input_stride),
-                _field_bytes(samples, record, "input_t", input_stride),
+                _field_bytes(ds, record, "seed_t", seed_stride),
+                _field_bytes(ds, record, "prev_input_t", input_stride),
+                _field_bytes(ds, record, "input_t", input_stride),
             )
         binding.write_compare(handle, out_bytes)
     finally:
@@ -90,31 +89,31 @@ def _rollout_to_pre_combat(
     defender: int,
 ) -> tuple[list[int], np.ndarray]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        binding.reseed_seed_rollout(handle, _field_bytes(samples, start_record, "seed_t", seed_stride))
+        binding.reseed_seed_rollout(handle, _field_bytes(ds, start_record, "seed_t", seed_stride))
         for record in range(start_record, target_record):
             binding.step_input_replay_frame_rng(
                 handle,
-                _field_bytes(samples, record, "seed_t", seed_stride),
-                _field_bytes(samples, record, "prev_input_t", input_stride),
-                _field_bytes(samples, record, "input_t", input_stride),
+                _field_bytes(ds, record, "seed_t", seed_stride),
+                _field_bytes(ds, record, "prev_input_t", input_stride),
+                _field_bytes(ds, record, "input_t", input_stride),
             )
         binding.debug_step_input_pre_combat(
             handle,
-            _field_bytes(samples, target_record, "prev_input_t", input_stride),
-            _field_bytes(samples, target_record, "input_t", input_stride),
+            _field_bytes(ds, target_record, "prev_input_t", input_stride),
+            _field_bytes(ds, target_record, "input_t", input_stride),
         )
         hitlist_contains = [
             int(binding.debug_hitlist_fighter_contains(handle, 0, attacker, hb, defender))
@@ -139,15 +138,15 @@ def test_throw_owner_body_hitbox_damages_attached_victim_without_victim_hitlag()
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007891C}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
+    dataset_path = root / "replays/validation/sheik/RuralReasonableRat.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 3160
     thrower = 0
     victim = 1
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][thrower]) == ACT_THROW_LW
     assert int(row["seed_t"]["action_id"][victim]) == ACT_THROWN_LW
     assert int(row["seed_t"]["grab_owner_port"][victim]) == thrower
@@ -169,10 +168,10 @@ def test_throw_owner_body_hitbox_damages_attached_victim_without_victim_hitlag()
 @pytest.mark.parametrize(
     ("filename", "record", "thrower", "victim"),
     [
-        ("MixedAllQuetzal.msl", 10097, 0, 1),
-        ("UnusedLivelyLouse.msl", 5224, 0, 1),
-        ("AttractiveAnyClam.msl", 176, 0, 1),
-        ("TornEnchantingGiraffe.msl", 8374, 0, 1),
+        ("MixedAllQuetzal.slpz", 10097, 0, 1),
+        ("UnusedLivelyLouse.slpz", 5224, 0, 1),
+        ("AttractiveAnyClam.slpz", 176, 0, 1),
+        ("TornEnchantingGiraffe.slpz", 8374, 0, 1),
     ],
 )
 def test_sheik_attached_throw_body_no_hitlag_sets_x221c_b0(
@@ -187,12 +186,12 @@ def test_sheik_attached_throw_body_no_hitlag_sets_x221c_b0(
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007891C}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik" / filename
+    dataset_path = root / "replays/validation/sheik" / filename
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["grab_owner_port"][victim]) == thrower
     assert int(row["seed_t"]["hitlag"][victim]) == 0
     assert int(row["ref_t1"]["hitlag"][victim]) == 0
@@ -210,9 +209,9 @@ def test_throw_owner_body_hitbox_hitlag_suppression_requires_attachment() -> Non
     # action-id-only suppression.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
+    dataset_path = root / "replays/validation/sheik/RuralReasonableRat.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 3160
     victim = 1
@@ -234,16 +233,16 @@ def test_direct_kb_pre_release_throw_body_hit_keeps_attached_victim_hitlag() -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 215
     thrower = 1
     victim = 0
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][thrower]) == 219
     assert int(row["seed_t"]["grab_owner_port"][victim]) == thrower
     assert int(row["ref_t1"]["hitlag"][victim]) > 0
@@ -265,9 +264,9 @@ def test_sheik_throwlw_body_hitlag_resumes_thrower_anim_before_release_rollout()
     # data/scripts/sheik.bin (MSLFTSC1) ftCo_SM_ThrowLw create_hitbox / set_throw_flags
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
+    dataset_path = root / "replays/validation/sheik/RuralReasonableRat.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     start_record = 2950
     thrower = 0
@@ -294,17 +293,17 @@ def test_throw_entry_clears_catchpull_hitlist_before_first_swing_rollout() -> No
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AFF8,ftColl_800768A0,ftColl_80076ED8}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/UnusedLivelyLouse.msl"
+    dataset_path = root / "replays/validation/sheik/UnusedLivelyLouse.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     start_record = 5101
     target_record = 5224
     thrower = 0
     victim = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[target_record]["seed_t"]
-    ref = ds.samples[target_record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[target_record]["seed_t"]
+    ref = ds.rows[target_record]["ref_t1"]
     assert int(seed["action_id"][thrower]) == ACT_THROW_LW
     assert int(seed["action_id"][victim]) == ACT_THROWN_LW
     assert [int(v) for v in seed["combat_hitlist_hb_valid"][thrower]] == [0, 0, 0, 0]
@@ -343,9 +342,9 @@ def test_sheik_throwlw_release_floor_publication_prevents_false_downbound_rollou
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
+    dataset_path = root / "replays/validation/sheik/RuralReasonableRat.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     start_record = 2950
     victim = 1
@@ -364,9 +363,9 @@ def test_sheik_throwlw_body_hitlag_does_not_release_before_script_flag_rollout()
     # release boundary and vanilla still keeps the victim in ThrownLw.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
+    dataset_path = root / "replays/validation/sheik/RuralReasonableRat.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     start_record = 2950
     thrower = 0

@@ -6,14 +6,12 @@ import numpy as np
 import pytest
 
 from tests.test_platform_collision_runtime import _step_one_replay_row
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_row_bytes
 
 
-def _field_bytes(samples: np.ndarray, record: int, field: str, stride: int) -> np.ndarray:
-    off = samples.dtype.fields[field][1]
-    raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
-    return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+def _field_bytes(ds, record: int, field: str, stride: int) -> np.ndarray:
+    return replay_buffer_row_bytes(ds, field, record, stride)
 
 
 def _run_rollout_to_records(ds, records: tuple[int, ...]) -> dict[int, np.void]:
@@ -22,7 +20,7 @@ def _run_rollout_to_records(ds, records: tuple[int, ...]) -> dict[int, np.void]:
 
 def _run_rollout_window_to_records(ds, start: int, records: tuple[int, ...]) -> dict[int, np.void]:
     binding = pytest.importorskip("msl_binding")
-    samples = ds.samples
+    samples = ds.rows
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -34,18 +32,18 @@ def _run_rollout_window_to_records(ds, start: int, records: tuple[int, ...]) -> 
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        binding.reseed_seed_rollout(handle, _field_bytes(samples, start, "seed_t", seed_stride))
+        binding.reseed_seed_rollout(handle, _field_bytes(ds, start, "seed_t", seed_stride))
         for rec in range(start, stop + 1):
             binding.step_input_replay_frame_rng(
                 handle,
-                _field_bytes(samples, rec, "seed_t", seed_stride),
-                _field_bytes(samples, rec, "prev_input_t", input_stride),
-                _field_bytes(samples, rec, "input_t", input_stride),
+                _field_bytes(ds, rec, "seed_t", seed_stride),
+                _field_bytes(ds, rec, "prev_input_t", input_stride),
+                _field_bytes(ds, rec, "input_t", input_stride),
             )
             if rec in wanted:
                 binding.write_compare(handle, out_compare)
@@ -124,13 +122,13 @@ def test_specialn_laser_spawn_latches_live_blaster_attack_identity_replay_real()
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
+    samples = ds.rows
 
     first_visible_seed = samples[175]["seed_t"]
     shot = first_visible_seed["items"][2]
@@ -176,13 +174,13 @@ def test_reflected_item_hit_advances_new_owner_stale_queue_replay_real() -> None
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
+    samples = ds.rows
 
     reflect_seed = samples[9898]["seed_t"]
     reflect_ref = samples[9898]["ref_t1"]
@@ -248,12 +246,12 @@ def test_returned_powershielded_falco_laser_uses_original_shooter_stale_damage_m
     # refs/melee/src/melee/it/itcoll.c::it_80272460
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        root / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+        pytest.skip(f"missing local replay: {dataset_path}")
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
 
     seed = samples[6294]["seed_t"]
     assert int(seed["items"][1]["type"]) == 55  # Falco blaster shot kind, data/items/lasers.bin.
@@ -281,12 +279,12 @@ def test_strong_reflector_returned_laser_keeps_existing_damage_timing_maj() -> N
     # strong-reflector damage/timing path: the target must not enter Damage until rec2016.
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        root / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+        pytest.skip(f"missing local replay: {dataset_path}")
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     seed = samples[2015]["seed_t"]
     assert int(seed["items"][0]["type"]) == 55
     assert float(seed["item_reflect_damage_mul"][0]) == pytest.approx(1.5, abs=1e-6)

@@ -5,14 +5,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _dataset_path() -> Path:
     root = Path(__file__).resolve().parents[1]
     return (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
 
 
@@ -58,10 +59,10 @@ def test_specialairhi_hurtcaps_xrotn_agn_target_window_stays_replay_exact() -> N
     # - The missing owner is victim hurtcaps on the SpecialAirHi launch family.
     dataset_path = _dataset_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
 
     for record in (7262, 7263, 7264):
@@ -90,10 +91,10 @@ def test_specialairhi_hurtcaps_xrotn_agn_target_window_stays_replay_exact() -> N
 def test_specialairhi_hurtcaps_xrotn_adjacent_blockers_stay_separate() -> None:
     dataset_path = _dataset_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
 
     # Keep the family boundary explicit: AGN:5611 is not part of the SpecialAirHi hurtcap-XRotN

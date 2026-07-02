@@ -6,9 +6,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h.
+from tests.replay_buffers_loader import load_replay_buffers
 ACT_TURN = 18
 ACT_DASH = 20
 
@@ -21,75 +22,75 @@ ACT_DASH = 20
 # - previous seed action_id matches expected context action (entry context lock)
 _CASES: tuple[tuple[str, int, int, int], ...] = (
     (
-        "datasets/marth/replays/validation/marth/MetallicUniqueGrouse.msl",
+        "replays/validation/marth/MetallicUniqueGrouse.slpz",
         3721,
         1,
         14,  # Wait -> basic Turn; Marth turn_frames must not seed as zero.
     ),
     (
-        "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl",
+        "replays/validation/marth/RipeWealthySeahorse.slpz",
         8048,
         1,
         43,  # LandingAirF -> basic Turn; same-direction flick must not UCF-dash.
     ),
     (
-        "datasets/marth/replays/validation/marth/ColossalYellowishBison.msl",
+        "replays/validation/marth/ColossalYellowishBison.slpz",
         986,
         1,
         233,  # DamageFlyN -> basic Turn; same-direction flick must not UCF-dash.
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
         1414,
         1,
         14,  # Wait -> Turn
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
         5740,
         0,
         20,  # Dash -> Turn
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+        "replays/validation/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
         305,
         0,
         73,  # LandingAirHi -> Turn
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+        "replays/validation/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
         4475,
         1,
         42,  # Landing -> Turn
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+        "replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
         1214,
         0,
         42,  # Landing -> Turn
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+        "replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
         9173,
         1,
         14,  # Wait -> Turn
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
         805,
         0,
         14,  # Wait -> Turn
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
         470,
         0,
         221,  # ThrowHi -> Turn
@@ -119,11 +120,11 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 def _row_or_skip(root: Path, dataset_rel: str, record: int) -> tuple[object, np.ndarray, np.ndarray]:
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     if int(samples.shape[0]) <= record:
-        pytest.skip(f"dataset too short for regression check: {dataset_rel} rec={record}")
+        pytest.skip(f"replay too short for regression check: {dataset_rel} rec={record}")
     return ds, samples, samples[record : record + 1]
 
 
@@ -159,7 +160,7 @@ def test_turn_iasa_no_spurious_dash_when_ref_stays_turn(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -200,7 +201,7 @@ def test_marth_basic_turn_ucf_dashback_uses_temporary_facing_after_positive() ->
     _skip_if_required_artifacts_missing(root)
     binding = pytest.importorskip("msl_binding")
     ds, _samples, row = _row_or_skip(
-        root, "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl", 2413
+        root, "replays/validation/marth/InternalPowerlessWallaby.slpz", 2413
     )
     p = 0
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_TURN
@@ -214,7 +215,7 @@ def test_marth_basic_turn_ucf_dashback_uses_temporary_facing_after_positive() ->
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride).copy()
         prev_input_bytes = (

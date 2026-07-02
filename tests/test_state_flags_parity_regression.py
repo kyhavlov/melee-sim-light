@@ -8,7 +8,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -61,12 +62,12 @@ def _run_case(c: _Case) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / c.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {c.dataset_rel}")
+        pytest.skip(f"missing local replay: {c.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > c.record, f"dataset too short: num_records={num_records} record={c.record}"
+    assert num_records > c.record, f"replay too short: num_records={num_records} record={c.record}"
 
     row = samples[c.record : c.record + 1]
 
@@ -106,7 +107,7 @@ def _run_case(c: _Case) -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -140,8 +141,8 @@ def _run_case(c: _Case) -> None:
         # 0x221A (state_flags[1]) bit 0x08 isFastFalling.
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
             ),
             record=131,
             p=0,
@@ -152,8 +153,8 @@ def _run_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
             ),
             record=159,
             p=1,
@@ -168,8 +169,8 @@ def _run_case(c: _Case) -> None:
         # timer expires and the shield desc is recreated. See src/shields.c for references.
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
             ),
             record=113,
             p=1,
@@ -187,7 +188,7 @@ def _run_case(c: _Case) -> None:
         # ReflectDesc.x20_behavior (0x04). Common GuardReflect passes behavior=1 through
         # ftCo_8009370C, so new GuardReflect entries must publish 0x14, not only 0x10.
         _Case(
-            dataset_rel="datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl",
+            dataset_rel="replays/validation/marth/VictoriousSpitefulAlpaca.slpz",
             record=4209,
             p=0,
             byte=0,
@@ -198,7 +199,7 @@ def _run_case(c: _Case) -> None:
             ref_action_id=0x00B6,
         ),
         _Case(
-            dataset_rel="datasets/marth/replays/validation/marth/BreakableMundaneElephant.msl",
+            dataset_rel="replays/validation/marth/BreakableMundaneElephant.slpz",
             record=171,
             p=1,
             byte=0,
@@ -211,7 +212,7 @@ def _run_case(c: _Case) -> None:
         # Adjacent exits: GuardReflect->GuardSetOff clears fp->reflecting through
         # Fighter_ChangeMotionState but keeps the ReflectDesc behavior bit carried in x2218_b5.
         _Case(
-            dataset_rel="datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            dataset_rel="replays/validation/marth/InternalPowerlessWallaby.slpz",
             record=1012,
             p=0,
             byte=0,
@@ -223,7 +224,7 @@ def _run_case(c: _Case) -> None:
             seed_guard_reflect_timer_x14=0,
         ),
         _Case(
-            dataset_rel="datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl",
+            dataset_rel="replays/validation/marth/RipeWealthySeahorse.slpz",
             record=4755,
             p=0,
             byte=0,
@@ -236,8 +237,8 @@ def _run_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
             ),
             record=429,
             p=1,
@@ -251,8 +252,8 @@ def _run_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
             ),
             record=1598,
             p=1,
@@ -266,8 +267,8 @@ def _run_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
             ),
             record=367,
             p=1,
@@ -290,7 +291,7 @@ def _run_case(c: _Case) -> None:
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
         # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl",
+            dataset_rel="replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
             record=8953,
             p=0,
             byte=0,
@@ -303,7 +304,7 @@ def _run_case(c: _Case) -> None:
             ref_hitlag=7,
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             record=5542,
             p=1,
             byte=0,
@@ -316,7 +317,7 @@ def _run_case(c: _Case) -> None:
             ref_hitlag=6,
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl",
+            dataset_rel="replays/validation/battlefield_recent/MediumVirtualPig.slpz",
             record=7217,
             p=1,
             byte=0,
@@ -336,7 +337,7 @@ def _run_case(c: _Case) -> None:
         # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack11_IASA,checkAttack12}
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            dataset_rel="replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz",
             record=7274,
             p=0,
             byte=0,
@@ -351,8 +352,8 @@ def _run_case(c: _Case) -> None:
         # 0x221C (state_flags[3]) bit 0x02 isHitstun.
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
             ),
             record=3586,
             p=1,
@@ -363,8 +364,8 @@ def _run_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
             ),
             record=6869,
             p=0,
@@ -385,15 +386,15 @@ def test_state_flags_2218_allow_interrupt_attackairb_window_active_parity() -> N
     # this record is in-window (allow_interrupt active) and action-id-stable at t/t+1.
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 1344
     p = 0
     assert int(samples.shape[0]) > record
@@ -423,7 +424,7 @@ def test_state_flags_2218_allow_interrupt_attackairb_window_active_parity() -> N
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -455,7 +456,7 @@ def test_state_flags_2218_allow_interrupt_attackairb_window_active_parity() -> N
     "c",
     [
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            dataset_rel="replays/validation/aggregate_recent/FavorableSuperficialPig.slpz",
             record=6071,
             p=0,
             byte=0,
@@ -468,7 +469,7 @@ def test_state_flags_2218_allow_interrupt_attackairb_window_active_parity() -> N
             ref_hitlag=6,
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            dataset_rel="replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
             record=11909,
             p=1,
             byte=0,
@@ -481,7 +482,7 @@ def test_state_flags_2218_allow_interrupt_attackairb_window_active_parity() -> N
             ref_hitlag=8,
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl",
+            dataset_rel="replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
             record=197,
             p=0,
             byte=0,
@@ -494,7 +495,7 @@ def test_state_flags_2218_allow_interrupt_attackairb_window_active_parity() -> N
             ref_hitlag=4,
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            dataset_rel="replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
             record=790,
             p=1,
             byte=0,
@@ -507,7 +508,7 @@ def test_state_flags_2218_allow_interrupt_attackairb_window_active_parity() -> N
             ref_hitlag=4,
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl",
+            dataset_rel="replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.slpz",
             record=5818,
             p=0,
             byte=0,
@@ -536,7 +537,7 @@ def test_state_flags_2218_damage_entry_bounded_source_allow_interrupt(c: _Case) 
     "c",
     [
         _Case(
-            dataset_rel="datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl",
+            dataset_rel="replays/validation/sheik/StiffLustrousZebra.slpz",
             record=2418,
             p=0,
             byte=1,
@@ -549,7 +550,7 @@ def test_state_flags_2218_damage_entry_bounded_source_allow_interrupt(c: _Case) 
             ref_hitstun=0,
         ),
         _Case(
-            dataset_rel="datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl",
+            dataset_rel="replays/validation/sheik/SnarlingHelplessBeaver.slpz",
             record=5599,
             p=1,
             byte=1,
@@ -562,7 +563,7 @@ def test_state_flags_2218_damage_entry_bounded_source_allow_interrupt(c: _Case) 
             ref_hitstun=0,
         ),
         _Case(
-            dataset_rel="datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl",
+            dataset_rel="replays/validation/sheik/AttractiveAnyClam.slpz",
             record=3143,
             p=1,
             byte=1,
@@ -617,13 +618,13 @@ def test_state_flags_2218_grounded_attack_anim_end_allow_interrupt_owner(
     #   ftCo_AttackS3_Anim,ftCo_AttackS3_IASA}
     # refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row["seed_t"]["action_id"][0, p]) == 0x0035, note
     assert int(row["ref_t1"]["action_id"][0, p]) == ref_action, note
     assert (int(row["ref_t1"]["state_flags"][0, p, 0]) & 0x80 != 0) == ref_bit_set, note
@@ -640,7 +641,7 @@ def test_state_flags_2218_grounded_attack_anim_end_allow_interrupt_owner(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -676,15 +677,15 @@ def test_attack11_jab_chain_uses_source_x668_z_as_a_edge() -> None:
     # refs/melee/src/melee/ft/fighter.c:1868-1896
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack11_IASA,checkAttack12}
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PutridJoyousOryx.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 7447
     p = 0
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     assert int(row["seed_t"]["action_id"][0, p]) == 0x002C
     assert int(row["seed_t"]["state_flags"][0, p, 0]) & 0x40
     assert (int(row["prev_input_t"]["p"]["buttons"][0, p]) & 0x0010) == 0
@@ -697,7 +698,7 @@ def test_attack11_jab_chain_uses_source_x668_z_as_a_edge() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
             1, seed_stride
@@ -733,15 +734,15 @@ def test_attack11_jab_chain_z_does_not_reedge_already_held_source_a() -> None:
     # refs/melee/src/melee/ft/fighter.c:1868-1896
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::checkAttack12
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    dataset_rel = "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 2559
     p = 1
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     assert int(row["seed_t"]["action_id"][0, p]) == 0x002C
     assert int(row["seed_t"]["state_flags"][0, p, 0]) & 0x40
     assert (int(row["prev_input_t"]["p"]["buttons"][0, p]) & 0x0100) != 0
@@ -754,7 +755,7 @@ def test_attack11_jab_chain_z_does_not_reedge_already_held_source_a() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
             1, seed_stride

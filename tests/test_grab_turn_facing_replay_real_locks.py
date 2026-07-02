@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -63,16 +64,16 @@ class _Case:
     ref_facing: int
 
 
-_BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE = "replays/validation/cardinal_1.0_recent"
 _CAPTURE_CASES = [
-    _Case("AGN:2421:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 2421, 0, 235, 226, 1),
-    _Case("GAT:367:p1", f"{_BASE}/GracefulAttachedTurtle.msl", 367, 1, 178, 226, 1),
-    _Case("TBK:5769:p1", f"{_BASE}/TreasuredBackKangaroo.msl", 5769, 1, 90, 223, 1),
+    _Case("AGN:2421:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 2421, 0, 235, 226, 1),
+    _Case("GAT:367:p1", f"{_BASE}/GracefulAttachedTurtle.slpz", 367, 1, 178, 226, 1),
+    _Case("TBK:5769:p1", f"{_BASE}/TreasuredBackKangaroo.slpz", 5769, 1, 90, 223, 1),
 ]
 _TURN_CASES = [
-    _Case("AGN:3817:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 3817, 0, 18, 56, 1),
-    _Case("TBK:473:p0", f"{_BASE}/TreasuredBackKangaroo.msl", 473, 0, 18, 63, 0),
-    _Case("QGD:3671:p1", f"{_BASE}/QuerulousGrandDinosaur.msl", 3671, 1, 18, 53, 1),
+    _Case("AGN:3817:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 3817, 0, 18, 56, 1),
+    _Case("TBK:473:p0", f"{_BASE}/TreasuredBackKangaroo.slpz", 473, 0, 18, 63, 0),
+    _Case("QGD:3671:p1", f"{_BASE}/QuerulousGrandDinosaur.slpz", 3671, 1, 18, 53, 1),
 ]
 
 
@@ -102,10 +103,10 @@ def test_capture_pulled_entry_facing_replay_real_locks(case: _Case) -> None:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     row = samples[case.record : case.record + 1]
     p = int(case.p)
 
@@ -113,7 +114,7 @@ def test_capture_pulled_entry_facing_replay_real_locks(case: _Case) -> None:
     assert int(row["ref_t1"]["action_id"][0, p]) == case.ref_action
     assert int(row["ref_t1"]["facing"][0, p]) == case.ref_facing
 
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
     _assert_exact_t1_parity(out=out, ref=row["ref_t1"][0], p=p, case_tag=case.tag)
 
 
@@ -126,10 +127,10 @@ def test_turn_iasa_attack_entry_facing_replay_real_locks(case: _Case) -> None:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     row = samples[case.record : case.record + 1]
     p = int(case.p)
 
@@ -137,5 +138,5 @@ def test_turn_iasa_attack_entry_facing_replay_real_locks(case: _Case) -> None:
     assert int(row["ref_t1"]["action_id"][0, p]) == case.ref_action
     assert int(row["ref_t1"]["facing"][0, p]) == case.ref_facing
 
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
     _assert_exact_t1_parity(out=out, ref=row["ref_t1"][0], p=p, case_tag=case.tag)

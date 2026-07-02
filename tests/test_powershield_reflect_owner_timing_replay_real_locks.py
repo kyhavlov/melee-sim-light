@@ -79,7 +79,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
     "case",
     [
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=6207,
             spawn_id=149,
             item_type=55,
@@ -101,7 +101,7 @@ def test_guardon_followup_powershield_reflect_commits_owner_xda8_target_pm1_both
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     for record in (case.target_record - 1, case.target_record, case.target_record + 1):
         _, out, ref = _step_one_row(dataset_path, record)
@@ -130,8 +130,8 @@ def test_guardon_followup_powershield_reflect_commits_owner_xda8_target_pm1_both
     [
         _AgedCommitCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=4828,
             spawn_id=125,
@@ -141,8 +141,8 @@ def test_guardon_followup_powershield_reflect_commits_owner_xda8_target_pm1_both
         ),
         _AgedCommitCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "TreasuredBackKangaroo.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "TreasuredBackKangaroo.slpz"
             ),
             target_record=7448,
             spawn_id=142,
@@ -164,7 +164,7 @@ def test_aged_powershield_reflect_commits_owner_xda8(case: _AgedCommitCase) -> N
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     _, out_t, ref_t = _step_one_row(dataset_path, case.target_record)
     slot_out = _find_item_slot_by_key(out_t["items"], spawn_id=case.spawn_id, item_type=case.item_type)
@@ -187,8 +187,8 @@ def test_aged_powershield_reflect_commits_owner_xda8(case: _AgedCommitCase) -> N
     [
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=2274,
             spawn_id=65,
@@ -197,8 +197,8 @@ def test_aged_powershield_reflect_commits_owner_xda8(case: _AgedCommitCase) -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=2274,
             spawn_id=65,
@@ -207,8 +207,8 @@ def test_aged_powershield_reflect_commits_owner_xda8(case: _AgedCommitCase) -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=2275,
             spawn_id=65,
@@ -217,8 +217,8 @@ def test_aged_powershield_reflect_commits_owner_xda8(case: _AgedCommitCase) -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=9479,
             spawn_id=202,
@@ -227,8 +227,8 @@ def test_aged_powershield_reflect_commits_owner_xda8(case: _AgedCommitCase) -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "DistinctCaringCobra.msl"
+                "replays/validation/aggregate_recent/"
+                "DistinctCaringCobra.slpz"
             ),
             target_record=352,
             spawn_id=11,
@@ -237,8 +237,8 @@ def test_aged_powershield_reflect_commits_owner_xda8(case: _AgedCommitCase) -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "TubbyCurlyHerring.msl"
+                "replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.slpz"
             ),
             target_record=10921,
             spawn_id=125,
@@ -247,8 +247,8 @@ def test_aged_powershield_reflect_commits_owner_xda8(case: _AgedCommitCase) -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "MotionlessAggressiveJay.msl"
+                "replays/validation/aggregate_recent/"
+                "MotionlessAggressiveJay.slpz"
             ),
             target_record=7384,
             spawn_id=166,
@@ -278,7 +278,7 @@ def test_aged_powershield_reflect_does_not_broad_transfer_controls(case: _Case) 
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed_t, out_t, ref_t = _step_one_row(dataset_path, case.target_record)
     slot_seed = _find_item_slot_by_key(seed_t["items"], spawn_id=case.spawn_id, item_type=case.item_type)
@@ -305,10 +305,10 @@ def test_non_dash_same_frame_guardreflect_contact_does_not_transfer_owner_xda8()
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     seed_t, out_t, ref_t = _step_one_row(dataset_path, 6314)
     p = 0
@@ -340,10 +340,10 @@ def test_final_x14_guardreflect_hitshield_handoff_destroys_laser() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        / "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip("missing local dataset: TreasuredBackKangaroo.msl")
+        pytest.skip("missing local replay: TreasuredBackKangaroo.slpz")
 
     # Adjacent previous row is still inside the active reflect window and keeps the laser alive.
     _seed_prev, out_prev, ref_prev = _step_one_row(dataset_path, 2322)
@@ -367,8 +367,8 @@ def test_final_x14_guardreflect_hitshield_handoff_destroys_laser() -> None:
     [
         _SpawnFrameCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.slpz"
             ),
             target_record=428,
             item_slot=1,
@@ -377,8 +377,8 @@ def test_final_x14_guardreflect_hitshield_handoff_destroys_laser() -> None:
         ),
         _SpawnFrameCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.slpz"
             ),
             target_record=3345,
             item_slot=1,
@@ -401,7 +401,7 @@ def test_spawn_frame_powershield_reflect_commits_owner_xda8(case: _SpawnFrameCas
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed_t, out_t, ref_t = _step_one_row(dataset_path, case.target_record)
     slot = int(case.item_slot)

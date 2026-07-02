@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _one_step_out_compare(*, ds, row) -> np.ndarray:
@@ -16,7 +17,7 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -46,17 +47,17 @@ class _Case:
 
 _CASES = [
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
         record=3901,
         p=1,
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
         record=3902,
         p=1,
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
         record=3903,
         p=1,
     ),
@@ -74,11 +75,11 @@ def test_ottotto_dash_flick_rows_match_replay(case: _Case) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > case.record, f"dataset too short for record={case.record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > case.record, f"replay too short for record={case.record}"
     row = samples[case.record : case.record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
@@ -123,15 +124,15 @@ def test_runbrake_edge_collision_enters_ottotto_replay_lock() -> None:
     # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    dataset_rel = "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 7625
     p = 1
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
 
@@ -179,15 +180,15 @@ def test_steady_runbrake_edge_collision_enters_ottotto_without_down_stick() -> N
     # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 1596
     p = 0
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
 

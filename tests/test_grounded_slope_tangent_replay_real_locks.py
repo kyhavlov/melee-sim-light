@@ -15,26 +15,26 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             2321,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.slpz",
             5275,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             1160,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             4794,
             0,
         ),
@@ -64,11 +64,11 @@ def test_flat_grounded_velocity_does_not_gain_vertical_component() -> None:
     _skip_if_required_artifacts_missing(root)
     ds_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.slpz"
     )
     if not ds_path.exists():
-        pytest.skip("missing local replay dataset: dream_land_recent/FlippantEnchantedHorse.msl")
+        pytest.skip("missing local replay dataset: dream_land_recent/FlippantEnchantedHorse.slpz")
 
     _seed, ref, out = _run_one_step_row(ds_path, 2340, 1)
     assert float(ref["speed_ground_x_self"][1]) == 0.0

@@ -4,7 +4,7 @@ import json
 
 import numpy as np
 
-from tools.slippi.make_dataset_from_slp import _derive_match_flow_timer
+from tools.slippi.validation_buffer_seed import _derive_match_flow_timer
 
 
 def test_match_flow_timer_derivation_is_prefix_invariant() -> None:

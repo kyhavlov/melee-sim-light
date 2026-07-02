@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -46,9 +47,9 @@ def _scalar_out(row_obj: np.ndarray, *, p: int, field: str) -> int:
 
 
 def _run_one_step_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
@@ -67,7 +68,7 @@ def _run_one_step_row(dataset_path: Path, record: int) -> tuple[np.void, np.void
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -92,11 +93,11 @@ def test_seed_hitlist_ownership_carry_agg_1430_family_context_and_seed_blocker_l
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     # Target row preconditions.
     seed, ref, _ = _run_one_step_row(dataset_path, 1430)
@@ -156,11 +157,11 @@ def test_seed_hitlist_ownership_carry_agg_848_family_replay_real_locks() -> None
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     # Target-frame preconditions: both players should take hitlag on rec=848.
     seed, ref, _ = _run_one_step_row(dataset_path, 848)

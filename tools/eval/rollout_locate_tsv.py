@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Helpers for rollout first-break locate TSVs.
 
-The TSV emitted by `tools.eval.locate_rollout_desyncs` uses:
+Legacy rollout locate TSV files use:
 `dataset,record,seed_frame,ref_frame,player,field,subindex,seed,out,ref,`
 `streak_start_record,streak_len,seeded_break,cluster_key`.
 """

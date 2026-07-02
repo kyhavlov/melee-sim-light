@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -27,14 +27,14 @@ def test_throwlw_first_attached_pulse_source_and_item_lifetime_lock() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     target_record = 9177
-    target = ds.samples[target_record]
+    target = ds.rows[target_record]
     seed = target["seed_t"]
     owner_p = 0
     victim_p = 1
@@ -79,13 +79,13 @@ def test_falco_throwlw_frame28_spawn_callback_lock(target_record: int) -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[target_record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[target_record]["seed_t"]
     owner_p = 1
     victim_p = 0
     assert int(seed["char_id"][owner_p]) == 22
@@ -112,15 +112,15 @@ def test_falco_throwlw_frame28_spawn_callback_primary_negatives(target_record: i
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[target_record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[target_record]["seed_t"]
     owner_p = 0
     victim_p = 1
     assert int(seed["action_id"][owner_p]) == 222

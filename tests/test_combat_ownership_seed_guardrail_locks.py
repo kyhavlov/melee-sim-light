@@ -9,8 +9,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE
-from tests.replay_dataset_loader import load_replay_dataset as read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 MSL_BUTTON_Z = 0x0010
 MSL_BUTTON_R = 0x0020
@@ -221,9 +221,9 @@ def _run_one_step_row(
     seed_mutator=None,
     input_mutator=None,
 ) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
     seed_t = row["seed_t"].copy()
     prev_input_t = row["prev_input_t"].copy()
@@ -256,7 +256,7 @@ def _run_one_step_row(
         # causality A/B checks in this lock harness.
         os.environ["MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE"] = "1"
 
-    init_kwargs = {"batch_size": 1, "num_players": int(ds.header["num_players"])}
+    init_kwargs = {"batch_size": 1, "num_players": int(ds.num_players)}
     if ucf_enabled is not None:
         init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
     if ucf_cardinals_1_0_enabled is not None:
@@ -288,9 +288,9 @@ def _run_rollout_window_rows_with_trace(
     ucf_enabled: bool | None = None,
     ucf_cardinals_1_0_enabled: bool | None = None,
 ) -> dict[int, tuple[np.void, np.void, int]]:
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > max(window_records), "dataset too short for rollout lock window"
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > max(window_records), "replay too short for rollout lock window"
     assert start_record <= min(window_records), "rollout start must be <= window start"
 
     binding = pytest.importorskip("msl_binding")
@@ -313,7 +313,7 @@ def _run_rollout_window_rows_with_trace(
         os.environ["MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE"] = "1"
     os.environ["MSL_RNG_TRACE_PATH"] = str(trace_path)
 
-    init_kwargs = {"batch_size": 1, "num_players": int(ds.header["num_players"])}
+    init_kwargs = {"batch_size": 1, "num_players": int(ds.num_players)}
     if ucf_enabled is not None:
         init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
     if ucf_cardinals_1_0_enabled is not None:
@@ -374,9 +374,9 @@ def _run_rollout_window_rows(
     ucf_enabled: bool | None = None,
     ucf_cardinals_1_0_enabled: bool | None = None,
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > max(window_records), "dataset too short for rollout lock window"
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > max(window_records), "replay too short for rollout lock window"
     assert start_record <= min(window_records), "rollout start must be <= window start"
 
     binding = pytest.importorskip("msl_binding")
@@ -392,7 +392,7 @@ def _run_rollout_window_rows(
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    init_kwargs = {"batch_size": 1, "num_players": int(ds.header["num_players"])}
+    init_kwargs = {"batch_size": 1, "num_players": int(ds.num_players)}
     if ucf_enabled is not None:
         init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
     if ucf_cardinals_1_0_enabled is not None:
@@ -431,9 +431,9 @@ def _run_rollout_window_rows_replay_frame_rng(
     ucf_enabled: bool | None = None,
     ucf_cardinals_1_0_enabled: bool | None = None,
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > max(window_records), "dataset too short for rollout lock window"
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > max(window_records), "replay too short for rollout lock window"
     assert start_record <= min(window_records), "rollout start must be <= window start"
 
     binding = pytest.importorskip("msl_binding")
@@ -449,7 +449,7 @@ def _run_rollout_window_rows_replay_frame_rng(
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    init_kwargs = {"batch_size": 1, "num_players": int(ds.header["num_players"])}
+    init_kwargs = {"batch_size": 1, "num_players": int(ds.num_players)}
     if ucf_enabled is not None:
         init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
     if ucf_cardinals_1_0_enabled is not None:
@@ -486,9 +486,9 @@ def _run_rollout_window_rows_replay_frame_rng(
 def _run_pre_combat_debug_row(
     ds_path: Path, record: int, attacker: int, hb_id: int
 ) -> tuple[np.void, np.ndarray, np.ndarray, np.void]:
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
 
@@ -503,7 +503,7 @@ def _run_pre_combat_debug_row(
     )
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
@@ -606,21 +606,21 @@ def _find_unique_combo_victim_from_seed(seed_row: np.void, attacker_p: int) -> i
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             329,
             0,
             79,
             24,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             161,
             0,
             78,
             24,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             129,
             1,
             75,
@@ -628,42 +628,42 @@ def _find_unique_combo_victim_from_seed(seed_row: np.void, attacker_p: int) -> i
         ),
         # Adjacent controls (same local transition window, strict replay parity).
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             328,
             0,
             79,
             79,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             330,
             0,
             24,
             24,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             160,
             0,
             78,
             78,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             162,
             0,
             24,
             24,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             128,
             1,
             75,
             75,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             130,
             1,
             24,
@@ -682,7 +682,7 @@ def test_damage_ground_to_kneebend_transition_rows_and_adjacent_controls_are_rep
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
     assert int(seed_row["action_id"][p]) == int(seed_action)
@@ -695,13 +695,13 @@ def test_damage_ground_to_kneebend_transition_rows_and_adjacent_controls_are_rep
     ("dataset_rel", "rows", "p_target", "seed_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             (328, 329, 330),
             0,
             79,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             (160, 161, 162),
             0,
             78,
@@ -721,12 +721,12 @@ def test_damage_ground_wait_iasa_kneebend_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[rows[1] : rows[1] + 1]
     assert int(target_row["seed_t"]["action_id"][0, p_target]) == int(seed_action)
@@ -757,21 +757,21 @@ def test_guardreflect_frozen_powershield_shield_damage_rows_and_adjacent_control
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     # target-1, target, target+1
     rows = (115, 116, 117)
     target = 116
     p_target = 1
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     seed_t = samples["seed_t"][target]
     ref_t1 = samples["ref_t1"][target]
@@ -802,21 +802,21 @@ def test_catchpull_capturewait_owner_before_victim_tick_rows_and_adjacent_contro
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     # target-1, target, target+1
     rows = (219, 220, 221)
     target = 220
     p_target = 1
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     seed_t = samples["seed_t"][target]
     ref_t1 = samples["ref_t1"][target]
@@ -837,22 +837,22 @@ def test_catchpull_capturewait_owner_before_victim_tick_rows_and_adjacent_contro
     ("dataset_rel", "target_record", "owner_p", "victim_p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             945,
             1,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             961,
             1,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             8257,
             1,
             0,
@@ -872,13 +872,13 @@ def test_catchwait_lower_slot_followup_tick_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record : target_record + 1]
     seed_t = target["seed_t"][0]
@@ -913,21 +913,21 @@ def test_items_guardreflect_no_submotion_shield_sweep_rows_and_adjacent_controls
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     # target-1, target, target+1
     rows = (217, 218, 219)
     target = 218
     p_target = 0
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     seed_t = samples["seed_t"][target]
     ref_t1 = samples["ref_t1"][target]
@@ -962,12 +962,12 @@ def test_items_guardreflect_seed_x14_stale_lane_rows_and_adjacent_controls_are_r
 
     families = [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             (548, 549, 550),
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             (2275, 2276, 2277),
             0,
         ),
@@ -976,11 +976,11 @@ def test_items_guardreflect_seed_x14_stale_lane_rows_and_adjacent_controls_are_r
     for dataset_rel, rows, p_target in families:
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
-        ds = read_dataset(str(dataset_path))
-        samples = ds.samples
+            pytest.skip(f"missing local replay: {dataset_rel}")
+        ds = load_replay_buffers(str(dataset_path))
+        samples = ds.rows
         for rec in rows:
-            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+            assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
         target = rows[1]
         seed_t = samples["seed_t"][target]
@@ -1012,22 +1012,22 @@ def test_guardreflect_no_submotion_x14_expired_transition_rows_and_adjacent_cont
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     families = [
         ((1445, 1446, 1447), 1),
         ((9106, 9107, 9108), 1),
     ]
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
 
     for rows, p_target in families:
         for rec in rows:
-            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+            assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
         target = rows[1]
         seed_t = samples["seed_t"][target]
         ref_t1 = samples["ref_t1"][target]
@@ -1050,25 +1050,25 @@ def test_guardreflect_no_submotion_x14_expired_transition_rows_and_adjacent_cont
     ("dataset_rel", "record", "p", "seed_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             784,
             0,
             0x00B3,  # Guard hold snapshot that previously drifted to GuardOff.
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             115,
             1,
             0x00B6,  # GuardReflect powershield snapshot that previously dropped to GuardSetOff.
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             2275,
             0,
             0x00B6,  # GuardReflect no-submotion lane.
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             5167,
             0,
             0x0019,  # Hitlist stale-latch row that previously synthesized hitlag/hitstun.
@@ -1085,11 +1085,11 @@ def test_seed_eq_guardrail_rows_stay_replay_exact(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     row = samples[record : record + 1]
     assert int(row["seed_t"]["action_id"][0, p]) == int(seed_action)
@@ -1111,7 +1111,7 @@ def test_seed_eq_guardrail_rows_stay_replay_exact(
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -1136,19 +1136,19 @@ def test_seed_eq_guardrail_rows_stay_replay_exact(
     ("dataset_rel", "record", "p", "expect_hitlist_contains"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             2485,
             1,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             2219,
             0,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             9848,
             1,
             0,
@@ -1173,11 +1173,11 @@ def test_guardsetoff_cluster_rows_have_replay_real_shield_hit_context(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
 
     seed = row["seed_t"][0]
@@ -1207,7 +1207,7 @@ def test_guardsetoff_cluster_rows_have_replay_real_shield_hit_context(
         1, input_stride
     )
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         # Classify shield/body contacts on the pre-combat snapshot for this replay row.
         binding.reseed_seed(handle, seed_bytes)
@@ -1230,7 +1230,7 @@ def test_guardsetoff_cluster_rows_have_replay_real_shield_hit_context(
     )
     assert float(chosen["hitbox_damage"]) > 0.0
     # Re-run once to query hitlist containment while handle is alive.
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
@@ -1252,14 +1252,14 @@ def test_guardsetoff_cluster_rows_have_replay_real_shield_hit_context(
     ("dataset_rel", "record", "p", "attacker", "ref_hitlag"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             5614,
             0,
             1,
             5,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             8297,
             1,
             0,
@@ -1286,11 +1286,11 @@ def test_guardsetoff_cluster_rows_runtime_shield_overlap_and_exact_parity(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
 
     seed = row["seed_t"][0]
@@ -1322,7 +1322,7 @@ def test_guardsetoff_cluster_rows_runtime_shield_overlap_and_exact_parity(
         1, input_stride
     )
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
@@ -1356,7 +1356,7 @@ def test_guardsetoff_cluster_rows_runtime_shield_overlap_and_exact_parity(
     # Exact discrete t+1 parity lock for residual rows.
     compare_stride = int(sizes["compare"])
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -1384,7 +1384,7 @@ def test_guardsetoff_cluster_rows_runtime_shield_overlap_and_exact_parity(
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             2485,
             1,
         ),
@@ -1400,11 +1400,11 @@ def test_guardsetoff_cluster_rows_resolve_to_reference_outputs(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
@@ -1427,7 +1427,7 @@ def test_guardsetoff_cluster_rows_resolve_to_reference_outputs(
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
@@ -1483,7 +1483,7 @@ def test_hitboxes_seed_bridge_early_window_owner_mismatch_trim_rows_and_adjacent
     # - GAT rec=1982 p1 transition 25->86 with stale lane a=0,hb=1,v=1.
     families = [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             (4058, 4059, 4060),
             0,  # attacked victim
             1,  # attacker
@@ -1492,7 +1492,7 @@ def test_hitboxes_seed_bridge_early_window_owner_mismatch_trim_rows_and_adjacent
             90,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             (1981, 1982, 1983),
             1,  # attacked victim
             0,  # attacker
@@ -1505,12 +1505,12 @@ def test_hitboxes_seed_bridge_early_window_owner_mismatch_trim_rows_and_adjacent
     for dataset_rel, rows, attacked, attacker, hb_id, seed_action, ref_action in families:
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
+            pytest.skip(f"missing local replay: {dataset_rel}")
 
-        ds = read_dataset(str(dataset_path))
-        samples = ds.samples
+        ds = load_replay_buffers(str(dataset_path))
+        samples = ds.rows
         for rec in rows:
-            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+            assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
         target = rows[1]
         seed_t = samples["seed_t"][target]
         ref_t1 = samples["ref_t1"][target]
@@ -1581,14 +1581,14 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
 
     exact_rows = [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             2221,
             1,
             1,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             285,
             0,
             0,
@@ -1599,11 +1599,11 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
     for dataset_rel, record, attacker, hb_id, victim in exact_rows:
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
+            pytest.skip(f"missing local replay: {dataset_rel}")
 
-        ds = read_dataset(str(dataset_path))
-        samples = ds.samples
-        assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+        ds = load_replay_buffers(str(dataset_path))
+        samples = ds.rows
+        assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
         seed_t = samples["seed_t"][record]
         ref_t1 = samples["ref_t1"][record]
@@ -1629,7 +1629,7 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
 
     qgd_8222 = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     _, contacts_8222, _, timing_8222 = _run_pre_combat_debug_row(qgd_8222, 8222, 0, 0)
     assert int(timing_8222["enabled_cur"]) == 1
@@ -1648,7 +1648,7 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
 
     for dataset_rel, record, attacker, hb_id, victim, exp_action, exp_hitlag, exp_hitstun in [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             5247,
             1,
             1,
@@ -1659,7 +1659,7 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
         ),
     ]:
         dataset_path = root / dataset_rel
-        ds = read_dataset(str(dataset_path))
+        ds = load_replay_buffers(str(dataset_path))
         _, contacts, _, timing = _run_pre_combat_debug_row(dataset_path, record, attacker, hb_id)
         assert int(timing["enabled_cur"]) == 1
         assert int(timing["enabled_prev"]) == 0
@@ -1682,7 +1682,7 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
 
     qgd_6822 = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     _, ref_6822, out_6822 = _run_one_step_row(qgd_6822, 6822, 0)
     _, contacts_6822, _, timing_6822 = _run_pre_combat_debug_row(qgd_6822, 6822, 1, 1)
@@ -1706,12 +1706,12 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             2219,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             9848,
             1,
         ),
@@ -1732,11 +1732,11 @@ def test_guardsetoff_cluster_tbk_family_rows_lock_guardsetoff_action_exact(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
@@ -1756,7 +1756,7 @@ def test_guardsetoff_cluster_tbk_family_rows_lock_guardsetoff_action_exact(
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -1774,8 +1774,8 @@ def test_guardsetoff_cluster_tbk_family_rows_lock_guardsetoff_action_exact(
 @pytest.mark.integration
 def test_guardsetoff_tbk_2219_one_step_and_rollout_resolve_guardsetoff() -> None:
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     record = 2219
     p = 0
@@ -1786,11 +1786,11 @@ def test_guardsetoff_tbk_2219_one_step_and_rollout_resolve_guardsetoff() -> None
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -1798,11 +1798,10 @@ def test_guardsetoff_tbk_2219_one_step_and_rollout_resolve_guardsetoff() -> None
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1811,11 +1810,11 @@ def test_guardsetoff_tbk_2219_one_step_and_rollout_resolve_guardsetoff() -> None
     out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
 
     # One-step reseed-at-row must now resolve GuardSetOff action.
-    one_step_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    one_step_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
-        prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
-        input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+        seed_bytes[0, :] = seed_u8[record, :seed_stride]
+        prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+        input_bytes[0, :] = input_u8[record, :input_stride]
         binding.reseed_seed(one_step_handle, seed_bytes)
         binding.step_input(one_step_handle, prev_input_bytes, input_bytes)
         binding.write_compare(one_step_handle, out_compare_bytes)
@@ -1834,13 +1833,13 @@ def test_guardsetoff_tbk_2219_one_step_and_rollout_resolve_guardsetoff() -> None
     end = min(int(samples.shape[0]) - 1, record + window_after)
     rollout_rows: list[dict[str, int]] = []
 
-    rollout_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    rollout_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[start, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start, :seed_stride]
         binding.reseed_seed(rollout_handle, seed_bytes)
         for j in range(start, end + 1):
-            prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
-            input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[j, :input_stride]
+            input_bytes[0, :] = input_u8[j, :input_stride]
             binding.step_input(rollout_handle, prev_input_bytes, input_bytes)
             binding.write_compare(rollout_handle, out_compare_bytes)
 
@@ -1867,7 +1866,7 @@ def test_guardsetoff_tbk_2219_one_step_and_rollout_resolve_guardsetoff() -> None
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             5813,
             1,
             0x005A,  # DamageFlyTop
@@ -1894,11 +1893,11 @@ def test_damage_exit_rows_clear_hitstun_on_non_damage_entry(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
@@ -1922,7 +1921,7 @@ def test_damage_exit_rows_clear_hitstun_on_non_damage_entry(
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -1952,7 +1951,7 @@ def test_damage_exit_rows_clear_hitstun_on_non_damage_entry(
     [
         # Runtime-minority containment row fixed by attacker-owned hitlag pair gate narrowing.
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             6822,
             1,
             0x0041,  # AttackAirN
@@ -1963,7 +1962,7 @@ def test_damage_exit_rows_clear_hitstun_on_non_damage_entry(
         ),
         # Runtime fix target for this slice (strict parity).
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             3347,
             0,
             0x002A,  # Landing
@@ -1973,7 +1972,7 @@ def test_damage_exit_rows_clear_hitstun_on_non_damage_entry(
             0x30,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             6206,
             0,
             0x002A,  # Landing
@@ -2009,7 +2008,7 @@ def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, p)
 
@@ -2025,9 +2024,9 @@ def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
     # Row-family context:
     # - AGG target row enters DamageHi1 from Landing under live laser context.
     # - QGD runtime-minority containment row is fighter-only in this window.
-    if "AttachedGoodNaturedGuanaco.msl" in dataset_rel:
+    if "AttachedGoodNaturedGuanaco.slpz" in dataset_rel:
         assert int(np.count_nonzero(seed["items"]["exists"])) > 0
-    if "QuerulousGrandDinosaur.msl" in dataset_rel:
+    if "QuerulousGrandDinosaur.slpz" in dataset_rel:
         assert int(np.count_nonzero(seed["items"]["exists"])) == 0
 
     # Exact t+1 parity lock.
@@ -2059,7 +2058,7 @@ def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
         # (see RETRO_CLEANUP_LOG.md, debug-dataset audit). Keep the row pinned in the parity
         # direction so drift back to the phantom hit is caught.
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             7173,
             0,
             0x0038,  # AttackS3LwS
@@ -2090,7 +2089,7 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, p)
 
@@ -2100,10 +2099,10 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
     assert int(ref["hitlag"][p]) == int(ref_hitlag)
     assert int(ref["state_flags"][p, 1]) == int(ref_sf1)
 
-    if "GracefulAttachedTurtle.msl" in dataset_rel:
+    if "GracefulAttachedTurtle.slpz" in dataset_rel:
         assert int(np.count_nonzero(seed["items"]["exists"])) > 0
         assert int(np.count_nonzero(ref["items"]["exists"])) > 0
-    if "QuerulousGrandDinosaur.msl" in dataset_rel:
+    if "QuerulousGrandDinosaur.slpz" in dataset_rel:
         assert int(np.count_nonzero(seed["items"]["exists"])) == 0
         assert int(np.count_nonzero(ref["items"]["exists"])) == 0
         assert int(seed["colanim_hit_status_x198c"][1]) == 1
@@ -2131,7 +2130,7 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
     [
         # Adjacent negative control in the same local QGD window as the runtime fix row above.
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             6821,
             1,
             0x0041,  # AttackAirN
@@ -2142,7 +2141,7 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
         ),
         # Negative controls adjacent to the target rows.
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             6205,
             0,
             0x002A,  # Landing
@@ -2152,7 +2151,7 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
             0x00,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             3348,
             0,
             0x004B,  # DamageHi1
@@ -2162,7 +2161,7 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
             0x30,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             7172,
             0,
             0x0038,  # AttackS3LwS
@@ -2172,7 +2171,7 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
             0x00,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             8221,
             1,
             0x002B,  # LandingFallSpecial
@@ -2182,7 +2181,7 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
             0x00,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             1248,
             0,
             0x0015,  # Run
@@ -2207,7 +2206,7 @@ def test_runtime_hitlag_clusters_negative_controls_remain_exact(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, p)
     assert int(seed["action_id"][p]) == int(seed_action)
@@ -2233,16 +2232,16 @@ def test_qgd_body_overlap_sweep_family_rows_and_adjacent_controls_stay_replay_ex
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in (4645, 4646, 4647, 4648, 4649):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     # Replay-real family preconditions for the target rows (no hit expected at t+1).
     for rec in (4646, 4647, 4648):
@@ -2269,17 +2268,17 @@ def test_qgd_body_overlap_reseed_bootstrap_x58_x4c_continuity_is_handle_independ
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     prime_record = 4645
     target_record = 4646
-    assert int(samples.shape[0]) > target_record, f"dataset too short for lock row: record={target_record}"
+    assert int(samples.shape[0]) > target_record, f"replay too short for lock row: record={target_record}"
 
     # Replay-real precondition: target row is a no-hit frame in reference for both players.
     target_row = samples[target_record : target_record + 1]
@@ -2293,11 +2292,10 @@ def test_qgd_body_overlap_reseed_bootstrap_x58_x4c_continuity_is_handle_independ
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -2305,21 +2303,21 @@ def test_qgd_body_overlap_reseed_bootstrap_x58_x4c_continuity_is_handle_independ
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     def _step_row(handle: object, record: int) -> np.void:
-        seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
-        prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
-        input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+        seed_bytes[0, :] = seed_u8[record, :seed_stride]
+        prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+        input_bytes[0, :] = input_u8[record, :input_stride]
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
         return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
 
-    fresh_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    fresh_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         out_target_fresh = _step_row(fresh_handle, target_record)
     finally:
         binding.destroy(fresh_handle)
 
-    reused_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    reused_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         out_prime = _step_row(reused_handle, prime_record)
         out_target_after_prime = _step_row(reused_handle, target_record)
@@ -2369,17 +2367,17 @@ def test_body_overlap_rollout_plus4_regression_families_and_adjacent_controls_st
     _skip_if_required_artifacts_missing(root)
 
     families = {
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl": [
+        "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz": [
             (2864, 0, "action_id", 356, 87, (2863, 2865)),
         ],
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl": [
+        "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz": [
             (652, 0, "hitlag", 67, 67, (651, 653)),
             # Immediate +1 row (8638) is not replay-exact on baseline for locked fields; use the
             # nearest replay-exact post control row (8639) instead.
             (8637, 1, "action_id", 90, 90, (8636, 8639)),
             (9627, 1, "action_id", 14, 14, (9626, 9628)),
         ],
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl": [
+        "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz": [
             (4592, 0, "action_id", 87, 87, (4591, 4593)),
         ],
     }
@@ -2387,13 +2385,13 @@ def test_body_overlap_rollout_plus4_regression_families_and_adjacent_controls_st
     for dataset_rel, target_rows in families.items():
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
+            pytest.skip(f"missing local replay: {dataset_rel}")
 
-        ds = read_dataset(str(dataset_path))
-        samples = ds.samples
+        ds = load_replay_buffers(str(dataset_path))
+        samples = ds.rows
         rows_to_lock: set[int] = set()
         for rec, p, field, seed_action, ref_action, controls in target_rows:
-            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+            assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
             row = samples[rec : rec + 1]
             assert int(row["seed_t"]["action_id"][0, p]) == int(seed_action), (
                 f"dataset={dataset_rel} record={rec} p={p} expected seed action {seed_action}"
@@ -2409,7 +2407,7 @@ def test_body_overlap_rollout_plus4_regression_families_and_adjacent_controls_st
 
         for rec in sorted(rows_to_lock):
             assert rec >= 0, f"invalid negative control row: record={rec}"
-            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+            assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
             _, ref, out = _run_one_step_row(dataset_path, rec, 0)
             for p in (0, 1):
                 _assert_body_overlap_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
@@ -2422,18 +2420,18 @@ def test_body_overlap_subset_attachedgoodnaturedguanaco_2533_family_stays_replay
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = 2533
     controls = (2532, 2534)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     row = samples[target_record : target_record + 1]
     assert int(row["seed_t"]["action_id"][0, 1]) == 68
@@ -2454,18 +2452,18 @@ def test_body_overlap_enable_edge_qgd_645_seeded_family_and_controls_stay_replay
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = 645
     controls = (644, 646)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     row = samples[target_record : target_record + 1]
     assert int(row["seed_t"]["action_id"][0, 1]) == 356
@@ -2490,7 +2488,7 @@ def test_body_overlap_enable_edge_qgd_645_seeded_family_and_controls_stay_replay
     ),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             573,
             1,
             241,
@@ -2499,7 +2497,7 @@ def test_body_overlap_enable_edge_qgd_645_seeded_family_and_controls_stay_replay
             180,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             444,
             1,
             241,
@@ -2508,7 +2506,7 @@ def test_body_overlap_enable_edge_qgd_645_seeded_family_and_controls_stay_replay
             180,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             2513,
             0,
             240,
@@ -2517,7 +2515,7 @@ def test_body_overlap_enable_edge_qgd_645_seeded_family_and_controls_stay_replay
             178,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             8286,
             0,
             240,
@@ -2550,13 +2548,13 @@ def test_throw_release_transition_families_and_adjacent_controls_action_anim_sta
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) == int(seed_action)
@@ -2593,20 +2591,20 @@ def test_throwlw_attached_victim_hitlag_seed_bridge_lock_target_pm1_both_players
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     target_record = 447
     owner_p = 0
     victim_p = 1
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in (target_record - 1, target_record, target_record + 1):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record : target_record + 1]
     assert int(target["seed_t"]["action_id"][0, owner_p]) == 222  # ThrowLw
@@ -2627,28 +2625,28 @@ def test_throwlw_attached_victim_hitlag_seed_bridge_lock_target_pm1_both_players
     ("dataset_rel", "target_record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             2237,
             0,
             360,  # ftFx_MS_SpecialLwStart
             361,  # ftFx_MS_SpecialLwLoop
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             1592,
             0,
             360,  # ftFx_MS_SpecialLwStart
             361,  # ftFx_MS_SpecialLwLoop
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             1761,
             0,
             365,  # ftFx_MS_SpecialAirLwStart
             366,  # ftFx_MS_SpecialAirLwLoop
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             3677,
             1,
             365,  # ftFx_MS_SpecialAirLwStart
@@ -2679,13 +2677,13 @@ def test_shine_reflect_behavior_transition_rows_and_adjacent_controls_stay_repla
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) == int(seed_action)
@@ -2717,12 +2715,12 @@ def test_shine_reflect_behavior_transition_rows_and_adjacent_controls_stay_repla
     ("dataset_rel", "target_record", "p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             5403,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             9658,
             0,
         ),
@@ -2746,13 +2744,13 @@ def test_attack11_jab_chain_transition_rows_and_adjacent_controls_stay_replay_ex
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) == 44
@@ -2781,7 +2779,7 @@ def test_attack11_jab_chain_transition_rows_and_adjacent_controls_stay_replay_ex
     ("dataset_rel", "target_record", "p", "ref_action", "ref_frame", "ref_anim"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             2349,
             1,
             50,
@@ -2789,7 +2787,7 @@ def test_attack11_jab_chain_transition_rows_and_adjacent_controls_stay_replay_ex
             52,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             6017,
             0,
             50,
@@ -2820,13 +2818,13 @@ def test_attackdash_iasa_pregate_transition_rows_and_adjacent_controls_are_repla
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) == 50  # AttackDash
@@ -2860,20 +2858,20 @@ def test_attackdash_iasa_pregate_transition_to_kneebend_row_and_adjacent_control
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     target_record = 917
     p = 0
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) == 50  # AttackDash
@@ -2907,20 +2905,20 @@ def test_attackdash_iasa_guardon_identity_continuity_row_and_adjacent_controls_a
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     target_record = 10910
     p = 0
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) == 50  # AttackDash
@@ -2950,20 +2948,20 @@ def test_attackdash_guardon_entry_countdown_row_and_adjacent_controls_are_replay
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     target_record = 10911
     p = 0
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     pre_row = samples[controls[0] : controls[0] + 1]
     assert int(pre_row["seed_t"]["action_id"][0, p]) == 50  # AttackDash
@@ -2995,12 +2993,12 @@ def test_attackdash_guardon_noncrouch_wait_iasa_rows_and_adjacent_controls_are_r
     _skip_if_required_artifacts_missing(root)
     families = [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             (7165, 7166, 7167),
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             (7375, 7376, 7377),
             0,
         ),
@@ -3009,12 +3007,12 @@ def test_attackdash_guardon_noncrouch_wait_iasa_rows_and_adjacent_controls_are_r
     for dataset_rel, rows, p_target in families:
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
+            pytest.skip(f"missing local replay: {dataset_rel}")
 
-        ds = read_dataset(str(dataset_path))
-        samples = ds.samples
+        ds = load_replay_buffers(str(dataset_path))
+        samples = ds.rows
         for rec in rows:
-            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+            assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
         pre_row = samples[rows[0] : rows[0] + 1]
         target_row = samples[rows[1] : rows[1] + 1]
@@ -3048,19 +3046,19 @@ def test_attackdash_guardon_noncrouch_wait_iasa_rows_and_adjacent_controls_are_r
     ("dataset_rel", "rows", "p_target", "target_action_frame"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             (10228, 10229, 10230),
             1,
             36,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             (3627, 3628, 3629),
             1,
             36,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             (6348, 6349, 6350),
             1,
             38,
@@ -3079,12 +3077,12 @@ def test_attackdash_wait_iasa_turn_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[rows[1] : rows[1] + 1]
     seed_t = target_row["seed_t"][0]
@@ -3116,25 +3114,25 @@ def test_attackdash_wait_iasa_turn_seed_lock_target_pm1_both_players(
     ("dataset_rel", "rows", "p", "post_ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             (607, 608, 609),
             1,
             178,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             (8284, 8285, 8286),
             1,
             178,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             (9829, 9830, 9831),
             1,
             178,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             (6800, 6801, 6802),
             1,
             235,
@@ -3156,12 +3154,12 @@ def test_escape_wait_guardon_bridge_rows_and_adjacent_controls_are_replay_exact(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     pre, target, post = rows
     pre_row = samples[pre : pre + 1]
@@ -3201,7 +3199,7 @@ def test_escape_wait_guardon_bridge_rows_and_adjacent_controls_are_replay_exact(
     ),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             593,
             1,
             38,
@@ -3212,7 +3210,7 @@ def test_escape_wait_guardon_bridge_rows_and_adjacent_controls_are_replay_exact(
             354,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             718,
             1,
             38,
@@ -3223,7 +3221,7 @@ def test_escape_wait_guardon_bridge_rows_and_adjacent_controls_are_replay_exact(
             354,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             5807,
             1,
             38,
@@ -3234,7 +3232,7 @@ def test_escape_wait_guardon_bridge_rows_and_adjacent_controls_are_replay_exact(
             354,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             6596,
             0,
             88,
@@ -3245,7 +3243,7 @@ def test_escape_wait_guardon_bridge_rows_and_adjacent_controls_are_replay_exact(
             354,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             7204,
             1,
             38,
@@ -3278,13 +3276,13 @@ def test_damagefall_specialhi_transition_rows_and_adjacent_controls_are_replay_e
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) == int(target_seed_action)
@@ -3324,18 +3322,18 @@ def test_damagefall_specialairn_transition_rows_and_adjacent_controls_are_replay
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record : target_record + 1]
     assert int(target["seed_t"]["action_id"][0, p]) == 38  # DamageFall
@@ -3374,7 +3372,7 @@ def test_damagefall_specialairn_transition_rows_and_adjacent_controls_are_replay
     ),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             8021,
             0,
             87,
@@ -3383,7 +3381,7 @@ def test_damagefall_specialairn_transition_rows_and_adjacent_controls_are_replay
             29,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             8825,
             0,
             38,
@@ -3412,13 +3410,13 @@ def test_damagefall_stick_fall_transition_rows_and_adjacent_controls_are_replay_
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     common = json.loads((root / "data/common/ft_common_data.json").read_text())
     tilt_thresh_i8 = int(np.floor(float(common["lstick_tilt_x_thresh"]) * 80.0))
@@ -3472,18 +3470,18 @@ def test_specialairn_reversal_x2228_transition_rows_and_adjacent_controls_are_re
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record : target_record + 1]
     assert int(target["seed_t"]["on_ground"][0, p]) == 0
@@ -3521,14 +3519,14 @@ def test_specialairn_reversal_x2228_transition_rows_and_adjacent_controls_are_re
     ("dataset_rel", "target_record", "p", "target_seed_action", "target_ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             1151,
             1,
             15,
             16,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             7373,
             0,
             21,
@@ -3550,13 +3548,13 @@ def test_walk_run_timebase_ownership_rows_and_adjacent_controls_are_replay_exact
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) == int(target_seed_action)
@@ -3572,12 +3570,12 @@ def test_walk_run_timebase_ownership_rows_and_adjacent_controls_are_replay_exact
     ("dataset_rel", "target_record", "p_target"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             3272,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             4034,
             1,
         ),
@@ -3596,11 +3594,11 @@ def test_walkmiddle_midcycle_rate_bridge_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > (target_record + 1), f"dataset too short for lock row: record={target_record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > (target_record + 1), f"replay too short for lock row: record={target_record}"
 
     target_row = samples[target_record : target_record + 1]
     # Replay-real preconditions anchoring this family to WalkMiddle mid-cycle ownership.
@@ -3612,9 +3610,9 @@ def test_walkmiddle_midcycle_rate_bridge_seed_lock_target_pm1_both_players(
 
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
         _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target)
-        num_players = int(ds.header["num_players"])
+        num_players = int(ds.num_players)
         for p in range(num_players):
             _assert_transition_lock_fields_match_ref(
                 out_row=out_row,
@@ -3629,19 +3627,19 @@ def test_walkmiddle_midcycle_rate_bridge_seed_lock_target_pm1_both_players(
     ("dataset_rel", "target_record", "p_target", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             11033,
             0,
             68,  # AttackAirB
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             1958,
             1,
             68,  # AttackAirB
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             5496,
             1,
             65,  # AttackAirN
@@ -3664,11 +3662,11 @@ def test_kneebend_jump_iasa_attackair_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > (target_record + 1), f"dataset too short for lock row: record={target_record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > (target_record + 1), f"replay too short for lock row: record={target_record}"
 
     prev_row = samples[target_record - 1 : target_record]
     target_row = samples[target_record : target_record + 1]
@@ -3708,14 +3706,14 @@ def test_kneebend_jump_iasa_attackair_seed_lock_target_pm1_both_players(
     ("dataset_rel", "target_record", "p_target", "ref_action", "edge_kind"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             2996,
             1,
             60,  # AttackHi4
             "side",
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             1803,
             1,
             64,  # AttackLw4
@@ -3740,12 +3738,12 @@ def test_landing_iasa_attack_order_cstick_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     common = json.loads((root / "data/common/ft_common_data.json").read_text(encoding="utf-8"))
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > (target_record + 1), f"dataset too short for lock row: record={target_record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > (target_record + 1), f"replay too short for lock row: record={target_record}"
 
     prev_row = samples[target_record - 1 : target_record]
     target_row = samples[target_record : target_record + 1]
@@ -3798,13 +3796,13 @@ def test_landing_iasa_attack_order_cstick_seed_lock_target_pm1_both_players(
     ("dataset_rel", "target_record", "p_target", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             315,
             0,
             69,  # AttackAirLw
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             1194,
             0,
             69,  # AttackAirLw
@@ -3827,12 +3825,12 @@ def test_kneebend_jump_iasa_full_attackair_cstick_seed_lock_target_pm1_both_play
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     common = json.loads((root / "data/common/ft_common_data.json").read_text(encoding="utf-8"))
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > (target_record + 1), f"dataset too short for lock row: record={target_record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > (target_record + 1), f"replay too short for lock row: record={target_record}"
 
     prev_row = samples[target_record - 1 : target_record]
     target_row = samples[target_record : target_record + 1]
@@ -3888,17 +3886,17 @@ def test_kneebend_jump_iasa_full_attackair_cstick_seed_lock_target_pm1_both_play
     ("dataset_rel", "target_record", "p_target"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             4393,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             6778,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             8061,
             1,
         ),
@@ -3918,12 +3916,12 @@ def test_walk_iasa_opposite_stick_wait_exit_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     common = json.loads((root / "data/common/ft_common_data.json").read_text(encoding="utf-8"))
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > (target_record + 1), f"dataset too short for lock row: record={target_record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > (target_record + 1), f"replay too short for lock row: record={target_record}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p_target]) == 16  # WalkMiddle
@@ -3951,12 +3949,12 @@ def test_walk_iasa_opposite_stick_wait_exit_seed_lock_target_pm1_both_players(
     ("dataset_rel", "target_record", "p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             370,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             567,
             1,
         ),
@@ -3975,13 +3973,13 @@ def test_capturewait_rate_ownership_rows_and_adjacent_controls_are_replay_exact(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) in (226, 227)
@@ -3997,13 +3995,13 @@ def test_capturewait_rate_ownership_rows_and_adjacent_controls_are_replay_exact(
     ("dataset_rel", "target_record", "p", "target_seed_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             224,
             1,
             241,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             424,
             1,
             242,
@@ -4024,13 +4022,13 @@ def test_throw_deferred_anim_tick_rows_and_adjacent_controls_are_replay_exact(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) == int(target_seed_action)
@@ -4046,13 +4044,13 @@ def test_throw_deferred_anim_tick_rows_and_adjacent_controls_are_replay_exact(
     ("dataset_rel", "target_record", "owner_p", "victim_p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             989,
             0,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             974,
             0,
             1,
@@ -4072,13 +4070,13 @@ def test_throw_owner_before_victim_deferred_tick_rows_and_adjacent_controls_are_
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     seed_t = target_row["seed_t"][0]
@@ -4102,13 +4100,13 @@ def test_throw_owner_before_victim_deferred_tick_rows_and_adjacent_controls_are_
     ("dataset_rel", "rows", "owner_p", "victim_p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             (226, 227, 228),
             0,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             (443, 444, 445),
             0,
             1,
@@ -4129,12 +4127,12 @@ def test_throwhi_owner_before_victim_deferred_hitstun_tick_rows_and_adjacent_con
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = rows[1]
     seed_t = samples["seed_t"][target]
@@ -4167,9 +4165,9 @@ def test_marth_throwhi_release_final_facing_carries_damageflytop_hurtcaps_qhp_ro
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    dataset_path = root / "replays/validation/marth/QuestionableHarmfulPanther.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rows = _run_rollout_window_rows(
         dataset_path,
@@ -4211,9 +4209,9 @@ def test_marth_attacks4_hitbox_pose_recomposes_transn_tail_pfz() -> None:
     # data/anims/marth.bin SSANIM01 v4 TransN tail
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/ParallelFamiliarZebra.msl"
+    dataset_path = root / "replays/validation/marth/ParallelFamiliarZebra.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     target_record = 1838
     attacker = 1
@@ -4266,12 +4264,12 @@ def test_marth_attacks4_seed_x58_recomposes_transn_tail_rws() -> None:
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
     # data/anims/marth.tracks.bin uses_root_motion / data/anims/marth.bin TransN tail
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    dataset_path = root / "replays/validation/marth/RipeWealthySeahorse.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[2119]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[2119]
     attacker = 0
     victim = 1
     assert int(row["seed_t"]["action_id"][attacker]) == 60  # ftCo_SM_AttackS4S.
@@ -4303,19 +4301,19 @@ def test_marth_attacks4_seed_x58_recomposes_transn_tail_rws() -> None:
     ("dataset_rel", "rows", "owner_p", "victim_p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             (437, 438, 439),
             0,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             (447, 448, 449),
             0,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
             (5626, 5627, 5628),
             1,
             0,
@@ -4337,12 +4335,12 @@ def test_throwlw_attached_item_hitlag_x221c_b0_rows_and_adjacent_controls_are_re
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = rows[1]
     seed_t = samples["seed_t"][target]
@@ -4368,13 +4366,13 @@ def test_throwlw_attached_item_hitlag_x221c_b0_rows_and_adjacent_controls_are_re
     ("dataset_rel", "target_record", "attacker_p", "victim_p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             999,
             1,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             237,
             0,
             1,
@@ -4393,13 +4391,13 @@ def test_combo_victim_reseed_bridge_rows_and_adjacent_controls_are_replay_exact(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     seed_t = target_row["seed_t"][0]
@@ -4435,15 +4433,15 @@ def test_guard_damage_and_guardreflect_transition_rows_and_adjacent_controls_are
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     families = [
         # target-1 / target / target+1
         ((189, 190, 191), 1, 75, 178),  # DamageHi1 -> GuardOn
@@ -4452,7 +4450,7 @@ def test_guard_damage_and_guardreflect_transition_rows_and_adjacent_controls_are
 
     for rows, p_target, seed_action, ref_action in families:
         for rec in rows:
-            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+            assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
         target = rows[1]
         target_row = samples[target : target + 1]
         assert int(target_row["seed_t"]["action_id"][0, p_target]) == int(seed_action)
@@ -4485,17 +4483,17 @@ def test_reboundstop_anim_callback_rows_and_adjacent_controls_are_replay_exact(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = rows[1]
     target_row = samples[target : target + 1]
@@ -4533,15 +4531,15 @@ def test_damage_ground_airborne_landing_transition_rows_and_adjacent_controls_ar
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     families = [
         # target-1 / target / target+1
         ((197, 198, 199), 1, 79, 42),      # DamageN2 -> Landing
@@ -4551,7 +4549,7 @@ def test_damage_ground_airborne_landing_transition_rows_and_adjacent_controls_ar
 
     for rows, p_target, seed_action, ref_action in families:
         for rec in rows:
-            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+            assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
         target = rows[1]
         target_row = samples[target : target + 1]
         seed_t = target_row["seed_t"][0]
@@ -4576,12 +4574,12 @@ def test_damage_ground_airborne_landing_transition_rows_and_adjacent_controls_ar
     ("dataset_rel", "target_record", "p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             6706,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             11382,
             0,
         ),
@@ -4603,13 +4601,13 @@ def test_escapeair_sustained_ledge_floor_handoff_rows_and_adjacent_controls_are_
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record : target_record + 1]
     seed_t = target["seed_t"][0]
@@ -4639,21 +4637,21 @@ def test_escapeair_sustained_ledge_floor_handoff_rows_and_adjacent_controls_are_
     ("dataset_rel", "target_record", "p", "pre_ref_action", "post_ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             4572,
             0,
             183,
             29,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             6386,
             0,
             183,
             29,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             9103,
             1,
             183,
@@ -4674,13 +4672,13 @@ def test_downbound_airborne_ledge_exit_transition_rows_and_adjacent_controls_are
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     stage = json.loads((root / "data/stages/final_destination.json").read_text())
     ledge_segments = [s for s in stage["segments"] if s.get("ledge")]
@@ -4721,21 +4719,21 @@ def test_downbound_airborne_ledge_exit_transition_rows_and_adjacent_controls_are
     ("dataset_rel", "target_record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             3020,
             0,
             0,   # DeadDown
             12,  # Rebirth
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             3646,
             1,
             0,   # DeadDown
             12,  # Rebirth
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             961,
             1,
             0,   # DeadDown
@@ -4760,13 +4758,13 @@ def test_death_to_rebirth_identity_reset_rows_and_adjacent_controls_are_replay_e
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     controls = (target_record - 1, target_record + 1)
     for rec in (target_record, *controls):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) == int(seed_action)
@@ -4808,22 +4806,22 @@ def test_attackairlw_early_stale_suppression_trim_rows_and_adjacent_controls_are
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     # target-1 / target / target+1
     rows = (5401, 5402, 5403)
     target = 5402
     p_attacker = 1
     p_victim = 0
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     seed_t = samples["seed_t"][target]
     ref_t1 = samples["ref_t1"][target]
@@ -4859,21 +4857,21 @@ def test_attackairlw_visible_hitstun_rollout_does_not_backfill_indefinite_hitlis
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target = 1848
     rows = (target - 1, target, target + 1)
     p_attacker = 0
     p_victim = 1
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     seed_t = samples["seed_t"][target]
     ref_t1 = samples["ref_t1"][target]
@@ -4910,13 +4908,13 @@ def test_attackairb_hitlag_frozen_hitcapsule_survives_replay_frame_rng_rollout_c
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+    dataset_rel = "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 3335
     first_hit = 3702
     hitlag_tail = 3705
@@ -4925,7 +4923,7 @@ def test_attackairb_hitlag_frozen_hitcapsule_survives_replay_frame_rng_rollout_c
     p_attacker = 0
     p_victim = 1
     for rec in (start_record, *rows):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     first_seed = samples["seed_t"][first_hit]
     first_ref = samples["ref_t1"][first_hit]
@@ -4993,21 +4991,21 @@ def test_attackairn_early_stale_suppression_trim_rows_and_adjacent_controls_are_
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (3467, 3468, 3469)
     target = 3468
     p_attacker = 0
     p_victim = 1
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     seed_t = samples["seed_t"][target]
     ref_t1 = samples["ref_t1"][target]
@@ -5046,17 +5044,17 @@ def test_marth_attackairn_post_clear_second_band_clears_dense_hitlist_ipw() -> N
     # data/moves/marth.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    dataset_path = root / "replays/validation/marth/InternalPowerlessWallaby.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (476, 477, 478)
     p_attacker = 1
     p_victim = 0
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[477:478]
     seed_t = target["seed_t"][0]
@@ -5120,7 +5118,7 @@ def test_marth_attackairn_post_clear_second_band_clears_dense_hitlist_ipw() -> N
     ),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             2635,
             0,
             1,
@@ -5130,7 +5128,7 @@ def test_marth_attackairn_post_clear_second_band_clears_dense_hitlist_ipw() -> N
             87,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             1943,
             1,
             0,
@@ -5162,13 +5160,13 @@ def test_attackairfb_early_stale_suppression_trim_rows_and_adjacent_controls_are
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record : target_record + 1]
     seed_t = target["seed_t"][0]
@@ -5203,22 +5201,22 @@ def test_attackairfb_early_stale_suppression_trim_rows_and_adjacent_controls_are
     ("dataset_rel", "target_record", "p_attacker", "p_victim"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             4232,
             1,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             1556,
             1,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             5349,
             1,
             0,
@@ -5239,13 +5237,13 @@ def test_attackairhi_early_stale_suppression_trim_seed_lock_target_pm1_both_play
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record : target_record + 1]
     seed_t = target["seed_t"][0]
@@ -5269,32 +5267,32 @@ def test_attackairhi_early_stale_suppression_trim_seed_lock_target_pm1_both_play
     ("dataset_rel", "target_record", "p_victim", "p_attacker", "seed_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             1738,
             1,
             0,
             38,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             5033,
             0,
             1,
             21,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             8633,
             1,
             0,
             69,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             2752,
             0,
             1,
@@ -5327,13 +5325,13 @@ def test_damageflyroll_rng_gate_transition_rows_and_adjacent_controls_are_replay
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record : target_record + 1]
     seed_t = target["seed_t"][0]
@@ -5373,18 +5371,18 @@ def test_marth_wait_attacklw3_selected_payload_admits_damageflyroll_ipw() -> Non
     # data/moves/marth.json::moves.ftCo_SM_AttackLw3.events.create_hitbox
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    dataset_rel = "replays/validation/marth/InternalPowerlessWallaby.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     target_record = 3983
     p_victim = 0
     p_attacker = 1
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in (target_record - 1, target_record, target_record + 1):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record : target_record + 1]
     assert int(target["seed_t"]["action_id"][0, p_victim]) == 14  # ftCo_MS_Wait
@@ -5453,8 +5451,8 @@ def test_marth_wait_attacklw3_selected_payload_admits_damageflyroll_ipw() -> Non
     ("dataset_rel", "target_record", "p_victim", "expect_site1"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             2694,
             1,
             1,
@@ -5476,13 +5474,13 @@ def test_damageflyroll_attackairb_subset_rng_pulse_rows_and_adjacent_controls_ar
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_seed = samples[target_record : target_record + 1]["seed_t"][0]
     assert int(target_seed["action_id"][p_victim]) == 67  # ftCo_MS_AttackAirB
@@ -5536,22 +5534,22 @@ def test_damageflyroll_damageflytop_attackairb_steady_admission_rows_and_adjacen
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     target_record = 6020
     p_victim = 0
     p_attacker = 1
     rows = (target_record - 1, target_record, target_record + 1)
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_seed = samples[target_record : target_record + 1]["seed_t"][0]
     target_ref = samples[target_record : target_record + 1]["ref_t1"][0]
@@ -5615,10 +5613,10 @@ def test_damageflyroll_damageflytop_attacklw4_source_admission_his() -> None:
     # data/scripts/{fox,falco}.bin (MSLFTSC1 ftCo_SM_AttackLw4 create_hitbox)
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_rel = "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     target_record = 4397
     p_victim = 0
@@ -5656,10 +5654,10 @@ def test_damageflyroll_attacklw4_gate_rejects_adjacent_script_frames_his(seed_ac
     # the attacker one frame earlier/later must not broaden the gate.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_rel = "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     target_record = 4397
     p_victim = 0
@@ -5697,20 +5695,20 @@ def test_damageflyroll_damageflytop_hitlag_continuity_rollout_rows_are_replay_ex
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 6343
     target_record = 6380
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in (start_record, 6367, 6373, *rows):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     # Seed producer backfills the same source-proven phase through the active-hitlag part of the
     # DamageFlyTop episode; this is the narrow regression that a normal one-step lock cannot see.
@@ -5758,21 +5756,21 @@ def test_specialhi_upground_pseudo_random_sfx_rng_pulse_row_and_adjacent_control
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     target_record = 2603
     p_special = 1
     rows = (target_record - 1, target_record, target_record + 1)
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_seed = samples[target_record : target_record + 1]["seed_t"][0]
     assert int(target_seed["action_id"][p_special]) == 356
@@ -5829,19 +5827,19 @@ def test_damageflyroll_fall_admission_rollout_window_rows_and_adjacent_controls_
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 5617
     rows = (5716, 5717, 5718)  # target-1, target, target+1 in the stabilized rollout window
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
 
     # Replay-real precondition anchoring this family to the Fall lane:
@@ -5896,8 +5894,8 @@ def test_damageflyroll_fall_admission_rollout_window_rows_and_adjacent_controls_
     ("dataset_rel", "target_record", "p_target", "seed_action", "ref_action", "seed_anim", "ref_anim"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             6660,
             0,
             356,  # SpecialHiBound
@@ -5906,8 +5904,8 @@ def test_damageflyroll_fall_admission_rollout_window_rows_and_adjacent_controls_
             311,  # ftFx_SM_SpecialHiFall
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             8477,
             0,
             356,
@@ -5916,8 +5914,8 @@ def test_damageflyroll_fall_admission_rollout_window_rows_and_adjacent_controls_
             311,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             9397,
             0,
             356,
@@ -5926,8 +5924,8 @@ def test_damageflyroll_fall_admission_rollout_window_rows_and_adjacent_controls_
             311,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             9837,
             0,
             356,
@@ -5956,10 +5954,10 @@ def test_specialhi_launch_duration_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target = samples[target_record : target_record + 1]
     assert int(target["seed_t"]["action_id"][0, p_target]) == int(seed_action)
     assert int(target["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
@@ -5979,32 +5977,32 @@ def test_specialhi_launch_duration_seed_lock_target_pm1_both_players(
     ("dataset_rel", "target_record", "p_target", "seed_action", "seed_anim"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             2332,
             0,
             352,  # SpecialAirSEnd
             306,  # ftFx_SM_SpecialSEnd
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             5401,
             1,
             352,
             306,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             3866,
             0,
             352,
             306,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             696,
             1,
             352,
@@ -6028,10 +6026,10 @@ def test_specialairsend_gravity_delay_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     pre = samples[target_record - 1 : target_record]
     target = samples[target_record : target_record + 1]
     post = samples[target_record + 1 : target_record + 2]
@@ -6073,16 +6071,16 @@ def test_specialairsend_gravity_delay_seed_lock_target_pm1_both_players(
     ("dataset_rel", "target_record", "p_target", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             6652,
             1,
             253,  # CliffWait
             259,  # CliffEscapeQuick
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             11462,
             0,
             253,  # CliffWait
@@ -6102,10 +6100,10 @@ def test_cliffwait_escape_lr_lane_edge_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target = samples[target_record : target_record + 1]
     common = json.loads((root / "data/common/ft_common_data.json").read_text())
     trigger_deadzone = float(common["trigger_deadzone"])
@@ -6148,8 +6146,8 @@ def test_cliffwait_escape_lr_lane_edge_seed_lock_target_pm1_both_players(
     ),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             2959,
             1,
             259,  # CliffEscapeQuick
@@ -6159,8 +6157,8 @@ def test_cliffwait_escape_lr_lane_edge_seed_lock_target_pm1_both_players(
             True,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             8253,
             1,
             257,  # CliffAttackQuick
@@ -6170,8 +6168,8 @@ def test_cliffwait_escape_lr_lane_edge_seed_lock_target_pm1_both_players(
             True,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             6701,
             1,
             259,  # CliffEscapeQuick
@@ -6202,10 +6200,10 @@ def test_cliff_option_end_wait_iasa_bridge_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target = samples[target_record : target_record + 1]
     common = json.loads((root / "data/common/ft_common_data.json").read_text())
     trigger_deadzone = float(common["trigger_deadzone"])
@@ -6243,8 +6241,8 @@ def test_cliff_option_end_wait_iasa_bridge_seed_lock_target_pm1_both_players(
     ("dataset_rel", "target_record", "p_target", "seed_action", "ref_action", "ref_action_frame"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             2910,
             1,
             253,  # CliffWait
@@ -6252,8 +6250,8 @@ def test_cliff_option_end_wait_iasa_bridge_seed_lock_target_pm1_both_players(
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             8195,
             1,
             253,  # CliffWait
@@ -6261,8 +6259,8 @@ def test_cliff_option_end_wait_iasa_bridge_seed_lock_target_pm1_both_players(
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             2943,
             1,
             253,  # CliffWait
@@ -6270,8 +6268,8 @@ def test_cliff_option_end_wait_iasa_bridge_seed_lock_target_pm1_both_players(
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             9027,
             1,
             253,  # CliffWait
@@ -6279,8 +6277,8 @@ def test_cliff_option_end_wait_iasa_bridge_seed_lock_target_pm1_both_players(
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             9041,
             1,
             262,  # CliffJumpQuick1
@@ -6308,10 +6306,10 @@ def test_cliff_option_and_jump2_entry_immediate_tick_seed_lock_target_pm1_both_p
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target = samples[target_record : target_record + 1]
     assert int(target["seed_t"]["action_id"][0, p_target]) == int(seed_action)
     assert int(target["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
@@ -6330,22 +6328,22 @@ def test_cliff_option_and_jump2_entry_immediate_tick_seed_lock_target_pm1_both_p
     ("dataset_rel", "target_record", "p_target", "seed_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             2959,
             0,
             35,  # FallSpecial
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             655,
             1,
             28,  # JumpAerialB
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             2918,
             1,
             27,  # JumpAerialF
@@ -6364,10 +6362,10 @@ def test_cliffcatch_entry_jumps_used_seed_lock_target_pm1_both_players(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target = samples[target_record : target_record + 1]
     pre = samples[target_record - 1 : target_record]
     post = samples[target_record + 1 : target_record + 2]

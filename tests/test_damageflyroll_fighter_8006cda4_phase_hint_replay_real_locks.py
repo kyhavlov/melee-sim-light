@@ -17,7 +17,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def test_attackairb_damageflytop_runtime_predicate_matches_extracted_source_data() -> None:
@@ -141,8 +142,8 @@ def _selected_body_hitbox_hurtcap(
     import numpy as np
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -174,7 +175,7 @@ def _selected_body_hitbox_hurtcap(
         ],
         align=False,
     )
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
@@ -203,8 +204,8 @@ def test_late_nair_to_attackairb_damageflyroll_owner_is_root_hb0_only() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dcc_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
-    feh_path = root / "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+    dcc_path = root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
+    feh_path = root / "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz"
     if not dcc_path.exists() or not feh_path.exists():
         pytest.skip("missing local DCC/FEH datasets")
 
@@ -256,7 +257,7 @@ class _DamageFlyRoll8006CDA4Case:
     "case",
     [
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=2694,
             victim_port=0,
             expect_seed_count=1,
@@ -264,7 +265,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="single-consume AttackAirB carry now lands DamageFlyRoll (AGG)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=5717,
             victim_port=0,
             expect_seed_count=2,
@@ -272,7 +273,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="double-consume grounded ThrownF hitlag carry now lands DamageFlyRoll (GAT)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=6020,
             victim_port=0,
             expect_seed_count=0,
@@ -280,7 +281,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="DamageFlyTop <- AttackAirB positive control remains DamageFlyRoll without early create-window carry (AGG)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=6929,
             victim_port=1,
             expect_seed_count=2,
@@ -288,7 +289,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="double-consume DamageFlyTop <- AttackAirB carry now lands DamageFlyRoll (TBK)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=11134,
             victim_port=1,
             expect_seed_count=1,
@@ -296,7 +297,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="single-consume LandingAirLw carry now lands DamageFlyRoll (GAT aggregate)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            dataset_rel="replays/validation/aggregate_recent/FavorableSuperficialPig.slpz",
             target_record=5391,
             victim_port=0,
             expect_seed_count=1,
@@ -304,7 +305,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="single-consume AttackLw3 carry now lands DamageFlyRoll (FSP aggregate)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            dataset_rel="replays/validation/aggregate_recent/FavorableSuperficialPig.slpz",
             target_record=1338,
             victim_port=0,
             expect_seed_count=1,
@@ -312,7 +313,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="single-consume Fox SpecialLwEnd carry now lands DamageFlyRoll (FSP aggregate)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            dataset_rel="replays/validation/aggregate_recent/FavorableSuperficialPig.slpz",
             target_record=2933,
             victim_port=0,
             expect_seed_count=0,
@@ -320,7 +321,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="SpecialLwEnd entry control does not consume before the DamageFlyHi branch (FSP aggregate)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl",
+            dataset_rel="replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz",
             target_record=11154,
             victim_port=0,
             expect_seed_count=2,
@@ -328,7 +329,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="late LandingAirLw double-consume carry now lands DamageFlyHi (IAT aggregate)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             target_record=6002,
             victim_port=1,
             expect_seed_count=2,
@@ -336,7 +337,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="LandingAirLw entry double-consume carry now lands DamageFlyRoll (PPA aggregate)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=4065,
             victim_port=0,
             expect_seed_count=4,
@@ -344,7 +345,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="AttackHi4 carry uses explicit zero-consume DamageFlyRoll phase (BHH aggregate)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=2105,
             victim_port=1,
             expect_seed_count=2,
@@ -352,7 +353,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="strong AttackAirB root BODY x14 DamageFlyTop carry reaches DamageFlyRoll (BHH)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=6057,
             victim_port=0,
             expect_seed_count=2,
@@ -360,7 +361,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="Catch-shaped late AttackAirN carry consumes Fighter_8006CDA4 prefix without rolling (BHH)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             target_record=4024,
             victim_port=0,
             expect_seed_count=3,
@@ -368,7 +369,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="early AttackAirB create-edge full Fighter_8006CDA4 path lands DamageFlyRoll (PPA aggregate)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             target_record=1033,
             victim_port=0,
             expect_seed_count=4,
@@ -376,7 +377,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="early AttackAirB DamageFlyTop uses explicit zero-consume frame-start roll",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=2635,
             victim_port=0,
             expect_seed_count=1,
@@ -384,7 +385,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="early AttackAirB DamageFlyTop consumes once to avoid false DamageFlyRoll",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=6380,
             victim_port=0,
             expect_seed_count=2,
@@ -392,7 +393,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="early AttackAirB DamageFlyTop consumes twice to reach DamageFlyRoll",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             target_record=7875,
             victim_port=0,
             expect_seed_count=2,
@@ -400,7 +401,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="late victim DamageFlyTop still uses early AttackAirB two-consume stream phase",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             target_record=7185,
             victim_port=0,
             expect_seed_count=0,
@@ -409,7 +410,7 @@ class _DamageFlyRoll8006CDA4Case:
             expect_hb0_enable_edge=1,
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl",
+            dataset_rel="replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz",
             target_record=6927,
             victim_port=0,
             expect_seed_count=0,
@@ -418,7 +419,7 @@ class _DamageFlyRoll8006CDA4Case:
             expect_hb0_enable_edge=1,
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl",
+            dataset_rel="replays/validation/battlefield_recent/MediumVirtualPig.slpz",
             target_record=1718,
             victim_port=0,
             expect_seed_count=0,
@@ -427,7 +428,7 @@ class _DamageFlyRoll8006CDA4Case:
             expect_hb0_enable_edge=1,
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=2367,
             victim_port=0,
             expect_seed_count=2,
@@ -435,7 +436,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="AttackAirN pre-action carries double Fighter_8006CDA4 stream phase (TBK)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=2752,
             victim_port=0,
             expect_seed_count=0,
@@ -443,7 +444,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="active-hitlag DamageFlyN <- ThrowHi state1 laser reaches DamageFlyRoll gate (TBK)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            dataset_rel="replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
             target_record=10207,
             victim_port=0,
             expect_seed_count=3,
@@ -451,7 +452,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="AttackAirN pre-action carries triple Fighter_8006CDA4 stream phase (PRH)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            dataset_rel="replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             target_record=4968,
             victim_port=0,
             expect_seed_count=1,
@@ -459,7 +460,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="AttackAirN pre-action follows same-frame reciprocal gate in the global RNG stream (DCC)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             target_record=7019,
             victim_port=0,
             expect_seed_count=0,
@@ -468,7 +469,7 @@ class _DamageFlyRoll8006CDA4Case:
             expect_hb0_enable_edge=0,
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            dataset_rel="replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
             target_record=10049,
             victim_port=0,
             expect_seed_count=0,
@@ -476,7 +477,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="JumpF victim uses live late AttackHi4 hb0/cap12 owner despite stale source-motion residue (STM)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            dataset_rel="replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz",
             target_record=2542,
             victim_port=1,
             expect_seed_count=4,
@@ -484,7 +485,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="grounded Dash severe-airborne entry uses explicit zero-consume DamageFlyRoll phase (EWT FoD)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            dataset_rel="replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz",
             target_record=2706,
             victim_port=1,
             expect_seed_count=2,
@@ -492,7 +493,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="grounded AttackHi3 severe-airborne entry carries double Fighter_8006CDA4 phase (EWT FoD)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            dataset_rel="replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz",
             target_record=3137,
             victim_port=0,
             expect_seed_count=4,
@@ -500,7 +501,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="grounded AttackDash severe-airborne entry uses explicit zero-consume DamageFlyRoll phase (EWT FoD)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            dataset_rel="replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz",
             target_record=157,
             victim_port=1,
             expect_seed_count=0,
@@ -508,7 +509,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="grounded Dash without explicit phase remains DamageFlyTop (EWT FoD)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            dataset_rel="replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz",
             target_record=4669,
             victim_port=1,
             expect_seed_count=4,
@@ -516,7 +517,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="grounded KneeBend severe-airborne entry uses explicit zero-consume DamageFlyRoll phase (EWT FoD)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            dataset_rel="replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz",
             target_record=4446,
             victim_port=0,
             expect_seed_count=0,
@@ -524,7 +525,7 @@ class _DamageFlyRoll8006CDA4Case:
             note="grounded KneeBend without explicit phase remains DamageFlyTop (EWT FoD)",
         ),
         _DamageFlyRoll8006CDA4Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl",
+            dataset_rel="replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slpz",
             target_record=5041,
             victim_port=0,
             expect_seed_count=4,
@@ -546,10 +547,10 @@ def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[int(case.target_record)]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[int(case.target_record)]
     seed = target["seed_t"]
     ref = target["ref_t1"]
     victim = int(case.victim_port)
@@ -634,15 +635,15 @@ def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
         _, _, _, timing = _run_pre_combat_debug_row(dataset_path, int(case.target_record), attacker, 0)
         assert int(timing["enable_edge"]) == int(case.expect_hb0_enable_edge), case.note
 
-    if "BlondHardHippopotamus.msl" in case.dataset_rel and int(case.target_record) == 6057:
+    if "BlondHardHippopotamus.slpz" in case.dataset_rel and int(case.target_record) == 6057:
         hb_id, cap_id = _selected_body_hitbox_hurtcap(dataset_path, int(case.target_record), 1, 0)
         assert (hb_id, cap_id) == (0, 1), case.note
 
-    if "SweatyThisMallard.msl" in case.dataset_rel and int(case.target_record) == 3998:
+    if "SweatyThisMallard.slpz" in case.dataset_rel and int(case.target_record) == 3998:
         hb_id, cap_id = _selected_body_hitbox_hurtcap(dataset_path, int(case.target_record), 1, 0)
         assert (hb_id, cap_id) == (1, 2), case.note
 
-    if "SweatyThisMallard.msl" in case.dataset_rel and int(case.target_record) == 10049:
+    if "SweatyThisMallard.slpz" in case.dataset_rel and int(case.target_record) == 10049:
         hb_id, cap_id = _selected_body_hitbox_hurtcap(dataset_path, int(case.target_record), 1, 0)
         assert (hb_id, cap_id) == (0, 12), case.note
 
@@ -671,17 +672,17 @@ def test_stm_attacklw4_strong_attackairn_zero_marker_is_selected_source_owned() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+        root / "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 3998
     victim = 0
     attacker = 1
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][victim]) == 64  # AttackLw4.
     assert int(seed["on_ground"][victim]) == 1
     assert int(seed["hitlag"][victim]) == 0
@@ -733,18 +734,18 @@ def test_tvr_attackhi4_weak_attackairb_selected_contact_owns_damageflyroll_prefi
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     victim = 0
     attacker = 1
     record = 11016
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][victim]) == 63  # AttackHi4.
     assert int(seed["on_ground"][victim]) == 1
     assert int(seed["hitlag"][victim]) == 0
@@ -812,35 +813,35 @@ def test_fsp_speciallwend_strong_attackairb_runtime_prefix_is_selected_source_ow
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     victim = 0
     attacker = 1
     strong_record = 1338
     continuing_weak_record = 2627
     weak_record = 2933
-    strong_seed = ds.samples[strong_record]["seed_t"]
-    continuing_weak_seed = ds.samples[continuing_weak_record]["seed_t"]
-    weak_seed = ds.samples[weak_record]["seed_t"]
+    strong_seed = ds.rows[strong_record]["seed_t"]
+    continuing_weak_seed = ds.rows[continuing_weak_record]["seed_t"]
+    weak_seed = ds.rows[weak_record]["seed_t"]
     assert int(strong_seed["action_id"][victim]) == 363  # SpecialLwEnd.
     assert int(strong_seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 1
     assert _selected_body_hitbox_hurtcap(dataset_path, strong_record, attacker, victim) == (0, 2)
-    assert int(ds.samples[strong_record]["ref_t1"]["action_id"][victim]) == 91
+    assert int(ds.rows[strong_record]["ref_t1"]["action_id"][victim]) == 91
     assert int(continuing_weak_seed["action_id"][victim]) == 363
     assert int(continuing_weak_seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 1
     assert _selected_body_hitbox_hurtcap(dataset_path, continuing_weak_record, attacker, victim) == (
         2,
         2,
     )
-    assert int(ds.samples[continuing_weak_record]["ref_t1"]["action_id"][victim]) == 91
+    assert int(ds.rows[continuing_weak_record]["ref_t1"]["action_id"][victim]) == 91
     assert int(weak_seed["action_id"][victim]) == 363
     assert int(weak_seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
     assert _selected_body_hitbox_hurtcap(dataset_path, weak_record, attacker, victim) == (2, 2)
-    assert int(ds.samples[weak_record]["ref_t1"]["action_id"][victim]) == 87
+    assert int(ds.rows[weak_record]["ref_t1"]["action_id"][victim]) == 87
 
     def clear_seed_count(seed_t):
       seed_t["fighter_8006cda4_pre_gate_consume_count"][0, victim] = 0
@@ -961,21 +962,21 @@ def test_fsp_attacklw3_late_attackhi4_runtime_prefix_is_selected_source_owned() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 5391
     victim = 0
     attacker = 1
-    seed = ds.samples[record]["seed_t"]
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][victim]) == 57  # AttackLw3.
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 1
     assert int(seed["action_id"][attacker]) == 63  # AttackHi4.
     assert _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim) == (0, 2)
-    assert int(ds.samples[record]["ref_t1"]["action_id"][victim]) == 91
+    assert int(ds.rows[record]["ref_t1"]["action_id"][victim]) == 91
 
     def clear_seed_count(seed_t):
         seed_t["fighter_8006cda4_pre_gate_consume_count"][0, victim] = 0
@@ -1024,14 +1025,14 @@ def test_bhh_kneebend_attacks3_runtime_prefix_reaches_damageflyroll_gate() -> No
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+        root / "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 5889
-    seed = ds.samples[record]["seed_t"]
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][0]) == 39  # Squat.
     assert int(seed["action_id"][1]) == 53  # AttackS3.
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 0
@@ -1174,15 +1175,15 @@ def test_iat_damageflyroll_runtime_owners_are_selected_source_owned(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "ImpassionedAlarmedTarsier.msl"
+        "replays/validation/aggregate_recent/"
+        "ImpassionedAlarmedTarsier.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[case.record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[case.record]["seed_t"]
     assert int(seed["action_id"][case.victim]) == int(case.victim_action), case.owner
     assert int(seed["action_id"][case.attacker]) == int(case.attacker_action), case.owner
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][case.victim]) == 0, case.owner
@@ -1261,18 +1262,18 @@ def test_pte_sustained_jump_late_attackairn_leg_owner_is_selected_source_owned()
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 6280
     victim = 1
     attacker = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][victim]) == 25  # JumpF.
     assert int(seed["action_id"][attacker]) == 65  # AttackAirN.
     assert int(seed["on_ground"][victim]) == 0
@@ -1331,18 +1332,18 @@ def test_pte_landingairn_weak_attackairb_owner_is_selected_source_owned() -> Non
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 5241
     victim = 0
     attacker = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][victim]) == 70  # LandingAirN.
     assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
@@ -1393,18 +1394,18 @@ def test_pte_attackairb_strong_dair_effect_prefix_is_randi_count_owned() -> None
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 9389
     victim = 0
     attacker = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][victim]) == 67  # AttackAirB.
     assert int(seed["action_id"][attacker]) == 69  # AttackAirLw.
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
@@ -1454,12 +1455,12 @@ def test_damageflyroll_to_damagefall_uses_frame_start_hitstun_one_tick_boundary(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "TubbyCurlyHerring.msl"
+        "replays/validation/aggregate_recent/"
+        "TubbyCurlyHerring.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 3251
     player = 1
@@ -1489,12 +1490,12 @@ def test_gat_top_f26_rollout_advances_replay_frame_rng_clock_to_delayed_damagefl
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     rows = _run_rollout_window_rows_with_trace(
         dataset_path,
@@ -1529,12 +1530,12 @@ def test_qgd_damageflyroll_site8_uses_current_processhit_source_not_stale_last_h
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     def _poison_visible_last_hit_by(seed_t):
         seed_t["last_hit_by"][0, :] = 6
@@ -1571,15 +1572,15 @@ def test_side_special_article_body_hit_admits_damageflyroll_without_fighter_effe
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "FlippantEnchantedHorse.msl"
+        "replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[10192]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[10192]["seed_t"]
     assert int(seed["action_id"][0]) == 14  # Wait
     assert int(seed["action_id"][1]) == 352  # FxSpecialAirSHit
     article = seed["items"][0]
@@ -1624,17 +1625,17 @@ def test_throwhi_capture_episode_rollout_clock_reaches_delayed_damageflyroll_gat
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 2712
     for rec in (start_record, 2743, 2748, 2751, 2752, 2754):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     start_seed = samples[start_record]["seed_t"]
     assert int(start_seed["action_id"][0]) == 225  # CaptureDamageHi
@@ -1686,15 +1687,15 @@ def test_tbk_damageflytop_segment_carries_fighter_8006cda4_stream_phase_to_delay
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    start_seed = ds.samples[3870]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    start_seed = ds.rows[3870]["seed_t"]
     assert int(start_seed["action_id"][1]) == 90
     assert int(start_seed["fighter_8006cda4_pre_gate_consume_count"][1]) == 2
 
@@ -1731,16 +1732,16 @@ def test_prh_damageflytop_segment_carries_zero_consume_gate_marker_to_delayed_hi
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PositiveRevolvingHyena.msl"
+        "replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    start_seed = ds.samples[1593]["seed_t"]
-    target_seed = ds.samples[1612]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    start_seed = ds.rows[1593]["seed_t"]
+    target_seed = ds.rows[1612]["seed_t"]
     assert int(start_seed["action_id"][1]) == 90
     assert int(start_seed["fighter_8006cda4_pre_gate_consume_count"][1]) == 4
     assert int(target_seed["action_id"][1]) == 90
@@ -1783,12 +1784,12 @@ def test_tbk_damageflyroll_live_xrotn_pose_selects_late_attackairb_height() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     for rec in (6993, 6994):
         seed, ref_row, out_row = _run_one_step_row(dataset_path, rec, 1)
@@ -1814,12 +1815,12 @@ def test_tbk_damageflyroll_live_xrotn_rollout_waits_for_late_attackairb_height()
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     rows = _run_rollout_window_rows_with_trace(
         dataset_path,
@@ -1854,15 +1855,15 @@ def test_tbk_attackairn_segment_carries_fighter_8006cda4_stream_phase_to_delayed
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    start_seed = ds.samples[2366]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    start_seed = ds.rows[2366]["seed_t"]
     assert int(start_seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 2
 
     rows = _run_rollout_window_rows_with_trace(
@@ -1897,17 +1898,17 @@ def test_prh_damageflytop_damagefall_iasa_carries_attackairn_stream_phase_to_del
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PositiveRevolvingHyena.msl"
+        "replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    start_seed = ds.samples[10169]["seed_t"]
-    damagefall_seed = ds.samples[10206]["seed_t"]
-    target_seed = ds.samples[10207]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    start_seed = ds.rows[10169]["seed_t"]
+    damagefall_seed = ds.rows[10206]["seed_t"]
+    target_seed = ds.rows[10207]["seed_t"]
     assert int(start_seed["action_id"][0]) == 90  # DamageFlyTop
     assert int(start_seed["hitstun"][0]) > 0
     assert int(start_seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 3
@@ -1946,16 +1947,16 @@ def test_damagefall_iasa_stream_phase_does_not_arm_unproven_damageflytop_control
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     for rec in (1656, 1657, 1658):
-        seed = ds.samples[rec]["seed_t"]
+        seed = ds.rows[rec]["seed_t"]
         assert int(seed["action_id"][0]) == 90  # DamageFlyTop
         assert int(seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 0
 
@@ -1974,12 +1975,12 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     def _noncompact_ports(seed_t):
         seed_t["source_port0"][0, 0] = 2
@@ -2005,8 +2006,8 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
     ),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             3907,
             0,
             1,
@@ -2016,8 +2017,8 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             91,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             6380,
             1,
             0,
@@ -2027,8 +2028,8 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             91,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             6495,
             1,
             0,
@@ -2038,7 +2039,7 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             88,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl",
+            "replays/validation/aggregate_recent/PutridJoyousOryx.slpz",
             5448,
             1,
             0,
@@ -2048,7 +2049,7 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             91,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             4024,
             1,
             0,
@@ -2058,7 +2059,7 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             91,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl",
+            "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz",
             10332,
             1,
             0,
@@ -2068,7 +2069,7 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             91,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             7566,
             1,
             0,
@@ -2078,7 +2079,7 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             88,
         ),
         (
-            "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl",
+            "replays/validation/doubles_recent/Game_20260509T152622.slpz",
             3301,
             1,
             0,
@@ -2088,7 +2089,7 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             88,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            "replays/validation/aggregate_recent/HungryImportantSnake.slpz",
             2461,
             0,
             1,
@@ -2098,8 +2099,8 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             88,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "MilkyGracefulStingray.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.slpz",
             2608,
             0,
             1,
@@ -2109,8 +2110,8 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             88,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "ShadyDecimalStarling.msl",
+            "replays/validation/dream_land_recent/"
+            "ShadyDecimalStarling.slpz",
             3351,
             0,
             1,
@@ -2120,8 +2121,8 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             88,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             4541,
             0,
             1,
@@ -2131,8 +2132,8 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
             91,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             9398,
             1,
             0,
@@ -2166,18 +2167,18 @@ def test_attackairb_damageflytop_runtime_phase_requires_selected_hurtcap_provena
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     got_hb, got_cap = _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim)
     assert (got_hb, got_cap) == (selected_hb, selected_cap)
-    seed_row = read_dataset(str(dataset_path)).samples[record]["seed_t"]
-    if dataset_rel.endswith("PutridJoyousOryx.msl") and record == 5448:
+    seed_row = load_replay_buffers(str(dataset_path)).rows[record]["seed_t"]
+    if dataset_rel.endswith("PutridJoyousOryx.slpz") and record == 5448:
         assert int(seed_row["damage_jump_buffer_x14"][victim]) > 0
         assert int(seed_row["state_flags"][attacker][0]) & 0x40
-    if dataset_rel.endswith("PriceyPartialAlbatross.msl") and record == 4024:
+    if dataset_rel.endswith("PriceyPartialAlbatross.slpz") and record == 4024:
         assert int(seed_row["damage_jump_buffer_x14"][victim]) == 0
         assert int(seed_row["state_flags"][attacker][0]) & 0x40 == 0
-    if dataset_rel.endswith("ImpassionedAlarmedTarsier.msl") and record == 10332:
+    if dataset_rel.endswith("ImpassionedAlarmedTarsier.slpz") and record == 10332:
         assert int(seed_row["damage_jump_buffer_x14"][victim]) > 0
         # At frame start the replay seed has x14 aligned to hitstun; during the runtime step the
         # DamageFlyTop callback decrements x14 once before ProcessHit reaches the DamageFlyRoll gate.
@@ -2213,18 +2214,18 @@ def test_damageflytop_attackairb_root_x14_primary_owner_closes_iat_10332_rollout
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "ImpassionedAlarmedTarsier.msl"
+        "replays/validation/aggregate_recent/"
+        "ImpassionedAlarmedTarsier.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 10332
     victim = 0
     attacker = 1
-    seed = ds.samples[record]["seed_t"]
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][victim]) == 90  # DamageFlyTop.
     assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 1
@@ -2258,18 +2259,18 @@ def test_damageflytop_attackairb_hb0_cap1_effect_prefix_closes_tvr_4541_rollout(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 4541
     victim = 1
     attacker = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][victim]) == 90  # DamageFlyTop.
     assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
     assert int(seed["damage_jump_buffer_x14"][victim]) == 0
@@ -2325,19 +2326,19 @@ def test_catch_attack11_jab_effect_prefix_closes_pte_5935_rollout() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 5935
     victim = 0
     attacker = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][victim]) == 212  # Catch.
     assert int(seed["action_id"][attacker]) == 44  # Attack11.
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
@@ -2388,10 +2389,10 @@ def test_specialairhi_damageflyroll_gate_rejects_attackairb_cap12_xrotn_owner_pp
     # data/hurtcaps/{fox,falco}.json cap12
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 7332
     attacker = 1
@@ -2433,7 +2434,7 @@ def test_specialhi_attackairb_cap2_current_payload_enters_damageflyroll() -> Non
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     fsp_dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not fsp_dataset_path.exists():
         pytest.skip("missing local SpecialHi DamageFlyRoll dataset")
@@ -2441,11 +2442,11 @@ def test_specialhi_attackairb_cap2_current_payload_enters_damageflyroll() -> Non
     victim = 0
     attacker = 1
     cases = ((11707, (2, 2), 5), (11924, (1, 2), 6))
-    ds = read_dataset(str(fsp_dataset_path))
+    ds = load_replay_buffers(str(fsp_dataset_path))
     for record, selected, expected_hitlag in cases:
         assert _selected_body_hitbox_hurtcap(fsp_dataset_path, record, attacker, victim) == selected
-        seed = ds.samples[record]["seed_t"]
-        ref_row = ds.samples[record]["ref_t1"]
+        seed = ds.rows[record]["seed_t"]
+        ref_row = ds.rows[record]["ref_t1"]
         assert int(seed["action_id"][victim]) == 356  # SpecialAirHi.
         assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
         assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
@@ -2481,17 +2482,17 @@ def test_specialairs_damageflyroll_gate_uses_attackairb_create_edge_root_body_ow
     # data/hurtcaps/{fox,falco}.json cap0
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 6123
     attacker = 0
     victim = 1
     got_hb, got_cap = _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim)
     assert (got_hb, got_cap) == (1, 0)
-    seed_row = read_dataset(str(dataset_path)).samples[record]["seed_t"]
+    seed_row = load_replay_buffers(str(dataset_path)).rows[record]["seed_t"]
     assert int(seed_row["action_id"][victim]) == 351  # FxSpecialAirS
     assert int(seed_row["on_ground"][victim]) == 0
     assert int(seed_row["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
@@ -2518,10 +2519,10 @@ def test_pjo_rollout_rng_sites_are_source_owned_without_exceptions() -> None:
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PutridJoyousOryx.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     trace_path = root / "reports/triage/pjo_rollout_rng_sites_source_owned.tsv"
     rows = _run_rollout_window_rows_with_trace(
@@ -2562,12 +2563,12 @@ def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_pr
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     trace_path = root / "reports/triage/qgd_wait_deadupstar_effect_prefix_rng.tsv"
     rows = _run_rollout_window_rows_with_trace(
@@ -2585,12 +2586,12 @@ def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_pr
     assert _trace_site_count(trace_path, start_record=0, record=4435, site_id=3) == 1
 
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "SweatyThisMallard.msl"
+        "replays/validation/pokemon_stadium_recent/"
+        "SweatyThisMallard.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     trace_path = root / "reports/triage/stm_wait_deadupstar_active_prefix_rng.tsv"
     rows = _run_rollout_window_rows_with_trace(
@@ -2609,12 +2610,12 @@ def test_wait_variant_replay_frame_rng_accounts_for_earlier_deadupstar_effect_pr
     assert _trace_site_count(trace_path, start_record=10395, record=10395, site_id=3) == 1
 
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "BlondHardHippopotamus.msl"
+        "replays/validation/aggregate_recent/"
+        "BlondHardHippopotamus.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     trace_path = root / "reports/triage/bhh_wait_deadupstar_stale_late_rng.tsv"
     rows = _run_rollout_window_rows_with_trace(
@@ -2644,11 +2645,11 @@ def test_frozenps_top_blast_replay_frame_rng_selects_deadupfall_4665() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "Game_20260515T182447_frozenps.msl"
+        / "replays/validation/aggregate_recent/"
+        "Game_20260515T182447_frozenps.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     trace_path = root / "reports/triage/frozenps_top_blast_deadupfall_rng.tsv"
     rows = _run_rollout_window_rows_with_trace(
@@ -2672,14 +2673,14 @@ def test_frozenps_top_blast_plain_step_does_not_pull_replay_frame_rng_4665() -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "Game_20260515T182447_frozenps.msl"
+        / "replays/validation/aggregate_recent/"
+        "Game_20260515T182447_frozenps.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[4665:4666]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[4665:4666]
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -2692,7 +2693,7 @@ def test_frozenps_top_blast_plain_step_does_not_pull_replay_frame_rng_4665() -> 
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -2720,11 +2721,11 @@ def test_top_blast_replay_frame_rng_rejects_later_player_without_prefix_owner_qg
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 6480
     trace_path = root / "reports/triage/qgd_top_blast_later_player_prefix_negative.tsv"
@@ -2746,19 +2747,19 @@ def test_top_blast_replay_frame_rng_rejects_later_player_without_prefix_owner_qg
     ("dataset_rel", "record", "top_player", "note"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
             2653,
             0,
             "other-player Wait getAnimID prefix",
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
             7810,
             0,
             "other-player Fighter_8006CDA4 prefix lane",
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
             10272,
             0,
             "other-player attack-script/combat RNG prefix",
@@ -2782,7 +2783,7 @@ def test_top_blast_replay_frame_rng_rejects_known_pre_matchflow_prefixes(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     trace_path = root / f"reports/triage/top_blast_prefix_negative_{record}.tsv"
     rows = _run_rollout_window_rows_with_trace(
@@ -2810,16 +2811,16 @@ def test_specialairhi_damageflyroll_gate_uses_live_rollout_rng_stream_his_1598()
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HungryImportantSnake.msl"
+        "replays/validation/aggregate_recent/"
+        "HungryImportantSnake.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[1598]["seed_t"]
-    ref = ds.samples[1598]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[1598]["seed_t"]
+    ref = ds.rows[1598]["ref_t1"]
     assert int(seed["action_id"][1]) == 356  # SpecialAirHi
     assert int(seed["action_frame"][1]) == 15
     assert int(seed["action_id"][0]) == 67  # AttackAirB
@@ -2863,17 +2864,17 @@ def test_his_replay_rollout_uses_current_frame_rng_seed_for_damageflyroll_4397()
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HungryImportantSnake.msl"
+        "replays/validation/aggregate_recent/"
+        "HungryImportantSnake.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    start_seed = ds.samples[4213]["seed_t"]
-    target_seed = ds.samples[4397]["seed_t"]
-    target_ref = ds.samples[4397]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    start_seed = ds.rows[4213]["seed_t"]
+    target_seed = ds.rows[4397]["seed_t"]
+    target_ref = ds.rows[4397]["ref_t1"]
     assert int(start_seed["action_id"][0]) == 74  # LandingAirLw
     assert int(start_seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 1
     assert int(target_seed["action_id"][0]) == 90  # DamageFlyN
@@ -2916,19 +2917,19 @@ def test_his_landingfallspecial_downattacku_current_hitcapsule_owns_damageflyrol
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HungryImportantSnake.msl"
+        "replays/validation/aggregate_recent/"
+        "HungryImportantSnake.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 7485
     victim = 0
     attacker = 1
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][victim]) == 43  # LandingFallSpecial
     assert int(seed["action_frame"][victim]) == 0
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
@@ -3005,19 +3006,19 @@ def test_landingairlw_without_live_source_owner_does_not_replay_feed_damageflyro
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "ImpassionedAlarmedTarsier.msl"
+        "replays/validation/aggregate_recent/"
+        "ImpassionedAlarmedTarsier.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 11154
     victim = 0
     attacker = 1
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][victim]) == 74  # LandingAirLw.
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 2
     assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
@@ -3047,16 +3048,16 @@ def test_normal_step_input_rollout_does_not_pull_future_replay_rng_his_7485() ->
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "HungryImportantSnake.msl"
+        "replays/validation/aggregate_recent/"
+        "HungryImportantSnake.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -3070,7 +3071,7 @@ def test_normal_step_input_rollout_does_not_pull_future_replay_rng_his_7485() ->
             .reshape(1, stride)
         )
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, row_bytes(6815, "seed_t", seed_stride))
         for record in range(6815, 7486):
@@ -3100,19 +3101,19 @@ def test_jumpaerial_attackairb_cap1_does_not_admit_damageflyroll_tch_8437() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "TubbyCurlyHerring.msl"
+        "replays/validation/aggregate_recent/"
+        "TubbyCurlyHerring.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 8437
     attacker = 0
     victim = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][victim]) == 27  # JumpAerialF
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
     assert int(ref["action_id"][victim]) == 88  # DamageFlyN, not DamageFlyRoll
@@ -3150,19 +3151,19 @@ def test_jumpaerial_illusion_article_source_admits_damageflyroll_prh_7739() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PositiveRevolvingHyena.msl"
+        "replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 7739
     victim = 0
     attacker = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][victim]) == 27  # JumpAerialF
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
     assert int(seed["action_id"][attacker]) in {351, 353}  # SpecialS/AirS side-special owner.
@@ -3211,18 +3212,18 @@ def test_throwhi_damageflyn_lw_seed_rows_do_not_use_rollout_rng_fallback_cdo(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "CornyDelayedOkapi.msl"
+        "replays/validation/pokemon_stadium_recent/"
+        "CornyDelayedOkapi.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     victim = 0
     attacker = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][victim]) == seed_action
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
     assert int(seed["action_id"][attacker]) == 221  # ThrowHi
@@ -3253,16 +3254,16 @@ def test_specialairhi_damageflyroll_gate_rejects_teacher_forced_seed_phase_agg_2
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[2864]["seed_t"]
-    ref = ds.samples[2864]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[2864]["seed_t"]
+    ref = ds.rows[2864]["ref_t1"]
     p = 0
     assert int(seed["action_id"][p]) == 356  # SpecialAirHi
     assert int(ref["action_id"][p]) == 87  # DamageFlyHi, not DamageFlyRoll
@@ -3283,12 +3284,12 @@ def test_specialairhi_damageflyroll_gate_rejects_exact_rollout_reseed_phase_agg_
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     rows = _run_rollout_window_rows_with_trace(
         dataset_path,
@@ -3314,16 +3315,16 @@ def test_damageflyn_without_stream_phase_rejects_exact_reseed_damageflyroll_prh_
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PositiveRevolvingHyena.msl"
+        "replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[8390]["seed_t"]
-    ref = ds.samples[8390]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[8390]["seed_t"]
+    ref = ds.rows[8390]["ref_t1"]
     p = 1
     assert int(seed["action_id"][p]) == 88  # DamageFlyN
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][p]) == 0
@@ -3360,12 +3361,12 @@ def test_qgd_downstream_rng_exception_rows_are_one_step_replay_exact() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     cases = (
         (8387, 0, 354, 88, 6, 32),
@@ -3395,12 +3396,12 @@ def test_gat_initial_damageflyroll_row_is_source_owned_one_step_replay_exact() -
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 3106
     p = 0
@@ -3467,12 +3468,12 @@ def test_gat_downstream_exception_rows_are_one_step_action_exact(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, p)
     assert int(seed["action_id"][p]) == seed_action

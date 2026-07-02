@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.eval.dataset import ITEM_DTYPE
-from tools.slippi.make_dataset_from_slp import _derive_item_attack_fields
+from tools.eval.validation_dtypes import ITEM_DTYPE
+from tools.slippi.validation_buffer_items import _derive_item_attack_fields
 
 
 def test_item_attack_fields_prefix_invariance_with_owner_change() -> None:

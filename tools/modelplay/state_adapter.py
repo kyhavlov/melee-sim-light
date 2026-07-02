@@ -6,7 +6,7 @@ from typing import Mapping
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 MSL_STAGE_FINAL_DESTINATION = 32
@@ -157,7 +157,7 @@ def _controller_from_input_player(inp: np.void):
     # Keep the modelplay bridge on that contract so current-sim and replay-patched vanilla see the
     # same held-trigger strength.
     # refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm (trigger floats are 0..1 on replay wire)
-    # tools/slippi/make_dataset_from_slp.py::_u8_from_float01 (dataset bridge uses 0..255)
+    # validation buffer modules::_u8_from_float01 (replay-buffer bridge uses 0..255)
     shoulder = np.float32(int(inp["l"]) / 255.0)
     return sa_types.Controller(
         main_stick=sa_types.Stick(main_x, main_y),

@@ -17,7 +17,7 @@ class _ThrowHiFirstPulseCarryCase:
 
 
 _BHH_AGG_DATASET = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
 )
 
 
@@ -57,7 +57,7 @@ def test_throwhi_first_pulse_carries_when_same_owner_victim_is_off_projectile_si
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _BHH_AGG_DATASET
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_BHH_AGG_DATASET}")
+        pytest.skip(f"missing local replay: {_BHH_AGG_DATASET}")
 
     seed, ref, out = _run_one_step_row(dataset_path, int(case.record), int(case.thrower_port))
     thrower = int(case.thrower_port)
@@ -87,7 +87,7 @@ def test_throwhi_first_pulse_front_side_contact_still_consumes_and_counts_combo(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _BHH_AGG_DATASET
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_BHH_AGG_DATASET}")
+        pytest.skip(f"missing local replay: {_BHH_AGG_DATASET}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 480, 1)
     thrower = 1
@@ -119,7 +119,7 @@ def test_throwhi_first_pulse_same_frame_spawn_body_destroy_event_rows(record: in
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _BHH_AGG_DATASET
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_BHH_AGG_DATASET}")
+        pytest.skip(f"missing local replay: {_BHH_AGG_DATASET}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, 0)
     thrower = 0
@@ -143,7 +143,7 @@ def test_throwhi_mid_pulse_front_side_contact_uses_callback_phase() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _BHH_AGG_DATASET
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_BHH_AGG_DATASET}")
+        pytest.skip(f"missing local replay: {_BHH_AGG_DATASET}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 937, 1)
     thrower = 1
@@ -165,7 +165,7 @@ def test_throwhi_crossed_prev_first_pulse_carry_keeps_replay_article() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _BHH_AGG_DATASET
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_BHH_AGG_DATASET}")
+        pytest.skip(f"missing local replay: {_BHH_AGG_DATASET}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 9419, 0)
     thrower = 0
@@ -200,7 +200,7 @@ def test_throwhi_frame18_callback_clear_does_not_create_extra_article_or_combo()
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _BHH_AGG_DATASET
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_BHH_AGG_DATASET}")
+        pytest.skip(f"missing local replay: {_BHH_AGG_DATASET}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 9419, 0)
     thrower = 0

@@ -10,7 +10,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -25,8 +26,8 @@ class _Case:
 _CASES = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         record=3761,
         attacker_p=0,
@@ -35,8 +36,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         record=7518,
         attacker_p=1,
@@ -111,11 +112,11 @@ def test_combo_victim_reseed_fallback_rows_are_replay_exact(case: _Case) -> None
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > case.record, f"dataset too short for record={case.record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > case.record, f"replay too short for record={case.record}"
 
     row = samples[case.record : case.record + 1]
     seed = row["seed_t"][0]

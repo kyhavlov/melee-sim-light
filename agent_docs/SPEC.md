@@ -597,7 +597,7 @@ Known teacher-forcing limitations (must be tracked and eventually removed, not t
 - Grabbed/thrown victim attachment offsets `grab_offset_{y,z}` map to `fp->x1A70.{y,z}`. For non-low `CaptureWait* -> ThrownF/B/Hi` entry, runtime now initializes the offsets from the victim's static `TransN - XRotN` pose analog before applying the thrown accessory anchor; decomp initializes `fp->x1A70` from bones and `ftCo_800DE508` applies it during `Thrown*` (`src/grab_attachment.c`, `src/grab_flow.c`; refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C, refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}). Reseed-inferred offsets remain the fallback outside the direct source-backed entry slice.
 - CaptureWaitHi/Lw mash rate is now owned live in the shared grab-flow runtime. Decomp `ftCo_CaptureWaitHi_Anim` writes `ftAnim_SetAnimRate(x3B4)` when `ftCommon_GrabMash(..., x3A8)` succeeds, uses `x3B0` as the hold timer before returning to rate `1.0`, and decrements the shared grab timer / counter in the same callback (`src/grab_flow.c`, `data/common/ft_common_data.json`).
 - CaptureWaitHi/Lw jump latch uses the IASA edge lane, not held buttons. `fn_800DC014` checks `fp->input.x668 & HSD_PAD_XY`, so runtime writes `capture_wait_jump_latch` from `input_buttons_pressed` during the narrow `capture_wait_counter < capture_wait_jump_latch_window_frames` window. This does not replace the separate first-steady CaptureWait ownership bridge below (`src/grab_flow.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DC014).
-- First-steady `CaptureWait` ownership no longer uses either cross-row rate carry or a replay-shaped phase bit. Preprocessing causally seeds only the shared hidden owner lanes that persist across frames (`grab_timer`, `capturewait.x0`, `capturewait.x4`, the deferred jump latch, and the breakout-resolve bit) for every active player slot; runtime derives the first-steady extra victim tick directly from replay-visible owner/victim slot ordering, frame-start `CaptureWait af=1 <- af=0` continuity, and current-frame `ftCommon_GrabMash` activity in the shared CatchPull/CatchWait/CatchAttack/CaptureWait path (`tools/slippi/seed_history.py`, `tools/slippi/make_dataset_from_slp.py`, `src/api.c`, `src/grab_flow.c`; decomp: `ftCo_Attack100.c::{ftCo_CaptureWaitHi_Anim,ftCommon_GrabMash,ftCo_800DA698,ftCo_CaptureCut_Enter,fn_800DA1D8,ftCo_CaptureWaitHi_Coll,fn_800DBAC4,fn_800DBBF8}`).
+- First-steady `CaptureWait` ownership no longer uses either cross-row rate carry or a replay-shaped phase bit. Preprocessing causally seeds only the shared hidden owner lanes that persist across frames (`grab_timer`, `capturewait.x0`, `capturewait.x4`, the deferred jump latch, and the breakout-resolve bit) for every active player slot; runtime derives the first-steady extra victim tick directly from replay-visible owner/victim slot ordering, frame-start `CaptureWait af=1 <- af=0` continuity, and current-frame `ftCommon_GrabMash` activity in the shared CatchPull/CatchWait/CatchAttack/CaptureWait path (`tools/slippi/seed_history.py`, `tools/slippi/validation_buffer_builder.py`, `src/api.c`, `src/grab_flow.c`; decomp: `ftCo_Attack100.c::{ftCo_CaptureWaitHi_Anim,ftCommon_GrabMash,ftCo_800DA698,ftCo_CaptureCut_Enter,fn_800DA1D8,ftCo_CaptureWaitHi_Coll,fn_800DBAC4,fn_800DBBF8}`).
 - Timer-expired `CaptureWait` breakout is owned by the victim Anim callback, not by later owner pummel/throw IASA. When `CaptureWaitHi_Anim` decrements `grab_timer` to zero it calls `ftCo_800DA698(owner, false)`, which cuts the grab owner to `CatchCut`, then routes the victim to `CaptureCut` or `CaptureJump` via the pre-existing jump latch or the direct stick-up test. Runtime records an explicit pending bit at the Anim gate and resolves it before same-frame `CatchWait` pummel/throw IASA or `fn_800DC014` X/Y latch. `CatchCut`/`CaptureCut` animation end routes through `ftCommon_8007D92C`; `CaptureJump` animation end routes through `ftCo_Fall_Enter` (`src/grab_flow.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_CaptureWaitHi_Anim,ftCo_800DA698,fn_800DC070,ftCo_CatchCut_Anim,ftCo_CaptureJump_Anim}, refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c::ftCo_CaptureCut_Anim, refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C).
 - Catch selection must honor the common x1A6A/x1A68 target mask before capsule overlap. `Catch`/`CatchDash` entry installs attacker `x1A68=1` through `ftCommon_8007E2D0`; `DownBound` installs victim `x1A6A=0x1FF`, while `DownBound/DownDamage -> DownWait` installs `x1A6A=1` through `ftCommon_8007E2F4`. Since `ftColl_80078A2C` rejects `(victim.x1A6A & attacker.x1A68) != 0`, DownBound/DownWait/DownDamage victims are not grabbable even if their ordinary grabbable hurt capsules overlap the catch bubble (`src/combat.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54, refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_8009794C,ftCo_80097E8C,ftCo_80097F38}, refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184, refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C).
 - Catch target selection uses the collision-skeleton HitCapsule point consumed by `lbColl_80007ECC`, not a second enlarged pose-space center. For enlarged models, runtime removes the generic pose-space `model_scaling` expansion before catch-only narrowphase; it does not extend catch reach for smaller models. A rejected all-hitbox/all-scale correction regressed validation and remains part of the broader hitbox geometry owner, not catch selection (`src/combat.c`; refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_8007AD18}, refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC, refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC).
@@ -764,13 +764,13 @@ Per-field budgets (report keys in `reports/validation/one_step_suite_eval.txt`):
 
 Notes:
 - `state_flags` is compared as 5 raw bytes per player-frame (see “`state_flags` Ownership” above).
-- `item_*` fields are compared across all 15 global item slots per record (see `tools/eval/run_one_step_eval.py`); meeting the `< 100` total gate is not possible if slot identity is unstable.
+- `item_*` fields are compared across all 15 global item slots per record (see `tools/eval/one_step_report.py`); meeting the `< 100` total gate is not possible if slot identity is unstable.
 
 #### Float errors (teacher-forced, one-step)
 
 Primary gate:
 - `overall.float_norm_mae_p95` (suite summary): **≤ 0.0030**
-  - This is the mean absolute error normalized per-float-field by the 0.95-quantile of the reference magnitude (see `tools/eval/run_one_step_eval.py::_float_norm_mae_p95`).
+  - This is the mean absolute error normalized per-float-field by the 0.95-quantile of the reference magnitude (see `tools/eval/one_step_report.py::_float_norm_mae_p95`).
 
 Group budgets (computed with the same normalization rule, but restricted to the listed fields):
 
@@ -784,13 +784,13 @@ Group budgets (computed with the same normalization rule, but restricted to the 
 Evaluator note:
 - RL 1.0 requires printing the **group-restricted** float metrics (per replay + suite summary), using the exact same computation rule as
   `overall.float_norm_mae_p95` but restricting the keys included in the aggregation.
-- Required additional output keys (names are part of the contract; add to `tools/eval/run_one_step_eval.py` output):
+- Required additional output keys (names are part of the contract; add to `tools/eval/one_step_report.py` output):
   - `overall.float_norm_mae_p95.group.position_self_velocity` over: `err.pos_x`, `err.pos_y`, `err.speed_air_x_self`,
     `err.speed_ground_x_self`, `err.speed_y_self`
   - `overall.float_norm_mae_p95.group.damage_kb_surface` over: `err.percent`, `err.speed_x_attack`, `err.speed_y_attack`
   - `overall.float_norm_mae_p95.group.items_projectiles` over: `err.item_pos_x`, `err.item_pos_y`, `err.item_vel_x`, `err.item_vel_y`
   - `overall.float_norm_mae_p95.group.defense` over: `err.shield_hp`
-- Exact computation rule (must match `tools/eval/run_one_step_eval.py::_float_norm_mae_p95`):
+- Exact computation rule (must match `tools/eval/one_step_report.py::_float_norm_mae_p95`):
   - For each included float field `k`, compute `scale_k = quantile_0.95(abs(ref_k))` over **all compared scalar values** for that field
     in the replay/suite scope; clamp `scale_k = max(scale_k, 1e-6)`.
   - Aggregate across fields by summing normalized absolute error and dividing by total scalar count:
@@ -1945,10 +1945,7 @@ This section is **suite-grounded**: it is intended to be regenerated any time th
 If the status labels in the generated tables conflict with the “Roadmap Status” section above, assume the tables are stale and regenerate/update them.
 
 How to regenerate (no extraction / no preprocess):
-- Action ids: `uv run python -m tools.eval.list_suite_action_ids --suite replays/suites/fox_falco_fd_ucf084_recent.json --datasets-dir datasets`
-- Animation indices (until a dedicated tool exists):
-  - Add a `tools/eval/list_suite_animation_indexes.py` sibling to `list_suite_action_ids.py` that unions `seed_t.animation_index` + `ref_t1.animation_index`.
-  - The implementation should mirror `tools/eval/list_suite_action_ids.py` exactly (same suite loader + dataset path mapping), just with `u32` counting.
+- Action/animation coverage should be derived from `ValidationReplayBuffers` for the suite entries, not from Dataset/.msl files.
 
 Terminology / identity (Slippi ↔ GALE01 ↔ this repo):
 - `action_id`: GALE01 `FtMotionId` / `ftCommon_MotionState` (plus character-specific motions starting at `ftCo_MS_Count`).
@@ -3838,7 +3835,7 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/it/itcoll.c::it_80272460`,
     `refs/melee/src/melee/it/items/{itfoxlaser.c,itfoxblaster.c,itfoxillusion.c}`,
     `refs/slippi-ssbm-asm/Recording/SendItemInfo.s`, and
-    `tools/slippi/make_dataset_from_slp.py::_fill_items_fixed`.
+    `tools/slippi/validation_buffer_builder.py::_fill_items_fixed`.
   - Guard laser lifetime runtime slice:
     - `Item_80269DC8` routes eligible shield contacts either through `shield_bounced` (keep the
       projectile alive) or `hit_shield` (destroy the projectile). Until the authoritative
@@ -5308,8 +5305,8 @@ Fox/Falco special-owner split (2026-04-17):
   - Laser shield/reflect event probe:
     - Reviewable intra-frame instrumentation now exists at
       `refs/Ishiiruka` branch `engine-dump-v12-probes`, with parser
-      `tools/dolphin/laser_shield_reflect_event_dump.py` and wrapper support in
-      `tools/dolphin/{dolphin_engine_dump.py,forensic_row_dump.py}`. It logs
+      `tools/dolphin/laser_shield_reflect_event_dump.py` and engine-dump support under
+      `tools/dolphin/`. It logs
       `ftColl_80077688`, `ftColl_80077464`, `Item_80269DC8`, `Item_80269F14`,
       `itFoxLaser_Logic94_ShieldBounced`, `itFoxLaser_Logic94_HitShield`, and destroy entry/return
       together with `xC54`, `xC58`, `xDCC`, `xDCE`, pending reflect owner/xDA8, fighter
@@ -6736,7 +6733,7 @@ BODY collision-space residual split and rejected seed bridge:
     capsules (`ftColl_80076808`/`inlineB0`);
   - `combat_hitlist_hb_valid=1` means the seed lane is authoritative for that exact slot,
     including non-empty victim lists and authoritative empty lists;
-  - the dense stale-latch cleanup in `tools/slippi/make_dataset_from_slp.py` and the runtime
+  - the dense stale-latch cleanup in `tools/slippi/validation_buffer_builder.py` and the runtime
     materialization trim in `src/hitboxes.c` must not erase authoritative per-HitCapsule lanes.
     This fixes replay-real AttackDash/AttackAirLw shield-lineage rows such as
     `PRH:1830..1834`, `IAT:11146..11147`, and the GuardSetOff shield-damage onset rows

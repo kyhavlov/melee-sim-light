@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _processed_to_stick_u8(v: float) -> np.int8:
@@ -46,15 +47,15 @@ def test_modelplay_dual_shine_start_does_not_static_freeze() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     trace_path = root / "reports/modelplay/20260409_rl_doubles_v27_7000_rerun/trace.json"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
     if not trace_path.exists():
         pytest.skip(f"missing local modelplay trace: {trace_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     trace = json.loads(trace_path.read_text())
     frames = trace["frames"]
     assert len(frames) >= 122, "modelplay trace must include the first frozen frame and follow-up"
@@ -65,8 +66,8 @@ def test_modelplay_dual_shine_start_does_not_static_freeze() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    row = ds.samples[0:1]
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    row = ds.rows[0:1]
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride).copy()
         prev_input_bytes = (

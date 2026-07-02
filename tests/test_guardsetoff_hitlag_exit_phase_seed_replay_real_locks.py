@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,7 @@ class _Case:
     "case",
     [
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=1212,
             p=1,
             expected_target_phase=2,
@@ -34,7 +34,7 @@ class _Case:
             note="AGN row A is the last-hitlag GuardSetOff row before the first post-hitlag ownership handoff row",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=1477,
             p=0,
             expected_target_phase=2,
@@ -43,7 +43,7 @@ class _Case:
             note="AGN row B follows the same last-hitlag -> first-post-hitlag GuardSetOff ownership pattern",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=2393,
             p=0,
             expected_target_phase=2,
@@ -66,10 +66,10 @@ def test_guardsetoff_hitlag_exit_phase_seed_locks_blockers_and_adjacent_controls
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = case.p
 
     assert int(samples[case.target_record - 2]["seed_t"]["guard_setoff_hitlag_exit_phase_u8"][p]) == 1, case.note
@@ -92,12 +92,12 @@ def test_guardsetoff_hitlag_exit_phase_seed_locks_blockers_and_adjacent_controls
 def test_guardsetoff_hitlag_exit_phase_seed_negative_control_outside_handoff() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[1214]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[1214]["seed_t"]
     assert int(seed["guard_setoff_hitlag_exit_phase_u8"][1]) == 0

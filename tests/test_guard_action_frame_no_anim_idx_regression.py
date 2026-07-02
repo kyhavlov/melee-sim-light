@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_row_one_step_compare(ds, row: np.ndarray) -> np.ndarray:
@@ -15,7 +16,7 @@ def _run_row_one_step_compare(ds, row: np.ndarray) -> np.ndarray:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -53,18 +54,18 @@ def test_guardon_preserves_action_frame_minus1_when_animation_index_invalid() ->
     # - out.action_frame stays -1 (do not clamp/recompute to 0)
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 191
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 178
@@ -87,14 +88,14 @@ def test_guardon_preserves_action_frame_minus1_when_animation_index_invalid() ->
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             3599,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             2571,
             1,
         ),
@@ -113,11 +114,11 @@ def test_guard_hold_no_spurious_guardsetoff_no_submotion_seed_rows(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 179

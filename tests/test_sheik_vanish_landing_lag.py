@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 _SK_SPECIAL_AIR_HI = 360  # MSL_ACT_SK_SPECIAL_AIR_HI (Vanish air travel)
 _LANDING_FALL_SPECIAL = 43  # MSL_ACT_LANDING_FALL_SPECIAL
@@ -15,11 +16,11 @@ _WAIT = 14
 
 def _load_demo():
     root = Path(__file__).resolve().parents[1]
-    rel = "datasets/sheik/replays/validation/sheik/sheik_demo_game.msl"
+    rel = "replays/validation/sheik/sheik_demo_game.slpz"
     path = root / rel
     if not path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
-    return read_dataset(str(path))
+        pytest.skip(f"missing local replay: {rel}")
+    return load_replay_buffers(str(path))
 
 
 @pytest.mark.integration
@@ -35,8 +36,8 @@ def test_sheik_vanish_landing_lag_spans_full_window() -> None:
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
     ds = _load_demo()
-    samples = ds.samples
-    num_players = int(ds.header["num_players"])
+    samples = ds.rows
+    num_players = int(ds.num_players)
     n = int(samples.shape[0])
     seed = samples["seed_t"]
     ref = samples["ref_t1"]
@@ -61,15 +62,15 @@ def test_sheik_vanish_landing_lag_spans_full_window() -> None:
     ss = int(sizes["seed"])
     ins = int(sizes["input"])
     cs = int(sizes["compare"])
-    su8 = samples.view(np.uint8).reshape(n, samples.dtype.itemsize)
-    so = samples.dtype.fields["seed_t"][1]
-    po = samples.dtype.fields["prev_input_t"][1]
-    io = samples.dtype.fields["input_t"][1]
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     handle = binding.init(batch_size=1, num_players=num_players, ucf_enabled=1,
                           ucf_cardinals_1_0_enabled=1)
     try:
-        binding.reseed_seed_rollout(handle, su8[start - 4, so : so + ss].reshape(1, ss).copy())
+        binding.reseed_seed_rollout(handle, seed_u8[start - 4, :ss].reshape(1, ss).copy())
         ob = np.zeros((1, cs), dtype=np.uint8)
         end = start + 25
         matched_window = True
@@ -77,9 +78,9 @@ def test_sheik_vanish_landing_lag_spans_full_window() -> None:
         for j in range(start - 4, end):
             binding.step_input_replay_frame_rng(
                 handle,
-                su8[j, so : so + ss].reshape(1, ss).copy(),
-                su8[j, po : po + ins].reshape(1, ins).copy(),
-                su8[j, io : io + ins].reshape(1, ins).copy(),
+                seed_u8[j, :ss].reshape(1, ss).copy(),
+                prev_input_u8[j, :ins].reshape(1, ins).copy(),
+                input_u8[j, :ins].reshape(1, ins).copy(),
             )
             binding.write_compare(handle, ob)
             out = ob.view(COMPARE_DTYPE).reshape((1,))[0]

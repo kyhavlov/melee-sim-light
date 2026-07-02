@@ -7,17 +7,18 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _dataset_path(root: Path) -> Path:
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     path = root / rel
     if not path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
     return path
 
 
@@ -31,8 +32,8 @@ def _row_bytes(samples: np.ndarray, record: int, field: str, stride: int) -> np.
 
 def _rollout_row(dataset_path: Path, start_record: int, end_record: int, *, trace_path: Path | None = None) -> np.void:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -44,7 +45,7 @@ def _rollout_row(dataset_path: Path, start_record: int, end_record: int, *, trac
         os.environ["MSL_RNG_TRACE_PATH"] = str(trace_path)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -87,12 +88,12 @@ def test_gat_cliffattack_x221d_b5_suppresses_self_nudge_at_8226() -> None:
     # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}
     root = Path(__file__).resolve().parents[1]
     dataset_path = _dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 8226
     p = 1
 
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][p]) == 257  # CliffAttackQuick
     assert int(seed["seed_prev_action_id"][p]) == 257
 
@@ -113,14 +114,14 @@ def test_gat_landingairlw_downattacku_damageflyroll_pre_gate_rng_owner_at_11134(
     # data/moves/{fox,falco}.json::moves.ftCo_SM_DownAttackU.events.create_hitbox
     root = Path(__file__).resolve().parents[1]
     dataset_path = _dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     target = 11134
     victim = 1
     attacker = 0
     trace_path = root / "reports/triage/gat_11134_test_rng.tsv"
 
-    seed = ds.samples[target]["seed_t"]
-    ref = ds.samples[target]["ref_t1"]
+    seed = ds.rows[target]["seed_t"]
+    ref = ds.rows[target]["ref_t1"]
     assert int(seed["action_id"][victim]) == 74  # LandingAirLw
     assert int(seed["fighter_8006cda4_pre_gate_consume_count"][victim]) == 1
     assert int(seed["action_id"][attacker]) == 187  # DownAttackU

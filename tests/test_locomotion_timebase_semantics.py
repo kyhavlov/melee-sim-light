@@ -6,9 +6,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
-# Character ids (GALE01): tools/slippi/make_dataset_from_slp.py and Slippi post-frame `character`.
+# Character ids (GALE01): validation buffer modules and Slippi post-frame `character`.
 CHAR_FOX = 1
 
 # Stage ids (GALE01): Final Destination = 32.

@@ -10,7 +10,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -27,8 +27,8 @@ class _SeedRefInstanceIdCase:
     [
         _SeedRefInstanceIdCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.slpz"
             ),
             record=4388,
             port=1,
@@ -36,8 +36,8 @@ class _SeedRefInstanceIdCase:
         ),
         _SeedRefInstanceIdCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             record=1370,
             port=0,
@@ -45,8 +45,8 @@ class _SeedRefInstanceIdCase:
         ),
         _SeedRefInstanceIdCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "QuerulousGrandDinosaur.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.slpz"
             ),
             record=1933,
             port=0,
@@ -54,8 +54,8 @@ class _SeedRefInstanceIdCase:
         ),
         _SeedRefInstanceIdCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "TreasuredBackKangaroo.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "TreasuredBackKangaroo.slpz"
             ),
             record=2377,
             port=0,
@@ -77,13 +77,13 @@ def test_seedref_instance_id_rows_stay_replay_exact_after_locomotion_prepass(
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rec = int(case.record)
     p = int(case.port)
-    assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+    assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     row = samples[rec]
     assert int(row["seed_t"]["instance_id"][p]) == int(row["ref_t1"]["instance_id"][p]), case.note

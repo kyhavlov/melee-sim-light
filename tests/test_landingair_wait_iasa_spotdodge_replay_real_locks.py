@@ -10,7 +10,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 MSL_ACT_SQUAT = 39
@@ -24,16 +25,16 @@ MSL_BUTTON_Y = 0x0400
 
 
 def _pjo_dataset(root: Path) -> Path:
-    return root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+    return root / "replays/validation/aggregate_recent/PutridJoyousOryx.slpz"
 
 
 def _gat_doubles_dataset(root: Path) -> Path:
-    return root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    return root / "replays/validation/doubles_recent/Game_20260509T152622.slpz"
 
 
 def _run_one_step_row_with_input_mutator(ds_path: Path, record: int, input_mutator) -> np.void:
-    ds = read_dataset(str(ds_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(ds_path))
+    row = ds.rows[record : record + 1]
     seed_t = row["seed_t"].copy()
     prev_input_t = row["prev_input_t"].copy()
     input_t = row["input_t"].copy()
@@ -52,7 +53,7 @@ def _run_one_step_row_with_input_mutator(ds_path: Path, record: int, input_mutat
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -74,11 +75,11 @@ def test_landingair_terminal_wait_iasa_spotdodge_beats_guard_entry_replay_real_l
     _skip_if_required_artifacts_missing(root)
     dataset_path = _pjo_dataset(root)
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     record = 622
     p = 0
-    row = read_dataset(str(dataset_path)).samples[record]
+    row = load_replay_buffers(str(dataset_path)).rows[record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
     inp = row["input_t"]
@@ -103,7 +104,7 @@ def test_landingair_terminal_wait_iasa_spotdodge_requires_fresh_down_tilt_gate()
     _skip_if_required_artifacts_missing(root)
     dataset_path = _pjo_dataset(root)
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     def stale_y_tilt(seed_t):
         seed_t["tilt_timer_y"][0, 0] = 10
@@ -125,11 +126,11 @@ def test_escapen_terminal_wait_iasa_analog_l_spotdodge_beats_squat_replay_real_l
     _skip_if_required_artifacts_missing(root)
     dataset_path = _gat_doubles_dataset(root)
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     record = 1765
     p = 0
-    row = read_dataset(str(dataset_path)).samples[record]
+    row = load_replay_buffers(str(dataset_path)).rows[record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
     inp = row["input_t"]

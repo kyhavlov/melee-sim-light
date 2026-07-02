@@ -8,7 +8,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -28,8 +28,8 @@ def test_fallspecial_camera_box_bottom_overlap_replay_real_locks() -> None:
 
     falco_cases = (
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             0,
             6689,
             6696,
@@ -37,8 +37,8 @@ def test_fallspecial_camera_box_bottom_overlap_replay_real_locks() -> None:
             6698,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             1,
             8808,
             8809,
@@ -50,12 +50,12 @@ def test_fallspecial_camera_box_bottom_overlap_replay_real_locks() -> None:
     for dataset_rel, p, negative_control, target_minus_1, target, target_plus_1 in falco_cases:
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
+            pytest.skip(f"missing local replay: {dataset_rel}")
 
-        ds = read_dataset(str(dataset_path))
-        samples = ds.samples
+        ds = load_replay_buffers(str(dataset_path))
+        samples = ds.rows
         for record in (negative_control, target_minus_1, target, target_plus_1):
-            assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+            assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
         target_seed = samples[target]["seed_t"]
         assert int(target_seed["char_id"][p]) == 22  # Falco
@@ -87,12 +87,12 @@ def test_fallspecial_camera_box_bottom_overlap_replay_real_locks() -> None:
             assert int(ref_row["state_flags"][p, 4]) == expected_ref, record
 
     fox_control_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     fox_control_path = root / fox_control_rel
     if not fox_control_path.exists():
-        pytest.skip(f"missing local dataset: {fox_control_rel}")
+        pytest.skip(f"missing local replay: {fox_control_rel}")
 
     # Fox-control expectations repinned 2026-06-12: the committed char-blind camera-gate
     # re-widening moved the camera-box bit on this FallSpecial window (out now leads ref by

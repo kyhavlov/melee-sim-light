@@ -6,10 +6,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent"
+_BASE_REL = "replays/validation/cardinal_1.0_recent"
 _BUTTON_A = 0x0100
 _BUTTON_Z = 0x0010
 _BUTTON_L = 0x0040
@@ -85,10 +86,10 @@ def _grab_attempt_edge(row: np.ndarray, port: int) -> bool:
 
 
 def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     row = samples[record : record + 1]
 
@@ -98,7 +99,7 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -127,8 +128,8 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
 
 
 def _run_rollout_to_record(dataset_path: Path, *, start_record: int, target_record: int):
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert start_record <= target_record
     assert int(samples.shape[0]) > target_record
 
@@ -140,7 +141,7 @@ def _run_rollout_to_record(dataset_path: Path, *, start_record: int, target_reco
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -184,22 +185,22 @@ def test_turn_catch_entry_uses_turn_facing_after_until_later_terminal_turn() -> 
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
     #   ftCo_Catch_CheckInput,ftCo_800D8C54}
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_rel = "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     catch_record = 7031
     terminal_record = 7061
     p = 1
-    catch_seed = ds.samples[catch_record]["seed_t"]
-    catch_ref = ds.samples[catch_record]["ref_t1"]
+    catch_seed = ds.rows[catch_record]["seed_t"]
+    catch_ref = ds.rows[catch_record]["ref_t1"]
     assert int(catch_seed["action_id"][p]) == _ACT_TURN
     assert int(catch_seed["action_frame"][p]) == 4
     assert int(catch_seed["facing"][p]) == 0
-    assert _grab_attempt_edge(ds.samples[catch_record : catch_record + 1], p)
+    assert _grab_attempt_edge(ds.rows[catch_record : catch_record + 1], p)
     assert int(catch_ref["action_id"][p]) == _ACT_CATCH
     assert int(catch_ref["facing"][p]) == 1
 
@@ -222,8 +223,8 @@ def test_turn_catch_entry_uses_turn_facing_after_until_later_terminal_turn() -> 
 @pytest.mark.parametrize(
     ("dataset_name", "record", "attacker"),
     [
-        ("GracefulAttachedTurtle.msl", 157, 1),
-        ("GracefulAttachedTurtle.msl", 2059, 1),
+        ("GracefulAttachedTurtle.slpz", 157, 1),
+        ("GracefulAttachedTurtle.slpz", 2059, 1),
     ],
 )
 def test_dash_grab_enters_catchdash(dataset_name: str, record: int, attacker: int) -> None:
@@ -231,11 +232,11 @@ def test_dash_grab_enters_catchdash(dataset_name: str, record: int, attacker: in
     dataset_rel = f"{_BASE_REL}/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     victim = 1 - attacker
 
     # Replay lock preconditions for dash-grab entry.
@@ -257,9 +258,9 @@ def test_dash_grab_enters_catchdash(dataset_name: str, record: int, attacker: in
 @pytest.mark.parametrize(
     ("dataset_rel", "start_record", "record", "attacker"),
     [
-        ("datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl", 5270, 5754, 1),
-        ("datasets/sheik/replays/validation/sheik/UnusedLivelyLouse.msl", 1602, 1892, 0),
-        ("datasets/sheik/replays/validation/sheik/UselessGlassLoris.msl", 4698, 4764, 1),
+        ("replays/validation/sheik/RuralReasonableRat.slpz", 5270, 5754, 1),
+        ("replays/validation/sheik/UnusedLivelyLouse.slpz", 1602, 1892, 0),
+        ("replays/validation/sheik/UselessGlassLoris.slpz", 4698, 4764, 1),
     ],
 )
 def test_run_grab_preempts_guardon_catchdash_before_shared_guard_pass(
@@ -268,10 +269,10 @@ def test_run_grab_preempts_guardon_catchdash_before_shared_guard_pass(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"]
     ref = row["ref_t1"]
 
@@ -302,15 +303,15 @@ def test_run_grab_preempts_guardon_catchdash_before_shared_guard_pass(
 @pytest.mark.integration
 def test_catch_grabs_shielded_guardon_no_submotion_snapshot() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.msl"
+    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 10931
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     owner = 0
     victim = 1
 
@@ -343,14 +344,14 @@ def test_catch_grabs_shielded_guardon_no_submotion_snapshot() -> None:
 @pytest.mark.parametrize("record", [5489, 5490])
 def test_catch_no_submotion_source_pose_does_not_grab_shield_rim(record: int) -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.msl"
+    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     owner = 0
     victim = 1
 
@@ -378,8 +379,8 @@ def test_catch_no_submotion_source_pose_does_not_grab_shield_rim(record: int) ->
 @pytest.mark.parametrize(
     ("dataset_name", "record", "attacker", "victim"),
     [
-        ("GracefulAttachedTurtle.msl", 3402, 1, 0),
-        ("QuerulousGrandDinosaur.msl", 5369, 0, 1),
+        ("GracefulAttachedTurtle.slpz", 3402, 1, 0),
+        ("QuerulousGrandDinosaur.slpz", 5369, 0, 1),
     ],
 )
 def test_replay_catchdash_connect_enters_pull_and_capture_pulled(
@@ -392,11 +393,11 @@ def test_replay_catchdash_connect_enters_pull_and_capture_pulled(
     dataset_rel = f"{_BASE_REL}/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # Replay-real lock preconditions for CatchDash connect.
     assert int(row["seed_t"]["action_id"][0, attacker]) == _ACT_CATCH_DASH
@@ -432,15 +433,15 @@ def test_dash_early_x4_a_tap_jump_after_attack_s4_miss_stm_6365() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        / "SweatyThisMallard.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        / "SweatyThisMallard.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
     record = 6365
     p = 0
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"]
     cur = row["input_t"]["p"]
     prev = row["prev_input_t"]["p"]
@@ -469,10 +470,10 @@ def test_catch_connect_clears_victim_attack_hitboxes_before_body_collision_rollo
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+        / "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
     _skip_if_required_artifacts_missing(root)
 
     row_6005, out_6005, ref_6005 = _run_rollout_to_record(

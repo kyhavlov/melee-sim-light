@@ -3,7 +3,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -55,32 +56,32 @@ def _step_one_row(*, binding, row: np.ndarray, num_players: int) -> np.void:
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz",
             4927,
             0,
             14,  # Wait
             60,  # AttackS4S
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             2996,
             1,
             42,  # Landing
             60,  # AttackS4S
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             10806,
             0,
             14,  # Wait
             60,  # AttackS4S
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             4475,
             1,
             14,  # Wait
@@ -101,16 +102,16 @@ def test_attacks4_entry_copies_stick_sign_into_facing(
 
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == seed_action
     assert int(row["ref_t1"]["action_id"][0, p]) == ref_action
     assert int(row["seed_t"]["facing"][0, p]) != int(row["ref_t1"]["facing"][0, p])
 
     binding = pytest.importorskip("msl_binding")
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["facing"][p]) == int(row["ref_t1"]["facing"][0, p])

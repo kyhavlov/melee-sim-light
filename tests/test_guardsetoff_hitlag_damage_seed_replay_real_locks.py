@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row, _run_rollout_window_rows
-from tools.eval.dataset import COMPARE_DTYPE
-from tools.eval.dataset import read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,7 @@ class _Case:
     "case",
     [
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=1212,
             p=1,
             expected_seed_damage_min=9,
@@ -36,7 +36,7 @@ class _Case:
             note="AGN row A carries the GuardSetOff entry hitlag-damage lower bound through hitlag",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=1477,
             p=0,
             expected_seed_damage_min=9,
@@ -45,7 +45,7 @@ class _Case:
             note="AGN row B carries the GuardSetOff entry hitlag-damage lower bound through hitlag",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=2393,
             p=0,
             expected_seed_damage_min=1,
@@ -67,14 +67,14 @@ def test_guardsetoff_hitlag_damage_seed_lane_locks_blockers_and_adjacent_control
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = case.p
 
     for rec in (case.target_record - 1, case.target_record, case.target_record + 1):
-        assert int(samples.shape[0]) > rec, f"dataset too short: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short: record={rec}"
         seed = samples[rec]["seed_t"]
         assert int(seed["guard_setoff_hitlag_damage_min"][p]) == case.expected_seed_damage_min, case.note
 
@@ -101,16 +101,16 @@ def test_guardsetoff_damage_lane_seeds_post_hitlag_attackair_rehit_suppression()
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    dataset_rel = "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 10271
     defender = 0
     attacker = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][defender]) == 181  # GuardSetOff
     assert int(seed["hitlag"][defender]) == 0
     assert int(seed["guard_setoff_hitlag_damage_min"][defender]) == 9
@@ -133,10 +133,10 @@ def test_guardsetoff_x19a4_seed_does_not_rewrite_attacker_x1924_hitlag() -> None
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl"
+    dataset_rel = "replays/validation/sheik/SnarlingHelplessBeaver.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 5072
     defender = 0
@@ -171,12 +171,12 @@ def test_guardsetoff_carried_shield_packet_overrides_stale_visible_powershield_b
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80092F2C}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 2395
     defender = 0
@@ -219,8 +219,8 @@ def test_guardsetoff_carried_shield_packet_overrides_stale_visible_powershield_b
 @pytest.mark.parametrize(
     ("dataset_rel", "start_record", "target_record", "defender", "attacker"),
     [
-        ("datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl", 9542, 9551, 0, 1),
-        ("datasets/sheik/replays/validation/sheik/UselessGlassLoris.msl", 757, 766, 1, 0),
+        ("replays/validation/sheik/TenseSameHummingbird.slpz", 9542, 9551, 0, 1),
+        ("replays/validation/sheik/UselessGlassLoris.slpz", 757, 766, 1, 0),
     ],
 )
 def test_guardon_zero_shield_damage_lower_bound_x19a4_uses_x19a0_rollout_rate(
@@ -236,10 +236,10 @@ def test_guardon_zero_shield_damage_lower_bound_x19a4_uses_x19a0_rollout_rate(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed_t = ds.samples[start_record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_t = ds.rows[start_record]["seed_t"]
     assert int(seed_t["action_id"][defender]) == 178  # GuardOn no-submotion.
     assert int(seed_t["action_frame"][defender]) < 0
     assert int(seed_t["animation_index"][defender]) == 0xFFFFFFFF
@@ -266,8 +266,8 @@ def test_guardon_zero_shield_damage_lower_bound_x19a4_uses_x19a0_rollout_rate(
 
 def _run_one_step_timebase_with_seed_mutator(dataset_path: Path, record: int, seed_mutator):
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -288,7 +288,7 @@ def _run_one_step_timebase_with_seed_mutator(dataset_path: Path, record: int, se
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -306,10 +306,10 @@ def test_guardon_zero_shield_damage_x19a0_rate_requires_shielddesc_provenance() 
     # replay-proven per-hitbox ShieldDesc contact kind, keep the x19A4 lower-bound path and do not
     # let a synthetic larger x19A0 become the hidden GuardDamage rate owner.
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl"
+    dataset_rel = "replays/validation/sheik/TenseSameHummingbird.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 9542
     defender = 0

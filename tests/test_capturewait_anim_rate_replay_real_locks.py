@@ -10,13 +10,14 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_rollout_window(dataset_path: Path, start_record: int, end_record: int) -> dict[int, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > end_record, "dataset too short for rollout lock window"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > end_record, "replay too short for rollout lock window"
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -29,7 +30,7 @@ def _run_rollout_window(dataset_path: Path, start_record: int, end_record: int) 
     ).copy().reshape(1, seed_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     outs: dict[int, np.ndarray] = {}
     try:
         binding.reseed_seed(handle, seed_bytes)
@@ -54,13 +55,13 @@ def _run_rollout_window(dataset_path: Path, start_record: int, end_record: int) 
     ("dataset_rel", "record", "p", "expected_action_frame"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             922,
             0,
             3,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             5677,
             0,
             3,
@@ -78,11 +79,11 @@ def test_capturewait_post_loop_rate_publication_reseed_matches_ref(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][p]) in (224, 227)
     assert int(seed["action_frame"][p]) == 1
     assert int(seed["seed_prev_action_id"][p]) == int(seed["action_id"][p])
@@ -106,16 +107,16 @@ def test_capturewait_post_loop_rate_publication_does_not_override_throw_handoff(
     #   ftCo_CaptureWaitHi_Anim,ftCo_CatchWait_IASA}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    dataset_rel = "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 1438
     p = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][p]) == 227
     assert int(seed["action_frame"][p]) == 1
     # Cross-family throw handoff rows intentionally do not seed the x2344 AObj-rate bridge in the
@@ -142,19 +143,19 @@ def test_capturewait_anim_rate_runtime_rollout_matches_qgd_window() -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
 
     target_rows = (415, 416, 417, 418, 419, 420)
     for rec in target_rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for record={rec}"
 
     seed = samples[415]["seed_t"]
     assert int(seed["action_id"][0]) == 216  # CatchWait

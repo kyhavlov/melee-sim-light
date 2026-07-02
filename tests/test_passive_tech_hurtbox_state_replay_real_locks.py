@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -30,8 +30,8 @@ class _PassiveTechHurtboxCase:
     [
         _PassiveTechHurtboxCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
             ),
             port=1,
             negative_control=263,
@@ -43,8 +43,8 @@ class _PassiveTechHurtboxCase:
         ),
         _PassiveTechHurtboxCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
             ),
             port=0,
             negative_control=3262,
@@ -72,13 +72,13 @@ def test_passive_tech_entry_hurtbox_state_target_family(case: _PassiveTechHurtbo
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = int(case.port)
     for record in (case.negative_control, case.target_minus_1, case.target, case.target_plus_1):
-        assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+        assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     target = samples[case.target : case.target + 1]
     target_seed = target["seed_t"][0]

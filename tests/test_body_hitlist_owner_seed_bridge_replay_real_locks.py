@@ -9,19 +9,19 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent"
+_CARDINAL = "replays/validation/cardinal_1.0_recent"
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_name", "record", "p_attacker", "p_defender", "attacker_action"),
     [
-        ("QuerulousGrandDinosaur.msl", 5868, 1, 0, 356),  # Falco Shine BODY hit.
-        ("GracefulAttachedTurtle.msl", 9619, 0, 1, 69),  # AttackAirLw BODY continuation.
-        ("TreasuredBackKangaroo.msl", 1848, 0, 1, 69),  # AttackAirLw BODY continuation.
+        ("QuerulousGrandDinosaur.slpz", 5868, 1, 0, 356),  # Falco Shine BODY hit.
+        ("GracefulAttachedTurtle.slpz", 9619, 0, 1, 69),  # AttackAirLw BODY continuation.
+        ("TreasuredBackKangaroo.slpz", 1848, 0, 1, 69),  # AttackAirLw BODY continuation.
     ],
 )
 def test_replay_only_body_admission_valid_empty_hitcapsule_locks(
@@ -39,13 +39,13 @@ def test_replay_only_body_admission_valid_empty_hitcapsule_locks(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _CARDINAL / dataset_name
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (record - 1, record, record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     seed_t = samples[record]["seed_t"]
     ref_t1 = samples[record]["ref_t1"]
@@ -77,8 +77,8 @@ def test_replay_only_body_admission_valid_empty_hitcapsule_locks(
 @pytest.mark.parametrize(
     ("dataset_name", "record", "p_attacker", "p_defender", "reason"),
     [
-        ("QuerulousGrandDinosaur.msl", 8638, 0, 1, "phantom/no-percent BODY contact"),
-        ("TreasuredBackKangaroo.msl", 5247, 1, 0, "extra BODY hit outside stale-admission owner"),
+        ("QuerulousGrandDinosaur.slpz", 8638, 0, 1, "phantom/no-percent BODY contact"),
+        ("TreasuredBackKangaroo.slpz", 5247, 1, 0, "extra BODY hit outside stale-admission owner"),
     ],
 )
 def test_replay_only_body_admission_negatives_keep_hitcapsules_non_authoritative(
@@ -88,11 +88,11 @@ def test_replay_only_body_admission_negatives_keep_hitcapsules_non_authoritative
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _CARDINAL / dataset_name
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed_t = ds.samples[record]["seed_t"]
-    ref_t1 = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_t = ds.rows[record]["seed_t"]
+    ref_t1 = ds.rows[record]["ref_t1"]
     assert all(int(v) == 0 for v in seed_t["combat_hitlist_hb_valid"][p_attacker]), reason
     assert not (
         float(ref_t1["percent"][p_defender]) > float(seed_t["percent"][p_defender])

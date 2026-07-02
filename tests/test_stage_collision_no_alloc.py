@@ -13,7 +13,7 @@ def test_no_allocations_in_stage_collision_step() -> None:
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:
         seed = np.zeros((1, seed_stride), dtype=np.uint8)
-        from tools.eval.dataset import SEED_DTYPE
+        from tools.eval.validation_dtypes import SEED_DTYPE
 
         seed_t = seed.view(SEED_DTYPE).reshape((1,))
         seed_t["stage_id"][0] = np.uint32(32)

@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 from tools.slippi.anim_timebase import derive_frame_speed_mul_f32, load_end_frame_tables
 
 
@@ -14,15 +14,15 @@ from tools.slippi.anim_timebase import derive_frame_speed_mul_f32, load_end_fram
 def test_frame_speed_mul_f32_prefix_invariant_window_attachedgoodnaturedguanaco() -> None:
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / expected_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {expected_rel}")
+        pytest.skip(f"missing local replay: {expected_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
 
     # Player 0 includes the Shine Start hitlag cluster window.
     p = 0
@@ -36,7 +36,7 @@ def test_frame_speed_mul_f32_prefix_invariant_window_attachedgoodnaturedguanaco(
     i = int(idxs[0])
 
     prefix_end = i + 64
-    assert prefix_end < int(seed.shape[0]), "dataset too short for prefix window"
+    assert prefix_end < int(seed.shape[0]), "replay too short for prefix window"
 
     # Inputs to derive_frame_speed_mul_f32 are per-post-frame; use the seed_t snapshots as a
     # replay prefix proxy (n = num_samples = num_post_frames - 1).

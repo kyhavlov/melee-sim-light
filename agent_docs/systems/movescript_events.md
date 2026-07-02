@@ -27,7 +27,7 @@ Status vocabulary: **CLOSED**, **RETAINED SOURCE-POLICY**, and exceptional **BLO
 
 | Source/Data Owner | Current MSL Owner | Required Source State/Data | Current Representation | Status | Decision / Locks |
 |---|---|---|---|---|---|
-| `ftAction_80073240` / `ftAction_80073354` command execution on animation frame | `tools/extraction/extract_fighter_moves.py`; `src/script_events.{h,c}`; `src/move_tables.c` | Subaction command stream, command frame, kind-specific payload, crossed/contains timing | `MSLFTSC1` tables loaded at init; `MslScriptFrameWindow` and pulse caches | CLOSED | Keep script timing sourced from animation frame, not action-frame literals. Locks: `test_move_tables_throw_data.py`, `test_mismatch_taxonomy_native_events.py`, `test_movescript_events_source_completion.py`. |
+| `ftAction_80073240` / `ftAction_80073354` command execution on animation frame | `tools/extraction/extract_fighter_moves.py`; `src/script_events.{h,c}`; `src/move_tables.c` | Subaction command stream, command frame, kind-specific payload, crossed/contains timing | `MSLFTSC1` tables loaded at init; `MslScriptFrameWindow` and pulse caches | CLOSED | Keep script timing sourced from animation frame, not action-frame literals. Locks: `test_move_tables_throw_data.py`, `test_movescript_events_source_completion.py`. |
 | `ftAction_8007121C` create HitCapsule | `tools/extraction/extract_fighter_moves.py`; `tools/extraction/extract_fighter_hitboxes.py`; `src/hitboxes.c` | Hitbox id, bone, group, damage, size, offsets, angle/KB, flags | `MSLFTSC1` create payload; `MSLHITB1` active hitbox records | CLOSED | Create payloads remain data-backed; geometry details are covered by hitbox/hurtbox system. |
 | `ftAction_8007162C` set HitCapsule damage | `extract_fighter_script_timeline.py`; `known_data_artifacts.py`; `extract_fighter_hitboxes.py`; `src/hitboxes.c` | Hitbox index and damage value for already-live HitCapsule | `MSLFTSC1` typed payload plus `MSLHITB1` kind-2 active-slot mutation record | CLOSED | Removed the unsupported-event bridge for `set_hitbox_damage`; mutation records update only active damage and never count as create/enable. Lock: `test_mslftsc1_encodes_set_hitbox_damage_payload`; `test_mslhitb1_folds_set_hitbox_damage_into_active_slot_record`; `test_runtime_set_hitbox_damage_does_not_create_edge`. |
 | `ftAction_800717D8` / clear HitCapsules | `extract_fighter_hitboxes.py`; `src/hitboxes.c` | Clear-all command frame | `MSLHITB1` clear records and runtime clear semantics | CLOSED | Clear-all is source-modeled; per-slot remove is retained only where it affects hitbox cache publication. |
@@ -48,7 +48,7 @@ Status vocabulary: **CLOSED**, **RETAINED SOURCE-POLICY**, and exceptional **BLO
 
 Closure should be kept current with:
 
-- `uv run pytest tests/test_movescript_events_source_completion.py tests/test_move_tables_throw_data.py tests/test_throw_command_pending_pulse_seed_lane.py tests/test_mismatch_taxonomy_native_events.py -q`
+- `uv run pytest tests/test_movescript_events_source_completion.py tests/test_move_tables_throw_data.py tests/test_throw_command_pending_pulse_seed_lane.py -q`
 - `make build_data`
 - `make build BUILD_FORCE=1`
 - `make validate-all`

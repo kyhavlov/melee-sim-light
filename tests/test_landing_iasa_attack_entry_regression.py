@@ -10,33 +10,34 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     MSL_BUTTON_A,
     _assert_transition_lock_fields_match_ref,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 _CASES: tuple[tuple[str, int, int, int, int], ...] = (
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+        "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
         6432,
         1,
         42,
         44,
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+        "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
         2931,
         0,
         42,
         44,
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+        "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
         7169,
         0,
         42,
         56,
     ),
     (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+        "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
         3240,
         0,
         42,
@@ -70,15 +71,15 @@ def test_landing_iasa_attack_entry_target_pm1_both_players_strict_lock(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     lo = target_record - 1
     hi = target_record + 2
     assert lo >= 0
     assert int(samples.shape[0]) > hi - 1, (
-        f"dataset too short for lock row: record={target_record} num_records={int(samples.shape[0])}"
+        f"replay too short for lock row: record={target_record} num_records={int(samples.shape[0])}"
     )
 
     target = samples[target_record]
@@ -95,7 +96,7 @@ def test_landing_iasa_attack_entry_target_pm1_both_players_strict_lock(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=3, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=3, num_players=int(ds.num_players))
     try:
         seed_bytes = (
             np.frombuffer(chunk["seed_t"].tobytes(order="C"), dtype=np.uint8)
@@ -121,7 +122,7 @@ def test_landing_iasa_attack_entry_target_pm1_both_players_strict_lock(
         out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
         for i in range(3):
             rec = lo + i
-            for p in range(int(ds.header["num_players"])):
+            for p in range(int(ds.num_players)):
                 _assert_transition_lock_fields_match_ref(
                     out_row=out[i], ref_row=chunk["ref_t1"][i], record=rec, p=p
                 )

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class _ControlCase:
     "case",
     [
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=1920,
             p=1,
             expected_out_state_flags_4=128,
@@ -41,7 +41,7 @@ class _ControlCase:
             note="AGN late-Rebirth blocker keeps camera visibility latched while the hidden Rebirth anchor Y should stay on the FD respawn platform",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=3227,
             p=0,
             expected_out_state_flags_4=128,
@@ -49,7 +49,7 @@ class _ControlCase:
             note="GAT late-Rebirth blocker still mismatches after the camera-box seed-bit promotion; the hidden anchor Y remains the missing ownership input",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=4514,
             p=0,
             expected_out_state_flags_4=128,
@@ -69,10 +69,10 @@ def test_rebirth_camera_anchor_y_seed_lane_locks_blockers(case: _BlockerCase) ->
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = case.p
 
     for rec in (case.target_record - 1, case.target_record, case.target_record + 1):
@@ -95,14 +95,14 @@ def test_rebirth_camera_anchor_y_seed_lane_locks_blockers(case: _BlockerCase) ->
     "case",
     [
         _ControlCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=1888,
             p=1,
             expected_anchor_y=0.0,
             note="non-Rebirth dead-flow control must not synthesize the hidden Rebirth camera anchor",
         ),
         _ControlCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=1889,
             p=1,
             expected_anchor_y=0.0,
@@ -114,8 +114,8 @@ def test_rebirth_camera_anchor_y_seed_lane_negative_controls(case: _ControlCase)
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[case.record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[case.record]["seed_t"]
     assert float(seed["rebirth_camera_anchor_y_f32"][case.p]) == pytest.approx(case.expected_anchor_y), case.note

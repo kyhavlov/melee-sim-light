@@ -5,13 +5,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     if int(row.shape[0]) != 1:
         raise AssertionError(f"record {record} not found in {dataset_path}")
 
@@ -24,7 +25,7 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     input_bytes = row["input_t"].view("u1").reshape(1, input_stride).copy()
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -44,12 +45,12 @@ def test_damageair3_hitlag_x670_window_sdi_applies_tbk_4222() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step(dataset_path, 4222)
     p = 0
@@ -75,15 +76,15 @@ def test_damage_n3_hitlag_sdi_radius_uses_deadzoned_lstick_fsp_10790() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "FavorableSuperficialPig.msl"
+        "replays/validation/aggregate_recent/"
+        "FavorableSuperficialPig.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[10790:10791]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[10790:10791]
     assert int(row.shape[0]) == 1
     seed, ref, out = _run_one_step(dataset_path, 10790)
     p = 0
@@ -107,12 +108,12 @@ def test_damageair3_prior_sdi_reset_blocks_stale_timer_window_tbk_4224() -> None
     # would otherwise look like a held-stick timer-window row, but vanilla applies no SDI here.
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step(dataset_path, 4224)
     p = 0
@@ -139,12 +140,12 @@ def test_damagefly_fresh_entry_reset_blocks_radius_crossing_sdi_bhh_1600() -> No
     # refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10,lb_8000D148}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "BlondHardHippopotamus.msl"
+        "replays/validation/aggregate_recent/"
+        "BlondHardHippopotamus.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step(dataset_path, 1600)
     p = 1
@@ -172,12 +173,12 @@ def test_damageflyn_first_active_source_input_crossing_sdi_applies_pyo_364() -> 
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PutridJoyousOryx.msl"
+        "replays/validation/aggregate_recent/"
+        "PutridJoyousOryx.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step(dataset_path, 364)
     p = 1
@@ -202,12 +203,12 @@ def test_damageflytop_to_damagefall_preserves_x670_for_exit_gat_8021() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Anim,ftCo_8008DCE0}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step(dataset_path, 8021)
     p = 0
@@ -227,12 +228,12 @@ def test_damagefall_hitlag_exit_preserves_x670_asdi_window_prh_5280() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PositiveRevolvingHyena.msl"
+        "replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step(dataset_path, 5280)
     p = 0

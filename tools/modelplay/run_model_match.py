@@ -111,20 +111,6 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--p2-model", type=Path, required=True)
     ap.add_argument("--p3-model", type=Path, default=None)
     ap.add_argument("--p4-model", type=Path, default=None)
-    ap.add_argument(
-        "--dataset",
-        type=Path,
-        default=Path(
-            "datasets/fox_falco_fd_ucf084_recent/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
-        ),
-    )
-    ap.add_argument("--start-record", type=int, default=0)
-    ap.add_argument(
-        "--start-mode",
-        choices=("replay", "sim-init"),
-        default="replay",
-        help="replay restores --dataset/--start-record; sim-init starts from C-owned match init",
-    )
     ap.add_argument("--max-frames", type=int, default=30000)
     ap.add_argument(
         "--static-frame-threshold",
@@ -161,7 +147,7 @@ def main() -> int:
         char_ids = tuple(CHAR_IDS[name] for name in char_names)
         team_ids = _parse_int_tuple(args.team_ids, expected_len=4, name="--team-ids")
         facing = DEFAULT_DOUBLES_FACING
-        start_mode = "sim-init" if args.start_mode == "replay" else args.start_mode
+        start_mode = "sim-init"
     else:
         char_ids = None
         if args.p1_char is not None or args.p2_char is not None:
@@ -171,11 +157,10 @@ def main() -> int:
             )
         team_ids = None
         facing = None
-        start_mode = args.start_mode
+        start_mode = "sim-init"
 
     session = SimSession(
-        dataset_path=args.dataset,
-        start_record=args.start_record,
+        start_record=0,
         char_ids=char_ids,
         team_ids=team_ids,
         is_teams=args.doubles,
@@ -294,8 +279,6 @@ def main() -> int:
             trace.write_json(trace_to_failure_path, frame_limit=player_static_failure["start_frame"] + 1)
 
         summary = {
-            "dataset": str(args.dataset),
-            "start_record": args.start_record,
             "start_mode": start_mode,
             "doubles": args.doubles,
             "team_ids": None if team_ids is None else list(team_ids),
@@ -321,8 +304,6 @@ def main() -> int:
                     "p2_model": str(args.p2_model),
                     "p3_model": None if args.p3_model is None else str(args.p3_model),
                     "p4_model": None if args.p4_model is None else str(args.p4_model),
-                    "dataset": str(args.dataset),
-                    "start_record": args.start_record,
                     "start_mode": start_mode,
                     "doubles": args.doubles,
                     "team_ids": None if team_ids is None else list(team_ids),

@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_WAIT = 0x000E
@@ -34,8 +35,8 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
     seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
@@ -49,7 +50,7 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -68,8 +69,8 @@ def _run_rollout_replay_frame_rng(dataset_path: Path, start: int, stop: int) -> 
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     def field_bytes(record: int, field: str, stride: int) -> np.ndarray:
@@ -77,7 +78,7 @@ def _run_rollout_replay_frame_rng(dataset_path: Path, start: int, stop: int) -> 
             1, stride
         )
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, field_bytes(start, "seed_t", seed_stride))
         for record in range(start, stop + 1):
@@ -229,14 +230,14 @@ def test_wait_loop_tvr_deadupstar_frame26_active_effect_prefix_selects_visible_v
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing TVR dataset")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[9935]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[9935]["seed_t"]
     assert int(seed["action_id"][0]) == ACT_WAIT
     assert int(seed["action_frame"][0]) == 119
     assert int(seed["action_id"][1]) == 4  # DeadUpStar.
@@ -259,14 +260,14 @@ def test_wait_loop_pte_deadupstar_frame25_active_effect_prefix_selects_visible_v
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing PTE dataset")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[4110]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[4110]["seed_t"]
     assert int(seed["action_id"][0]) == ACT_WAIT
     assert int(seed["action_frame"][0]) == 119
     assert int(seed["action_id"][1]) == 4  # DeadUpStar.
@@ -285,13 +286,13 @@ def test_wait_loop_bhh_deadupstar_frame28_does_not_carry_active_effect_prefix() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+        root / "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing BHH dataset")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[10161]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[10161]["seed_t"]
     assert int(seed["action_id"][0]) == ACT_WAIT
     assert int(seed["action_frame"][0]) == 119
     assert int(seed["action_id"][1]) == 4  # DeadUpStar.
@@ -313,14 +314,14 @@ def test_wait_loop_maj_deadupstar_frame4_uses_startup_prefix_not_active_tail() -
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/"
+        "MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing MAJ dataset")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[2748]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[2748]["seed_t"]
     assert int(seed["action_id"][1]) == ACT_WAIT
     assert int(seed["action_frame"][1]) == 119
     assert int(seed["action_id"][0]) == 4  # DeadUpStar.
@@ -338,8 +339,8 @@ def test_wait_loop_does_not_change_submotion_before_loop_boundary_pte() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local FoD dataset")

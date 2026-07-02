@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_GUARD = 0x00B3
@@ -18,14 +19,14 @@ ACT_LANDING_FALL_SPECIAL = 0x002B
 
 
 def _dataset_path(root: Path) -> Path:
-    return root / "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl"
+    return root / "replays/validation/battlefield_recent/MediumVirtualPig.slpz"
 
 
 def _skip_if_dataset_missing(root: Path, dataset_path: Path | None = None) -> None:
     if dataset_path is None:
         dataset_path = _dataset_path(root)
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
 
 def _bytes(row: np.ndarray, field: str, stride: int) -> np.ndarray:
@@ -46,14 +47,14 @@ def _run_rollout_to_records(ds, start_record: int, records: tuple[int, ...]) -> 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     compare_stride = int(sizes["compare"])
-    samples = ds.samples
+    samples = ds.rows
     assert max(records) >= start_record
 
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_bytes.view(COMPARE_DTYPE).reshape(1)
     out: dict[int, np.void] = {}
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(
             handle, _bytes(samples[start_record : start_record + 1], "seed_t", int(sizes["seed"]))
@@ -73,10 +74,10 @@ def _run_one_replay_row(ds, record: int) -> np.void:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     compare_stride = int(sizes["compare"])
-    samples = ds.samples
+    samples = ds.rows
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(
             handle, _bytes(samples[record : record + 1], "seed_t", int(sizes["seed"]))
@@ -99,13 +100,13 @@ def test_tvr_fresh_jumpaerial_escapeair_static_platform_waits_one_callback() -> 
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     _skip_if_dataset_missing(root, dataset_path)
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    players = int(ds.header["num_players"])
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    players = int(ds.num_players)
     p = 1
 
     # TVR:2770 enters EscapeAir from JumpAerialF while the callback root is already below Pokemon
@@ -134,9 +135,9 @@ def test_tvr_fresh_jumpaerial_escapeair_static_platform_waits_one_callback() -> 
 def test_mvp_escapeair_and_downed_callback_rows_stay_rollout_clean() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_dataset_missing(root)
-    ds = read_dataset(str(_dataset_path(root)))
-    samples = ds.samples
-    players = int(ds.header["num_players"])
+    ds = load_replay_buffers(str(_dataset_path(root)))
+    samples = ds.rows
+    players = int(ds.num_players)
 
     # MVP:3104 is the hard-floor EscapeAir continuation. The live JumpAerial desired-bottom lane
     # must not be directly published as a landing unless the current EscapeAir callback owns a real
@@ -186,14 +187,14 @@ def test_mvp_escapeair_and_downed_callback_rows_stay_rollout_clean() -> None:
     "dataset_rel,start_record,record,player,note",
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/LoyalDishonestWren.msl",
+            "replays/validation/battlefield_recent/LoyalDishonestWren.slpz",
             44,
             167,
             1,
             "LDW EscapeAir hard-floor landing control",
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
             992,
             1115,
             1,
@@ -207,13 +208,13 @@ def test_escapeair_jumpaerial_hard_floor_owner_does_not_suppress_controls(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     _skip_if_dataset_missing(root, dataset_path)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     out = _run_rollout_to_records(ds, start_record, (record,))[record]
-    ref = ds.samples["ref_t1"][record]
-    assert int(ds.samples["seed_t"][record]["action_id"][player]) == ACT_ESCAPE_AIR
+    ref = ds.rows["ref_t1"][record]
+    assert int(ds.rows["seed_t"][record]["action_id"][player]) == ACT_ESCAPE_AIR
     assert int(ref["action_id"][player]) == ACT_LANDING_FALL_SPECIAL
     assert int(ref["on_ground"][player]) == 1
-    _assert_discrete_matches(out, ref, players=int(ds.header["num_players"]), note=note)
+    _assert_discrete_matches(out, ref, players=int(ds.num_players), note=note)
 
 
 @pytest.mark.integration
@@ -231,7 +232,7 @@ def test_escapeair_jumpaerial_hard_floor_owner_does_not_suppress_controls(
 def test_mvp_one_step_owner_proving_rows_match(record: int, note: str) -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_dataset_missing(root)
-    ds = read_dataset(str(_dataset_path(root)))
+    ds = load_replay_buffers(str(_dataset_path(root)))
     out = _run_one_replay_row(ds, record)
-    ref = ds.samples["ref_t1"][record]
-    _assert_discrete_matches(out, ref, players=int(ds.header["num_players"]), note=note)
+    ref = ds.rows["ref_t1"][record]
+    _assert_discrete_matches(out, ref, players=int(ds.num_players), note=note)

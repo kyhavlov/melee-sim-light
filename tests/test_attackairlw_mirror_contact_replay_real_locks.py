@@ -35,10 +35,10 @@ def test_attackairlw_invincible_contact_does_not_start_attacker_hitlag(
 
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     attacker = 1
     defender = 0
@@ -70,10 +70,10 @@ def test_attackairlw_early_invincible_contact_starts_attacker_hitlag() -> None:
 
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 7935
     attacker = 1

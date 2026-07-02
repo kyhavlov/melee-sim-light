@@ -21,18 +21,18 @@ def test_guardsetoff_ground_push_target_pm1_and_negative() -> None:
     # - ftColl_80076CBC writes x19A4/specialn_facing_dir on shield contact.
     # - ftCo_80092F2C computes the grounded GuardSetOff push and writes fp->gr_vel.
     # This uses a committed validation-suite row instead of the old ignored
-    # datasets/**/replays/debug/** cache row, so local debug cache regeneration cannot affect it.
+    # replays/validation/** cache row, so local debug cache regeneration cannot affect it.
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
     target_path = root / (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "TubbyCurlyHerring.msl"
+        "replays/validation/aggregate_recent/"
+        "TubbyCurlyHerring.slpz"
     )
     if not target_path.exists():
-        pytest.skip("missing local dataset artifacts")
+        pytest.skip("missing local replay artifacts")
 
     p = 1
     seed_neg, ref_neg, out_neg = _run_one_step_row(target_path, 432, p)
@@ -70,11 +70,11 @@ def test_guardreflect_hitshield_guardsetoff_recoil_uses_x221c_b2_boundary() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     target_path = root / (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     if not target_path.exists():
-        pytest.skip("missing local dataset artifacts")
+        pytest.skip("missing local replay artifacts")
 
     p = 0
     seed, ref, out = _run_one_step_row(target_path, 2323, p)

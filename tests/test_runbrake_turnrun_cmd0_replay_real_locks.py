@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset, read_dataset_window
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffer_window, load_replay_buffers
 
 ACT_WAIT = 14
 ACT_TURN_RUN = 19
@@ -25,7 +26,7 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -57,7 +58,7 @@ class _Case:
     expected_seed_cmd0: int
 
 
-_DATASET_DIR = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_DATASET_DIR = "replays/validation/cardinal_1.0_recent"
 
 _CASES = [
     _Case(dataset="QuerulousGrandDinosaur", record=2341, p=0, expected_seed_cmd0=1),
@@ -80,13 +81,13 @@ def test_runbrake_turnrun_cmd0_replay_rows(case: _Case) -> None:
     # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::fn_800C9CEC
     # - refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / _DATASET_DIR / f"{case.dataset}.msl"
+    dataset_path = root / _DATASET_DIR / f"{case.dataset}.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > case.record, f"dataset too short for record={case.record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > case.record, f"replay too short for record={case.record}"
     row = samples[case.record : case.record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
@@ -120,12 +121,12 @@ def test_marth_runbrake_cmd0_clear_suppresses_same_frame_turnrun_qhp_2131() -> N
     # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::fn_800C9CEC
     # - data/moves/marth.json moves["ftCo_SM_RunBrake"].events set_cmd_var(0,0) at frame 15.
     root = Path(__file__).resolve().parents[1]
-    dataset = root / "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    dataset = root / "replays/validation/marth/QuestionableHarmfulPanther.slpz"
     if not dataset.exists():
-        pytest.skip(f"missing local dataset: {dataset}")
+        pytest.skip(f"missing local replay: {dataset}")
 
-    ds = read_dataset_window(str(dataset), 2131, 2132)
-    row = ds.samples[0:1]
+    ds = load_replay_buffer_window(str(dataset), 2131, 2132)
+    row = ds.rows[0:1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
     p = 0
@@ -146,12 +147,12 @@ def test_marth_runbrake_cmd0_active_frame_can_enter_turnrun_before_clear() -> No
     # Adjacent positive for the same owner: one frame earlier, the advanced script frame is still
     # inside the cmd_var[0] window, so a patched opposite-stick input may enter TurnRun.
     root = Path(__file__).resolve().parents[1]
-    dataset = root / "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    dataset = root / "replays/validation/marth/QuestionableHarmfulPanther.slpz"
     if not dataset.exists():
-        pytest.skip(f"missing local dataset: {dataset}")
+        pytest.skip(f"missing local replay: {dataset}")
 
-    ds = read_dataset_window(str(dataset), 2130, 2131)
-    row = ds.samples[0:1].copy()
+    ds = load_replay_buffer_window(str(dataset), 2130, 2131)
+    row = ds.rows[0:1].copy()
     p = 0
     seed = row["seed_t"][0]
     assert int(seed["action_id"][p]) == ACT_RUN_BRAKE
@@ -173,12 +174,12 @@ def test_runbrake_anim_end_wait_iasa_turns_same_frame() -> None:
     # refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[901:902]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[901:902]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
     p = 0
@@ -206,12 +207,12 @@ def test_marth_runbrake_anim_end_wait_iasa_guardon_same_frame(record: int) -> No
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/BreakableMundaneElephant.msl"
+    dataset_path = root / "replays/validation/marth/BreakableMundaneElephant.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
     p = 1

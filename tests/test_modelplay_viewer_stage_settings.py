@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE
 from tools.modelplay.state_adapter import (
     MSL_STAGE_BATTLEFIELD,
     MSL_STAGE_POKEMON_STADIUM,

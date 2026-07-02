@@ -9,8 +9,9 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -26,22 +27,22 @@ def test_damagefly_wall_tech_entry_qgd_replay_real_lock() -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = 0
     negative_control = 8406
     target_minus_1 = 8403
     target = 8404
     target_plus_1 = 8405
     for record in (negative_control, target_minus_1, target, target_plus_1):
-        assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+        assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     seed = samples[target]["seed_t"]
     ref = samples[target]["ref_t1"]
@@ -97,12 +98,12 @@ def test_passivewalljump_timer_hold_and_launch_qgd_replay_real_lock() -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     locked_fields = ("action_id", "action_frame", "pos_x", "pos_y", "speed_air_x_self", "speed_y_self")
     for record in range(8405, 8414):
@@ -138,10 +139,10 @@ def test_passivewalljump_steady_wall_envelope_priceypartialalbatross_lock() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     locked_fields = ("action_id", "action_frame", "pos_x", "pos_y", "speed_air_x_self", "speed_y_self")
     for record in range(907, 912):
@@ -170,10 +171,10 @@ def test_passivewall_timer_allows_specialairs_after_hold_distinctcaringcobra_loc
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    dataset_rel = "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     for record in range(4811, 4816):
         _, ref_row, out_row = _run_one_step_row(dataset_path, record, 1)
@@ -200,9 +201,9 @@ def test_passivewall_entry_uses_source_wall_anchor_and_clears_kb_distinctcaringc
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     if not dataset_path.exists():
-        pytest.skip("missing aggregate validation dataset: DistinctCaringCobra.msl")
+        pytest.skip("missing aggregate validation dataset: DistinctCaringCobra.slpz")
 
     pre_record = 4809
     entry_record = 4810
@@ -244,9 +245,9 @@ def test_passivewalljump_entry_uses_mpcoll_wall_contact_his_lock() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     if not dataset_path.exists():
-        pytest.skip("missing aggregate validation dataset: HungryImportantSnake.msl")
+        pytest.skip("missing aggregate validation dataset: HungryImportantSnake.slpz")
 
     p = 1
     entry_record = 1789
@@ -279,9 +280,9 @@ def test_passivewalljump_current_stick_entry_uses_outgoing_ecb_side_ppa_lock() -
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     if not dataset_path.exists():
-        pytest.skip("missing aggregate validation dataset: PriceyPartialAlbatross.msl")
+        pytest.skip("missing aggregate validation dataset: PriceyPartialAlbatross.slpz")
 
     p = 0
     record = 902
@@ -314,15 +315,15 @@ def test_passivewalljump_terminal_x1990_clears_hurtbox_state_hvg_lock() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     if not dataset_path.exists():
-        pytest.skip("missing aggregate validation dataset: HilariousVillainousGiraffe.msl")
+        pytest.skip("missing aggregate validation dataset: HilariousVillainousGiraffe.slpz")
 
     p = 0
     pre_record = 4680
     terminal_record = 4681
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > terminal_record
 
     pre_seed = samples[pre_record]["seed_t"]
@@ -363,19 +364,19 @@ def test_common_air_walljump_hidden_phase_seed_qgd_replay_real_lock() -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = 0
     target = 9218
     for record in (627, 635, target):
-        assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+        assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     seed = samples[target]["seed_t"]
     ref = samples[target]["ref_t1"]
@@ -415,16 +416,16 @@ def test_common_air_walljump_setup_carry_consumes_fresh_stick_away_feh_lock() ->
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
+    samples = ds.rows
     p = 1
     for record in (8797, 8798, 8799):
-        assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+        assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     for record in (8797, 8798):
         seed = samples[record]["seed_t"]
@@ -457,7 +458,7 @@ def test_common_air_walljump_setup_carry_consumes_fresh_stick_away_feh_lock() ->
         1, int(sizes["input"])
     )
     out_bytes = np.empty((1, int(sizes["compare"])), dtype=np.uint8)
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)

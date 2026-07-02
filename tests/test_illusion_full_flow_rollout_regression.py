@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 from tests.test_items_spawn_joint_replay_real_locks import _skip_if_required_artifacts_missing
 
@@ -52,8 +53,8 @@ class _Case:
 
 
 def _rollout_window(dataset_path: Path, start_record: int, length: int) -> list[tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     row = samples[start_record : start_record + 1]
 
     binding = pytest.importorskip("msl_binding")
@@ -69,7 +70,7 @@ def _rollout_window(dataset_path: Path, start_record: int, length: int) -> list[
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     history: list[tuple[np.void, np.void]] = []
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         prev_in = prev_input_bytes
@@ -96,8 +97,8 @@ def _rollout_window_with_seed_override(
     length: int,
     override_fn,
 ) -> list[tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     row = samples[start_record : start_record + 1].copy()
     override_fn(row["seed_t"])
 
@@ -114,7 +115,7 @@ def _rollout_window_with_seed_override(
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     history: list[tuple[np.void, np.void]] = []
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         prev_in = prev_input_bytes
@@ -140,14 +141,14 @@ def _rollout_window_with_seed_override(
     "case",
     [
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             start_record=1428,
             length=6,
             slot=0,
             note="grounded side-B shield flow stays replay-real across spawn, travel, shield hit, and end",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             start_record=6514,
             length=4,
             slot=0,
@@ -170,7 +171,7 @@ def test_illusion_rollout_windows_match_replay_real(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     history = _rollout_window(dataset_path, case.start_record, case.length)
     slot = int(case.slot)
@@ -210,10 +211,10 @@ def test_grounded_side_special_run_entry_applies_common_xb8_damping_replay_real(
     #   ftFx_SpecialSStart_Enter,ftFx_SpecialS_Enter,ftFx_SpecialSEnd_Enter}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     history = _rollout_window(dataset_path, start_record=1613, length=35)
     for step_i, (out, ref) in enumerate(history):
@@ -231,9 +232,9 @@ def test_grounded_side_special_run_entry_applies_common_xb8_damping_replay_real(
 def test_illusion_main_entry_resets_ground_ring_before_spawn_progression() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    dataset_path = root / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     if not dataset_path.exists():
-        pytest.skip("missing local dataset")
+        pytest.skip("missing local replay")
 
     def _poison(seed_t: np.ndarray) -> None:
         seed_t["illusion_ghost_pos0_x"][0, 0] = np.float32(-999.0)
@@ -254,9 +255,9 @@ def test_illusion_main_entry_resets_ground_ring_before_spawn_progression() -> No
 def test_illusion_main_entry_resets_air_ring_before_first_hit_frame() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    dataset_path = root / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     if not dataset_path.exists():
-        pytest.skip("missing local dataset")
+        pytest.skip("missing local replay")
 
     def _poison(seed_t: np.ndarray) -> None:
         seed_t["illusion_ghost_pos0_x"][0, 0] = np.float32(-999.0)

@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -23,18 +24,18 @@ def test_instance_id_does_not_bump_on_specialairnstart_to_loop_record_108() -> N
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNStart_Anim
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / expected_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {expected_rel}")
+        pytest.skip(f"missing local replay: {expected_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 108
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     row = samples[record : record + 1]
 
@@ -52,7 +53,7 @@ def test_instance_id_does_not_bump_on_specialairnstart_to_loop_record_108() -> N
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -92,16 +93,16 @@ def test_attacklw3_entry_consumes_x21ec_instance_writer_replay_real_lock() -> No
     # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / expected_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {expected_rel}")
+        pytest.skip(f"missing local replay: {expected_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 1464
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     p = 1
     assert int(row["seed_t"]["action_id"][0, p]) == 43  # LandingFallSpecial
     assert int(row["ref_t1"]["action_id"][0, p]) == 57  # AttackLw3
@@ -113,7 +114,7 @@ def test_attacklw3_entry_consumes_x21ec_instance_writer_replay_real_lock() -> No
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride).copy()
         prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(

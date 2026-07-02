@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE
-from tests.replay_dataset_loader import load_replay_dataset as read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 def _step_sample(sample: np.ndarray) -> np.void:
@@ -30,25 +30,24 @@ def _step_sample(sample: np.ndarray) -> np.void:
 
 
 def _step_record(path: str, rec: int) -> np.void:
-    ds = read_dataset(path)
-    return _step_sample(ds.samples[rec : rec + 1].copy())
+    ds = load_replay_buffers(path)
+    return _step_sample(ds.rows[rec : rec + 1].copy())
 
 
 def _rollout_to_record(path: str, start_rec: int, target_rec: int) -> np.void:
     import msl_binding
 
-    ds = read_dataset(path)
-    samples = ds.samples
+    ds = load_replay_buffers(path)
+    samples = ds.rows
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(samples.shape[0], sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input = np.empty((1, input_stride), dtype=np.uint8)
@@ -60,13 +59,11 @@ def _rollout_to_record(path: str, start_rec: int, target_rec: int) -> np.void:
         ucf_enabled=1,
     )
     try:
-        seed[0, :] = samples_u8[start_rec, seed_off : seed_off + seed_stride]
+        seed[0, :] = seed_u8[start_rec, :seed_stride]
         msl_binding.reseed_seed_rollout(handle, seed)
         for rec in range(start_rec, target_rec + 1):
-            prev_input[0, :] = samples_u8[
-                rec, prev_input_off : prev_input_off + input_stride
-            ]
-            cur_input[0, :] = samples_u8[rec, input_off : input_off + input_stride]
+            prev_input[0, :] = prev_input_u8[rec, :input_stride]
+            cur_input[0, :] = input_u8[rec, :input_stride]
             msl_binding.step_input(handle, prev_input, cur_input)
         msl_binding.write_compare(handle, out)
         return out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
@@ -75,16 +72,16 @@ def _rollout_to_record(path: str, start_rec: int, target_rec: int) -> np.void:
 
 
 def test_escapeair_airjump_locked_desired_bottom_lands_on_late_yoshi_platform_rows() -> None:
-    path = "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
-    ds = read_dataset(path)
+    path = "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
+    ds = load_replay_buffers(path)
 
     for rec, player in ((149, 1), (2389, 0)):
-        seed = ds.samples["seed_t"][rec]
+        seed = ds.rows["seed_t"][rec]
         assert int(seed["action_id"][player]) == 0x00EC
         assert int(seed["ecb_lock_bottom_rel_y_valid_u8"][player]) == 1
 
         out = _step_record(path, rec)
-        ref = ds.samples["ref_t1"][rec]
+        ref = ds.rows["ref_t1"][rec]
 
         assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 0x002B
         assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 1
@@ -92,11 +89,11 @@ def test_escapeair_airjump_locked_desired_bottom_lands_on_late_yoshi_platform_ro
 
 
 def test_escapeair_late_yoshi_platform_rows_need_locked_desired_bottom_lane() -> None:
-    path = "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
-    ds = read_dataset(path)
+    path = "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
+    ds = load_replay_buffers(path)
 
     for rec, player in ((149, 1), (2389, 0)):
-        sample = ds.samples[rec : rec + 1].copy()
+        sample = ds.rows[rec : rec + 1].copy()
         seed = sample["seed_t"][0]
         assert int(seed["action_id"][player]) == 0x00EC
         assert int(seed["ecb_lock_bottom_rel_y_valid_u8"][player]) == 1
@@ -111,46 +108,46 @@ def test_escapeair_late_yoshi_platform_rows_need_locked_desired_bottom_lane() ->
 def test_escapeair_locked_desired_bottom_waits_for_source_bottom_sweep() -> None:
     rows = (
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
             148,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
             7364,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl",
+            "replays/validation/dream_land_recent/ShadyDecimalStarling.slpz",
             7521,
             1,
         ),
     )
 
     for path, rec, player in rows:
-        ds = read_dataset(path)
-        seed = ds.samples["seed_t"][rec]
+        ds = load_replay_buffers(path)
+        seed = ds.rows["seed_t"][rec]
         assert int(seed["action_id"][player]) == 0x00EC
         assert int(seed["ecb_lock_bottom_rel_y_valid_u8"][player]) == 1
 
         out = _step_record(path, rec)
-        ref = ds.samples["ref_t1"][rec]
+        ref = ds.rows["ref_t1"][rec]
 
         assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 0x00EC
         assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 0
         assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1e-6)
 
 def test_escapeair_locked_desired_bottom_final_writeback_needs_bottom_sweep() -> None:
-    path = "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
-    ds = read_dataset(path)
+    path = "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
+    ds = load_replay_buffers(path)
 
     for rec, player in ((147, 1), (1983, 0), (1984, 0)):
-        seed = ds.samples["seed_t"][rec]
+        seed = ds.rows["seed_t"][rec]
         assert int(seed["action_id"][player]) == 0x00EC
         assert int(seed["ecb_lock_bottom_rel_y_valid_u8"][player]) == 1
 
         out = _step_record(path, rec)
-        ref = ds.samples["ref_t1"][rec]
+        ref = ds.rows["ref_t1"][rec]
 
         assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 0x00EC
         assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 0
@@ -167,21 +164,21 @@ def test_escapeair_locked_missing_desired_bottom_keeps_already_below_floor_airbo
     #   mpColl_LoadECB_inline,mpColl_80044628_Floor,mpColl_80044838_Floor}
     rows = (
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
             6998,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
             7388,
             0,
         ),
     )
 
     for path, rec, player in rows:
-        ds = read_dataset(path)
-        seed = ds.samples["seed_t"][rec]
-        ref = ds.samples["ref_t1"][rec]
+        ds = load_replay_buffers(path)
+        seed = ds.rows["seed_t"][rec]
+        ref = ds.rows["ref_t1"][rec]
         assert int(seed["action_id"][player]) == 0x00EC
         assert int(seed["ecb_lock_timer"][player]) != 0
         assert int(seed["ecb_lock_bottom_rel_y_valid_u8"][player]) == 0
@@ -205,14 +202,14 @@ def test_sustained_escapeair_locked_bottom_lands_on_static_hard_floor_rollout() 
     # refs/melee/src/melee/mp/mpcoll.c::{
     #   mpColl_LoadECB_inline,mpColl_80044628_Floor,mpColl_80044838_Floor}
     path = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     start_rec = 3639
     target_rec = 5224
     player = 1
-    ds = read_dataset(path)
-    row = ds.samples[target_rec]
+    ds = load_replay_buffers(path)
+    row = ds.rows[target_rec]
     assert int(row["seed_t"]["action_id"][player]) == 0x00EC
     assert int(row["seed_t"]["seed_prev_action_id"][player]) == 0x00EC
     assert int(row["ref_t1"]["action_id"][player]) == 0x002B
@@ -235,22 +232,22 @@ def test_escapeair_unlocked_direct_reseed_does_not_borrow_locked_floor_sweep() -
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_LoadECB_inline}
     rows = (
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "HilariousVillainousGiraffe.msl",
+            "replays/validation/aggregate_recent/"
+            "HilariousVillainousGiraffe.slpz",
             1829,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
             2082,
             0,
         ),
     )
 
     for path, rec, player in rows:
-        ds = read_dataset(path)
-        seed = ds.samples["seed_t"][rec]
-        ref = ds.samples["ref_t1"][rec]
+        ds = load_replay_buffers(path)
+        seed = ds.rows["seed_t"][rec]
+        ref = ds.rows["ref_t1"][rec]
         assert int(seed["action_id"][player]) == 0x00EC
         assert int(seed["ecb_lock_timer"][player]) == 0
         assert int(ref["action_id"][player]) == 0x00EC

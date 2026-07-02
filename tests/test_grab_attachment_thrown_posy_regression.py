@@ -6,14 +6,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     row = samples[record : record + 1]
 
@@ -26,7 +27,7 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -59,11 +60,11 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
     ("dataset_name", "record", "victim", "pos_x_max_err", "pos_y_max_err"),
         [
             # Frame-6 regression rows where the prior repeated spike was centered.
-            ("AttachedGoodNaturedGuanaco.msl", 5972, 0, 0.7, 0.05),
-            ("TreasuredBackKangaroo.msl", 6823, 1, 0.7, 0.05),
+            ("AttachedGoodNaturedGuanaco.slpz", 5972, 0, 0.7, 0.05),
+            ("TreasuredBackKangaroo.slpz", 6823, 1, 0.7, 0.05),
             # Keep original frame-7 coverage as a broad "no return of spike" guard.
-            ("AttachedGoodNaturedGuanaco.msl", 5973, 0, 3.0, 0.6),
-            ("TreasuredBackKangaroo.msl", 6824, 1, 3.0, 0.6),
+            ("AttachedGoodNaturedGuanaco.slpz", 5973, 0, 3.0, 0.6),
+            ("TreasuredBackKangaroo.slpz", 6824, 1, 3.0, 0.6),
         ],
 )
 def test_thrownhi_attachment_matches_ref_position_tight(
@@ -74,13 +75,13 @@ def test_thrownhi_attachment_matches_ref_position_tight(
     pos_y_max_err: float,
 ) -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/{dataset_name}"
+    dataset_rel = f"replays/validation/cardinal_1.0_recent/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # Replay-real preconditions for this regression slice.
     assert int(row["seed_t"]["action_id"][0, victim]) == 241

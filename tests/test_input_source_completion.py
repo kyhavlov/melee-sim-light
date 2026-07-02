@@ -5,8 +5,8 @@ import re
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
-from tools.slippi.make_dataset_from_slp import _derive_cliff_option_stick_latch_x8
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.slippi.validation_buffer_seed import _derive_cliff_option_stick_latch_x8
 
 
 ACT_WAIT = 0x000E

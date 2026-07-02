@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.slippi.make_dataset_from_slp import (
+from tools.slippi.validation_buffer_seed import (
     _seed_bridge_owner_matches_attacker,
     _seed_bridge_trim_indefinite_lanes,
 )

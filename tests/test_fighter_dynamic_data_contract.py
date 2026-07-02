@@ -9,7 +9,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _parse_ssdynn01(path: Path) -> dict[str, object]:
@@ -560,14 +561,14 @@ def test_fox_attackhi3_dynamic_reseed_reconstruction_matches_sequential_carry_bh
     # BHH:1599 exercises Fox AttackHi3's SSDYNN01 collision pose. The non-sequential
     # teacher-forced seed path reconstructs action-local dynamic state by replaying frame 0..N
     # during reseed/pre-combat update; normal rollout carries the same state frame-to-frame.
-    dataset_path = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl")
+    dataset_path = Path("replays/validation/aggregate_recent/BlondHardHippopotamus.slpz")
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
     _parse_ssdynn01_or_skip(Path("data/anims/fox.dyn.bin"))
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     prev_record = 1598
     target_record = 1599
     prev_row = samples[prev_record : prev_record + 1]
@@ -582,8 +583,8 @@ def test_fox_attackhi3_dynamic_reseed_reconstruction_matches_sequential_carry_bh
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
 
-    seq_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
-    nonseq_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    seq_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
+    nonseq_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(seq_handle, _sample_field_bytes(prev_row, "seed_t", seed_stride))
         binding.step_input(
@@ -629,15 +630,15 @@ def test_fox_cliffattackquick_dynamic_collision_pose_rejects_tail_false_body_sds
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AEA4
     # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
-    dataset_path = Path("datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl")
+    dataset_path = Path("replays/validation/dream_land_recent/ShadyDecimalStarling.slpz")
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
     fox_dyn = _parse_ssdynn01_or_skip(Path("data/anims/fox.dyn.bin"))
     assert 222 in fox_dyn["collision_msids"]
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[6237:6238]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[6237:6238]
     player = 0
     attacker = 1
 
@@ -651,7 +652,7 @@ def test_fox_cliffattackquick_dynamic_collision_pose_rejects_tail_false_body_sds
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, _sample_field_bytes(row, "seed_t", seed_stride))
         binding.debug_step_input_pre_combat(

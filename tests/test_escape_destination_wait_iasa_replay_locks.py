@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -17,7 +18,7 @@ class _EscapeEndCase:
     note: str
 
 
-_BASE = Path("datasets/aggregate_recent/replays/validation")
+_BASE = Path("replays/validation")
 _ACT_ESCAPE_N = 235
 _ACT_GUARD_ON = 178
 
@@ -55,13 +56,13 @@ def _step_one_record(row: np.ndarray, num_players: int):
     "case",
     [
         _EscapeEndCase(
-            "aggregate_recent/MotionlessAggressiveJay.msl",
+            "aggregate_recent/MotionlessAggressiveJay.slpz",
             7546,
             0,
             "EscapeN anim-end destination Wait checks GuardOn before down-held Squat",
         ),
         _EscapeEndCase(
-            "dream_land_recent/ShadyDecimalStarling.msl",
+            "dream_land_recent/ShadyDecimalStarling.slpz",
             6646,
             1,
             "EscapeN destination Wait keeps shield-owned GuardOn priority on platforms too",
@@ -80,16 +81,16 @@ def test_escapen_anim_end_destination_wait_guard_preempts_squat(case: _EscapeEnd
     root = Path(__file__).resolve().parents[1]
     path = root / _BASE / case.dataset_rel
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / case.dataset_rel}")
+        pytest.skip(f"missing local replay: {_BASE / case.dataset_rel}")
 
-    ds = read_dataset(str(path))
-    if int(ds.samples.shape[0]) <= int(case.record):
-        pytest.skip(f"dataset too short for record {case.record}: {path}")
+    ds = load_replay_buffers(str(path))
+    if int(ds.rows.shape[0]) <= int(case.record):
+        pytest.skip(f"replay too short for record {case.record}: {path}")
 
-    row = ds.samples[case.record : case.record + 1]
+    row = ds.rows[case.record : case.record + 1]
     p = int(case.player)
     assert int(row["seed_t"]["action_id"][0, p]) == _ACT_ESCAPE_N, case.note
     assert int(row["ref_t1"]["action_id"][0, p]) == _ACT_GUARD_ON, case.note
 
-    out = _step_one_record(row, int(ds.header["num_players"]))
+    out = _step_one_record(row, int(ds.num_players))
     assert int(out["action_id"][p]) == _ACT_GUARD_ON, case.note

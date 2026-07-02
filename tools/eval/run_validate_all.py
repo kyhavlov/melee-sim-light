@@ -13,22 +13,6 @@ from tools.eval.validation_profile import get_validation_profile, validation_pro
 from tools.slippi.slpz import resolve_replay_path
 from tools.slippi.suite_io import load_suite, repo_root
 
-_STANDARD_ROLLOUT_FIELDS = ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags")
-
-
-def _parse_csv(s: str) -> tuple[str, ...]:
-    return tuple(x.strip() for x in s.split(",") if x.strip() != "")
-
-
-def _validate_discrete_fields(fields: tuple[str, ...]) -> tuple[str, ...]:
-    if tuple(fields) != _STANDARD_ROLLOUT_FIELDS:
-        raise SystemExit(
-            "error: validate-all supports the standard rollout field set only: "
-            + ",".join(_STANDARD_ROLLOUT_FIELDS)
-        )
-    return tuple(fields)
-
-
 def _resolve_worker_count(requested: int, task_count: int) -> int:
     if int(requested) > 0:
         return max(1, int(requested))
@@ -51,7 +35,6 @@ def main() -> None:
     ap.add_argument("--doubles-suite", default="")
     ap.add_argument("--sheik-suite", default="")
     ap.add_argument("--chunk", type=int, default=64)
-    ap.add_argument("--fields", default="action_id,animation_index,on_ground,hitlag,hitstun,state_flags")
     ap.add_argument("--profile", default="rl1_gameplay", choices=validation_profile_names())
     ap.add_argument("--exceptions", default="replays/validation_exceptions.json")
     ap.add_argument("--float-top", type=int, default=3)
@@ -68,7 +51,7 @@ def main() -> None:
     args = ap.parse_args()
 
     root = repo_root()
-    fields = _validate_discrete_fields(_parse_csv(str(args.fields)))
+    fields = run_rollout_suite_eval.standard_rollout_fields()
     validation_profile = get_validation_profile(args.profile)
     exceptions_path = (root / args.exceptions).resolve()
     exceptions = load_validation_exceptions(exceptions_path)
@@ -104,10 +87,6 @@ def main() -> None:
                 "profile": validation_profile.name,
                 "ucf_enabled": bool(suite.ucf_enabled),
                 "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
-                "debug_mismatch": (),
-                "debug_limit": 10,
-                "debug_float": (),
-                "debug_float_limit": 10,
                 "fields": list(fields),
                 "players_csv": None,
                 "max_records": 0,

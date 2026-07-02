@@ -417,7 +417,7 @@ Top-level fields:
 ## Replay Validation Helper
 
 For quick triage of a single Slippi replay, `tools.eval.validate_replay` builds
-a temporary `.msl` dataset and prints one-step or rollout results to stdout
+validation replay buffers directly from `.slp/.slpz` input and prints one-step or rollout results to stdout
 without updating committed validation reports:
 
 ```bash

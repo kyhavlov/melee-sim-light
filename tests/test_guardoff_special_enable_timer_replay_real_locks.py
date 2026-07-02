@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_GUARD = 0x00B3
@@ -23,15 +23,15 @@ def test_guardoff_without_x1c_does_not_enter_shine_iat_replay_lock() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 7302
     p = 0
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     seed = row["seed_t"]
     assert int(seed["action_id"][p]) == ACT_GUARD_OFF
     assert int(seed["guard_special_enable_timer_x1c"][p]) == 0

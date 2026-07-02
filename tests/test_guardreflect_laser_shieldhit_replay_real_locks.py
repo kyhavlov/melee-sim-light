@@ -10,7 +10,8 @@ from tests.test_items_spawn_joint_replay_real_locks import (
     _skip_if_required_artifacts_missing,
     _step_one_row,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class _Case:
     "case",
     [
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             negative_record=4042,
             target_record=4044,
             p=1,
@@ -36,7 +37,7 @@ class _Case:
             note="AGN locomotion->GuardSetOff laser handoff",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             negative_record=3491,
             target_record=3493,
             p=0,
@@ -57,7 +58,7 @@ def test_locomotion_laser_guardsetoff_family_lock(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     p = case.p
 
@@ -114,11 +115,11 @@ def test_landing_guardreflect_laser_no_contact_row_stays_replay_real() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+        "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 132
     p = 1
@@ -153,11 +154,11 @@ def test_landing_guardreflect_followup_uses_shielddesc_shieldbounced_after_refle
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+        "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 133
     p = 1
@@ -201,10 +202,10 @@ def test_landing_turn_guardon_followup_reflect_miss_preserves_laser_for_body_hit
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+        / "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
 
@@ -248,10 +249,10 @@ def test_guardreflect_no_submotion_seeded_shieldbounced_handoff_beats_active_kee
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 7384
     p = 1
@@ -286,9 +287,9 @@ def test_doubles_no_submotion_guard_laser_uses_source_item_contact_sample() -> N
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218/fp+0x221B bytes)
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    dataset_path = root / "replays/validation/doubles_recent/Game_20260509T152622.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     defender = 1
     for record, expected_action in ((3578, 182), (3616, 179)):
@@ -355,9 +356,9 @@ def test_doubles_no_submotion_guard_laser_uses_source_item_contact_sample() -> N
 def _step_one_row_with_seed_prev_action(
     dataset_path: Path, record: int, *, player: int, seed_prev_action_id: int
 ) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(record), f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(record), f"replay too short for lock row: record={record}"
     row = samples[record : record + 1].copy()
     row["seed_t"]["seed_prev_action_id"][0, player] = np.uint16(seed_prev_action_id)
     seed = row["seed_t"][0].copy()
@@ -386,7 +387,7 @@ def _step_one_row_with_seed_prev_action(
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -410,10 +411,10 @@ def test_guardon_guardreflect_no_submotion_hurtcaps_allow_shine_body_hit() -> No
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        root / "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 7531
     defender = 0
@@ -453,14 +454,14 @@ def test_guardon_guardreflect_no_submotion_hurtcaps_allow_shine_body_hit() -> No
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "PositiveRevolvingHyena.msl",
+            "replays/validation/aggregate_recent/"
+            "PositiveRevolvingHyena.slpz",
             944,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             2554,
             0,
         ),
@@ -479,7 +480,7 @@ def test_guardreflect_final_x14_without_reflectdesc_hitshield_stays_reflect(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record)
     assert int(seed["action_id"][p]) == 182  # GuardReflect
@@ -501,14 +502,14 @@ def test_guardreflect_final_x14_without_reflectdesc_hitshield_stays_reflect(
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "MotionlessAggressiveJay.msl",
+            "replays/validation/aggregate_recent/"
+            "MotionlessAggressiveJay.slpz",
             202,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz",
             6315,
             0,
         ),
@@ -526,7 +527,7 @@ def test_guardreflect_final_x14_with_reflectdesc_hitshield_enters_setoff(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record)
     assert int(seed["action_id"][p]) == 182  # GuardReflect
@@ -557,10 +558,10 @@ def test_dash_91ad8_guardon_stale_trailing_laser_misses_same_step_shield() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
 
@@ -598,10 +599,10 @@ def test_dash_91ad8_guardon_same_step_laser_shield_contact_uses_scaled_endpoint(
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+        / "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     seed_t, out_t, ref_t = _step_one_row(dataset_path, 5142)
@@ -626,10 +627,10 @@ def test_dash_x4_clear_guardon_can_take_same_step_laser_shield_contact() -> None
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
     seed_t, out_t, ref_t = _step_one_row(dataset_path, 773)
@@ -653,10 +654,10 @@ def test_dash_91ad8_guardreflect_controls_still_reflect(record: int) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     seed_t, out_t, ref_t = _step_one_row(dataset_path, record)

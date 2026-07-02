@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -16,20 +17,20 @@ def test_tbk_guardon_no_spurious_guardsetoff_records_4144_4145_p0() -> None:
     # false-positive Falco laser->shield hit.
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / expected_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {expected_rel}")
+        pytest.skip(f"missing local replay: {expected_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
 
     records = [4144, 4145]
     p = 0
     for r in records:
-        assert int(samples.shape[0]) > r, f"dataset too short for regression check: record={r}"
+        assert int(samples.shape[0]) > r, f"replay too short for regression check: record={r}"
 
     rows = samples[records]
 
@@ -50,7 +51,7 @@ def test_tbk_guardon_no_spurious_guardsetoff_records_4144_4145_p0() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=len(records), num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=len(records), num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((len(records), seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((len(records), input_stride), dtype=np.uint8)
@@ -108,20 +109,20 @@ def test_tbk_laser_shield_hit_still_happens_record_1248_p0() -> None:
     # spurious GuardSetOff transitions.
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / expected_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {expected_rel}")
+        pytest.skip(f"missing local replay: {expected_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
 
     # A TBK record where ref_t1 enters GuardSetOff with hitlag and the Falco laser despawns.
     record = 1248
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short for regression check: record={record}"
+    assert int(samples.shape[0]) > record, f"replay too short for regression check: record={record}"
 
     row = samples[record : record + 1]
 
@@ -147,7 +148,7 @@ def test_tbk_laser_shield_hit_still_happens_record_1248_p0() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)

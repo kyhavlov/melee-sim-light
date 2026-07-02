@@ -8,10 +8,11 @@ import pytest
 from tests.test_combat_ownership_seed_guardrail_locks import (
     _DEBUG_SHIELD_CANDIDATE_DTYPE,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_GAT_DOUBLES = Path("datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl")
+_GAT_DOUBLES = Path("replays/validation/doubles_recent/Game_20260509T152622.slpz")
 
 
 def _pack(arr: np.ndarray, stride: int) -> np.ndarray:
@@ -54,11 +55,11 @@ def test_guardsetoff_guarddamage_shielddesc_accepts_attackairn_hb1_gat_2747() ->
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _GAT_DOUBLES
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
     row = samples[2747:2748].copy()
     assert int(row["seed_t"]["action_id"][0, 1]) == 181
     assert int(row["seed_t"]["animation_index"][0, 1]) == 40
@@ -68,7 +69,7 @@ def test_guardsetoff_guarddamage_shielddesc_accepts_attackairn_hb1_gat_2747() ->
     row["seed_t"]["combat_shield_damage_taken"][0, 1] = 0
 
     sizes = binding.sizes()
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, _pack(row["seed_t"], int(sizes["seed"])))
         binding.debug_step_input_pre_combat(
@@ -95,15 +96,15 @@ def test_guardsetoff_shielddesc_and_downed_phantom_rollout_matches_gat_2739_to_2
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _GAT_DOUBLES
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
-    out = _run_rollout(binding, samples, 2739, 2754, num_players=int(ds.header["num_players"]))
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
+    out = _run_rollout(binding, samples, 2739, 2754, num_players=int(ds.num_players))
     ref = samples[2754]["ref_t1"]
 
-    for p in range(int(ds.header["num_players"])):
+    for p in range(int(ds.num_players)):
         for field in ("action_id", "action_frame", "hitlag", "hitstun", "last_hit_by", "instance_hit_by"):
             assert int(out[field][p]) == int(ref[field][p]), (field, p)
         assert float(out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-5)
@@ -122,11 +123,11 @@ def test_downed_phantom_damage_uses_stale_scaled_hitcapsule_damage_gat_2749() ->
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _GAT_DOUBLES
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
     mutated = samples[2739:2740]["seed_t"].copy()
     assert int(mutated["attack_id"][0, 3]) == 15
     assert 15 in {int(v) for v in mutated["stale_move_id"][0, 3]}
@@ -137,7 +138,7 @@ def test_downed_phantom_damage_uses_stale_scaled_hitcapsule_damage_gat_2749() ->
     compare_stride = int(sizes["compare"])
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, _pack(mutated, int(sizes["seed"])))
         for record in range(2739, 2750):

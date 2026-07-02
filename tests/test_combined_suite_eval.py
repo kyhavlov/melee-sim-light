@@ -8,7 +8,7 @@ from pathlib import Path
 
 from tools.eval import run_combined_suite_eval, run_heldout_validation, run_one_step_suite_eval
 from tools.eval import run_rollout_suite_eval, run_validate_all
-from tools.eval import top_float_offenders, validate_replay
+from tools.eval import validate_replay
 from tools.eval.one_step_report import EvalSummary
 from tools.eval.streaming_validation import ValidationStreaks
 from tools.slippi.suite_io import repo_root
@@ -131,7 +131,6 @@ def test_combined_rollout_float_rows_do_not_call_legacy_python_collector(
     suite = tmp_path / "small_suite.json"
     _write_suite(suite, name="small_suite", replays=[REPLAY_A])
 
-    assert not hasattr(top_float_offenders, "collect_dataset_top_rollout_float_offenders")
     assert not hasattr(run_rollout_suite_eval, "collect_dataset_top_rollout_float_offenders")
     assert not hasattr(validate_replay, "collect_dataset_top_rollout_float_offenders")
     _run_main(
@@ -152,14 +151,11 @@ def test_combined_rollout_float_rows_do_not_call_legacy_python_collector(
 
 
 def test_combined_normal_task_uses_validation_buffers_not_dataset(monkeypatch) -> None:
-    from tools.slippi import make_dataset_from_slp
+    from tools.slippi import validation_buffer_builder
 
     class FakeBuffers:
         num_records = 7
         num_players = 2
-
-    def fail_dataset_builder(**_kwargs):
-        raise AssertionError("normal combined validation must not build Dataset rows")
 
     def fake_buffer_builder(**_kwargs):
         return FakeBuffers()
@@ -196,8 +192,7 @@ def test_combined_normal_task_uses_validation_buffers_not_dataset(monkeypatch) -
             [],
         )
 
-    monkeypatch.setattr(make_dataset_from_slp, "build_dataset_from_slp", fail_dataset_builder)
-    monkeypatch.setattr(make_dataset_from_slp, "build_validation_buffers_from_slp", fake_buffer_builder)
+    monkeypatch.setattr(validation_buffer_builder, "build_validation_buffers_from_slp", fake_buffer_builder)
     monkeypatch.setattr(run_combined_suite_eval, "evaluate_validation_buffers", fake_one_step)
     monkeypatch.setattr(run_combined_suite_eval, "scan_validation_buffers_with_native_float_rows", fake_rollout)
 
@@ -211,8 +206,6 @@ def test_combined_normal_task_uses_validation_buffers_not_dataset(monkeypatch) -
             "profile": "rl1_gameplay",
             "ucf_enabled": True,
             "ucf_cardinals_1_0_enabled": True,
-            "debug_mismatch": (),
-            "debug_float": (),
             "players_csv": None,
             "fields": ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags"),
             "max_records": 0,
@@ -226,14 +219,11 @@ def test_combined_normal_task_uses_validation_buffers_not_dataset(monkeypatch) -
 
 
 def test_combined_exception_rows_stay_on_validation_buffers(monkeypatch) -> None:
-    from tools.slippi import make_dataset_from_slp
+    from tools.slippi import validation_buffer_builder
 
     class FakeBuffers:
         num_records = 7
         num_players = 2
-
-    def fail_dataset_builder(**_kwargs):
-        raise AssertionError("exception overlay must not rebuild Dataset rows in normal combined validation")
 
     def fake_buffer_builder(**_kwargs):
         return FakeBuffers()
@@ -287,8 +277,7 @@ def test_combined_exception_rows_stay_on_validation_buffers(monkeypatch) -> None
             ],
         )
 
-    monkeypatch.setattr(make_dataset_from_slp, "build_dataset_from_slp", fail_dataset_builder)
-    monkeypatch.setattr(make_dataset_from_slp, "build_validation_buffers_from_slp", fake_buffer_builder)
+    monkeypatch.setattr(validation_buffer_builder, "build_validation_buffers_from_slp", fake_buffer_builder)
     monkeypatch.setattr(run_combined_suite_eval, "evaluate_validation_buffers", fake_one_step)
     monkeypatch.setattr(run_combined_suite_eval, "scan_validation_buffers_with_native_float_rows", fake_rollout)
 
@@ -302,8 +291,6 @@ def test_combined_exception_rows_stay_on_validation_buffers(monkeypatch) -> None
             "profile": "rl1_gameplay",
             "ucf_enabled": True,
             "ucf_cardinals_1_0_enabled": True,
-            "debug_mismatch": (),
-            "debug_float": (),
             "players_csv": None,
             "fields": ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags"),
             "max_records": 0,
@@ -314,20 +301,6 @@ def test_combined_exception_rows_stay_on_validation_buffers(monkeypatch) -> None
     )
 
     assert result["rollout_payload"]["first_mismatch_rows"][0]["field"] == "action_id"
-
-
-def test_normal_combined_validation_source_has_no_dataset_materialization_calls() -> None:
-    modules = (
-        run_combined_suite_eval,
-        __import__("tools.eval.run_validate_all", fromlist=[""]),
-        __import__("tools.eval.streaming_validation", fromlist=[""]),
-    )
-    forbidden = ("build_dataset_from_slp", "read_dataset", "SAMPLE_DTYPE", ".msl")
-    for module in modules:
-        source = Path(module.__file__).read_text()
-        for token in forbidden:
-            assert token not in source, f"{module.__name__} must not reference {token!r} on normal path"
-        assert "Dataset" not in source.replace("_combined_dataset_task", "")
 
 
 def test_validate_all_evaluates_duplicate_replay_once_and_emits_each_report(tmp_path: Path, monkeypatch) -> None:
@@ -445,11 +418,7 @@ def test_shard_stats_are_stats_only(monkeypatch, tmp_path: Path) -> None:
         "profile": "rl1_gameplay",
         "ucf_enabled": True,
         "ucf_cardinals_1_0_enabled": True,
-        "debug_mismatch": (),
-        "debug_limit": 10,
-        "debug_float": (),
-        "debug_float_limit": 10,
-        "fields": ["action_id"],
+        "fields": ["action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags"],
         "players_csv": None,
         "max_records": 0,
         "float_fields": [],

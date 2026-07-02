@@ -6,14 +6,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
 
 
-_PRH = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+_PRH = "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
 
 
 def _run_rollout_rows(
@@ -21,31 +22,30 @@ def _run_rollout_rows(
 ) -> dict[int, tuple[np.void, np.void]]:
     import msl_binding
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
-    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.num_players))
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         msl_binding.reseed_seed_rollout(handle, seed_bytes)
         out: dict[int, tuple[np.void, np.void]] = {}
         for record in range(int(start_record), int(max(rows)) + 1):
-            prev_input_bytes[0, :] = samples_u8[record, prev_off : prev_off + input_stride]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             msl_binding.step_input(handle, prev_input_bytes, input_bytes)
             msl_binding.write_compare(handle, out_compare_bytes)
             if record in rows:
@@ -124,7 +124,7 @@ def test_shield_hold_drain_enters_shieldbreakfly_only_on_depletion(case: _Case) 
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _PRH
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_PRH}")
+        pytest.skip(f"missing local replay: {_PRH}")
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, case.record, case.port)
     p = case.port
@@ -170,7 +170,7 @@ def test_shieldbreakfly_lands_into_downu_during_rollout() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _PRH
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_PRH}")
+        pytest.skip(f"missing local replay: {_PRH}")
 
     p = 0
     rows = _run_rollout_rows(dataset_path, 11456, (11465, 11504, 11510))

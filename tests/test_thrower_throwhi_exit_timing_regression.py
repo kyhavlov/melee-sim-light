@@ -6,10 +6,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE = "replays/validation/cardinal_1.0_recent"
 _REQUIRED_ARTIFACTS = (
     "data/moves/fox.json",
     "data/moves/falco.json",
@@ -69,14 +70,14 @@ def _step_one_record(*, binding, row: np.ndarray, num_players: int) -> np.ndarra
 @pytest.mark.parametrize(
     "case",
     [
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 3884, 1, 3761, 3762),
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 4216, 1, 4093, 4094),
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 252, 0, 129, 130),
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 3438, 1, 3315, 3316),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 3105, 0, 2982, 2983),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 5419, 0, 5296, 5297),
-        _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 2757, 1, 2634, 2635),
-        _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 3881, 0, 3758, 3759),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 3884, 1, 3761, 3762),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 4216, 1, 4093, 4094),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 252, 0, 129, 130),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 3438, 1, 3315, 3316),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 3105, 0, 2982, 2983),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 5419, 0, 5296, 5297),
+        _Case(f"{_BASE}/TreasuredBackKangaroo.slpz", 2757, 1, 2634, 2635),
+        _Case(f"{_BASE}/TreasuredBackKangaroo.slpz", 3881, 0, 3758, 3759),
     ],
 )
 def test_throwhi_anim_end_exits_to_wait(case: _Case) -> None:
@@ -86,11 +87,11 @@ def test_throwhi_anim_end_exits_to_wait(case: _Case) -> None:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(case.record), f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(case.record), f"replay too short: num_records={int(samples.shape[0])}"
 
     row = samples[case.record : case.record + 1]
     p = int(case.p)
@@ -117,7 +118,7 @@ def test_throwhi_anim_end_exits_to_wait(case: _Case) -> None:
     assert int(row["ref_t1"]["hitstun"][0, p]) == 0
     assert int(row["seed_t"]["grab_owner_port"][0, p]) == 0xFF
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["animation_index"][p]) == int(row["ref_t1"]["animation_index"][0, p])
     assert int(out["hitlag"][p]) == int(row["ref_t1"]["hitlag"][0, p])

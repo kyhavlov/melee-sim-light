@@ -6,22 +6,26 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SAMPLE_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 from tools.slippi.known_data_artifacts import (
     fountain_of_dreams_default_platform_heights,
     fountain_of_dreams_platform_motion_params,
 )
-from tools.slippi.make_dataset_from_slp import (
+from tools.slippi.validation_buffer_fighter import (
     _derive_jab_rapid_count_seed_lane,
     _derive_landing_fallspecial_allow_interrupt_seed_lane,
+    _derive_specialhi_rotate_model_seed_lane,
+)
+from tools.slippi.validation_buffer_seed import (
+    _derive_walljump_phase_seed_lanes,
+)
+from tools.slippi.validation_buffer_stage import (
     _derive_fod_floor_skip_segments,
     _fod_platform_heights_from_frames,
     _fod_platform_heights_with_ground_contact,
     _fod_visible_choice_lanes,
     _fod_hidden_return_timers,
     _fod_platform_motion_with_ground_contact,
-    _derive_specialhi_rotate_model_seed_lane,
-    _derive_walljump_phase_seed_lanes,
 )
 from tools.slippi.seed_history import derive_item_spawn_id_counter
 from tests.test_hitboxes_pose import _read_hitbox_events
@@ -200,13 +204,14 @@ def test_native_dream_whispy_wind_derivation_rejects_short_rows() -> None:
         )
 
 
-def test_dataset_dtype_sizes_match_c_structs() -> None:
+def test_validation_dtype_sizes_match_c_structs() -> None:
     # If these drift, preprocessing/eval will fail with record_size mismatches.
     import msl_binding
 
     sizes = msl_binding.sizes()
     assert int(sizes["seed"]) == SEED_DTYPE.itemsize
-    assert int(sizes["sample"]) == SAMPLE_DTYPE.itemsize
+    assert int(sizes["input"]) == INPUT_DTYPE.itemsize
+    assert int(sizes["compare"]) == COMPARE_DTYPE.itemsize
 
 
 def test_removed_nonfd_bridge_seed_lanes_stay_absent() -> None:
@@ -640,7 +645,7 @@ def _synthetic_fod_escapeair_platform_crossing(
     prev_main_y: int = -80,
     platform_height_valid: int = 1,
 ) -> tuple[np.ndarray, int]:
-    from tools.slippi.make_dataset_from_slp import _fod_platform_height_transform_records
+    from tools.slippi.validation_buffer_stage import _fod_platform_height_transform_records
 
     transforms = _fod_platform_height_transform_records(Path("data"))
     line_id, (platform_id, coeff, local_y) = next(iter(transforms.items()))
@@ -822,16 +827,24 @@ def test_landing_fallspecial_allow_interrupt_lane_is_prefix_causal() -> None:
     assert got_marth.tolist() == [0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 
-def test_character_attrs_include_ordered_walljump_setup_threshold() -> None:
+def test_character_attrs_include_ordered_walljump_source_fields() -> None:
     root = Path(__file__).resolve().parents[1]
-    for character in ("fox", "falco"):
+    expected_can_walljump = {
+        "fox": True,
+        "falco": True,
+        "sheik": True,
+        "marth": False,
+        "zelda": False,
+    }
+    for character, can_walljump in expected_can_walljump.items():
         data = json.loads((root / "data" / "characters" / f"{character}.json").read_text())
         keys = list(data.keys())
-        assert data["rapid_jab_window"] == 4
+        assert data["can_walljump"] is can_walljump
         assert data["walljump_setup_x_delta_threshold"] == 0.5
         assert keys.index("rebound_anim_numerator_frames") < keys.index("rapid_jab_window")
         assert keys.index("rapid_jab_window") < keys.index("wall_jump_horizontal_velocity")
-        assert keys.index("wall_jump_vertical_velocity") < keys.index("walljump_setup_x_delta_threshold")
+        assert keys.index("wall_jump_vertical_velocity") < keys.index("can_walljump")
+        assert keys.index("can_walljump") < keys.index("walljump_setup_x_delta_threshold")
         assert keys.index("walljump_setup_x_delta_threshold") < keys.index("camera_zoom_target_bone_part_id")
 
 

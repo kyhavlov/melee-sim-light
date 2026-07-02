@@ -6,7 +6,7 @@ from tools.eval.summarize_shield_reject_reasons import _summarize_row
 def test_summarize_row_prefers_pair_gate_first_failure() -> None:
     row = {
         "row": {
-            "dataset": "datasets/x/Foo.msl",
+            "dataset": "replays/x/Foo.slpz",
             "record": 123,
             "p": 1,
         },
@@ -31,7 +31,7 @@ def test_summarize_row_prefers_pair_gate_first_failure() -> None:
     }
 
     out = _summarize_row(row)
-    assert out["row"] == "Foo.msl:123:1"
+    assert out["row"] == "Foo.slpz:123:1"
     assert out["first_failing_reason"] == "REJECT_HITLAG_GATE"
     assert out["first_failing_gate"] == "ftColl_80078C70 pair hitlag gate"
     assert "Runtime hitlag latch/decrement ordering mismatch" in out["recommendation"]

@@ -5,11 +5,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_PJO = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl")
-_HIS = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl")
+_PJO = Path("replays/validation/aggregate_recent/PutridJoyousOryx.slpz")
+_HIS = Path("replays/validation/aggregate_recent/HungryImportantSnake.slpz")
 
 
 def _bytes(row: np.ndarray, *, seed_stride: int, input_stride: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -112,17 +113,17 @@ def test_downattacku_create_edge_honors_seeded_hitlist_snapshot() -> None:
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _PJO
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     record = 4092
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     seed = row["seed_t"][0]
-    ref = ds.samples["ref_t1"][record]
+    ref = ds.rows["ref_t1"][record]
 
     # Replay-real positive:
-    # p1 DownAttackU reaches a create/enable edge for hitboxes 0..2. Regenerated datasets now carry
+    # p1 DownAttackU reaches a create/enable edge for hitboxes 0..2. Regenerated replays now carry
     # an explicit empty hitlist seed for this row; the no-false-hit result is owned by the live
     # collision pose/source path, not by a stale dense victims_1 fallback.
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
@@ -134,9 +135,9 @@ def test_downattacku_create_edge_honors_seeded_hitlist_snapshot() -> None:
     assert [int(x) for x in seed["combat_hitlist_hb_valid"][1].tolist()] == [0] * 4
 
     # The empty seed is intentionally not materialized into victims_1 at pre-combat time.
-    assert _precombat_hitlist(binding, row, num_players=int(ds.header["num_players"])) == [0, 0, 0, 0]
+    assert _precombat_hitlist(binding, row, num_players=int(ds.num_players)) == [0, 0, 0, 0]
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "percent"):
         assert out[field][0] == ref[field][0], f"field={field}"
         assert out[field][1] == ref[field][1], f"field={field}"
@@ -147,14 +148,14 @@ def test_downattacku_dense_seed_rebinds_live_victim_instance_proxy() -> None:
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _PJO
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     record = 4092
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     seed = row["seed_t"][0]
-    ref = ds.samples["ref_t1"][record]
+    ref = ds.rows["ref_t1"][record]
 
     # Source-backed identity boundary:
     # This regenerated row no longer seeds a stale dense instance-id proxy. It still locks that an
@@ -163,7 +164,7 @@ def test_downattacku_dense_seed_rebinds_live_victim_instance_proxy() -> None:
     assert [int(x) for x in seed["combat_hitlist_cd"][1, :, 0].tolist()] == [0] * 8
     assert [int(x) for x in seed["combat_hitlist_victim_iid"][1, :, 0].tolist()] == [0] * 8
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     for field in ("action_id", "hitlag", "hitstun", "percent"):
         assert out[field][0] == ref[field][0], f"field={field}"
         assert out[field][1] == ref[field][1], f"field={field}"
@@ -174,10 +175,10 @@ def test_downattacku_rollout_preserves_dense_seed_through_live_instance_rebind()
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _PJO
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     start = 4084
     target = 4092
 
@@ -185,16 +186,16 @@ def test_downattacku_rollout_preserves_dense_seed_through_live_instance_rebind()
     # starting from the earlier LandingFallSpecial/DownAttackU seed now carries an explicit empty
     # hitlist seed, then reaches the hb0..2 frame-17 create edge at record 4092. The rollout lock
     # protects the live collision-pose/source owner without relying on legacy dense suppression.
-    seed_start = ds.samples["seed_t"][start]
-    seed_target = ds.samples["seed_t"][target]
+    seed_start = ds.rows["seed_t"][start]
+    seed_target = ds.rows["seed_t"][target]
     assert [int(x) for x in seed_start["combat_hitlist_cd"][1, :, 0].tolist()] == [0] * 8
     assert [int(x) for x in seed_start["combat_hitlist_victim_iid"][1, :, 0].tolist()] == [0] * 8
     assert int(seed_target["instance_id"][0]) == 928
 
     out = _run_rollout_until(
-        binding, ds.samples, start=start, stop=target, num_players=int(ds.header["num_players"])
+        binding, ds.rows, start=start, stop=target, num_players=int(ds.num_players)
     )[target]
-    ref = ds.samples["ref_t1"][target]
+    ref = ds.rows["ref_t1"][target]
     for field in ("action_id", "hitlag", "hitstun", "percent"):
         assert out[field][0] == ref[field][0], f"field={field}"
         assert out[field][1] == ref[field][1], f"field={field}"
@@ -205,14 +206,14 @@ def test_downattacku_landingfallspecial_dynamic_pose_prevents_false_body_without
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _PJO
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     record = 4092
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     seed = row["seed_t"]
-    ref = ds.samples["ref_t1"][record]
+    ref = ds.rows["ref_t1"][record]
 
     # Dynamic-pose owner lock:
     # PJO:4092 originally looked like a dense-hitlist carry problem, but a vanilla
@@ -224,9 +225,9 @@ def test_downattacku_landingfallspecial_dynamic_pose_prevents_false_body_without
     # reports/triage/item19_pjo4092_downattack_p1_engine_dump/
     seed["combat_hitlist_cd"][0, 1, :, 0] = np.uint16(0)
 
-    assert _precombat_hitlist(binding, row, num_players=int(ds.header["num_players"])) == [0, 0, 0, 0]
+    assert _precombat_hitlist(binding, row, num_players=int(ds.num_players)) == [0, 0, 0, 0]
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "percent"):
         assert out[field][0] == ref[field][0], f"field={field}"
         assert out[field][1] == ref[field][1], f"field={field}"
@@ -237,10 +238,10 @@ def test_downattacku_landingfallspecial_dynamic_pose_rollout_pjo_4057() -> None:
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _PJO
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     start = 4057
     target = 4092
 
@@ -248,15 +249,15 @@ def test_downattacku_landingfallspecial_dynamic_pose_rollout_pjo_4057() -> None:
     # starting at LandingAirHi frame 16 previously reached PJO:4092 with a static
     # LandingFallSpecial tail pose and false-hit p0 into DamageFlyN. The fix is data-owned by the
     # SSDYNN01 collision-msid index rather than a row-local DownAttackU suppression.
-    seed_start = ds.samples["seed_t"][start]
+    seed_start = ds.rows["seed_t"][start]
     assert int(seed_start["action_id"][0]) == 73  # ftCo_SM_LandingAirHi
-    assert int(ds.samples["seed_t"][target]["action_id"][0]) == 43  # ftCo_SM_LandingFallSpecial
-    assert int(ds.samples["seed_t"][target]["action_id"][1]) == 187  # ftCo_SM_DownAttackU
+    assert int(ds.rows["seed_t"][target]["action_id"][0]) == 43  # ftCo_SM_LandingFallSpecial
+    assert int(ds.rows["seed_t"][target]["action_id"][1]) == 187  # ftCo_SM_DownAttackU
 
     out = _run_rollout_until(
-        binding, ds.samples, start=start, stop=target, num_players=int(ds.header["num_players"])
+        binding, ds.rows, start=start, stop=target, num_players=int(ds.num_players)
     )[target]
-    ref = ds.samples["ref_t1"][target]
+    ref = ds.rows["ref_t1"][target]
     for field in ("action_id", "animation_index", "hitlag", "hitstun", "percent"):
         assert out[field][0] == ref[field][0], f"field={field}"
         assert out[field][1] == ref[field][1], f"field={field}"
@@ -267,14 +268,14 @@ def test_downattacku_landingfallspecial_entry_does_not_trust_dense_seed() -> Non
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _HIS
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     record = 7485
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     seed = row["seed_t"][0]
-    ref = ds.samples["ref_t1"][record]
+    ref = ds.rows["ref_t1"][record]
 
     # Replay-real negative/control for the empty fallback boundary:
     # p1 DownAttackU has no authoritative hitlist seed and p0 has just entered LandingFallSpecial
@@ -286,7 +287,7 @@ def test_downattacku_landingfallspecial_entry_does_not_trust_dense_seed() -> Non
     assert [int(x) for x in seed["combat_hitlist_cd"][1, :, 0].tolist()] == [0] * 8
     assert [int(x) for x in seed["combat_hitlist_victim_iid"][1, :, 0].tolist()] == [0] * 8
 
-    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    out = _run_one_step(binding, row, num_players=int(ds.num_players))
     # This row still has a separate DamageFlyN vs DamageFlyRoll residual, but the BODY admission
     # fields must match; otherwise the dense seed bridge has over-suppressed the hit.
     assert int(out["action_id"][0]) != 43

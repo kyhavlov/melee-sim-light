@@ -5,10 +5,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-PJO = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+PJO = "replays/validation/aggregate_recent/PutridJoyousOryx.slpz"
 
 
 def _rollout_rows(
@@ -20,8 +21,8 @@ def _rollout_rows(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert targets
     assert start_record <= min(targets) <= max(targets) < int(samples.shape[0])
 
@@ -35,7 +36,7 @@ def _rollout_rows(
     out_by_record: dict[int, np.void] = {}
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -72,24 +73,24 @@ def test_escapeair_landing_does_not_leak_stale_damage_x1994_under_cliff_invuln()
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / PJO
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {PJO}")
+        pytest.skip(f"missing local replay: {PJO}")
 
     ds, out_by_record = _rollout_rows(dataset_path, 2718, (2735, 2738))
     p = 1
 
-    seed = ds.samples[2718]["seed_t"]
+    seed = ds.rows[2718]["seed_t"]
     assert int(seed["action_id"][p]) == 236  # EscapeAir
     assert int(seed["hurtbox_state"][p]) == 2
     assert int(seed["colanim_timer_x1990"][p]) > 0
     assert int(seed["colanim_timer_x1994"][p]) == 0
 
-    ref_2735 = ds.samples[2735]["ref_t1"]
+    ref_2735 = ds.rows[2735]["ref_t1"]
     out_2735 = out_by_record[2735]
     assert int(ref_2735["action_id"][p]) == 236
     assert int(out_2735["action_id"][p]) == 236
     assert int(out_2735["hurtbox_state"][p]) == int(ref_2735["hurtbox_state"][p]) == 2
 
-    ref_2738 = ds.samples[2738]["ref_t1"]
+    ref_2738 = ds.rows[2738]["ref_t1"]
     out_2738 = out_by_record[2738]
     assert int(ref_2738["action_id"][p]) == 43  # LandingFallSpecial
     assert int(out_2738["action_id"][p]) == 43

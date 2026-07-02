@@ -16,7 +16,8 @@ from tests.test_modelplay_rerun5_collision_regressions import (
     _seed_from_trace_frame,
 )
 from tests.test_stage_collision_fd_grounding import _fd_floor_pick_line_at_x
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 RERUN11 = "reports/modelplay/20260410_rl_doubles_v27_7000_rerun11/trace.json"
 RERUN11_PASSIVESTAND_INPUT_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_289.json"
@@ -402,12 +403,12 @@ def test_modelplay_rerun11_passivestandb_releases_floor_adjacent_right_wall_latc
     _require_local_data_or_skip()
     root = _root()
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
     trace_frames = _load_input_fixture(root / RERUN11_PASSIVESTAND_INPUT_FIXTURE)
 
     binding = importlib.import_module("msl_binding")
@@ -440,8 +441,8 @@ def test_modelplay_rerun11_passivestandb_releases_floor_adjacent_right_wall_latc
     )
     assert int(contacts_dtype.itemsize) == contacts_stride
 
-    ds = read_dataset(str(dataset_path))
-    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+    ds = load_replay_buffers(str(dataset_path))
+    seed_bytes = np.frombuffer(ds.rows[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
         1, seed_stride
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
@@ -496,12 +497,12 @@ def test_modelplay_rerun11_passivestandb_end_runs_same_frame_wait_iasa_squat() -
     _require_local_data_or_skip()
     root = _root()
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
     trace_frames = _load_input_fixture(root / RERUN11_PASSIVESTAND_INPUT_FIXTURE)
 
     binding = importlib.import_module("msl_binding")
@@ -510,8 +511,8 @@ def test_modelplay_rerun11_passivestandb_end_runs_same_frame_wait_iasa_squat() -
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+    ds = load_replay_buffers(str(dataset_path))
+    seed_bytes = np.frombuffer(ds.rows[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
         1, seed_stride
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
@@ -562,12 +563,12 @@ def test_modelplay_rerun11_grounded_damagehi3_hitlag_sdi_stays_floor_pinned() ->
     _require_local_data_or_skip()
     root = _root()
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
     trace_frames = _load_input_fixture(root / RERUN11_DAMAGE_HITLAG_INPUT_FIXTURE)
 
     binding = importlib.import_module("msl_binding")
@@ -576,8 +577,8 @@ def test_modelplay_rerun11_grounded_damagehi3_hitlag_sdi_stays_floor_pinned() ->
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+    ds = load_replay_buffers(str(dataset_path))
+    seed_bytes = np.frombuffer(ds.rows[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
         1, seed_stride
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
@@ -641,12 +642,12 @@ def test_modelplay_rerun11_grounded_damage_wait_iasa_enters_guard_before_escape(
     _require_local_data_or_skip()
     root = _root()
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
     trace_frames = _load_input_fixture(root / RERUN11_GUARD_INPUT_FIXTURE)
 
     binding = importlib.import_module("msl_binding")
@@ -655,8 +656,8 @@ def test_modelplay_rerun11_grounded_damage_wait_iasa_enters_guard_before_escape(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+    ds = load_replay_buffers(str(dataset_path))
+    seed_bytes = np.frombuffer(ds.rows[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
         1, seed_stride
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
@@ -700,12 +701,12 @@ def test_modelplay_rerun11_shield_recharge_continues_through_air_shine_hitlag() 
     _require_local_data_or_skip()
     root = _root()
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
     trace = _load_rerun11_trace()
 
     binding = pytest.importorskip("msl_binding")
@@ -714,8 +715,8 @@ def test_modelplay_rerun11_shield_recharge_continues_through_air_shine_hitlag() 
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+    ds = load_replay_buffers(str(dataset_path))
+    seed_bytes = np.frombuffer(ds.rows[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
         1, seed_stride
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
@@ -815,12 +816,12 @@ def test_modelplay_rerun11_damageflytop_buffered_jump_can_chain_into_dair() -> N
     _require_local_data_or_skip()
     root = _root()
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
     trace = _load_rerun11_trace()
 
     binding = pytest.importorskip("msl_binding")
@@ -829,8 +830,8 @@ def test_modelplay_rerun11_damageflytop_buffered_jump_can_chain_into_dair() -> N
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+    ds = load_replay_buffers(str(dataset_path))
+    seed_bytes = np.frombuffer(ds.rows[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
         1, seed_stride
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)

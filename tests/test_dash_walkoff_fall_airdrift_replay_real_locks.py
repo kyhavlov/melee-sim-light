@@ -30,11 +30,11 @@ def test_dash_walkoff_fall_airdrift_target_pm1_and_negative() -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_path = root / (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
 

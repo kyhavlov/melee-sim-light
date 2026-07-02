@@ -6,14 +6,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_dataset_record(ds, record: int) -> tuple[np.ndarray, np.ndarray]:
-    samples = ds.samples
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     row = samples[record : record + 1]
 
@@ -23,7 +24,7 @@ def _run_dataset_record(ds, record: int) -> tuple[np.ndarray, np.ndarray]:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -52,15 +53,15 @@ def _run_dataset_record(ds, record: int) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
-    return _run_dataset_record(read_dataset(str(dataset_path)), record)
+    return _run_dataset_record(load_replay_buffers(str(dataset_path)), record)
 
 
 def _run_rollout_records(
     dataset_path: Path, start_record: int, records: tuple[int, ...]
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > max(records), "dataset too short for rollout regression check"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > max(records), "replay too short for rollout regression check"
     assert start_record <= min(records), "rollout start must be <= first checked record"
 
     binding = importlib.import_module("msl_binding")
@@ -74,7 +75,7 @@ def _run_rollout_records(
     ).copy().reshape(1, seed_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         out_by_record: dict[int, tuple[np.void, np.void]] = {}
@@ -101,9 +102,9 @@ def _run_rollout_records(
 @pytest.mark.parametrize(
     ("dataset_name", "record", "attacker", "victim", "expected_thrown"),
     [
-        # From --debug-float offenders: seed_t.action_id[victim]==227 (CaptureWait) -> Thrown*
-        ("AttachedGoodNaturedGuanaco.msl", 4185, 1, 0, 241),
-        ("QuerulousGrandDinosaur.msl", 8279, 1, 0, 240),
+        # From rollout float offenders: seed_t.action_id[victim]==227 (CaptureWait) -> Thrown*
+        ("AttachedGoodNaturedGuanaco.slpz", 4185, 1, 0, 241),
+        ("QuerulousGrandDinosaur.slpz", 8279, 1, 0, 240),
     ],
 )
 def test_capturewait_to_nonlow_thrown_entry_uses_static_attachment_offsets(
@@ -114,13 +115,13 @@ def test_capturewait_to_nonlow_thrown_entry_uses_static_attachment_offsets(
     expected_thrown: int,
 ) -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/{dataset_name}"
+    dataset_rel = f"replays/validation/cardinal_1.0_recent/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, victim]) == 227
     assert int(row["ref_t1"]["action_id"][0, victim]) == expected_thrown
@@ -165,12 +166,12 @@ def test_throwhi_attached_rollout_uses_float_aobj_anchor() -> None:
     # refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     out_by_record = _run_rollout_records(dataset_path, 8392, (8407, 8408, 8411))
     for record, (out, ref) in out_by_record.items():
@@ -198,14 +199,14 @@ def test_throwhi_attachment_pose_uses_source_float_rate_selfplay_181413() -> Non
     record = 1047
     victim = 0
     owner = 1
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
     out, ref = _run_dataset_record(ds, record)
-    seed = ds.samples[record]["seed_t"]
+    seed = ds.rows[record]["seed_t"]
 
     assert int(seed["action_id"][owner]) == 221  # ThrowHi
     assert int(seed["action_id"][victim]) == 241  # ThrownHi
@@ -228,18 +229,18 @@ def test_throwf_attached_validation_row_strips_duplicate_transn_root() -> None:
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80085004,ft_80085030}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 1452
     victim = 0
     out, ref = _run_record(dataset_path, record)
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
 
     assert int(seed["action_id"][victim]) == 239  # ThrownF
     assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim]) == 239
@@ -266,14 +267,14 @@ def test_capturewait_to_throwf_entry_runs_post_phys_attachment_selfplay_181413()
     record = 531
     owner = 0
     victim = 1
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
     out, ref = _run_dataset_record(ds, record)
-    seed = ds.samples[record]["seed_t"]
+    seed = ds.rows[record]["seed_t"]
 
     assert int(seed["action_id"][owner]) == 216  # CatchWait
     assert int(seed["action_id"][victim]) == 227  # CaptureWaitLw
@@ -295,12 +296,12 @@ def test_throwlw_low_throw_keeps_existing_attachment_anchor_boundary() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     out_by_record = _run_rollout_records(dataset_path, 8116, (8121,))
     out, ref = out_by_record[8121]
@@ -315,12 +316,12 @@ def test_throwlw_low_throw_keeps_existing_attachment_anchor_boundary() -> None:
 def test_throwhi_release_rollout_applies_current_frame_di_and_damage_gravity() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     out_by_record = _run_rollout_records(dataset_path, 5861, (5869, 5908))
 

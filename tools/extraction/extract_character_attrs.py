@@ -8,6 +8,7 @@ from pathlib import Path
 
 from melee_sim.hsd_archive import parse_hsd_archive
 from melee_sim.iso import extract_file, find_files, list_files
+from tools.extraction.char_registry import CHARS
 from tools.extraction.extract_fighter_moves import _parse_subaction_events
 
 ARTICLE_HITBOX_FLAG_TARGET_GROUNDED = 1
@@ -38,6 +39,18 @@ def _s16_be(buf: bytes, off: int) -> int:
 
 def _f32_be(buf: bytes, off: int) -> float:
     return struct.unpack(">f", buf[off : off + 4])[0]
+
+
+def _source_can_walljump(character: str) -> bool:
+    info = CHARS.get(character)
+    if info is None:
+        return False
+    src_dir = Path("refs/melee/src/melee/ft/chara") / info.decomp_dir
+    for path in src_dir.glob("*.c"):
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if "can_walljump" in text and "can_walljump = true" in text:
+            return True
+    return False
 
 
 def _rot_xyz_mul_vec(rx: float, ry: float, rz: float, x: float, y: float, z: float) -> tuple[float, float, float]:
@@ -950,6 +963,11 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         "passivewall_vel_x": f(0x100),
         "wall_jump_horizontal_velocity": f(0x104),
         "wall_jump_vertical_velocity": f(0x108),
+        # Source owner: `ftWallJump_8008169C` first checks `fp->can_walljump`; each character
+        # init file sets that bit explicitly if the character can enter PassiveWallJump.
+        # refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+        # refs/melee/src/melee/ft/chara/*/*_Init.c (`fp->can_walljump = true`)
+        "can_walljump": False,
         # ftWallJump_8008169C compares ABS(fp->pos_delta.x - wall_pos.x) against
         # fp->co_attrs.x148 before starting the hidden wall-jump input timer.
         # refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
@@ -1362,6 +1380,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "passivewall_vel_x",
         "wall_jump_horizontal_velocity",
         "wall_jump_vertical_velocity",
+        "can_walljump",
         "walljump_setup_x_delta_threshold",
         "camera_zoom_target_bone_part_id",
         "camera_zoom_target_offset",
@@ -1457,6 +1476,7 @@ def main() -> None:
 
         extracted = _extract_ftco_dattrs(pl_path, ftdata_symbol=sym, extract_fox_blaster=bool(blaster),
                                          ext_attr_layout=ext_layout)
+        extracted["can_walljump"] = bool(_source_can_walljump(name))
         if blaster:
             # Decomp ownership: SpecialN spawn joint uses ftParts_GetBoneIndex(fp, FtPart_RThumbNb).
             # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint

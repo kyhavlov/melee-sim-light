@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 FIXTURE = "tests/fixtures/modelplay/20260507_platform_throw_air_windows.json"
 

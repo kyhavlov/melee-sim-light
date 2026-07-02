@@ -5,16 +5,17 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
-_DCC = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl")
+_DCC = Path("replays/validation/aggregate_recent/DistinctCaringCobra.slpz")
 _EWT = Path(
-    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz"
 )
-_FSP = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl")
+_FSP = Path("replays/validation/aggregate_recent/FavorableSuperficialPig.slpz")
 _MVP = Path(
-    "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl"
+    "replays/validation/battlefield_recent/MediumVirtualPig.slpz"
 )
 
 ACT_DAMAGE_FLY_HI = 0x0057
@@ -40,11 +41,11 @@ def _run_one_step(ds, record: int, *, rollout_reseed: bool = False) -> np.void:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -75,13 +76,12 @@ def _run_rollout(ds, start_record: int, target_record: int) -> np.void:
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples = ds.samples
+    samples = ds.rows
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -90,18 +90,16 @@ def _run_rollout(ds, start_record: int, target_record: int) -> np.void:
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, target_record + 1):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
         return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
@@ -117,13 +115,12 @@ def _run_rollout_to_pre_combat_resolve(
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    samples = ds.samples
+    samples = ds.rows
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -132,23 +129,19 @@ def _run_rollout_to_pre_combat_resolve(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, target_record):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
-        prev_input_bytes[0, :] = samples_u8[
-            target_record, prev_input_off : prev_input_off + input_stride
-        ]
-        input_bytes[0, :] = samples_u8[target_record, input_off : input_off + input_stride]
+        prev_input_bytes[0, :] = prev_input_u8[target_record, :input_stride]
+        input_bytes[0, :] = input_u8[target_record, :input_stride]
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
         if mutator is not None:
             mutator(binding, handle)
@@ -180,11 +173,11 @@ def test_dcc_turn_kneebend_hidden_facing_rollout_closes_3296() -> None:
     # The rollout must preserve the source Turn-facing lane rather than treating the temporary
     # attack-facing flip as visible facing.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::fn_800C9C2C
-    ds = read_dataset(str(_dataset_path()))
+    ds = load_replay_buffers(str(_dataset_path()))
     out = _run_rollout(ds, 3200, 3296)
-    ref = ds.samples[3296]["ref_t1"]
+    ref = ds.rows[3296]["ref_t1"]
 
-    assert int(ds.samples[3296]["seed_t"]["action_id"][1]) == 14  # Wait.
+    assert int(ds.rows[3296]["seed_t"]["action_id"][1]) == 14  # Wait.
     assert int(ref["action_id"][1]) == 20  # Dash.
     _assert_fields_match(out, ref, players=(1,))
 
@@ -195,11 +188,11 @@ def test_turn_kneebend_tap_jump_control_stays_normal_facing() -> None:
     # remain on the ordinary restored-facing path from ftCo_Turn_IASA / ftCo_Jump_CheckInput.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
-    ds = read_dataset(str(_dataset_path_for(_FSP)))
+    ds = load_replay_buffers(str(_dataset_path_for(_FSP)))
     turn_record = 5340
     jump_record = 5343
-    seed = ds.samples[turn_record]["seed_t"]
-    input_t = ds.samples[turn_record]["input_t"]["p"][0]
+    seed = ds.rows[turn_record]["seed_t"]
+    input_t = ds.rows[turn_record]["input_t"]["p"][0]
 
     assert int(seed["action_id"][0]) == 18  # Turn.
     assert int(seed["turn_kneebend_facing_override_u8"][0]) == 0
@@ -207,7 +200,7 @@ def test_turn_kneebend_tap_jump_control_stays_normal_facing() -> None:
     assert int(input_t["main_y"]) > 0
 
     out = _run_rollout(ds, 5200, jump_record)
-    ref = ds.samples[jump_record]["ref_t1"]
+    ref = ds.rows[jump_record]["ref_t1"]
     assert int(ref["action_id"][0]) == 26  # JumpB.
     assert int(out["action_id"][0]) == int(ref["action_id"][0])
     assert int(out["facing"][0]) == int(ref["facing"][0])
@@ -221,10 +214,10 @@ def test_dcc_same_frame_aerial_trade_damageflyroll_current_processhit_source_496
     # zero-consume gate marker.
     # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
     # data/moves/{fox,falco}.json::moves.ftCo_SM_{AttackAirN,AttackAirB}.events.create_hitbox
-    ds = read_dataset(str(_dataset_path()))
+    ds = load_replay_buffers(str(_dataset_path()))
     record = 4968
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
 
     assert int(seed["action_id"][0]) == 65  # AttackAirN.
     assert int(seed["action_id"][1]) == 67  # AttackAirB.
@@ -242,10 +235,10 @@ def test_dcc_grounded_shine_terminal_dense_hitlist_rollout_closes_6431() -> None
     # same-source DamageFlyTop state, not a replay row or stage band.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Pass
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
-    ds = read_dataset(str(_dataset_path()))
+    ds = load_replay_buffers(str(_dataset_path()))
     record = 6431
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
 
     assert int(seed["action_id"][1]) == 39  # SquatWait, entering SpecialLwStart this frame.
     assert int(ref["action_id"][1]) == 360  # SpecialLwStart.
@@ -300,9 +293,9 @@ def test_shine_start_dense_hitlist_boundaries_do_not_suppress_real_body(
     # BODY hit must then be allowed through instead of being hidden by stale dense victims_1 state.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Pass
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
-    ds = read_dataset(str(_dataset_path()))
+    ds = load_replay_buffers(str(_dataset_path()))
     record = 6431
-    ref = ds.samples[record]["ref_t1"]
+    ref = ds.rows[record]["ref_t1"]
 
     out = _run_rollout_to_pre_combat_resolve(ds, 6300, record, mutator)
     if expect_body:
@@ -323,10 +316,10 @@ def test_dcc_strong_attackairlw_terminal_damageflytop_hitstun_rollout_closes_708
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     # data/moves/falco.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
-    ds = read_dataset(str(_dataset_path()))
+    ds = load_replay_buffers(str(_dataset_path()))
     record = 7083
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
 
     assert int(seed["action_id"][1]) == 69  # AttackAirLw.
     assert int(seed["action_id"][0]) == 90  # terminal DamageFlyTop.
@@ -353,9 +346,9 @@ def test_first_create_attackairlw_damageflytop_keeps_full_hitstun(
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     # data/moves/falco.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
-    ds = read_dataset(str(_dataset_path_for(rel_path)))
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(_dataset_path_for(rel_path)))
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
 
     assert int(seed["action_id"][1]) == 69  # AttackAirLw.
     assert int(seed["action_frame"][1]) == 4
@@ -375,11 +368,11 @@ def test_dcc_terminal_damageflytop_phantom_expiry_rollout_closes_9367_and_9685()
     # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006D10C}
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007BE3C
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
-    ds = read_dataset(str(_dataset_path()))
+    ds = load_replay_buffers(str(_dataset_path()))
 
     phantom_record = 9367
-    phantom_seed = ds.samples[phantom_record]["seed_t"]
-    phantom_ref = ds.samples[phantom_record]["ref_t1"]
+    phantom_seed = ds.rows[phantom_record]["seed_t"]
+    phantom_ref = ds.rows[phantom_record]["ref_t1"]
     assert int(phantom_seed["action_id"][1]) == 90  # DamageFlyTop.
     assert int(phantom_seed["hitstun"][1]) == 4
     assert int(phantom_seed["damage_time_since_hit_x18ac"][1]) == 83
@@ -393,7 +386,7 @@ def test_dcc_terminal_damageflytop_phantom_expiry_rollout_closes_9367_and_9685()
     _assert_fields_match(phantom_out, phantom_ref, players=(1,))
 
     later_record = 9685
-    later_ref = ds.samples[later_record]["ref_t1"]
+    later_ref = ds.rows[later_record]["ref_t1"]
     later_out = _run_rollout(ds, 9000, later_record)
     _assert_fields_match(later_out, later_ref, players=(1,))
 
@@ -403,9 +396,9 @@ def test_terminal_damageflytop_phantom_expiry_seed_frame_does_not_fabricate_dama
     # The terminal phantom fallback is rollout-after-reseed only. Exact one-step seed frames with
     # empty x1898/x189C lanes must not invent hidden phantom damage.
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-    ds = read_dataset(str(_dataset_path()))
+    ds = load_replay_buffers(str(_dataset_path()))
     record = 9367
-    seed = ds.samples[record]["seed_t"]
+    seed = ds.rows[record]["seed_t"]
 
     out = _run_one_step(ds, record, rollout_reseed=True)
     assert float(out["percent"][1]) == pytest.approx(float(seed["percent"][1]), abs=0.001)
@@ -417,8 +410,8 @@ def test_terminal_damageflytop_phantom_expiry_adjacent_phase_does_not_fabricate_
     record: int,
 ) -> None:
     # Adjacent terminal phases are not the x18AC/hitstun callback boundary used by the fallback.
-    ds = read_dataset(str(_dataset_path()))
-    ref = ds.samples[record]["ref_t1"]
+    ds = load_replay_buffers(str(_dataset_path()))
+    ref = ds.rows[record]["ref_t1"]
 
     out = _run_rollout_to_pre_combat_resolve(ds, 9000, record)
     assert float(out["percent"][1]) == pytest.approx(float(ref["percent"][1]), abs=0.001)
@@ -443,9 +436,9 @@ def test_terminal_damageflytop_phantom_expiry_source_boundaries_do_not_double_ap
 ) -> None:
     # At the DCC terminal callback boundary, removing the live non-self source episode or keeping
     # the explicit empty x1898/x189C lane must prevent extra fabricated phantom damage.
-    ds = read_dataset(str(_dataset_path()))
+    ds = load_replay_buffers(str(_dataset_path()))
     record = 9367
-    ref = ds.samples[record]["ref_t1"]
+    ref = ds.rows[record]["ref_t1"]
 
     out = _run_rollout_to_pre_combat_resolve(ds, 9000, record, mutator)
     assert float(out["percent"][1]) == pytest.approx(float(ref["percent"][1]), abs=0.001), name

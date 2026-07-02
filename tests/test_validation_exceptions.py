@@ -19,7 +19,7 @@ def test_rollout_first_exception_requires_exact_observed_shape(tmp_path: Path) -
                 "version": 1,
                 "rollout_first_mismatch_exceptions": [
                     {
-                        "dataset": "Game.msl",
+                        "dataset": "Game.slpz",
                         "record": 12,
                         "player": 0,
                         "field": "action_id",
@@ -39,10 +39,10 @@ def test_rollout_first_exception_requires_exact_observed_shape(tmp_path: Path) -
     exceptions = load_validation_exceptions(path)
 
     accepted, stale = match_rollout_first_exceptions(
-        dataset="datasets/aggregate/Game.msl",
+        dataset="replays/aggregate/Game.slpz",
         rows=(
             {
-                "dataset": "datasets/aggregate/Game.msl",
+                "dataset": "replays/aggregate/Game.slpz",
                 "record": 12,
                 "player": 0,
                 "field": "action_id",
@@ -60,10 +60,10 @@ def test_rollout_first_exception_requires_exact_observed_shape(tmp_path: Path) -
     assert stale == ()
 
     accepted, stale = match_rollout_first_exceptions(
-        dataset="datasets/aggregate/Game.msl",
+        dataset="replays/aggregate/Game.slpz",
         rows=(
             {
-                "dataset": "datasets/aggregate/Game.msl",
+                "dataset": "replays/aggregate/Game.slpz",
                 "record": 12,
                 "player": 0,
                 "field": "action_id",
@@ -89,7 +89,7 @@ def test_rollout_exception_probe_limit_is_zero_for_unlisted_datasets(tmp_path: P
                 "version": 1,
                 "rollout_first_mismatch_exceptions": [
                     {
-                        "dataset": "Game.msl",
+                        "dataset": "Game.slpz",
                         "record": 12,
                         "player": 0,
                         "field": "action_id",
@@ -108,8 +108,8 @@ def test_rollout_exception_probe_limit_is_zero_for_unlisted_datasets(tmp_path: P
     )
     exceptions = load_validation_exceptions(path)
 
-    assert _exception_probe_limit(dataset="datasets/aggregate/Game.msl", exceptions=exceptions) == 13
-    assert _exception_probe_limit(dataset="datasets/aggregate/Other.msl", exceptions=exceptions) == 0
+    assert _exception_probe_limit(dataset="replays/aggregate/Game.slpz", exceptions=exceptions) == 13
+    assert _exception_probe_limit(dataset="replays/aggregate/Other.slpz", exceptions=exceptions) == 0
 
 
 def test_rollout_float_annotation_is_exact_to_dataset_record_player_field(tmp_path: Path) -> None:
@@ -120,7 +120,7 @@ def test_rollout_float_annotation_is_exact_to_dataset_record_player_field(tmp_pa
                 "version": 1,
                 "rollout_float_annotations": [
                     {
-                        "dataset": "Game.msl",
+                        "dataset": "Game.slpz",
                         "record": 2463,
                         "player": 0,
                         "field": "percent",
@@ -135,14 +135,14 @@ def test_rollout_float_annotation_is_exact_to_dataset_record_player_field(tmp_pa
     exceptions = load_validation_exceptions(path)
 
     assert classify_float_row(
-        dataset="datasets/aggregate/Game.msl",
+        dataset="replays/aggregate/Game.slpz",
         record=2463,
         player=0,
         field="percent",
         exceptions=exceptions,
     ) == ("open_magnify", "known open owner")
     assert classify_float_row(
-        dataset="datasets/aggregate/Game.msl",
+        dataset="replays/aggregate/Game.slpz",
         record=2464,
         player=0,
         field="percent",
@@ -158,7 +158,7 @@ def test_rollout_float_annotation_does_not_block_float_clean_status(tmp_path: Pa
                 "version": 1,
                 "rollout_float_annotations": [
                     {
-                        "dataset": "Game.msl",
+                        "dataset": "Game.slpz",
                         "record": 2463,
                         "player": 0,
                         "field": "percent",
@@ -173,13 +173,13 @@ def test_rollout_float_annotation_does_not_block_float_clean_status(tmp_path: Pa
     exceptions = load_validation_exceptions(path)
 
     summary = _float_summary(
-        dataset="datasets/aggregate/Game.msl",
+        dataset="replays/aggregate/Game.slpz",
         rows_by_field={
             "percent": [
                 {
                     "field": "percent",
                     "abs_err": 1.0,
-                    "dataset": "datasets/aggregate/Game.msl",
+                    "dataset": "replays/aggregate/Game.slpz",
                     "record": 2463,
                     "p": 0,
                     "seed": 89.0,
@@ -195,7 +195,7 @@ def test_rollout_float_annotation_does_not_block_float_clean_status(tmp_path: Pa
                 {
                     "field": "pos_x",
                     "abs_err": 0.00001,
-                    "dataset": "datasets/aggregate/Game.msl",
+                    "dataset": "replays/aggregate/Game.slpz",
                     "record": 2703,
                     "p": 0,
                     "seed": 132.0,
@@ -218,13 +218,13 @@ def test_rollout_float_annotation_does_not_block_float_clean_status(tmp_path: Pa
 
 def test_unclassified_rollout_float_still_blocks_float_clean_status() -> None:
     summary = _float_summary(
-        dataset="datasets/aggregate/Game.msl",
+        dataset="replays/aggregate/Game.slpz",
         rows_by_field={
             "percent": [
                 {
                     "field": "percent",
                     "abs_err": 1.0,
-                    "dataset": "datasets/aggregate/Game.msl",
+                    "dataset": "replays/aggregate/Game.slpz",
                     "record": 2464,
                     "p": 0,
                     "seed": 90.0,

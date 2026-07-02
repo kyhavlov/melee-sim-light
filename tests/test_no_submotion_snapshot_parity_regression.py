@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -16,13 +17,13 @@ class _Case:
     p: int
 
 
-_BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE = "replays/validation/cardinal_1.0_recent"
 
 
 def _skip_if_missing_dataset(root: Path, rel: str) -> Path:
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
     return dataset_path
 
 
@@ -57,8 +58,8 @@ def _step_one_row(*, binding, row: np.ndarray, num_players: int) -> np.ndarray:
 @pytest.mark.parametrize(
     "case",
     [
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 3599, 0),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 2571, 1),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 3599, 0),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 2571, 1),
     ],
 )
 def test_no_submotion_guard_hold_stays_guard(case: _Case) -> None:
@@ -66,9 +67,9 @@ def test_no_submotion_guard_hold_stays_guard(case: _Case) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = _skip_if_missing_dataset(root, case.dataset_rel)
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(case.record), f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(case.record), f"replay too short: num_records={int(samples.shape[0])}"
 
     row = samples[case.record : case.record + 1]
     p = int(case.p)
@@ -83,7 +84,7 @@ def test_no_submotion_guard_hold_stays_guard(case: _Case) -> None:
     assert int(row["ref_t1"]["action_frame"][0, p]) == -1
     assert int(row["ref_t1"]["animation_index"][0, p]) == 0xFFFFFFFF
 
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
 
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["action_frame"][p]) == int(row["ref_t1"]["action_frame"][0, p])
@@ -95,9 +96,9 @@ def test_no_submotion_guard_hold_stays_guard(case: _Case) -> None:
 @pytest.mark.parametrize(
     "case",
     [
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 3600, 0),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 2572, 1),
-        _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 5559, 0),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 3600, 0),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 2572, 1),
+        _Case(f"{_BASE}/TreasuredBackKangaroo.slpz", 5559, 0),
     ],
 )
 def test_no_submotion_guard_snapshot_enters_guardsetoff(case: _Case) -> None:
@@ -105,9 +106,9 @@ def test_no_submotion_guard_snapshot_enters_guardsetoff(case: _Case) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = _skip_if_missing_dataset(root, case.dataset_rel)
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(case.record), f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(case.record), f"replay too short: num_records={int(samples.shape[0])}"
 
     row = samples[case.record : case.record + 1]
     p = int(case.p)
@@ -122,7 +123,7 @@ def test_no_submotion_guard_snapshot_enters_guardsetoff(case: _Case) -> None:
     assert int(row["ref_t1"]["animation_index"][0, p]) == 40
     assert int(row["ref_t1"]["hitlag"][0, p]) > 0
 
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
 
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["action_frame"][p]) == int(row["ref_t1"]["action_frame"][0, p])

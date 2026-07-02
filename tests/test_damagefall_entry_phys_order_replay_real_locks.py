@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_DAMAGE_FALL = 0x0026
@@ -29,7 +30,7 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 def _dataset_path(root: Path, rel: str) -> Path:
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
     return dataset_path
 
 
@@ -40,8 +41,8 @@ def _run_one_step(dataset_path: Path, record: int, seed_mutator=None) -> tuple[n
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
     seed_t = row["seed_t"].copy()
@@ -56,7 +57,7 @@ def _run_one_step(dataset_path: Path, record: int, seed_mutator=None) -> tuple[n
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -72,7 +73,7 @@ def test_damagefly_to_damagefall_entry_uses_destination_phys_before_integration(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _dataset_path(
-        root, "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        root, "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
 
     seed, ref, out = _run_one_step(dataset_path, 710)
@@ -90,8 +91,8 @@ def test_steady_damagefall_keeps_seed_driven_current_frame_displacement() -> Non
     _skip_if_required_artifacts_missing(root)
     dataset_path = _dataset_path(
         root,
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl",
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz",
     )
 
     seed, ref, out = _run_one_step(dataset_path, 2959)
@@ -110,8 +111,8 @@ def test_steady_damagefall_allow_interrupt_uses_pre_integration_gravity() -> Non
     _skip_if_required_artifacts_missing(root)
     dataset_path = _dataset_path(
         root,
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl",
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz",
     )
 
     seed, ref, out = _run_one_step(dataset_path, 8326)

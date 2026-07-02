@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from tools.slippi.anim_timebase import EndFrameTables, derive_frame_speed_mul_f32
-from tools.slippi.make_dataset_from_slp import _derive_landing_fallspecial_allow_interrupt_seed_lane
+from tools.slippi.validation_buffer_fighter import _derive_landing_fallspecial_allow_interrupt_seed_lane
 
 
 def _frame_speed_oracle(

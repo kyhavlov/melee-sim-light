@@ -8,23 +8,23 @@ def validate_rollout_payload(payload: Mapping[str, Any], *, label: str = "input"
     if not isinstance(payload, Mapping):
         raise ValueError(
             f"{label}: invalid rollout JSON (expected object). "
-            "Expected output from tools.eval.run_longest_rollout_streaks."
+            "Expected standard rollout payload."
         )
     missing = [k for k in ("per_dataset", "fields") if k not in payload]
     if missing:
         raise ValueError(
             f"{label}: invalid rollout JSON; missing keys: {', '.join(missing)}. "
-            "Expected output from tools.eval.run_longest_rollout_streaks."
+            "Expected standard rollout payload."
         )
     if not isinstance(payload.get("per_dataset"), list):
         raise ValueError(
             f"{label}: invalid rollout JSON; 'per_dataset' must be a list. "
-            "Expected output from tools.eval.run_longest_rollout_streaks."
+            "Expected standard rollout payload."
         )
     if not isinstance(payload.get("fields"), list):
         raise ValueError(
             f"{label}: invalid rollout JSON; 'fields' must be a list. "
-            "Expected output from tools.eval.run_longest_rollout_streaks."
+            "Expected standard rollout payload."
         )
 
 
@@ -154,7 +154,6 @@ def summarize_rollout_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         "suite": str(payload.get("suite", "")),
         "suite_path": str(payload.get("suite_path", "")),
         "fields": list(payload.get("fields", [])),
-        "datasets_dir": str(payload.get("datasets_dir", "")),
         "dataset_summaries": sorted(dataset_rows, key=lambda r: str(r["dataset"])),
         "suite_summary": suite,
     }

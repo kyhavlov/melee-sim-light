@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class _Case:
     "case",
     [
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=4044,
             p=1,
             expected_seed_ground=0.945753276348114,
@@ -33,7 +33,7 @@ class _Case:
             note="AGN laser shield-hit GuardSetOff entry keeps prior grounded self_vel.x separate from recoil gr_vel",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=3493,
             p=0,
             expected_seed_ground=-2.1725001335144043,
@@ -56,10 +56,10 @@ def test_guardsetoff_entry_replay_real_splits_ground_recoil_and_self_velocity(ca
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[case.target_record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
     p = case.p

@@ -11,7 +11,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -28,91 +29,91 @@ class _SourceClearTerminalPhaseCase:
     "case",
     [
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=2143,
             victim_port=0,
             expect_owner=1,
             note="ref 1->out 6 residual cleanup (AGN)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=1670,
             victim_port=1,
             expect_owner=0,
             note="ref 0->out 6 residual cleanup (GAT)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=1936,
             victim_port=0,
             expect_owner=1,
             note="ref 1->out 6 residual cleanup (QGD)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=10537,
             victim_port=1,
             expect_owner=0,
             note="ref 0->out 6 residual cleanup (GAT late)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=1905,
             victim_port=0,
             expect_owner=1,
             note="Wait followup terminal cleanup (GAT)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=5208,
             victim_port=0,
             expect_owner=1,
             note="EscapeF followup terminal cleanup (QGD)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=6501,
             victim_port=0,
             expect_owner=1,
             note="SpecialSEnd followup terminal cleanup (AGN)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=8198,
             victim_port=1,
             expect_owner=0,
             note="SpecialSEnd followup terminal cleanup (QGD)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=531,
             victim_port=1,
             expect_owner=0,
             note="SpecialSEnd zero-combo terminal cleanup (QGD)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=1974,
             victim_port=0,
             expect_owner=1,
             note="AttackAirN terminal followup cleanup (GAT)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=4477,
             victim_port=0,
             expect_owner=1,
             note="AttackAirLw terminal followup cleanup (GAT)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=5442,
             victim_port=1,
             expect_owner=0,
             note="Guard hold terminal followup cleanup (GAT)",
         ),
         _SourceClearTerminalPhaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=9591,
             victim_port=1,
             expect_owner=0,
@@ -135,15 +136,15 @@ def test_source_clear_terminal_phase_target_pm1_both_players_strict_lock(
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
     victim = int(case.victim_port)
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record]
     seed = target["seed_t"]
@@ -176,10 +177,10 @@ def test_source_clear_terminal_phase_target_pm1_both_players_strict_lock(
 
 
 def _run_rollout_compare_row(dataset_path: Path, start_record: int, compare_record: int) -> tuple[np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert start_record <= compare_record
-    assert int(samples.shape[0]) > compare_record, f"dataset too short for compare row: record={compare_record}"
+    assert int(samples.shape[0]) > compare_record, f"replay too short for compare row: record={compare_record}"
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -193,7 +194,7 @@ def _run_rollout_compare_row(dataset_path: Path, start_record: int, compare_reco
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -225,14 +226,14 @@ def test_source_clear_terminal_phase_attackairn_without_terminal_lane_still_clea
     # is clear, so Fighter_8006A360's ordinary terminal clear still publishes source 6.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 441
     victim = 0
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][victim]) == 0x0041
     assert int(seed["source_clear_timer_x18c8"][victim]) == 1
     assert int(seed["source_clear_owner_set_phase"][victim]) == 1
@@ -258,24 +259,24 @@ def test_source_clear_active_damagefly_terminal_parks_owner_tvr() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 12179
     terminal_record = 12207
     compare_record = 12210
     victim = 1
-    terminal_seed = ds.samples[terminal_record]["seed_t"]
+    terminal_seed = ds.rows[terminal_record]["seed_t"]
     assert int(terminal_seed["action_id"][victim]) == 0x0057  # DamageFlyHi.
     assert int(terminal_seed["hitstun"][victim]) != 0
     assert int(terminal_seed["source_clear_timer_x18c8"][victim]) == 1
     assert int(terminal_seed["source_clear_owner_set_phase"][victim]) == 1
     assert int(terminal_seed["source_clear_terminal_phase"][victim]) == 0
-    assert int(ds.samples[compare_record]["ref_t1"]["last_hit_by"][victim]) == 0
+    assert int(ds.rows[compare_record]["ref_t1"]["last_hit_by"][victim]) == 0
 
     out, ref = _run_rollout_compare_row(dataset_path, start_record, compare_record)
     assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == 0x001C
@@ -296,20 +297,20 @@ def test_source_clear_downed_recovery_terminal_parks_owner_in_rollout_cdo() -> N
     # - refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+    dataset_path = root / "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 12020
     terminal_record = 12024
     compare_record = 12025
     victim = 1
-    terminal_seed = ds.samples[terminal_record]["seed_t"]
+    terminal_seed = ds.rows[terminal_record]["seed_t"]
     assert int(terminal_seed["action_id"][victim]) == 0x00C8
     assert int(terminal_seed["source_clear_timer_x18c8"][victim]) == 1
     assert int(terminal_seed["source_clear_terminal_phase"][victim]) == 1
-    assert int(ds.samples[start_record]["seed_t"]["source_clear_terminal_phase"][victim]) == 0
+    assert int(ds.rows[start_record]["seed_t"]["source_clear_terminal_phase"][victim]) == 0
 
     out, ref = _run_rollout_compare_row(dataset_path, start_record, compare_record)
     assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == 0x00C8
@@ -328,16 +329,16 @@ def test_source_clear_x18c8_starts_on_later_grounded_motion_entry_cnm() -> None:
     # - data/attack_id/move_id/{fox,falco}.bin::motion_state_word
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    dataset_path = root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 3357
     clear_record = 3604
     victim = 1
-    seed = ds.samples[clear_record]["seed_t"]
-    ref = ds.samples[clear_record]["ref_t1"]
+    seed = ds.rows[clear_record]["seed_t"]
+    ref = ds.rows[clear_record]["ref_t1"]
     assert int(seed["action_id"][victim]) == 0x0015
     assert int(seed["source_clear_timer_x18c8"][victim]) == 1
     assert int(seed["source_clear_owner_set_phase"][victim]) == 1
@@ -360,16 +361,16 @@ def test_rebirth_resets_stale_queue_before_next_stock_hit_cnm() -> None:
     # - refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    dataset_path = root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 3604
     compare_record = 3961
     attacker = 0
     victim = 1
-    seed = ds.samples[compare_record]["seed_t"]
+    seed = ds.rows[compare_record]["seed_t"]
     assert int(seed["stale_move_id"][attacker, 0]) == 0
     assert int(seed["action_id"][attacker]) == 0x0043
     assert int(seed["attack_id"][attacker]) == 15

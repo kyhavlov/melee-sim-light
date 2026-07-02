@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_DASH = 20
@@ -23,14 +24,14 @@ def _run_one_step(ds, record: int, *, seed_mutator=None) -> np.void:
     compare_stride = int(sizes["compare"])
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     if seed_mutator is not None:
         seed_mutator(row["seed_t"])
 
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -52,20 +53,20 @@ def _run_one_step(ds, record: int, *, seed_mutator=None) -> np.void:
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "BlondHardHippopotamus.msl",
+            "replays/validation/aggregate_recent/"
+            "BlondHardHippopotamus.slpz",
             6673,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             829,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             11238,
             1,
         ),
@@ -90,10 +91,10 @@ def test_grounded_dash_entry_uses_connected_floor_projection_result(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["ref_t1"]["action_id"][p]) == ACT_DASH
     assert int(row["ref_t1"]["on_ground"][p]) == 1
     assert int(row["seed_t"]["ground_id"][p]) != int(row["ref_t1"]["ground_id"][p])
@@ -110,20 +111,20 @@ def test_grounded_dash_entry_uses_connected_floor_projection_result(
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             2340,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             4985,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "ShadyDecimalStarling.msl",
+            "replays/validation/dream_land_recent/"
+            "ShadyDecimalStarling.slpz",
             739,
             0,
         ),
@@ -145,10 +146,10 @@ def test_whispy_wind_grounded_root_crossing_flat_seam_refreshes_floor_index(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["on_ground"][p]) == 1
     assert int(row["ref_t1"]["on_ground"][p]) == 1
     assert int(row["seed_t"]["ground_id"][p]) != int(row["ref_t1"]["ground_id"][p])
@@ -179,14 +180,14 @@ def test_fall_landing_entry_uses_mplib_signed_correction_order_qhp_532() -> None
     # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    dataset_path = root / "replays/validation/marth/QuestionableHarmfulPanther.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 532
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == 28  # Dream Land N64
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
@@ -207,13 +208,13 @@ def test_grounded_dash_entry_does_not_rewrite_floor_without_connected_seam() -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "BlondHardHippopotamus.msl"
+        / "replays/validation/aggregate_recent/"
+        "BlondHardHippopotamus.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 6673
     p = 1
 

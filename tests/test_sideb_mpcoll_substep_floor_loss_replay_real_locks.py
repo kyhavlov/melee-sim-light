@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset_window
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffer_window
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -24,8 +25,8 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset_window(str(dataset_path), record, record + 1)
-    row = ds.samples[0:1]
+    ds = load_replay_buffer_window(str(dataset_path), record, record + 1)
+    row = ds.rows[0:1]
 
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -33,7 +34,7 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     compare_stride = int(sizes["compare"])
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     try:
         binding.reseed_seed(handle, row["seed_t"].view("u1").reshape(1, seed_stride).copy())
@@ -70,11 +71,11 @@ def test_fod_grounded_sideb_floor_loss_publishes_mpcoll_substep() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ElatedWearyTermite.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _step_one_row(dataset_path, 7115)
     p = 0
@@ -114,11 +115,11 @@ def test_dream_land_aerial_sideb_wall_envelope_matches_entry_and_end_window() ->
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        / "FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/"
+        / "FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
     for record in range(7692, 7700):
@@ -146,11 +147,11 @@ def test_fod_aerial_sideb_after_floor_loss_keeps_full_airborne_root_step() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ElatedWearyTermite.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _step_one_row(dataset_path, 7116)
     p = 0

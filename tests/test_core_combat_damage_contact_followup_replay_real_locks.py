@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
     "case",
     [
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             record=5656,
             port=0,
             seed_action=38,
@@ -57,7 +57,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="held-stick DamageFall_IASA enters Fall from reconstructed x670",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             record=2545,
             port=1,
             seed_action=90,
@@ -65,7 +65,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageFly_IASA reaches DamageFall_IASA x670 Fall handoff",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl",
+            dataset_rel="replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
             record=5255,
             port=0,
             seed_action=90,
@@ -73,7 +73,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageFly_IASA x670 Fall handoff from aggregate validation row",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            dataset_rel="replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
             record=869,
             port=1,
             seed_action=90,
@@ -81,7 +81,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageFly_IASA x670 Fall handoff preserves same-frame ordering",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             record=383,
             port=0,
             seed_action=90,
@@ -89,7 +89,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageFly_IASA x670 Fall handoff source-owner lock",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            dataset_rel="replays/validation/aggregate_recent/FavorableSuperficialPig.slpz",
             record=8041,
             port=0,
             seed_action=193,
@@ -97,7 +97,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="airborne DownDamageD anim-end exits to Fall",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            dataset_rel="replays/validation/aggregate_recent/FavorableSuperficialPig.slpz",
             record=8024,
             port=0,
             seed_action=183,
@@ -106,7 +106,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             require_ref_hitlag_zero=False,
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            dataset_rel="replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             record=3562,
             port=1,
             seed_action=183,
@@ -115,7 +115,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             require_ref_hitlag_zero=False,
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             record=1510,
             port=1,
             seed_action=183,
@@ -124,7 +124,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             require_ref_hitlag_zero=False,
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            dataset_rel="replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
             record=5473,
             port=1,
             seed_action=191,
@@ -133,7 +133,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             require_ref_hitlag_zero=False,
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            dataset_rel="replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             record=3577,
             port=1,
             seed_action=193,
@@ -142,7 +142,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             expected_seed_hitlag=1,
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             record=6063,
             port=1,
             seed_action=193,
@@ -150,7 +150,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="grounded DownDamageD anim-end with live hidden x0 enters DownWaitD then DownFowardD IASA",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             record=1516,
             port=1,
             seed_action=193,
@@ -159,7 +159,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             expected_seed_hitlag=1,
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            dataset_rel="replays/validation/aggregate_recent/FavorableSuperficialPig.slpz",
             record=3721,
             port=0,
             seed_action=193,
@@ -168,7 +168,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             expected_seed_hitlag=1,
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             record=430,
             port=0,
             seed_action=183,
@@ -176,7 +176,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DownBoundU getup into DownStandU does not immediate-tick DownStand entry",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl",
+            dataset_rel="replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
             record=2137,
             port=0,
             seed_action=191,
@@ -184,7 +184,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DownBoundD getup into DownStandD does not immediate-tick DownStand entry",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            dataset_rel="replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             record=2060,
             port=0,
             seed_action=183,
@@ -192,7 +192,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DownBoundU Anim uses pre-input x67C/x67D before same-frame A edge can force DownAttack",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            dataset_rel="replays/validation/aggregate_recent/HungryImportantSnake.slpz",
             record=4229,
             port=0,
             seed_action=80,
@@ -200,7 +200,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="grounded Damage_Coll ledge-slip floor loss enters MissFoot",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            dataset_rel="replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             record=193,
             port=0,
             seed_action=84,
@@ -208,7 +208,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageAir1 IASA consumes current-frame jump into JumpAerialF",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            dataset_rel="replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             record=9171,
             port=0,
             seed_action=84,
@@ -216,7 +216,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageAir1 IASA enters AttackAirN without same-frame floor landing",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=4187,
             port=0,
             seed_action=84,
@@ -224,7 +224,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageAir1 IASA consumes AttackAirLw before JumpAerial fallback",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             record=902,
             port=0,
             seed_action=90,
@@ -233,7 +233,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             require_ref_hitlag_zero=False,
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             record=892,
             port=0,
             seed_action=352,
@@ -242,7 +242,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             require_ref_hitlag_zero=False,
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             record=1172,
             port=1,
             seed_action=76,
@@ -250,7 +250,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageHi2 seeded final ECB-lock frame lands through ft_80081DD4 locked-bottom floor callback",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            dataset_rel="replays/validation/aggregate_recent/HungryImportantSnake.slpz",
             record=427,
             port=1,
             seed_action=76,
@@ -258,7 +258,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageHi2 mirrored seeded final ECB-lock frame lands through common Damage_Coll",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            dataset_rel="replays/validation/aggregate_recent/HungryImportantSnake.slpz",
             record=2323,
             port=0,
             seed_action=90,
@@ -266,7 +266,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageFlyTop x670 hold frame does not rewind into same-frame DamageFall_IASA Fall",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            dataset_rel="replays/validation/aggregate_recent/HungryImportantSnake.slpz",
             record=2324,
             port=0,
             seed_action=90,
@@ -274,7 +274,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageFlyTop next-frame x670 hold still allows PassiveStandF floor tech",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             record=4114,
             port=1,
             seed_action=85,
@@ -282,7 +282,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageAir2 seeded final ECB-lock frame stays airborne; common Damage_Coll lock-bottom bridge must not apply",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            dataset_rel="replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
             record=385,
             port=1,
             seed_action=84,
@@ -290,7 +290,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageAir1 Landing_Enter_Basic clears hitstun even when seed x221C_b6 lockout is live",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl",
+            dataset_rel="replays/validation/doubles_recent/Game_20260509T152622.slpz",
             record=2634,
             port=2,
             seed_action=259,
@@ -298,7 +298,7 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="CliffEscapeQuick anim-end preserves residual ground speed into GuardOn Phys",
         ),
         _DamageContactCase(
-            dataset_rel="datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl",
+            dataset_rel="replays/validation/doubles_recent/Game_20260509T152622.slpz",
             record=2745,
             port=2,
             seed_action=183,
@@ -371,11 +371,11 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > case.record, case.note
-    row = ds.samples[case.record]
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > case.record, case.note
+    row = ds.rows[case.record]
     p = int(case.port)
     assert int(row["seed_t"]["action_id"][p]) == int(case.seed_action), case.note
     assert int(row["ref_t1"]["action_id"][p]) == int(case.ref_action), case.note
@@ -398,13 +398,13 @@ def test_low_kb_damageair_floor_contact_copies_self_x_to_ground_speed() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local MotionlessAggressiveJay aggregate dataset")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[8933]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[8933]
     p = 1
     assert int(row["seed_t"]["action_id"][p]) == 84  # DamageAir1
     assert int(row["seed_t"]["on_ground"][p]) == 0
@@ -438,13 +438,13 @@ def test_damageair_grounded_kneebend_followup_enters_specialhi_from_bup_edge() -
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local MotionlessAggressiveJay aggregate dataset")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[8935]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[8935]
     p = 1
     assert int(row["seed_t"]["action_id"][p]) == 24  # KneeBend
     assert (int(row["input_t"]["p"]["buttons"][p]) & 0x0200) != 0
@@ -470,13 +470,13 @@ def test_downdamage_hitlag_exit_uses_common_damage_phys() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local MotionlessAggressiveJay aggregate dataset")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[5476]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[5476]
     p = 1
     assert int(row["seed_t"]["action_id"][p]) == 193  # DownDamageD
     assert int(row["seed_t"]["hitlag"][p]) == 1
@@ -501,7 +501,7 @@ def test_downdamage_hitlag_exit_uses_common_damage_phys() -> None:
     ),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             6479,
             1,
             0,
@@ -510,7 +510,7 @@ def test_downdamage_hitlag_exit_uses_common_damage_phys() -> None:
             False,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            "replays/validation/aggregate_recent/HungryImportantSnake.slpz",
             2780,
             1,
             0,
@@ -519,7 +519,7 @@ def test_downdamage_hitlag_exit_uses_common_damage_phys() -> None:
             True,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
             2217,
             0,
             1,
@@ -540,7 +540,7 @@ def test_attackair_guard_reentry_shield_hitlist_rows_are_replay_exact(
 ) -> None:
     # Shield re-entry HitCapsule provenance:
     # - older datasets carried legacy dense group-level combat_hitlist_cd/victim_iid,
-    # - regenerated datasets may instead carry an explicit empty group seed,
+    # - regenerated replays may instead carry an explicit empty group seed,
     # - the replay-only authoritative-empty per-HitCapsule lane is used when t+1 proves the stale
     #   fallback would suppress a live AttackAir shield hit,
     # - the t+1 proof is GuardSetOff + both-fighter hitlag; shield HP loss is not required because
@@ -551,11 +551,11 @@ def test_attackair_guard_reentry_shield_hitlist_rows_are_replay_exact(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > record, f"replay too short for lock row: record={record}"
+    row = ds.rows[record]
     seed_t = row["seed_t"]
     ref_t1 = row["ref_t1"]
     assert int(seed_t["action_id"][attacker]) == int(attacker_action)
@@ -599,13 +599,13 @@ def test_ongoing_guardsetoff_hitlag_seeds_fighter_shield_hitlist_carry() -> None
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target = 10270
     assert int(samples.shape[0]) > target
     onset = samples[10264]
@@ -635,7 +635,7 @@ def test_ongoing_guardsetoff_hitlag_seeds_fighter_shield_hitlist_carry() -> None
     ("dataset_rel", "record", "p", "seed_wall_kind", "seed_wall_id", "ref_action"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            "replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             4809,
             1,
             0,
@@ -643,7 +643,7 @@ def test_ongoing_guardsetoff_hitlag_seeds_fighter_shield_hitlist_carry() -> None
             90,  # DamageFlyTop adjacent non-wall-callback control
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            "replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             4810,
             1,
             1,
@@ -651,7 +651,7 @@ def test_ongoing_guardsetoff_hitlag_seeds_fighter_shield_hitlist_carry() -> None
             202,  # PassiveWall
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            "replays/validation/aggregate_recent/HungryImportantSnake.slpz",
             1788,
             1,
             2,
@@ -659,7 +659,7 @@ def test_ongoing_guardsetoff_hitlag_seeds_fighter_shield_hitlist_carry() -> None
             90,  # DamageFlyTop adjacent non-walljump control
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            "replays/validation/aggregate_recent/HungryImportantSnake.slpz",
             1789,
             1,
             2,
@@ -685,10 +685,10 @@ def test_damageflytop_wall_callback_coll_data_seed_locks(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     seed_t = row["seed_t"]
     ref_t1 = row["ref_t1"]
     assert int(seed_t["action_id"][p]) == 90

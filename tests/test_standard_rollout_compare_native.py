@@ -2,11 +2,7 @@ import numpy as np
 import pytest
 
 import msl_binding
-from tools.eval.dataset import COMPARE_DTYPE
-from tools.eval.run_longest_rollout_streaks import (
-    _first_ignored_standard_rollout,
-    _first_mismatch_standard_rollout,
-)
+from tools.eval.validation_dtypes import COMPARE_DTYPE
 
 
 _CODE_TO_FIELD = {
@@ -43,14 +39,32 @@ def _native_result(
 def _python_result(
     out: np.ndarray, ref: np.ndarray, *, players: tuple[int, ...], profile_name: str
 ) -> tuple[str | None, str | None]:
-    return (
-        _first_mismatch_standard_rollout(
-            out_row=out[0], ref_row=ref[0], players=players, profile_name=profile_name
-        ),
-        _first_ignored_standard_rollout(
-            out_row=out[0], ref_row=ref[0], players=players, profile_name=profile_name
-        ),
-    )
+    out_row = out[0]
+    ref_row = ref[0]
+    for field in ("action_id", "animation_index", "on_ground", "hitlag", "hitstun"):
+        for p in players:
+            if int(out_row[field][p]) != int(ref_row[field][p]):
+                return field, None
+
+    out_sf = out_row["state_flags"]
+    ref_sf = ref_row["state_flags"]
+    if profile_name == "rl1_gameplay":
+        for p in players:
+            for sub in range(4):
+                if int(out_sf[p, sub]) != int(ref_sf[p, sub]):
+                    return "state_flags", None
+            if ((int(out_sf[p, 4]) ^ int(ref_sf[p, 4])) & 0x7F) != 0:
+                return "state_flags", None
+        for p in players:
+            if ((int(out_sf[p, 4]) ^ int(ref_sf[p, 4])) & 0x80) != 0:
+                return None, "state_flags[4]&0x80"
+        return None, None
+
+    for p in players:
+        for sub in range(5):
+            if int(out_sf[p, sub]) != int(ref_sf[p, sub]):
+                return "state_flags", None
+    return None, None
 
 
 def _assert_native_matches_python(

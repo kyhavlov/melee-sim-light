@@ -26,7 +26,7 @@ class _Case:
     "case",
     [
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=1430,
             attacker_port=0,
             defender_port=1,
@@ -34,7 +34,7 @@ class _Case:
             note="grounded side-B shield contact keeps GuardOn -> GuardSetOff article flow",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=6516,
             attacker_port=0,
             defender_port=1,
@@ -48,7 +48,7 @@ def test_illusion_contact_rows_match_replay_real(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     a = case.attacker_port
     d = case.defender_port

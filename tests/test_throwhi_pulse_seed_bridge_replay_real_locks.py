@@ -11,8 +11,9 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
+from tools.eval.streaming_validation import _load_binding
 
 
 @dataclass(frozen=True)
@@ -106,8 +107,8 @@ class _ThrowBlasterHiddenTopoffCase:
 
 
 def _run_rollout_rows(dataset_path: Path, start_record: int, rows: tuple[int, ...]) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -115,7 +116,7 @@ def _run_rollout_rows(dataset_path: Path, start_record: int, rows: tuple[int, ..
     compare_stride = int(sizes["compare"])
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -125,20 +126,19 @@ def _run_rollout_rows(dataset_path: Path, start_record: int, rows: tuple[int, ..
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
     end_record = max(rows)
 
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         out: dict[int, tuple[np.void, np.void]] = {}
         for record in range(start_record, end_record + 1):
-            prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             if record in rows:
@@ -153,7 +153,7 @@ def _run_rollout_rows(dataset_path: Path, start_record: int, rows: tuple[int, ..
     "case",
     [
         _ThrowHiPulseBridgeCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=583,
             thrower_port=0,
             expect_last_attack_landed_nonzero=True,
@@ -161,7 +161,7 @@ def _run_rollout_rows(dataset_path: Path, start_record: int, rows: tuple[int, ..
             note="ThrowHi pulse bridge family AGG",
         ),
         _ThrowHiPulseBridgeCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=984,
             thrower_port=1,
             expect_last_attack_landed_nonzero=True,
@@ -169,7 +169,7 @@ def _run_rollout_rows(dataset_path: Path, start_record: int, rows: tuple[int, ..
             note="ThrowHi pulse bridge family GAT",
         ),
         _ThrowHiPulseBridgeCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=3091,
             thrower_port=0,
             expect_last_attack_landed_nonzero=True,
@@ -177,7 +177,7 @@ def _run_rollout_rows(dataset_path: Path, start_record: int, rows: tuple[int, ..
             note="ThrowHi pulse bridge family QGD",
         ),
         _ThrowHiPulseBridgeCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=2137,
             thrower_port=1,
             expect_last_attack_landed_nonzero=True,
@@ -185,7 +185,7 @@ def _run_rollout_rows(dataset_path: Path, start_record: int, rows: tuple[int, ..
             note="ThrowHi pulse bridge family TBK",
         ),
         _ThrowHiPulseBridgeCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=3424,
             thrower_port=1,
             expect_last_attack_landed_nonzero=False,
@@ -193,7 +193,7 @@ def _run_rollout_rows(dataset_path: Path, start_record: int, rows: tuple[int, ..
             note="ThrowHi broadened ongoing-hitstun bridge (no damage provenance, left-facing)",
         ),
         _ThrowHiPulseBridgeCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=5087,
             thrower_port=1,
             expect_last_attack_landed_nonzero=False,
@@ -215,15 +215,15 @@ def test_throwhi_pulse_seed_bridge_target_pm1_both_players_strict_lock(case: _Th
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
     thrower = int(case.thrower_port)
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record]
     seed = target["seed_t"]
@@ -273,7 +273,7 @@ def test_throwhi_pulse_seed_bridge_target_pm1_both_players_strict_lock(case: _Th
     "case",
     [
         _ThrowHiCrossedPrevCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=938,
             thrower_port=1,
             item_slot=1,
@@ -282,7 +282,7 @@ def test_throwhi_pulse_seed_bridge_target_pm1_both_players_strict_lock(case: _Th
             note="ThrowHi crossed-prev frame-20 spawn BHH owner p1",
         ),
         _ThrowHiCrossedPrevCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=1673,
             thrower_port=0,
             item_slot=1,
@@ -291,7 +291,7 @@ def test_throwhi_pulse_seed_bridge_target_pm1_both_players_strict_lock(case: _Th
             note="ThrowHi crossed-prev frame-20 spawn BHH owner p0",
         ),
         _ThrowHiCrossedPrevCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=4337,
             thrower_port=0,
             item_slot=1,
@@ -311,12 +311,12 @@ def test_throwhi_crossed_prev_frame20_article_spawn_locks(case: _ThrowHiCrossedP
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
-    assert int(samples.shape[0]) > target_record, f"dataset too short for lock row: record={target_record}"
+    assert int(samples.shape[0]) > target_record, f"replay too short for lock row: record={target_record}"
 
     seed = samples[target_record]["seed_t"]
     thrower = int(case.thrower_port)
@@ -352,7 +352,7 @@ def test_throwhi_crossed_prev_frame20_article_spawn_locks(case: _ThrowHiCrossedP
     "case",
     [
         _ThrowHiPendingSpawnHitlistCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=4335,
             thrower_port=0,
             item_slot=1,
@@ -361,7 +361,7 @@ def test_throwhi_crossed_prev_frame20_article_spawn_locks(case: _ThrowHiCrossedP
             expected_pending_frame=18,
         ),
         _ThrowHiPendingSpawnHitlistCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            dataset_rel="replays/validation/aggregate_recent/FavorableSuperficialPig.slpz",
             target_record=9282,
             thrower_port=0,
             item_slot=1,
@@ -370,7 +370,7 @@ def test_throwhi_crossed_prev_frame20_article_spawn_locks(case: _ThrowHiCrossedP
             expected_pending_frame=18,
         ),
         _ThrowHiPendingSpawnHitlistCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=1208,
             thrower_port=0,
             item_slot=1,
@@ -397,12 +397,12 @@ def test_throwhi_pending_spawn_hitlist_carries_first_pulse_article(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
-    assert int(samples.shape[0]) > target_record, f"dataset too short for lock row: record={target_record}"
+    assert int(samples.shape[0]) > target_record, f"replay too short for lock row: record={target_record}"
 
     seed = samples[target_record]["seed_t"]
     thrower = int(case.thrower_port)
@@ -442,7 +442,7 @@ def test_throwhi_pending_spawn_hitlist_carries_first_pulse_article(
     "case",
     [
         _ThrowHiSameCharacterCallbackCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=937,
             thrower_port=1,
             item_slot=1,
@@ -450,7 +450,7 @@ def test_throwhi_pending_spawn_hitlist_carries_first_pulse_article(
             note="Fox/Fox ThrowHi frame-18 front-side first-pulse callback consumes article",
         ),
         _ThrowHiSameCharacterCallbackCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            dataset_rel="replays/validation/aggregate_recent/HungryImportantSnake.slpz",
             target_record=2428,
             thrower_port=0,
             item_slot=1,
@@ -458,7 +458,7 @@ def test_throwhi_pending_spawn_hitlist_carries_first_pulse_article(
             note="Fox/Fox ThrowHi frame-18 later-hitbox victim-ring phase carries article",
         ),
         _ThrowHiSameCharacterCallbackCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            dataset_rel="replays/validation/aggregate_recent/HungryImportantSnake.slpz",
             target_record=7337,
             thrower_port=1,
             item_slot=1,
@@ -466,7 +466,7 @@ def test_throwhi_pending_spawn_hitlist_carries_first_pulse_article(
             note="Fox/Fox ThrowHi frame-18 alternate later-hitbox victim-ring phase carries article",
         ),
         _ThrowHiSameCharacterCallbackCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=1250,
             thrower_port=0,
             item_slot=2,
@@ -475,8 +475,8 @@ def test_throwhi_pending_spawn_hitlist_carries_first_pulse_article(
         ),
         _ThrowHiSameCharacterCallbackCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.slpz"
             ),
             target_record=998,
             thrower_port=1,
@@ -486,8 +486,8 @@ def test_throwhi_pending_spawn_hitlist_carries_first_pulse_article(
         ),
         _ThrowHiSameCharacterCallbackCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=463,
             thrower_port=0,
@@ -517,12 +517,12 @@ def test_throwhi_same_character_callback_phase_locks(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
-    assert int(samples.shape[0]) > target_record, f"dataset too short for lock row: record={target_record}"
+    assert int(samples.shape[0]) > target_record, f"replay too short for lock row: record={target_record}"
 
     seed = samples[target_record]["seed_t"]
     thrower = int(case.thrower_port)
@@ -554,14 +554,14 @@ def test_throwhi_rollout_uses_frame_crossing_after_seed_pending_authority_clears
     # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_rel = "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples[2068]["seed_t"]["throw_command_pending_pulse_frame"][0]) == 20
-    assert int(ds.samples[2071]["seed_t"]["throw_command_pending_pulse_frame"][0]) == 24
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows[2068]["seed_t"]["throw_command_pending_pulse_frame"][0]) == 20
+    assert int(ds.rows[2071]["seed_t"]["throw_command_pending_pulse_frame"][0]) == 24
 
     rows = _run_rollout_rows(dataset_path, 2042, (2068, 2071))
     for record, slot in ((2068, 2), (2071, 3)):
@@ -583,13 +583,13 @@ def test_throwhi_frame20_timebase_snap_defers_consumed_first_pulse_article_doubl
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    dataset_rel = "replays/validation/doubles_recent/Game_20260509T152622.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed_7734 = ds.samples[7734]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_7734 = ds.rows[7734]["seed_t"]
     thrower = 0
     victim = 1
     assert int(seed_7734["char_id"][thrower]) == 1  # Fox
@@ -632,7 +632,7 @@ def test_throwhi_frame20_timebase_snap_defers_consumed_first_pulse_article_doubl
     "case",
     [
         _ThrowHiMidPulseCommandCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=1251,
             thrower_port=0,
             positive_item_slot=2,
@@ -640,8 +640,8 @@ def test_throwhi_frame20_timebase_snap_defers_consumed_first_pulse_article_doubl
         ),
         _ThrowHiMidPulseCommandCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=464,
             thrower_port=0,
@@ -667,12 +667,12 @@ def test_throwhi_mid_pulse_command_uses_combo_hitlist_ordinal_gate(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
-    assert int(samples.shape[0]) > target_record, f"dataset too short for lock row: record={target_record}"
+    assert int(samples.shape[0]) > target_record, f"replay too short for lock row: record={target_record}"
 
     seed = samples[target_record]["seed_t"]
     thrower = int(case.thrower_port)
@@ -710,7 +710,7 @@ def test_throwhi_mid_pulse_command_uses_combo_hitlist_ordinal_gate(
     "case",
     [
         _ThrowHiConsumedPulseCountCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl",
+            dataset_rel="replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
             target_record=2963,
             thrower_port=0,
             item_slot=3,
@@ -718,7 +718,7 @@ def test_throwhi_mid_pulse_command_uses_combo_hitlist_ordinal_gate(
             note="Falco ThrowHi frame-20 consumed pulse does not emit a third state1 article",
         ),
         _ThrowHiConsumedPulseCountCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            dataset_rel="replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
             target_record=6738,
             thrower_port=0,
             item_slot=3,
@@ -726,7 +726,7 @@ def test_throwhi_mid_pulse_command_uses_combo_hitlist_ordinal_gate(
             note="Falco ThrowHi frame-20 consumed pulse max-count guard PRH",
         ),
         _ThrowHiConsumedPulseCountCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            dataset_rel="replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
             target_record=267,
             thrower_port=1,
             item_slot=3,
@@ -734,7 +734,7 @@ def test_throwhi_mid_pulse_command_uses_combo_hitlist_ordinal_gate(
             note="Falco ThrowHi frame-20 consumed pulse max-count guard TCH",
         ),
         _ThrowHiConsumedPulseCountCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=3091,
             thrower_port=0,
             item_slot=2,
@@ -759,10 +759,10 @@ def test_throwhi_consumed_pulse_respects_existing_state1_article_count(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     seed = target["seed_t"]
     thrower = int(case.thrower_port)
 
@@ -799,21 +799,21 @@ def test_throwhi_consumed_pulse_respects_existing_state1_article_count(
     "case",
     [
         _FalcoThrowHiPrev18SecondArticleCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            dataset_rel="replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
             target_record=6737,
             thrower_port=0,
             item_slot=2,
             note="Falco ThrowHi crossed-prev frame-18 emits second state1 article PRH",
         ),
         _FalcoThrowHiPrev18SecondArticleCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl",
+            dataset_rel="replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
             target_record=2962,
             thrower_port=0,
             item_slot=2,
             note="Falco ThrowHi crossed-prev frame-18 emits second state1 article HVG",
         ),
         _FalcoThrowHiPrev18SecondArticleCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            dataset_rel="replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
             target_record=266,
             thrower_port=1,
             item_slot=2,
@@ -837,12 +837,12 @@ def test_falco_throwhi_crossed_prev_frame18_emits_second_article(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
-    assert int(samples.shape[0]) > target_record, f"dataset too short for lock row: record={target_record}"
+    assert int(samples.shape[0]) > target_record, f"replay too short for lock row: record={target_record}"
 
     seed = samples[target_record]["seed_t"]
     thrower = int(case.thrower_port)
@@ -884,14 +884,14 @@ def test_falco_throwhi_crossed_prev_frame18_slow_step_waits_for_pending_frame20_
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    dataset_rel = "replays/validation/marth/RipeWealthySeahorse.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[2663]["seed_t"]
-    next_seed = ds.samples[2664]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[2663]["seed_t"]
+    next_seed = ds.rows[2664]["seed_t"]
     thrower = 1
     victim = 0
     assert int(seed["char_id"][thrower]) == 22
@@ -937,13 +937,13 @@ def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -
     # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    dataset_rel = "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[8136]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[8136]["seed_t"]
     thrower = 0
     victim = 1
     assert int(seed["char_id"][thrower]) == 22
@@ -977,8 +977,8 @@ def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -
     [
         _ThrowHiFrame24CarryCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=3426,
             thrower_port=1,
@@ -988,7 +988,7 @@ def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -
             note="Falco ThrowHi frame-24 current-pulse carried BODY row",
         ),
         _ThrowHiFrame24CarryCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            dataset_rel="replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
             target_record=270,
             thrower_port=1,
             positive=True,
@@ -998,8 +998,8 @@ def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -
         ),
         _ThrowHiFrame24CarryCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "TreasuredBackKangaroo.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "TreasuredBackKangaroo.slpz"
             ),
             target_record=5090,
             thrower_port=1,
@@ -1010,8 +1010,8 @@ def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -
         ),
         _ThrowHiFrame24CarryCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=3427,
             thrower_port=1,
@@ -1021,7 +1021,7 @@ def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -
             note="Falco frame-24 lower-hitlag handoff consumes normally",
         ),
         _ThrowHiFrame24CarryCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            dataset_rel="replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             target_record=1208,
             thrower_port=0,
             positive=False,
@@ -1044,12 +1044,12 @@ def test_falco_throwhi_frame24_carried_body_locks(case: _ThrowHiFrame24CarryCase
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
-    assert int(samples.shape[0]) > target_record, f"dataset too short for lock row: record={target_record}"
+    assert int(samples.shape[0]) > target_record, f"replay too short for lock row: record={target_record}"
 
     seed = samples[target_record]["seed_t"]
     thrower = int(case.thrower_port)
@@ -1098,10 +1098,10 @@ def test_falco_throwhi_frame24_projectile_side_body_consumes_and_compacts_mgs() 
     # data/moves/falco.json moves["ftCo_SM_ThrowHi"].events
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+    dataset_rel = "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref_row, out_row = _run_one_step_row(dataset_path, 1815, 0)
     thrower = 0
@@ -1137,14 +1137,14 @@ def test_falco_throwhi_frame24_projectile_side_body_consumes_and_compacts_mgs() 
     "case",
     [
         _ThrowBlasterHiddenTopoffCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=9964,
             thrower_port=1,
             expected_throw_action=220,
             note="Falco ThrowB terminal pulse top-off without serialized article",
         ),
         _ThrowBlasterHiddenTopoffCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            dataset_rel="replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
             target_record=5099,
             thrower_port=1,
             expected_throw_action=220,
@@ -1169,12 +1169,12 @@ def test_throw_blaster_hidden_terminal_pulse_topoff_without_live_article(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
-    assert int(samples.shape[0]) > target_record, f"dataset too short for lock row: record={target_record}"
+    assert int(samples.shape[0]) > target_record, f"replay too short for lock row: record={target_record}"
 
     seed = samples[target_record]["seed_t"]
     thrower = int(case.thrower_port)
@@ -1216,10 +1216,10 @@ def test_throwhi_same_frame_laser_topoff_merges_kb_without_second_damage_entry()
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        root / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     target_record = 6744
     thrower = 0

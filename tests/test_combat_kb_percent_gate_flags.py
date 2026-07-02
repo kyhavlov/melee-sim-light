@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
 
 # src/hitboxes_tables.h (MSLHITB1 u16_6 bits)
 HIT_AERIAL = 1 << 10

@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -22,25 +22,25 @@ class _Case:
 
 _CASES = (
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
         target_record=999,
         p=0,
         note="AGN zero-KB laser carry clears x221C_b0 on the carry row",
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
         target_record=2469,
         p=0,
         note="AGN late zero-KB laser carry clears x221C_b0 on the carry row",
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
         target_record=414,
         p=1,
         note="GAT zero-KB laser carry clears x221C_b0 on the carry row",
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
         target_record=453,
         p=1,
         note="TBK zero-KB laser carry clears x221C_b0 on the carry row",
@@ -62,14 +62,14 @@ def test_zero_kb_item_x221c_b0_rows_and_adjacent_controls_are_replay_exact(case:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = case.p
     rows = (case.target_record - 1, case.target_record, case.target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[case.target_record]
     seed = target["seed_t"]

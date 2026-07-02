@@ -9,10 +9,11 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_FEH = Path("datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl")
+_FEH = Path("replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz")
 
 _CONTACT_CLASSIFIED_DTYPE = np.dtype(
     [
@@ -56,7 +57,7 @@ def test_attackairn_primary_phantom_allows_later_medium_damage_height_feh_12440(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _FEH
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_FEH}")
+        pytest.skip(f"missing local replay: {_FEH}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 12440, 0)
     assert int(seed["action_id"][0]) == 356  # ftFx_MS_SpecialAirHi
@@ -76,11 +77,11 @@ def test_attackairn_primary_full_overlap_keeps_high_damage_height_feh_12440_nega
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _FEH
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_FEH}")
+        pytest.skip(f"missing local replay: {_FEH}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[12440:12441]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[12440:12441]
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -96,7 +97,7 @@ def test_attackairn_primary_full_overlap_keeps_high_damage_height_feh_12440_nega
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)

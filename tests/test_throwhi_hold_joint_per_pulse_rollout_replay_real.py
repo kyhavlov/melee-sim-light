@@ -6,13 +6,14 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
+from tools.eval.streaming_validation import _load_binding
 
 
 def _rollout_rows(dataset_path: Path, start_record: int, end_record_inclusive: int):
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -20,7 +21,7 @@ def _rollout_rows(dataset_path: Path, start_record: int, end_record_inclusive: i
     compare_stride = int(sizes["compare"])
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -30,21 +31,18 @@ def _rollout_rows(dataset_path: Path, start_record: int, end_record_inclusive: i
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed(handle, seed_bytes)
         rows = {}
         for record in range(start_record, end_record_inclusive + 1):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             rows[record] = (out_view[0].copy(), samples["ref_t1"][record].copy())
@@ -67,10 +65,10 @@ def test_throwhi_rollout_recomputes_hold_joint_vector_for_each_pulse() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     samples, rows = _rollout_rows(dataset_path, start_record=8416, end_record_inclusive=8425)
     seed = samples["seed_t"][8416]

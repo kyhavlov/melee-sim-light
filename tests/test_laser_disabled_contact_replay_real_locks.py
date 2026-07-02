@@ -23,8 +23,8 @@ class _DisabledContactCase:
     [
         _DisabledContactCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PositiveRevolvingHyena.msl"
+                "replays/validation/aggregate_recent/"
+                "PositiveRevolvingHyena.slpz"
             ),
             record=4757,
             item_slot=0,
@@ -33,8 +33,8 @@ class _DisabledContactCase:
         ),
         _DisabledContactCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PositiveRevolvingHyena.msl"
+                "replays/validation/aggregate_recent/"
+                "PositiveRevolvingHyena.slpz"
             ),
             record=4778,
             item_slot=0,
@@ -55,7 +55,7 @@ def test_laser_disabled_hurtcaps_consume_item_without_damage(case: _DisabledCont
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, int(case.record), int(case.defender_port))
     p = int(case.defender_port)
@@ -76,12 +76,12 @@ def test_vulnerable_zero_kb_laser_body_hit_still_applies_damage() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 197, 1)
     p = 1
@@ -105,12 +105,12 @@ def test_passive_hidden_colanim_keeps_fox_laser_alive_without_damage() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 6197, 1)
     p = 1
@@ -132,10 +132,10 @@ def test_passive_hidden_colanim_guard_does_not_keep_falco_laser_alive() -> None:
     # type-55 lasers, whose replay rows still consume normally.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 3886, 1)
     p = 1

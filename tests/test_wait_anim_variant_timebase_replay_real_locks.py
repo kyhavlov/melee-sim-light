@@ -11,7 +11,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 )
 
 
-DEMO2 = Path("datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl")
+DEMO2 = Path("replays/validation/sheik/sheik_demo_game_2.slpz")
 
 
 @pytest.mark.integration

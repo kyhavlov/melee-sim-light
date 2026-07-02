@@ -63,7 +63,7 @@ from tools.slippi.known_data_artifacts import (
     dream_whispy_metadata,
     yoshi_shyguy_metadata,
 )
-from tools.slippi.make_dataset_from_slp import _load_stage_segments_for_seed, _stage_ledge_floor_ids
+from tools.slippi.validation_buffer_stage import _load_stage_segments_for_seed, _stage_ledge_floor_ids
 
 SUPPORTED_STAGE_BINS = ("griz.bin", "grps.bin", "grst.bin", "grop.bin", "grnba.bin", "grnla.bin")
 SUPPORTED_STAGE_IDS_BY_BIN = {
@@ -1082,7 +1082,7 @@ def test_runtime_stage_collision_does_not_require_unused_registered_battlefield_
     code = """
 import msl_binding
 import numpy as np
-from tools.eval.dataset import SEED_DTYPE
+from tools.eval.validation_dtypes import SEED_DTYPE
 try:
     handle = msl_binding.init(batch_size=1, num_players=2)
 except Exception:
@@ -1112,7 +1112,7 @@ def test_runtime_reseed_rejects_unsupported_stage_id() -> None:
     code = """
 import msl_binding
 import numpy as np
-from tools.eval.dataset import SEED_DTYPE
+from tools.eval.validation_dtypes import SEED_DTYPE
 handle = msl_binding.init(batch_size=1, num_players=2)
 seed = np.zeros((1,), dtype=SEED_DTYPE)
 seed["stage_id"][0] = np.uint32(4)
@@ -2206,7 +2206,7 @@ def test_manifest_registry_chars_fails_loudly_on_unknown_char(tmp_path) -> None:
 
     import pytest as _pytest
 
-    from tools.slippi.make_dataset_from_slp import manifest_registry_chars
+    from tools.slippi.validation_buffer_common import manifest_registry_chars
 
     (tmp_path / "manifest.json").write_text(
         _json.dumps({"chars": ["fox", "falco", "marth", "roy"]})
@@ -2228,7 +2228,7 @@ def test_replay_chars_must_be_in_manifest() -> None:
 
     import pytest as _pytest
 
-    from tools.slippi.make_dataset_from_slp import require_replay_chars_in_manifest
+    from tools.slippi.validation_buffer_common import require_replay_chars_in_manifest
 
     manifest = [(1, "fox"), (22, "falco")]
     require_replay_chars_in_manifest(_np.array([1, 22, 1], dtype=_np.uint8), manifest)

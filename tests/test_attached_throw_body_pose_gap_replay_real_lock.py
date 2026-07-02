@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 HIT_GROUNDED = 1 << 9
 HIT_AERIAL = 1 << 10
@@ -34,13 +34,13 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 def _tense_throwhi_row():
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(root / "replays/validation/sheik/TenseSameHummingbird.slpz"),
         ports=[1, 3],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    return ds, ds.samples[6883:6884]
+    return ds, ds.rows[6883:6884]
 
 
 def _seed_input_bytes(row, sizes, seed_mutator: Callable[[np.ndarray], None] | None = None):
@@ -78,7 +78,7 @@ def _selected_contacts(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -118,7 +118,7 @@ def test_attached_throwhi_body_contact_survives_source_correct_fobj_eof_tsh_6883
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )

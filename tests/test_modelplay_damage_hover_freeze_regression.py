@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _processed_to_stick_u8(v: float) -> np.int8:
@@ -51,11 +52,11 @@ def test_modelplay_common_damage_airborne_rows_do_not_hover_into_midair_wait_fre
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     fixture_path = root / "tests/fixtures/modelplay/rerun3_hover_freeze_window.json"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     grounded_locomotion_actions = {
         14,  # Wait
@@ -70,7 +71,7 @@ def test_modelplay_common_damage_airborne_rows_do_not_hover_into_midair_wait_fre
         23,  # RunBrake
     }
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     fixture = json.loads(fixture_path.read_text())
     frames = fixture["frames"]
     windows = fixture["windows"]
@@ -81,8 +82,8 @@ def test_modelplay_common_damage_airborne_rows_do_not_hover_into_midair_wait_fre
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    row = ds.samples[0:1]
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    row = ds.rows[0:1]
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride).copy()
         prev_input_bytes = (

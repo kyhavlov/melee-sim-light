@@ -26,11 +26,11 @@ def test_catchpull_ground_speed_owner_target_pm1_and_negative() -> None:
     _skip_if_required_artifacts_missing(root)
 
     gat = root / (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     if not gat.exists():
-        pytest.skip(f"missing local dataset: {gat}")
+        pytest.skip(f"missing local replay: {gat}")
 
     owner = 0
 

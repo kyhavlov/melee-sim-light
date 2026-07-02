@@ -13,7 +13,7 @@ from tests.test_modelplay_rerun5_collision_regressions import (
     _require_local_data_or_skip,
     _seed_from_trace_frame,
 )
-from tools.eval.dataset import COMPARE_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE
 
 
 TRACE_NAME = "reports/modelplay/20260412_rl_doubles_v27_7000_fox_fox_2/trace.json"

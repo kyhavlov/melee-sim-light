@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 MSL_ACT_ATTACK_HI4 = 63
 MSL_BUTTON_A = 0x0100
@@ -18,8 +18,8 @@ def _skip_if_dataset_missing(root: Path) -> None:
         pytest.skip(f"missing local replay: {rel}")
 
 
-def _build_fsp_dataset(root: Path):
-    return build_dataset_from_slp(
+def _build_fsp_replay_buffers(root: Path):
+    return load_replay_buffers(
         slp_path=str(root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"),
         ports=[1, 2],
         ucf_enabled=True,
@@ -41,7 +41,7 @@ def _step_row(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed_t = row["seed_t"].copy()
     if seed_mutator is not None:
         seed_mutator(seed_t)
@@ -61,7 +61,7 @@ def _step_row(
     input_bytes = np.frombuffer(input_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
 
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -84,11 +84,11 @@ def test_attackhi4_smash_charge_knockback_multiplier_accepts_fsp_body_hit() -> N
     # data/moves/fox.json::ftCo_SM_AttackHi4.events start_smash_charge
     root = Path(__file__).resolve().parents[1]
     _skip_if_dataset_missing(root)
-    ds = _build_fsp_dataset(root)
+    ds = _build_fsp_replay_buffers(root)
     record = 6454
     defender = 0
 
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][defender]) == MSL_ACT_ATTACK_HI4
     assert int(row["seed_t"]["action_frame"][defender]) == 1
     assert int(row["prev_input_t"]["p"]["buttons"][defender]) & MSL_BUTTON_A
@@ -107,7 +107,7 @@ def test_attackhi4_smash_charge_knockback_multiplier_denies_without_current_a() 
     # is SmashState_Charging, and ftCo_800DF0D0 only promotes PreCharge while current held A is set.
     root = Path(__file__).resolve().parents[1]
     _skip_if_dataset_missing(root)
-    ds = _build_fsp_dataset(root)
+    ds = _build_fsp_replay_buffers(root)
     record = 6454
     defender = 0
 
@@ -133,7 +133,7 @@ def test_attackhi4_smash_release_seed_state_accepts_selfplay_hitbox_damage() -> 
     slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
@@ -143,12 +143,12 @@ def test_attackhi4_smash_release_seed_state_accepts_selfplay_hitbox_damage() -> 
     attacker = 1
     victim = 0
 
-    seed = ds.samples[record]["seed_t"]
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][attacker]) == MSL_ACT_ATTACK_HI4
     assert int(seed["smash_charge_state"][attacker]) == 3
     assert int(seed["smash_charge_frames"][attacker]) == 11
     assert int(seed["smash_charge_hold_frames_max"][attacker]) == 60
-    assert int(ds.samples[record + 1]["seed_t"]["smash_charge_state"][attacker]) == 0
+    assert int(ds.rows[record + 1]["seed_t"]["smash_charge_state"][attacker]) == 0
 
     ref, out = _step_row(ds=ds, record=record, defender=attacker)
     assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == 90
@@ -173,7 +173,7 @@ def test_attackhi4_smash_release_api_seed_sanitizes_bad_saved_rate() -> None:
     slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
@@ -183,7 +183,7 @@ def test_attackhi4_smash_release_api_seed_sanitizes_bad_saved_rate() -> None:
     attacker = 1
     victim = 0
 
-    seed = ds.samples[record]["seed_t"]
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][attacker]) == MSL_ACT_ATTACK_HI4
     assert int(seed["smash_charge_state"][attacker]) == 3
     assert int(seed["smash_charge_hold_frames_max"][attacker]) == 60
@@ -215,7 +215,7 @@ def test_attackhi4_short_release_seed_state_accepts_selfplay_hitbox_damage() -> 
     slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
@@ -225,7 +225,7 @@ def test_attackhi4_short_release_seed_state_accepts_selfplay_hitbox_damage() -> 
     attacker = 0
     victim = 1
 
-    seed = ds.samples[record]["seed_t"]
+    seed = ds.rows[record]["seed_t"]
     assert int(seed["action_id"][attacker]) == MSL_ACT_ATTACK_HI4
     assert int(seed["smash_charge_state"][attacker]) == 3
     assert int(seed["smash_charge_frames"][attacker]) == 4
@@ -251,7 +251,7 @@ def test_attackhi4_smash_release_seed_state_denies_raw_uncharged_damage() -> Non
     slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
@@ -280,7 +280,7 @@ def test_attackhi4_smash_release_api_seed_zero_hold_clears_inconsistent_state() 
     slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,

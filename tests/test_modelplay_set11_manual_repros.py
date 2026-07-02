@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE
 from tools.modelplay.sim_env import build_match_config_array
 
 

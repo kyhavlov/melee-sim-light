@@ -10,7 +10,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 MSL_BUTTON_A = 0x0100
 
@@ -31,7 +31,7 @@ class _SmashHoldReleaseCase:
     "case",
     [
         _SmashHoldReleaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=3753,
             p_target=0,
             expected_ref_action_frame=2,
@@ -40,7 +40,7 @@ class _SmashHoldReleaseCase:
             note="AttackHi4 af=2 held row (GAT)",
         ),
         _SmashHoldReleaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=4544,
             p_target=1,
             expected_ref_action_frame=2,
@@ -49,7 +49,7 @@ class _SmashHoldReleaseCase:
             note="AttackLw4 af=2 release-edge hold row (AGG)",
         ),
         _SmashHoldReleaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=6819,
             p_target=1,
             expected_ref_action_frame=3,
@@ -58,7 +58,7 @@ class _SmashHoldReleaseCase:
             note="AttackLw4 af=2 release row (AGG)",
         ),
         _SmashHoldReleaseCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=2804,
             p_target=1,
             expected_ref_action_frame=3,
@@ -83,16 +83,16 @@ def test_attackhi4_lw4_smash_hold_preinput_release_target_pm1_both_players_stric
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
     p_target = int(case.p_target)
 
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record]
     seed = target["seed_t"]

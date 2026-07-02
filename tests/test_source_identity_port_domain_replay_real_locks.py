@@ -13,19 +13,11 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 
 
 def _aggregate_dataset(root: Path, name: str) -> Path:
-    return root / "datasets" / "aggregate_recent" / "replays" / "validation" / "aggregate_recent" / name
+    return root / "replays" / "validation" / "aggregate_recent" / name
 
 
 def _primary_cardinal_dataset(root: Path, name: str) -> Path:
-    return (
-        root
-        / "datasets"
-        / "fox_falco_fd_ucf084_recent"
-        / "replays"
-        / "validation"
-        / "cardinal_1.0_recent"
-        / name
-    )
+    return root / "replays" / "validation" / "cardinal_1.0_recent" / name
 
 
 def test_damage_source_episode_helper_maps_raw_ports_and_processhit_clear(tmp_path: Path) -> None:
@@ -121,9 +113,9 @@ def test_processhit_source_owner_uses_raw_source_port_for_aggregate_ports(record
     # - refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = _aggregate_dataset(root, "HungryImportantSnake.msl")
+    dataset_path = _aggregate_dataset(root, "HungryImportantSnake.slpz")
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _run_one_step_row(dataset_path, record, 0)
 
@@ -140,9 +132,9 @@ def test_processhit_source_owner_synthetic_source_port_mutation_changes_only_por
     # against writing compact local slot ids into `last_hit_by`.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = _aggregate_dataset(root, "HungryImportantSnake.msl")
+    dataset_path = _aggregate_dataset(root, "HungryImportantSnake.slpz")
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def remap_attacker_source_port(seed_t):
         seed_t["source_port0"][0, 1] = 2
@@ -167,9 +159,9 @@ def test_zero_kb_item_source_owner_synthetic_source_port_keeps_item_instance_ide
     # - refs/melee/src/melee/ft/ftcoll.c::{ftColl_800787B4,ftColl_80078998}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = _primary_cardinal_dataset(root, "TreasuredBackKangaroo.msl")
+    dataset_path = _primary_cardinal_dataset(root, "TreasuredBackKangaroo.slpz")
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def remap_item_owner_source_port(seed_t):
         seed_t["source_port0"][0, 0] = 2

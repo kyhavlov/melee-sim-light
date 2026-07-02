@@ -56,20 +56,6 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument("--slippi-ai-root", type=Path, required=True)
     ap.add_argument("--model", type=Path, required=True, help="Shared checkpoint for both ports.")
-    ap.add_argument(
-        "--dataset",
-        type=Path,
-        default=Path(
-            "datasets/fox_falco_fd_ucf084_recent/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
-        ),
-    )
-    ap.add_argument("--start-record", type=int, default=0)
-    ap.add_argument(
-        "--start-mode",
-        choices=("replay", "sim-init"),
-        default="replay",
-        help="replay restores --dataset/--start-record; sim-init starts from C-owned match init",
-    )
     ap.add_argument("--num-traces", type=int, default=5)
     ap.add_argument("--max-frames", type=int, default=30000)
     ap.add_argument(
@@ -153,8 +139,6 @@ def main() -> int:
     if args.legal_stage_matchup_matrix:
         if args.stages is not None or args.matchups is not None:
             raise ValueError("--legal-stage-matchup-matrix cannot be combined with --stages or --matchups")
-        if args.start_mode != "sim-init":
-            raise ValueError("--legal-stage-matchup-matrix requires --start-mode sim-init")
         matrix_specs = tuple((stage, matchup) for stage in LEGAL_STAGE_ORDER for matchup in SUPPORTED_MATCHUPS)
         args.num_traces = len(matrix_specs)
 
@@ -189,14 +173,10 @@ def main() -> int:
         if len(stage_names) != args.num_traces:
             raise ValueError(f"--stages has {len(stage_names)} entries but --num-traces is {args.num_traces}")
         stage_ids = tuple(STAGE_IDS[name] for name in stage_names)
-        if args.start_mode != "sim-init":
-            raise ValueError("--stages requires --start-mode sim-init")
     if args.matchups is not None:
         matchup_names = tuple(_parse_matchup(part.strip()) for part in args.matchups.split(",") if part.strip())
         if len(matchup_names) != args.num_traces:
             raise ValueError(f"--matchups has {len(matchup_names)} entries but --num-traces is {args.num_traces}")
-        if args.start_mode != "sim-init":
-            raise ValueError("--matchups requires --start-mode sim-init")
         char_ids_by_env = tuple(tuple(CHAR_IDS[name] for name in matchup) for matchup in matchup_names)
         char_ids = None
         for env, (p1, p2) in enumerate(matchup_names):
@@ -206,12 +186,11 @@ def main() -> int:
 
     session = BatchedSimSession(
         batch_size=args.num_traces,
-        dataset_path=args.dataset,
-        start_record=args.start_record,
+        start_record=0,
         char_ids=char_ids,
         team_ids=team_ids,
         is_teams=False,
-        start_mode=args.start_mode,
+        start_mode="sim-init",
         stage_id=stage_id,
         stage_ids=stage_ids,
         char_ids_by_env=char_ids_by_env,
@@ -398,9 +377,7 @@ def main() -> int:
         aggregate = {
             "slippi_ai_root": str(args.slippi_ai_root),
             "model": str(args.model),
-            "dataset": str(args.dataset),
-            "start_record": int(args.start_record),
-            "start_mode": args.start_mode,
+            "start_mode": "sim-init",
             "stage": args.stage,
             "stage_ids": None if stage_ids is None else list(stage_ids),
             "matchups": None if matchup_names is None else [list(matchup) for matchup in matchup_names],

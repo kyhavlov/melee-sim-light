@@ -5,24 +5,25 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-TCH = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl")
+TCH = Path("replays/validation/aggregate_recent/TubbyCurlyHerring.slpz")
 FEH_SLP = Path("replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz")
 SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slpz")
 
 
 def _skip_if_dataset_missing(ds_path: Path) -> None:
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {ds_path}")
+        pytest.skip(f"missing local replay: {ds_path}")
 
 
 def _run_one_step_row(ds_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
     _skip_if_dataset_missing(ds_path)
-    ds = read_dataset(str(ds_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(ds_path))
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
 
@@ -39,7 +40,7 @@ def _run_one_step_row(ds_path: Path, record: int) -> tuple[np.void, np.void, np.
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -54,13 +55,13 @@ def _run_one_step_row(ds_path: Path, record: int) -> tuple[np.void, np.void, np.
 def _run_one_step_from_slp(slp_path: Path, record: int, *, ports: list[int]) -> tuple[np.void, np.void, np.void]:
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=ports,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
 
@@ -79,7 +80,7 @@ def _run_one_step_from_slp(slp_path: Path, record: int, *, ports: list[int]) -> 
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )

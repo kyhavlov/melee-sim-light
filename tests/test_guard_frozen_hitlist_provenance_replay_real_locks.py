@@ -4,20 +4,20 @@ from pathlib import Path
 
 import pytest
 
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
 
 
 def _skip_if_datasets_missing(root: Path) -> None:
     required = [
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+        "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
+        "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
+        "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
     ]
     missing = [rel for rel in required if not (root / rel).exists()]
     if missing:
-        pytest.skip(f"missing local datasets: {', '.join(missing)}")
+        pytest.skip(f"missing local replays: {', '.join(missing)}")
 
 
 @pytest.mark.integration
@@ -35,7 +35,7 @@ def test_frozen_guard_provenance_generator_rows_match_proving_set() -> None:
 
     cases = [
         (
-            root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
             (954, 955),
             0,
             1,
@@ -43,7 +43,7 @@ def test_frozen_guard_provenance_generator_rows_match_proving_set() -> None:
             [0xFFFF, 0xFFFF, 0xFFFF, 0],
         ),
         (
-            root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            root / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
             (763, 764),
             1,
             0,
@@ -51,7 +51,7 @@ def test_frozen_guard_provenance_generator_rows_match_proving_set() -> None:
             [0, 0xFFFF, 0, 0],
         ),
             (
-                root / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+                root / "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
                 (2485,),
                 0,
                 1,
@@ -61,9 +61,9 @@ def test_frozen_guard_provenance_generator_rows_match_proving_set() -> None:
     ]
 
     for ds_path, records, attacker, victim, expect_valid, expect_cd in cases:
-        ds = read_dataset(str(ds_path))
+        ds = load_replay_buffers(str(ds_path))
         for record in records:
-            seed = ds.samples[record]["seed_t"]
+            seed = ds.rows[record]["seed_t"]
             assert list(map(int, seed["combat_hitlist_hb_valid"][attacker])) == expect_valid
             assert list(map(int, seed["combat_hitlist_hb_cd"][attacker, :, victim])) == expect_cd
 
@@ -76,22 +76,22 @@ def test_frozen_guard_provenance_one_step_proving_rows() -> None:
 
     persist_cases = [
         (
-            root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
             954,
             1,
         ),
         (
-            root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
             955,
             1,
         ),
         (
-            root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            root / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
             763,
             0,
         ),
         (
-            root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            root / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
             764,
             0,
         ),
@@ -104,7 +104,7 @@ def test_frozen_guard_provenance_one_step_proving_rows() -> None:
         assert int(out_row["hitlag"][victim]) == int(ref_row["hitlag"][victim])
         assert int(out_row["hitstun"][victim]) == int(ref_row["hitstun"][victim])
 
-    qgd = root / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    qgd = root / "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     _, ref_row, out_row = _run_one_step_row(qgd, 2485, 1)
     assert int(ref_row["action_id"][1]) == 181
     assert int(ref_row["hitlag"][1]) == 6

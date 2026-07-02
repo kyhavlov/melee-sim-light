@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
@@ -16,11 +17,11 @@ def _one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.voi
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = (
             np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8)
@@ -56,7 +57,7 @@ class _ParityCase:
     note: str
 
 
-_AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
+_AGG = "replays/validation/aggregate_recent"
 
 
 @pytest.mark.integration
@@ -64,35 +65,35 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
     "case",
     [
         _ParityCase(
-            dataset_rel=f"{_AGG}/BlondHardHippopotamus.msl",
+            dataset_rel=f"{_AGG}/BlondHardHippopotamus.slpz",
             record=640,
             player=0,
             item_slot=1,
             note="adjacent DownBound laser row before trailing-scale contact remains alive",
         ),
         _ParityCase(
-            dataset_rel=f"{_AGG}/BlondHardHippopotamus.msl",
+            dataset_rel=f"{_AGG}/BlondHardHippopotamus.slpz",
             record=641,
             player=0,
             item_slot=1,
             note="DownBound trailing laser BODY uses previous x58 scale and stays alive",
         ),
         _ParityCase(
-            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.msl",
+            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.slpz",
             record=1791,
             player=1,
             item_slot=0,
             note="adjacent airborne laser row before x58 scale correction remains alive",
         ),
         _ParityCase(
-            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.msl",
+            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.slpz",
             record=1792,
             player=1,
             item_slot=0,
             note="airborne laser BODY uses previous x58 scale before full hit",
         ),
         _ParityCase(
-            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.msl",
+            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.slpz",
             record=1793,
             player=1,
             item_slot=0,
@@ -111,7 +112,7 @@ def test_laser_hitcap_prev_scale_replay_rows(case: _ParityCase) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed, out, ref = _one_step(dataset_path, case.record)
     p = case.player
@@ -146,10 +147,10 @@ def test_laser_hitcap_prev_scale_does_not_enable_rejected_unscaled_offset_fallba
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _one_step(dataset_path, 7214)
     p = 0

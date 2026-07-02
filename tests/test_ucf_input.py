@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.eval.dataset import INPUT_DTYPE
+from tools.eval.validation_dtypes import INPUT_DTYPE
 
 
 def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:

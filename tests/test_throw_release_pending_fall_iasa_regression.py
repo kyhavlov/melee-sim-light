@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -38,9 +39,9 @@ def _skip_if_marth_required_artifacts_missing(root: Path) -> None:
 
 
 def _run_one_step_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
@@ -59,7 +60,7 @@ def _run_one_step_row(dataset_path: Path, record: int) -> tuple[np.void, np.void
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -74,9 +75,9 @@ def _run_one_step_row(dataset_path: Path, record: int) -> tuple[np.void, np.void
 def _run_one_step_row_with_current_buttons(
     dataset_path: Path, record: int, player: int, buttons: int
 ) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
@@ -97,7 +98,7 @@ def _run_one_step_row_with_current_buttons(
     input_bytes = np.frombuffer(input_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -112,9 +113,9 @@ def _run_one_step_row_with_current_buttons(
 def _run_one_step_row_with_current_stick(
     dataset_path: Path, record: int, player: int, main_x: int, main_y: int
 ) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
@@ -136,7 +137,7 @@ def _run_one_step_row_with_current_stick(
     input_bytes = np.frombuffer(input_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -151,9 +152,9 @@ def _run_one_step_row_with_current_stick(
 def _run_rollout_records(
     dataset_path: Path, start_record: int, records: tuple[int, ...]
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > max(records), "dataset too short for rollout lock"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > max(records), "replay too short for rollout lock"
     assert start_record <= min(records), "rollout start must be <= first checked record"
 
     binding = pytest.importorskip("msl_binding")
@@ -167,7 +168,7 @@ def _run_rollout_records(
     ).copy().reshape(1, seed_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         out_by_record: dict[int, tuple[np.void, np.void]] = {}
@@ -217,7 +218,7 @@ def test_throw_release_mpcoll_floor_publication_mask_is_explicit_data() -> None:
     ("dataset_rel", "start_record", "pre_record", "release_record", "post_records", "victim"),
     [
         (
-            "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            "replays/validation/marth/InternalPowerlessWallaby.slpz",
             1347,
             1353,
             1354,
@@ -225,7 +226,7 @@ def test_throw_release_mpcoll_floor_publication_mask_is_explicit_data() -> None:
             1,
         ),
         (
-            "datasets/marth/replays/validation/marth/ParallelFamiliarZebra.msl",
+            "replays/validation/marth/ParallelFamiliarZebra.slpz",
             1543,
             1549,
             1550,
@@ -233,7 +234,7 @@ def test_throw_release_mpcoll_floor_publication_mask_is_explicit_data() -> None:
             1,
         ),
         (
-            "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            "replays/validation/marth/InternalPowerlessWallaby.slpz",
             10002,
             10008,
             10009,
@@ -258,7 +259,7 @@ def test_marth_throwf_release_uses_mpcoll_800471f8_substep_publication(
     _skip_if_marth_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     rows = _run_rollout_records(dataset_path, start_record, (pre_record, release_record, *post_records))
     out_pre, ref_pre = rows[pre_record]
@@ -288,10 +289,10 @@ def test_throwlw_release_non_marth_anchor_part_does_not_take_marth_mpcoll_public
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     victim = 1
     rows = _run_rollout_records(dataset_path, 9182, (9186, 9187, 9188))
@@ -316,10 +317,10 @@ def test_marth_throwb_release_anchor_part_does_not_publish_floor_sweep_result() 
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80046904}
     root = Path(__file__).resolve().parents[1]
     _skip_if_marth_required_artifacts_missing(root)
-    dataset_rel = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    dataset_rel = "replays/validation/marth/InternalPowerlessWallaby.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     victim = 0
     rows = _run_rollout_records(dataset_path, 8282, (8283, 8284, 8285))
@@ -337,7 +338,7 @@ def test_marth_throwb_release_anchor_part_does_not_publish_floor_sweep_result() 
     ("dataset_rel", "start_record", "pre_terminal_record", "terminal_record", "owner", "terminal_action"),
     [
         (
-            "datasets/marth/replays/validation/marth/StiffDraftyWalrus.msl",
+            "replays/validation/marth/StiffDraftyWalrus.slpz",
             9073,
             9391,
             9392,
@@ -345,7 +346,7 @@ def test_marth_throwb_release_anchor_part_does_not_publish_floor_sweep_result() 
             14,
         ),
         (
-            "datasets/marth/replays/validation/marth/FemaleWorthyAlpaca.msl",
+            "replays/validation/marth/FemaleWorthyAlpaca.slpz",
             4155,
             4316,
             4317,
@@ -371,7 +372,7 @@ def test_marth_throwf_post_release_source_rate_reaches_anim_end(
     _skip_if_marth_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     rows = _run_rollout_records(dataset_path, start_record, (pre_terminal_record, terminal_record))
     out_pre, ref_pre = rows[pre_terminal_record]
@@ -398,10 +399,10 @@ def test_throwhi_pending_release_placeholder_does_not_run_fall_phys_before_damag
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_rel = "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     victim = 1
     seed, ref, out = _run_one_step_row(dataset_path, 2419)
@@ -435,10 +436,10 @@ def test_throwhi_rollout_shared_throw_rate_reaches_release_frame_bhh() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398,ftCo_800DD724}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_rel = "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     out_by_record = _run_rollout_records(dataset_path, 467, (469, 472))
     out_469, ref_469 = out_by_record[469]
@@ -465,11 +466,11 @@ def test_throw_release_pending_victim_strict_fields_match_ref(record: int) -> No
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 0
     seed, ref, out = _run_one_step_row(dataset_path, record)
@@ -507,15 +508,15 @@ def test_throw_release_pending_victim_position_context_shape(record: int) -> Non
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > (record + 1), f"dataset too short for context row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > (record + 1), f"replay too short for context row: record={record}"
 
     p = 0
     seed, ref, out = _run_one_step_row(dataset_path, record)
@@ -566,13 +567,13 @@ def test_throwf_owner_before_victim_release_uses_callback_local_transn_anchor_tc
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][target_record]
     owner = 0
     victim = 1
     assert int(seed["action_id"][owner]) == 219  # ThrowF.
@@ -596,13 +597,13 @@ def test_throwf_owner_before_victim_release_uses_callback_local_transn_anchor_tc
     ("dataset_rel", "start_record", "target_record"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             3404,
             3407,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "MilkyGracefulStingray.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.slpz",
             4485,
             4488,
         ),
@@ -619,10 +620,10 @@ def test_throwf_owner_after_victim_release_keeps_attached_anchor_controls(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][target_record]
     victim = 0
     owner = 1
     assert int(seed["action_id"][owner]) == 219  # ThrowF.
@@ -659,11 +660,11 @@ def test_throw_release_pending_victim_target_rows_keep_replay_real_discrete_and_
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 0
     seed, ref, out = _run_one_step_row(dataset_path, record)
@@ -703,11 +704,11 @@ def test_throw_release_immediate_di_does_not_apply_lr_lsi_multiplier() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 0
     record = 1456
@@ -741,16 +742,16 @@ def test_throwhi_release_di_uses_pre_input_stick_lane() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 8412
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == 241  # ThrownHi
     assert int(row["seed_t"]["action_frame"][p]) == 7
     assert int(row["ref_t1"]["action_id"][p]) == 90  # DamageFlyTop
@@ -786,11 +787,11 @@ def test_throw_release_rollout_kb_decay_reaches_damagefly_floor_contact() -> Non
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     out_by_record = _run_rollout_records(dataset_path, 265, (493, 497))
 
@@ -819,11 +820,11 @@ def test_throw_release_pending_adjacent_negative_controls_stay_replay_exact(reco
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 0
     _, ref, out = _run_one_step_row(dataset_path, record)
@@ -844,11 +845,11 @@ def test_throw_release_pending_context_controls_adjacent_rows_5716_5718() -> Non
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 0
 
@@ -882,11 +883,11 @@ def test_throw_release_pending_context_row_owner_fsm_le1_extra_share_noop() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     # Replay-real context row: victim still attached-thrown under owner ThrowF, no release step yet.
     record = 216

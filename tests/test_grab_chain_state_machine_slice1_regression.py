@@ -6,17 +6,18 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE_REL = "replays/validation/cardinal_1.0_recent"
 
 
 def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     row = samples[record : record + 1]
 
@@ -26,7 +27,7 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -58,10 +59,10 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
 @pytest.mark.parametrize(
     ("dataset_name", "record", "attacker", "victim"),
     [
-        ("AttachedGoodNaturedGuanaco.msl", 203, 1, 0),
-        ("GracefulAttachedTurtle.msl", 218, 0, 1),
-        ("QuerulousGrandDinosaur.msl", 4063, 0, 1),
-        ("TreasuredBackKangaroo.msl", 5069, 1, 0),
+        ("AttachedGoodNaturedGuanaco.slpz", 203, 1, 0),
+        ("GracefulAttachedTurtle.slpz", 218, 0, 1),
+        ("QuerulousGrandDinosaur.slpz", 4063, 0, 1),
+        ("TreasuredBackKangaroo.slpz", 5069, 1, 0),
     ],
 )
 def test_catch_connect_enters_catchpull_and_capturepulled(
@@ -74,10 +75,10 @@ def test_catch_connect_enters_catchpull_and_capturepulled(
     dataset_rel = f"{_BASE_REL}/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # Replay preconditions for this lock (grab connect frame).
     assert int(row["seed_t"]["action_id"][0, attacker]) == 212
@@ -97,10 +98,10 @@ def test_catch_connect_enters_catchpull_and_capturepulled(
 @pytest.mark.parametrize(
     ("dataset_name", "record", "attacker", "victim", "expected_throw", "expected_thrown"),
     [
-        ("AttachedGoodNaturedGuanaco.msl", 568, 0, 1, 221, 241),
-        ("GracefulAttachedTurtle.msl", 221, 0, 1, 221, 241),
-        ("QuerulousGrandDinosaur.msl", 421, 0, 1, 222, 242),
-        ("TreasuredBackKangaroo.msl", 438, 0, 1, 221, 241),
+        ("AttachedGoodNaturedGuanaco.slpz", 568, 0, 1, 221, 241),
+        ("GracefulAttachedTurtle.slpz", 221, 0, 1, 221, 241),
+        ("QuerulousGrandDinosaur.slpz", 421, 0, 1, 222, 242),
+        ("TreasuredBackKangaroo.slpz", 438, 0, 1, 221, 241),
     ],
 )
 def test_catchwait_throw_iasa_enters_throw_and_thrown(
@@ -115,10 +116,10 @@ def test_catchwait_throw_iasa_enters_throw_and_thrown(
     dataset_rel = f"{_BASE_REL}/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # Replay preconditions for this lock (CatchWait throw-select frame).
     assert int(row["seed_t"]["action_id"][0, attacker]) == 216
@@ -141,9 +142,9 @@ def test_catchwait_throw_iasa_enters_throw_and_thrown(
 @pytest.mark.parametrize(
     ("dataset_name", "record", "p", "expected_action_id"),
     [
-        ("AttachedGoodNaturedGuanaco.msl", 568, 0, 221),
-        ("GracefulAttachedTurtle.msl", 448, 0, 221),
-        ("GracefulAttachedTurtle.msl", 2507, 1, 220),
+        ("AttachedGoodNaturedGuanaco.slpz", 568, 0, 221),
+        ("GracefulAttachedTurtle.slpz", 448, 0, 221),
+        ("GracefulAttachedTurtle.slpz", 2507, 1, 220),
     ],
 )
 def test_catchwait_throw_entry_preserves_action_frame_parity(
@@ -156,10 +157,10 @@ def test_catchwait_throw_entry_preserves_action_frame_parity(
     dataset_rel = f"{_BASE_REL}/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # Replay preconditions for this lock (seed CatchWait, throw entry on next frame).
     assert int(row["seed_t"]["action_id"][0, p]) == 216

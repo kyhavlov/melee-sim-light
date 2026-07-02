@@ -26,7 +26,8 @@ from test_char_common_action_coverage import ACT_GUARD, _mk_inputs, _run, _seed_
 
 ACT_GUARD_REFLECT = 0x00B6
 from test_colldata_ecb_substrate import _colldata_ecb_dtype  # noqa: E402
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, read_dataset  # noqa: E402
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers  # noqa: E402
 from tools.slippi.item_article_data import item_article_values_by_sim_char  # noqa: E402
 
 pytest.importorskip("msl_binding")
@@ -351,9 +352,7 @@ def _run_seed_one_step(seed: np.ndarray, prev: np.ndarray, cur: np.ndarray) -> n
 
 def _sheik_validation_samples(rel: str) -> np.ndarray:
     path = ROOT / rel
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
-    return read_dataset(str(path)).samples
+    return load_replay_buffers(str(path)).rows
 
 
 def _item_type_present(row: np.void, item_type: int) -> bool:
@@ -420,7 +419,7 @@ def test_sheik_kneebend_iasa_up_b_presence_beats_side_special_demo_lock(record: 
     # These demo rows have B+diagonal-up during KneeBend and must enter Vanish, not Chain.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100_CheckInput
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_KNEE_BEND
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_HI_START_0
 
@@ -444,8 +443,8 @@ def test_sheik_kneebend_iasa_does_not_admit_side_b_negative() -> None:
 @pytest.mark.parametrize(
     ("replay", "record"),
     [
-        ("datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl", 84),
-        ("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl", 3979),
+        ("replays/validation/sheik/RuralReasonableRat.slpz", 84),
+        ("replays/validation/sheik/StiffLustrousZebra.slpz", 3979),
     ],
 )
 def test_sheik_landing_iasa_neutral_b_enters_needle_start_replay_real(
@@ -599,7 +598,7 @@ def test_sheik_ground_vanish_platform_pass_enters_air_travel_replay_real_lock() 
     # platform floor, updates floor_skip, and falls through to the aerial travel helper.
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialHi_80113838
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/ToughOutlyingChicken.slpz")
     record = 11512
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_HI_START_0
     assert int(samples[record]["seed_t"]["on_ground"][0]) == 1
@@ -626,7 +625,7 @@ def test_sheik_vanish_travel_entry_spawns_smoke_article_demo_locks(
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
     #   inlineA0,ftSk_SpecialHi_80113A30,fn_80112ED8,ftSk_SpecialHi_80112F48}
     # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     assert int(samples[record]["seed_t"]["action_id"][0]) == expected_action
     assert int(samples[record]["ref_t1"]["action_id"][0]) in (
         ACT_SK_SPECIAL_HI_START_1,
@@ -664,7 +663,7 @@ def test_sheik_vanish_travel_entry_can_spawn_second_smoke_article_replay_real() 
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
     #   inlineA0,ftSk_SpecialHi_80113A30,fn_80112ED8}
     # refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/StiffLustrousZebra.slpz")
     record = 4592
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_0
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
@@ -689,7 +688,7 @@ def test_sheik_vanish_travel_entry_can_spawn_second_smoke_article_replay_real() 
 def test_sheik_vanish_start0_existing_smoke_does_not_duplicate_before_travel_entry() -> None:
     # Adjacent quiet frame: a live older smoke article alone is not a spawn command. The second
     # smoke appears only once Start0's Anim callback reaches the travel-entry owner.
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/StiffLustrousZebra.slpz")
     record = 4591
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_0
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_0
@@ -795,7 +794,7 @@ def test_sheik_chain_start_spawn_frame_publishes_chain_article_demo_locks(
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
     # refs/melee/src/melee/it/items/itseakchain.c::itSeakChain_Spawn
     # data/items/articles/fox_falco.bin::MSLITAR1 chain_spawn_part_id
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
     assert int(samples[record]["seed_t"]["action_id"][0]) == expected_action
@@ -822,7 +821,7 @@ def test_sheik_chain_end_destroy_frame_clears_chain_article_demo_locks(record: i
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
     #   ftSk_SpecialSEnd_Anim,ftSk_SpecialAirSEnd_Anim}
     # refs/melee/src/melee/it/items/itseakchain.c::it_802BB20C
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_S_END
     assert int(samples[record]["seed_t"]["sheik_chain_x0_u8"][0]) == 27
     assert not _item_type_present(samples[record]["ref_t1"], ITEM_SHEIK_CHAIN)
@@ -860,9 +859,9 @@ def test_sheik_vanish_reseed_timer_controls_travel_exit() -> None:
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "seed_action"),
     [
-        ("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl", 1841, ACT_SK_SPECIAL_AIR_HI_START_0),
-        ("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl", 4541, ACT_SK_SPECIAL_AIR_HI_START_1),
-        ("datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl", 9805, ACT_SK_SPECIAL_AIR_HI),
+        ("replays/validation/sheik/StiffLustrousZebra.slpz", 1841, ACT_SK_SPECIAL_AIR_HI_START_0),
+        ("replays/validation/sheik/StiffLustrousZebra.slpz", 4541, ACT_SK_SPECIAL_AIR_HI_START_1),
+        ("replays/validation/sheik/TenseSameHummingbird.slpz", 9805, ACT_SK_SPECIAL_AIR_HI),
     ],
 )
 def test_sheik_vanish_air_collision_callbacks_can_cliffcatch_replay_real_lock(
@@ -887,7 +886,7 @@ def test_sheik_chain_air_start_floor_contact_swaps_to_ground_start_demo_lock() -
     # grounded Chain Start at the preserved animation frame through ftSk_SpecialS_801114E4.
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
     #   ftSk_SpecialAirSStart_Coll,ftSk_SpecialS_801114E4}
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     record = 254
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_S_START
@@ -906,7 +905,7 @@ def test_sheik_chain_air_start_script_cmd0_enables_gravity_before_landing_demo_r
     #   ftSk_SpecialAirSStart_Anim,ftSk_SpecialAirSStart_Phys,ftSk_SpecialAirSStart_Coll,
     #   ftSk_SpecialS_801114E4}
     # data/scripts/sheik.bin::MSLFTSC1 specials_by_msid[306] set_cmd_var(idx=0,value=1)
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     assert int(samples[230]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
     assert int(samples[246]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
     assert float(samples[246]["ref_t1"]["speed_y_self"][0]) == pytest.approx(0.0, abs=1.0e-6)
@@ -1038,7 +1037,7 @@ def test_sheik_chain_start_hidden_x0_enters_active_demo_lock() -> None:
     # when x0 > ftSeakAttributes::x20.
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
     #   ftSk_SpecialS_CheckInitChain,ftSk_SpecialSStart_Anim}
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
 
     before = 258
     assert int(samples[before]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_S_START
@@ -1062,7 +1061,7 @@ def test_sheik_chain_start_hidden_x0_hitlag_freeze_delays_active_demo_lock() -> 
     # stays in SpecialAirSStart.
     # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
 
     assert int(samples[4630]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_S_START
     assert int(samples[4630]["seed_t"]["sheik_chain_x0_u8"][0]) == 29
@@ -1090,7 +1089,7 @@ def test_sheik_demo_chain_start_terminal_frontier_payload_and_hitlag_freeze_roll
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
     #   ftSk_SpecialS_UpdateHitboxes,ftSk_SpecialS_CheckInitChain}
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     rows = _run_sample_rollout_records(
         samples,
         start_record=4261,
@@ -1126,7 +1125,7 @@ def test_sheik_demo_chain_retract_landing_and_flag_tail_rollout() -> None:
     #   ftCo_Landing_Enter,ftCo_Landing_Enter_Basic}
     # refs/melee/src/melee/ft/ftaction.c::ftAction_80071B28
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Start_IASA
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     rows = _run_sample_rollout_records(
         samples,
         start_record=4261,
@@ -1154,7 +1153,7 @@ def test_sheik_chain_active_release_latch_exits_one_frame_after_b_release_demo_l
     # B-held state. Therefore the B release at row 465 is not consumed until row 466.
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
     #   ftSk_SpecialS_Anim,ftSk_SpecialS_IASA}
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
 
     release_frame = 465
     assert int(samples[release_frame]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_S
@@ -1176,9 +1175,9 @@ def test_sheik_chain_active_release_latch_exits_one_frame_after_b_release_demo_l
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "expected_ground"),
     [
-        ("datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl", 2940, 4),
-        ("datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl", 6243, 5),
-        ("datasets/sheik/replays/validation/sheik/MixedAllQuetzal.msl", 8569, 4),
+        ("replays/validation/sheik/RuralReasonableRat.slpz", 2940, 4),
+        ("replays/validation/sheik/TenseSameHummingbird.slpz", 6243, 5),
+        ("replays/validation/sheik/MixedAllQuetzal.slpz", 8569, 4),
     ],
 )
 def test_sheik_vanish_air_end_script_cmd0_bottom_floor_landing_replay_real_lock(
@@ -1210,7 +1209,7 @@ def test_sheik_vanish_air_end_script_cmd0_bottom_floor_landing_replay_real_lock(
 def test_sheik_vanish_air_end_floor_landing_does_not_steal_cliffcatch_negative() -> None:
     # Adjacent negative: the same SpecialAirHi callback family must keep ledge contacts on
     # ftCliffCommon_80081298 instead of converting every root crossing into hard-floor landing.
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/StiffLustrousZebra.slpz")
     record = 7655
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_CLIFF_CATCH
@@ -1233,7 +1232,7 @@ def test_sheik_demo_grounded_vanish_air_travel_and_end_friction_rollout_lock() -
     # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CEF4
     # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
     samples = _sheik_validation_samples(
-        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+        "replays/validation/sheik/sheik_demo_game.slpz"
     )
     rows = _run_sample_rollout_records(
         samples,
@@ -1269,7 +1268,7 @@ def test_sheik_demo_main_floor_vanish_air_travel_integrates_vertical_immediately
     #   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialHi_80113390,ftSk_SpecialHi_80113A30}
     # data/stages/*.bin::MSLSTG01 floor line platform flags
     samples = _sheik_validation_samples(
-        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+        "replays/validation/sheik/sheik_demo_game.slpz"
     )
     rows = _run_sample_rollout_records(
         samples,
@@ -1299,7 +1298,7 @@ def test_sheik_demo_air_vanish_start0_low_stick_deadzone_keeps_x_static_rollout(
     # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D268,ftCommon_8007D174}
     # data/common/ft_common_data.json::lstick_deadzone_x
     samples = _sheik_validation_samples(
-        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+        "replays/validation/sheik/sheik_demo_game.slpz"
     )
     rows = _run_sample_rollout_records(
         samples,
@@ -1322,7 +1321,7 @@ def test_sheik_vanish_air_travel_wall_angle_enters_air_end_replay_real_lock() ->
     # enters SpecialAirHi through ftSk_SpecialHi_80113F68 before the hidden travel timer expires.
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
     #   ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialHi_80113F68}
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/StiffLustrousZebra.slpz")
     record = 7635
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
     assert int(samples[record]["seed_t"]["sheik_vanish_travel_timer_u8"][0]) > 1
@@ -1337,7 +1336,7 @@ def test_sheik_vanish_air_travel_wall_angle_enters_air_end_replay_real_lock() ->
 def test_sheik_vanish_air_travel_no_wall_contact_stays_travel_adjacent_negative() -> None:
     # Adjacent negative: the same Vanish travel episode has no wall/ceiling contact one frame
     # earlier, so the Coll callback must not end travel based on timer/action alone.
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/StiffLustrousZebra.slpz")
     record = 7634
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
@@ -1357,7 +1356,7 @@ def test_sheik_vanish_start1_early_platform_pass_writes_floor_skip_replay_real_l
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
     #   ftSk_SpecialAirHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Coll}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     first_contact = 1712
     carried_skip = 1713
 
@@ -1395,7 +1394,7 @@ def test_sheik_demo2_vanish_start1_platform_remap_keeps_source_root_snap_lock() 
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     record = 3095
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
@@ -1418,7 +1417,7 @@ def test_sheik_vanish_start1_late_platform_contact_enters_grounded_negative() ->
     # Adjacent negative: after the xC >= ftSeakAttributes::x3C boundary, the same platform contact
     # must enter grounded SpecialHiStart_1 when no prior CollData.floor_skip is live. This prevents
     # the early-platform owner from becoming "all Vanish platform contacts stay airborne."
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     record = 1712
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
 
@@ -1443,7 +1442,7 @@ def test_sheik_demo2_vanish_start1_late_ground_contact_clears_horizontal_velocit
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
     #   ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialHi_801137C8}
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     record = 6873
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
@@ -1464,7 +1463,7 @@ def test_sheik_demo2_vanish_start1_late_ground_contact_clears_horizontal_velocit
 def test_sheik_vanish_start1_early_platform_pass_keeps_horizontal_travel_negative() -> None:
     # Adjacent negative: early xC platform pass-through stays airborne in SpecialAirHiStart_1, so it
     # must retain the travel horizontal velocity rather than applying the late grounded handoff clear.
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     record = 1712
     out = _run_sample_row(samples, record)
     ref = samples[record]["ref_t1"]
@@ -1479,7 +1478,7 @@ def test_sheik_vanish_cliffcatch_keeps_downheld_source_reject_replay_real_lock()
     # common cliff-drop threshold. The Sheik Vanish callback eligibility must not bypass that
     # source-owned input gate.
     # refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/StiffLustrousZebra.slpz")
     record = 4541
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_HI_START_1
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_CLIFF_CATCH
@@ -1598,7 +1597,7 @@ def test_sheik_demo2_transform_air_uses_friction_not_stick_drift_lock() -> None:
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::ftSk_SpecialAirLw_Phys
     # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_Fall,ftCommon_8007CEF4}
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
 
     for record in (4538, 4540, 4545, 4554):
@@ -1647,7 +1646,7 @@ def test_sheik_demo2_grounded_needle_charge_uses_ground_friction_lock() -> None:
     #   ftSk_SpecialNStart_Phys,ftSk_SpecialNLoop_Phys}
     # refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
 
     for record in (5016, 5017):
@@ -1720,7 +1719,7 @@ def test_sheik_demo2_transform_swap_flags_and_wait_iasa_locks() -> None:
     # refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
 
     first_zelda_finish = _run_sample_row(samples, 4070)
@@ -1877,7 +1876,7 @@ def test_sheik_ground_vanish_end_anim_end_turns_from_destination_wait_demo_lock(
     # refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
     # refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
     samples = _sheik_validation_samples(
-        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+        "replays/validation/sheik/sheik_demo_game.slpz"
     )
     rows = _run_sample_rollout_records(
         samples,
@@ -1901,7 +1900,7 @@ def test_sheik_ground_vanish_end_anim_end_turns_from_destination_wait_demo_lock(
 
 @pytest.mark.integration
 def test_sheik_ground_vanish_end_anim_end_can_remain_wait_demo_lock() -> None:
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     record = 1986
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_HI
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_WAIT
@@ -1915,7 +1914,7 @@ def test_sheik_ground_chain_end_anim_end_squats_from_destination_wait_demo_lock(
     # ftSk_SpecialSEnd_Anim calls ft_8008A2BC. The same destination Wait_IASA owner applies to
     # terminal Chain and consumes the held down-stick as Squat.
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialSEnd_Anim
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     record = 4680
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_S_END
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SQUAT
@@ -1938,7 +1937,7 @@ def test_sheik_air_vanish_end_anim_end_does_not_run_ground_wait_tail_negative() 
 
 @pytest.mark.integration
 def test_sheik_ground_needle_cancel_to_guardon_replay_real_lock() -> None:
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/StiffLustrousZebra.slpz")
     record = 4085
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_N_CANCEL
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_GUARD_ON
@@ -1954,7 +1953,7 @@ def test_sheik_demo_ground_needle_start_anim_spawns_held_article_replay_real() -
     # model transform.
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialNStart_Anim
     # refs/melee/src/melee/it/items/itseakneedleheld.c::it_802B19AC
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     record = 95
     ref = samples[record]["ref_t1"]
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_N_START
@@ -1971,7 +1970,7 @@ def test_sheik_demo_ground_needle_start_anim_spawns_held_article_replay_real() -
 
 @pytest.mark.integration
 def test_sheik_demo_air_needle_start_anim_spawns_held_article_replay_real() -> None:
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     record = 545
     ref = samples[record]["ref_t1"]
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_N_START
@@ -1995,7 +1994,7 @@ def test_sheik_demo_needle_start_spawns_held_before_same_frame_end_iasa_replay_r
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
     #   ftSk_SpecialNStart_Anim,ftSk_SpecialNLoop_IASA,ftSk_SpecialAirNStart_Anim,
     #   ftSk_SpecialAirNLoop_IASA}
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
     assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_N_START
@@ -2016,7 +2015,7 @@ def test_sheik_demo_needle_end_anim_first_latch_spawns_thrown_article_replay_rea
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
     #   ftSk_SpecialNEnd_Anim,shootNeedles}
     # refs/melee/src/melee/it/items/itseakneedlethrown.c::it_802AFD8C
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     record = 118
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
@@ -2044,7 +2043,7 @@ def test_sheik_demo_needle_shoot_uses_replay_frame_rng_at_accessory_phase() -> N
     # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{ftSk_SpecialNEnd_Anim,shootNeedles}
     # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     record = 121
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
@@ -2072,7 +2071,7 @@ def test_sheik_demo_needle_stored_count_survives_cancel_gap_then_shoots_volley(
     # still publishes multiple thrown Needles.
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
     #   doEnter,ftSk_SpecialNCancel_Anim,ftSk_SpecialNEnd_Anim,shootNeedles}
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
     assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_AIR_N_END
@@ -2094,7 +2093,7 @@ def test_sheik_demo_needle_shoot_plain_step_does_not_pull_replay_frame_rng_negat
     # step_input must not synthesize a future replay seed. It consumes the seed snapshot's current
     # HSD stream, which is exactly why preprocessing promotes this source-owned row.
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/sheik_demo_game.msl"
+        "replays/validation/sheik/sheik_demo_game.slpz"
     ).copy()
     record = 121
     samples[record]["seed_t"]["frame_pre_random_seed"] = samples[record - 1]["ref_t1"][
@@ -2116,7 +2115,7 @@ def test_sheik_demo_air_needle_end_uses_ft80084eec_no_stick_drift_rollout() -> N
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialAirNEnd_Phys
     # refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC
     samples = _sheik_validation_samples(
-        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+        "replays/validation/sheik/sheik_demo_game.slpz"
     )
     rows = _run_sample_rollout_records(
         samples,
@@ -2155,7 +2154,7 @@ def test_sheik_demo2_dash_sideb_entry_runs_dash_terminal_scalar_lock() -> None:
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
     #   ftSk_SpecialS_Enter,ftSk_SpecialSStart_Phys}
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     out = _run_sample_row(samples, 329, replay_frame_rng=True)
     ref = samples[329]["ref_t1"]
@@ -2182,7 +2181,7 @@ def test_sheik_demo_ground_chain_start_damps_run_velocity_rollout_float_lock() -
     #   ftSk_SpecialS_Enter,ftSk_SpecialSStart_Phys}
     # data/characters/sheik.json::side_special_ground_entry_vel_mul
     samples = _sheik_validation_samples(
-        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+        "replays/validation/sheik/sheik_demo_game.slpz"
     )
     rows = _run_sample_rollout_records(
         samples,
@@ -2228,7 +2227,7 @@ def test_sheik_demo_runbrake_freeze_latch_resumes_one_aobj_tick_later_rollout() 
     # data/scripts/sheik.bin::MSLFTSC1 ftCo_SM_RunBrake set_cmd_var(idx=1,value=1)
     # data/common/ft_common_data.json::runbrake_anim_freeze_speed_threshold
     samples = _sheik_validation_samples(
-        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+        "replays/validation/sheik/sheik_demo_game.slpz"
     )
     rows = _run_sample_rollout_records(
         samples,
@@ -2266,7 +2265,7 @@ def test_sheik_demo_kneebend_escapeair_landing_fallspecial_publishes_substep_roo
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044838_Floor}
     samples = _sheik_validation_samples(
-        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+        "replays/validation/sheik/sheik_demo_game.slpz"
     )
 
     out = _run_sample_row(samples, 3497)
@@ -2300,7 +2299,7 @@ def test_sheik_demo_kneebend_escapeair_landing_fallspecial_publishes_substep_roo
 @pytest.mark.integration
 def test_sheik_demo_kneebend_escapeair_substep_root_keeps_later_landing_rollout() -> None:
     samples = _sheik_validation_samples(
-        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+        "replays/validation/sheik/sheik_demo_game.slpz"
     )
     rows = _run_sample_rollout_records(
         samples,
@@ -2823,7 +2822,7 @@ def test_sheik_demo_chain_article_state_machine_replay_real(
     seed_state: int,
     ref_state: int,
 ) -> None:
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
     assert int(seed["items"]["type"][0]) == ITEM_SHEIK_CHAIN
@@ -2846,7 +2845,7 @@ def test_sheik_demo2_chain_end_pre_destroy_frame_preserves_retract_state_replay_
     #   ftSk_SpecialSEnd_Anim,ftSk_SpecialAirSEnd_Anim}
     # refs/melee/src/melee/it/items/itseakchain.c::{
     #   it_802BCF84,it_802BB20C,it_802BC94C,it_2725_Logic54_PickedUp}
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game_2.slpz")
     seed = samples[7532]["seed_t"]
     ref = samples[7532]["ref_t1"]
     assert int(seed["action_id"][0]) == ACT_SK_SPECIAL_S_END
@@ -2864,7 +2863,7 @@ def test_sheik_demo2_chain_end_pre_destroy_frame_preserves_retract_state_replay_
 @pytest.mark.integration
 @pytest.mark.parametrize("record", [2743, 3577, 4024])
 def test_sheik_demo_needle_cancel_destroys_held_article_replay_real(record: int) -> None:
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
     assert int(seed["action_id"][0]) in (ACT_SK_SPECIAL_N_CANCEL, ACT_SK_SPECIAL_AIR_N_CANCEL)
@@ -2878,7 +2877,7 @@ def test_sheik_demo_needle_cancel_destroys_held_article_replay_real(record: int)
 @pytest.mark.integration
 @pytest.mark.parametrize("record", [2871, 3226, 5095])
 def test_sheik_demo_thrown_needle_lifetime_expires_replay_real(record: int) -> None:
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
     assert int(seed["items"]["type"][0]) == ITEM_SHEIK_NEEDLE_THROWN
@@ -2892,7 +2891,7 @@ def test_sheik_demo_thrown_needle_lifetime_expires_replay_real(record: int) -> N
 
 @pytest.mark.integration
 def test_sheik_needle_loop_analog_trigger_edge_cancel_replay_real_lock() -> None:
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/RuralReasonableRat.slpz")
     record = 2644
     assert int(samples[record]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_N_LOOP
     assert int(samples[record]["ref_t1"]["action_id"][0]) == ACT_SK_SPECIAL_N_CANCEL
@@ -3431,7 +3430,7 @@ def test_sheik_vanish_airhistart0_windup_drift_matches_source_common_drift_repla
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHiStart_0_Phys
     # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D268,ftCommon_8007D174}
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl"
+        "replays/validation/sheik/AttractiveAnyClam.slpz"
     )
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
@@ -3449,7 +3448,7 @@ def test_sheik_air_needle_cancel_finish_runs_fall_iasa_tail_aac_2333() -> None:
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::ftSk_SpecialAirNCancel_Anim
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_IASA_Inner}
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl"
+        "replays/validation/sheik/AttractiveAnyClam.slpz"
     )
     quiet = _run_sample_row(samples, 2332)
     assert int(samples[2332]["seed_t"]["action_id"][0]) == ACT_SK_SPECIAL_AIR_N_CANCEL
@@ -3857,7 +3856,7 @@ def test_sheik_demo_vanish_smoke_spawn_frame_body_hit_and_no_hitlag_rehit_lock()
     # refs/melee/src/melee/it/it_2725.c::it_8027518C
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,Fighter_ProcessHit_8006D1EC}
     samples = _sheik_validation_samples(
-        "datasets/sheik_demo_triage/replays/validation/sheik/sheik_demo_game.msl"
+        "replays/validation/sheik/sheik_demo_game.slpz"
     )
 
     out = _run_sample_row(samples, 1927)
@@ -3884,7 +3883,7 @@ def test_sheik_vanish_smoke_same_item_hitstun_seed_reconstructs_victim_ring() ->
     # refs/melee/src/melee/it/it_2725.c::it_8027518C
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/TornEnchantingGiraffe.msl"
+        "replays/validation/sheik/TornEnchantingGiraffe.slpz"
     )
     player = 1
     for record in (9258, 9259, 9260):
@@ -3921,7 +3920,7 @@ def test_sheik_vanish_smoke_victim_ring_seed_requires_same_item_source_negative(
     # the seed does not prove an existing victims_1 entry, so the live active smoke BODY remains
     # eligible to hit the overlapping defender.
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/TornEnchantingGiraffe.msl"
+        "replays/validation/sheik/TornEnchantingGiraffe.slpz"
     )
     player = 1
     seed = samples[9258]["seed_t"]
@@ -3943,14 +3942,14 @@ def test_sheik_vanish_smoke_victim_ring_seed_requires_same_item_source_negative(
     ("dataset_rel", "record", "player", "action_id", "expected_hitlag"),
     [
         (
-            "datasets/sheik/replays/validation/sheik/ZestyPreciousTurtle.msl",
+            "replays/validation/sheik/ZestyPreciousTurtle.slpz",
             2273,
             1,
             ACT_ATTACK_AIR_LW,
             6,
         ),
         (
-            "datasets/sheik/replays/validation/sheik/MixedAllQuetzal.msl",
+            "replays/validation/sheik/MixedAllQuetzal.slpz",
             9336,
             1,
             ACT_ATTACK_AIR_B,
@@ -4000,7 +3999,7 @@ def test_sheik_vanish_fresh_smoke_owner_contact_hitlist_blocks_later_rehit() -> 
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007925C,ftColl_80076ED8}
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/MixedAllQuetzal.msl"
+        "replays/validation/sheik/MixedAllQuetzal.slpz"
     )
     player = 1
 
@@ -4022,8 +4021,8 @@ def test_sheik_vanish_fresh_smoke_owner_contact_hitlist_blocks_later_rehit() -> 
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "player", "expected_hitlag"),
     [
-        ("datasets/sheik/replays/validation/sheik/MixedAllQuetzal.msl", 5914, 1, 5),
-        ("datasets/sheik/replays/validation/sheik/UselessGlassLoris.msl", 2167, 1, 7),
+        ("replays/validation/sheik/MixedAllQuetzal.slpz", 5914, 1, 5),
+        ("replays/validation/sheik/UselessGlassLoris.slpz", 2167, 1, 7),
     ],
 )
 def test_sheik_vanish_smoke_owner_order_defers_body_after_invincible_owner_contact(
@@ -4107,7 +4106,7 @@ def test_sheik_vanish_smoke_stale_owner_action_does_not_defer_to_attacker_hitlag
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
     # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHiStart_1_Anim
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/UnusedLivelyLouse.msl"
+        "replays/validation/sheik/UnusedLivelyLouse.slpz"
     )
     record = 5483
     player = 1
@@ -4140,7 +4139,7 @@ def test_sheik_vanish_smoke_owner_order_ignores_nonclank_specialhi_hold_pulses(
     # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007925C}
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/MixedAllQuetzal.msl"
+        "replays/validation/sheik/MixedAllQuetzal.slpz"
     )
     player = 1
     seed = samples[record]["seed_t"]
@@ -4444,7 +4443,7 @@ def test_sheik_demo_chain_active_frontier_hits_and_hitlag_freezes_replay_real() 
     # refs/melee/src/melee/it/items/itseakchain.c::{it_802BC080,it_802BCB88}
     import msl_binding
 
-    samples = _sheik_validation_samples("datasets/sheik/replays/validation/sheik/sheik_demo_game.msl")
+    samples = _sheik_validation_samples("replays/validation/sheik/sheik_demo_game.slpz")
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -4529,7 +4528,7 @@ def test_sheik_demo2_chain_publication_freezes_stale_damage_replay_real() -> Non
     import msl_binding
 
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -4589,7 +4588,7 @@ def test_sheik_demo2_chain_reseed_clears_runtime_hitcap_frontier_negative() -> N
     import msl_binding
 
     samples = _sheik_validation_samples(
-        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])

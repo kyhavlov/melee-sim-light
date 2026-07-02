@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
@@ -606,10 +606,10 @@ def test_guardsetoff_platform_pass_is_not_admitted_from_empty_iasa_replay_real()
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    dataset_rel = "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     # Replay-real lock for the GuardSetOff platform-pass boundary:
     # - GuardOn/Guard/GuardReflect can call ftCo_8009A080 from IASA.
@@ -632,22 +632,22 @@ def test_guardsetoff_platform_pass_is_not_admitted_from_empty_iasa_replay_real()
     ("dataset_rel", "record", "p", "seed_action"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.slpz",
             1067,
             1,
             ACT_GUARD,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.slpz",
             4046,
             1,
             ACT_GUARD,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             7423,
             1,
             ACT_GUARD_SET_OFF,
@@ -661,7 +661,7 @@ def test_guard_platform_pass_uses_hsd_lr_lane_and_destination_guard_replay_real(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     # Replay-real locks for ftCo_8009A080 ownership:
     # - `held_inputs & HSD_PAD_LR` includes analog trigger-held shield inputs.
@@ -726,10 +726,10 @@ def test_marth_suite_turnrun_iasa_does_not_admit_guard_entry_bsg_replay_real(rec
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/marth/replays/validation/marth/BountifulScalyGuanaco.msl"
+    dataset_rel = "replays/validation/marth/BountifulScalyGuanaco.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 1
     seed, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
@@ -806,26 +806,26 @@ def test_run_iasa_still_admits_guard_entry_spacie_control() -> None:
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             679,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             2870,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             2111,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "TubbyCurlyHerring.msl",
+            "replays/validation/aggregate_recent/"
+            "TubbyCurlyHerring.slpz",
             1721,
             1,
         ),
@@ -838,7 +838,7 @@ def test_guardoff_anim_end_wait_destination_guardon_replay_real(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
     assert int(seed["action_id"][p]) == ACT_GUARD_OFF
@@ -853,10 +853,10 @@ def test_guard_jump_oos_does_not_reconsume_kneebend_iasa_positive_revolving_hyen
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     # Replay-real guard jump OoS rows:
     # - Guard_IASA can enter KneeBend through ftCo_800CB024.
@@ -881,10 +881,10 @@ def test_guard_snapshot_held_z_does_not_drop_to_guardoff_putrid_joyous_oryx() ->
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+    dataset_rel = "replays/validation/aggregate_recent/PutridJoyousOryx.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     for record in (7475, 7476):
         _, ref_row, out_row = _run_one_step_row(dataset_path, record, 0)

@@ -23,8 +23,8 @@ class _Case:
     [
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
             ),
             record=10025,
             p=0,
@@ -33,8 +33,8 @@ class _Case:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
             ),
             record=4063,
             p=1,
@@ -43,8 +43,8 @@ class _Case:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
             ),
             record=5369,
             p=1,
@@ -68,7 +68,7 @@ def test_state_flags_221a_b5_entry_clears_replay_real_locks(case: _Case) -> None
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     _, ref_target, out_target = _run_one_step_row(dataset_path, case.record, case.p)
     assert int(out_target["state_flags"][case.p, 1]) == case.expected_state_flags_1, case.note
@@ -94,7 +94,7 @@ def test_sheik_attackhi4_smash_charge_reaches_script_hurt_state_rollout_lock() -
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B128
     # data/moves/sheik.json::moves.ftCo_SM_AttackHi4.events start_smash_charge/set_hurt_state
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl"
+    dataset_path = root / "replays/validation/sheik/TenseSameHummingbird.slpz"
     if not dataset_path.exists():
         pytest.skip("missing local Sheik validation dataset")
 

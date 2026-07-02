@@ -5,15 +5,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-DATASET_REL = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+DATASET_REL = "replays/validation/aggregate_recent/PutridJoyousOryx.slpz"
 TBK_DATASET_REL = (
-    "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-    "TreasuredBackKangaroo.msl"
+    "replays/validation/cardinal_1.0_recent/"
+    "TreasuredBackKangaroo.slpz"
 )
-BHH_DATASET_REL = "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+BHH_DATASET_REL = "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -35,10 +36,10 @@ def _run_one_step(record: int, dataset_rel: str = DATASET_REL) -> tuple[np.void,
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -46,7 +47,7 @@ def _run_one_step(record: int, dataset_rel: str = DATASET_REL) -> tuple[np.void,
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride).copy()
         prev_input_bytes = (

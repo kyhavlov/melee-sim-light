@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import SEED_DTYPE
+from tools.eval.validation_dtypes import SEED_DTYPE
 from tools.extraction.extract_fighter_script_timeline import EVENT_IDS
 from tools.slippi.known_data_artifacts import read_mslftsc1_v1
 

@@ -6,8 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset, read_dataset_window
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffer_window, load_replay_buffers
 from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype, _ecb_rel_points
 
 
@@ -94,8 +94,8 @@ def test_damage_hitlag_colldata_ecb_samples_previous_attackair_facing() -> None:
 
 
 def _run_one_step_with_contacts(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray, np.void]:
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
     binding = pytest.importorskip("msl_binding")
@@ -114,7 +114,7 @@ def _run_one_step_with_contacts(dataset_path: Path, record: int) -> tuple[np.nda
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -135,8 +135,8 @@ def _run_one_step_with_contacts(dataset_path: Path, record: int) -> tuple[np.nda
 def _run_one_step_with_contacts_and_colldata(
     dataset_path: Path, record: int
 ) -> tuple[np.ndarray, np.ndarray, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
     binding = pytest.importorskip("msl_binding")
@@ -159,7 +159,7 @@ def _run_one_step_with_contacts_and_colldata(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -250,7 +250,7 @@ def _run_one_step_seed_arrays(
 
 
 def _run_rollout_record(dataset_path: Path, start_record: int, target_record: int) -> tuple[np.void, np.void]:
-    ds = read_dataset_window(str(dataset_path), start_record, target_record + 1)
+    ds = load_replay_buffer_window(str(dataset_path), start_record, target_record + 1)
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -259,17 +259,17 @@ def _run_rollout_record(dataset_path: Path, start_record: int, target_record: in
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     try:
         binding.reseed_seed_rollout(
-            handle, ds.samples[0:1]["seed_t"].view("u1").reshape(1, seed_stride).copy()
+            handle, ds.rows[0:1]["seed_t"].view("u1").reshape(1, seed_stride).copy()
         )
         for off in range(0, target_record - start_record + 1):
-            row = ds.samples[off : off + 1]
+            row = ds.rows[off : off + 1]
             binding.step_input(
                 handle,
                 row["prev_input_t"].view("u1").reshape(1, input_stride).copy(),
@@ -279,7 +279,7 @@ def _run_rollout_record(dataset_path: Path, start_record: int, target_record: in
     finally:
         binding.destroy(handle)
     return (
-        ds.samples[target_record - start_record]["ref_t1"].copy(),
+        ds.rows[target_record - start_record]["ref_t1"].copy(),
         out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy(),
     )
 
@@ -294,13 +294,13 @@ def test_damageair_reentry_active_hitlag_floorhug_projects_root_his_3147() -> No
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
     # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_rel = "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[3147:3148]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[3147:3148]
     p = 0
 
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_AIR_2
@@ -331,13 +331,13 @@ def test_damageair_sustained_active_hitlag_sdi_does_not_reproject_floor_his_3643
     # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_rel = "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset_window(str(dataset_path), 3643, 3644)
-    row = ds.samples[0:1]
+    ds = load_replay_buffer_window(str(dataset_path), 3643, 3644)
+    row = ds.rows[0:1]
     p = 1
 
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_AIR_3
@@ -371,15 +371,15 @@ def test_grounded_damage_floor_loss_uses_fod_world_platform_for_missfoot_mgs_661
     # data/stages/bin/griz.bin::MSLSTG01 platform_transforms
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "MilkyGracefulStingray.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset_window(str(dataset_path), 661, 662)
-    row = ds.samples[0]
+    ds = load_replay_buffer_window(str(dataset_path), 661, 662)
+    row = ds.rows[0]
     p = 0
 
     assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_N_2
@@ -389,7 +389,7 @@ def test_grounded_damage_floor_loss_uses_fod_world_platform_for_missfoot_mgs_661
     assert int(row["ref_t1"]["action_id"][p]) == ACT_DAMAGE_N_2
     assert int(row["ref_t1"]["on_ground"][p]) == 0
 
-    out, ref, _contacts = _run_one_step_with_contacts_from_samples(ds.samples, int(ds.header["num_players"]), 0)
+    out, ref, _contacts = _run_one_step_with_contacts_from_samples(ds.rows, int(ds.num_players), 0)
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_N_2
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
@@ -402,15 +402,15 @@ def test_grounded_damage_floor_loss_uses_fod_world_platform_for_missfoot_mgs_661
 def test_grounded_damage_floor_loss_still_missfoots_past_facing_fod_world_endpoint_mgs_661_negative() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "MilkyGracefulStingray.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset_window(str(dataset_path), 661, 662)
-    row = ds.samples[0]
+    ds = load_replay_buffer_window(str(dataset_path), 661, 662)
+    row = ds.rows[0]
     p = 0
     seed = row["seed_t"].copy()
     # The transformed left-platform line is roughly [-49.5, -21.0] in world coordinates here. The
@@ -420,7 +420,7 @@ def test_grounded_damage_floor_loss_still_missfoots_past_facing_fod_world_endpoi
     seed["facing"][p] = np.uint8(0)
     seed["facing_dir1"][p] = np.int8(-1)
 
-    out = _run_one_step_seed_arrays(seed, row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.header["num_players"]))
+    out = _run_one_step_seed_arrays(seed, row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.num_players))
 
     assert int(out["action_id"][p]) == ACT_MISS_FOOT
     assert int(out["hitstun"][p]) == 0
@@ -440,15 +440,15 @@ def test_grounded_damagehi_hitlag_exit_asdi_reprojects_to_floor_pte_633() -> Non
     # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset_window(str(dataset_path), 633, 634)
-    row = ds.samples[0:1]
+    ds = load_replay_buffer_window(str(dataset_path), 633, 634)
+    row = ds.rows[0:1]
     p = 0
 
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_HI_2
@@ -458,7 +458,7 @@ def test_grounded_damagehi_hitlag_exit_asdi_reprojects_to_floor_pte_633() -> Non
     assert float(row["ref_t1"]["pos_y"][0, p]) == pytest.approx(0.0028748512, abs=1e-7)
 
     out, ref, contacts = _run_one_step_with_contacts_from_samples(
-        row, int(ds.header["num_players"]), 0
+        row, int(ds.num_players), 0
     )
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_HI_2
@@ -475,15 +475,15 @@ def test_post_hitlag_projection_requires_grounded_damage_coll_pte_negative() -> 
     # ft_800848DC/mpColl_8004B108 projection must not run from the air path.
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset_window(str(dataset_path), 633, 634)
-    row = ds.samples[0]
+    ds = load_replay_buffer_window(str(dataset_path), 633, 634)
+    row = ds.rows[0]
     p = 0
     seed = row["seed_t"].copy()
     seed["on_ground"][p] = np.uint8(0)
@@ -491,7 +491,7 @@ def test_post_hitlag_projection_requires_grounded_damage_coll_pte_negative() -> 
     seed["pos_y"][p] = np.float32(10.0)
 
     out = _run_one_step_seed_arrays(
-        seed, row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.header["num_players"])
+        seed, row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.num_players)
     )
 
     assert int(out["action_id"][p]) == ACT_DAMAGE_HI_2
@@ -512,15 +512,15 @@ def test_terminal_airborne_damage_iasa_can_enter_escapeair_pte_2417() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset_window(str(dataset_path), 2417, 2418)
-    row = ds.samples[0:1]
+    ds = load_replay_buffer_window(str(dataset_path), 2417, 2418)
+    row = ds.rows[0:1]
     p = 0
 
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_AIR_1
@@ -530,7 +530,7 @@ def test_terminal_airborne_damage_iasa_can_enter_escapeair_pte_2417() -> None:
     assert int(row["ref_t1"]["action_id"][0, p]) == ACT_ESCAPE_AIR
 
     out, ref, _contacts = _run_one_step_with_contacts_from_samples(
-        row, int(ds.header["num_players"]), 0
+        row, int(ds.num_players), 0
     )
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_ESCAPE_AIR
@@ -543,15 +543,15 @@ def test_terminal_airborne_damage_iasa_escapeair_requires_escape_input_pte_2417_
     # EscapeAir branch must not fire without the source input predicate.
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset_window(str(dataset_path), 2417, 2418)
-    row = ds.samples[0]
+    ds = load_replay_buffer_window(str(dataset_path), 2417, 2418)
+    row = ds.rows[0]
     p = 0
     input_t = row["input_t"].copy()
     input_t["p"]["buttons"][p] = np.uint16(0)
@@ -559,7 +559,7 @@ def test_terminal_airborne_damage_iasa_escapeair_requires_escape_input_pte_2417_
     input_t["p"]["r"][p] = np.uint8(0)
 
     out = _run_one_step_seed_arrays(
-        row["seed_t"].copy(), row["prev_input_t"].copy(), input_t, int(ds.header["num_players"])
+        row["seed_t"].copy(), row["prev_input_t"].copy(), input_t, int(ds.num_players)
     )
 
     assert int(out["action_id"][p]) != ACT_ESCAPE_AIR
@@ -576,15 +576,15 @@ def test_damageflytop_active_hitlag_floorhug_stays_airborne_qgd_9683() -> None:
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[9683 : 9684]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[9683 : 9684]
     p = 1
 
     assert int(row["seed_t"]["action_id"][0, p]) == 90
@@ -629,13 +629,13 @@ def test_damageflytop_downward_sdi_bottom_above_floor_stays_airborne_selfplay_18
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
+    samples = ds.rows
     p = 1
 
     row = samples[1417]
@@ -646,7 +646,7 @@ def test_damageflytop_downward_sdi_bottom_above_floor_stays_airborne_selfplay_18
     assert float(row["ref_t1"]["pos_y"][p]) == pytest.approx(-4.0499, abs=1e-6)
 
     out, ref, contacts = _run_one_step_with_contacts_from_samples(
-        samples, int(ds.header["num_players"]), 1417
+        samples, int(ds.num_players), 1417
     )
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 6
@@ -656,7 +656,7 @@ def test_damageflytop_downward_sdi_bottom_above_floor_stays_airborne_selfplay_18
     assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
 
     out, ref, contacts = _run_one_step_with_contacts_from_samples(
-        samples, int(ds.header["num_players"]), 1420
+        samples, int(ds.num_players), 1420
     )
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 3
@@ -686,17 +686,17 @@ def test_forensic_optional_damageflyn_hitlag_exit_floorhug_latch_requires_curren
 
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "reports/triage/mainline_selfplay_datasets/mainline_selfplay_20260514T083640/"
-        "reports/triage/mainline_selfplay_replays/Game_20260514T083640.msl"
+        "reports/triage/mainline_selfplay_replays/mainline_selfplay_20260514T083640/"
+        "reports/triage/mainline_selfplay_replays/Game_20260514T083640.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing optional local self-play triage dataset: {dataset_rel}")
 
     p = 0
-    ds = read_dataset_window(str(dataset_path), 1045, 1046)
-    seed = ds.samples[0]["seed_t"]
-    ref = ds.samples[0]["ref_t1"]
+    ds = load_replay_buffer_window(str(dataset_path), 1045, 1046)
+    seed = ds.rows[0]["seed_t"]
+    ref = ds.rows[0]["ref_t1"]
     assert int(seed["action_id"][p]) == 88  # DamageFlyN
     assert int(seed["hitlag"][p]) == 1
     assert int(seed["hitstun"][p]) == 33
@@ -774,15 +774,15 @@ def test_damageflytop_active_hitlag_floorhug_does_not_trigger_early_qgd_9682() -
     # - vanilla does not raise FloorPush|FloorHug and does not correct Y
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[9682 : 9683]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[9682 : 9683]
     p = 1
 
     assert int(row["seed_t"]["action_id"][0, p]) == 90
@@ -810,15 +810,15 @@ def test_damageflytop_active_hitlag_floorhug_does_not_snap_to_ledge_floor_agn_48
     # - keep the hitlag floorhug owner restricted to the proven main-floor continuation class
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[4839 : 4840]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[4839 : 4840]
     p = 1
 
     assert int(row["seed_t"]["action_id"][0, p]) == 90
@@ -854,15 +854,15 @@ def test_damageflyn_from_damageair_active_hitlag_floorhug_projects_root_pec_870(
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044948_Floor}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "PhysicalElectricCapybara.msl"
+        "replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[870:871]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[870:871]
     p = 0
 
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_N
@@ -893,15 +893,15 @@ def test_damageflyn_entry_from_ground_attack_does_not_gain_damageair_floorhug_bh
     # all first-frame DamageFly entries or to replay-visible hitlag state alone.
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "BlondHardHippopotamus.msl"
+        "replays/validation/aggregate_recent/"
+        "BlondHardHippopotamus.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[1600:1601]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[1600:1601]
     p = 1
 
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_N
@@ -935,15 +935,15 @@ def test_damageair_active_hitlag_sdi_does_not_snap_to_dream_land_platform_feh_11
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "FlippantEnchantedHorse.msl"
+        "replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[11342:11343]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[11342:11343]
     p = 1
 
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_AIR_2
@@ -975,15 +975,15 @@ def test_damageflytop_downward_sdi_floorhug_uses_consumed_sdi_latch_agn_794() ->
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044948_Floor}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[794:795]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[794:795]
     p = 1
 
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_TOP
@@ -1026,15 +1026,15 @@ def test_damageflytop_active_hitlag_stadium_ledge_edge_floorhug_tvr_11591() -> N
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044948_Floor}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "ThisVioletRaccoon.msl"
+        "replays/validation/pokemon_stadium_recent/"
+        "ThisVioletRaccoon.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[11591:11592]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[11591:11592]
     p = 0
 
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_TOP
@@ -1076,15 +1076,15 @@ def test_thrownlw_release_damage_active_hitlag_floorhug_projects_root_qgd(
     # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     p = 1
 
     assert int(row["seed_t"]["action_id"][0, p]) == expected_action
@@ -1118,15 +1118,15 @@ def test_horizontal_only_hitlag_sdi_at_floor_height_does_not_false_land_maj_3612
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "MotionlessAggressiveJay.msl"
+        "replays/validation/aggregate_recent/"
+        "MotionlessAggressiveJay.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[3612:3613]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[3612:3613]
     p = 1
 
     assert int(row["seed_t"]["action_id"][0, p]) == 79
@@ -1168,13 +1168,13 @@ def test_nonfd_damageair_root_below_floor_current_ecb_bottom_above_does_not_land
     # refs/melee/src/melee/mp/mpcoll.c::{
     #   mpColl_800477E0,mpColl_LoadECB_inline,mpColl_80044628_Floor,mpColl_80044948_Floor}
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+    dataset_rel = "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[5521:5522]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[5521:5522]
     p = 1
 
     assert int(row["seed_t"]["stage_id"][0]) == 3
@@ -1207,13 +1207,13 @@ def test_nonfd_damageair_hard_floor_exit_publication_stays_exact_tvr_5994() -> N
     # refs/melee/src/melee/mp/mpcoll.c::{
     #   mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044838_Floor}
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl"
+    dataset_rel = "replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[5994:5995]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[5994:5995]
     p = 1
 
     assert int(row["seed_t"]["stage_id"][0]) == 3
@@ -1243,13 +1243,13 @@ def test_damageair_fd_hard_floor_hitlag_exit_projection_stays_exact_fsp_3593() -
     # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[3593:3594]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[3593:3594]
     p = 1
 
     assert int(row["seed_t"]["stage_id"][0]) == 32
@@ -1286,13 +1286,13 @@ def test_damagefly_hitlag_exit_uses_current_loaded_ecb_not_next_stored_pose_stm_
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+        / "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip("missing local dataset: SweatyThisMallard.msl")
+        pytest.skip("missing local replay: SweatyThisMallard.slpz")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[9002:9003]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[9002:9003]
     p = 0
 
     assert int(row["seed_t"]["stage_id"][0]) == 3
@@ -1330,13 +1330,13 @@ def test_damage_active_hitlag_floor_sweep_lifetime_lands_on_real_contact_stm_872
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+        / "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip("missing local dataset: SweatyThisMallard.msl")
+        pytest.skip("missing local replay: SweatyThisMallard.slpz")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[8729:8730]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[8729:8730]
     p = 0
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_HI_3
     assert int(row["seed_t"]["hitlag"][0, p]) == 1
@@ -1358,13 +1358,13 @@ def test_damage_active_hitlag_floor_sweep_lifetime_lands_on_real_contact_stm_872
     ("dataset_rel", "record", "player", "expected_downbound"),
     (
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl",
+            "replays/validation/dream_land_recent/ShadyDecimalStarling.slpz",
             322,
             1,
             ACT_DOWN_BOUND_U,
         ),
             (
-                "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+                "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
                 7569,
                 0,
                 ACT_PASSIVE,
@@ -1387,10 +1387,10 @@ def test_damageflytop_hitlag_exit_resting_hard_floor_carries_floorhug_latch(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     p = player
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_TOP
     assert int(row["seed_t"]["hitlag"][0, p]) == 1
@@ -1414,19 +1414,19 @@ def test_damageflytop_resting_floorhug_owner_does_not_apply_to_damageflyroll() -
     # geometry looks similar.
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+        root / "replays/validation/dream_land_recent/ShadyDecimalStarling.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip("missing local dataset: ShadyDecimalStarling.msl")
+        pytest.skip("missing local replay: ShadyDecimalStarling.slpz")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples[322:323].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows[322:323].copy()
     p = 1
     samples["seed_t"]["action_id"][0, p] = np.uint16(ACT_DAMAGE_FLY_ROLL)
     samples["seed_t"]["animation_index"][0, p] = np.uint32(181)  # ftCo_SM_DamageFlyRoll
     samples["ref_t1"]["action_id"][0, p] = np.uint16(ACT_DAMAGE_FLY_ROLL)
     out, _ref, contacts = _run_one_step_with_contacts_from_samples(
-        samples, int(ds.header["num_players"]), 0
+        samples, int(ds.num_players), 0
     )
 
     assert int(out["action_id"][p]) == ACT_DAMAGE_FLY_ROLL
@@ -1440,15 +1440,15 @@ def test_damageflytop_resting_floorhug_owner_requires_frame_start_floor_contact(
     # are not enough if the fighter is already below the floor at frame start. Source CollData lacks
     # the same resting FloorHug state, so the row stays airborne instead of entering DownBound.
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    dataset_rel = "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 999
     p = 1
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_TOP
     assert int(row["seed_t"]["hitlag"][0, p]) == 1
     assert int(row["seed_t"]["damage_post_hitlag_cb_kind"][0, p]) == 1
@@ -1472,15 +1472,15 @@ def test_damageflytop_resting_floorhug_owner_does_not_apply_to_damageflyn() -> N
     # row in DamageFlyN must not inherit the DamageFlyTop-specific resting hard-floor hitlag-exit
     # handoff.
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl"
+    dataset_rel = "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 781
     p = 1
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_N
     assert int(row["seed_t"]["hitlag"][0, p]) == 1
     assert int(row["seed_t"]["damage_post_hitlag_cb_kind"][0, p]) == 1
@@ -1500,29 +1500,29 @@ def test_damageflytop_resting_floorhug_owner_does_not_apply_to_damageflyn() -> N
     ("dataset_rel", "record", "player", "expect_floor_result"),
     (
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "CornyDelayedOkapi.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "CornyDelayedOkapi.slpz",
             5521,
             1,
             False,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             5994,
             1,
             True,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "FavorableSuperficialPig.msl",
+            "replays/validation/aggregate_recent/"
+            "FavorableSuperficialPig.slpz",
             3593,
             1,
             True,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "SweatyThisMallard.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "SweatyThisMallard.slpz",
             9002,
             0,
             True,
@@ -1549,7 +1549,7 @@ def test_damageair_hard_floor_publication_follows_loaded_ecb_bottom_sweep_proven
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     out, ref, contacts, colldata = _run_one_step_with_contacts_and_colldata(dataset_path, record)
     p = player
@@ -1590,13 +1590,13 @@ def test_downed_contact_downbound_entry_preserves_frame_start_airborne_ground_or
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
     #   ftCo_8009F0F0,ftCo_8009F184,ftCo_DownDamage_Coll}
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[3713:3714]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[3713:3714]
     p = 0
 
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DOWN_BOUND_U
@@ -1624,13 +1624,13 @@ def test_downed_contact_forced_tumble_does_not_apply_to_ordinary_grounded_damage
     # retargeted to an ordinary grounded action must remain on the normal low-severity grounded KB
     # projection path instead of inheriting DownDamage's forced-tumble bounce.
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[3713]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[3713]
     p = 0
     seed = row["seed_t"].copy()
     seed["action_id"][p] = 14  # Wait.
@@ -1638,7 +1638,7 @@ def test_downed_contact_forced_tumble_does_not_apply_to_ordinary_grounded_damage
     seed["on_ground"][p] = 1
 
     out = _run_one_step_seed_arrays(
-        seed, row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.header["num_players"])
+        seed, row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.num_players)
     )
 
     assert int(out["action_id"][p]) == ACT_DAMAGE_HI_2

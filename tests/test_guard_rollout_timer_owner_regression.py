@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 ACT_GUARD_ON = 0x00B2
@@ -16,10 +17,10 @@ ACT_GUARD_SET_OFF = 0x00B5
 ACT_GUARD_REFLECT = 0x00B6
 
 _BASE = (
-    "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-    "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    "replays/validation/"
+    "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
 )
-_PJO = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+_PJO = "replays/validation/aggregate_recent/PutridJoyousOryx.slpz"
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -63,7 +64,7 @@ def _step_one_record(binding, samples: np.ndarray, record: int, num_players: int
 
 def _rollout_to_record(
     binding,
-    samples: np.ndarray,
+    ds,
     *,
     start_record: int,
     target_record: int,
@@ -73,11 +74,11 @@ def _rollout_to_record(
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    samples = ds.rows
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -86,11 +87,11 @@ def _rollout_to_record(
 
     handle = binding.init(batch_size=1, num_players=int(num_players))
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed(handle, seed_bytes)
         for record in range(int(start_record), int(target_record) + 1):
-            prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
         return out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
@@ -115,11 +116,11 @@ def test_guardon_one_step_boundary_stays_on_predecrement_x10() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _BASE
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_BASE}")
+        pytest.skip(f"missing local replay: {_BASE}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    num_players = int(ds.header["num_players"])
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    num_players = int(ds.num_players)
     p = 1
 
     # Decomp owner model:
@@ -168,10 +169,10 @@ def test_guard_no_submotion_x10_rollout_owner_windows(case: _RolloutCase) -> Non
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _BASE
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_BASE}")
+        pytest.skip(f"missing local replay: {_BASE}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > int(case.target_record)
 
     p = int(case.player)
@@ -180,10 +181,10 @@ def test_guard_no_submotion_x10_rollout_owner_windows(case: _RolloutCase) -> Non
 
     out = _rollout_to_record(
         binding,
-        samples,
+        ds,
         start_record=int(case.start_record),
         target_record=int(case.target_record),
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
     )
     assert int(out["action_id"][p]) == int(case.ref_action), case.note
 
@@ -195,10 +196,10 @@ def test_guardsetoff_to_guard_release_latch_survives_late_trigger_repress_pjo_lo
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _PJO
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_PJO}")
+        pytest.skip(f"missing local replay: {_PJO}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     start_record = 901
     target_record = 926
     p = 0
@@ -222,10 +223,10 @@ def test_guardsetoff_to_guard_release_latch_survives_late_trigger_repress_pjo_lo
 
     out = _rollout_to_record(
         binding,
-        samples,
+        ds,
         start_record=start_record,
         target_record=target_record,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
     )
     assert int(out["action_id"][p]) == ACT_GUARD_OFF
     assert abs(float(out["shield_hp"][p]) - float(samples[target_record]["ref_t1"]["shield_hp"][p])) < 0.01

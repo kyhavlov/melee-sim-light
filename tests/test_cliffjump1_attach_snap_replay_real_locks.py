@@ -33,8 +33,8 @@ class _Case:
 
 
 _DATASET_REL = (
-    "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-    "QuerulousGrandDinosaur.msl"
+    "replays/validation/cardinal_1.0_recent/"
+    "QuerulousGrandDinosaur.slpz"
 )
 _CASES = [
     _Case(9026, 1),  # CliffWait control
@@ -60,7 +60,7 @@ def test_cliffjump1_attach_snap_replay_real_rows_exact(case: _Case) -> None:
 
     dataset_path = root / _DATASET_REL
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, case.record, case.p, rng_damage_fly_roll_gate=True)
     _assert_branch_identity_match_ref(out_row=out_row, ref_row=ref_row, p=case.p)

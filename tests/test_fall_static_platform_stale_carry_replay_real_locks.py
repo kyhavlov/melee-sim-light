@@ -6,14 +6,15 @@ import numpy as np
 import pytest
 
 from tests.test_turn_iasa_no_spurious_dash_regression import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 ACT_FALL = 29
 ACT_LANDING = 42
 NO_GROUND = 0xFFFF
 
-WWS = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
-DSG = "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl"
+WWS = "replays/validation/marth/WellWornSmallGoshawk.slpz"
+DSG = "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz"
 
 
 def _run_one_step(dataset_rel: str, record: int) -> tuple[object, np.ndarray, np.void]:
@@ -22,13 +23,13 @@ def _run_one_step(dataset_rel: str, record: int) -> tuple[object, np.ndarray, np
     _skip_if_required_artifacts_missing(root)
     path = root / dataset_rel
     if not path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(path))
-    if record >= int(ds.samples.shape[0]):
-        pytest.skip(f"dataset too short for regression check: {dataset_rel} rec={record}")
+    ds = load_replay_buffers(str(path))
+    if record >= int(ds.rows.shape[0]):
+        pytest.skip(f"replay too short for regression check: {dataset_rel} rec={record}")
 
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -38,7 +39,7 @@ def _run_one_step(dataset_rel: str, record: int) -> tuple[object, np.ndarray, np
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )

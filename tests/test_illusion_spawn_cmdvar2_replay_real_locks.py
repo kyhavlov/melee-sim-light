@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 from tests.test_items_spawn_joint_replay_real_locks import (
     _skip_if_required_artifacts_missing,
@@ -54,7 +54,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
     "case",
     [
         _IllusionSpawnCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=1429,
             owner_port=0,
             owner_action=348,  # ftFx_MS_SpecialS
@@ -66,7 +66,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             note="ground side-special cmd_var2 spawn pulse lock",
         ),
         _IllusionSpawnCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=545,
             owner_port=1,
             owner_action=351,  # ftFx_MS_SpecialAirS
@@ -78,7 +78,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             note="air side-special cmd_var2 spawn pulse lock",
         ),
         _IllusionSpawnCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=9278,
             owner_port=0,
             owner_action=351,  # ftFx_MS_SpecialAirS (transitions to End at t+1)
@@ -90,7 +90,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             note="air side-special end-entry pulse bridge lock (QGD)",
         ),
         _IllusionSpawnCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=6701,
             owner_port=1,
             owner_action=351,  # ftFx_MS_SpecialAirS (transitions to End at t+1)
@@ -108,10 +108,10 @@ def test_illusion_spawn_cmdvar2_target_pm1_both_players(case: _IllusionSpawnCase
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     owner = int(case.owner_port)
     slot = int(case.slot)
 

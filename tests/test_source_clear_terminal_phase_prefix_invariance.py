@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.slippi.make_dataset_from_slp import _derive_source_clear_terminal_phase_seed_lane
+from tools.slippi.validation_buffer_seed import _derive_source_clear_terminal_phase_seed_lane
 
 
 def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None:

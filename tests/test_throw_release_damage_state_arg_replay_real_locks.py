@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_THROW_F = 219
@@ -35,9 +35,9 @@ class _Case:
 @pytest.mark.parametrize(
     "case",
     [
-        _Case("InternalPowerlessWallaby.msl", 7365, 1, 0),
-        _Case("ExtraLargeScaryHornet.msl", 456, 0, 1),
-        _Case("VigorousRelievedLlama.msl", 5436, 0, 1),
+        _Case("InternalPowerlessWallaby.slpz", 7365, 1, 0),
+        _Case("ExtraLargeScaryHornet.slpz", 456, 0, 1),
+        _Case("VigorousRelievedLlama.slpz", 5436, 0, 1),
     ],
 )
 def test_throwlw_release_forces_damageflytop_state_arg(case: _Case) -> None:
@@ -53,12 +53,12 @@ def test_throwlw_release_forces_damageflytop_state_arg(case: _Case) -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth" / case.dataset
+    dataset_path = root / "replays/validation/marth" / case.dataset
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[case.record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[case.record]
     assert int(row["seed_t"]["action_id"][case.thrower]) == ACT_THROW_LW
     assert int(row["seed_t"]["action_id"][case.victim]) == ACT_THROWN_LW
     assert int(row["seed_t"]["grab_owner_port"][case.victim]) == case.thrower
@@ -75,8 +75,8 @@ def test_throwlw_release_forces_damageflytop_state_arg(case: _Case) -> None:
 @pytest.mark.parametrize(
     "case,throw_action,thrown_action,expected_action",
     [
-        (_Case("MetallicUniqueGrouse.msl", 236, 1, 0), ACT_THROW_F, ACT_THROWN_F, ACT_DAMAGE_AIR_3),
-        (_Case("LoudDullGoat.msl", 252, 1, 0), ACT_THROW_B, ACT_THROWN_B, ACT_DAMAGE_FLY_N),
+        (_Case("MetallicUniqueGrouse.slpz", 236, 1, 0), ACT_THROW_F, ACT_THROWN_F, ACT_DAMAGE_AIR_3),
+        (_Case("LoudDullGoat.slpz", 252, 1, 0), ACT_THROW_B, ACT_THROWN_B, ACT_DAMAGE_FLY_N),
     ],
 )
 def test_non_low_throw_release_does_not_force_damageflytop_arg(
@@ -86,12 +86,12 @@ def test_non_low_throw_release_does_not_force_damageflytop_arg(
     # motion state stays owned by the ordinary ftCo_8008DCE0 severity/angle path.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth" / case.dataset
+    dataset_path = root / "replays/validation/marth" / case.dataset
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[case.record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[case.record]
     assert int(row["seed_t"]["action_id"][case.thrower]) == throw_action
     assert int(row["seed_t"]["action_id"][case.victim]) == thrown_action
     assert int(row["ref_t1"]["action_id"][case.victim]) == expected_action

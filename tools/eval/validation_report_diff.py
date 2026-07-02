@@ -24,6 +24,68 @@ REPORT_FILES: tuple[ReportSpec, ...] = (
     ReportSpec("doubles rollout", "doubles_recent_rollout_suite_eval.txt", optional_before=True),
 )
 
+
+def _label_for_report_path(rel_path: str) -> str:
+    stem = rel_path.removesuffix(".txt")
+    kind = "one-step" if "one_step" in rel_path else "rollout"
+    return f"{stem.replace('/', ' / ')} {kind}"
+
+
+def _is_validation_report_path(rel_path: str) -> bool:
+    return rel_path.endswith(".txt") and ("one_step" in rel_path or "rollout" in rel_path)
+
+
+def _report_dir_root(path: Path) -> Path:
+    nested = path / "reports" / "validation"
+    return nested if nested.is_dir() else path
+
+
+def _report_paths_from_source(source: str) -> set[str]:
+    path = Path(source)
+    if path.is_dir():
+        root = _report_dir_root(path)
+        return {
+            p.relative_to(root).as_posix()
+            for p in root.rglob("*.txt")
+            if _is_validation_report_path(p.relative_to(root).as_posix())
+        }
+    if path.is_file():
+        return {path.name} if _is_validation_report_path(path.name) else set()
+    try:
+        out = subprocess.check_output(
+            ["git", "ls-tree", "-r", "--name-only", source, "--", "reports/validation"],
+            cwd=_repo_root(),
+            text=True,
+            stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError:
+        return set()
+    prefix = "reports/validation/"
+    rel_paths: set[str] = set()
+    for line in out.splitlines():
+        if not line.startswith(prefix):
+            continue
+        rel_path = line.removeprefix(prefix)
+        if _is_validation_report_path(rel_path):
+            rel_paths.add(rel_path)
+    return rel_paths
+
+
+def discover_report_specs(*sources: str) -> tuple[ReportSpec, ...]:
+    source_paths = [_report_paths_from_source(source) for source in sources]
+    rel_paths: set[str] = set().union(*source_paths) if source_paths else set()
+    if not rel_paths:
+        return REPORT_FILES
+    before_paths = source_paths[0] if len(source_paths) >= 2 else rel_paths
+    return tuple(
+        ReportSpec(
+            _label_for_report_path(rel_path),
+            rel_path,
+            optional_before=rel_path not in before_paths,
+        )
+        for rel_path in sorted(rel_paths)
+    )
+
 ONE_STEP_METRICS: dict[str, str] = {
     "overall.discrete_mismatch": "lower",
     "overall.strict_discrete_mismatch": "lower",
@@ -115,10 +177,21 @@ def _parse_metric_value(raw: str) -> MetricValue:
     return MetricValue(raw=raw.strip(), value=float(match.group(0)))
 
 
+def _canonical_section(section: str) -> str:
+    if section == "suite summary":
+        return "suite"
+    marker = "/replays/"
+    if marker in section:
+        section = "replays/" + section.split(marker, 1)[1]
+    if section.endswith(".msl"):
+        return section.removesuffix(".msl") + ".slpz"
+    return section
+
+
 def _read_report(source: str, rel_path: str, *, required: bool) -> str | None:
     path = Path(source)
     if path.is_dir():
-        report_path = path / rel_path
+        report_path = _report_dir_root(path) / rel_path
         if not report_path.exists():
             if required:
                 raise FileNotFoundError(f"required validation report missing: {report_path}")
@@ -154,9 +227,7 @@ def parse_report(text: str, *, label: str) -> dict[str, dict[str, MetricValue]]:
     for line in text.splitlines():
         header = _HEADER_RE.match(line)
         if header is not None:
-            section = header.group("section")
-            if section == "suite summary":
-                section = "suite"
+            section = _canonical_section(header.group("section"))
             continue
         metric = _METRIC_RE.match(line)
         if metric is None:
@@ -172,9 +243,14 @@ def parse_report(text: str, *, label: str) -> dict[str, dict[str, MetricValue]]:
     return sections
 
 
-def read_report_set(source: str, *, before: bool = False) -> dict[str, dict[str, dict[str, MetricValue]]]:
+def read_report_set(
+    source: str,
+    *,
+    before: bool = False,
+    report_specs: tuple[ReportSpec, ...] = REPORT_FILES,
+) -> dict[str, dict[str, dict[str, MetricValue]]]:
     reports: dict[str, dict[str, dict[str, MetricValue]]] = {}
-    for spec in REPORT_FILES:
+    for spec in report_specs:
         text = _read_report(source, spec.rel_path, required=not (before and spec.optional_before))
         if text is None:
             continue
@@ -639,8 +715,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = ap.parse_args(argv)
 
-    before = read_report_set(str(args.before), before=True)
-    after = read_report_set(str(args.after), before=False)
+    report_specs = discover_report_specs(str(args.before), str(args.after))
+    before = read_report_set(str(args.before), before=True, report_specs=report_specs)
+    after = read_report_set(str(args.after), before=False, report_specs=report_specs)
     print(f"before: {args.before}")
     print(f"after:  {args.after}")
     regression_count = print_report(before, after, top=max(1, int(args.top)))

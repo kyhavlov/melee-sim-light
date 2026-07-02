@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -18,19 +18,19 @@ def test_throwhi_command_pending_pulse_follows_timer_cursor() -> None:
     # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_rel = "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     cases = [
         (4335, 0, 17, 0, 18),
         (1250, 0, 18, 18, 0),
         (1251, 0, 20, 20, 20),
     ]
     for record, player, action_frame, crossed_prev, pending in cases:
-        seed = ds.samples[record]["seed_t"]
+        seed = ds.rows[record]["seed_t"]
         assert int(seed["action_id"][player]) == 221
         assert int(seed["action_frame"][player]) == action_frame
         assert int(seed["throw_pulse_crossed_prev_frame"][player]) == crossed_prev
@@ -45,12 +45,12 @@ def test_throwlw_command_pending_pulse_covers_first_mid_terminal_pulses() -> Non
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     # data/moves/{fox,falco}.json moves["ftCo_SM_ThrowLw"].events
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     cases = [
         (9177, 0, 22, 0, 23),
         (9180, 0, 25, 25, 0),
@@ -58,7 +58,7 @@ def test_throwlw_command_pending_pulse_covers_first_mid_terminal_pulses() -> Non
         (9185, 0, 30, 0, 31),
     ]
     for record, player, action_frame, crossed_prev, pending in cases:
-        seed = ds.samples[record]["seed_t"]
+        seed = ds.rows[record]["seed_t"]
         assert int(seed["action_id"][player]) == 222
         assert int(seed["action_frame"][player]) == action_frame
         assert int(seed["throw_pulse_crossed_prev_frame"][player]) == crossed_prev
@@ -77,12 +77,12 @@ def test_throwlw_attached_laser_hitlist_seed_lane_latches_victim_ring() -> None:
     # refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C,it_80272460}
     # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    seed = read_dataset(str(dataset_path)).samples[9180]["seed_t"]
+    seed = load_replay_buffers(str(dataset_path)).rows[9180]["seed_t"]
     assert int(seed["items"][1]["exists"]) == 1
     assert int(seed["items"][1]["type"]) == 54
     assert int(seed["items"][1]["state"]) == 1
@@ -104,12 +104,12 @@ def test_throwhi_non_attached_laser_hitlist_seed_lane_negative_control() -> None
     # - Because the victim is not attached/grabbed, the seed lane remains empty; this keeps the
     #   lane from becoming a broad visible instance_hit_by proxy.
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_rel = "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    seed = read_dataset(str(dataset_path)).samples[937]["seed_t"]
+    seed = load_replay_buffers(str(dataset_path)).rows[937]["seed_t"]
     assert int(seed["items"][1]["exists"]) == 1
     assert int(seed["items"][1]["type"]) == 54
     assert int(seed["items"][1]["state"]) == 1
@@ -128,12 +128,12 @@ def test_falco_throwlw_attached_hitlist_seed_lane_keeps_body_callback_phase_spli
     # - The compact seed producer now records the 2/3 victim-ring mask; runtime must consume it as
     #   per-HitCapsule state so 0/1 remain BODY-eligible instead of suppressing the whole item.
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    dataset_rel = "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    seed = read_dataset(str(dataset_path)).samples[443]["seed_t"]
+    seed = load_replay_buffers(str(dataset_path)).rows[443]["seed_t"]
     assert int(seed["action_id"][0]) == 222
     assert int(seed["items"][1]["exists"]) == 1
     assert int(seed["items"][1]["type"]) == 55

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tools.eval.dataset import SEED_DTYPE
+from tools.eval.validation_dtypes import SEED_DTYPE
 from tools.modelplay import state_adapter
 from tools.modelplay.state_adapter import frame_state_from_seed, viewer_frame_from_state
 

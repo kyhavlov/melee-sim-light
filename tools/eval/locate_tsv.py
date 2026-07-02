@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Helpers for reading and filtering locate-discrete-mismatches TSV rows.
 
-The TSV emitted by `tools.eval.locate_discrete_mismatches --format tsv` uses:
+Legacy locate TSV files use:
 `dataset,record,seed_frame,ref_frame,p,field,seed,out,ref`.
 """
 

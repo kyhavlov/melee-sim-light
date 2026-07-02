@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 from tests.test_items_spawn_joint_replay_real_locks import (
     _skip_if_required_artifacts_missing,
@@ -54,7 +54,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
     "case",
     [
         _PulseStaleLatchCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=3091,
             thrower_port=0,
             throw_action=221,  # ThrowHi
@@ -66,7 +66,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             note="ThrowHi pulse20 carried stale-context lock",
         ),
         _PulseStaleLatchCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=8291,
             thrower_port=1,
             throw_action=220,  # ThrowB
@@ -78,7 +78,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             note="ThrowB pulse15 ongoing-hitstun stale-context lock",
         ),
         _PulseStaleLatchCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=8293,
             thrower_port=1,
             throw_action=220,  # ThrowB
@@ -96,10 +96,10 @@ def test_throw_blaster_pulse_stale_latch_target_pm1_both_players(case: _PulseSta
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     thrower = int(case.thrower_port)
     victim = 1 - thrower
     assert int(target["seed_t"]["action_id"][thrower]) == int(case.throw_action), case.note

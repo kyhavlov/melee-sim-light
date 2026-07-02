@@ -6,16 +6,17 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_row_bytes
 
 
 _LIM = (
-    "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-    "LawfulInsistentMeerkat.msl"
+    "replays/validation/yoshis_story_recent/"
+    "LawfulInsistentMeerkat.slpz"
 )
 _FEH = (
-    "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-    "FlippantEnchantedHorse.msl"
+    "replays/validation/dream_land_recent/"
+    "FlippantEnchantedHorse.slpz"
 )
 
 
@@ -24,20 +25,18 @@ def _dataset_path(rel_path: str = _LIM) -> Path:
     _skip_if_required_artifacts_missing(root)
     path = root / rel_path
     if not path.exists():
-        pytest.skip(f"missing local dataset artifact: {rel_path}")
+        pytest.skip(f"missing local replay artifact: {rel_path}")
     return path
 
 
-def _field_bytes(samples, record: int, field: str, stride: int) -> np.ndarray:
-    off = int(samples.dtype.fields[field][1])
-    raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
-    return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+def _field_bytes(ds, record: int, field: str, stride: int) -> np.ndarray:
+    return replay_buffer_row_bytes(ds, field, record, stride)
 
 
 def _step_one(record: int, rel_path: str = _LIM) -> tuple[np.void, np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(_dataset_path(rel_path)))
-    samples = ds.samples
+    ds = load_replay_buffers(str(_dataset_path(rel_path)))
+    samples = ds.rows
     row = samples[record : record + 1]
     assert int(row.shape[0]) == 1
 
@@ -49,7 +48,7 @@ def _step_one(record: int, rel_path: str = _LIM) -> tuple[np.void, np.void, np.v
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -78,8 +77,8 @@ def _step_one(record: int, rel_path: str = _LIM) -> tuple[np.void, np.void, np.v
 
 def _rollout(start: int, stop: int) -> tuple[np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(_dataset_path()))
-    samples = ds.samples
+    ds = load_replay_buffers(str(_dataset_path()))
+    samples = ds.rows
 
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -89,18 +88,18 @@ def _rollout(start: int, stop: int) -> tuple[np.void, np.void]:
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        binding.reseed_seed_rollout(handle, _field_bytes(samples, start, "seed_t", seed_stride))
+        binding.reseed_seed_rollout(handle, _field_bytes(ds, start, "seed_t", seed_stride))
         for record in range(start, stop + 1):
             binding.step_input_replay_frame_rng(
                 handle,
-                _field_bytes(samples, record, "seed_t", seed_stride),
-                _field_bytes(samples, record, "prev_input_t", input_stride),
-                _field_bytes(samples, record, "input_t", input_stride),
+                _field_bytes(ds, record, "seed_t", seed_stride),
+                _field_bytes(ds, record, "prev_input_t", input_stride),
+                _field_bytes(ds, record, "input_t", input_stride),
             )
         binding.write_compare(handle, out_bytes)
     finally:

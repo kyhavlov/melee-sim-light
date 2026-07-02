@@ -5,69 +5,69 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE
-from tests.replay_dataset_loader import load_replay_dataset as read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 QGD = (
-    "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-    "QuerulousGrandDinosaur.msl"
+    "replays/validation/cardinal_1.0_recent/"
+    "QuerulousGrandDinosaur.slpz"
 )
 BHH = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-    "BlondHardHippopotamus.msl"
+    "replays/validation/aggregate_recent/"
+    "BlondHardHippopotamus.slpz"
 )
 TCH = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-    "TubbyCurlyHerring.msl"
+    "replays/validation/aggregate_recent/"
+    "TubbyCurlyHerring.slpz"
 )
 GAT = (
-    "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-    "GracefulAttachedTurtle.msl"
+    "replays/validation/cardinal_1.0_recent/"
+    "GracefulAttachedTurtle.slpz"
 )
 MAJ = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-    "MotionlessAggressiveJay.msl"
+    "replays/validation/aggregate_recent/"
+    "MotionlessAggressiveJay.slpz"
 )
 HVG = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-    "HilariousVillainousGiraffe.msl"
+    "replays/validation/aggregate_recent/"
+    "HilariousVillainousGiraffe.slpz"
 )
 HIS = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-    "HungryImportantSnake.msl"
+    "replays/validation/aggregate_recent/"
+    "HungryImportantSnake.slpz"
 )
 MGS = (
-    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-    "MilkyGracefulStingray.msl"
+    "replays/validation/fountain_of_dreams_recent/"
+    "MilkyGracefulStingray.slpz"
 )
 PTE = (
-    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-    "ParallelTemptingElk.msl"
+    "replays/validation/fountain_of_dreams_recent/"
+    "ParallelTemptingElk.slpz"
 )
 G18447 = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-    "Game_20260515T182447_frozenps.msl"
+    "replays/validation/aggregate_recent/"
+    "Game_20260515T182447_frozenps.slpz"
 )
 IAT = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-    "ImpassionedAlarmedTarsier.msl"
+    "replays/validation/aggregate_recent/"
+    "ImpassionedAlarmedTarsier.slpz"
 )
 CNM = (
-    "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-    "CheeryNumbMonkey.msl"
+    "replays/validation/yoshis_story_recent/"
+    "CheeryNumbMonkey.slpz"
 )
 CDO = (
-    "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-    "CornyDelayedOkapi.msl"
+    "replays/validation/pokemon_stadium_recent/"
+    "CornyDelayedOkapi.slpz"
 )
 EWT = (
-    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-    "ElatedWearyTermite.msl"
+    "replays/validation/fountain_of_dreams_recent/"
+    "ElatedWearyTermite.slpz"
 )
 STM = (
-    "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-    "SweatyThisMallard.msl"
+    "replays/validation/pokemon_stadium_recent/"
+    "SweatyThisMallard.slpz"
 )
 
 
@@ -81,8 +81,8 @@ def _run_row(
     compare_stride = int(sizes["compare"])
 
     root = Path(__file__).resolve().parents[1]
-    ds = read_dataset(str(root / dataset_rel))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(root / dataset_rel))
+    row = ds.rows[record : record + 1]
 
     seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
         1, seed_stride
@@ -118,7 +118,7 @@ def _run_row(
     )
     contact_bytes = np.zeros((1, contact_dtype.itemsize), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -171,8 +171,8 @@ def _run_rollout_rows(
     compare_stride = int(sizes["compare"])
 
     root = Path(__file__).resolve().parents[1]
-    ds = read_dataset(str(root / dataset_rel))
-    rows = ds.samples[start_record : end_record + 1]
+    ds = load_replay_buffers(str(root / dataset_rel))
+    rows = ds.rows[start_record : end_record + 1]
 
     def _bytes(name: str, i: int, stride: int) -> np.ndarray:
         return np.frombuffer(rows[i : i + 1][name].tobytes(order="C"), dtype=np.uint8).copy().reshape(
@@ -183,7 +183,7 @@ def _run_rollout_rows(
     contact_dtype = _collision_contact_dtype()
     contact_bytes = np.zeros((1, contact_dtype.itemsize), dtype=np.uint8)
     got_by_record: dict[int, tuple[np.void, np.void, np.void]] = {}
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         if rollout_seed:
             binding.reseed_seed_rollout(handle, _bytes("seed_t", 0, seed_stride))
@@ -499,8 +499,8 @@ def test_specialhi_rotate_model_seed_persists_into_fall_landing_and_bound_rows()
         (HIS, 561, 1, 359),   # SpecialHiBound after SpecialAirHi rebound entry
     )
     for dataset_rel, record, player, action_id in cases:
-        ds = read_dataset(str(root / dataset_rel))
-        seed = ds.samples[record]["seed_t"]
+        ds = load_replay_buffers(str(root / dataset_rel))
+        seed = ds.rows[record]["seed_t"]
         assert int(seed["action_id"][player]) == action_id
         assert int(seed["specialhi_rotate_model_valid_u8"][player]) == 1
         assert np.isfinite(float(seed["specialhi_rotate_model_f32"][player]))
@@ -518,9 +518,9 @@ def test_specialairhi_stale_endpoint_floor_owner_continues_launch_his_1409() -> 
     #   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_IsBound}
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_80044628_Floor}
     root = Path(__file__).resolve().parents[1]
-    ds = read_dataset(str(root / HIS))
-    seed = ds.samples[1409]["seed_t"]
-    ref = ds.samples[1409]["ref_t1"]
+    ds = load_replay_buffers(str(root / HIS))
+    seed = ds.rows[1409]["seed_t"]
+    ref = ds.rows[1409]["ref_t1"]
     p = 1
 
     assert int(seed["char_id"][p]) == 1
@@ -807,8 +807,8 @@ def test_non_specialairhi_left_wall_does_not_use_specialhi_envelope() -> None:
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
     binding = pytest.importorskip("msl_binding")
     root = Path(__file__).resolve().parents[1]
-    ds = read_dataset(str(root / MAJ))
-    row = ds.samples[8917:8918].copy()
+    ds = load_replay_buffers(str(root / MAJ))
+    row = ds.rows[8917:8918].copy()
     row["seed_t"]["action_id"][0, 1] = np.uint16(88)  # DamageFlyN: non-SpecialHi airborne state.
     row["seed_t"]["animation_index"][0, 1] = np.uint32(174)
 
@@ -829,7 +829,7 @@ def test_non_specialairhi_left_wall_does_not_use_specialhi_envelope() -> None:
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     contact_bytes = np.zeros((1, contact_dtype.itemsize), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)

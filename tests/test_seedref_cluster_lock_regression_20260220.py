@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 _REQUIRED_ARTIFACTS = (
@@ -27,8 +28,8 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 
 def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -36,7 +37,7 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
             1, seed_stride
@@ -70,14 +71,14 @@ def test_seedref_cluster_rows_match_ref_lock() -> None:
         # GuardReflect entry ordering cluster (combat shield envelope gate).
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80092450}
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             1370,
             0,
             "action_id",
             84,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             2272,
             0,
             "hitlag",
@@ -87,14 +88,14 @@ def test_seedref_cluster_rows_match_ref_lock() -> None:
         # refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14
         # refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             4388,
             1,
             "instance_id",
             914,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             330,
             1,
             "action_id",
@@ -105,7 +106,7 @@ def test_seedref_cluster_rows_match_ref_lock() -> None:
     for dataset_rel, record, p, field, expect in rows:
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
+            pytest.skip(f"missing local replay: {dataset_rel}")
 
         out, seed, ref = _run_record(dataset_path, record)
 

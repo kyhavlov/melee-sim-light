@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_FALL = 29
@@ -53,13 +53,13 @@ def _cheery_samples() -> tuple[np.ndarray, int]:
     slp_path = root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    return ds.samples, int(ds.header["num_players"])
+    return ds.rows, int(ds.num_players)
 
 
 @pytest.mark.integration

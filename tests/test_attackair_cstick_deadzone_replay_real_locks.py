@@ -5,11 +5,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 ROOT = Path(__file__).resolve().parents[1]
 DATASET_REL = (
-    "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
 )
 LOCK_FIELDS = ("action_id", "action_frame", "animation_index", "instance_id", "hitlag", "hitstun")
 
@@ -32,7 +33,7 @@ def _run_one_step(binding, ds, row):
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -72,9 +73,9 @@ def test_attackair_cstick_deadzone_rows_match_replay_real_t1(
     _skip_if_required_artifacts_missing(ROOT)
 
     dataset_path = ROOT / DATASET_REL
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for regression check: num_records={samples.shape[0]}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for regression check: num_records={samples.shape[0]}"
 
     row = samples[record : record + 1]
     assert int(row["seed_t"]["action_id"][0, player]) == seed_action

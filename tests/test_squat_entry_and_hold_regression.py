@@ -7,7 +7,8 @@ import json
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 ACT_SQUAT = 39
 SM_SQUAT = 30
@@ -54,25 +55,25 @@ class _Case:
     seed_action: int
 
 
-_BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE = "replays/validation/cardinal_1.0_recent"
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
     [
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 265, 0, 235),
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 685, 0, 74),
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 1855, 0, 70),
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 1034, 1, 70),
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 3646, 1, 74),
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 4209, 0, 74),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 315, 0, 72),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 1312, 0, 72),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 1469, 0, 74),
-        _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 306, 0, 73),
-        _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 344, 0, 74),
-        _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 390, 0, 20),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 265, 0, 235),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 685, 0, 74),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 1855, 0, 70),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 1034, 1, 70),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 3646, 1, 74),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 4209, 0, 74),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 315, 0, 72),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 1312, 0, 72),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 1469, 0, 74),
+        _Case(f"{_BASE}/TreasuredBackKangaroo.slpz", 306, 0, 73),
+        _Case(f"{_BASE}/TreasuredBackKangaroo.slpz", 344, 0, 74),
+        _Case(f"{_BASE}/TreasuredBackKangaroo.slpz", 390, 0, 20),
     ],
 )
 def test_squat_entry_records_hold_down(case: _Case) -> None:
@@ -80,7 +81,7 @@ def test_squat_entry_records_hold_down(case: _Case) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
     common_path = root / "data/common/ft_common_data.json"
     if not common_path.exists():
         pytest.skip("missing local artifact: data/common/ft_common_data.json")
@@ -89,9 +90,9 @@ def test_squat_entry_records_hold_down(case: _Case) -> None:
     crouch_thr = float(common["crouch_stick_threshold"])
     dz_y = float(common["lstick_deadzone_y"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(case.record), f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(case.record), f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[case.record : case.record + 1]
     p = int(case.p)
 
@@ -107,7 +108,7 @@ def test_squat_entry_records_hold_down(case: _Case) -> None:
     stick_y = _apply_deadzone(float(main_y) * (1.0 / 80.0), dz_y)
     assert stick_y < -crouch_thr
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == ACT_SQUAT
     assert int(out["animation_index"][p]) == SM_SQUAT
     assert int(out["hitlag"][p]) == int(row["ref_t1"]["hitlag"][0, p])
@@ -118,10 +119,10 @@ def test_squat_entry_records_hold_down(case: _Case) -> None:
 def test_wait_iasa_neutral_stick_does_not_enter_squat() -> None:
     binding = pytest.importorskip("msl_binding")
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE}/AttachedGoodNaturedGuanaco.msl"
+    dataset_rel = f"{_BASE}/AttachedGoodNaturedGuanaco.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     common_path = root / "data/common/ft_common_data.json"
     if not common_path.exists():
         pytest.skip("missing local artifact: data/common/ft_common_data.json")
@@ -132,8 +133,8 @@ def test_wait_iasa_neutral_stick_does_not_enter_squat() -> None:
 
     # Replay-real neutral Wait frame: no crouch input, and ref/out should remain Wait.
     # Dataset: AGG rec=156 p=1.
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[156:157]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[156:157]
     p = 1
 
     assert int(row["seed_t"]["action_id"][0, p]) == 14  # Wait
@@ -148,7 +149,7 @@ def test_wait_iasa_neutral_stick_does_not_enter_squat() -> None:
     stick_y = _apply_deadzone(float(main_y) * (1.0 / 80.0), dz_y)
     assert abs(stick_y) < crouch_thr
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == 14
     assert int(out["action_id"][p]) != ACT_SQUAT
 
@@ -157,11 +158,11 @@ def test_wait_iasa_neutral_stick_does_not_enter_squat() -> None:
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "player", "seed_action"),
     [
-        (f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 5867, 1, 39),
-        (f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 7106, 0, 57),
-        (f"{_BASE}/GracefulAttachedTurtle.msl", 6234, 1, 39),
-        (f"{_BASE}/QuerulousGrandDinosaur.msl", 6462, 0, 57),
-        (f"{_BASE}/QuerulousGrandDinosaur.msl", 7616, 1, 57),
+        (f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 5867, 1, 39),
+        (f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 7106, 0, 57),
+        (f"{_BASE}/GracefulAttachedTurtle.slpz", 6234, 1, 39),
+        (f"{_BASE}/QuerulousGrandDinosaur.slpz", 6462, 0, 57),
+        (f"{_BASE}/QuerulousGrandDinosaur.slpz", 7616, 1, 57),
     ],
 )
 def test_squat_and_attacklw3_anim_end_route_to_squatrv_on_release(
@@ -178,11 +179,11 @@ def test_squat_and_attacklw3_anim_end_route_to_squatrv_on_release(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(record), f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(record), f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
     p = int(player)
 
@@ -196,7 +197,7 @@ def test_squat_and_attacklw3_anim_end_route_to_squatrv_on_release(
     assert int(row["ref_t1"]["hitlag"][0, p]) == 0
     assert int(row["ref_t1"]["hitstun"][0, p]) == 0
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["action_frame"][p]) == int(row["ref_t1"]["action_frame"][0, p])
     assert int(out["animation_index"][p]) == int(row["ref_t1"]["animation_index"][0, p])

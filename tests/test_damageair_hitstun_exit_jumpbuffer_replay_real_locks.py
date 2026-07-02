@@ -28,11 +28,11 @@ def test_damageair_hitstun_exit_jumpbuffer_window_is_replay_exact() -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_path = root / (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip("missing local dataset artifacts")
+        pytest.skip("missing local replay artifacts")
 
     p = 1
     for rec in (608, 609, 610, 611):
@@ -56,11 +56,11 @@ def test_damageair_hitstun_exit_jumpbuffer_stale_tap_buffer_does_not_spuriously_
     _skip_if_required_artifacts_missing(root)
 
     dataset_path = root / (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip("missing local dataset artifacts")
+        pytest.skip("missing local replay artifacts")
 
     p = 0
     for rec in (1579, 1580, 1581):

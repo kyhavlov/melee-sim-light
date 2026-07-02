@@ -4,7 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from tools.eval.validation_report_diff import classify_reds, diff_report_sets, main, read_report_set
+import tools.eval.validation_report_diff as validation_report_diff
+from tools.eval.validation_report_diff import (
+    classify_reds,
+    diff_report_sets,
+    discover_report_specs,
+    main,
+    read_report_set,
+)
 
 
 def _write_reports(root: Path, *, one_step: str, rollout: str, include_doubles: bool = True) -> None:
@@ -33,7 +40,7 @@ def _one_step(
     return f"""
 suite: synthetic
 
-== datasets/suite/Foo.msl ==
+== replays/suite/Foo.slpz ==
 overall.discrete_mismatch: {replay} / 100
 overall.strict_discrete_mismatch: {strict} / 100
 {ignored_line}overall.float_norm_mae_p95: {p95}
@@ -65,7 +72,7 @@ def _rollout(
     return f"""
 suite: synthetic
 
-== datasets/suite/Foo.msl ==
+== replays/suite/Foo.slpz ==
 rollout.best_len: {best_len}
 rollout.streak_count: {replay_streak}
 rollout.streak_len.median: {median}
@@ -115,7 +122,7 @@ def test_validation_report_diff_detects_replay_regression_despite_suite_improvem
 
     assert any(
         d.report == "primary rollout"
-        and d.section.endswith("Foo.msl")
+        and d.section.endswith("Foo.slpz")
         and d.metric == "rollout.streak_count"
         and d.is_regression
         for d in deltas
@@ -474,7 +481,7 @@ def test_validation_report_diff_prints_no_replay_regressions_for_suite_only_regr
         one_step="""
 suite: synthetic
 
-== datasets/suite/Foo.msl ==
+== replays/suite/Foo.slpz ==
 overall.discrete_mismatch: 10 / 100
 overall.strict_discrete_mismatch: 12 / 100
 overall.float_norm_mae_p95: 0.20
@@ -487,7 +494,7 @@ overall.float_norm_mae_p95: 0.25
         rollout="""
 suite: synthetic
 
-== datasets/suite/Foo.msl ==
+== replays/suite/Foo.slpz ==
 rollout.best_len: 1000
 rollout.streak_count: 30
 rollout.streak_len.median: 100
@@ -565,6 +572,157 @@ def test_validation_report_diff_rejects_missing_after_doubles_report(tmp_path: P
 
     with pytest.raises(FileNotFoundError, match="required validation report missing"):
         read_report_set(str(after), before=False)
+
+
+def test_validation_report_diff_discovers_character_and_heldout_reports(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    for root, total in ((before, 10), (after, 9)):
+        (root / "heldout").mkdir(exist_ok=True)
+        (root / "marth_one_step.txt").write_text(
+            _one_step(total=total, strict=12, p95="0.20"),
+            encoding="utf-8",
+        )
+        (root / "heldout" / "sheik_heldout_rollout.txt").write_text(
+            _rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+            encoding="utf-8",
+        )
+
+    specs = discover_report_specs(str(after))
+    rel_paths = {spec.rel_path for spec in specs}
+    assert "marth_one_step.txt" in rel_paths
+    assert "heldout/sheik_heldout_rollout.txt" in rel_paths
+
+    before_reports = read_report_set(str(before), before=True, report_specs=specs)
+    after_reports = read_report_set(str(after), before=False, report_specs=specs)
+    deltas = diff_report_sets(before_reports, after_reports)
+
+    assert any(
+        d.report == "marth_one_step one-step"
+        and d.section == "suite"
+        and d.metric == "overall.discrete_mismatch"
+        for d in deltas
+    )
+
+
+def test_validation_report_diff_reads_new_after_reports_as_optional_before(
+    tmp_path: Path,
+) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+        include_doubles=False,
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+        include_doubles=False,
+    )
+    (after / "heldout").mkdir(exist_ok=True)
+    (after / "marth_one_step.txt").write_text(
+        _one_step(total=9, strict=12, p95="0.20"),
+        encoding="utf-8",
+    )
+    (after / "heldout" / "sheik_heldout_rollout.txt").write_text(
+        _rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+        encoding="utf-8",
+    )
+
+    specs = discover_report_specs(str(before), str(after))
+    spec_by_path = {spec.rel_path: spec for spec in specs}
+    assert spec_by_path["marth_one_step.txt"].optional_before
+    assert spec_by_path["heldout/sheik_heldout_rollout.txt"].optional_before
+
+    before_reports = read_report_set(str(before), before=True, report_specs=specs)
+    after_reports = read_report_set(str(after), before=False, report_specs=specs)
+
+    assert "marth_one_step one-step" not in before_reports
+    assert "marth_one_step one-step" in after_reports
+    assert "heldout / sheik_heldout_rollout rollout" in after_reports
+
+
+def test_validation_report_diff_discovers_reports_from_git_refs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_check_output(cmd: list[str], **_: object) -> str:
+        assert cmd[:4] == ["git", "ls-tree", "-r", "--name-only"]
+        ref = cmd[4]
+        if ref == "BASE":
+            return "\n".join(
+                (
+                    "reports/validation/one_step_suite_eval.txt",
+                    "reports/validation/marth_one_step.txt",
+                    "reports/validation/heldout/sheik_heldout_rollout.txt",
+                    "reports/validation/heldout/summary.txt",
+                )
+            )
+        if ref == "HEAD":
+            return "\n".join(
+                (
+                    "reports/validation/sheik_rollout.txt",
+                    "reports/validation/heldout/marth_heldout_one_step.txt",
+                )
+            )
+        raise AssertionError(f"unexpected ref {ref}")
+
+    monkeypatch.setattr(validation_report_diff.subprocess, "check_output", fake_check_output)
+
+    specs = discover_report_specs("BASE", "HEAD")
+    rel_paths = {spec.rel_path for spec in specs}
+
+    assert rel_paths == {
+        "heldout/marth_heldout_one_step.txt",
+        "heldout/sheik_heldout_rollout.txt",
+        "marth_one_step.txt",
+        "one_step_suite_eval.txt",
+        "sheik_rollout.txt",
+    }
+
+
+def test_validation_report_diff_normalizes_legacy_msl_section_labels(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=8, strict=10, p95="0.10", replay_total=8),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    text = (before / "one_step_suite_eval.txt").read_text(encoding="utf-8")
+    (before / "one_step_suite_eval.txt").write_text(
+        text.replace("== replays/suite/Foo.slpz ==", "== datasets/foo/replays/suite/Foo.msl =="),
+        encoding="utf-8",
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after), before=False)
+    deltas = diff_report_sets(before_reports, after_reports)
+
+    assert any(
+        d.report == "primary one-step"
+        and d.section == "replays/suite/Foo.slpz"
+        and d.metric == "overall.discrete_mismatch"
+        and not d.is_regression
+        for d in deltas
+    )
 
 
 def test_validation_report_diff_clean_improvement_does_not_exit(tmp_path: Path) -> None:

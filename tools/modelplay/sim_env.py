@@ -7,7 +7,7 @@ from typing import Mapping, Sequence
 import numpy as np
 
 import melee_sim.dtypes as msl_dtypes
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 from tools.modelplay.state_adapter import (
     MSL_STAGE_FINAL_DESTINATION,
     STAGE_DEBUG_DTYPE,
@@ -115,12 +115,11 @@ class SimSession:
     def __init__(
         self,
         *,
-        dataset_path: Path | None,
         start_record: int = 0,
         char_ids: Sequence[int] | None = None,
         team_ids: Sequence[int] | None = None,
         is_teams: bool = False,
-        start_mode: str = "replay",
+        start_mode: str = "sim-init",
         stocks: int = 4,
         stage_id: int = MSL_STAGE_FINAL_DESTINATION,
         facing: Sequence[int] | None = None,
@@ -130,51 +129,30 @@ class SimSession:
         import msl_binding  # type: ignore
 
         self._binding = msl_binding
-        if start_mode not in ("replay", "sim-init"):
+        if start_mode != "sim-init":
             raise ValueError(f"unknown start_mode: {start_mode}")
         self._start_mode = start_mode
-        self._dataset_path = None if dataset_path is None else Path(dataset_path)
-        self._start_record = int(start_record)
         self._record = int(start_record)
-        self._dataset = None
-        self._samples = None
-        if start_mode == "replay":
-            if dataset_path is None:
-                raise ValueError("dataset_path is required for replay start_mode")
-            self._dataset = read_dataset(str(dataset_path))
-            self._samples = self._dataset.samples
-            if start_record < 0 or start_record >= len(self._samples):
-                raise ValueError(f"start_record out of range: {start_record}")
-            self._num_players = int(self._dataset.header["num_players"])
-            if char_ids is not None and len(char_ids) != self._num_players:
-                raise ValueError(f"expected {self._num_players} char ids, got {len(char_ids)}")
-            if team_ids is not None and len(team_ids) != self._num_players:
-                raise ValueError(f"expected {self._num_players} team ids, got {len(team_ids)}")
-            self._char_ids = None if char_ids is None else tuple(int(x) for x in char_ids)
-            self._team_ids = None if team_ids is None else tuple(int(x) for x in team_ids)
-            self._is_teams = bool(is_teams)
-            self._match_config = None
-        else:
-            self._num_players = 2 if char_ids is None else len(char_ids)
-            if self._num_players not in (2, 4):
-                raise ValueError(f"num_players must be 2 or 4, got {self._num_players}")
-            init_char_ids = tuple(int(x) for x in (char_ids or (CHAR_FALCO, CHAR_FOX)))
-            init_team_ids = tuple(int(x) for x in (team_ids or tuple(range(self._num_players))))
-            init_facing = tuple(int(x) for x in (facing or (1, 0, 1, 0)[: self._num_players]))
-            self._char_ids = init_char_ids
-            self._team_ids = init_team_ids
-            self._is_teams = bool(is_teams)
-            self._match_config = build_match_config_array(
-                num_players=self._num_players,
-                char_ids=init_char_ids,
-                team_ids=init_team_ids,
-                facing=init_facing,
-                stocks=stocks,
-                stage_id=stage_id,
-                frame_id=frame_id,
-                random_seed=random_seed,
-                is_teams=is_teams,
-            )
+        self._num_players = 2 if char_ids is None else len(char_ids)
+        if self._num_players not in (2, 4):
+            raise ValueError(f"num_players must be 2 or 4, got {self._num_players}")
+        init_char_ids = tuple(int(x) for x in (char_ids or (CHAR_FALCO, CHAR_FOX)))
+        init_team_ids = tuple(int(x) for x in (team_ids or tuple(range(self._num_players))))
+        init_facing = tuple(int(x) for x in (facing or (1, 0, 1, 0)[: self._num_players]))
+        self._char_ids = init_char_ids
+        self._team_ids = init_team_ids
+        self._is_teams = bool(is_teams)
+        self._match_config = build_match_config_array(
+            num_players=self._num_players,
+            char_ids=init_char_ids,
+            team_ids=init_team_ids,
+            facing=init_facing,
+            stocks=stocks,
+            stage_id=stage_id,
+            frame_id=frame_id,
+            random_seed=random_seed,
+            is_teams=is_teams,
+        )
         self._handle = msl_binding.init(1, self._num_players)
         self._compare = np.zeros(1, dtype=COMPARE_DTYPE)
         self._compare_bytes = self._compare.view(np.uint8).reshape(1, -1)
@@ -188,12 +166,6 @@ class SimSession:
         self._needs_reset = True
 
     def trace_start_info(self) -> dict[str, object]:
-        if self._start_mode == "replay":
-            return {
-                "mode": "replay",
-                "dataset": None if self._dataset_path is None else str(self._dataset_path),
-                "startRecord": int(self._start_record),
-            }
         if self._match_config is None:
             return {"mode": "sim-init"}
         row = self._match_config[0]
@@ -219,41 +191,19 @@ class SimSession:
         self._binding.destroy(self._handle)
 
     def reset(self) -> EnvOutput:
-        if self._start_mode == "sim-init":
-            if self._match_config is None:
-                raise RuntimeError("missing sim-init match config")
-            config_bytes = self._match_config.view(np.uint8).reshape(1, -1)
-            self._binding.init_match(self._handle, config_bytes)
-            self._binding.write_compare(self._handle, self._compare_bytes)
-            self._binding.debug_write_stage_state(self._handle, self._stage_debug_bytes)
-            self._prev_input[...] = np.zeros(1, dtype=INPUT_DTYPE)
-            self._input[...] = np.zeros(1, dtype=INPUT_DTYPE)
-            self._refresh_processed_controllers()
-            self._state = frame_state_with_timebase(
-                frame_state_from_compare(self._compare[0], self._stage_debug[0]),
-                self._binding.debug_timebase(self._handle, 0),
-            )
-            self._needs_reset = True
-            return self.current_state()
-
-        if self._samples is None:
-            raise RuntimeError("missing replay dataset samples")
-        row = self._samples[self._record]
-        seed_arr = np.zeros(1, dtype=SEED_DTYPE)
-        seed_arr[0] = row["seed_t"]
-        if self._char_ids is not None:
-            for p, char_id in enumerate(self._char_ids):
-                seed_arr[0]["char_id"][p] = np.uint8(char_id)
-        if self._team_ids is not None:
-            seed_arr[0]["is_teams"] = np.uint8(1 if self._is_teams else 0)
-            for p, team_id in enumerate(self._team_ids):
-                seed_arr[0]["team_id"][p] = np.uint8(team_id)
-        seed_bytes = seed_arr.view(np.uint8).reshape(1, -1)
-        self._binding.reseed_seed(self._handle, seed_bytes)
-        self._prev_input[0] = row["prev_input_t"]
-        self._input[0] = row["input_t"]
+        if self._match_config is None:
+            raise RuntimeError("missing sim-init match config")
+        config_bytes = self._match_config.view(np.uint8).reshape(1, -1)
+        self._binding.init_match(self._handle, config_bytes)
+        self._binding.write_compare(self._handle, self._compare_bytes)
+        self._binding.debug_write_stage_state(self._handle, self._stage_debug_bytes)
+        self._prev_input[...] = np.zeros(1, dtype=INPUT_DTYPE)
+        self._input[...] = np.zeros(1, dtype=INPUT_DTYPE)
         self._refresh_processed_controllers()
-        self._state = frame_state_from_seed(seed_arr[0])
+        self._state = frame_state_with_timebase(
+            frame_state_from_compare(self._compare[0], self._stage_debug[0]),
+            self._binding.debug_timebase(self._handle, 0),
+        )
         self._needs_reset = True
         return self.current_state()
 
@@ -325,12 +275,11 @@ class BatchedSimSession:
         self,
         *,
         batch_size: int,
-        dataset_path: Path | None,
         start_record: int = 0,
         char_ids: Sequence[int] | None = None,
         team_ids: Sequence[int] | None = None,
         is_teams: bool = False,
-        start_mode: str = "replay",
+        start_mode: str = "sim-init",
         stocks: int = 4,
         stage_id: int = MSL_STAGE_FINAL_DESTINATION,
         stage_ids: Sequence[int] | None = None,
@@ -343,80 +292,58 @@ class BatchedSimSession:
 
         if batch_size <= 0:
             raise ValueError(f"batch_size must be positive, got {batch_size}")
-        if start_mode not in ("replay", "sim-init"):
+        if start_mode != "sim-init":
             raise ValueError(f"unknown start_mode: {start_mode}")
 
         self._binding = msl_binding
         self._batch_size = int(batch_size)
         self._start_mode = start_mode
-        self._dataset_path = None if dataset_path is None else Path(dataset_path)
-        self._start_record = int(start_record)
         self._record = int(start_record)
-        self._dataset = None
-        self._samples = None
-
-        if start_mode == "replay":
-            if dataset_path is None:
-                raise ValueError("dataset_path is required for replay start_mode")
-            self._dataset = read_dataset(str(dataset_path))
-            self._samples = self._dataset.samples
-            if start_record < 0 or start_record >= len(self._samples):
-                raise ValueError(f"start_record out of range: {start_record}")
-            self._num_players = int(self._dataset.header["num_players"])
-            if char_ids is not None and len(char_ids) != self._num_players:
-                raise ValueError(f"expected {self._num_players} char ids, got {len(char_ids)}")
-            if team_ids is not None and len(team_ids) != self._num_players:
-                raise ValueError(f"expected {self._num_players} team ids, got {len(team_ids)}")
-            self._char_ids = None if char_ids is None else tuple(int(x) for x in char_ids)
-            self._team_ids = None if team_ids is None else tuple(int(x) for x in team_ids)
-            self._is_teams = bool(is_teams)
-            self._match_config = None
-        else:
-            if char_ids_by_env is not None and len(char_ids_by_env) != self._batch_size:
-                raise ValueError(f"expected {self._batch_size} char-id rows, got {len(char_ids_by_env)}")
-            self._num_players = (
-                len(char_ids_by_env[0])
-                if char_ids_by_env is not None
-                else 2 if char_ids is None else len(char_ids)
-            )
-            if self._num_players not in (2, 4):
-                raise ValueError(f"num_players must be 2 or 4, got {self._num_players}")
-            if char_ids_by_env is not None:
-                for env, row in enumerate(char_ids_by_env):
-                    if len(row) != self._num_players:
-                        raise ValueError(
-                            f"expected {self._num_players} char ids for env {env}, got {len(row)}"
-                        )
-            if stage_ids is not None and len(stage_ids) != self._batch_size:
-                raise ValueError(f"expected {self._batch_size} stage ids, got {len(stage_ids)}")
-            init_char_ids = tuple(int(x) for x in (char_ids or (CHAR_FALCO, CHAR_FOX)))
-            init_team_ids = tuple(int(x) for x in (team_ids or tuple(range(self._num_players))))
-            init_facing = tuple(int(x) for x in (facing or (1, 0, 1, 0)[: self._num_players]))
-            self._char_ids = init_char_ids
-            self._team_ids = init_team_ids
-            self._is_teams = bool(is_teams)
-            one = build_match_config_array(
-                num_players=self._num_players,
-                char_ids=init_char_ids,
-                team_ids=init_team_ids,
-                facing=init_facing,
-                stocks=stocks,
-                stage_id=stage_id,
-                frame_id=frame_id,
-                random_seed=random_seed,
-                is_teams=is_teams,
-            )[0]
-            self._match_config = np.zeros(self._batch_size, dtype=MATCH_CONFIG_DTYPE)
-            self._match_config[:] = one
-            if stage_ids is not None:
-                self._match_config["stage_id"] = np.asarray(stage_ids, dtype=np.uint32)
-            if char_ids_by_env is not None:
-                for env, row in enumerate(char_ids_by_env):
-                    for port, char_id in enumerate(row):
-                        self._match_config["players"][env, port]["char_id"] = np.uint8(int(char_id))
-            self._match_config["frame_pre_random_seed"] = (
-                np.uint32(random_seed) + np.arange(self._batch_size, dtype=np.uint32)
-            )
+        if char_ids_by_env is not None and len(char_ids_by_env) != self._batch_size:
+            raise ValueError(f"expected {self._batch_size} char-id rows, got {len(char_ids_by_env)}")
+        self._num_players = (
+            len(char_ids_by_env[0])
+            if char_ids_by_env is not None
+            else 2 if char_ids is None else len(char_ids)
+        )
+        if self._num_players not in (2, 4):
+            raise ValueError(f"num_players must be 2 or 4, got {self._num_players}")
+        if char_ids_by_env is not None:
+            for env, row in enumerate(char_ids_by_env):
+                if len(row) != self._num_players:
+                    raise ValueError(
+                        f"expected {self._num_players} char ids for env {env}, got {len(row)}"
+                    )
+        if stage_ids is not None and len(stage_ids) != self._batch_size:
+            raise ValueError(f"expected {self._batch_size} stage ids, got {len(stage_ids)}")
+        init_char_ids = tuple(int(x) for x in (char_ids or (CHAR_FALCO, CHAR_FOX)))
+        init_team_ids = tuple(int(x) for x in (team_ids or tuple(range(self._num_players))))
+        init_facing = tuple(int(x) for x in (facing or (1, 0, 1, 0)[: self._num_players]))
+        self._char_ids = init_char_ids
+        self._team_ids = init_team_ids
+        self._is_teams = bool(is_teams)
+        one = build_match_config_array(
+            num_players=self._num_players,
+            char_ids=init_char_ids,
+            team_ids=init_team_ids,
+            facing=init_facing,
+            stocks=stocks,
+            stage_id=stage_id,
+            frame_id=frame_id,
+            random_seed=random_seed,
+            is_teams=is_teams,
+        )[0]
+        self._match_config = np.zeros(self._batch_size, dtype=MATCH_CONFIG_DTYPE)
+        self._match_config[:] = one
+        if stage_ids is not None:
+            self._match_config["stage_id"] = np.asarray(stage_ids, dtype=np.uint32)
+        if char_ids_by_env is not None:
+            for env, row in enumerate(char_ids_by_env):
+                for port, char_id in enumerate(row):
+                    self._match_config["players"][env, port]["char_id"] = np.uint8(int(char_id))
+        self._match_config["frame_pre_random_seed"] = (
+            np.uint32(random_seed) + np.arange(self._batch_size, dtype=np.uint32)
+        )
 
         self._handle = msl_binding.init(self._batch_size, self._num_players)
         self._compare = np.zeros(self._batch_size, dtype=COMPARE_DTYPE)
@@ -433,13 +360,6 @@ class BatchedSimSession:
     def trace_start_info(self, env: int) -> dict[str, object]:
         if env < 0 or env >= self._batch_size:
             raise IndexError(f"env out of range: {env}")
-        if self._start_mode == "replay":
-            return {
-                "mode": "replay",
-                "dataset": None if self._dataset_path is None else str(self._dataset_path),
-                "startRecord": int(self._start_record),
-                "env": int(env),
-            }
         if self._match_config is None:
             return {"mode": "sim-init", "env": int(env)}
         row = self._match_config[env]
@@ -484,37 +404,16 @@ class BatchedSimSession:
         self._binding.destroy(self._handle)
 
     def reset(self) -> BatchedEnvOutput:
-        if self._start_mode == "sim-init":
-            if self._match_config is None:
-                raise RuntimeError("missing sim-init match config")
-            config_bytes = self._match_config.view(np.uint8).reshape(self._batch_size, -1)
-            self._binding.init_match(self._handle, config_bytes)
-            self._binding.write_compare(self._handle, self._compare_bytes)
-            self._binding.debug_write_stage_state(self._handle, self._stage_debug_bytes)
-            self._prev_input[...] = np.zeros(self._batch_size, dtype=INPUT_DTYPE)
-            self._input[...] = np.zeros(self._batch_size, dtype=INPUT_DTYPE)
-            self._refresh_processed_controllers()
-            self._refresh_states_from_compare()
-            self._needs_reset[:] = True
-            return self.current_state()
-
-        if self._samples is None:
-            raise RuntimeError("missing replay dataset samples")
-        row = self._samples[self._record]
-        seed_arr = np.zeros(self._batch_size, dtype=SEED_DTYPE)
-        seed_arr[:] = row["seed_t"]
-        if self._char_ids is not None:
-            for p, char_id in enumerate(self._char_ids):
-                seed_arr["char_id"][:, p] = np.uint8(char_id)
-        if self._team_ids is not None:
-            seed_arr["is_teams"][:] = np.uint8(1 if self._is_teams else 0)
-            for p, team_id in enumerate(self._team_ids):
-                seed_arr["team_id"][:, p] = np.uint8(team_id)
-        self._binding.reseed_seed(self._handle, seed_arr.view(np.uint8).reshape(self._batch_size, -1))
-        self._prev_input[:] = row["prev_input_t"]
-        self._input[:] = row["input_t"]
+        if self._match_config is None:
+            raise RuntimeError("missing sim-init match config")
+        config_bytes = self._match_config.view(np.uint8).reshape(self._batch_size, -1)
+        self._binding.init_match(self._handle, config_bytes)
+        self._binding.write_compare(self._handle, self._compare_bytes)
+        self._binding.debug_write_stage_state(self._handle, self._stage_debug_bytes)
+        self._prev_input[...] = np.zeros(self._batch_size, dtype=INPUT_DTYPE)
+        self._input[...] = np.zeros(self._batch_size, dtype=INPUT_DTYPE)
         self._refresh_processed_controllers()
-        self._states = [frame_state_from_seed(seed_arr[i]) for i in range(self._batch_size)]
+        self._refresh_states_from_compare()
         self._needs_reset[:] = True
         return self.current_state()
 

@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import json
 
-from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
 
 
 def _write_minimal_ssanim_v4(path: Path, *, msid: int, part_id: int, mtx34: list[float]) -> None:

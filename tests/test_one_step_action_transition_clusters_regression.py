@@ -7,7 +7,8 @@ import json
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _apply_deadzone(v: float, dz: float) -> float:
@@ -62,7 +63,7 @@ class _Case:
     ref_action: int
 
 
-_BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE = "replays/validation/cardinal_1.0_recent"
 
 
 @pytest.mark.integration
@@ -70,22 +71,22 @@ _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
     "case",
     [
         # 236/43/236: EscapeAir should land into LandingFallSpecial.
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 815, 0, 236, 43),
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 6259, 0, 236, 43),
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 2069, 0, 236, 43),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 159, 0, 236, 43),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 248, 0, 236, 43),
-        _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 1267, 0, 236, 43),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 815, 0, 236, 43),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 6259, 0, 236, 43),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 2069, 0, 236, 43),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 159, 0, 236, 43),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 248, 0, 236, 43),
+        _Case(f"{_BASE}/TreasuredBackKangaroo.slpz", 1267, 0, 236, 43),
         # 178/179/178: GuardOn should become Guard.
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 334, 1, 178, 179),
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 1382, 0, 178, 179),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 2478, 1, 178, 179),
-        _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 1590, 0, 178, 179),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 334, 1, 178, 179),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 1382, 0, 178, 179),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 2478, 1, 178, 179),
+        _Case(f"{_BASE}/TreasuredBackKangaroo.slpz", 1590, 0, 178, 179),
         # 42/40/42: Landing should transition to SquatWait (crouch).
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 1400, 0, 42, 40),
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 144, 0, 42, 40),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 122, 0, 42, 40),
-        _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 7260, 1, 42, 40),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 1400, 0, 42, 40),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 144, 0, 42, 40),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 122, 0, 42, 40),
+        _Case(f"{_BASE}/TreasuredBackKangaroo.slpz", 7260, 1, 42, 40),
     ],
 )
 def test_one_step_action_transition_cluster_records(case: _Case) -> None:
@@ -94,11 +95,11 @@ def test_one_step_action_transition_cluster_records(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(case.record), f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(case.record), f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[case.record : case.record + 1]
     p = int(case.p)
 
@@ -149,7 +150,7 @@ def test_one_step_action_transition_cluster_records(case: _Case) -> None:
         assert cur_af >= float(landing_lag_frames)
         assert cur_af < float(landing_lag_frames) + seed_spd
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
     got_a = int(out["action_id"][p])
     want_a = int(row["ref_t1"]["action_id"][0, p])
     assert got_a == want_a, f"dataset={case.dataset_rel} record={case.record} p={p} expected action_id={want_a}, got {got_a}"

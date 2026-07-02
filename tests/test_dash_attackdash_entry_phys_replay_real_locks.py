@@ -10,7 +10,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_rollout_window_rows_with_trace,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_rollout_with_seed_mutation(
@@ -20,8 +21,8 @@ def _run_rollout_with_seed_mutation(
     end_record: int,
     mutate_seed,
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > end_record
 
     binding = pytest.importorskip("msl_binding")
@@ -37,7 +38,7 @@ def _run_rollout_with_seed_mutation(
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     out: dict[int, tuple[np.void, np.void]] = {}
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
@@ -71,10 +72,10 @@ def test_dash_attackdash_entry_phys_applies_same_frame_root_velocity() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        / "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, 2399, 1)
     for field in ("action_id", "action_frame", "animation_index", "on_ground"):
@@ -99,10 +100,10 @@ def test_run_attackdash_entry_phys_applies_same_frame_root_velocity() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        root / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, 9954, 1)
     assert int(out_row["action_id"][1]) == 50  # AttackDash
@@ -123,15 +124,15 @@ def test_dash_attackdash_entry_phys_rollout_and_adjacent_dash_control() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        / "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed_2398 = ds.samples[2398]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_2398 = ds.rows[2398]["seed_t"]
     assert int(seed_2398["action_id"][1]) == 20  # Dash
-    assert int(ds.samples[2398]["ref_t1"]["action_id"][1]) == 20  # stays Dash without A press
+    assert int(ds.rows[2398]["ref_t1"]["action_id"][1]) == 20  # stays Dash without A press
 
     rows = _run_rollout_window_rows_with_trace(
         dataset_path,
@@ -155,13 +156,13 @@ def test_airborne_downbound_x1994_seed_carries_to_grounded_attackdash_pose_bound
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        / "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[2400]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[2400]["seed_t"]
     defender = 0
     attacker = 1
     assert int(seed["action_id"][defender]) == 191  # DownBound/DownBack family row
@@ -212,13 +213,13 @@ def test_grounded_downbound_x1994_keeps_current_pose_for_body_contact() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[1555]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[1555]["seed_t"]
     defender = 1
     attacker = 0
     assert int(seed["action_id"][defender]) == 191  # DownBoundD
@@ -241,13 +242,13 @@ def test_run_attackdash_entry_phys_downbound_contact_rollout_boundary() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        root / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[9954]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[9954]["seed_t"]
     defender = 0
     attacker = 1
     assert int(seed["action_id"][defender]) == 191  # DownBoundD

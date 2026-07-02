@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_GUARD_REFLECT = 0x00B6
@@ -39,9 +40,9 @@ def _find_item_slot_by_key(items: np.ndarray, *, spawn_id: int, item_type: int) 
 
 
 def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
@@ -59,7 +60,7 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -100,7 +101,7 @@ class _TimingCase:
     "case",
     [
         _TransferCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=4829,
             prev_record=4828,
             spawn_id=125,
@@ -110,7 +111,7 @@ class _TimingCase:
             note="powershield transfer lane A",
         ),
         _TransferCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=6208,
             prev_record=6207,
             spawn_id=149,
@@ -120,7 +121,7 @@ class _TimingCase:
             note="powershield transfer lane B",
         ),
         _TransferCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             record=7449,
             prev_record=7448,
             spawn_id=142,
@@ -140,10 +141,10 @@ def test_reflected_laser_transfer_rows_match_replay_real_item_identity(case: _Tr
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > case.record
     assert int(samples.shape[0]) > case.prev_record
     seed_prev = samples[case.prev_record]["seed_t"]
@@ -179,7 +180,7 @@ def test_reflected_laser_transfer_rows_match_replay_real_item_identity(case: _Tr
     "case",
     [
         _TimingCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             control_record=4830,
             transfer_record=4828,
             apply_record=4829,
@@ -189,7 +190,7 @@ def test_reflected_laser_transfer_rows_match_replay_real_item_identity(case: _Tr
             note="powershield timing lane A",
         ),
         _TimingCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             control_record=6209,
             transfer_record=6207,
             apply_record=6208,
@@ -199,7 +200,7 @@ def test_reflected_laser_transfer_rows_match_replay_real_item_identity(case: _Tr
             note="powershield timing lane B",
         ),
         _TimingCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             control_record=7450,
             transfer_record=7448,
             apply_record=7449,
@@ -223,10 +224,10 @@ def test_powershield_reflect_transfer_then_speed_apply_timing_locks(case: _Timin
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > case.apply_record
     assert int(samples.shape[0]) > case.transfer_record
     assert int(samples.shape[0]) > case.control_record
@@ -361,7 +362,7 @@ class _HitCase:
     "case",
     [
         _HitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=4833,
             spawn_id=125,
             item_type=55,
@@ -372,7 +373,7 @@ class _HitCase:
             note="adjacent control A (no hit yet)",
         ),
         _HitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=4834,
             spawn_id=125,
             item_type=55,
@@ -383,7 +384,7 @@ class _HitCase:
             note="reflected hit A",
         ),
         _HitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=6212,
             spawn_id=149,
             item_type=55,
@@ -394,7 +395,7 @@ class _HitCase:
             note="adjacent control B (no hit yet)",
         ),
         _HitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=6213,
             spawn_id=149,
             item_type=55,
@@ -405,7 +406,7 @@ class _HitCase:
             note="reflected hit B",
         ),
         _HitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             record=7475,
             spawn_id=142,
             item_type=55,
@@ -416,7 +417,7 @@ class _HitCase:
             note="adjacent control C (no hit yet)",
         ),
         _HitCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             record=7476,
             spawn_id=142,
             item_type=55,
@@ -427,7 +428,7 @@ class _HitCase:
             note="reflected hit C",
         ),
         _HitCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             record=4124,
             spawn_id=44,
             item_type=55,
@@ -438,7 +439,7 @@ class _HitCase:
             note="PPA same-source hitlist negative: reflected laser stays alive",
         ),
         _HitCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             record=4189,
             spawn_id=48,
             item_type=55,
@@ -460,10 +461,10 @@ def test_reflected_laser_hit_rows_and_adjacent_controls_lock_replay_real(case: _
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > case.record
     row = samples[case.record]
     seed = row["seed_t"]

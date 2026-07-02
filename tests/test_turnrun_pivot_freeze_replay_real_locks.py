@@ -5,12 +5,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
+from tools.eval.streaming_validation import _load_binding
 
 
 _AGG_FSP = Path(
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
 )
 
 ACT_RUN_BRAKE = 23
@@ -18,45 +19,34 @@ ACT_TURN_RUN = 19
 
 
 def _byte_views(ds):
-    samples = ds.samples
-    stride = int(samples.dtype.itemsize)
-    u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), stride)
-    return (
-        u8,
-        int(samples.dtype.fields["seed_t"][1]),
-        int(samples.dtype.fields["prev_input_t"][1]),
-        int(samples.dtype.fields["input_t"][1]),
-    )
+    views = replay_buffer_byte_views(ds)
+    return views.seed_t, views.prev_input_t, views.input_t
 
 
 def _rollout_row(dataset_path: Path, start: int, stop: int) -> tuple[np.void, np.void]:
     binding = _load_binding()
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    samples_u8, seed_off, prev_input_off, input_off = _byte_views(ds)
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    seed_u8, prev_input_u8, input_u8 = _byte_views(ds)
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, stop + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[
-                record : record + 1, input_off : input_off + input_stride
-            ].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_bytes)
     finally:
@@ -81,13 +71,13 @@ def test_turnrun_cmd1_freeze_handles_runbrake_preserved_anim_start_rollout() -> 
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _AGG_FSP
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start = 9664
     p = 1
 
-    seed_first_turnrun = ds.samples["seed_t"][9669]
+    seed_first_turnrun = ds.rows["seed_t"][9669]
     assert int(seed_first_turnrun["action_id"][p]) == ACT_TURN_RUN
     assert int(seed_first_turnrun["action_frame"][p]) == 12
     assert int(seed_first_turnrun["seed_prev_action_id"][p]) == ACT_RUN_BRAKE

@@ -26,11 +26,11 @@ def test_damageair2_post_hitlag_gravity_target_pm1_and_negative_are_strict() -> 
     _skip_if_required_artifacts_missing(root)
 
     dataset_path = root / (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip("missing local dataset artifacts")
+        pytest.skip("missing local replay artifacts")
 
     p = 1
 

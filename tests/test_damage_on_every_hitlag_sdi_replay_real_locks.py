@@ -5,12 +5,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_one_step(dataset_path: Path, record: int):
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
     binding = pytest.importorskip("msl_binding")
@@ -24,7 +25,7 @@ def _run_one_step(dataset_path: Path, record: int):
     input_bytes = row["input_t"].view("u1").reshape(1, input_stride).copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -40,19 +41,19 @@ def _run_one_step(dataset_path: Path, record: int):
 def test_damage_on_every_hitlag_sdi_target_pm1_rows_are_replay_exact() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (313, 314, 315)
     p = 0
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for record={rec}"
 
     target = samples[314 : 315]
     assert int(target["seed_t"]["action_id"][0, p]) == 79
@@ -74,15 +75,15 @@ def test_damage_on_every_hitlag_sdi_target_pm1_rows_are_replay_exact() -> None:
 def test_damage_on_every_hitlag_sdi_explicit_negative_control_row_3097_stays_exact() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[3097 : 3098]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[3097 : 3098]
     p = 1
     assert int(row["seed_t"]["action_id"][0, p]) == 86
     assert int(row["seed_t"]["hitlag"][0, p]) == 4
@@ -100,20 +101,20 @@ def test_damage_on_every_hitlag_sdi_explicit_negative_control_row_3097_stays_exa
 def test_damageflylw_hitlag_sdi_target_pm1_and_negative_control_are_replay_exact() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (3374, 3375, 3376)
     neg = 3373
     p = 1
     for rec in (*rows, neg):
-        assert int(samples.shape[0]) > rec, f"dataset too short for record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for record={rec}"
 
     target = samples[3375 : 3376]
     assert int(target["seed_t"]["action_id"][0, p]) == 89
@@ -138,20 +139,20 @@ def test_damageflylw_hitlag_sdi_target_pm1_and_negative_control_are_replay_exact
 def test_downdamaged_hitlag_sdi_target_pm1_and_negative_control_are_replay_exact() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (6049, 6050, 6051)
     neg = 6048
     p = 1
     for rec in (*rows, neg):
-        assert int(samples.shape[0]) > rec, f"dataset too short for record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for record={rec}"
 
     target = samples[6050 : 6051]
     assert int(target["seed_t"]["action_id"][0, p]) == 193
@@ -177,20 +178,20 @@ def test_downdamaged_hitlag_sdi_target_pm1_and_negative_control_are_replay_exact
 def test_damageflyhi_hitlag_sdi_target_pm1_and_negative_control_are_replay_exact() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (4158, 4159, 4160)
     neg = 4162
     p = 0
     for rec in (*rows, neg):
-        assert int(samples.shape[0]) > rec, f"dataset too short for record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for record={rec}"
 
     target = samples[4159 : 4160]
     assert int(target["seed_t"]["action_id"][0, p]) == 87
@@ -219,19 +220,19 @@ def test_damageflyhi_hitlag_sdi_target_pm1_and_negative_control_are_replay_exact
 def test_damageflytop_hitlag_sdi_target_and_neighbors_are_replay_exact() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (612, 613, 614)
     p = 1
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for record={rec}"
 
     target = samples[613 : 614]
     assert int(target["seed_t"]["action_id"][0, p]) == 90
@@ -261,15 +262,15 @@ def test_first_active_hitlag_radius_crossing_sdi_applies_ppa_2185() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PriceyPartialAlbatross.msl"
+        "replays/validation/aggregate_recent/"
+        "PriceyPartialAlbatross.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[2185:2186]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[2185:2186]
     p = 0
     assert int(row["seed_t"]["action_id"][0, p]) == 78
     assert int(row["seed_t"]["hitlag"][0, p]) == 4
@@ -296,15 +297,15 @@ def test_held_radius_stick_does_not_retrigger_first_hitlag_sdi_prh_659() -> None
     #   frame 537: lstick=(0,-0.9875), lstick1=(0,-0.9875), pos unchanged
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PositiveRevolvingHyena.msl"
+        "replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[659:660]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[659:660]
     p = 0
     assert int(row["seed_t"]["action_id"][0, p]) == 90
     assert int(row["seed_t"]["hitlag"][0, p]) == 7

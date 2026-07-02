@@ -5,10 +5,10 @@ from pathlib import Path
 import pytest
 
 from tests.test_damagefly_right_wall_projection_replay_real_locks import _rollout_rows
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_PPA = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl")
+_PPA = Path("replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz")
 
 ACT_ATTACK_HI3 = 56
 ACT_DAMAGE_FLY_LW = 89
@@ -28,10 +28,10 @@ def test_attackhi3_enable_edge_clears_stale_dense_hitlist_for_damagefly_rehit() 
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _PPA
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    seed_567 = ds.samples[567]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_567 = ds.rows[567]["seed_t"]
     assert int(seed_567["action_id"][0]) == ACT_DAMAGE_FLY_LW
     assert int(seed_567["action_id"][1]) == ACT_ATTACK_HI3
     assert int(seed_567["combat_hitlist_cd"][1, 0, 0]) == 0

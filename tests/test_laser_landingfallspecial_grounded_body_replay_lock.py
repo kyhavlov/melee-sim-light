@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _one_step_out_compare(*, ds, row) -> np.ndarray:
@@ -16,7 +17,7 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -46,8 +47,8 @@ class _Case:
 
 
 _DATASET_REL = (
-    "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-    "AttachedGoodNaturedGuanaco.msl"
+    "replays/validation/cardinal_1.0_recent/"
+    "AttachedGoodNaturedGuanaco.slpz"
 )
 
 _CASES = [
@@ -77,11 +78,11 @@ def test_laser_landingfallspecial_grounded_body_replay_rows(case: _Case) -> None
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _DATASET_REL
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_DATASET_REL}")
+        pytest.skip(f"missing local replay: {_DATASET_REL}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > case.record, f"dataset too short for record={case.record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > case.record, f"replay too short for record={case.record}"
     row = samples[case.record : case.record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]

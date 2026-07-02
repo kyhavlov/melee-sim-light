@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -23,9 +24,9 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 
 def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(record), f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(record), f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
@@ -43,7 +44,7 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -78,7 +79,7 @@ class _SpawnCase:
     "case",
     [
         _SpawnCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=136,
             slot=1,
             shot_itkind=55,
@@ -88,7 +89,7 @@ class _SpawnCase:
             note="Falco laser spawn lock",
         ),
         _SpawnCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             record=3239,
             slot=1,
             shot_itkind=54,
@@ -110,7 +111,7 @@ def test_laser_spawn_joint_lane_rows_match_replay_real(case: _SpawnCase) -> None
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     joint_part = _read_spawn_joint_part_id(root, character=case.owner_char_name)
     assert joint_part > 0, case.note

@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _tracks_end_frame(tracks_path: Path, msid: int) -> float:
@@ -86,18 +87,18 @@ def test_action_frame_run_anim_rate_scaled_from_ground_speed() -> None:
     # but the sim previously advanced state_age too quickly (out.action_frame != 1).
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 741
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 21  # Run
@@ -116,7 +117,7 @@ def test_action_frame_run_anim_rate_scaled_from_ground_speed() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -152,18 +153,18 @@ def test_action_frame_non_looping_anim_clamps_at_end_frame() -> None:
     # but the sim previously advanced beyond the end.
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 3503
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 88  # DamageFlyN
@@ -188,7 +189,7 @@ def test_action_frame_non_looping_anim_clamps_at_end_frame() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -229,18 +230,18 @@ def test_damagefly_iasa_jump_buffer_parity_agg_1681_p1() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 1681
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 90  # ftCo_MS_DamageFlyTop
@@ -264,7 +265,7 @@ def test_damagefly_iasa_jump_buffer_parity_agg_1681_p1() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -300,18 +301,18 @@ def test_state_flags_x221a_b3_not_set_on_throw_release_damage_entry() -> None:
     # Regression target: TBK rec 444 p1 (ThrownHi -> DamageFlyTop) with ref.state_flags[1] == 0.
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 444
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 241  # ThrownHi
@@ -328,7 +329,7 @@ def test_state_flags_x221a_b3_not_set_on_throw_release_damage_entry() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -367,18 +368,18 @@ def test_state_flags_x221a_b3_clears_when_hitlag_reaches_zero() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 182
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 75  # ftCo_MS_DamageHi1
@@ -394,7 +395,7 @@ def test_state_flags_x221a_b3_clears_when_hitlag_reaches_zero() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -437,18 +438,18 @@ def test_state_flags_x221b_b5_set_on_catchpull_entry() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 203
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 212  # Catch
@@ -466,7 +467,7 @@ def test_state_flags_x221b_b5_set_on_catchpull_entry() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -508,19 +509,19 @@ def test_catchpull_connect_with_guard_no_submotion_victim() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 4155
     owner_p = 1
     victim_p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, owner_p]) == 212  # Catch
@@ -546,7 +547,7 @@ def test_catchpull_connect_with_guard_no_submotion_victim() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -601,18 +602,18 @@ def test_guardreflect_no_submotion_seed_eq_ref_stays_stable_gat_1289() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 1289
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 182  # GuardReflect
@@ -630,7 +631,7 @@ def test_guardreflect_no_submotion_seed_eq_ref_stays_stable_gat_1289() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -667,18 +668,18 @@ def test_guardreflect_no_submotion_no_new_hitstun_tbk_3610() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 3610
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 182  # GuardReflect
@@ -692,7 +693,7 @@ def test_guardreflect_no_submotion_no_new_hitstun_tbk_3610() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -728,18 +729,18 @@ def test_state_flags_x221b_b5_clears_after_throw_release() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 573
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 221  # ThrowHi
@@ -757,7 +758,7 @@ def test_state_flags_x221b_b5_clears_after_throw_release() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -801,18 +802,18 @@ def test_state_flags_x221c_b2_set_on_guard_reflect_entry() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 213
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 20  # Dash
@@ -829,7 +830,7 @@ def test_state_flags_x221c_b2_set_on_guard_reflect_entry() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -868,18 +869,18 @@ def test_state_flags_x221c_b2_clears_after_guard_reflect_window() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 217
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 182  # GuardReflect
@@ -899,7 +900,7 @@ def test_state_flags_x221c_b2_clears_after_guard_reflect_window() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -934,18 +935,18 @@ def test_action_frame_blaster_start_entry_ticks_once() -> None:
     # Regression target: TBK rec 3786 p1 (JumpF -> SpecialAirNStart) with seed.action_frame == ref.action_frame == 1.
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 3786
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 25  # JumpF
@@ -969,7 +970,7 @@ def test_action_frame_blaster_start_entry_ticks_once() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1008,18 +1009,18 @@ def test_action_frame_shine_start_entry_ticks_once() -> None:
     # Regression target: TBK rec 1601 p1 (Squat -> SpecialLwStart) with seed.action_frame == ref.action_frame == 1.
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 1601
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 39  # Squat
@@ -1040,7 +1041,7 @@ def test_action_frame_shine_start_entry_ticks_once() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1079,18 +1080,18 @@ def test_action_frame_attackair_entry_from_cstick_edge() -> None:
     # Regression target: TBK rec 734 p0 (JumpF -> AttackAirLw) with seed.action_frame == ref.action_frame == 1.
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 734
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 25  # JumpF
@@ -1116,7 +1117,7 @@ def test_action_frame_attackair_entry_from_cstick_edge() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1155,18 +1156,18 @@ def test_action_frame_attackair_entry_from_cstick_edge_second_example() -> None:
     # Regression target: TBK rec 5460 p1 (JumpB -> AttackAirLw).
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 5460
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 26  # JumpB
@@ -1192,7 +1193,7 @@ def test_action_frame_attackair_entry_from_cstick_edge_second_example() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1232,18 +1233,18 @@ def test_state_flags_fastfall_bit_persists_across_fall_anim_wrap() -> None:
     # sim previously cleared it on the wrap boundary.
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 2645
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 29  # Fall
@@ -1262,7 +1263,7 @@ def test_state_flags_fastfall_bit_persists_across_fall_anim_wrap() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1306,18 +1307,18 @@ def test_action_frame_landingairn_entry_rate_uses_decomp_lag_formula() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 320
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 70  # ftCo_MS_LandingAirN
@@ -1369,7 +1370,7 @@ def test_action_frame_landingairn_entry_rate_uses_decomp_lag_formula() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1413,18 +1414,18 @@ def test_action_frame_attackair_entry_rate_resets_to_one() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 285
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 69  # ftCo_MS_AttackAirLw
@@ -1445,7 +1446,7 @@ def test_action_frame_attackair_entry_rate_resets_to_one() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1493,18 +1494,18 @@ def test_action_frame_guard_setoff_hitlag_tail_uses_entry_rate() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 924
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 181  # GuardSetOff
@@ -1582,7 +1583,7 @@ def test_action_frame_guard_setoff_hitlag_tail_uses_entry_rate() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1626,21 +1627,21 @@ def test_specialhi_fall_landing_wait_transitions_qgd() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
 
     # rec 5895 p1: SpecialHiFall (air) -> SpecialHiLanding (ground).
     record_fall_to_landing = 5895
     p = 1
     assert int(samples.shape[0]) > record_fall_to_landing, (
-        f"dataset too short: num_records={int(samples.shape[0])}"
+        f"replay too short: num_records={int(samples.shape[0])}"
     )
     row = samples[record_fall_to_landing : record_fall_to_landing + 1]
     assert int(row["seed_t"]["action_id"][0, p]) == 358  # ftFx_MS_SpecialHiFall
@@ -1660,7 +1661,7 @@ def test_specialhi_fall_landing_wait_transitions_qgd() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1704,7 +1705,7 @@ def test_specialhi_fall_landing_wait_transitions_qgd() -> None:
         # rec 5901 p1: SpecialHiLanding -> Wait on anim end.
         record_landing_to_wait = 5901
         assert int(samples.shape[0]) > record_landing_to_wait, (
-            f"dataset too short: num_records={int(samples.shape[0])}"
+            f"replay too short: num_records={int(samples.shape[0])}"
         )
         row2 = samples[record_landing_to_wait : record_landing_to_wait + 1]
         assert int(row2["seed_t"]["action_id"][0, p]) == 357  # ftFx_MS_SpecialHiLanding
@@ -1752,15 +1753,15 @@ def test_specialhi_fall_landing_wait_transitions_tbk() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = 0
 
     binding = pytest.importorskip("msl_binding")
@@ -1769,7 +1770,7 @@ def test_specialhi_fall_landing_wait_transitions_tbk() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1779,7 +1780,7 @@ def test_specialhi_fall_landing_wait_transitions_tbk() -> None:
         # rec 7123 p0: SpecialHiFall (air) -> SpecialHiLanding (ground).
         record_fall_to_landing = 7123
         assert int(samples.shape[0]) > record_fall_to_landing, (
-            f"dataset too short: num_records={int(samples.shape[0])}"
+            f"replay too short: num_records={int(samples.shape[0])}"
         )
         row = samples[record_fall_to_landing : record_fall_to_landing + 1]
         assert int(row["seed_t"]["action_id"][0, p]) == 358  # ftFx_MS_SpecialHiFall
@@ -1826,7 +1827,7 @@ def test_specialhi_fall_landing_wait_transitions_tbk() -> None:
         # rec 7129 p0: SpecialHiLanding -> Wait on anim end.
         record_landing_to_wait = 7129
         assert int(samples.shape[0]) > record_landing_to_wait, (
-            f"dataset too short: num_records={int(samples.shape[0])}"
+            f"replay too short: num_records={int(samples.shape[0])}"
         )
         row2 = samples[record_landing_to_wait : record_landing_to_wait + 1]
         assert int(row2["seed_t"]["action_id"][0, p]) == 357  # ftFx_MS_SpecialHiLanding
@@ -1881,18 +1882,18 @@ def test_action_frame_escapeair_entry_ticks_once() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 814
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 26  # ftCo_MS_JumpB
@@ -1913,7 +1914,7 @@ def test_action_frame_escapeair_entry_ticks_once() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -1956,19 +1957,19 @@ def test_action_id_catch_wait_throw_entry_uses_x98_threshold_lane() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 206
     owner_p = 1
     victim_p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, owner_p]) == 216  # CatchWait
@@ -1990,7 +1991,7 @@ def test_action_id_catch_wait_throw_entry_uses_x98_threshold_lane() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -2023,20 +2024,20 @@ def test_action_id_catch_wait_throw_entry_uses_x98_threshold_lane() -> None:
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             6465,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             4593,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             7456,
             0,
         ),
@@ -2052,11 +2053,11 @@ def test_damagefly_hitlag_exit_rows_stay_airborne(dataset_rel: str, record: int,
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     # Replay-real preconditions for this cluster.
@@ -2075,7 +2076,7 @@ def test_damagefly_hitlag_exit_rows_stay_airborne(dataset_rel: str, record: int,
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -2107,8 +2108,8 @@ def test_damagefly_hitlag_exit_rows_stay_airborne(dataset_rel: str, record: int,
     ("dataset_rel", "record", "p", "seed_hitlag", "ref_hitlag", "seed_hitstun", "ref_hitstun"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             4553,
             0,
             1,
@@ -2117,8 +2118,8 @@ def test_damagefly_hitlag_exit_rows_stay_airborne(dataset_rel: str, record: int,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             4651,
             0,
             1,
@@ -2127,8 +2128,8 @@ def test_damagefly_hitlag_exit_rows_stay_airborne(dataset_rel: str, record: int,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             482,
             1,
             1,
@@ -2137,8 +2138,8 @@ def test_damagefly_hitlag_exit_rows_stay_airborne(dataset_rel: str, record: int,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             352,
             1,
             1,
@@ -2147,8 +2148,8 @@ def test_damagefly_hitlag_exit_rows_stay_airborne(dataset_rel: str, record: int,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             6466,
             0,
             0,
@@ -2157,8 +2158,8 @@ def test_damagefly_hitlag_exit_rows_stay_airborne(dataset_rel: str, record: int,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             7457,
             0,
             0,
@@ -2193,11 +2194,11 @@ def test_action_id_damagefly_to_downbound_entry_rows(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     # Replay-real strict preconditions.
@@ -2216,7 +2217,7 @@ def test_action_id_damagefly_to_downbound_entry_rows(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -2248,29 +2249,29 @@ def test_action_id_damagefly_to_downbound_entry_rows(
     ("dataset_rel", "record", "p", "ref_action_id"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             2095,
             0,
             183,  # ftCo_MS_DownBoundU
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             2316,
             1,
             183,  # ftCo_MS_DownBoundU
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             5287,
             1,
             199,  # ftCo_MS_Passive
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             1156,
             1,
             199,  # ftCo_MS_Passive
@@ -2292,11 +2293,11 @@ def test_action_id_damageflyhi_hitlag_exit_ground_entry_rows(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 87  # ftCo_MS_DamageFlyHi
@@ -2314,7 +2315,7 @@ def test_action_id_damageflyhi_hitlag_exit_ground_entry_rows(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -2347,20 +2348,20 @@ def test_action_id_damageflyhi_hitlag_exit_ground_entry_rows(
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             6468,
             0,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             484,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             8152,
             1,
         ),
@@ -2378,11 +2379,11 @@ def test_action_id_downboundu_ledge_release_to_fall_rows(dataset_rel: str, recor
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 183  # ftCo_MS_DownBoundU
@@ -2398,7 +2399,7 @@ def test_action_id_downboundu_ledge_release_to_fall_rows(dataset_rel: str, recor
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)

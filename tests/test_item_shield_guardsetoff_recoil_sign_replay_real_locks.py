@@ -24,7 +24,7 @@ class _Case:
     "case",
     [
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=4044,
             p=1,
             expected_shield_hp=58.599998474121094,
@@ -33,7 +33,7 @@ class _Case:
             note="AGN locomotion-origin laser shield-hit uses item contact pos.x for GuardSetOff recoil sign",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             record=3493,
             p=0,
             expected_shield_hp=58.599998474121094,
@@ -42,7 +42,7 @@ class _Case:
             note="TBK laser shield-hit sign must use the contact-time item x after the shot advances onto the defender",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=5280,
             p=0,
             expected_shield_hp=58.599998474121094,
@@ -63,7 +63,7 @@ def test_item_shield_guardsetoff_entry_recoil_sign_replay_real_locks(case: _Case
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, case.record, case.p)
     p = case.p

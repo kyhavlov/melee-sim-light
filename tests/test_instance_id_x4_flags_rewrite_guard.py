@@ -6,7 +6,7 @@ import pytest
 
 from tools.slippi.action_state_tables import read_mslacid1_v3
 from tools.slippi.suite_io import load_suite
-from tests.replay_dataset_loader import load_replay_dataset as read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -29,10 +29,7 @@ def test_suite_observed_actions_do_not_require_ft_800895E0_rewrite_paths() -> No
     if not suite_path.exists():
         pytest.skip("missing suite manifest: replays/suites/fox_falco_fd_ucf084_recent.json")
     suite = load_suite(suite_path)
-    replay_labels = sorted(
-        Path("datasets") / suite.name / Path(entry.replay).with_suffix(".msl")
-        for entry in suite.replays
-    )
+    replay_labels = sorted(Path(entry.replay) for entry in suite.replays)
 
     fox_low = read_mslacid1_v3(Path("data/attack_id/move_id/fox.bin")).x4_flags_low
     falco_low = read_mslacid1_v3(Path("data/attack_id/move_id/falco.bin")).x4_flags_low
@@ -40,8 +37,8 @@ def test_suite_observed_actions_do_not_require_ft_800895E0_rewrite_paths() -> No
     bad: set[tuple[int, int, int]] = set()
 
     for p in replay_labels:
-        ds = read_dataset(str(p))
-        s = ds.samples
+        ds = load_replay_buffers(str(p))
+        s = ds.rows
         for field in ("seed_t", "ref_t1"):
             action = s[field]["action_id"][:, :2]
             char = s[field]["char_id"][:, :2]

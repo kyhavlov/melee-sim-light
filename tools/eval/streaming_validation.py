@@ -11,7 +11,7 @@ from tools.eval.one_step_report import (
     emit_summary_from_native,
 )
 from tools.eval.validation_profile import ValidationProfile, get_validation_profile
-from tools.slippi.make_dataset_from_slp import ValidationReplayBuffers
+from tools.slippi.validation_buffer_common import ValidationReplayBuffers
 
 
 _STANDARD_ROLLOUT_FIELDS = ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags")

@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -29,7 +30,7 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
     ("dataset_rel", "record", "p", "seed_action", "ref_action", "seed_hitlag", "ref_hitlag", "mechanism"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             1889,
             1,
             0,  # DeadDown
@@ -39,7 +40,7 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
             "rebirth path consumes hidden plAttack counter before fighter motion-state write",
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             444,
             1,
             241,  # ThrownHi
@@ -49,7 +50,7 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
             "throw-release fallback must use timebase restart (no extra motion-identity bump)",
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             1456,
             0,
             239,  # ThrownF
@@ -79,11 +80,11 @@ def test_instance_id_transition_clusters_match_ref(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == seed_action
@@ -98,7 +99,7 @@ def test_instance_id_transition_clusters_match_ref(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -138,17 +139,17 @@ def test_instance_id_transition_clusters_match_ref(
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             10161,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz",
             7135,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz",
             8879,
             0,
         ),
@@ -164,11 +165,11 @@ def test_wait_anim_end_restart_keeps_instance_id(dataset_rel: str, record: int, 
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p]) == 14  # Wait
@@ -185,7 +186,7 @@ def test_wait_anim_end_restart_keeps_instance_id(dataset_rel: str, record: int, 
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )

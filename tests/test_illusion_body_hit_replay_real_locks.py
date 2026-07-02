@@ -33,7 +33,7 @@ class _Case:
     "case",
     [
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            dataset_rel="replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             record=4761,
             attacker_port=0,
             defender_port=1,
@@ -44,7 +44,7 @@ class _Case:
             item_float_fields=("pos_x", "pos_y", "timer"),
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl",
+            dataset_rel="replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
             record=528,
             attacker_port=0,
             defender_port=1,
@@ -55,7 +55,7 @@ class _Case:
             item_float_fields=("pos_x", "pos_y", "timer"),
         ),
         _Case(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            dataset_rel="replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
             record=6632,
             attacker_port=1,
             defender_port=0,
@@ -82,7 +82,7 @@ def test_illusion_body_hit_rows_match_replay_real(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     _seed, out, ref = _step_one_row(dataset_path, case.record)
     d = case.defender_port
@@ -117,10 +117,10 @@ def test_illusion_ghost2_sweep_does_not_hit_adjacent_attackair_entry_row() -> No
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        root / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 4760)
     victim = 1
@@ -136,25 +136,25 @@ def test_illusion_ghost2_sweep_does_not_hit_adjacent_attackair_entry_row() -> No
     ("dataset_rel", "record", "slot", "note"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            "replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             4762,
             0,
             "Fox Illusion state1 BODY-hit article advances into state2 during victim hitlag",
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            "replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             4764,
             0,
             "Fox Illusion state2 BODY-hit article expires during victim hitlag",
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl",
+            "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
             6975,
             0,
             "Falco Phantasm state2 article ticks once when owner exits Side-B in the same step",
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl",
+            "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz",
             7712,
             0,
             "Falco Phantasm state1 article ticks once when owner exits Side-B in the same step",
@@ -176,7 +176,7 @@ def test_illusion_article_lifetime_rows_tick_through_body_hitlag_and_owner_exit(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, record)
     item_out = out["items"][slot]
@@ -211,10 +211,10 @@ def test_phantasm_body_hit_consumes_runbrake_source_pose_before_squat_publicatio
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl"
+        root / "replays/validation/yoshis_story_recent/DependentSteelGrouse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, out, ref = _step_one_row(dataset_path, 296)
     defender = 1
@@ -241,10 +241,10 @@ def test_phantasm_runbrake_source_pose_owner_requires_frame_start_runbrake_actio
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl"
+        root / "replays/validation/yoshis_story_recent/DependentSteelGrouse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def mutate_source_action(seed_t) -> None:
         seed_t["action_id"][0, 1] = 0x0027  # Squat, not RunBrake.
@@ -272,10 +272,10 @@ def test_phantasm_runbrake_source_pose_adjacent_rows_stay_exact(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl"
+        root / "replays/validation/yoshis_story_recent/DependentSteelGrouse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _seed, out, ref = _step_one_row(dataset_path, record)
     defender = 1
@@ -301,10 +301,10 @@ def test_phantasm_runbrake_rollout_hit_uses_guardsetoff_edge_instance_counter_ow
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl"
+        root / "replays/validation/yoshis_story_recent/DependentSteelGrouse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rows = _run_rollout_window_rows_with_trace(
         dataset_path,

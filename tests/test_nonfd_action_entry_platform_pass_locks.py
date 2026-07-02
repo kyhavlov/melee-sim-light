@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 from tools.modelplay.state_adapter import STAGE_DEBUG_DTYPE
 
 
@@ -20,7 +21,7 @@ class _ActionCase:
     note: str
 
 
-_BASE = Path("datasets/aggregate_recent/replays/validation")
+_BASE = Path("replays/validation")
 
 
 def _step_one_record(row: np.ndarray, num_players: int):
@@ -85,8 +86,8 @@ def _stage_state_dtype() -> np.dtype:
 
 def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int):
     msl_binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert start_record <= target_record
     assert int(samples.shape[0]) > target_record
 
@@ -104,7 +105,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
 
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -130,7 +131,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
     "case",
     [
         _ActionCase(
-            "battlefield_recent/DelayedSuperbGuanaco.msl",
+            "battlefield_recent/DelayedSuperbGuanaco.slpz",
             404,
             1,
             344,
@@ -138,7 +139,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "SpecialAirNStart locked ECB bottom keeps early platform crossing airborne",
         ),
         _ActionCase(
-            "battlefield_recent/DelayedSuperbGuanaco.msl",
+            "battlefield_recent/DelayedSuperbGuanaco.slpz",
             5575,
             1,
             69,
@@ -146,7 +147,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "AttackAirLw locked ECB bottom keeps early platform crossing airborne",
         ),
         _ActionCase(
-            "battlefield_recent/DelayedSuperbGuanaco.msl",
+            "battlefield_recent/DelayedSuperbGuanaco.slpz",
             5495,
             0,
             39,
@@ -154,7 +155,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "Squat pass countdown arm frame does not enter Pass early",
         ),
         _ActionCase(
-            "battlefield_recent/DelayedSuperbGuanaco.msl",
+            "battlefield_recent/DelayedSuperbGuanaco.slpz",
             5496,
             0,
             39,
@@ -162,7 +163,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "Squat pass countdown enters Pass after the source x470 delay",
         ),
         _ActionCase(
-            "dream_land_recent/FlippantEnchantedHorse.msl",
+            "dream_land_recent/FlippantEnchantedHorse.slpz",
             6815,
             0,
             39,
@@ -170,7 +171,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "Squat consumes an armed platform-pass countdown after x671 advances to the consume frame",
         ),
         _ActionCase(
-            "dream_land_recent/FlippantEnchantedHorse.msl",
+            "dream_land_recent/FlippantEnchantedHorse.slpz",
             11757,
             1,
             39,
@@ -178,7 +179,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "Squat platform-pass countdown consumption does not re-run the original x671 arm gate",
         ),
         _ActionCase(
-            "battlefield_recent/MediumVirtualPig.msl",
+            "battlefield_recent/MediumVirtualPig.slpz",
             5677,
             1,
             40,
@@ -186,7 +187,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "SquatWait does not consume Squat's delayed platform-pass countdown",
         ),
         _ActionCase(
-            "yoshis_story_recent/LawfulInsistentMeerkat.msl",
+            "yoshis_story_recent/LawfulInsistentMeerkat.slpz",
             4975,
             0,
             40,
@@ -194,7 +195,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "SquatWait held-down platform row stays SquatWait because ftCo_Squat_IASA_inline is not called",
         ),
         _ActionCase(
-            "battlefield_recent/DelayedSuperbGuanaco.msl",
+            "battlefield_recent/DelayedSuperbGuanaco.slpz",
             5521,
             1,
             25,
@@ -202,7 +203,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "JumpF ft_80082B1C gentle floor contact enters Wait instead of Landing",
         ),
         _ActionCase(
-            "battlefield_recent/LoyalDishonestWren.msl",
+            "battlefield_recent/LoyalDishonestWren.slpz",
             928,
             1,
             345,
@@ -210,7 +211,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "SpecialAirNLoop AirCatchHit shares ft_80082B1C's Wait/Landing velocity split",
         ),
         _ActionCase(
-            "dream_land_recent/FlippantEnchantedHorse.msl",
+            "dream_land_recent/FlippantEnchantedHorse.slpz",
             3266,
             1,
             251,
@@ -218,7 +219,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "MissFoot_Coll routes through ft_80082F28 and enters basic Landing on hard floor contact",
         ),
         _ActionCase(
-            "battlefield_recent/DelayedSuperbGuanaco.msl",
+            "battlefield_recent/DelayedSuperbGuanaco.slpz",
             7337,
             1,
             43,
@@ -226,7 +227,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "LandingFallSpecial shares Landing_Coll and admits Ottotto on platform edge floor loss",
         ),
         _ActionCase(
-            "fountain_of_dreams_recent/ParallelTemptingElk.msl",
+            "fountain_of_dreams_recent/ParallelTemptingElk.slpz",
             1093,
             0,
             236,
@@ -234,7 +235,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "EscapeAir keeps stale floor_skip cleared without landing before source floor contact",
         ),
         _ActionCase(
-            "fountain_of_dreams_recent/ParallelTemptingElk.msl",
+            "fountain_of_dreams_recent/ParallelTemptingElk.slpz",
             1094,
             0,
             236,
@@ -242,7 +243,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "EscapeAir ignores stale floor_skip and admits source LandingFallSpecial on FoD platform",
         ),
         _ActionCase(
-            "fountain_of_dreams_recent/ParallelTemptingElk.msl",
+            "fountain_of_dreams_recent/ParallelTemptingElk.slpz",
             9136,
             0,
             25,
@@ -250,7 +251,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "JumpF admits source-owned same-step FoD platform height when the platform reappears low",
         ),
         _ActionCase(
-            "battlefield_recent/DelayedSuperbGuanaco.msl",
+            "battlefield_recent/DelayedSuperbGuanaco.slpz",
             4961,
             1,
             27,
@@ -258,7 +259,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "JumpAerialF -> EscapeAir entry uses prior-motion prev_ecb for same-frame landing",
         ),
         _ActionCase(
-            "battlefield_recent/LoyalDishonestWren.msl",
+            "battlefield_recent/LoyalDishonestWren.slpz",
             3401,
             1,
             28,
@@ -266,7 +267,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "JumpAerialB -> EscapeAir entry uses prior-motion prev_ecb for same-frame landing",
         ),
         _ActionCase(
-            "battlefield_recent/LoyalDishonestWren.msl",
+            "battlefield_recent/LoyalDishonestWren.slpz",
             3606,
             1,
             27,
@@ -274,7 +275,7 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "fresh JumpAerialF -> EscapeAir keeps locked CollData floor lifetime airborne",
         ),
         _ActionCase(
-            "yoshis_story_recent/CheeryNumbMonkey.msl",
+            "yoshis_story_recent/CheeryNumbMonkey.slpz",
             3941,
             1,
             27,
@@ -323,20 +324,20 @@ def test_nonfd_action_entry_platform_pass_replay_real_locks(case: _ActionCase) -
     root = Path(__file__).resolve().parents[1]
     path = root / _BASE / case.dataset_rel
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / case.dataset_rel}")
+        pytest.skip(f"missing local replay: {_BASE / case.dataset_rel}")
 
-    ds = read_dataset(str(path))
-    if int(ds.samples.shape[0]) <= int(case.record):
-        pytest.skip(f"dataset too short for record {case.record}: {path}")
+    ds = load_replay_buffers(str(path))
+    if int(ds.rows.shape[0]) <= int(case.record):
+        pytest.skip(f"replay too short for record {case.record}: {path}")
 
-    row = ds.samples[case.record : case.record + 1]
+    row = ds.rows[case.record : case.record + 1]
     p = int(case.player)
     assert int(row["seed_t"]["action_id"][0, p]) == int(case.seed_action), case.note
     assert int(row["ref_t1"]["action_id"][0, p]) == int(case.ref_action), case.note
     assert int(row["seed_t"]["hitlag"][0, p]) == 0
     assert int(row["ref_t1"]["hitlag"][0, p]) == 0
 
-    out = _step_one_record(row, int(ds.header["num_players"]))
+    out = _step_one_record(row, int(ds.num_players))
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p]), case.note
 
 
@@ -348,21 +349,21 @@ def test_fod_jumpf_same_step_height_source_lane_is_generated_for_low_platform_la
     # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
     # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.slpz'}")
 
-    ds = read_dataset(str(path))
-    if int(ds.samples.shape[0]) <= 9136:
-        pytest.skip(f"dataset too short for record 9136: {path}")
+    ds = load_replay_buffers(str(path))
+    if int(ds.rows.shape[0]) <= 9136:
+        pytest.skip(f"replay too short for record 9136: {path}")
 
-    row = ds.samples[9136:9137].copy()
+    row = ds.rows[9136:9137].copy()
     p = 0
     assert int(row["seed_t"]["action_id"][0, p]) == 25
     assert int(row["ref_t1"]["action_id"][0, p]) == 42
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0, 1]) & 0x04
 
-    out = _step_one_record(row, int(ds.header["num_players"]))
+    out = _step_one_record(row, int(ds.num_players))
     assert int(out["action_id"][p]) == 42
 
 
@@ -376,16 +377,16 @@ def test_fod_same_step_height_source_is_consumed_after_seeded_frame() -> None:
     # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
     msl_binding = pytest.importorskip("msl_binding")
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.slpz'}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 71
-    if int(ds.samples.shape[0]) <= record:
-        pytest.skip(f"dataset too short for record {record}: {path}")
+    if int(ds.rows.shape[0]) <= record:
+        pytest.skip(f"replay too short for record {record}: {path}")
 
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     p = 0
     assert int(row["seed_t"]["stage_fod_platform_height_valid_u8"][0, 1]) == 1
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0, 1]) & 0x04
@@ -402,7 +403,7 @@ def test_fod_same_step_height_source_is_consumed_after_seeded_frame() -> None:
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_stage_bytes = np.empty((1, stage_stride), dtype=np.uint8)
 
-    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         msl_binding.reseed_seed(handle, seed_bytes)
         msl_binding.debug_write_stage_state(handle, out_stage_bytes)
@@ -435,23 +436,23 @@ def test_fod_sustained_escapeair_high_lock_countdown_rejects_side_platform_root_
     # refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_80044838_Floor}
     # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/MilkyGracefulStingray.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/MilkyGracefulStingray.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'fountain_of_dreams_recent/MilkyGracefulStingray.slpz'}")
 
     start = 0
     target = 1278
     player = 0
 
-    ds = read_dataset(str(path))
-    if int(ds.samples.shape[0]) <= target:
-        pytest.skip(f"dataset too short for record {target}: {path}")
-    assert int(ds.samples[target]["seed_t"]["action_id"][player]) == 236  # EscapeAir.
-    assert int(ds.samples[target]["seed_t"]["seed_prev_action_id"][player]) == 236
-    assert int(ds.samples[target]["seed_t"]["stage_fod_platform_height_valid_u8"][1]) == 1
-    assert int(ds.samples[target]["seed_t"]["stage_fod_platform_height_source_u8"][1]) == 0
-    assert int(ds.samples[target]["ref_t1"]["action_id"][player]) == 43  # LandingFallSpecial.
-    assert int(ds.samples[target]["ref_t1"]["ground_id"][player]) == 5
+    ds = load_replay_buffers(str(path))
+    if int(ds.rows.shape[0]) <= target:
+        pytest.skip(f"replay too short for record {target}: {path}")
+    assert int(ds.rows[target]["seed_t"]["action_id"][player]) == 236  # EscapeAir.
+    assert int(ds.rows[target]["seed_t"]["seed_prev_action_id"][player]) == 236
+    assert int(ds.rows[target]["seed_t"]["stage_fod_platform_height_valid_u8"][1]) == 1
+    assert int(ds.rows[target]["seed_t"]["stage_fod_platform_height_source_u8"][1]) == 0
+    assert int(ds.rows[target]["ref_t1"]["action_id"][player]) == 43  # LandingFallSpecial.
+    assert int(ds.rows[target]["ref_t1"]["ground_id"][player]) == 5
 
     out, ref = _rollout_record(path, start_record=start, target_record=target)
 
@@ -470,24 +471,24 @@ def test_fod_landing_entry_same_step_height_source_reprojects_to_current_platfor
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
     # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.slpz'}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 5288
     player = 1
-    if int(ds.samples.shape[0]) <= record:
-        pytest.skip(f"dataset too short for record {record}: {path}")
+    if int(ds.rows.shape[0]) <= record:
+        pytest.skip(f"replay too short for record {record}: {path}")
 
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][player]) == 42
     assert int(row["seed_t"]["action_frame"][player]) == 0
     assert int(row["seed_t"]["ground_id"][player]) == 5
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][1]) & 0x04
     assert int(row["ref_t1"]["ground_id"][player]) == 0
 
-    out = _step_one_record(ds.samples[record : record + 1].copy(), int(ds.header["num_players"]))
+    out = _step_one_record(ds.rows[record : record + 1].copy(), int(ds.num_players))
     ref = row["ref_t1"]
     assert int(out["ground_id"][player]) == int(ref["ground_id"][player])
     assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=2e-4)
@@ -501,24 +502,24 @@ def test_fod_sustained_landingfallspecial_does_not_reuse_same_step_height_source
     # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ElatedWearyTermite.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ElatedWearyTermite.slpz'}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 5155
     player = 0
-    if int(ds.samples.shape[0]) <= record:
-        pytest.skip(f"dataset too short for record {record}: {path}")
+    if int(ds.rows.shape[0]) <= record:
+        pytest.skip(f"replay too short for record {record}: {path}")
 
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][player]) == 43
     assert int(row["seed_t"]["action_frame"][player]) == 24
     assert int(row["seed_t"]["ground_id"][player]) == 5
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][1]) & 0x04
     assert int(row["ref_t1"]["ground_id"][player]) == 5
 
-    out = _step_one_record(ds.samples[record : record + 1].copy(), int(ds.header["num_players"]))
+    out = _step_one_record(ds.rows[record : record + 1].copy(), int(ds.num_players))
     ref = row["ref_t1"]
     assert int(out["ground_id"][player]) == int(ref["ground_id"][player])
     assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1e-6)
@@ -538,19 +539,19 @@ def test_fod_landingairb_live_velocity_entry_retries_to_platform_pte_5336() -> N
     # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
     # data/stages/bin/griz.bin::MSLSTG01 height platform transforms
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     if not path.exists():
         pytest.skip(
-            f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}"
+            f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.slpz'}"
         )
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 5336
     player = 0
-    if int(ds.samples.shape[0]) <= record:
-        pytest.skip(f"dataset too short for record {record}: {path}")
+    if int(ds.rows.shape[0]) <= record:
+        pytest.skip(f"replay too short for record {record}: {path}")
 
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][player]) == 72  # LandingAirB.
     assert int(row["seed_t"]["action_frame"][player]) == 0
     assert int(row["seed_t"]["ground_id"][player]) == 5
@@ -558,7 +559,7 @@ def test_fod_landingairb_live_velocity_entry_retries_to_platform_pte_5336() -> N
     assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][1]) == 1
     assert int(row["ref_t1"]["ground_id"][player]) == 0
 
-    out = _step_one_record(ds.samples[record : record + 1].copy(), int(ds.header["num_players"]))
+    out = _step_one_record(ds.rows[record : record + 1].copy(), int(ds.num_players))
     ref = row["ref_t1"]
     assert int(out["ground_id"][player]) == int(ref["ground_id"][player])
     assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=2e-4)
@@ -573,24 +574,24 @@ def test_fod_landingair_live_velocity_entry_retry_requires_vertical_reach_ewt_77
     # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
     # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B4B0
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ElatedWearyTermite.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ElatedWearyTermite.slpz'}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 770
     player = 1
-    if int(ds.samples.shape[0]) <= record:
-        pytest.skip(f"dataset too short for record {record}: {path}")
+    if int(ds.rows.shape[0]) <= record:
+        pytest.skip(f"replay too short for record {record}: {path}")
 
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][player]) == 74  # LandingAirLw.
     assert int(row["seed_t"]["action_frame"][player]) == 0
     assert int(row["seed_t"]["seed_prev_action_id"][player]) != 74
     assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0]) == 1
     assert int(row["ref_t1"]["ground_id"][player]) == 5
 
-    out = _step_one_record(ds.samples[record : record + 1].copy(), int(ds.header["num_players"]))
+    out = _step_one_record(ds.rows[record : record + 1].copy(), int(ds.num_players))
     ref = row["ref_t1"]
     assert int(out["ground_id"][player]) == int(ref["ground_id"][player]) == 5
     assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1e-6)
@@ -607,19 +608,19 @@ def test_fod_damageair_live_velocity_replay_frame_lands_on_current_platform_pte_
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
     # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     if not path.exists():
         pytest.skip(
-            f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}"
+            f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.slpz'}"
         )
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 3466
     player = 1
-    if int(ds.samples.shape[0]) <= record:
-        pytest.skip(f"dataset too short for record {record}: {path}")
+    if int(ds.rows.shape[0]) <= record:
+        pytest.skip(f"replay too short for record {record}: {path}")
 
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][player]) == 85  # DamageAir2.
     assert int(row["seed_t"]["hitlag"][player]) == 0
     assert int(row["seed_t"]["hitstun"][player]) != 0
@@ -630,7 +631,7 @@ def test_fod_damageair_live_velocity_replay_frame_lands_on_current_platform_pte_
     assert int(row["ref_t1"]["ground_id"][player]) == 1
 
     out = _step_one_record_replay_frame(
-        ds.samples[record : record + 1].copy(), int(ds.header["num_players"])
+        ds.rows[record : record + 1].copy(), int(ds.num_players)
     )
     ref = row["ref_t1"]
     assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 42
@@ -644,19 +645,19 @@ def test_fod_damageair_live_velocity_owner_requires_recovered_velocity_pte_3466(
     # grIzumi/mpLib packet. Removing only the recovered platform-velocity lane leaves the same
     # DamageAir row airborne instead of promoting a generic transformed-platform snap.
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     if not path.exists():
         pytest.skip(
-            f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}"
+            f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.slpz'}"
         )
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 3466
     player = 1
-    if int(ds.samples.shape[0]) <= record:
-        pytest.skip(f"dataset too short for record {record}: {path}")
+    if int(ds.rows.shape[0]) <= record:
+        pytest.skip(f"replay too short for record {record}: {path}")
 
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     assert int(row["seed_t"]["action_id"][0, player]) == 85  # DamageAir2.
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0, 0]) == 0
     assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0, 0]) == 1
@@ -664,7 +665,7 @@ def test_fod_damageair_live_velocity_owner_requires_recovered_velocity_pte_3466(
     row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0, 0] = np.uint8(0)
     row["seed_t"]["stage_fod_platform_velocity_f32"][0, 0] = np.float32(0.0)
 
-    out = _step_one_record_replay_frame(row, int(ds.header["num_players"]))
+    out = _step_one_record_replay_frame(row, int(ds.num_players))
     assert int(out["action_id"][player]) == 85
     assert int(out["hitstun"][player]) != 0
     assert int(out["on_ground"][player]) == 0
@@ -683,23 +684,23 @@ def test_fod_jumpb_downheld_transformed_platform_skip_carries_after_release_roll
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
     # data/stages/bin/griz.bin (MSLSTG01 height platform transforms)
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.slpz'}")
 
     start = 1456
     target = 1510
     player = 1
 
-    ds = read_dataset(str(path))
-    if int(ds.samples.shape[0]) <= target:
-        pytest.skip(f"dataset too short for record {target}: {path}")
-    assert int(ds.samples[start]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 0
-    assert int(ds.samples[target]["seed_t"]["action_id"][player]) == 26  # JumpB.
-    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
-    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_id_u16"][player]) == 1
-    assert int(ds.samples[target]["ref_t1"]["action_id"][player]) == 26
-    assert int(ds.samples[target]["ref_t1"]["on_ground"][player]) == 0
+    ds = load_replay_buffers(str(path))
+    if int(ds.rows.shape[0]) <= target:
+        pytest.skip(f"replay too short for record {target}: {path}")
+    assert int(ds.rows[start]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 0
+    assert int(ds.rows[target]["seed_t"]["action_id"][player]) == 26  # JumpB.
+    assert int(ds.rows[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
+    assert int(ds.rows[target]["seed_t"]["floor_skip_segment_id_u16"][player]) == 1
+    assert int(ds.rows[target]["ref_t1"]["action_id"][player]) == 26
+    assert int(ds.rows[target]["ref_t1"]["on_ground"][player]) == 0
 
     out, ref = _rollout_record(path, start_record=start, target_record=target)
 
@@ -719,25 +720,25 @@ def test_fod_attackairn_downheld_transformed_platform_hitbox_phase_rollout_stays
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.slpz'}")
 
     start = 1663
     target = 1701
     player = 0
 
-    ds = read_dataset(str(path))
-    if int(ds.samples.shape[0]) <= target:
-        pytest.skip(f"dataset too short for record {target}: {path}")
-    assert int(ds.samples[start]["seed_t"]["action_id"][1]) == 212  # Catch selector row.
-    assert int(ds.samples[target]["seed_t"]["action_frame"][player]) == 18
-    assert int(ds.samples[target]["ref_t1"]["action_id"][player]) == 65  # AttackAirN.
-    assert int(ds.samples[target]["ref_t1"]["on_ground"][player]) == 0
-    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
-    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_id_u16"][player]) == 1
-    assert int(ds.samples[target + 1]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 0
-    assert int(ds.samples[target + 1]["ref_t1"]["action_id"][player]) == 70  # LandingAirN.
+    ds = load_replay_buffers(str(path))
+    if int(ds.rows.shape[0]) <= target:
+        pytest.skip(f"replay too short for record {target}: {path}")
+    assert int(ds.rows[start]["seed_t"]["action_id"][1]) == 212  # Catch selector row.
+    assert int(ds.rows[target]["seed_t"]["action_frame"][player]) == 18
+    assert int(ds.rows[target]["ref_t1"]["action_id"][player]) == 65  # AttackAirN.
+    assert int(ds.rows[target]["ref_t1"]["on_ground"][player]) == 0
+    assert int(ds.rows[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
+    assert int(ds.rows[target]["seed_t"]["floor_skip_segment_id_u16"][player]) == 1
+    assert int(ds.rows[target + 1]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 0
+    assert int(ds.rows[target + 1]["ref_t1"]["action_id"][player]) == 70  # LandingAirN.
 
     out, ref = _rollout_record(path, start_record=start, target_record=target)
 
@@ -757,21 +758,21 @@ def test_fod_attackair_floor_skip_still_lands_on_nonplatform_floor_rollout() -> 
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ElatedWearyTermite.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ElatedWearyTermite.slpz'}")
 
     start = 7647
     target = 7996
     player = 0
 
-    ds = read_dataset(str(path))
-    if int(ds.samples.shape[0]) <= target:
-        pytest.skip(f"dataset too short for record {target}: {path}")
-    assert int(ds.samples[target]["seed_t"]["action_id"][player]) == 67  # AttackAirB.
-    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 0
-    assert int(ds.samples[target]["ref_t1"]["action_id"][player]) == 72  # LandingAirB.
-    assert int(ds.samples[target]["ref_t1"]["on_ground"][player]) == 1
+    ds = load_replay_buffers(str(path))
+    if int(ds.rows.shape[0]) <= target:
+        pytest.skip(f"replay too short for record {target}: {path}")
+    assert int(ds.rows[target]["seed_t"]["action_id"][player]) == 67  # AttackAirB.
+    assert int(ds.rows[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 0
+    assert int(ds.rows[target]["ref_t1"]["action_id"][player]) == 72  # LandingAirB.
+    assert int(ds.rows[target]["ref_t1"]["on_ground"][player]) == 1
 
     out, ref = _rollout_record(path, start_record=start, target_record=target)
 
@@ -793,22 +794,22 @@ def test_fod_attackairb_downheld_root_crossing_publishes_floor_skip_rollout() ->
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpUpdateFloorSkip}
     # data/stages/bin/griz.bin (MSLSTG01 height platform transforms)
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.slpz'}")
 
     start = 1263
     target = 1835
     player = 1
 
-    ds = read_dataset(str(path))
-    if int(ds.samples.shape[0]) <= target:
-        pytest.skip(f"dataset too short for record {target}: {path}")
-    assert int(ds.samples[target]["seed_t"]["action_id"][player]) == 67  # AttackAirB.
-    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
-    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_id_u16"][player]) == 1
-    assert int(ds.samples[target]["ref_t1"]["action_id"][player]) == 67
-    assert int(ds.samples[target]["ref_t1"]["on_ground"][player]) == 0
+    ds = load_replay_buffers(str(path))
+    if int(ds.rows.shape[0]) <= target:
+        pytest.skip(f"replay too short for record {target}: {path}")
+    assert int(ds.rows[target]["seed_t"]["action_id"][player]) == 67  # AttackAirB.
+    assert int(ds.rows[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
+    assert int(ds.rows[target]["seed_t"]["floor_skip_segment_id_u16"][player]) == 1
+    assert int(ds.rows[target]["ref_t1"]["action_id"][player]) == 67
+    assert int(ds.rows[target]["ref_t1"]["on_ground"][player]) == 0
 
     out, ref = _rollout_record(path, start_record=start, target_record=target)
 
@@ -831,23 +832,23 @@ def test_fod_attackairn_hard_floor_edge_root_projection_lands() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.slpz'}")
 
     record = 1702
     player = 0
-    ds = read_dataset(str(path))
-    if int(ds.samples.shape[0]) <= record:
-        pytest.skip(f"dataset too short for record {record}: {path}")
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(path))
+    if int(ds.rows.shape[0]) <= record:
+        pytest.skip(f"replay too short for record {record}: {path}")
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][player]) == 65  # AttackAirN.
     assert int(row["seed_t"]["floor_skip_segment_valid_u8"][player]) == 0
     assert int(row["ref_t1"]["action_id"][player]) == 70  # LandingAirN.
     assert int(row["ref_t1"]["on_ground"][player]) == 1
     assert int(row["ref_t1"]["ground_id"][player]) == 6
 
-    out = _step_one_record(ds.samples[record : record + 1].copy(), int(ds.header["num_players"]))
+    out = _step_one_record(ds.rows[record : record + 1].copy(), int(ds.num_players))
     ref = row["ref_t1"]
 
     assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 70
@@ -871,18 +872,18 @@ def test_fod_attackairlw_source_trusted_platform_root_projection_lands() -> None
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+    path = root / _BASE / "fountain_of_dreams_recent/MilkyGracefulStingray.slpz"
     if not path.exists():
         pytest.skip(
-            f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/MilkyGracefulStingray.msl'}"
+            f"missing local replay: {_BASE / 'fountain_of_dreams_recent/MilkyGracefulStingray.slpz'}"
         )
 
     record = 5344
     player = 0
-    ds = read_dataset(str(path))
-    if int(ds.samples.shape[0]) <= record:
-        pytest.skip(f"dataset too short for record {record}: {path}")
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(path))
+    if int(ds.rows.shape[0]) <= record:
+        pytest.skip(f"replay too short for record {record}: {path}")
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][player]) == 69  # AttackAirLw.
     assert int(row["seed_t"]["action_frame"][player]) == 10
     assert int(row["seed_t"]["floor_skip_segment_valid_u8"][player]) == 0
@@ -891,7 +892,7 @@ def test_fod_attackairlw_source_trusted_platform_root_projection_lands() -> None
     assert int(row["ref_t1"]["on_ground"][player]) == 1
     assert int(row["ref_t1"]["ground_id"][player]) == 0
 
-    out = _step_one_record(ds.samples[record : record + 1].copy(), int(ds.header["num_players"]))
+    out = _step_one_record(ds.rows[record : record + 1].copy(), int(ds.num_players))
     ref = row["ref_t1"]
 
     assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 74
@@ -914,9 +915,9 @@ def test_battlefield_landingfallspecial_overlap_nudge_reaches_ottotto_rollout() 
     # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_8009A3C8
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "battlefield_recent/LoyalDishonestWren.msl"
+    path = root / _BASE / "battlefield_recent/LoyalDishonestWren.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'battlefield_recent/LoyalDishonestWren.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'battlefield_recent/LoyalDishonestWren.slpz'}")
 
     start = 2581
     player = 0

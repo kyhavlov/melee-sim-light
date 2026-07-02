@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -17,16 +18,16 @@ def test_shine_loop_release_lag_holds_loop_until_countdown_expires() -> None:
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
     #   ftFx_SpecialLwLoop_Anim,ftFx_SpecialLwHit_Check}
     root = Path(__file__).resolve().parents[1]
-    rel = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    rel = "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     record = 4455
     p = 1
 
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > record
     row = samples[record : record + 1]
 
@@ -47,7 +48,7 @@ def test_shine_loop_release_lag_holds_loop_until_countdown_expires() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -85,12 +86,12 @@ def test_shine_turn_to_loop_followup_does_not_double_tick_release_lag_hvg() -> N
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
     #   ftFx_SpecialLwTurn_Anim,ftFx_SpecialLwHit_Check,ftFx_SpecialLwLoop_IASA}
     root = Path(__file__).resolve().parents[1]
-    rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    rel = "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 2658
     loop_record = 2936
     end_record = 2937
@@ -104,7 +105,7 @@ def test_shine_turn_to_loop_followup_does_not_double_tick_release_lag_hvg() -> N
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -112,14 +113,14 @@ def test_shine_turn_to_loop_followup_does_not_double_tick_release_lag_hvg() -> N
     try:
         binding.reseed_seed_rollout(
             handle,
-            np.frombuffer(ds.samples[start_record]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+            np.frombuffer(ds.rows[start_record]["seed_t"].tobytes(order="C"), dtype=np.uint8)
             .copy()
             .reshape(1, seed_stride),
         )
         loop_out = None
         end_out = None
         for record in range(start_record, end_record + 1):
-            row = ds.samples[record]
+            row = ds.rows[record]
             binding.step_input(
                 handle,
                 np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
@@ -138,8 +139,8 @@ def test_shine_turn_to_loop_followup_does_not_double_tick_release_lag_hvg() -> N
 
         assert loop_out is not None
         assert end_out is not None
-        loop_ref = ds.samples[loop_record]["ref_t1"]
-        end_ref = ds.samples[end_record]["ref_t1"]
+        loop_ref = ds.rows[loop_record]["ref_t1"]
+        end_ref = ds.rows[end_record]["ref_t1"]
         assert int(loop_out["action_id"][p]) == int(loop_ref["action_id"][p]) == 361
         assert int(loop_out["action_frame"][p]) == int(loop_ref["action_frame"][p]) == 10
         assert int(end_out["action_id"][p]) == int(end_ref["action_id"][p]) == 363

@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_PASS = 0x00F4
@@ -49,20 +50,20 @@ def test_guardreflect_platform_pass_entry_clamps_overmax_air_drift_mgs_460() -> 
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "MilkyGracefulStingray.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local FoD dataset")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[460]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[460]
     p = 1
     assert int(row["seed_t"]["action_id"][p]) == ACT_GUARD_REFLECT
     assert int(row["ref_t1"]["action_id"][p]) == ACT_PASS
     assert float(row["seed_t"]["speed_air_x_self"][p]) < -0.83
 
-    out = _run_one_step(row["seed_t"].copy(), row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.header["num_players"]))
+    out = _run_one_step(row["seed_t"].copy(), row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.num_players))
 
     assert int(out["action_id"][p]) == ACT_PASS
     assert float(out["speed_air_x_self"][p]) == pytest.approx(float(row["ref_t1"]["speed_air_x_self"][p]), abs=1e-7)
@@ -73,20 +74,20 @@ def test_platform_pass_entry_does_not_clamp_inrange_air_drift_mgs_460_negative()
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "MilkyGracefulStingray.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local FoD dataset")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[460]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[460]
     p = 1
     seed = row["seed_t"].copy()
     seed["speed_air_x_self"][p] = np.float32(-0.7)
     seed["speed_ground_x_self"][p] = np.float32(-0.7)
 
-    out = _run_one_step(seed, row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.header["num_players"]))
+    out = _run_one_step(seed, row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.num_players))
 
     assert int(out["action_id"][p]) == ACT_PASS
     assert float(out["speed_air_x_self"][p]) == pytest.approx(-0.68, abs=1e-6)

@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -66,56 +67,56 @@ class _Case:
 
 _CASES = (
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
         record=3426,
         victim_p=0,
         expected_facing=1,
         note="ThrowHi nearby control before state1 hitlag extension stays matched",
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
         record=3427,
         victim_p=0,
         expected_facing=1,
         note="ThrowHi state1 shot keeps victim facing from thrower-facing lane on ongoing DamageAir2",
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
         record=3428,
         victim_p=0,
         expected_facing=0,
         note="ThrowHi negative control: fully-saturated hitlag row must keep generic facing match",
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
         record=5087,
         victim_p=0,
         expected_facing=0,
         note="ThrowHi nearby control before DamageFlyTop entry stays matched",
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
         record=5088,
         victim_p=0,
         expected_facing=0,
         note="ThrowHi nearby control on DamageFlyTop entry stays matched",
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
         record=5090,
         victim_p=0,
         expected_facing=0,
         note="ThrowHi state1 shot keeps victim facing from thrower-facing lane on ongoing DamageAir2",
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
         record=5091,
         victim_p=0,
         expected_facing=0,
         note="ThrowHi adjacent ongoing DamageAir2 row stays matched",
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
         record=5092,
         victim_p=0,
         expected_facing=1,
@@ -139,10 +140,10 @@ def test_throwhi_item_damage_facing_replay_real_locks(case: _Case) -> None:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[case.record : case.record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[case.record : case.record + 1]
     p = int(case.victim_p)
     thrower = 1 - p
 
@@ -157,7 +158,7 @@ def test_throwhi_item_damage_facing_replay_real_locks(case: _Case) -> None:
     assert int(ref["facing"][p]) == int(case.expected_facing), case.note
 
     binding = pytest.importorskip("msl_binding")
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
 
     for field in ("action_id", "action_frame", "facing", "animation_index"):
         assert int(out[field][p]) == int(ref[field][p]), (

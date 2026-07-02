@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -23,8 +23,8 @@ class _Case:
 _TARGETS = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz"
         ),
         target_record=552,
         port=1,
@@ -32,8 +32,8 @@ _TARGETS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=2279,
         port=0,
@@ -44,8 +44,8 @@ _TARGETS = (
 _B1_TARGETS = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz"
         ),
         target_record=2393,
         port=0,
@@ -53,8 +53,8 @@ _B1_TARGETS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=4897,
         port=0,
@@ -62,8 +62,8 @@ _B1_TARGETS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz"
         ),
         target_record=2393,
         port=0,
@@ -71,8 +71,8 @@ _B1_TARGETS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=4897,
         port=0,
@@ -83,8 +83,8 @@ _B1_TARGETS = (
 _ACTIVE_TIMER_B1_TARGETS = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=6315,
         port=0,
@@ -92,8 +92,8 @@ _ACTIVE_TIMER_B1_TARGETS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=6315,
         port=0,
@@ -104,8 +104,8 @@ _ACTIVE_TIMER_B1_TARGETS = (
 _ACTIVE_TIMER_B1_NEGATIVE_CONTROLS = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz"
         ),
         target_record=2390,
         port=0,
@@ -113,8 +113,8 @@ _ACTIVE_TIMER_B1_NEGATIVE_CONTROLS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz"
         ),
         target_record=2390,
         port=0,
@@ -125,8 +125,8 @@ _ACTIVE_TIMER_B1_NEGATIVE_CONTROLS = (
 _NEGATIVE_CONTROLS = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=6318,
         port=0,
@@ -134,8 +134,8 @@ _NEGATIVE_CONTROLS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=9482,
         port=0,
@@ -143,8 +143,8 @@ _NEGATIVE_CONTROLS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz"
         ),
         target_record=2326,
         port=0,
@@ -155,8 +155,8 @@ _NEGATIVE_CONTROLS = (
 _SECOND_STEADY_B2_TARGETS = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=6319,
         port=0,
@@ -164,8 +164,8 @@ _SECOND_STEADY_B2_TARGETS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=9483,
         port=0,
@@ -173,8 +173,8 @@ _SECOND_STEADY_B2_TARGETS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz"
         ),
         target_record=2327,
         port=0,
@@ -185,8 +185,8 @@ _SECOND_STEADY_B2_TARGETS = (
 _SECOND_STEADY_INIT_MINUS_ONE_B2_TARGETS = (
     _Case(
         dataset_rel=(
-            "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl"
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz"
         ),
         target_record=1226,
         port=1,
@@ -197,8 +197,8 @@ _SECOND_STEADY_INIT_MINUS_ONE_B2_TARGETS = (
 _CARRY_SNAPSHOT_B2_TARGETS = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz"
         ),
         target_record=2395,
         port=0,
@@ -206,8 +206,8 @@ _CARRY_SNAPSHOT_B2_TARGETS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=4899,
         port=0,
@@ -218,8 +218,8 @@ _CARRY_SNAPSHOT_B2_TARGETS = (
 _CARRY_SNAPSHOT_NEGATIVE_CONTROLS = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz"
         ),
         target_record=4049,
         port=1,
@@ -227,8 +227,8 @@ _CARRY_SNAPSHOT_NEGATIVE_CONTROLS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=852,
         port=0,
@@ -236,8 +236,8 @@ _CARRY_SNAPSHOT_NEGATIVE_CONTROLS = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz"
         ),
         target_record=3498,
         port=0,
@@ -261,10 +261,10 @@ def test_guardsetoff_first_steady_gx10_5_rows_clear_b2(case: _Case) -> None:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = case.port
     target = samples[case.target_record]
     seed = target["seed_t"]
@@ -294,10 +294,10 @@ def test_guardsetoff_first_steady_gx10_7_rows_clear_b1_only(case: _Case) -> None
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     seed = target["seed_t"]
     p = case.port
     assert int(seed["action_id"][p]) == 181, case.note
@@ -329,10 +329,10 @@ def test_guardsetoff_active_timer_handoff_rows_clear_b1_only(case: _Case) -> Non
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     seed = target["seed_t"]
     p = case.port
     assert int(seed["action_id"][p]) == 182, case.note
@@ -364,10 +364,10 @@ def test_guardsetoff_active_timer_controls_keep_b1_while_x14_is_live(case: _Case
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     seed = target["seed_t"]
     p = case.port
     assert int(seed["action_id"][p]) == 182, case.note
@@ -390,10 +390,10 @@ def test_guardsetoff_first_steady_gx10_6_controls_keep_b2(case: _Case) -> None:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     seed = target["seed_t"]
     p = case.port
     assert int(seed["action_id"][p]) == 181, case.note
@@ -428,10 +428,10 @@ def test_guardsetoff_second_steady_rows_clear_b2_once_x18_owner_is_gone(case: _C
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     seed = target["seed_t"]
     p = case.port
     assert int(seed["action_id"][p]) == 181, case.note
@@ -473,10 +473,10 @@ def test_guardsetoff_second_steady_init_minus_one_row_clears_b2_after_post_hitla
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     seed = target["seed_t"]
     p = case.port
     assert int(seed["action_id"][p]) == 181, case.note
@@ -509,10 +509,10 @@ def test_guardsetoff_carry_snapshot_rows_clear_b2_once_x18_owner_is_gone(case: _
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     seed = target["seed_t"]
     p = case.port
     assert int(seed["seed_prev_action_id"][p]) == 181, case.note
@@ -544,10 +544,10 @@ def test_guardsetoff_carry_snapshot_controls_keep_b2(case: _Case) -> None:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     seed = target["seed_t"]
     p = case.port
     assert int(seed["seed_prev_action_id"][p]) == 181, case.note
@@ -569,8 +569,8 @@ def test_guardsetoff_carry_snapshot_controls_keep_b2(case: _Case) -> None:
         (
             _Case(
                 dataset_rel=(
-                    "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                    "AttachedGoodNaturedGuanaco.msl"
+                    "replays/validation/cardinal_1.0_recent/"
+                    "AttachedGoodNaturedGuanaco.slpz"
                 ),
                 target_record=2395,
                 port=0,
@@ -581,8 +581,8 @@ def test_guardsetoff_carry_snapshot_controls_keep_b2(case: _Case) -> None:
         (
             _Case(
                 dataset_rel=(
-                    "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                    "GracefulAttachedTurtle.msl"
+                    "replays/validation/cardinal_1.0_recent/"
+                    "GracefulAttachedTurtle.slpz"
                 ),
                 target_record=4899,
                 port=0,
@@ -593,8 +593,8 @@ def test_guardsetoff_carry_snapshot_controls_keep_b2(case: _Case) -> None:
         (
             _Case(
                 dataset_rel=(
-                    "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                    "AttachedGoodNaturedGuanaco.msl"
+                    "replays/validation/cardinal_1.0_recent/"
+                    "AttachedGoodNaturedGuanaco.slpz"
                 ),
                 target_record=4049,
                 port=1,
@@ -605,8 +605,8 @@ def test_guardsetoff_carry_snapshot_controls_keep_b2(case: _Case) -> None:
         (
             _Case(
                 dataset_rel=(
-                    "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                    "GracefulAttachedTurtle.msl"
+                    "replays/validation/cardinal_1.0_recent/"
+                    "GracefulAttachedTurtle.slpz"
                 ),
                 target_record=852,
                 port=0,
@@ -630,7 +630,7 @@ def test_guardsetoff_validation_carry_rows_match_b2_owner_boundary(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, case.target_record, case.port)
     assert int(ref_row["state_flags"][case.port, 3]) == expected_flag3, case.note

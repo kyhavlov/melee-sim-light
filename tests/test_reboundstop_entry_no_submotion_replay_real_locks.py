@@ -11,28 +11,27 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
-from tools.eval.dataset import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_row_bytes, replay_buffer_byte_views, replay_buffer_row_bytes
+from tools.eval.validation_dtypes import COMPARE_DTYPE
 
 
 def _run_rollout_to_record(dataset_path: Path, start_record: int, target_record: int):
     import msl_binding
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    seed_off = "seed_t"
+    prev_off = "prev_input_t"
+    input_off = "input_t"
 
-    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
-        raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
-        return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+    def field_bytes(record: int, group: str, stride: int) -> np.ndarray:
+        return replay_buffer_row_bytes(ds, group, record, stride)
 
-    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         msl_binding.reseed_seed_rollout(handle, field_bytes(start_record, seed_off, seed_stride))
         out_bytes = np.zeros((1, compare_stride), dtype=np.uint8, order="C")
@@ -105,17 +104,17 @@ def test_reboundstop_entry_no_submotion_target_pm1_rows_are_replay_exact(
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in case.records:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = case.records[1]
     seed_t = samples[target]["seed_t"]
@@ -152,16 +151,16 @@ def test_reboundstop_entry_uses_swept_hitbox_hitbox_clank_fsp_5466() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 5466
     p = 1
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     seed_t = samples[record]["seed_t"]
     ref_t1 = samples[record]["ref_t1"]
@@ -199,22 +198,22 @@ def test_landingair_entry_clears_carried_attackair_hitcapsules_lim_4610() -> Non
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "LawfulInsistentMeerkat.msl"
+        "replays/validation/yoshis_story_recent/"
+        "LawfulInsistentMeerkat.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     start_record = 3562
     target_record = 4610
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > target_record, (
-        f"dataset too short for lock row: record={target_record}"
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > target_record, (
+        f"replay too short for lock row: record={target_record}"
     )
 
-    seed_t = ds.samples[target_record]["seed_t"]
-    ref_t1 = ds.samples[target_record]["ref_t1"]
+    seed_t = ds.rows[target_record]["seed_t"]
+    ref_t1 = ds.rows[target_record]["ref_t1"]
     assert int(seed_t["action_id"][0]) == 70  # LandingAirN
     assert int(seed_t["action_id"][1]) == 63  # AttackAirN
     assert int(ref_t1["action_id"][0]) == 90  # DamageFlyTop
@@ -254,18 +253,18 @@ def test_reboundstop_entry_clank_precedes_stale_body_hitlist_hhg_8674() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    dataset_rel = "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 8674
     p = 0
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    assert int(ds.rows.shape[0]) > record, f"replay too short for lock row: record={record}"
 
-    seed_t = ds.samples[record]["seed_t"]
-    ref_t1 = ds.samples[record]["ref_t1"]
+    seed_t = ds.rows[record]["seed_t"]
+    ref_t1 = ds.rows[record]["ref_t1"]
     assert int(seed_t["action_id"][p]) == 50  # AttackDash
     assert int(ref_t1["action_id"][p]) == 237  # ReboundStop
     assert int(ref_t1["hitstun"][p]) == 0
@@ -296,17 +295,17 @@ def test_reboundstop_same_group_clank_suppresses_enable_edge_body_fsp_467() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 467
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    assert int(ds.rows.shape[0]) > record, f"replay too short for lock row: record={record}"
 
-    seed_t = ds.samples[record]["seed_t"]
-    ref_t1 = ds.samples[record]["ref_t1"]
+    seed_t = ds.rows[record]["seed_t"]
+    ref_t1 = ds.rows[record]["ref_t1"]
     assert int(seed_t["action_id"][0]) == 56  # AttackHi3
     assert int(seed_t["action_id"][1]) == 50  # AttackDash
     assert int(ref_t1["action_id"][0]) == 237  # ReboundStop
@@ -343,14 +342,14 @@ def test_reboundstop_same_group_clank_suppresses_enable_edge_body_fsp_467() -> N
     ("dataset_rel", "record", "expected_hitlag"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "LoyalDishonestWren.msl",
+            "replays/validation/battlefield_recent/"
+            "LoyalDishonestWren.slpz",
             1103,
             (0, 4),
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             6937,
             (4, 0),
         ),
@@ -371,13 +370,13 @@ def test_ftcoll_8007699c_asymmetric_x3cc_clank_side_branches(
 
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > record, f"replay too short for lock row: record={record}"
 
-    seed_t = ds.samples[record]["seed_t"]
-    ref_t1 = ds.samples[record]["ref_t1"]
+    seed_t = ds.rows[record]["seed_t"]
+    ref_t1 = ds.rows[record]["ref_t1"]
     assert any(int(ref_t1["action_id"][p]) == 360 for p in (0, 1))  # SpecialLwStart
     for p, expected in enumerate(expected_hitlag):
         assert int(seed_t["hitlag"][p]) == 0
@@ -409,15 +408,15 @@ def test_ftcoll_8007699c_asymmetric_x3cc_clank_side_branches(
     ("dataset_rel", "start_record", "target_records", "focus_port"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "LoyalDishonestWren.msl",
+            "replays/validation/battlefield_recent/"
+            "LoyalDishonestWren.slpz",
             1103,
             (1104, 1105, 1106),
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             6937,
             (6938, 6939, 6940),
             0,
@@ -438,13 +437,13 @@ def test_ftcoll_8007699c_hitbox_contact_victim_ring_persists_through_hitlag_tail
 
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > max(target_records), (
-        f"dataset too short for lock rows: records={target_records}"
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > max(target_records), (
+        f"replay too short for lock rows: records={target_records}"
     )
-    assert int(ds.samples[start_record]["seed_t"]["hitlag"][focus_port]) == 0
+    assert int(ds.rows[start_record]["seed_t"]["hitlag"][focus_port]) == 0
 
     for target_record in target_records:
         ref_row, out_row = _run_rollout_to_record(dataset_path, start_record, target_record)
@@ -480,22 +479,22 @@ def test_reboundstop_rollout_clears_stale_seed_hitlists_before_shine_jab_clank_q
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     start_record = 2683
     target_record = 2732
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > target_record, (
-        f"dataset too short for lock row: record={target_record}"
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > target_record, (
+        f"replay too short for lock row: record={target_record}"
     )
 
-    seed_start = ds.samples[start_record]["seed_t"]
-    ref_t1 = ds.samples[target_record]["ref_t1"]
+    seed_start = ds.rows[start_record]["seed_t"]
+    ref_t1 = ds.rows[target_record]["ref_t1"]
     assert int(seed_start["combat_hitlist_hb_valid"][1, 0]) == 1
     assert int(seed_start["combat_hitlist_hb_cd"][1, 0, 0]) != 0
     assert int(ref_t1["action_id"][1]) == 237  # ReboundStop
@@ -524,19 +523,19 @@ def test_reboundstop_clank_damage_stale_excludes_current_attack_instance_gat_100
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 10025
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    assert int(ds.rows.shape[0]) > record, f"replay too short for lock row: record={record}"
 
-    seed_t = ds.samples[record]["seed_t"]
-    ref_t1 = ds.samples[record]["ref_t1"]
+    seed_t = ds.rows[record]["seed_t"]
+    ref_t1 = ds.rows[record]["ref_t1"]
     p = 0
     assert int(seed_t["action_id"][p]) == 63
     assert int(seed_t["attack_id"][p]) == 11
@@ -574,18 +573,18 @@ def test_reboundstop_hitlag_tail_seeds_queued_ground_accel_fsp_472() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 472
     p = 1
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    assert int(ds.rows.shape[0]) > record, f"replay too short for lock row: record={record}"
 
-    seed_t = ds.samples[record]["seed_t"]
-    ref_t1 = ds.samples[record]["ref_t1"]
+    seed_t = ds.rows[record]["seed_t"]
+    ref_t1 = ds.rows[record]["ref_t1"]
     assert int(seed_t["action_id"][p]) == 237  # ReboundStop
     assert int(seed_t["hitlag"][p]) == 1
     assert int(ref_t1["action_id"][p]) == 238  # Rebound
@@ -616,18 +615,18 @@ def test_rebound_first_frame_seed_and_rollout_keep_hidden_anim_rate_fsp() -> Non
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 473
     p = 1
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    assert int(ds.rows.shape[0]) > record, f"replay too short for lock row: record={record}"
 
-    seed_t = ds.samples[record]["seed_t"]
-    ref_t1 = ds.samples[record]["ref_t1"]
+    seed_t = ds.rows[record]["seed_t"]
+    ref_t1 = ds.rows[record]["ref_t1"]
     assert int(seed_t["action_id"][p]) == 238  # Rebound
     assert int(seed_t["action_frame"][p]) == 0
     assert float(seed_t["rebound_anim_rate_f32"][p]) > 0.0
@@ -653,8 +652,8 @@ def test_rebound_first_frame_seed_and_rollout_keep_hidden_anim_rate_fsp() -> Non
     [
         _GuardSetOffShieldDamageCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "FavorableSuperficialPig.msl"
+                "replays/validation/aggregate_recent/"
+                "FavorableSuperficialPig.slpz"
             ),
             record=3100,
             defender=0,
@@ -664,8 +663,8 @@ def test_rebound_first_frame_seed_and_rollout_keep_hidden_anim_rate_fsp() -> Non
         ),
         _GuardSetOffShieldDamageCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "HilariousVillainousGiraffe.msl"
+                "replays/validation/aggregate_recent/"
+                "HilariousVillainousGiraffe.slpz"
             ),
             record=5544,
             defender=0,
@@ -675,8 +674,8 @@ def test_rebound_first_frame_seed_and_rollout_keep_hidden_anim_rate_fsp() -> Non
         ),
         _GuardSetOffShieldDamageCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PositiveRevolvingHyena.msl"
+                "replays/validation/aggregate_recent/"
+                "PositiveRevolvingHyena.slpz"
             ),
             record=7124,
             defender=0,
@@ -701,13 +700,13 @@ def test_guardsetoff_shield_damage_taken_seed_is_separate_from_hitlag_scalar(
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > case.record, f"dataset too short for lock row: record={case.record}"
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > case.record, f"replay too short for lock row: record={case.record}"
 
-    seed_t = ds.samples[case.record]["seed_t"]
-    ref_t1 = ds.samples[case.record]["ref_t1"]
+    seed_t = ds.rows[case.record]["seed_t"]
+    ref_t1 = ds.rows[case.record]["ref_t1"]
     p = int(case.defender)
     assert int(seed_t["combat_shield_hit_int_damage"][p]) == case.expected_x19a4, case.note
     assert int(seed_t["combat_shield_damage_taken"][p]) == case.expected_x19a0, case.note
@@ -737,19 +736,19 @@ def test_guardsetoff_shield_damage_taken_seed_does_not_override_runtime_selected
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 3938
     defender = 0
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > record, f"replay too short for lock row: record={record}"
 
-    seed_t = ds.samples[record]["seed_t"]
+    seed_t = ds.rows[record]["seed_t"]
     assert int(seed_t["combat_shield_hit_int_damage"][defender]) == 15
     assert int(seed_t["combat_shield_damage_taken"][defender]) == 0
 

@@ -210,7 +210,6 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--index", default="replays/suites/heldout.json")
     ap.add_argument("--chunk", type=int, default=4096)
-    ap.add_argument("--fields", default="action_id,animation_index,on_ground,hitlag,hitstun,state_flags")
     ap.add_argument("--out-dir", default="reports/validation/heldout")
     ap.add_argument("--summary-out", default="reports/validation/heldout/summary.txt")
     ap.add_argument("--summary-only", action="store_true")
@@ -238,8 +237,6 @@ def main() -> None:
                     suite_cli_arg(suite_path),
                     "--chunk",
                     str(int(args.chunk)),
-                    "--fields",
-                    args.fields,
                     "--one-step-out",
                     str(one_step_out),
                     "--rollout-out",

@@ -45,12 +45,12 @@ def _populate_data_overlay_without_legacy_script_owner_splits(dst_data_dir: Path
             dst.write_bytes(src.read_bytes())
 
 
-def test_default_data_dir_is_dot_msl(monkeypatch, tmp_path) -> None:
+def test_default_data_dir_is_repo_data(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("MSL_DATA_DIR", raising=False)
-    (tmp_path / ".msl").mkdir()
+    (tmp_path / "data").mkdir()
 
-    assert _resolve_data_dir(None) == str(tmp_path / ".msl")
+    assert _resolve_data_dir(None) == str(tmp_path / "data")
     # Resolution must NOT write the host environment (the data root reaches the native
     # loaders via _native.set_data_dir instead).
     assert "MSL_DATA_DIR" not in os.environ
@@ -65,9 +65,9 @@ def test_missing_default_data_dir_error_is_actionable(monkeypatch, tmp_path) -> 
 
     msg = str(excinfo.value)
     assert "melee_sim data directory not found" in msg
-    assert str(tmp_path / ".msl") in msg
+    assert str(tmp_path / "data") in msg
     assert "python -m melee_sim.extract_data --iso /path/to/SSBM.iso" in msg
-    assert "MSL_DATA_DIR=/path/to/.msl python your_script.py" in msg
+    assert "MSL_DATA_DIR=/path/to/data python your_script.py" in msg
 
 
 def test_data_manifest_schema_mismatch_error_is_actionable(tmp_path) -> None:
@@ -305,7 +305,7 @@ def test_gamestate_dtype_exposes_items_randall_and_invulnerability() -> None:
 
 
 def test_resolve_data_dir_is_side_effect_free_for_later_native_init(monkeypatch, tmp_path) -> None:
-    # Lifecycle regression: _resolve_data_dir(None) resolving a temp .msl must NOT set the
+    # Lifecycle regression: _resolve_data_dir(None) resolving a temp data root must NOT set the
     # native process-global override - a later DIRECT msl_binding.init() (env/repo data)
     # must still load from the real root. The override is set only inside EnvBatch.__init__
     # after the preflights pass.
@@ -313,12 +313,12 @@ def test_resolve_data_dir_is_side_effect_free_for_later_native_init(monkeypatch,
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("MSL_DATA_DIR", raising=False)
-    (tmp_path / ".msl").mkdir()
-    assert _resolve_data_dir(None) == str(tmp_path / ".msl")
+    (tmp_path / "data").mkdir()
+    assert _resolve_data_dir(None) == str(tmp_path / "data")
 
     # Native init must not see the temp root. The autouse fixture pins MSL_DATA_DIR to the
     # repo data dir, but the loaders may already be latched from earlier inits in this
-    # process - either way, init succeeding proves the stale temp .msl did not win.
+    # process - either way, init succeeding proves the stale temp data root did not win.
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     handle = msl_binding.init(batch_size=1, num_players=2)
     msl_binding.destroy(handle)

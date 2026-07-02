@@ -10,7 +10,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,7 @@ class _WalkCallbackSourceCase:
     expect_retarget_source_nonzero: bool = True
 
 
-_CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent"
+_CARDINAL = "replays/validation/cardinal_1.0_recent"
 
 
 @pytest.mark.integration
@@ -33,7 +33,7 @@ _CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0
     "case",
     [
         _WalkCallbackSourceCase(
-            dataset_rel=f"{_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel=f"{_CARDINAL}/AttachedGoodNaturedGuanaco.slpz",
             target_record=1142,
             walker_port=1,
             seed_action_id=15,
@@ -42,7 +42,7 @@ _CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0
             note="AGN WalkSlow af=2 callback-source family",
         ),
         _WalkCallbackSourceCase(
-            dataset_rel=f"{_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel=f"{_CARDINAL}/AttachedGoodNaturedGuanaco.slpz",
             target_record=4391,
             walker_port=1,
             seed_action_id=16,
@@ -51,7 +51,7 @@ _CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0
             note="AGN WalkMiddle af=2 callback-source family",
         ),
         _WalkCallbackSourceCase(
-            dataset_rel=f"{_CARDINAL}/QuerulousGrandDinosaur.msl",
+            dataset_rel=f"{_CARDINAL}/QuerulousGrandDinosaur.slpz",
             target_record=3315,
             walker_port=1,
             seed_action_id=15,
@@ -60,7 +60,7 @@ _CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0
             note="QGD WalkSlow af=2 callback-source family (low-rate carry)",
         ),
         _WalkCallbackSourceCase(
-            dataset_rel=f"{_CARDINAL}/QuerulousGrandDinosaur.msl",
+            dataset_rel=f"{_CARDINAL}/QuerulousGrandDinosaur.slpz",
             target_record=3319,
             walker_port=1,
             seed_action_id=15,
@@ -69,7 +69,7 @@ _CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0
             note="QGD WalkSlow mid-cycle callback-source family",
         ),
         _WalkCallbackSourceCase(
-            dataset_rel=f"{_CARDINAL}/QuerulousGrandDinosaur.msl",
+            dataset_rel=f"{_CARDINAL}/QuerulousGrandDinosaur.slpz",
             target_record=3745,
             walker_port=1,
             seed_action_id=15,
@@ -78,7 +78,7 @@ _CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0
             note="QGD WalkSlow af=2 callback-source family (neutral-state facing flip)",
         ),
         _WalkCallbackSourceCase(
-            dataset_rel=f"{_CARDINAL}/TreasuredBackKangaroo.msl",
+            dataset_rel=f"{_CARDINAL}/TreasuredBackKangaroo.slpz",
             target_record=672,
             walker_port=0,
             seed_action_id=15,
@@ -88,8 +88,8 @@ _CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0
         ),
         _WalkCallbackSourceCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "MotionlessAggressiveJay.msl"
+                "replays/validation/aggregate_recent/"
+                "MotionlessAggressiveJay.slpz"
             ),
             target_record=1190,
             walker_port=0,
@@ -115,15 +115,15 @@ def test_walk_callback_source_rate_target_pm1_both_players_strict_lock(
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
     walker = int(case.walker_port)
     rows = (target_record - 1, target_record, target_record + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[target_record]
     seed = target["seed_t"]

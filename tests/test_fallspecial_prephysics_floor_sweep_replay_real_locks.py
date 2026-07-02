@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE
-from tests.replay_dataset_loader import load_replay_dataset as read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _step_sample(sample: np.ndarray) -> np.void:
@@ -30,8 +30,8 @@ def _step_sample(sample: np.ndarray) -> np.void:
 
 
 def _step_record(path: str, rec: int) -> np.void:
-    ds = read_dataset(path)
-    return _step_sample(ds.samples[rec : rec + 1].copy())
+    ds = load_replay_buffers(path)
+    return _step_sample(ds.rows[rec : rec + 1].copy())
 
 
 def test_fallspecial_landing_controls_do_not_require_the_prephysics_helper() -> None:
@@ -44,14 +44,14 @@ def test_fallspecial_landing_controls_do_not_require_the_prephysics_helper() -> 
     # refs/melee/src/melee/mp/mpcoll.c::{
     #   mpColl_80047E14,mpColl_80044628_Floor,mpColl_80044838_Floor}
     rows = (
-        ("datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl", 3368, 1),
-        ("datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl", 1965, 0),
+        ("replays/validation/aggregate_recent/TubbyCurlyHerring.slpz", 3368, 1),
+        ("replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz", 1965, 0),
     )
 
     for path, rec, player in rows:
-        ds = read_dataset(path)
-        seed = ds.samples["seed_t"][rec]
-        ref = ds.samples["ref_t1"][rec]
+        ds = load_replay_buffers(path)
+        seed = ds.rows["seed_t"][rec]
+        ref = ds.rows["ref_t1"][rec]
         assert int(seed["action_id"][player]) == 0x0023
         assert int(ref["action_id"][player]) == 0x002B
 
@@ -65,12 +65,12 @@ def test_fallspecial_landing_controls_do_not_require_the_prephysics_helper() -> 
 def test_fallspecial_lands_when_callback_visible_bottom_sweep_hits() -> None:
     # Control: once the carried CollData previous root to callback-visible root sweep crosses the
     # floor, FallSpecial_Coll enters LandingFallSpecial through ftCo_80096D28.
-    path = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    path = "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     rec = 4321
     player = 1
-    ds = read_dataset(path)
-    seed = ds.samples["seed_t"][rec]
-    ref = ds.samples["ref_t1"][rec]
+    ds = load_replay_buffers(path)
+    seed = ds.rows["seed_t"][rec]
+    ref = ds.rows["ref_t1"][rec]
     assert int(seed["action_id"][player]) == 0x0023
     assert int(ref["action_id"][player]) == 0x002B
 
@@ -93,11 +93,11 @@ def test_fallspecial_connected_hard_floor_root_projection_uses_source_prev_endpo
     # refs/melee/src/melee/ft/ft_081B.c::ft_80083090
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor,
     #   mpColl_80044838_Floor}
-    path = "datasets/aggregate_recent/replays/validation/marth/InternalPowerlessWallaby.msl"
+    path = "replays/validation/marth/InternalPowerlessWallaby.slpz"
     rec = 1240
     player = 1
-    ds = read_dataset(path)
-    sample = ds.samples[rec : rec + 1].copy()
+    ds = load_replay_buffers(path)
+    sample = ds.rows[rec : rec + 1].copy()
     seed = sample["seed_t"][0]
     ref = sample["ref_t1"][0]
     assert int(seed["action_id"][player]) == 0x0023
@@ -119,7 +119,7 @@ def test_fallspecial_connected_hard_floor_root_projection_uses_source_prev_endpo
     assert int(out_no_source["on_ground"][player]) == 0
     assert int(out_no_source["ground_id"][player]) == 5
 
-    prior = ds.samples[rec - 1 : rec].copy()
+    prior = ds.rows[rec - 1 : rec].copy()
     prior_seed = prior["seed_t"][0]
     prior_ref = prior["ref_t1"][0]
     assert int(prior_seed["action_id"][player]) == 0x0023
@@ -141,11 +141,11 @@ def test_fallspecial_connected_hard_floor_root_projection_rejects_frame_start_fa
     #   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor,
     #   mpColl_80044838_Floor}
-    path = "datasets/aggregate_recent/replays/validation/marth/ParallelFamiliarZebra.msl"
+    path = "replays/validation/marth/ParallelFamiliarZebra.slpz"
     rec = 5199
     player = 1
-    ds = read_dataset(path)
-    sample = ds.samples[rec : rec + 1].copy()
+    ds = load_replay_buffers(path)
+    sample = ds.rows[rec : rec + 1].copy()
     seed = sample["seed_t"][0]
     ref = sample["ref_t1"][0]
     assert int(seed["action_id"][player]) == 0x0023
@@ -177,7 +177,7 @@ def test_fallspecial_alternate_endpoint_root_projection_stays_airborne_esh(rec: 
     #   mpColl_80044838_Floor}
     import msl_binding
 
-    path = "datasets/marth/replays/validation/marth/ExtraLargeScaryHornet.msl"
+    path = "replays/validation/marth/ExtraLargeScaryHornet.slpz"
     player = 0
     stage_main = msl_binding.stage_floor_segment(3, 34)
     stage_ledge = msl_binding.stage_floor_segment(3, 51)
@@ -185,9 +185,9 @@ def test_fallspecial_alternate_endpoint_root_projection_stays_airborne_esh(rec: 
     assert int(stage_ledge["has_next_link"]) == 1
     assert int(stage_ledge["is_ledge"]) == 1
 
-    ds = read_dataset(path)
-    seed = ds.samples["seed_t"][rec]
-    ref = ds.samples["ref_t1"][rec]
+    ds = load_replay_buffers(path)
+    seed = ds.rows["seed_t"][rec]
+    ref = ds.rows["ref_t1"][rec]
     assert int(seed["stage_id"]) == 3
     assert int(seed["action_id"][player]) == 0x0023
     assert int(seed["ground_id"][player]) == 34
@@ -208,12 +208,12 @@ def test_fallspecial_alternate_endpoint_lands_after_source_floor_publication_esh
     # Adjacent positive: the alternate-endpoint guard above is not a blanket Stadium/FallSpecial
     # delay. Once the following callback reaches source floor publication, LandingFallSpecial still
     # publishes from ledge strip 51.
-    path = "datasets/marth/replays/validation/marth/ExtraLargeScaryHornet.msl"
+    path = "replays/validation/marth/ExtraLargeScaryHornet.slpz"
     rec = 2063
     player = 0
-    ds = read_dataset(path)
-    seed = ds.samples["seed_t"][rec]
-    ref = ds.samples["ref_t1"][rec]
+    ds = load_replay_buffers(path)
+    seed = ds.rows["seed_t"][rec]
+    ref = ds.rows["ref_t1"][rec]
     assert int(seed["stage_id"]) == 3
     assert int(seed["action_id"][player]) == 0x0023
     assert int(seed["ground_id"][player]) == 34
@@ -236,12 +236,12 @@ def test_fallspecial_current_ecb_owner_does_not_land_first_sustained_frame_pec()
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
     #   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
-    path = "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    path = "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     rec = 6952
     player = 1
-    ds = read_dataset(path)
-    seed = ds.samples["seed_t"][rec]
-    ref = ds.samples["ref_t1"][rec]
+    ds = load_replay_buffers(path)
+    seed = ds.rows["seed_t"][rec]
+    ref = ds.rows["ref_t1"][rec]
     assert int(seed["action_id"][player]) == 0x0023
     assert int(seed["action_frame"][player]) == 1
     assert int(ref["action_id"][player]) == 0x0023
@@ -256,12 +256,12 @@ def test_fallspecial_current_ecb_owner_does_not_land_first_sustained_frame_pec()
 def test_fallspecial_same_floor_early_root_crossing_stays_airborne_dcc() -> None:
     # Same carried-floor early FallSpecial root crossings stay airborne; adjacent floor/seam
     # handoffs remain covered by the positive controls above.
-    path = "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    path = "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     rec = 8771
     player = 1
-    ds = read_dataset(path)
-    seed = ds.samples["seed_t"][rec]
-    ref = ds.samples["ref_t1"][rec]
+    ds = load_replay_buffers(path)
+    seed = ds.rows["seed_t"][rec]
+    ref = ds.rows["ref_t1"][rec]
     assert int(seed["action_id"][player]) == 0x0023
     assert int(seed["ground_id"][player]) == 1
     assert int(ref["action_id"][player]) == 0x0023

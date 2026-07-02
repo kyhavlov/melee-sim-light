@@ -7,7 +7,8 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -18,16 +19,16 @@ class _DeadUpStarCase:
     note: str
 
 
-_MAJ_DATASET = "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+_MAJ_DATASET = "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
 _PTE_FOD_DATASET = (
-    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
 )
 
 
 def _dataset(root: Path, rel: str) -> Path:
     path = root / rel
     if not path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
     return path
 
 
@@ -108,8 +109,8 @@ def test_deadupstar_rollout_from_damageflytop_crosses_phase1_boundary() -> None:
     # teacher-forced. This locks the entry-owned phase velocity rather than a one-step seed carry.
     root = Path(__file__).resolve().parents[1]
     dataset_path = _dataset(root, _MAJ_DATASET)
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > 7938
 
     binding = pytest.importorskip("msl_binding")
@@ -123,7 +124,7 @@ def test_deadupstar_rollout_from_damageflytop_crosses_phase1_boundary() -> None:
     ).copy().reshape(1, seed_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for rec in range(7899, 7939):

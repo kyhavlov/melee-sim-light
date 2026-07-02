@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -34,7 +34,7 @@ class _ControlCase:
     "case",
     [
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=1920,
             p=1,
             expected_inside=1,
@@ -43,7 +43,7 @@ class _ControlCase:
             note="late-Rebirth over-set blocker still has a valid inside-camera target point on the seed row",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=2710,
             p=0,
             expected_inside=1,
@@ -52,7 +52,7 @@ class _ControlCase:
             note="mixed-direction under-set blocker is also point-inside on the seed row, so the branch input alone does not resolve ownership",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=3227,
             p=0,
             expected_inside=1,
@@ -61,7 +61,7 @@ class _ControlCase:
             note="mirrored late-Rebirth blocker stays point-inside under the same Camera_80030CD8-style predicate",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=705,
             p=1,
             expected_inside=1,
@@ -70,7 +70,7 @@ class _ControlCase:
             note="damage-side under-set blocker keeps the inside-point predicate even though the visible bit diverges",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=4514,
             p=0,
             expected_inside=1,
@@ -79,7 +79,7 @@ class _ControlCase:
             note="Falco late-Rebirth over-set blocker remains point-inside on the seed row",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=2534,
             p=0,
             expected_inside=0,
@@ -102,10 +102,10 @@ def test_rebirth_camera_target_point_inside_stage_cam_bounds_seed_locks_blockers
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     seed = samples[case.target_record]["seed_t"]
     p = case.p
 
@@ -121,14 +121,14 @@ def test_rebirth_camera_target_point_inside_stage_cam_bounds_seed_locks_blockers
     "case",
     [
         _ControlCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=1888,
             p=1,
             expected_inside=0,
             note="pre-Rebirth control has no valid camera target/radius yet, so the point-inside lane must stay zero",
         ),
         _ControlCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=1889,
             p=1,
             expected_inside=0,
@@ -140,8 +140,8 @@ def test_rebirth_camera_target_point_inside_stage_cam_bounds_seed_negative_contr
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[case.record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[case.record]["seed_t"]
     assert int(seed["camera_target_point_inside_stage_cam_bounds_u8"][case.p]) == case.expected_inside, case.note

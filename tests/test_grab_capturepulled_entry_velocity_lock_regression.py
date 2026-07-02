@@ -5,10 +5,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE_REL = "replays/validation/cardinal_1.0_recent"
 _REQUIRED_ARTIFACTS = (
     "data/moves/fox.json",
     "data/moves/falco.json",
@@ -26,8 +27,8 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 
 def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -35,7 +36,7 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -65,16 +66,16 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
 @pytest.mark.integration
 def test_replay_capturepulledhi_entry_clears_velocity_lanes_record_2691_lock() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.msl"
+    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
     victim = 0
     record = 2691
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # Replay-real lock: Catch connect transitions victim SpecialAirS -> CapturePulledHi.
     # The captured victim's self/attack velocity lanes should match replay on entry.
@@ -105,18 +106,18 @@ def test_replay_capturepulledhi_entry_clears_velocity_lanes_record_2691_lock() -
 @pytest.mark.integration
 def test_replay_capturepulledhi_entry_adjacent_context_controls_records_2690_2692() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.msl"
+    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
     victim = 0
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     # Adjacent context controls: verify entry-frame zeroing does not bleed to surrounding rows.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAADC,ftCo_CapturePulledHi_Phys}
-    row_before = ds.samples[2690:2691]
+    row_before = ds.rows[2690:2691]
     assert int(row_before["seed_t"]["action_id"][0, victim]) == 351
     assert int(row_before["ref_t1"]["action_id"][0, victim]) == 351
     out_before, ref_before = _run_record(dataset_path, 2690)
@@ -125,7 +126,7 @@ def test_replay_capturepulledhi_entry_adjacent_context_controls_records_2690_269
     )
     assert float(out_before["speed_air_x_self"][0, victim]) > 1.0
 
-    row_after = ds.samples[2692:2693]
+    row_after = ds.rows[2692:2693]
     assert int(row_after["seed_t"]["action_id"][0, victim]) == 223
     assert int(row_after["ref_t1"]["action_id"][0, victim]) == 223
     out_after, ref_after = _run_record(dataset_path, 2692)
@@ -137,17 +138,17 @@ def test_replay_capturepulledhi_entry_adjacent_context_controls_records_2690_269
 @pytest.mark.integration
 def test_replay_capturepulledhi_entry_applies_airborne_capture_delta_record_6468_lock() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    dataset_rel = "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     _skip_if_required_artifacts_missing(root)
 
     victim = 0
     owner = 1
     record = 6468
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     # Replay-real lock: Catch -> CatchPull connects against an airborne DamageFlyTop victim and
     # fn_800DAADC immediately applies the capture-anchor minus victim-XRotN delta after

@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -27,11 +28,11 @@ def _step_case(c: _Case) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / c.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {c.dataset_rel}")
+        pytest.skip(f"missing local replay: {c.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > c.record, f"dataset too short: record={c.record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > c.record, f"replay too short: record={c.record}"
     row = samples[c.record : c.record + 1]
 
     binding = pytest.importorskip("msl_binding")
@@ -40,7 +41,7 @@ def _step_case(c: _Case) -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -85,8 +86,8 @@ def _step_case(c: _Case) -> None:
     [
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
             ),
             record=734,
             p=0,
@@ -95,8 +96,8 @@ def _step_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
             ),
             record=1891,
             p=1,
@@ -105,8 +106,8 @@ def _step_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
             ),
             record=2390,
             p=0,
@@ -115,8 +116,8 @@ def _step_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
             ),
             record=2391,
             p=0,
@@ -126,8 +127,8 @@ def _step_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
             ),
             record=3599,
             p=1,
@@ -137,8 +138,8 @@ def _step_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
             ),
             record=3944,
             p=1,
@@ -147,8 +148,8 @@ def _step_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
             ),
             record=4482,
             p=0,
@@ -158,8 +159,8 @@ def _step_case(c: _Case) -> None:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-                "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+                "replays/validation/"
+                "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
             ),
             record=4021,
             p=1,

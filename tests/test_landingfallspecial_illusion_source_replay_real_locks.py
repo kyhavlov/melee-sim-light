@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -19,32 +20,32 @@ class _Case:
 _CASES = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz"
         ),
         rows=(5415, 5416, 5417, 5418),
         player=1,
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         rows=(5919, 5920, 5921, 5922),
         player=1,
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz"
         ),
         rows=(3873, 3874, 3875, 3876),
         player=0,
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz"
         ),
         rows=(707, 708, 709, 710),
         player=1,
@@ -65,14 +66,14 @@ def test_landingfallspecial_illusion_source_rows_and_controls_are_replay_exact(c
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = list(case.rows)
     p = int(case.player)
     for record in rows:
-        assert int(samples.shape[0]) > record, f"dataset too short for replay lock row: record={record}"
+        assert int(samples.shape[0]) > record, f"replay too short for replay lock row: record={record}"
 
     lock = samples[rows]
 
@@ -105,7 +106,7 @@ def test_landingfallspecial_illusion_source_rows_and_controls_are_replay_exact(c
     )
     out_compare_bytes = np.empty((len(rows), compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=len(rows), num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=len(rows), num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)

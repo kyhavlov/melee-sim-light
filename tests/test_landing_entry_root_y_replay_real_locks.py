@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -32,11 +33,11 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = (
             np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8)
@@ -84,7 +85,7 @@ class _Case:
     note: str
 
 
-_BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE = "replays/validation/cardinal_1.0_recent"
 
 
 @pytest.mark.integration
@@ -92,7 +93,7 @@ _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
     "case",
     [
         _Case(
-            dataset_rel=f"{_BASE}/QuerulousGrandDinosaur.msl",
+            dataset_rel=f"{_BASE}/QuerulousGrandDinosaur.slpz",
             p=0,
             target_record=10216,
             target_seed_action=27,  # JumpAerialF
@@ -109,7 +110,7 @@ _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
             note="JumpAerialF -> Landing root-Y target family",
         ),
         _Case(
-            dataset_rel=f"{_BASE}/QuerulousGrandDinosaur.msl",
+            dataset_rel=f"{_BASE}/QuerulousGrandDinosaur.slpz",
             p=0,
             target_record=1255,
             target_seed_action=236,  # EscapeAir
@@ -126,7 +127,7 @@ _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
             note="EscapeAir -> LandingFallSpecial root-Y target family",
         ),
         _Case(
-            dataset_rel=f"{_BASE}/GracefulAttachedTurtle.msl",
+            dataset_rel=f"{_BASE}/GracefulAttachedTurtle.slpz",
             p=1,
             target_record=7702,
             target_seed_action=66,  # AttackAirF
@@ -150,11 +151,11 @@ def test_landing_entry_root_y_targets_pm1_and_negative_controls(case: _Case) -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
-    target = ds.samples[case.target_record]
+    target = ds.rows[case.target_record]
     assert int(target["seed_t"]["action_id"][case.p]) == case.target_seed_action, case.note
     assert int(target["ref_t1"]["action_id"][case.p]) == case.target_ref_action, case.note
     assert int(target["seed_t"]["on_ground"][case.p]) == 0, case.note
@@ -164,14 +165,14 @@ def test_landing_entry_root_y_targets_pm1_and_negative_controls(case: _Case) -> 
     assert int(out["on_ground"][case.p]) == int(ref["on_ground"][case.p]) == 1, case.note
     assert abs(float(out["pos_y"][case.p]) - float(ref["pos_y"][case.p])) <= 2e-4, case.note
 
-    prev = ds.samples[case.prev_record]
+    prev = ds.rows[case.prev_record]
     assert int(prev["seed_t"]["action_id"][case.p]) == case.prev_seed_action, case.note
     assert int(prev["ref_t1"]["action_id"][case.p]) == case.prev_ref_action, case.note
     out_prev, ref_prev = _step_one_row(dataset_path, case.prev_record)
     assert int(out_prev["action_id"][case.p]) == int(ref_prev["action_id"][case.p]), case.note
     assert int(out_prev["on_ground"][case.p]) == int(ref_prev["on_ground"][case.p]) == 0, case.note
 
-    nxt = ds.samples[case.next_record]
+    nxt = ds.rows[case.next_record]
     assert int(nxt["seed_t"]["action_id"][case.p]) == case.next_seed_action, case.note
     assert int(nxt["ref_t1"]["action_id"][case.p]) == case.next_ref_action, case.note
     out_next, ref_next = _step_one_row(dataset_path, case.next_record)
@@ -179,7 +180,7 @@ def test_landing_entry_root_y_targets_pm1_and_negative_controls(case: _Case) -> 
     assert int(out_next["on_ground"][case.p]) == int(ref_next["on_ground"][case.p]) == 1, case.note
     assert abs(float(out_next["pos_y"][case.p]) - float(ref_next["pos_y"][case.p])) <= 2e-4, case.note
 
-    negative = ds.samples[case.negative_record]
+    negative = ds.rows[case.negative_record]
     assert int(negative["seed_t"]["action_id"][case.p]) == case.negative_seed_action, case.note
     assert int(negative["ref_t1"]["action_id"][case.p]) == case.negative_ref_action, case.note
     assert int(negative["seed_t"]["on_ground"][case.p]) == 0, case.note
@@ -193,15 +194,15 @@ def test_landing_entry_root_y_targets_pm1_and_negative_controls(case: _Case) -> 
 def test_landing_family_steady_negative_control_stays_replay_real() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = f"{_BASE}/QuerulousGrandDinosaur.msl"
+    dataset_rel = f"{_BASE}/QuerulousGrandDinosaur.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     record = 387
     p = 0
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
 
     # Explicit non-target landing-family control:
     # - already in LandingAirF on seed_t and remains there on ref_t1

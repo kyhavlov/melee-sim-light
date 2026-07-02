@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -20,8 +21,8 @@ class _Case:
 _CASES = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz"
         ),
         record=4527,
         p=1,
@@ -29,8 +30,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz"
         ),
         record=4528,
         p=1,
@@ -38,8 +39,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz"
         ),
         record=4529,
         p=1,
@@ -47,8 +48,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz"
         ),
         record=4538,
         p=1,
@@ -56,8 +57,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz"
         ),
         record=4539,
         p=1,
@@ -65,8 +66,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz"
         ),
         record=4540,
         p=1,
@@ -74,8 +75,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz"
         ),
         record=5744,
         p=0,
@@ -91,7 +92,7 @@ def _step_one_row(ds, row: np.ndarray) -> np.ndarray:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -125,11 +126,11 @@ def test_turn_basic_postflip_facing_replay_real_locks(case: _Case) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > case.record, f"dataset too short for record={case.record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > case.record, f"replay too short for record={case.record}"
 
     row = samples[case.record : case.record + 1]
     seed = row["seed_t"][0]

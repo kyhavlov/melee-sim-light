@@ -12,7 +12,7 @@ from tests.test_modelplay_rerun5_collision_regressions import (
     _require_local_data_or_skip,
     _seed_from_trace_frame,
 )
-from tools.eval.dataset import COMPARE_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE
 
 RERUN9 = "reports/modelplay/20260410_rl_doubles_v27_7000_rerun9/trace.json"
 RERUN10 = "reports/modelplay/20260410_rl_doubles_v27_7000_rerun10/trace.json"

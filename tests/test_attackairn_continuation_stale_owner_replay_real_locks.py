@@ -10,13 +10,14 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_rollout_row(ds_path: Path, *, start_record: int, target_record: int) -> np.void:
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > target_record, f"dataset too short for rollout target: record={target_record}"
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > target_record, f"replay too short for rollout target: record={target_record}"
     assert start_record <= target_record
 
     binding = pytest.importorskip("msl_binding")
@@ -30,7 +31,7 @@ def _run_rollout_row(ds_path: Path, *, start_record: int, target_record: int) ->
     ).copy().reshape(1, seed_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for rec in range(start_record, target_record + 1):
@@ -66,25 +67,25 @@ def test_attackairn_continuation_stale_owner_rows_and_adjacent_controls_are_repl
 
     agn_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        / "AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "AttachedGoodNaturedGuanaco.slpz"
     )
     gat_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        / "GracefulAttachedTurtle.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "GracefulAttachedTurtle.slpz"
     )
     if not agn_path.exists():
-        pytest.skip(f"missing local dataset: {agn_path}")
+        pytest.skip(f"missing local replay: {agn_path}")
     if not gat_path.exists():
-        pytest.skip(f"missing local dataset: {gat_path}")
+        pytest.skip(f"missing local replay: {gat_path}")
 
-    agn = read_dataset(str(agn_path)).samples
-    gat = read_dataset(str(gat_path)).samples
+    agn = load_replay_buffers(str(agn_path)).rows
+    gat = load_replay_buffers(str(gat_path)).rows
 
     for rec in (5481, 5482, 5483, 7047, 7048):
-        assert int(agn.shape[0]) > rec, f"dataset too short for AGN rec={rec}"
-    assert int(gat.shape[0]) > 2520, "dataset too short for GAT rec=2520"
+        assert int(agn.shape[0]) > rec, f"replay too short for AGN rec={rec}"
+    assert int(gat.shape[0]) > 2520, "replay too short for GAT rec=2520"
 
     target_seed = agn[5482]["seed_t"]
     target_ref = agn[5482]["ref_t1"]
@@ -149,14 +150,14 @@ def test_attackairn_same_group_damageflytop_latch_suppresses_reseeded_rehit_on_m
 
     mgs_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "MilkyGracefulStingray.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "MilkyGracefulStingray.slpz"
     )
     if not mgs_path.exists():
-        pytest.skip(f"missing local dataset: {mgs_path}")
+        pytest.skip(f"missing local replay: {mgs_path}")
 
-    mgs = read_dataset(str(mgs_path)).samples
-    assert int(mgs.shape[0]) > 3421, "dataset too short for MGS lock"
+    mgs = load_replay_buffers(str(mgs_path)).rows
+    assert int(mgs.shape[0]) > 3421, "replay too short for MGS lock"
 
     seed = mgs[3421]["seed_t"]
     ref = mgs[3421]["ref_t1"]
@@ -211,13 +212,13 @@ def test_attackairn_late_window_live_airborne_victim_mgs_open_provenance_debt() 
 
     mgs_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "MilkyGracefulStingray.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "MilkyGracefulStingray.slpz"
     )
     if not mgs_path.exists():
-        pytest.skip(f"missing local dataset: {mgs_path}")
+        pytest.skip(f"missing local replay: {mgs_path}")
 
-    mgs = read_dataset(str(mgs_path)).samples
+    mgs = load_replay_buffers(str(mgs_path)).rows
     start = 1998
     target = 2002
     attacker = 1

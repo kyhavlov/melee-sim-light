@@ -9,7 +9,8 @@ import pytest
 from tests.test_combat_ownership_seed_guardrail_locks import (
     _assert_transition_lock_fields_match_ref,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_GUARD_REFLECT = 0x00B6
@@ -33,9 +34,9 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 
 def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
     row = samples[record : record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
@@ -53,7 +54,7 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -79,35 +80,35 @@ class _FixedRow:
     "case",
     [
         _FixedRow(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=4045,
             slot=0,
             expected_instance_id=861,
             note="fixed row A (AGG)",
         ),
         _FixedRow(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=4046,
             slot=0,
             expected_instance_id=861,
             note="fixed row B (AGG)",
         ),
         _FixedRow(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=9480,
             slot=0,
             expected_instance_id=2116,
             note="fixed row C (GAT)",
         ),
         _FixedRow(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             record=3494,
             slot=0,
             expected_instance_id=730,
             note="fixed row D (TBK)",
         ),
         _FixedRow(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             record=3495,
             slot=0,
             expected_instance_id=730,
@@ -125,7 +126,7 @@ def test_guard_reflect_non_guardreflect_powershield_rows_lock_item_identity(case
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, case.record)
     slot = case.slot
@@ -164,19 +165,19 @@ class _ControlRow:
     "case",
     [
         _ControlRow(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=4043,
             slot=0,
             note="adjacent control A (pre-lane)",
         ),
         _ControlRow(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             record=9478,
             slot=0,
             note="adjacent control B (still GuardReflect)",
         ),
         _ControlRow(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             record=3492,
             slot=0,
             note="adjacent control C (pre-lane)",
@@ -188,7 +189,7 @@ def test_guard_reflect_item_identity_adjacent_controls(case: _ControlRow) -> Non
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed, out, ref = _step_one_row(dataset_path, case.record)
     slot = case.slot

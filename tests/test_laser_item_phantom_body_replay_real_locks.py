@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _one_step_out_ref(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
@@ -16,11 +17,11 @@ def _one_step_out_ref(dataset_path: Path, record: int) -> tuple[np.void, np.void
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = (
             np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8)
@@ -59,9 +60,9 @@ class _Case:
     note: str
 
 
-_AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
-_BF = "datasets/aggregate_recent/replays/validation/battlefield_recent"
-_PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
+_AGG = "replays/validation/aggregate_recent"
+_BF = "replays/validation/battlefield_recent"
+_PS = "replays/validation/pokemon_stadium_recent"
 
 
 @pytest.mark.integration
@@ -69,7 +70,7 @@ _PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
     "case",
     [
         _Case(
-            dataset_rel=f"{_AGG}/TubbyCurlyHerring.msl",
+            dataset_rel=f"{_AGG}/TubbyCurlyHerring.slpz",
             record=8969,
             player=1,
             seed_action=27,  # JumpAerialF
@@ -79,7 +80,7 @@ _PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
             note="JumpAerialF laser phantom writes hitlag/attribution and keeps projectile alive",
         ),
         _Case(
-            dataset_rel=f"{_BF}/DelayedSuperbGuanaco.msl",
+            dataset_rel=f"{_BF}/DelayedSuperbGuanaco.slpz",
             record=2526,
             player=0,
             seed_action=27,  # JumpAerialF
@@ -89,7 +90,7 @@ _PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
             note="JumpAerialF laser phantom still writes hitlag with stale reflect-behavior carry",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.msl",
+            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.slpz",
             record=1580,
             player=0,
             seed_action=345,  # SpecialAirNLoop
@@ -99,7 +100,7 @@ _PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
             note="SpecialAirNLoop laser phantom writes hitlag/attribution and keeps projectile alive",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/BlondHardHippopotamus.msl",
+            dataset_rel=f"{_AGG}/BlondHardHippopotamus.slpz",
             record=7270,
             player=1,
             seed_action=25,  # JumpF
@@ -109,7 +110,7 @@ _PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
             note="JumpF stale reflect-behavior laser phantom remains attribution-only",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/TubbyCurlyHerring.msl",
+            dataset_rel=f"{_AGG}/TubbyCurlyHerring.slpz",
             record=8968,
             player=1,
             seed_action=27,  # adjacent JumpAerialF no-contact row
@@ -119,7 +120,7 @@ _PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
             note="adjacent JumpAerialF negative before phantom keeps baseline",
         ),
         _Case(
-            dataset_rel=f"{_PS}/ThisVioletRaccoon.msl",
+            dataset_rel=f"{_PS}/ThisVioletRaccoon.slpz",
             record=9511,
             player=0,
             seed_action=27,  # JumpAerialF
@@ -129,7 +130,7 @@ _PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
             note="JumpAerialF cap12 tail-only shallow laser contact waits for deeper BODY",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/TubbyCurlyHerring.msl",
+            dataset_rel=f"{_AGG}/TubbyCurlyHerring.slpz",
             record=8970,
             player=1,
             seed_action=27,  # following JumpAerialF full BODY hit
@@ -139,7 +140,7 @@ _PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
             note="following JumpAerialF full BODY hit still consumes projectile",
         ),
         _Case(
-            dataset_rel=f"{_PS}/ThisVioletRaccoon.msl",
+            dataset_rel=f"{_PS}/ThisVioletRaccoon.slpz",
             record=9512,
             player=0,
             seed_action=27,  # following JumpAerialF full BODY hit
@@ -149,7 +150,7 @@ _PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
             note="following JumpAerialF cap12 tail laser BODY hit still consumes projectile",
         ),
         _Case(
-            dataset_rel=f"{_PS}/ThisVioletRaccoon.msl",
+            dataset_rel=f"{_PS}/ThisVioletRaccoon.slpz",
             record=11488,
             player=0,
             seed_action=27,  # JumpAerialF
@@ -159,7 +160,7 @@ _PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
             note="earlier Falco laser hb1 cap12 tail contact remains BODY-eligible",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.msl",
+            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.slpz",
             record=1579,
             player=0,
             seed_action=345,  # adjacent SpecialAirNLoop no-contact row
@@ -169,7 +170,7 @@ _PS = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent"
             note="adjacent SpecialAirNLoop negative before phantom keeps baseline",
         ),
         _Case(
-            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.msl",
+            dataset_rel=f"{_AGG}/ImpassionedAlarmedTarsier.slpz",
             record=1581,
             player=0,
             seed_action=345,  # following full BODY hit
@@ -192,7 +193,7 @@ def test_laser_item_phantom_body_rows(case: _Case) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed, out, ref = _one_step_out_ref(dataset_path, case.record)
     p = case.player

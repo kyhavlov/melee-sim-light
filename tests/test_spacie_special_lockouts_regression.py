@@ -4,7 +4,7 @@ import importlib
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 ACT_KNEE_BEND = 24

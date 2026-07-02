@@ -10,10 +10,9 @@ Current v0 scope:
 
 - singles and experimental 2v2 doubles
 - Fox/Falco on Final Destination, including `fox/falco` vs `fox/falco` doubles
-- can start from an existing local `.msl` dataset row or from C-owned sim match init
+- starts from C-owned sim match init
 - model inputs/outputs stay in Python
-- default rollout starts from the dataset opening row (`start_record=0`), which is the real 4-stock
-  match-start `Entry` state for the sampled game
+- default rollout starts from C match initialization.
 
 Main entrypoint:
 
@@ -35,7 +34,6 @@ uv run python -m tools.modelplay.run_model_batch \
   --slippi-ai-root /media/kyle/Windows/Users/kyleh/git/slippi-ai \
   --model /path/to/model.pkl \
   --num-traces 5 \
-  --start-mode sim-init \
   --out reports/modelplay/<run_name>
 ```
 
@@ -66,16 +64,6 @@ uv run python -m tools.modelplay.run_model_match \
 
 For FD doubles sim-init, the C core applies Slippi's 2v2 neutral-spawn table, so team starts are
 `AA BB` (`[-60, -20, 60, 20]`) rather than vanilla port-order `ABBA`.
-
-To skip replay seeding and start from the C match-init path:
-
-```bash
-uv run python -m tools.modelplay.run_model_match \
-  --start-mode sim-init \
-  --slippi-ai-root /media/kyle/Windows/Users/kyleh/git/slippi-ai \
-  --p1-model /path/to/model1.pkl \
-  --p2-model /path/to/model2.pkl
-```
 
 The default `--max-frames` is `30000`, so the runner will usually carry the game from match start
 through the final stock without needing extra flags.

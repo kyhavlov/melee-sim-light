@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_LANDING = 42
@@ -26,14 +27,14 @@ def _run_one_step(ds, record: int, *, seed_mutator=None) -> np.void:
     compare_stride = int(sizes["compare"])
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     if seed_mutator is not None:
         seed_mutator(row["seed_t"])
 
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -67,16 +68,16 @@ def test_jumpaerial_attackair_entry_consumes_callback_local_ecb_for_landing() ->
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 7100
     p = 1
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(ref["action_id"][p]) == ACT_LANDING
     assert int(ref["on_ground"][p]) == 1
@@ -98,16 +99,16 @@ def test_jumpaerial_specialn_entry_consumes_callback_local_ecb_for_wait_landing(
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl"
+        / "replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 603
     p = 1
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(ref["action_id"][p]) == ACT_WAIT
 
@@ -125,16 +126,16 @@ def test_jumpf_attackair_entry_does_not_borrow_jumpaerial_ecb_consumer() -> None
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl"
+        / "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 8626
     p = 0
-    seed = ds.samples[record]["seed_t"]
-    ref = ds.samples[record]["ref_t1"]
+    seed = ds.rows[record]["seed_t"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(seed["action_id"][p]) == ACT_JUMP_F
     assert int(ref["action_id"][p]) == ACT_ATTACK_AIR_B
     assert int(ref["on_ground"][p]) == 0
@@ -154,12 +155,12 @@ def test_mutated_jumpf_provenance_does_not_consume_jumpaerial_ecb_landing() -> N
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 7100
     p = 1
 
@@ -178,15 +179,15 @@ def test_mutated_jumpf_provenance_does_not_consume_jumpaerial_ecb_landing() -> N
     ("dataset_rel", "record", "p", "act"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             6745,
             1,
             ACT_JUMP_AERIAL_F,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             1332,
             0,
             ACT_JUMP_AERIAL_B,
@@ -207,10 +208,10 @@ def test_jumpaerial_fastfall_transformed_platform_keeps_callback_local_airborne_
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == act
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == act
     assert int(row["seed_t"]["fall_fast"][p]) == 1

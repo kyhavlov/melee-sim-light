@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 from tests.stage_metadata_helpers import fd_stage_segments
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h

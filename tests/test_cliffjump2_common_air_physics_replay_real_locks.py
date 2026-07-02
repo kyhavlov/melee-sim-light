@@ -31,12 +31,12 @@ class _FastfallAnimEndCase:
     seed_action: int
 
 
-_AGG_VALID = "datasets/aggregate_recent/replays/validation/aggregate_recent"
-_PRIMARY_CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_AGG_VALID = "replays/validation/aggregate_recent"
+_PRIMARY_CARDINAL = "replays/validation/cardinal_1.0_recent"
 
 _CASES = [
     _Case(
-        f"{_AGG_VALID}/PositiveRevolvingHyena.msl",
+        f"{_AGG_VALID}/PositiveRevolvingHyena.slpz",
         4377,
         1,
         260,  # CliffJumpSlow1
@@ -46,7 +46,7 @@ _CASES = [
         3.9000000953674316,
     ),
     _Case(
-        f"{_AGG_VALID}/PositiveRevolvingHyena.msl",
+        f"{_AGG_VALID}/PositiveRevolvingHyena.slpz",
         4378,
         1,
         261,  # steady CliffJumpSlow2
@@ -56,7 +56,7 @@ _CASES = [
         3.7300000190734863,
     ),
     _Case(
-        f"{_PRIMARY_CARDINAL}/QuerulousGrandDinosaur.msl",
+        f"{_PRIMARY_CARDINAL}/QuerulousGrandDinosaur.slpz",
         9041,
         1,
         262,  # CliffJumpQuick1
@@ -66,7 +66,7 @@ _CASES = [
         4.0,
     ),
     _Case(
-        f"{_PRIMARY_CARDINAL}/QuerulousGrandDinosaur.msl",
+        f"{_PRIMARY_CARDINAL}/QuerulousGrandDinosaur.slpz",
         9042,
         1,
         263,  # steady CliffJumpQuick2
@@ -79,19 +79,19 @@ _CASES = [
 
 _FASTFALL_ANIM_END_CASES = [
     _FastfallAnimEndCase(
-        f"{_AGG_VALID}/HilariousVillainousGiraffe.msl",
+        f"{_AGG_VALID}/HilariousVillainousGiraffe.slpz",
         6170,
         1,
         263,  # CliffJumpQuick2
     ),
     _FastfallAnimEndCase(
-        f"{_AGG_VALID}/PositiveRevolvingHyena.msl",
+        f"{_AGG_VALID}/PositiveRevolvingHyena.slpz",
         8136,
         0,
         261,  # CliffJumpSlow2
     ),
     _FastfallAnimEndCase(
-        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+        "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
         7314,
         1,
         261,  # CliffJumpSlow2
@@ -114,7 +114,7 @@ def test_cliffjump2_common_air_helper_x0_gate_replay_real(case: _Case) -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed_row, ref_row, out_row = _run_one_step_row(
         dataset_path, case.record, case.p, rng_damage_fly_roll_gate=True
@@ -152,7 +152,7 @@ def test_cliffjump2_anim_end_fall_enter_keeps_fastfall_replay_real(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed_row, ref_row, out_row = _run_one_step_row(
         dataset_path, case.record, case.p, rng_damage_fly_roll_gate=True

@@ -7,7 +7,8 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 @dataclass(frozen=True)
@@ -21,10 +22,10 @@ class _ThrowLwArticleCase:
 
 
 def _run_record(dataset_path: Path, record: int) -> np.ndarray:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     row = samples[record : record + 1]
 
@@ -34,7 +35,7 @@ def _run_record(dataset_path: Path, record: int) -> np.ndarray:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -59,8 +60,8 @@ def _run_record(dataset_path: Path, record: int) -> np.ndarray:
 def _run_rollout_rows(
     dataset_path: Path, start_record: int, rows: tuple[int, ...]
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     end_record = max(rows)
     assert 0 <= start_record <= end_record < int(samples.shape[0])
 
@@ -72,7 +73,7 @@ def _run_rollout_rows(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -83,21 +84,18 @@ def _run_rollout_rows(
         out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
         out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
-        sample_stride = int(samples.dtype.itemsize)
-        samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-        seed_off = int(samples.dtype.fields["seed_t"][1])
-        prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-        input_off = int(samples.dtype.fields["input_t"][1])
+        views = replay_buffer_byte_views(ds)
+        seed_u8 = views.seed_t
+        prev_input_u8 = views.prev_input_t
+        input_u8 = views.input_t
 
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
 
         out: dict[int, tuple[np.void, np.void]] = {}
         for record in range(start_record, end_record + 1):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             if record in rows:
@@ -110,25 +108,25 @@ def _run_rollout_rows(
 @pytest.mark.integration
 @pytest.mark.parametrize("record", [448, 449, 8116, 8117])
 def test_thrownlw_victim_hit_by_attached_laser_stays_thrownlw(record: int) -> None:
-    # Locks in the QuerulousGrandDinosaur.msl offenders:
+    # Locks in the QuerulousGrandDinosaur.slpz offenders:
     # - seed_t: p0=ThrowLw (0xDE), p1=ThrownLw (0xF2), grab_owner_port[p1]=0 (attached)
     # - A Falco blaster laser overlaps the victim while attached.
     # - ref_t1: victim remains ThrownLw with hitstun==0 (no forced Damage* entry), and the laser persists.
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / expected_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {expected_rel}")
+        pytest.skip(f"missing local replay: {expected_rel}")
 
     p_attacker = 0
     p_victim = 1
     laser_slot = 1
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, p_attacker]) == 0x00DE  # ThrowLw
     assert int(row["seed_t"]["action_id"][0, 1]) == 0x00F2  # ThrownLw
@@ -207,19 +205,19 @@ def test_released_throwlw_live_laser_damage_uses_item_velocity_facing(record: in
     # refs/melee/src/melee/it/types.h::ItemCommonData::x78_float
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p_attacker = 0
     p_victim = 1
     laser_slot = 0
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     seed = row["seed_t"]
     ref = row["ref_t1"]
 
@@ -257,19 +255,19 @@ def test_throwlw_live_laser_reentry_clears_stale_release_ecb_lock_in_rollout() -
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/"
-        "yoshis_story_recent/PhysicalElectricCapybara.msl"
+        "replays/validation/"
+        "yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     start_record = 5621
     target_record = 5660
     p_victim = 1
 
-    ds = read_dataset(str(dataset_path))
-    target_seed = ds.samples[target_record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    target_seed = ds.rows[target_record]["seed_t"]
     assert int(target_seed["action_id"][p_victim]) == 0x0056  # DamageAir3
     assert int(target_seed["seed_prev_action_id"][p_victim]) == 0x00F2  # ThrownLw
     assert int(target_seed["hitlag"][p_victim]) > 0
@@ -293,7 +291,7 @@ def test_throwlw_live_laser_reentry_clears_stale_release_ecb_lock_in_rollout() -
     "case",
     [
         _ThrowLwArticleCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            dataset_rel="replays/validation/aggregate_recent/FavorableSuperficialPig.slpz",
             record=9182,
             attacker=0,
             victim=1,
@@ -301,7 +299,7 @@ def test_throwlw_live_laser_reentry_clears_stale_release_ecb_lock_in_rollout() -
             note="Fox ThrowLw frame-28 command refreshes expiring attached state1 article",
         ),
         _ThrowLwArticleCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            dataset_rel="replays/validation/aggregate_recent/FavorableSuperficialPig.slpz",
             record=9185,
             attacker=0,
             victim=1,
@@ -324,11 +322,11 @@ def test_throwlw_late_attached_replacement_article_locks(case: _ThrowLwArticleCa
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[case.record]["seed_t"]
-    ref = ds.samples[case.record]["ref_t1"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[case.record]["seed_t"]
+    ref = ds.rows[case.record]["ref_t1"]
     assert int(seed["action_id"][case.attacker]) == 0x00DE, case.note  # ThrowLw
     assert int(seed["action_id"][case.victim]) == 0x00F2, case.note  # ThrownLw
     assert int(seed["grab_owner_port"][case.victim]) == case.attacker, case.note

@@ -13,20 +13,19 @@ from pathlib import Path
 from tools.eval.one_step_report import Reporter
 from tools.eval.rollout_metrics import summarize_rollout_payload
 from tools.eval.run_rollout_suite_eval import (
-    _parse_csv,
     _parse_players,
     _dataset_exception_overlay,
     _exception_probe_limit,
     _float_compare_fields,
     _float_summary,
     _rollout_status,
-    _validate_discrete_fields,
     print_rollout_dataset_report,
+    standard_rollout_fields,
 )
 from tools.eval.streaming_validation import evaluate_validation_buffers, scan_validation_buffers_with_native_float_rows
 from tools.eval.validation_exceptions import load_validation_exceptions
 from tools.eval.validation_profile import get_validation_profile, validation_profile_names
-from tools.slippi.make_dataset_from_slp import build_validation_buffers_from_slp
+from tools.slippi.validation_buffer_builder import build_validation_buffers_from_slp
 from tools.slippi.slpz import resolve_replay_path
 
 
@@ -50,7 +49,7 @@ def _parse_ports(value: str | None) -> list[int] | None:
     return sorted(set(ports))
 
 
-def _dataset_label(replay: Path) -> Path:
+def _replay_label(replay: Path) -> Path:
     return replay
 
 
@@ -70,7 +69,7 @@ def _print_one_step(
         ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
     )
     evaluate_validation_buffers(
-        dataset_path=_dataset_label(replay),
+        dataset_path=_replay_label(replay),
         buffers=buffers,
         chunk=int(chunk),
         profile=profile,
@@ -105,7 +104,6 @@ def _print_rollout(
     ports: list[int] | None,
     ucf_enabled: bool,
     ucf_cardinals_1_0_enabled: bool,
-    fields: tuple[str, ...],
     players_csv: str | None,
     max_records: int,
     profile: str,
@@ -113,85 +111,38 @@ def _print_rollout(
     float_top: int,
 ) -> None:
     exceptions = load_validation_exceptions(exceptions_path)
-    label = _dataset_label(replay)
-    dataset_label = str(label)
-    exception_probe_limit = _exception_probe_limit(dataset=dataset_label, exceptions=exceptions)
+    label = _replay_label(replay)
+    replay_label = str(label)
+    exception_probe_limit = _exception_probe_limit(dataset=replay_label, exceptions=exceptions)
     if exception_probe_limit > 0 and int(max_records) > 0:
         exception_probe_limit = min(exception_probe_limit, int(max_records))
-    standard_fields = ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags")
-    if tuple(fields) == standard_fields:
-        buffers = build_validation_buffers_from_slp(
-            slp_path=str(replay),
-            ports=ports,
-            ucf_enabled=ucf_enabled,
-            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-        )
-        players = _parse_players(players_csv, num_players=int(buffers.num_players))
-        float_top_scan = max(0, int(float_top)) * 8
-        streaks, float_rows, first_rows = scan_validation_buffers_with_native_float_rows(
-            dataset_path=label,
-            buffers=buffers,
-            fields=fields,
-            players=players,
-            max_records=int(max_records),
-            ucf_enabled=ucf_enabled,
-            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-            profile=profile,
-            float_fields=_float_compare_fields() if float_top_scan > 0 else (),
-            float_top=float_top_scan,
-            float_threshold=0.0,
-            float_dataset_label=dataset_label,
-            first_mismatch_probe_limit=exception_probe_limit,
-        )
-    else:
-        from dataclasses import asdict
-
-        from tools.eval.locate_rollout_desyncs import _locate_dataset_rollout_desyncs
-        from tools.eval.run_longest_rollout_streaks import _scan_dataset_streaks_with_native_float_rows
-        from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
-
-        dataset = build_dataset_from_slp(
-            slp_path=str(replay),
-            ports=ports,
-            ucf_enabled=ucf_enabled,
-            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-        )
-        num_players = int(dataset.header["num_players"])
-        players = _parse_players(players_csv, num_players=num_players)
-        float_top_scan = max(0, int(float_top)) * 8
-        streaks, float_rows = _scan_dataset_streaks_with_native_float_rows(
-            dataset_path=label,
-            ds=dataset,
-            fields=fields,
-            players=players,
-            max_records=int(max_records),
-            ucf_enabled=ucf_enabled,
-            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-            profile=profile,
-            float_fields=_float_compare_fields() if float_top_scan > 0 else (),
-            float_top=float_top_scan,
-            float_threshold=0.0,
-            float_dataset_label=dataset_label,
-        )
-        first_rows = [
-            asdict(row)
-            for row in _locate_dataset_rollout_desyncs(
-                dataset_path=label,
-                dataset_label=dataset_label,
-                ds=dataset,
-                fields=fields,
-                players=players,
-                max_records=exception_probe_limit,
-                row_limit=None,
-                ucf_enabled=ucf_enabled,
-                ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-                profile=profile,
-            )
-        ]
+    fields = standard_rollout_fields()
+    buffers = build_validation_buffers_from_slp(
+        slp_path=str(replay),
+        ports=ports,
+        ucf_enabled=ucf_enabled,
+        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+    )
+    players = _parse_players(players_csv, num_players=int(buffers.num_players))
+    float_top_scan = max(0, int(float_top)) * 8
+    streaks, float_rows, first_rows = scan_validation_buffers_with_native_float_rows(
+        dataset_path=label,
+        buffers=buffers,
+        fields=fields,
+        players=players,
+        max_records=int(max_records),
+        ucf_enabled=ucf_enabled,
+        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        profile=profile,
+        float_fields=_float_compare_fields() if float_top_scan > 0 else (),
+        float_top=float_top_scan,
+        float_threshold=0.0,
+        float_dataset_label=replay_label,
+        first_mismatch_probe_limit=exception_probe_limit,
+    )
     payload = {
         "suite": "single_replay",
         "suite_path": str(replay),
-        "datasets_dir": "",
         "ucf_enabled": bool(ucf_enabled),
         "ucf_cardinals_1_0_enabled": bool(ucf_cardinals_1_0_enabled),
         "fields": list(fields),
@@ -228,7 +179,7 @@ def _print_rollout(
     overlay["float"] = float_overlay
 
     print(
-        f"suite: single_replay  datasets: 1  "
+        f"suite: single_replay  replays: 1  "
         f"ucf_enabled: {ucf_enabled}  ucf_cardinals_1_0_enabled: {ucf_cardinals_1_0_enabled}"
     )
     print(f"fields: {','.join(str(x) for x in summary['fields'])}")
@@ -254,11 +205,6 @@ def main() -> None:
     ap.add_argument("--mode", choices=("one-step", "rollout", "both"), default="one-step")
     ap.add_argument("--ports", default=None, help="Comma-separated 1-based ports; default uses human ports.")
     ap.add_argument("--chunk", type=int, default=4096, help="One-step batch size.")
-    ap.add_argument(
-        "--fields",
-        default="action_id,animation_index,on_ground,hitlag,hitstun,state_flags",
-        help="Rollout discrete fields.",
-    )
     ap.add_argument("--players", default=None, help="Rollout 0-based player indices; default all selected players.")
     ap.add_argument("--max-records", type=int, default=0, help="Rollout record cap; 0 means no cap.")
     ap.add_argument("--profile", default="rl1_gameplay", choices=validation_profile_names())
@@ -288,7 +234,6 @@ def main() -> None:
     if not replay.exists():
         raise SystemExit(f"error: replay does not exist: {replay}")
     ports = _parse_ports(args.ports)
-    fields = _validate_discrete_fields(_parse_csv(str(args.fields)))
 
     if args.mode in ("one-step", "both"):
         _print_one_step(
@@ -307,7 +252,6 @@ def main() -> None:
             ports=ports,
             ucf_enabled=bool(args.ucf_enabled),
             ucf_cardinals_1_0_enabled=bool(args.ucf_cardinals_1_0_enabled),
-            fields=fields,
             players_csv=args.players,
             max_records=int(args.max_records),
             profile=str(args.profile),

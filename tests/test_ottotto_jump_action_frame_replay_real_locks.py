@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _one_step_out_compare(*, ds, row) -> np.ndarray:
@@ -16,7 +17,7 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
     input_stride = int(sizes["input"] if "input" in sizes else sizes["input_v0"])
     compare_stride = int(sizes["compare"] if "compare" in sizes else sizes["compare_v0"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -61,15 +62,15 @@ def test_ottotto_jump_action_frame_rows_match_replay(case: _Case) -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
     #   ftCo_Ottotto_IASA,ftCo_OttottoWait_IASA}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
-    dataset_rel = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    dataset_rel = "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > case.record, f"dataset too short for record={case.record}"
-    row = ds.samples[case.record : case.record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > case.record, f"replay too short for record={case.record}"
+    row = ds.rows[case.record : case.record + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
     p = 0

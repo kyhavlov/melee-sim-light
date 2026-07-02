@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -39,7 +40,7 @@ def _stick_to_unit_from_input(v: int, deadzone: float) -> float:
 @pytest.mark.integration
 def test_spacie_bspecial_entry_and_specialhi_progression_regression() -> None:
     root = Path(__file__).resolve().parents[1]
-    base = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+    base = "replays/validation/cardinal_1.0_recent"
 
     required = [
         "data/anims_ecb/fox.bin",
@@ -72,17 +73,17 @@ def test_spacie_bspecial_entry_and_specialhi_progression_regression() -> None:
 
     cases = [
         # 354->344: should resolve to Up-B hold-air on B-edge + up input.
-        _Case(f"{base}/AttachedGoodNaturedGuanaco.msl", 2743, 1, "354->344", True, "up", False),
-        _Case(f"{base}/TreasuredBackKangaroo.msl", 3192, 1, "354->344", True, "up", False),
+        _Case(f"{base}/AttachedGoodNaturedGuanaco.slpz", 2743, 1, "354->344", True, "up", False),
+        _Case(f"{base}/TreasuredBackKangaroo.slpz", 3192, 1, "354->344", True, "up", False),
         # 350->344: should resolve to Side-B air start on B-edge + side input.
-        _Case(f"{base}/AttachedGoodNaturedGuanaco.msl", 2312, 0, "350->344", True, "side", False),
-        _Case(f"{base}/TreasuredBackKangaroo.msl", 672, 1, "350->344", True, "side", False),
+        _Case(f"{base}/AttachedGoodNaturedGuanaco.slpz", 2312, 0, "350->344", True, "side", False),
+        _Case(f"{base}/TreasuredBackKangaroo.slpz", 672, 1, "350->344", True, "side", False),
         # 356->354: hold-air should progress into air-hi.
-        _Case(f"{base}/AttachedGoodNaturedGuanaco.msl", 2602, 1, "356->354", False, "", True),
-        _Case(f"{base}/TreasuredBackKangaroo.msl", 3336, 1, "356->354", False, "", True),
+        _Case(f"{base}/AttachedGoodNaturedGuanaco.slpz", 2602, 1, "356->354", False, "", True),
+        _Case(f"{base}/TreasuredBackKangaroo.slpz", 3336, 1, "356->354", False, "", True),
         # 252->354: hold-air should progress to grounded hi action in these suite records.
-        _Case(f"{base}/AttachedGoodNaturedGuanaco.msl", 2758, 1, "252->354", False, "", False),
-        _Case(f"{base}/TreasuredBackKangaroo.msl", 3207, 1, "252->354", False, "", False),
+        _Case(f"{base}/AttachedGoodNaturedGuanaco.slpz", 2758, 1, "252->354", False, "", False),
+        _Case(f"{base}/TreasuredBackKangaroo.slpz", 3207, 1, "252->354", False, "", False),
     ]
 
     common = json.loads((root / "data/common/ft_common_data.json").read_text(encoding="utf-8"))
@@ -104,13 +105,13 @@ def test_spacie_bspecial_entry_and_specialhi_progression_regression() -> None:
     for rel, rel_cases in by_rel.items():
         dataset_path = root / rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {rel}")
-        ds = read_dataset(str(dataset_path))
-        samples = ds.samples
+            pytest.skip(f"missing local replay: {rel}")
+        ds = load_replay_buffers(str(dataset_path))
+        samples = ds.rows
         num_records = int(samples.shape[0])
 
         for case in rel_cases:
-            assert num_records > case.record, f"dataset too short for record={case.record}: {rel}"
+            assert num_records > case.record, f"replay too short for record={case.record}: {rel}"
             row = samples[case.record]
             p = case.player
 
@@ -142,7 +143,7 @@ def test_spacie_bspecial_entry_and_specialhi_progression_regression() -> None:
             else:
                 assert seed_action == 354, f"{rel} record={case.record} p={p} expected seed action_id=354"
 
-            handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+            handle = binding.init(batch_size=1, num_players=int(ds.num_players))
             try:
                 seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
                 prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)

@@ -4,7 +4,7 @@ import json
 
 import numpy as np
 
-from tools.slippi.make_dataset_from_slp import _derive_ledge_cooldown
+from tools.slippi.validation_buffer_seed import _derive_ledge_cooldown
 
 
 def test_ledge_cooldown_derivation_is_prefix_invariant() -> None:

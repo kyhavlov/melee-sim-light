@@ -68,9 +68,8 @@ Prioritization:
   normalized rates. Do not choose solely by raw aggregate totals.
 - Use disruptive rollout clusters when a target is rollout-visible, but do not over-bias toward
   disruptive rankings while broad one-step/platform systems are still missing.
-- Before patching a selected disruptive row/cluster, run
-  `uv run python -m tools.eval.next_desync_investigation --suite <suite> --datasets-dir datasets`
-  and record the packet path in the worklog.
+- Before patching a selected disruptive row/cluster, record the replay path, suite, record,
+  player, and current report/benchmark artifact path in the worklog.
 - Treat high repeated float residuals as first-class signals when they precede discrete mismatch,
   repeat under the same owner, drive rollout disruption, or show up as modelplay-visible
   position/velocity bugs.

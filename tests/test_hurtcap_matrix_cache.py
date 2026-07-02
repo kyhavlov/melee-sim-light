@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import SEED_DTYPE
+from tools.eval.validation_dtypes import SEED_DTYPE
 from tools.modelplay.sim_env import MATCH_CONFIG_DTYPE, build_match_config_array
 
 ACT_WAIT = 14

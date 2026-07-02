@@ -5,38 +5,38 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slpz")
 AGN_SLP = Path("replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz")
 EWT_SLP = Path("replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz")
 PTE_SLP = Path("replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz")
-AGN_DATASET = Path("datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl")
+AGN_DATASET = Path("replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz")
 
 
 def _rollout_until_from_slp(slp_path: Path, *, record: int, ports: list[int]) -> tuple[np.void, np.void, np.void]:
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=ports,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(samples.shape[0], sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -46,16 +46,16 @@ def _rollout_until_from_slp(slp_path: Path, *, record: int, ports: list[int]) ->
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        seed_bytes[0, :] = samples_u8[0, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[0, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for j in range(record + 1):
-            prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
-            input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[j, :input_stride]
+            input_bytes[0, :] = input_u8[j, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
     finally:
@@ -70,24 +70,23 @@ def _rollout_segment_from_slp(
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
     assert start_record <= record
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=ports,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(samples.shape[0], sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -97,16 +96,16 @@ def _rollout_segment_from_slp(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for j in range(start_record, record + 1):
-            prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
-            input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[j, :input_stride]
+            input_bytes[0, :] = input_u8[j, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
     finally:
@@ -118,13 +117,13 @@ def _rollout_segment_from_slp(
 def _one_step_from_slp(slp_path: Path, *, record: int, ports: list[int]) -> tuple[np.void, np.void, np.void]:
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=ports,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
+    samples = ds.rows
     row = samples[record : record + 1]
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -145,7 +144,7 @@ def _one_step_from_slp(slp_path: Path, *, record: int, ports: list[int]) -> tupl
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -180,7 +179,7 @@ def _one_step_sample(ds, row: np.ndarray) -> np.void:
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -326,13 +325,13 @@ def test_cliff_option_end_held_lr_without_fresh_press_stays_guardon() -> None:
     # entering GuardReflect from a stale x672 timer alone.
     if not PTE_SLP.exists():
         pytest.skip(f"missing local replay: {PTE_SLP}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(PTE_SLP),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    row = ds.samples[3606:3607].copy()
+    row = ds.rows[3606:3607].copy()
     p = 1
     assert int(row["seed_t"]["action_id"][0, p]) == 255  # CliffClimbQuick
     assert int(row["input_t"]["p"]["buttons"][0, p]) & 0x0020  # R held
@@ -352,9 +351,9 @@ def test_landing_origin_guardon_uses_live_x672_for_followup_guardreflect() -> No
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::*_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80093694}
     if not AGN_DATASET.exists():
-        pytest.skip(f"missing local dataset: {AGN_DATASET}")
-    ds = read_dataset(str(AGN_DATASET))
-    row = ds.samples[1339:1340].copy()
+        pytest.skip(f"missing local replay: {AGN_DATASET}")
+    ds = load_replay_buffers(str(AGN_DATASET))
+    row = ds.rows[1339:1340].copy()
     p = 1
     assert int(row["seed_t"]["action_id"][0, p]) == 178  # GuardOn
     assert int(row["seed_t"]["seed_prev_action_id"][0, p]) == 42  # Landing

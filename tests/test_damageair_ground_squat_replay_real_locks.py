@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -23,14 +23,14 @@ class _Case:
 
 _CASES = (
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
         negative_record=784,
         target_record=786,
         p=0,
         note="AGN grounded DamageAir2 to Squat family",
     ),
     _Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+        dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
         negative_record=4428,
         target_record=4430,
         p=1,
@@ -53,10 +53,10 @@ def test_grounded_damageair_wait_iasa_squat_target_pm1_with_negative_control(cas
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = case.p
     for rec in (
         case.negative_record,
@@ -64,7 +64,7 @@ def test_grounded_damageair_wait_iasa_squat_target_pm1_with_negative_control(cas
         case.target_record,
         case.target_record + 1,
     ):
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[case.target_record]
     seed_t = target["seed_t"]

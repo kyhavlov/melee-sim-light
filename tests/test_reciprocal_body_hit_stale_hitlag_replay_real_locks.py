@@ -10,17 +10,17 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 )
 
 
-_CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent"
+_CARDINAL = "replays/validation/cardinal_1.0_recent"
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_name", "record", "p_defender"),
     [
-        ("GracefulAttachedTurtle.msl", 5088, 0),
-        ("GracefulAttachedTurtle.msl", 6012, 0),
-        ("QuerulousGrandDinosaur.msl", 9911, 0),
-        ("AttachedGoodNaturedGuanaco.msl", 2259, 0),
+        ("GracefulAttachedTurtle.slpz", 5088, 0),
+        ("GracefulAttachedTurtle.slpz", 6012, 0),
+        ("QuerulousGrandDinosaur.slpz", 9911, 0),
+        ("AttachedGoodNaturedGuanaco.slpz", 2259, 0),
     ],
 )
 def test_reciprocal_body_hit_uses_precombat_stale_damage_and_received_hitlag(
@@ -37,7 +37,7 @@ def test_reciprocal_body_hit_uses_precombat_stale_damage_and_received_hitlag(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _CARDINAL / dataset_name
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, record, p_defender)
     assert float(out_row["percent"][p_defender]) == pytest.approx(float(ref_row["percent"][p_defender]))
@@ -51,12 +51,12 @@ def test_reciprocal_body_hit_uses_precombat_stale_damage_and_received_hitlag(
     ("dataset_rel", "record", "p_defender"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             815,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl",
+            "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz",
             11469,
             1,
         ),
@@ -74,7 +74,7 @@ def test_reciprocal_body_hit_received_hitlag_survives_later_outgoing_hit(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, record, p_defender)
     assert int(out_row["action_id"][p_defender]) == int(ref_row["action_id"][p_defender])
@@ -89,9 +89,9 @@ def test_reciprocal_body_hit_negative_extra_contact_is_owned_by_hitcapsule_latch
     # test as a guard that the row is exact without broadening reciprocal-hit stale ownership.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / _CARDINAL / "TreasuredBackKangaroo.msl"
+    dataset_path = root / _CARDINAL / "TreasuredBackKangaroo.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, 5247, 0)
     assert int(ref_row["hitlag"][0]) == 0

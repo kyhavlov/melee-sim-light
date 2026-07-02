@@ -24,7 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 
 from test_char_common_action_coverage import _mk_inputs, _run, _seed_base  # noqa: E402
-from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset_window  # noqa: E402
+from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffer_window  # noqa: E402
 
 B = 0x0200
 Y = 0x0800
@@ -126,11 +127,9 @@ def _step_real_row(dataset: str, record: int, seed_mutator=None) -> tuple[np.nda
     msl_binding = pytest.importorskip("msl_binding")
 
     dataset_path = ROOT / dataset
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset}")
 
-    ds = read_dataset_window(str(dataset_path), record, record + 1)
-    row = ds.samples[0]
+    ds = load_replay_buffer_window(str(dataset_path), record, record + 1)
+    row = ds.rows[0]
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -146,7 +145,7 @@ def _step_real_row(dataset: str, record: int, seed_mutator=None) -> tuple[np.nda
     )
     inp = np.frombuffer(row["input_t"].tobytes(), dtype=np.uint8).reshape(1, input_stride).copy()
     out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
-    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         msl_binding.reseed_seed(handle, seed)
         msl_binding.step_input(handle, prev, inp)
@@ -164,25 +163,23 @@ def _rollout_real_window(dataset: str, start: int, stop: int) -> dict[int, tuple
     msl_binding = pytest.importorskip("msl_binding")
 
     dataset_path = ROOT / dataset
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset}")
 
-    ds = read_dataset_window(str(dataset_path), start, stop + 1)
+    ds = load_replay_buffer_window(str(dataset_path), start, stop + 1)
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.num_players))
     out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
     got: dict[int, tuple[np.ndarray, np.ndarray]] = {}
     try:
         seed = (
-            np.frombuffer(ds.samples[0]["seed_t"].tobytes(), dtype=np.uint8)
+            np.frombuffer(ds.rows[0]["seed_t"].tobytes(), dtype=np.uint8)
             .reshape(1, seed_stride)
             .copy()
         )
         msl_binding.reseed_seed_rollout(handle, seed)
-        for offset, row in enumerate(ds.samples):
+        for offset, row in enumerate(ds.rows):
             rec = start + offset
             prev = (
                 np.frombuffer(row["prev_input_t"].tobytes(), dtype=np.uint8)
@@ -209,11 +206,9 @@ def _debug_precombat_body_select_count(dataset: str, record: int) -> int:
     msl_binding = pytest.importorskip("msl_binding")
 
     dataset_path = ROOT / dataset
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset}")
 
-    ds = read_dataset_window(str(dataset_path), record, record + 1)
-    row = ds.samples[0]
+    ds = load_replay_buffer_window(str(dataset_path), record, record + 1)
+    row = ds.rows[0]
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -224,7 +219,7 @@ def _debug_precombat_body_select_count(dataset: str, record: int) -> int:
         .copy()
     )
     inp = np.frombuffer(row["input_t"].tobytes(), dtype=np.uint8).reshape(1, input_stride).copy()
-    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         msl_binding.reseed_seed(handle, seed)
         msl_binding.debug_step_input_pre_combat(handle, prev, inp)
@@ -491,7 +486,7 @@ def test_sb_start_anim_end_runs_destination_loop_iasa_release_real_rows() -> Non
     # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c::{
     #   ftMs_SpecialNStart_Anim,ftMs_SpecialAirNStart_Anim,ftMs_SpecialNLoop_IASA,
     #   ftMs_SpecialAirNLoop_IASA,ftMs_SpecialN_80137354,ftMs_SpecialN_801373B8}
-    path = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    path = "replays/validation/marth/InternalPowerlessWallaby.slpz"
     cases = (
         (4449, 1, ACT_SB_AIR_START, ACT_SB_AIR_END0),
         (5174, 1, ACT_SB_START, ACT_SB_END0),
@@ -622,7 +617,7 @@ def test_db_air_s1_anim_end_runs_destination_fall_iasa_jump_qhp_2123() -> None:
     # ftCo_800CB870 and enters JumpAerial instead of serializing the intermediate Fall.
     # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialS.c::ftMs_SpecialAirS1_Anim
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_IASA_Inner}
-    path = "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+    path = "replays/validation/marth/QuestionableHarmfulPanther.slpz"
     out, seed, ref = _step_real_row(path, 2123)
     p = 1
     assert int(seed["action_id"][p]) == ACT_DB_AIR_S1
@@ -659,8 +654,8 @@ def test_db_ground_anim_end_runs_destination_wait_iasa_real_rows() -> None:
     #   ftMs_SpecialAirS1_Anim,ftMs_SpecialS2_Anim}
     # refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-    path_ldg = "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
-    path_wws = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    path_ldg = "replays/validation/marth/LoudDullGoat.slpz"
+    path_wws = "replays/validation/marth/WellWornSmallGoshawk.slpz"
     cases = [
         (path_ldg, 742, 1, ACT_DB_S1, ACT_GUARD_ON),
         (path_wws, 6566, 1, ACT_DB_S1, ACT_GUARD_ON),
@@ -679,7 +674,7 @@ def test_shield_breaker_end_anim_end_runs_destination_wait_guard_reflect_real_ro
     # Shield Breaker End uses the same grounded ft_8008A2BC callback owner as Dancing Blade:
     # current-frame shield input can enter GuardReflect before the row serializes.
     # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c::ftMs_SpecialNEnd_Anim
-    path = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    path = "replays/validation/marth/InternalPowerlessWallaby.slpz"
     out, seed, ref = _step_real_row(path, 5207)
     p = 1
     assert int(seed["action_id"][p]) == ACT_SB_END0
@@ -737,7 +732,7 @@ def test_counter_shielddesc_state_flags_publish_on_script_open_real_rows() -> No
     # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
     #   ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim}
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
-    path = "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
+    path = "replays/validation/marth/LoudDullGoat.slpz"
     for rec, floor_owner in ((3959, 0), (3960, 1), (3963, 1)):
         out, _seed, ref = _step_real_row(path, rec)
         p = 1
@@ -755,7 +750,7 @@ def test_counter_shielddesc_state_flags_carry_across_ground_air_swap_real_rows()
     # descriptor but do not restore shield_unk0/1.
     # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
     #   ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
-    path = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    path = "replays/validation/marth/WellWornSmallGoshawk.slpz"
     for rec, act, floor_owner in (
         (846, ACT_COUNTER_AIR, 0),
         (850, ACT_COUNTER_AIR, 1),
@@ -777,7 +772,7 @@ def test_counter_shielddesc_state_flags_clear_b0_on_hit_transition_real_row() ->
     # clears x221B_b0 while x221B_b1 remains published on the post-frame row (0xC0 -> 0x40).
     # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::ftMs_SpecialLw_80139140
     # refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState reset)
-    path = "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
+    path = "replays/validation/marth/LoudDullGoat.slpz"
     out, _seed, ref = _step_real_row(path, 3964)
     p = 1
     assert int(ref["action_id"][p]) == ACT_COUNTER_AIR_HIT
@@ -797,7 +792,7 @@ def test_counter_descriptor_hitbox_contact_does_not_require_body_overlap_real_ro
     # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
     #   ftMs_SpecialLw_Anim,ftMs_SpecialLw_80139140}
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80078C70}
-    path = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    path = "replays/validation/marth/WellWornSmallGoshawk.slpz"
     assert _debug_precombat_body_select_count(path, 860) == 0
     out, seed, ref = _step_real_row(path, 860)
     p = 1
@@ -822,7 +817,7 @@ def test_counter_grounded_uninterrupted_seed_floor_owner_applies_x60_real_row() 
     # the owner, shield_unk0/1 provenance is.
     # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
     #   ftMs_SpecialLw_Anim,ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
-    path = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    path = "replays/validation/marth/WellWornSmallGoshawk.slpz"
     p = 1
 
     def force_anim_created_descriptor(seed_t: np.ndarray) -> None:
@@ -845,7 +840,7 @@ def test_counter_hit_registers_post_transition_identity_for_lingering_contact_ww
     # matching normal BODY damage paths. Registering the pre-transition id lets the lingering same
     # hit_group contact re-enter on the next frozen rows.
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
-    path = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    path = "replays/validation/marth/WellWornSmallGoshawk.slpz"
     p = 1
     got = _rollout_real_window(path, 860, 862)
     for rec in (860, 861, 862):

@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -23,16 +24,16 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 def _step_one_row(*, dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for record={record}"
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > record, f"replay too short for record={record}"
+    row = ds.rows[record : record + 1]
 
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
             1, seed_stride
@@ -56,38 +57,33 @@ def _step_one_row(*, dataset_path: Path, record: int) -> tuple[np.void, np.void,
 
 def _rollout_to_record(*, dataset_path: Path, start: int, target: int) -> tuple[np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > target, f"dataset too short for record={target}"
-    samples = ds.samples
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > target, f"replay too short for record={target}"
+    samples = ds.rows
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, target + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[
-                record : record + 1, input_off : input_off + input_stride
-            ].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
         out = out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
@@ -106,15 +102,15 @@ class _RespawnCase:
     ref_facing: int
 
 
-_AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
+_AGG = "replays/validation/aggregate_recent"
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
     [
-        _RespawnCase(f"{_AGG}/HilariousVillainousGiraffe.msl", 4889, 0, 1, -50.0, 1),
-        _RespawnCase(f"{_AGG}/TubbyCurlyHerring.msl", 4460, 1, 2, 50.0, 0),
+        _RespawnCase(f"{_AGG}/HilariousVillainousGiraffe.slpz", 4889, 0, 1, -50.0, 1),
+        _RespawnCase(f"{_AGG}/TubbyCurlyHerring.slpz", 4460, 1, 2, 50.0, 0),
     ],
 )
 def test_rebirth_respawn_uses_replay_source_port_spawn_slot(case: _RespawnCase) -> None:
@@ -130,7 +126,7 @@ def test_rebirth_respawn_uses_replay_source_port_spawn_slot(case: _RespawnCase) 
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset}")
+        pytest.skip(f"missing local replay: {case.dataset}")
 
     seed, ref, out = _step_one_row(dataset_path=dataset_path, record=case.record)
     p = case.p
@@ -158,10 +154,10 @@ def test_rebirth_centered_respawn_faces_left_replay_real() -> None:
     # refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+    dataset = "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz"
     dataset_path = root / dataset
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset}")
+        pytest.skip(f"missing local replay: {dataset}")
 
     seed, ref, out = _step_one_row(dataset_path=dataset_path, record=9226)
     p = 1
@@ -188,10 +184,10 @@ def test_deadupstar_terminal_source_clear_phase_preserves_owner_one_step() -> No
     # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset = f"{_AGG}/PositiveRevolvingHyena.msl"
+    dataset = f"{_AGG}/PositiveRevolvingHyena.slpz"
     dataset_path = root / dataset
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset}")
+        pytest.skip(f"missing local replay: {dataset}")
 
     seed, ref, out = _step_one_row(dataset_path=dataset_path, record=8756)
     p = 0
@@ -212,10 +208,10 @@ def test_rebirthwait_specialairn_exit_applies_x5d8_colanim() -> None:
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B7A4
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset = f"{_AGG}/TubbyCurlyHerring.msl"
+    dataset = f"{_AGG}/TubbyCurlyHerring.slpz"
     dataset_path = root / dataset
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset}")
+        pytest.skip(f"missing local replay: {dataset}")
 
     seed, ref, out = _step_one_row(dataset_path=dataset_path, record=3062)
     p = 0
@@ -238,13 +234,13 @@ def test_rebirthwait_exit_preserves_tilt_timer_for_fastfall_gate() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset = f"{_AGG}/PositiveRevolvingHyena.msl"
+    dataset = f"{_AGG}/PositiveRevolvingHyena.slpz"
     dataset_path = root / dataset
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset}")
+        pytest.skip(f"missing local replay: {dataset}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][8945]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][8945]
     p = 0
     assert int(seed["action_id"][p]) == 12
     assert int(seed["tilt_timer_y"][p]) == 254

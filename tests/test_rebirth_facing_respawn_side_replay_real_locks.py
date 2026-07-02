@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -60,12 +61,12 @@ class _Case:
     ref_facing: int
 
 
-_BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE = "replays/validation/cardinal_1.0_recent"
 _CASES = [
-    _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 8103, 0, 1, 12, 0),
-    _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 9253, 1, 0, 12, 1),
-    _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 3470, 1, 0, 12, 1),
-    _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 6523, 0, 1, 12, 0),
+    _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 8103, 0, 1, 12, 0),
+    _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 9253, 1, 0, 12, 1),
+    _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 3470, 1, 0, 12, 1),
+    _Case(f"{_BASE}/TreasuredBackKangaroo.slpz", 6523, 0, 1, 12, 0),
 ]
 
 
@@ -85,17 +86,17 @@ def test_rebirth_entry_faces_toward_stage_center_from_respawn_side(case: _Case) 
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[case.record : case.record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[case.record : case.record + 1]
     p = int(case.p)
 
     assert int(row["seed_t"]["action_id"][0, p]) == case.seed_action
     assert int(row["ref_t1"]["action_id"][0, p]) == case.ref_action
     assert int(row["ref_t1"]["facing"][0, p]) == case.ref_facing
 
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["facing"][p]) == int(row["ref_t1"]["facing"][0, p])
     assert int(out["animation_index"][p]) == int(row["ref_t1"]["animation_index"][0, p])

@@ -10,9 +10,10 @@ import pytest
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
 from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype
 from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, first_mismatch_values
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 from tools.eval.validation_profile import get_validation_profile
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 BUTTON_L = 0x0040
@@ -90,7 +91,7 @@ def _run_one_step(ds, record: int, *, seed_mutator=None, input_mutator=None) -> 
     compare_stride = int(sizes["compare"])
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     if seed_mutator is not None:
         seed_mutator(row["seed_t"])
     if input_mutator is not None:
@@ -99,7 +100,7 @@ def _run_one_step(ds, record: int, *, seed_mutator=None, input_mutator=None) -> 
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -121,10 +122,10 @@ def _debug_commonfall_seed_state(ds, record: int, player: int) -> tuple[float, i
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
 
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -143,11 +144,11 @@ def _debug_colldata_after_reseed(ds, record: int):
     colldata_stride = int(sizes["colldata_ecb"])
     colldata_dtype = _colldata_ecb_dtype()
 
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     out_bytes = np.empty((1, colldata_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -167,13 +168,12 @@ def _rollout_first_mismatch_through(ds, target_record: int):
     compare_stride = int(sizes["compare"])
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    samples = ds.samples
-    num_players = int(ds.header["num_players"])
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    samples = ds.rows
+    num_players = int(ds.num_players)
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -198,13 +198,11 @@ def _rollout_first_mismatch_through(ds, target_record: int):
         last_mismatch = None
         for record in range(target_record + 1):
             if needs_seed:
-                seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
+                seed_bytes[0, :] = seed_u8[record, :seed_stride]
                 binding.reseed_seed_rollout(handle, seed_bytes)
                 needs_seed = False
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_bytes)
             last_out = out_view[0].copy()
@@ -217,7 +215,7 @@ def _rollout_first_mismatch_through(ds, target_record: int):
             if last_mismatch is None:
                 continue
 
-            seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
+            seed_bytes[0, :] = seed_u8[record, :seed_stride]
             binding.reseed_seed_rollout(handle, seed_bytes)
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_bytes)
@@ -243,11 +241,11 @@ def _run_rollout_to_record(ds, start_record: int, target_record: int) -> np.void
     compare_stride = int(sizes["compare"])
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    samples = ds.samples
+    samples = ds.rows
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -278,12 +276,12 @@ def _run_rollout_to_record_with_colldata(ds, start_record: int, target_record: i
     assert compare_stride == COMPARE_DTYPE.itemsize
     assert colldata_stride == colldata_dtype.itemsize
 
-    samples = ds.samples
+    samples = ds.rows
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     colldata_bytes = np.empty((1, colldata_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -327,13 +325,13 @@ def _run_rollout_to_record_with_seed_mutator(
     compare_stride = int(sizes["compare"])
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    samples = ds.samples
+    samples = ds.rows
     start = samples[start_record : start_record + 1].copy()
     seed_mutator(start["seed_t"])
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -364,7 +362,7 @@ def _run_one_step_with_colldata(ds, record: int, *, seed_mutator=None) -> tuple[
     assert compare_stride == COMPARE_DTYPE.itemsize
     assert colldata_stride == colldata_dtype.itemsize
 
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
     if seed_mutator is not None:
         seed_mutator(row["seed_t"])
 
@@ -372,7 +370,7 @@ def _run_one_step_with_colldata(ds, record: int, *, seed_mutator=None) -> tuple[
     colldata_bytes = np.empty((1, colldata_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
@@ -429,31 +427,31 @@ def _synthetic_air_seed(
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl",
+            "replays/validation/battlefield_recent/MediumVirtualPig.slpz",
             2565,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "CornyDelayedOkapi.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "CornyDelayedOkapi.slpz",
             6243,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             2771,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.slpz",
             6328,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             1361,
             1,
         ),
@@ -479,10 +477,10 @@ def test_locked_escapeair_platform_start_lifetime_enters_landing_fall_special(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
     assert int(row["seed_t"]["seed_prev_action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
@@ -518,16 +516,16 @@ def test_locked_escapeair_deep_cliff_floor_handoff_lands() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+        "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 1097
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
     assert int(row["seed_t"]["seed_prev_action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
@@ -557,17 +555,17 @@ def test_fod_throwf_slope_to_flat_seam_uses_returned_floor_line() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "MilkyGracefulStingray.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
-    pre_seam = ds.samples[4483]
+    pre_seam = ds.rows[4483]
     assert int(pre_seam["seed_t"]["action_id"][p]) == ACT_THROW_F
     assert int(pre_seam["ref_t1"]["ground_id"][p]) == 6
     pre_out, pre_dbg = _run_one_step_with_colldata(ds, 4483)
@@ -575,7 +573,7 @@ def test_fod_throwf_slope_to_flat_seam_uses_returned_floor_line() -> None:
     assert int(pre_dbg["floor_result_segment_id"][p]) == 6
     assert float(pre_out["pos_y"][p]) == pytest.approx(float(pre_seam["ref_t1"]["pos_y"][p]), abs=1e-6)
 
-    seam = ds.samples[4484]
+    seam = ds.rows[4484]
     assert int(seam["seed_t"]["action_id"][p]) == ACT_THROW_F
     assert int(seam["seed_t"]["ground_id"][p]) == 6
     assert int(seam["ref_t1"]["ground_id"][p]) == 7
@@ -603,17 +601,17 @@ def test_fod_locked_escapeair_hard_floor_root_crossing_lands() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "MilkyGracefulStingray.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 1278
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["ecb_lock_timer"][p]) != 0
@@ -649,24 +647,24 @@ def test_fod_fresh_jumpaerial_escapeair_locked_bottom_sweep_lands_on_hard_floor(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
-    pre = ds.samples[9749]
+    pre = ds.rows[9749]
     assert int(pre["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(pre["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
     pre_out = _run_one_step(ds, 9749)
     assert int(pre_out["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(pre_out["on_ground"][p]) == 0
 
-    row = ds.samples[9750]
+    row = ds.rows[9750]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 4
@@ -688,15 +686,15 @@ def test_fod_fresh_jumpaerial_escapeair_locked_bottom_sweep_lands_on_hard_floor(
     ("dataset_rel", "record", "p", "max_abs_pos_x_err"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "DistinctCaringCobra.msl",
+            "replays/validation/aggregate_recent/"
+            "DistinctCaringCobra.slpz",
             7308,
             1,
             0.05,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "PutridJoyousOryx.msl",
+            "replays/validation/aggregate_recent/"
+            "PutridJoyousOryx.slpz",
             3339,
             1,
             0.10,
@@ -717,10 +715,10 @@ def test_jump_entry_escapeair_does_not_use_ground_departure_wall_packet(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["seed_prev_action_id"][p]) in (ACT_KNEE_BEND, ACT_JUMP_AERIAL_F, ACT_JUMP_AERIAL_B)
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
 
@@ -737,15 +735,15 @@ def test_jump_entry_escapeair_does_not_use_ground_departure_wall_packet(
     ("dataset_rel", "record", "p", "expected_ground"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             3596,
             1,
             4,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "ShadyDecimalStarling.msl",
+            "replays/validation/dream_land_recent/"
+            "ShadyDecimalStarling.slpz",
             5304,
             1,
             1,
@@ -771,10 +769,10 @@ def test_escapeair_locked_loaded_ecb_bottom_sweep_lands_on_static_platform(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
     assert int(row["seed_t"]["seed_prev_action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
     assert int(row["seed_t"]["ecb_lock_timer"][p]) != 0
@@ -809,20 +807,20 @@ def test_fod_fresh_jump_escapeair_height_platform_lands_without_broad_ground_jum
 
     fod_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     ps_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        "SweatyThisMallard.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        "SweatyThisMallard.slpz"
     )
     if not fod_path.exists() or not ps_path.exists():
         pytest.skip("missing local FoD/Pokemon Stadium validation datasets")
 
-    fod = read_dataset(str(fod_path))
+    fod = load_replay_buffers(str(fod_path))
     p = 0
-    row = fod.samples[2951]
+    row = fod.rows[2951]
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_B
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_B
@@ -836,8 +834,8 @@ def test_fod_fresh_jump_escapeair_height_platform_lands_without_broad_ground_jum
         assert int(out[field][p]) == int(ref[field][p]), field
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
 
-    ps = read_dataset(str(ps_path))
-    control = ps.samples[7388]
+    ps = load_replay_buffers(str(ps_path))
+    control = ps.rows[7388]
     assert int(control["seed_t"]["stage_id"]) != 2
     assert int(control["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(control["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_F
@@ -858,16 +856,16 @@ def test_locked_escapeair_shallow_cliff_floor_final_snap_stays_airborne() -> Non
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl"
+        "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 11685
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
@@ -897,17 +895,17 @@ def test_sustained_escapeair_desired_bottom_platform_sweep_publishes_despite_dow
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl"
+        "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 3558
     target_record = 3596
     p = 1
-    row = ds.samples[target_record]
+    row = ds.rows[target_record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["input_t"]["p"][p]["main_y"]) < 0
@@ -927,15 +925,15 @@ def test_sustained_escapeair_desired_bottom_platform_sweep_publishes_despite_dow
     ("dataset_rel", "start_record", "target_record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "MediumVirtualPig.msl",
+            "replays/validation/battlefield_recent/"
+            "MediumVirtualPig.slpz",
             2598,
             2753,
             1,
         ),
             (
-                "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-                "MilkyGracefulStingray.msl",
+                "replays/validation/fountain_of_dreams_recent/"
+                "MilkyGracefulStingray.slpz",
                 5485,
                 5554,
                 0,
@@ -959,10 +957,10 @@ def test_fall_ecb_lock_expiry_rollout_keeps_fastfall_airborne(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[target_record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["fall_fast"][p]) == 1
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
@@ -992,18 +990,18 @@ def test_attackair_transformed_platform_floor_skip_clears_after_first_root_cross
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "MilkyGracefulStingray.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 2010
     target_record = 2013
     p = 1
-    row = ds.samples[target_record]
+    row = ds.rows[target_record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_N
     assert int(row["seed_t"]["fall_fast"][p]) == 1
     assert int(row["seed_t"]["ground_id"][p]) != 0xFFFF
@@ -1045,15 +1043,15 @@ def test_attackair_transformed_platform_rollout_publishes_floor_skip_lifetime_pt
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[target_record]
     assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
     assert int(row["seed_t"]["action_id"][p]) == action_id
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == action_id
@@ -1085,16 +1083,16 @@ def test_fall_stale_static_platform_first_hard_floor_contact_stays_airborne_sds(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "ShadyDecimalStarling.msl"
+        "replays/validation/dream_land_recent/"
+        "ShadyDecimalStarling.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 0
-    shallow = ds.samples[7169]
+    shallow = ds.rows[7169]
     assert int(shallow["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(shallow["seed_t"]["fall_fast"][p]) == 0
     assert int(shallow["seed_t"]["ground_id"][p]) == 0
@@ -1110,7 +1108,7 @@ def test_fall_stale_static_platform_first_hard_floor_contact_stays_airborne_sds(
         assert int(shallow_out[field][p]) == int(shallow_ref[field][p]), field
     assert float(shallow_out["pos_y"][p]) == pytest.approx(float(shallow_ref["pos_y"][p]), abs=1e-6)
 
-    deeper = ds.samples[7170]
+    deeper = ds.rows[7170]
     assert int(deeper["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(deeper["seed_t"]["fall_fast"][p]) == 0
     assert int(deeper["seed_t"]["ground_id"][p]) == 0
@@ -1125,7 +1123,7 @@ def test_fall_stale_static_platform_first_hard_floor_contact_stays_airborne_sds(
     assert float(deeper_out["pos_y"][p]) == pytest.approx(float(deeper_ref["pos_y"][p]), abs=1e-6)
 
     for record in (3439, 5819):
-        neutral = ds.samples[record]
+        neutral = ds.rows[record]
         assert int(neutral["seed_t"]["action_id"][p]) == ACT_FALL
         assert int(neutral["seed_t"]["fall_fast"][p]) == 0
         assert int(neutral["seed_t"]["ground_id"][p]) == 0
@@ -1146,23 +1144,23 @@ def test_fall_stale_static_platform_first_hard_floor_contact_stays_airborne_sds(
 
     for dataset_rel, record, player in (
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             1427,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             1601,
             1,
         ),
     ):
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
-        control_ds = read_dataset(str(dataset_path))
-        control = control_ds.samples[record]
+            pytest.skip(f"missing local replay: {dataset_rel}")
+        control_ds = load_replay_buffers(str(dataset_path))
+        control = control_ds.rows[record]
         assert int(control["seed_t"]["action_id"][player]) == ACT_FALL
         assert int(control["seed_t"]["fall_fast"][player]) == 0
         assert float(control["seed_t"]["speed_air_x_self"][player]) * float(
@@ -1200,15 +1198,15 @@ def test_attackair_transformed_platform_released_pass_final_handoff_lands(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == seed_action
     assert int(row["seed_t"]["floor_skip_segment_id_u16"][p]) == 0xFFFF
     assert int(row["seed_t"]["floor_skip_segment_valid_u8"][p]) == 0
@@ -1236,17 +1234,17 @@ def test_attackair_transformed_platform_downheld_final_handoff_stays_airborne() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 7960
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_N
     assert int(row["seed_t"]["floor_skip_segment_id_u16"][p]) == 0xFFFF
     assert int(row["seed_t"]["floor_skip_segment_valid_u8"][p]) == 0
@@ -1270,21 +1268,21 @@ def test_attackair_transformed_platform_downheld_final_handoff_stays_airborne() 
     ("dataset_rel", "record", "p", "expected_char", "expected_source_bits"),
     [
         (
-            "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            "replays/validation/marth/InternalPowerlessWallaby.slpz",
             9718,
             1,
             CHAR_MARTH,
             (0x02, 0x00),
         ),
         (
-            "datasets/marth/replays/validation/marth/VigorousRelievedLlama.msl",
+            "replays/validation/marth/VigorousRelievedLlama.slpz",
             3110,
             0,
             CHAR_MARTH,
             (0x00, 0x00),
         ),
         (
-            "datasets/marth/replays/validation/marth/FemaleWorthyAlpaca.msl",
+            "replays/validation/marth/FemaleWorthyAlpaca.slpz",
             3738,
             0,
             CHAR_FOX,
@@ -1309,11 +1307,11 @@ def test_attackairn_fod_height_platform_requires_current_source_to_land(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
     assert int(row["seed_t"]["char_id"][p]) == expected_char
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_N
@@ -1342,7 +1340,7 @@ def test_attackairn_fod_height_platform_requires_current_source_to_land(
     ("dataset_rel", "record", "p", "seed_action", "ref_action", "source_platform_i"),
     [
         (
-            "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            "replays/validation/marth/InternalPowerlessWallaby.slpz",
             488,
             1,
             ACT_ATTACK_AIR_N,
@@ -1350,7 +1348,7 @@ def test_attackairn_fod_height_platform_requires_current_source_to_land(
             1,
         ),
         (
-            "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            "replays/validation/marth/InternalPowerlessWallaby.slpz",
             3095,
             1,
             ACT_ATTACK_AIR_N,
@@ -1368,10 +1366,10 @@ def test_attackairn_fod_same_step_height_platform_source_lands(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
     assert int(row["seed_t"]["action_id"][p]) == seed_action
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][source_platform_i]) & 0x04
@@ -1390,7 +1388,7 @@ def test_attackairn_fod_same_step_height_platform_source_lands(
     ("dataset_rel", "record", "p", "seed_action", "ref_action", "source_platform_i", "source_bit"),
     [
         (
-            "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl",
+            "replays/validation/marth/InternalPowerlessWallaby.slpz",
             9574,
             1,
             ACT_ATTACK_AIR_F,
@@ -1399,7 +1397,7 @@ def test_attackairn_fod_same_step_height_platform_source_lands(
             0x02,
         ),
         (
-            "datasets/marth/replays/validation/marth/VigorousRelievedLlama.msl",
+            "replays/validation/marth/VigorousRelievedLlama.slpz",
             8578,
             1,
             69,
@@ -1408,8 +1406,8 @@ def test_attackairn_fod_same_step_height_platform_source_lands(
             0x02,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "MilkyGracefulStingray.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.slpz",
             739,
             0,
             ACT_ATTACK_AIR_F,
@@ -1434,10 +1432,10 @@ def test_non_nair_attackair_fod_height_platform_source_controls_still_land(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
     assert int(row["seed_t"]["action_id"][p]) == seed_action
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][source_platform_i]) & source_bit
@@ -1475,14 +1473,14 @@ def test_attackairlw_fod_height_platform_pre_first_create_stays_airborne(record:
     # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/marth/replays/validation/marth/VigorousRelievedLlama.msl"
+    dataset_rel = "replays/validation/marth/VigorousRelievedLlama.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     first_create_frame = _callback_first_create_frame_from_moves_json("falco", "ftCo_SM_AttackAirLw")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     p = 1
     assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
     assert int(row["seed_t"]["char_id"][p]) == CHAR_FALCO
@@ -1505,16 +1503,16 @@ def test_attackairlw_fod_height_platform_first_create_lands() -> None:
     # the source script owner and may publish LandingAirLw through the accepted FoD platform floor.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/marth/replays/validation/marth/VigorousRelievedLlama.msl"
+    dataset_rel = "replays/validation/marth/VigorousRelievedLlama.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     first_create_frame = _callback_first_create_frame_from_moves_json("falco", "ftCo_SM_AttackAirLw")
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 8578
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
     assert int(row["seed_t"]["char_id"][p]) == CHAR_FALCO
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_LW_TRUE
@@ -1535,40 +1533,40 @@ def test_attackairlw_fod_height_platform_first_create_lands() -> None:
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "CornyDelayedOkapi.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "CornyDelayedOkapi.slpz",
             3936,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.slpz",
             4812,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.slpz",
             950,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl",
+            "replays/validation/battlefield_recent/MediumVirtualPig.slpz",
             2617,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl",
+            "replays/validation/battlefield_recent/MediumVirtualPig.slpz",
             2618,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz",
             511,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz",
             512,
             1,
         ),
@@ -1583,10 +1581,10 @@ def test_locked_escapeair_first_platform_crossing_stays_airborne(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["on_ground"][p]) == 0
@@ -1617,19 +1615,19 @@ def test_replay_rollout_frame_clock_keeps_randall_phase_current_for_sideb() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "LawfulInsistentMeerkat.msl"
+        "replays/validation/yoshis_story_recent/"
+        "LawfulInsistentMeerkat.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 3562
     target_record = 4125
     p = 0
     out = _run_rollout_to_record(ds, start_record, target_record)
-    ref = ds.samples[target_record]["ref_t1"]
+    ref = ds.rows[target_record]["ref_t1"]
 
     assert int(out["frame_id"]) == int(ref["frame_id"])
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 352
@@ -1657,17 +1655,17 @@ def test_randall_path_uses_post_start_frame_id_for_damageair_landing_cnm_7056() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 7056
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_AIR_2
     assert int(row["ref_t1"]["action_id"][p]) == ACT_DAMAGE_AIR_2
     assert int(row["seed_t"]["on_ground"][p]) == 0
@@ -1687,14 +1685,14 @@ def test_randall_path_uses_post_start_frame_id_for_damageair_landing_cnm_7056() 
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             7436,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "ShadyDecimalStarling.msl",
+            "replays/validation/dream_land_recent/"
+            "ShadyDecimalStarling.slpz",
             7522,
             1,
         ),
@@ -1715,10 +1713,10 @@ def test_sustained_escapeair_different_platform_segment_lands(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["ground_id"][p]) != int(row["ref_t1"]["ground_id"][p])
@@ -1740,12 +1738,12 @@ def test_locked_escapeair_platform_consumer_does_not_broaden_fd_or_hard_floor() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl"
+        root / "replays/validation/battlefield_recent/MediumVirtualPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 2565
     p = 1
 
@@ -1789,16 +1787,16 @@ def test_pass_specialairn_platform_floor_skip_handoff_stays_airborne() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 4283
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_PASS
     assert int(row["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_N_START
     assert int(row["ref_t1"]["animation_index"][p]) == SM_FX_SPECIAL_AIR_N_START
@@ -1818,13 +1816,13 @@ def test_pass_specialairn_platform_floor_skip_handoff_requires_carried_platform(
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 4283
     p = 1
 
@@ -1854,15 +1852,15 @@ def test_sheik_jump_specialairn_entry_platform_ecb_drop_lands_demo2_lock() -> No
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        / "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 5015
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["char_id"][p]) == CHAR_SHEIK
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_F
     assert int(row["seed_t"]["on_ground"][p]) == 0
@@ -1887,12 +1885,12 @@ def test_sheik_jump_specialairn_entry_platform_ecb_drop_requires_platform_floor(
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        / "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 5015
     p = 0
 
@@ -1921,17 +1919,17 @@ def test_marth_terminal_hitstun_damage_lw_stale_platform_carry_needs_raw_sweep_d
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        / "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 7558
     p = 1
 
     quiet_record = 8335
-    quiet_row = ds.samples[quiet_record]
+    quiet_row = ds.rows[quiet_record]
     assert int(quiet_row["seed_t"]["char_id"][p]) == CHAR_MARTH
     assert int(quiet_row["seed_t"]["action_id"][p]) == ACT_DAMAGE_LW_2
     assert int(quiet_row["seed_t"]["hitstun"][p]) == 2
@@ -1943,7 +1941,7 @@ def test_marth_terminal_hitstun_damage_lw_stale_platform_carry_needs_raw_sweep_d
     )
 
     target_record = 8336
-    row = ds.samples[target_record]
+    row = ds.rows[target_record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_LW_2
     assert int(row["seed_t"]["hitstun"][p]) == 1
     assert int(row["ref_t1"]["action_id"][p]) == ACT_DAMAGE_LW_2
@@ -1978,16 +1976,16 @@ def test_jumpaerial_escapeair_platform_entry_frame4_keeps_source_airborne() -> N
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 958
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["seed_prev_action_frame"][p]) == 4
@@ -2005,13 +2003,13 @@ def test_jumpaerial_escapeair_platform_entry_frame4_keeps_source_airborne() -> N
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl",
+            "replays/validation/battlefield_recent/MediumVirtualPig.slpz",
             1863,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "SweatyThisMallard.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "SweatyThisMallard.slpz",
             5078,
             1,
         ),
@@ -2034,10 +2032,10 @@ def test_jumpaerial_escapeair_ledge_entry_keeps_source_airborne(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["ecb_lock_timer"][p]) != 0
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
@@ -2065,16 +2063,16 @@ def test_jumpaerial_escapeair_static_platform_overstep_stays_airborne_feh() -> N
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 11156
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
@@ -2101,16 +2099,16 @@ def test_no_lock_escapeair_static_platform_overstep_stays_airborne_feh() -> None
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 11157
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
@@ -2140,16 +2138,16 @@ def test_no_lock_escapeair_ignores_fod_static_y_platform_transform_pte() -> None
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 422
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
@@ -2167,12 +2165,12 @@ def test_no_lock_escapeair_ignores_fod_static_y_platform_transform_pte() -> None
 @pytest.mark.parametrize(
     ("dataset_rel", "record"),
     [
-        ("datasets/sheik/replays/validation/sheik/ConstantStiffOtter.msl", 119),
-        ("datasets/sheik/replays/validation/sheik/ConstantStiffOtter.msl", 254),
-        ("datasets/sheik/replays/validation/sheik/ConstantStiffOtter.msl", 318),
-        ("datasets/sheik/replays/validation/sheik/ConstantStiffOtter.msl", 644),
-        ("datasets/sheik/replays/validation/sheik/ConstantStiffOtter.msl", 706),
-        ("datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl", 704),
+        ("replays/validation/sheik/ConstantStiffOtter.slpz", 119),
+        ("replays/validation/sheik/ConstantStiffOtter.slpz", 254),
+        ("replays/validation/sheik/ConstantStiffOtter.slpz", 318),
+        ("replays/validation/sheik/ConstantStiffOtter.slpz", 644),
+        ("replays/validation/sheik/ConstantStiffOtter.slpz", 706),
+        ("replays/validation/sheik/SnarlingHelplessBeaver.slpz", 704),
     ],
 )
 def test_sheik_escapeair_fod_static_y_remap_bottom_sweep_lands(
@@ -2196,11 +2194,11 @@ def test_sheik_escapeair_fod_static_y_remap_bottom_sweep_lands(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["char_id"][p]) == CHAR_SHEIK
     assert int(row["seed_t"]["stage_id"]) == STAGE_FOD
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
@@ -2231,15 +2229,15 @@ def test_jumpaerial_escapeair_static_platform_deeper_step_still_lands_feh(record
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
@@ -2264,13 +2262,13 @@ def test_jumpaerial_escapeair_platform_entry_owner_is_not_broadened() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 958
     p = 0
 
@@ -2311,13 +2309,13 @@ def test_jumpaerial_escapeair_platform_entry_owner_is_not_broadened() -> None:
     ("dataset_rel", "record"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             6725,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.slpz",
             7972,
         ),
     ],
@@ -2335,11 +2333,11 @@ def test_jumpaerial_escapeair_shallow_yoshi_ledge_remap_stays_airborne(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     p = 1
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["on_ground"][p]) == 0
@@ -2360,16 +2358,16 @@ def test_jumpaerial_escapeair_deep_yoshi_ledge_remap_still_lands() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 5959
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
     assert int(row["ref_t1"]["on_ground"][p]) == 1
@@ -2386,32 +2384,32 @@ def test_jumpaerial_escapeair_deep_yoshi_ledge_remap_still_lands() -> None:
     ("dataset_rel", "start_record", "target_record", "p", "expected_ground_id"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             3357,
             3544,
             1,
             6,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             3942,
             4083,
             1,
             6,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             6725,
             6727,
             1,
             2,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "LawfulInsistentMeerkat.msl",
+            "replays/validation/yoshis_story_recent/"
+            "LawfulInsistentMeerkat.slpz",
             3490,
             3492,
             1,
@@ -2439,10 +2437,10 @@ def test_rollout_jumpaerial_escapeair_preserves_x130_bottom_to_yoshi_ledge(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[target_record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) in (
         ACT_JUMP_AERIAL_F,
@@ -2484,14 +2482,14 @@ def test_jumpaerial_escapeair_fd_zero_bottom_root_projection_lands(
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PriceyPartialAlbatross.msl"
+        / "replays/validation/aggregate_recent/"
+        "PriceyPartialAlbatross.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["ground_id"][p]) != 0xFFFF
@@ -2522,20 +2520,20 @@ def test_marth_jumpaerial_escapeair_no_lock_flat_ledge_bottom_sweep_lands() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     cases = [
-        ("InternalPowerlessWallaby.msl", 290, 0, 3),
-        ("InternalPowerlessWallaby.msl", 4210, 0, 7),
-        ("ParallelFamiliarZebra.msl", 7821, 0, 5),
-        ("QuestionableHarmfulPanther.msl", 4388, 1, 5),
-        ("WellWornSmallGoshawk.msl", 1605, 1, 3),
-        ("WellWornSmallGoshawk.msl", 12063, 1, 3),
+        ("InternalPowerlessWallaby.slpz", 290, 0, 3),
+        ("InternalPowerlessWallaby.slpz", 4210, 0, 7),
+        ("ParallelFamiliarZebra.slpz", 7821, 0, 5),
+        ("QuestionableHarmfulPanther.slpz", 4388, 1, 5),
+        ("WellWornSmallGoshawk.slpz", 1605, 1, 3),
+        ("WellWornSmallGoshawk.slpz", 12063, 1, 3),
     ]
 
     for replay, record, p, expected_ground_id in cases:
-        dataset_path = root / "datasets/marth/replays/validation/marth" / replay
+        dataset_path = root / "replays/validation/marth" / replay
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_path}")
-        ds = read_dataset(str(dataset_path))
-        row = ds.samples[record]
+            pytest.skip(f"missing local replay: {dataset_path}")
+        ds = load_replay_buffers(str(dataset_path))
+        row = ds.rows[record]
         assert int(row["seed_t"]["action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
         assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
         assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
@@ -2566,15 +2564,15 @@ def test_jumpaerial_escapeair_fresh_static_platform_side_owner_lands_qhp() -> No
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+        root / "replays/validation/marth/QuestionableHarmfulPanther.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 5432
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
@@ -2595,24 +2593,24 @@ def test_jumpaerial_escapeair_fresh_static_platform_side_owner_lands_qhp() -> No
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             2986,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             11156,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             11157,
             0,
         ),
-        ("datasets/marth/replays/validation/marth/VigorousRelievedLlama.msl", 9073, 0),
+        ("replays/validation/marth/VigorousRelievedLlama.slpz", 9073, 0),
     ],
 )
 def test_escapeair_static_platform_side_owner_requires_fresh_jumpaerial_entry(
@@ -2624,10 +2622,10 @@ def test_escapeair_static_platform_side_owner_requires_fresh_jumpaerial_entry(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
     assert int(row["seed_t"]["seed_prev_action_id"][p]) in (ACT_JUMP_AERIAL_F, ACT_ESCAPE_AIR)
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
@@ -2655,13 +2653,13 @@ def test_marth_jumpaerial_escapeair_no_lock_sloped_ledge_entry_waits_for_next_ca
     # data/stages/bin/grst.bin::MSLSTG01 sloped ledge floor segments
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/LoudDullGoat.msl"
+    dataset_path = root / "replays/validation/marth/LoudDullGoat.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_path}")
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
-    entry = ds.samples[3757]
+    entry = ds.rows[3757]
     assert int(entry["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(entry["input_t"]["p"]["buttons"][p]) & (BUTTON_L | BUTTON_R)
     assert int(entry["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
@@ -2674,7 +2672,7 @@ def test_marth_jumpaerial_escapeair_no_lock_sloped_ledge_entry_waits_for_next_ca
     assert int(dbg["floor_result_mode"][p]) == 0
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
 
-    follow = ds.samples[3758]
+    follow = ds.rows[3758]
     assert int(follow["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(follow["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
     rollout, rollout_dbg = _run_rollout_to_record_with_colldata(ds, 3757, 3758)
@@ -2685,17 +2683,17 @@ def test_marth_jumpaerial_escapeair_no_lock_sloped_ledge_entry_waits_for_next_ca
     assert int(rollout_dbg["floor_result_segment_id"][p]) == 2
     assert float(rollout["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
 
-    positive_path = root / "datasets/marth/replays/validation/marth/MetallicUniqueGrouse.msl"
+    positive_path = root / "replays/validation/marth/MetallicUniqueGrouse.slpz"
     if not positive_path.exists():
-        pytest.skip(f"missing local dataset: {positive_path}")
-    positive_ds = read_dataset(str(positive_path))
+        pytest.skip(f"missing local replay: {positive_path}")
+    positive_ds = load_replay_buffers(str(positive_path))
     linked_slope_positives = [
         (947, 1, 2, 2),
         (1990, 0, 3, 6),
         (3967, 1, 3, 6),
     ]
     for record, port, seed_ground_id, expected_ground_id in linked_slope_positives:
-        positive = positive_ds.samples[record]
+        positive = positive_ds.rows[record]
         assert int(positive["seed_t"]["action_id"][port]) == ACT_JUMP_AERIAL_F
         assert int(positive["seed_t"]["ground_id"][port]) == seed_ground_id
         assert int(positive["ref_t1"]["action_id"][port]) == ACT_LANDING_FALL_SPECIAL
@@ -2735,14 +2733,14 @@ def test_rollout_escapeair_live_floor_producer_authority_lands_on_carried_hard_f
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PriceyPartialAlbatross.msl"
+        / "replays/validation/aggregate_recent/"
+        "PriceyPartialAlbatross.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    producer_row = ds.samples[producer_record]
+    ds = load_replay_buffers(str(dataset_path))
+    producer_row = ds.rows[producer_record]
     assert int(producer_row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(producer_row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(producer_row["ref_t1"]["on_ground"][p]) == 0
@@ -2757,7 +2755,7 @@ def test_rollout_escapeair_live_floor_producer_authority_lands_on_carried_hard_f
         or int(producer_dbg["floor_probe_owner"][p]) != 0
     )
 
-    row = ds.samples[target_record]
+    row = ds.rows[target_record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
     assert int(row["ref_t1"]["on_ground"][p]) == 1
@@ -2776,20 +2774,20 @@ def test_rollout_escapeair_live_floor_producer_authority_lands_on_carried_hard_f
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             156,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "MediumVirtualPig.msl",
+            "replays/validation/battlefield_recent/"
+            "MediumVirtualPig.slpz",
             3104,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             2444,
             1,
         ),
@@ -2809,10 +2807,10 @@ def test_escapeair_restored_floor_state_without_live_producer_stays_airborne(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["on_ground"][p]) == 0
@@ -2985,16 +2983,16 @@ def test_escapeair_terminal_locked_static_platform_sweep_lands_sds(
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "ShadyDecimalStarling.msl"
+        / "replays/validation/dream_land_recent/"
+        "ShadyDecimalStarling.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[target_record]
     p = 1
-    assert int(ds.samples["seed_t"][producer_record]["action_id"][p]) in (
+    assert int(ds.rows["seed_t"][producer_record]["action_id"][p]) in (
         ACT_FX_SPECIAL_AIR_LW_LOOP,
         ACT_JUMP_AERIAL_F,
         ACT_ESCAPE_AIR,
@@ -3024,15 +3022,15 @@ def test_escapeair_static_platform_needs_locked_bottom_source_owner_sds(
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "ShadyDecimalStarling.msl"
+        / "replays/validation/dream_land_recent/"
+        "ShadyDecimalStarling.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
-    assert int(ds.samples["seed_t"][target_record]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(ds.rows["seed_t"][target_record]["action_id"][p]) == ACT_ESCAPE_AIR
 
     def clear_locked_bottom(seed_t) -> None:
         seed_t["ecb_lock_bottom_rel_y_valid_u8"][0, p] = np.uint8(0)
@@ -3060,20 +3058,20 @@ def test_escapeair_start_to_loop_shine_jump_preserves_bottom_without_early_platf
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
-    assert int(ds.samples["seed_t"][2440]["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_START
-    assert int(ds.samples["ref_t1"][2441]["action_id"][p]) == ACT_JUMP_AERIAL_F
-    assert int(ds.samples["seed_t"][2444]["action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(ds.samples["seed_t"][2444]["ecb_lock_bottom_rel_y_valid_u8"][p]) == 1
-    assert int(ds.samples["ref_t1"][2444]["action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(ds.samples["ref_t1"][2447]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(ds.rows["seed_t"][2440]["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_START
+    assert int(ds.rows["ref_t1"][2441]["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(ds.rows["seed_t"][2444]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(ds.rows["seed_t"][2444]["ecb_lock_bottom_rel_y_valid_u8"][p]) == 1
+    assert int(ds.rows["ref_t1"][2444]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(ds.rows["ref_t1"][2447]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
 
     early_out, early_dbg = _run_rollout_to_record_with_colldata(ds, 2440, 2444)
     assert int(early_out["action_id"][p]) == ACT_ESCAPE_AIR
@@ -3103,16 +3101,16 @@ def test_yoshi_jumpaerial_escapeair_uses_frame_start_last_pos_for_platform_landi
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 2717
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_B
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_B
     assert int(row["seed_t"]["seed_prev_action_frame"][p]) == 7
@@ -3139,15 +3137,15 @@ def test_sustained_escapeair_yoshi_floor_rows_do_not_borrow_fd_zero_bottom_owner
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 0
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["on_ground"][p]) == 0
@@ -3163,14 +3161,14 @@ def test_sustained_escapeair_yoshi_floor_rows_do_not_borrow_fd_zero_bottom_owner
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             2445,
             1,
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             157,
             0,
         ),
@@ -3191,10 +3189,10 @@ def test_sustained_escapeair_early_locked_vertical_window_stays_airborne(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["action_frame"][p]) == 3
@@ -3212,13 +3210,13 @@ def test_sustained_escapeair_early_locked_vertical_window_stays_airborne(
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "CornyDelayedOkapi.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "CornyDelayedOkapi.slpz",
             3937,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl",
+            "replays/validation/battlefield_recent/MediumVirtualPig.slpz",
             787,
             1,
         ),
@@ -3239,10 +3237,10 @@ def test_locked_escapeair_deep_platform_crossing_lands(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
@@ -3260,24 +3258,24 @@ def test_locked_escapeair_deep_platform_crossing_lands(
     ("dataset_rel", "record", "p", "expected_ground_id", "pos_y_tol"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "CornyDelayedOkapi.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "CornyDelayedOkapi.slpz",
             9345,
             0,
             35,
             1e-6,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "MilkyGracefulStingray.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.slpz",
             4325,
             0,
             2,
             1e-6,
         ),
-        ("datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl", 3358, 0, 1, 2e-4),
-        ("datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl", 6683, 0, 1, 2e-4),
-        ("datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl", 7880, 0, 1, 2e-4),
+        ("replays/validation/sheik/SnarlingHelplessBeaver.slpz", 3358, 0, 1, 2e-4),
+        ("replays/validation/sheik/SnarlingHelplessBeaver.slpz", 6683, 0, 1, 2e-4),
+        ("replays/validation/sheik/SnarlingHelplessBeaver.slpz", 7880, 0, 1, 2e-4),
     ],
 )
 def test_no_lock_sustained_escapeair_platform_contact_lands(
@@ -3296,10 +3294,10 @@ def test_no_lock_sustained_escapeair_platform_contact_lands(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
@@ -3314,7 +3312,7 @@ def test_no_lock_sustained_escapeair_platform_contact_lands(
     if pos_y_tol > 1e-6:
         # FoD height-platform rows still carry a small root-snap residual after the source-owned
         # LandingFallSpecial decision. Keep older static/ordinary controls exact.
-        assert "SnarlingHelplessBeaver.msl" in dataset_rel
+        assert "SnarlingHelplessBeaver.slpz" in dataset_rel
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=pos_y_tol)
 
 
@@ -3334,20 +3332,20 @@ def test_locked_escapeair_late_above_root_platform_projection_uses_callback_prev
     _skip_if_required_artifacts_missing(root)
     positives = (
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             953,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             8411,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "MilkyGracefulStingray.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.slpz",
             5485,
             0,
         ),
@@ -3355,10 +3353,10 @@ def test_locked_escapeair_late_above_root_platform_projection_uses_callback_prev
     for dataset_rel, record, p in positives:
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
+            pytest.skip(f"missing local replay: {dataset_rel}")
 
-        ds = read_dataset(str(dataset_path))
-        row = ds.samples[record]
+        ds = load_replay_buffers(str(dataset_path))
+        row = ds.rows[record]
         assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
         assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
         assert int(row["seed_t"]["ecb_lock_timer"][p]) == 6
@@ -3376,20 +3374,20 @@ def test_locked_escapeair_late_above_root_platform_projection_uses_callback_prev
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "CornyDelayedOkapi.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "CornyDelayedOkapi.slpz",
             5203,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             3500,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.msl",
+            "replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.slpz",
             4746,
             1,
         ),
@@ -3412,10 +3410,10 @@ def test_locked_escapeair_uses_frame_start_colldata_last_pos_and_desired_bottom(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["ecb_lock_timer"][p]) != 0
 
@@ -3439,16 +3437,16 @@ def test_fallspecial_static_platform_first_crossing_stays_airborne_then_lands() 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+        "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     airborne_record = 12282
-    airborne = ds.samples[airborne_record]
+    airborne = ds.rows[airborne_record]
     assert int(airborne["seed_t"]["action_id"][0]) == ACT_FALL_SPECIAL
     assert int(airborne["ref_t1"]["action_id"][0]) == ACT_FALL_SPECIAL
     out_air = _run_one_step(ds, airborne_record)
@@ -3457,7 +3455,7 @@ def test_fallspecial_static_platform_first_crossing_stays_airborne_then_lands() 
     assert float(out_air["pos_y"][0]) == pytest.approx(float(airborne["ref_t1"]["pos_y"][0]), abs=1e-4)
 
     landing_record = 12283
-    landing = ds.samples[landing_record]
+    landing = ds.rows[landing_record]
     assert int(landing["seed_t"]["action_id"][0]) == ACT_FALL_SPECIAL
     assert int(landing["ref_t1"]["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
     out_land = _run_one_step(ds, landing_record)
@@ -3473,16 +3471,16 @@ def test_locked_escapeair_late_platform_projection_keeps_shallow_current_root_ai
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+        "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 3936
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 6
@@ -3513,14 +3511,14 @@ def test_fod_locked_escapeair_platform_bottom_sweep_lands_after_lock_phase() -> 
     _skip_if_required_artifacts_missing(root)
     cases = (
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             942,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             6998,
             1,
         ),
@@ -3528,9 +3526,9 @@ def test_fod_locked_escapeair_platform_bottom_sweep_lands_after_lock_phase() -> 
     for dataset_rel, record, p in cases:
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
-        ds = read_dataset(str(dataset_path))
-        row = ds.samples[record]
+            pytest.skip(f"missing local replay: {dataset_rel}")
+        ds = load_replay_buffers(str(dataset_path))
+        row = ds.rows[record]
         assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
         assert int(row["seed_t"]["ecb_lock_timer"][p]) != 0
         assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
@@ -3551,16 +3549,16 @@ def test_fod_locked_escapeair_side_platform_timer3_stays_airborne() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     record = 941
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 3
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
@@ -3586,17 +3584,17 @@ def test_fod_rollout_escapeair_timer3_does_not_reuse_jumpaerial_current_bottom()
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 867
     target_record = 941
     p = 1
-    target = ds.samples[target_record]
+    target = ds.rows[target_record]
     assert int(target["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(target["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(target["seed_t"]["ecb_lock_timer"][p]) == 3
@@ -3624,16 +3622,16 @@ def test_fod_sustained_escapeair_ledge_span_crossing_lands_without_endpoint_entr
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
-    positive = ds.samples[2683]
+    positive = ds.rows[2683]
     assert int(positive["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(positive["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(positive["seed_t"]["ecb_lock_timer"][p]) == 3
@@ -3646,7 +3644,7 @@ def test_fod_sustained_escapeair_ledge_span_crossing_lands_without_endpoint_entr
         float(positive["ref_t1"]["pos_y"][p]), abs=2e-4
     )
 
-    negative = ds.samples[6442]
+    negative = ds.rows[6442]
     assert int(negative["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(negative["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(negative["seed_t"]["ecb_lock_timer"][p]) == 3
@@ -3674,18 +3672,18 @@ def test_fod_locked_escapeair_side_platform_timer2_lands_after_rollout_carry() -
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 941
     target_record = 942
     p = 1
-    row_start = ds.samples[start_record]
-    row_target = ds.samples[target_record]
+    row_start = ds.rows[start_record]
+    row_target = ds.rows[target_record]
     assert int(row_start["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row_start["seed_t"]["ecb_lock_timer"][p]) == 3
     assert int(row_target["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
@@ -3714,19 +3712,19 @@ def test_fod_jumpaerial_escapeair_offspan_platform_carries_desired_bottom_to_lan
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 3762
     entry_record = 3905
     target_record = 3907
     p = 1
-    entry = ds.samples[entry_record]
-    target = ds.samples[target_record]
+    entry = ds.rows[entry_record]
+    target = ds.rows[target_record]
     assert int(entry["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(entry["seed_t"]["ground_id"][p]) == 2
     assert int(entry["seed_t"]["ecb_lock_bottom_rel_y_valid_u8"][p]) == 1
@@ -3746,16 +3744,16 @@ def test_fod_jumpaerial_escapeair_desired_bottom_carry_requires_source_floor() -
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     record = 3905
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["ground_id"][p]) == 2
 
@@ -3778,22 +3776,22 @@ def test_fod_escapeair_seeded_desired_bottom_crossing_lands_on_hard_floor() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
-    previous = ds.samples[4056]
+    previous = ds.rows[4056]
     assert int(previous["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     out_prev = _run_one_step(ds, 4056)
     for field in ("action_id", "animation_index", "on_ground", "ground_id"):
         assert int(out_prev[field][p]) == int(previous["ref_t1"][field][p]), field
 
-    row = ds.samples[4057]
+    row = ds.rows[4057]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["ecb_lock_bottom_rel_y_valid_u8"][p]) == 1
     assert int(row["seed_t"]["ground_id"][p]) == 3
@@ -3818,20 +3816,20 @@ def test_fod_escapeair_rollout_ed5c_floor_corner_bottom_crossing_lands() -> None
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
     # Keep this lock local to the EscapeAir floor-publication owner. The older long rollout from
     # 3762 now diverges earlier on a JumpF transition after fresh dataset regeneration; that
     # upstream jump owner is not part of this floor-corner handoff.
     out_prev = _run_rollout_to_record(ds, 4054, 4056)
-    ref_prev = ds.samples[4056]["ref_t1"]
+    ref_prev = ds.rows[4056]["ref_t1"]
     assert int(out_prev["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(out_prev["on_ground"][p]) == 0
     assert int(out_prev["action_id"][p]) == int(ref_prev["action_id"][p])
@@ -3839,7 +3837,7 @@ def test_fod_escapeair_rollout_ed5c_floor_corner_bottom_crossing_lands() -> None
     assert int(out_prev["ground_id"][p]) == 3
 
     out = _run_rollout_to_record(ds, 4054, 4057)
-    ref = ds.samples[4057]["ref_t1"]
+    ref = ds.rows[4057]["ref_t1"]
     for field in ("action_id", "animation_index", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
@@ -3858,16 +3856,16 @@ def test_locked_escapeair_seed6_different_platform_root_projection_stays_airborn
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+        "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 2838
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 6
@@ -3888,26 +3886,26 @@ def test_locked_escapeair_seed6_different_platform_root_projection_stays_airborn
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "CornyDelayedOkapi.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "CornyDelayedOkapi.slpz",
             5736,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "MediumVirtualPig.msl",
+            "replays/validation/battlefield_recent/"
+            "MediumVirtualPig.slpz",
             6897,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             2170,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "ShadyDecimalStarling.msl",
+            "replays/validation/dream_land_recent/"
+            "ShadyDecimalStarling.slpz",
             571,
             1,
         ),
@@ -3928,10 +3926,10 @@ def test_kneebend_escapeair_early_locked_vertical_window_still_lands(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_KNEE_BEND
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
     assert int(row["ref_t1"]["on_ground"][p]) == 1
@@ -3958,12 +3956,12 @@ def test_kneebend_escapeair_platform_handoff_requires_downward_entry_step() -> N
     _skip_if_required_artifacts_missing(root)
 
     negative_path = (
-        root / "datasets/marth/replays/validation/marth/QuestionableHarmfulPanther.msl"
+        root / "replays/validation/marth/QuestionableHarmfulPanther.slpz"
     )
     if not negative_path.exists():
-        pytest.skip(f"missing local dataset: {negative_path}")
-    negative_ds = read_dataset(str(negative_path))
-    negative = negative_ds.samples[90]
+        pytest.skip(f"missing local replay: {negative_path}")
+    negative_ds = load_replay_buffers(str(negative_path))
+    negative = negative_ds.rows[90]
     p = 0
     assert int(negative["seed_t"]["action_id"][p]) == ACT_KNEE_BEND
     assert float(negative["ref_t1"]["speed_y_self"][p]) == pytest.approx(0.0, abs=1e-7)
@@ -3977,7 +3975,7 @@ def test_kneebend_escapeair_platform_handoff_requires_downward_entry_step() -> N
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
 
     for record in (91, 3900):
-        row = negative_ds.samples[record]
+        row = negative_ds.rows[record]
         assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
         assert float(row["ref_t1"]["speed_y_self"][p]) == pytest.approx(0.0, abs=1e-7)
         assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
@@ -3991,14 +3989,14 @@ def test_kneebend_escapeair_platform_handoff_requires_downward_entry_step() -> N
 
     positive_cases = (
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             2170,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "ShadyDecimalStarling.msl",
+            "replays/validation/dream_land_recent/"
+            "ShadyDecimalStarling.slpz",
             571,
             1,
         ),
@@ -4006,9 +4004,9 @@ def test_kneebend_escapeair_platform_handoff_requires_downward_entry_step() -> N
     for dataset_rel, record, player in positive_cases:
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
-        ds = read_dataset(str(dataset_path))
-        row = ds.samples[record]
+            pytest.skip(f"missing local replay: {dataset_rel}")
+        ds = load_replay_buffers(str(dataset_path))
+        row = ds.rows[record]
         assert int(row["seed_t"]["action_id"][player]) == ACT_KNEE_BEND
         assert float(row["ref_t1"]["speed_y_self"][player]) < 0.0
         assert int(row["ref_t1"]["action_id"][player]) == ACT_LANDING_FALL_SPECIAL
@@ -4039,24 +4037,24 @@ def test_kneebend_escapeair_platform_handoff_requires_escapeair_entry() -> None:
 
     for dataset_rel, record, p in (
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             2170,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "ShadyDecimalStarling.msl",
+            "replays/validation/dream_land_recent/"
+            "ShadyDecimalStarling.slpz",
             571,
             1,
         ),
     ):
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
+            pytest.skip(f"missing local replay: {dataset_rel}")
 
-        ds = read_dataset(str(dataset_path))
-        row = ds.samples[record]
+        ds = load_replay_buffers(str(dataset_path))
+        row = ds.rows[record]
         assert int(row["seed_t"]["action_id"][p]) == ACT_KNEE_BEND
         assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
 
@@ -4070,32 +4068,32 @@ def test_kneebend_escapeair_platform_handoff_requires_escapeair_entry() -> None:
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             4875,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             4947,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             1581,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             10773,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             4778,
             1,
         ),
@@ -4118,10 +4116,10 @@ def test_jumpaerial_escapeair_transformed_platform_remap_enters_landing_fall_spe
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
@@ -4143,13 +4141,13 @@ def test_jumpaerial_escapeair_transformed_platform_remap_gate_is_source_scoped()
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 4875
     p = 1
 
@@ -4178,20 +4176,20 @@ def test_jumpaerial_escapeair_transformed_platform_remap_gate_is_source_scoped()
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             680,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "LawfulInsistentMeerkat.msl",
+            "replays/validation/yoshis_story_recent/"
+            "LawfulInsistentMeerkat.slpz",
             3654,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             10926,
             0,
         ),
@@ -4212,10 +4210,10 @@ def test_fall_attackair_entry_platform_contact_stays_airborne(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ATTACK_AIR_F
     assert int(row["ref_t1"]["animation_index"][p]) == SM_ATTACK_AIR_F
@@ -4232,20 +4230,20 @@ def test_fall_attackair_entry_platform_contact_stays_airborne(
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             5886,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "SweatyThisMallard.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "SweatyThisMallard.slpz",
             6606,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             9375,
             0,
         ),
@@ -4261,10 +4259,10 @@ def test_jump_attackair_platform_entry_does_not_use_fall_owner(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_F
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
     assert int(row["ref_t1"]["animation_index"][p]) == SM_LANDING
@@ -4295,14 +4293,14 @@ def test_jumpaerial_attackair_entry_floor_requires_live_bottom_owner() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    wws_rel = "datasets/aggregate_recent/replays/validation/marth/WellWornSmallGoshawk.msl"
+    wws_rel = "replays/validation/marth/WellWornSmallGoshawk.slpz"
     wws_path = root / wws_rel
     if not wws_path.exists():
-        pytest.skip(f"missing local dataset: {wws_rel}")
-    wws = read_dataset(str(wws_path))
+        pytest.skip(f"missing local replay: {wws_rel}")
+    wws = load_replay_buffers(str(wws_path))
     wws_record = 679
     p = 0
-    wws_row = wws.samples[wws_record]
+    wws_row = wws.rows[wws_record]
     assert int(wws_row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(wws_row["ref_t1"]["action_id"][p]) == ACT_ATTACK_AIR_B
     assert int(wws_row["ref_t1"]["on_ground"][p]) == 0
@@ -4323,13 +4321,13 @@ def test_jumpaerial_attackair_entry_floor_requires_live_bottom_owner() -> None:
     assert source_prev_bottom_y < contact_y
     assert source_current_bottom_y < contact_y
 
-    his_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    his_rel = "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     his_path = root / his_rel
     if not his_path.exists():
-        pytest.skip(f"missing local dataset: {his_rel}")
-    his = read_dataset(str(his_path))
+        pytest.skip(f"missing local replay: {his_rel}")
+    his = load_replay_buffers(str(his_path))
     his_record = 3623
-    his_row = his.samples[his_record]
+    his_row = his.rows[his_record]
     assert int(his_row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(his_row["ref_t1"]["action_id"][p]) == ACT_LANDING
     assert int(his_row["ref_t1"]["on_ground"][p]) == 1
@@ -4369,15 +4367,15 @@ def test_jumpaerial_static_platform_pass_callback_boundary(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     ucf_slot = int(row["seed_t"]["ucf_padbuf_index"][p]) & 3
     assert int(row["seed_t"]["ucf_padbuf_stick_y"][p][ucf_slot]) == raw_stick_y
@@ -4406,16 +4404,16 @@ def test_fod_jumpaerial_fastfall_transformed_platform_suppression_restores_root_
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 1333
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_B
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_B
     assert int(row["seed_t"]["fall_fast"][p]) == 1
@@ -4434,15 +4432,15 @@ def test_fod_jumpaerial_fastfall_transformed_platform_suppression_restores_root_
     ("dataset_rel", "record", "p", "expected_ground_id"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "MilkyGracefulStingray.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.slpz",
             1341,
             0,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             6748,
             1,
             1,
@@ -4463,10 +4461,10 @@ def test_fod_jumpaerial_fastfall_fresh_platform_floor_contact_lands(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["ground_id"][p]) == 5
@@ -4498,16 +4496,16 @@ def test_fod_jumpaerial_fastfall_same_step_platform_contact_lands_pte_2026() -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 2026
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_B
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_B
     assert int(row["seed_t"]["fall_fast"][p]) == 1
@@ -4549,14 +4547,14 @@ def test_fod_fall_root_crossing_height_platform_lands_in_rollout(
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[target_record]
     assert int(row["seed_t"]["action_id"][p]) == expected_seed_action
     assert int(row["seed_t"]["fall_fast"][p]) == 1
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
@@ -4592,14 +4590,14 @@ def test_fall_transformed_platform_fastfall_callback_lifetime_stays_airborne(
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["fall_fast"][p]) == 1
@@ -4628,16 +4626,16 @@ def test_fod_terminal_jump_anim_fall_uses_transformed_platform_lifetime_pte_1455
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 1455
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_F
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_F
     assert int(row["seed_t"]["fall_fast"][p]) == 1
@@ -4661,13 +4659,13 @@ def test_fall_transformed_platform_fastfall_gate_is_source_scoped() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     # Use the last retained airborne Fall frame before the platform publishes Landing. With the
     # same-action lifetime broken, the row is no longer owned by sustained Fall_Coll and lands.
     record = 5960
@@ -4696,16 +4694,16 @@ def test_fod_fall_loop_wrap_delays_transformed_platform_hard_floor_publish() -> 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
-    loop_row = ds.samples[5960]
+    loop_row = ds.rows[5960]
     assert int(loop_row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(loop_row["seed_t"]["seed_prev_action_id"][p]) == ACT_FALL
     assert int(loop_row["seed_t"]["seed_prev_action_frame"][p]) == 7
@@ -4722,7 +4720,7 @@ def test_fod_fall_loop_wrap_delays_transformed_platform_hard_floor_publish() -> 
         assert int(out[field][p]) == int(ref[field][p]), field
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
 
-    landing_row = ds.samples[5961]
+    landing_row = ds.rows[5961]
     assert int(landing_row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(landing_row["seed_t"]["seed_prev_action_frame"][p]) == 0
     assert int(landing_row["ref_t1"]["action_id"][p]) == ACT_LANDING
@@ -4746,17 +4744,17 @@ def test_fod_fall_loop_wrap_already_below_hard_floor_lands() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "MilkyGracefulStingray.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 4354
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["seed_prev_action_frame"][p]) == 7
@@ -4789,16 +4787,16 @@ def test_nonfastfall_fall_generic_ecb_lock_does_not_stale_lift_wall_envelope() -
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/"
+        "ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     target_record = 11572
     p = 1
-    row = ds.samples[target_record]
+    row = ds.rows[target_record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["fall_fast"][p]) == 0
     assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
@@ -4815,29 +4813,29 @@ def test_nonfastfall_fall_generic_ecb_lock_does_not_stale_lift_wall_envelope() -
     ("dataset_rel", "record", "p", "expected_ground"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             1574,
             0,
             3,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.msl",
+            "replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.slpz",
             1971,
             0,
             3,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "CornyDelayedOkapi.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "CornyDelayedOkapi.slpz",
             8911,
             1,
             51,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "PriceyPartialAlbatross.msl",
+            "replays/validation/aggregate_recent/"
+            "PriceyPartialAlbatross.slpz",
             7609,
             1,
             2,
@@ -4861,10 +4859,10 @@ def test_fall_flags6_root_projection_lands_after_callback_floor_contact(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
     assert int(row["ref_t1"]["animation_index"][p]) == SM_LANDING
@@ -4883,14 +4881,14 @@ def test_fall_flags6_root_projection_lands_after_callback_floor_contact(
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "PriceyPartialAlbatross.msl",
+            "replays/validation/aggregate_recent/"
+            "PriceyPartialAlbatross.slpz",
             3012,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.slpz",
             7193,
             0,
         ),
@@ -4910,10 +4908,10 @@ def test_fall_no_floor_shallow_fastfall_contact_stays_airborne(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["fall_fast"][p]) == 1
     assert int(row["seed_t"]["ground_id"][p]) == 0xFFFF
@@ -4941,16 +4939,16 @@ def test_fall_no_floor_shallow_allow_interrupt_contact_lands() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 1967
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["fall_fast"][p]) == 1
     assert int(row["seed_t"]["ground_id"][p]) == 0xFFFF
@@ -4970,14 +4968,14 @@ def test_fall_no_floor_shallow_allow_interrupt_contact_lands() -> None:
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
-            "MediumVirtualPig.msl",
+            "replays/validation/battlefield_recent/"
+            "MediumVirtualPig.slpz",
             2753,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "MilkyGracefulStingray.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.slpz",
             5554,
             0,
         ),
@@ -4997,10 +4995,10 @@ def test_fall_ledge_continuation_before_allow_interrupt_stays_airborne(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["fall_fast"][p]) == 1
     assert int(row["seed_t"]["ground_id"][p]) != 0xFFFF
@@ -5021,20 +5019,20 @@ def test_fall_ledge_continuation_before_allow_interrupt_stays_airborne(
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             94,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.msl",
+            "replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.slpz",
             107,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             10947,
             1,
         ),
@@ -5055,10 +5053,10 @@ def test_fall_flags6_root_projection_rejects_unowned_stale_floor_index(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["ref_t1"]["action_id"][p]) == ACT_FALL
     assert int(row["ref_t1"]["on_ground"][p]) == 0
@@ -5083,16 +5081,16 @@ def test_guardon_powershield_reflect_preempts_platform_pass() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 3516
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_GUARD_ON
     assert int(row["ref_t1"]["action_id"][p]) == ACT_GUARD_REFLECT
     assert int(row["ref_t1"]["on_ground"][p]) == 1
@@ -5114,16 +5112,16 @@ def test_ground_jump_uses_self_vel_not_gr_vel_on_yoshi_slope_cnm_1268() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 1268
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_KNEE_BEND
     assert int(row["ref_t1"]["action_id"][p]) == ACT_JUMP_B
     assert int(row["seed_t"]["ground_id"][p]) == 6
@@ -5153,16 +5151,16 @@ def test_ground_jump_launch_does_not_borrow_slope_gr_vel_cnm_1268() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 1268
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
 
     def replace_self_vel_with_gr_vel(seed_t: np.ndarray) -> None:
         seed_t["speed_air_x_self"][0, p] = seed_t["speed_ground_x_self"][0, p]
@@ -5189,14 +5187,14 @@ def test_sheik_kneebend_escapeair_static_platform_lock_stays_airborne() -> None:
     # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/TenseSameHummingbird.msl"
+    dataset_path = root / "replays/validation/sheik/TenseSameHummingbird.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 0
     for record in (4981, 4983, 4984, 4985, 4986, 4987, 4988, 4989):
-        row = ds.samples[record]
+        row = ds.rows[record]
         out, dbg = _run_one_step_with_colldata(ds, record)
         ref = row["ref_t1"]
         for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
@@ -5209,7 +5207,7 @@ def test_sheik_kneebend_escapeair_static_platform_lock_stays_airborne() -> None:
         )
 
     quiet_out, quiet_dbg = _run_one_step_with_colldata(ds, 4982)
-    quiet_ref = ds.samples[4982]["ref_t1"]
+    quiet_ref = ds.rows[4982]["ref_t1"]
     assert int(quiet_out["action_id"][p]) == int(quiet_ref["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(quiet_out["on_ground"][p]) == 0
     assert (
@@ -5218,8 +5216,8 @@ def test_sheik_kneebend_escapeair_static_platform_lock_stays_airborne() -> None:
     ) == 0
 
     expired_out, expired_dbg = _run_one_step_with_colldata(ds, 4990)
-    expired_ref = ds.samples[4990]["ref_t1"]
-    assert int(ds.samples[4990]["seed_t"]["ecb_lock_timer"][p]) == 1
+    expired_ref = ds.rows[4990]["ref_t1"]
+    assert int(ds.rows[4990]["seed_t"]["ecb_lock_timer"][p]) == 1
     assert int(expired_out["action_id"][p]) == int(expired_ref["action_id"][p]) == ACT_ESCAPE_AIR
     assert int(expired_out["on_ground"][p]) == 0
     assert (
@@ -5252,16 +5250,16 @@ def test_guardon_ucf_shielddrop_suppresses_spotdodge_without_lr_edge() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 3516
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_GUARD_ON
 
     def remove_lr_edge(prev_input: np.ndarray, input_t: np.ndarray) -> None:
@@ -5288,16 +5286,16 @@ def test_fresh_guardon_nonshield_entry_does_not_platform_pass_same_callback() ->
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 3516
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_GUARD_ON
 
     def refresh_pass_tilt_timer(seed: np.ndarray) -> None:
@@ -5340,7 +5338,7 @@ def test_fod_fall_coll_floor_skip_seed_carries_transformed_platform_pass() -> No
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,
@@ -5348,7 +5346,7 @@ def test_fod_fall_coll_floor_skip_seed_carries_transformed_platform_pass() -> No
     )
     record = 5954
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["floor_skip_segment_id_u16"][p]) == 1
     assert int(row["seed_t"]["floor_skip_segment_valid_u8"][p]) == 1
@@ -5381,29 +5379,29 @@ def test_fod_fall_coll_flags6_root_projection_lands_source_trusted_floors() -> N
     _skip_if_required_artifacts_missing(root)
     cases = (
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             1565,
             0,
             5,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ElatedWearyTermite.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.slpz",
             10060,
             0,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             1395,
             1,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "ParallelTemptingElk.msl",
+            "replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.slpz",
             4681,
             1,
             5,
@@ -5412,9 +5410,9 @@ def test_fod_fall_coll_flags6_root_projection_lands_source_trusted_floors() -> N
     for dataset_rel, record, p, ground_id in cases:
         dataset_path = root / dataset_rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_rel}")
-        ds = read_dataset(str(dataset_path))
-        row = ds.samples[record]
+            pytest.skip(f"missing local replay: {dataset_rel}")
+        ds = load_replay_buffers(str(dataset_path))
+        row = ds.rows[record]
         assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
         assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
         assert int(row["ref_t1"]["ground_id"][p]) == ground_id
@@ -5441,16 +5439,16 @@ def test_fod_fall_coll_current_down_input_keeps_transformed_platform_pass() -> N
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     record = 1395
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
 
@@ -5467,8 +5465,8 @@ def test_fod_fall_coll_current_down_input_keeps_transformed_platform_pass() -> N
 @pytest.mark.parametrize(
     ("dataset_name", "record", "p", "expected_ground"),
     [
-        ("ExtraLargeScaryHornet.msl", 4180, 1, 34),
-        ("WingedGorgeousPanther.msl", 2804, 1, 34),
+        ("ExtraLargeScaryHornet.slpz", 4180, 1, 34),
+        ("WingedGorgeousPanther.slpz", 2804, 1, 34),
     ],
 )
 def test_marth_fallaerial_commonfall_blended_ecb_delays_shallow_stadium_landing(
@@ -5489,12 +5487,12 @@ def test_marth_fallaerial_commonfall_blended_ecb_delays_shallow_stadium_landing(
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth" / dataset_name
+    dataset_path = root / "replays/validation/marth" / dataset_name
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["char_id"][p]) == 18
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL_AERIAL
     assert int(row["seed_t"]["animation_index"][p]) == SM_FALL_AERIAL
@@ -5516,9 +5514,9 @@ def test_marth_fallaerial_commonfall_blended_ecb_delays_shallow_stadium_landing(
 @pytest.mark.parametrize(
     ("dataset_name", "record", "p", "expected_ground"),
     [
-        ("ExtraLargeScaryHornet.msl", 4181, 1, 34),
-        ("WingedGorgeousPanther.msl", 2805, 1, 35),
-        ("DraftyHealthyHare.msl", 6555, 0, 3),
+        ("ExtraLargeScaryHornet.slpz", 4181, 1, 34),
+        ("WingedGorgeousPanther.slpz", 2805, 1, 35),
+        ("DraftyHealthyHare.slpz", 6555, 0, 3),
     ],
 )
 def test_marth_fallaerial_commonfall_blended_ecb_still_lands_deeper_contacts(
@@ -5530,12 +5528,12 @@ def test_marth_fallaerial_commonfall_blended_ecb_still_lands_deeper_contacts(
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth" / dataset_name
+    dataset_path = root / "replays/validation/marth" / dataset_name
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL_AERIAL
     x4, msid = _debug_commonfall_seed_state(ds, record, p)
     assert x4 > 0.0
@@ -5555,13 +5553,13 @@ def test_marth_fallaerial_commonfall_blended_ecb_still_lands_deeper_contacts(
 @pytest.mark.parametrize(
     ("dataset_name", "record", "p", "expected_action", "expected_msid"),
     [
-        ("RuralReasonableRat.msl", 523, 0, ACT_LANDING, 21),
-        ("StiffLustrousZebra.msl", 1619, 0, ACT_FALL, 22),
-        ("StiffLustrousZebra.msl", 1620, 0, ACT_LANDING, 22),
-        ("StiffLustrousZebra.msl", 3696, 0, ACT_FALL, 22),
-        ("SnarlingHelplessBeaver.msl", 2464, 0, ACT_FALL, 21),
-        ("ToughOutlyingChicken.msl", 3812, 0, ACT_FALL, 22),
-        ("ToughOutlyingChicken.msl", 3813, 0, ACT_LANDING, 22),
+        ("RuralReasonableRat.slpz", 523, 0, ACT_LANDING, 21),
+        ("StiffLustrousZebra.slpz", 1619, 0, ACT_FALL, 22),
+        ("StiffLustrousZebra.slpz", 1620, 0, ACT_LANDING, 22),
+        ("StiffLustrousZebra.slpz", 3696, 0, ACT_FALL, 22),
+        ("SnarlingHelplessBeaver.slpz", 2464, 0, ACT_FALL, 21),
+        ("ToughOutlyingChicken.slpz", 3812, 0, ACT_FALL, 22),
+        ("ToughOutlyingChicken.slpz", 3813, 0, ACT_LANDING, 22),
     ],
 )
 def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
@@ -5590,12 +5588,12 @@ def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
     # reports/triage/newchar_sheik/fall_floor_probe_{rural_523_p0,stiff_1619_p0,tough_3812_p0}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik" / dataset_name
+    dataset_path = root / "replays/validation/sheik" / dataset_name
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["char_id"][p]) == CHAR_SHEIK
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["animation_index"][p]) == SM_FALL
@@ -5620,8 +5618,8 @@ def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
         assert left <= -2.0
         assert right >= 2.0
         assert side == pytest.approx(ecb_side_offset + 0.5 * (bottom + top), abs=1e-5)
-    if dataset_name in {"RuralReasonableRat.msl", "ToughOutlyingChicken.msl"} or (
-        dataset_name == "StiffLustrousZebra.msl" and record == 1619
+    if dataset_name in {"RuralReasonableRat.slpz", "ToughOutlyingChicken.slpz"} or (
+        dataset_name == "StiffLustrousZebra.slpz" and record == 1619
     ):
         # These rows exercise mpColl_LoadECB_JObj's narrow-span recenter branch. The raw
         # collision-pose JObj envelope is asymmetric; source recenters it before the final side
@@ -5638,7 +5636,7 @@ def test_sheik_fall_commonfall_blended_ecb_controls_floor_sweep(
     for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
-    if dataset_name == "SnarlingHelplessBeaver.msl":
+    if dataset_name == "SnarlingHelplessBeaver.slpz":
         out, colldata_after = _run_one_step_with_colldata(ds, record)
         assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_FALL
         assert (
@@ -5659,13 +5657,13 @@ def test_sheik_demo2_damage_lw2_soft_platform_bottom_sweep_lands(record: int) ->
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        / "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     p = 1
     assert int(row["seed_t"]["char_id"][p]) == CHAR_MARTH
     assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_LW_2
@@ -5692,13 +5690,13 @@ def test_sheik_demo2_damage_lw2_post_hitlag_no_sweep_edge_snap_stays_airborne() 
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        / "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[8337]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[8337]
     p = 1
     assert int(row["seed_t"]["char_id"][p]) == CHAR_MARTH
     assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_LW_2
@@ -5728,13 +5726,13 @@ def test_sheik_demo2_terminal_damagelw_soft_platform_without_bottom_authority_fa
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        / "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[1635]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[1635]
     p = 1
     assert int(row["seed_t"]["char_id"][p]) == CHAR_MARTH
     assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_LW_1
@@ -5753,8 +5751,8 @@ def test_sheik_demo2_terminal_damagelw_soft_platform_without_bottom_authority_fa
 @pytest.mark.parametrize(
     ("dataset_name", "record", "p", "platform_i", "seed_action", "ref_action", "named_height"),
     [
-        ("ElatedWearyTermite.msl", 2523, 0, 1, ACT_ATTACK_AIR_B, ACT_LANDING_AIR_B, 25.0),
-        ("ParallelTemptingElk.msl", 1395, 1, 1, ACT_FALL, ACT_LANDING, 20.0),
+        ("ElatedWearyTermite.slpz", 2523, 0, 1, ACT_ATTACK_AIR_B, ACT_LANDING_AIR_B, 25.0),
+        ("ParallelTemptingElk.slpz", 1395, 1, 1, ACT_FALL, ACT_LANDING, 20.0),
     ],
 )
 def test_fod_landing_uses_named_grizumi_platform_pose_for_source_height(
@@ -5778,12 +5776,12 @@ def test_fod_landing_uses_named_grizumi_platform_pose_for_source_height(
     # data/stages/bin/griz.bin::MSLSTG01 platform_transform/platform_motion records
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = f"datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/{dataset_name}"
+    dataset_rel = f"replays/validation/fountain_of_dreams_recent/{dataset_name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == seed_action
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][platform_i]) & 0x04
     assert abs(float(row["seed_t"]["stage_fod_platform_height_f32"][platform_i]) - named_height) < 1e-3
@@ -5810,16 +5808,16 @@ def test_fod_fall_locked_root_initial_pose_does_not_land_without_current_source(
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
-    row203 = ds.samples[203]
+    row203 = ds.rows[203]
     assert int(row203["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row203["seed_t"]["stage_fod_platform_height_source_u8"][1]) == 0
     assert int(row203["ref_t1"]["action_id"][p]) == ACT_FALL
@@ -5830,7 +5828,7 @@ def test_fod_fall_locked_root_initial_pose_does_not_land_without_current_source(
     assert int(out203["ground_id"][p]) == int(row203["ref_t1"]["ground_id"][p])
     assert float(out203["pos_y"][p]) == pytest.approx(float(row203["ref_t1"]["pos_y"][p]), abs=1e-6)
 
-    row204 = ds.samples[204]
+    row204 = ds.rows[204]
     assert int(row204["ref_t1"]["action_id"][p]) == ACT_LANDING
     out204 = _run_rollout_to_record(ds, 0, 204)
     assert int(out204["action_id"][p]) == ACT_LANDING
@@ -5848,17 +5846,17 @@ def test_fod_landing_named_platform_pose_snap_is_not_generic_height_rounding() -
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     record = 1395
     p = 1
     platform_i = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][platform_i]) & 0x04
 
     def move_outside_named_pose(seed_t: np.ndarray) -> None:
@@ -5880,17 +5878,17 @@ def test_fod_landing_named_platform_pose_snap_requires_current_source_owner() ->
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     record = 1395
     p = 1
     platform_i = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][platform_i]) & 0x04
 
     def make_near_named_pose_stale(seed_t: np.ndarray) -> None:
@@ -5923,16 +5921,16 @@ def test_fod_passive_grounded_knockback_uses_stage_material_friction() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     record = 3976
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_PASSIVE
     assert int(row["seed_t"]["ground_id"][p]) == 3
     assert float(row["seed_t"]["ground_friction_mul"][p]) == pytest.approx(1.0)
@@ -5968,19 +5966,19 @@ def test_fod_passive_material_friction_prevents_early_edge_fall_rollout() -> Non
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
     # Start after the unrelated JumpF branch in this replay so the lock remains scoped to the
     # Passive material-friction/edge owner.
     out = _run_rollout_to_record(ds, 3976, 3981)
-    ref = ds.samples[3981]["ref_t1"]
+    ref = ds.rows[3981]["ref_t1"]
     assert int(ref["action_id"][p]) == ACT_PASSIVE
     for field in ("action_id", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
@@ -6006,22 +6004,22 @@ def test_fod_match_start_initial_platform_height_rollout_lands_damage_on_side_pl
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "MilkyGracefulStingray.msl"
+        "replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
-    start = ds.samples[0]["seed_t"]
+    start = ds.rows[0]["seed_t"]
     assert int(start["frame_id"]) == -123
     assert int(start["stage_fod_platform_height_valid_u8"][0]) == 0
     assert float(start["stage_fod_platform_height_f32"][0]) == pytest.approx(28.0)
 
     out = _run_rollout_to_record(ds, 0, 442)
-    ref = ds.samples[442]["ref_t1"]
+    ref = ds.rows[442]["ref_t1"]
     assert int(ref["action_id"][p]) == ACT_LANDING
     for field in ("action_id", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
@@ -6055,7 +6053,7 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner() -
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=[1, 2],
         ucf_enabled=True,
@@ -6063,7 +6061,7 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner() -
     )
 
     for record, action in ((1640, ACT_ATTACK_AIR_HI), (1641, ACT_ATTACK_AIR_HI), (1692, ACT_ATTACK_AIR_N)):
-        row = ds.samples[record]
+        row = ds.rows[record]
         assert int(row["seed_t"]["action_id"][0]) == action
         assert int(row["seed_t"]["floor_skip_segment_id_u16"][0]) == 1
         assert int(row["seed_t"]["floor_skip_segment_valid_u8"][0]) == 1
@@ -6077,7 +6075,7 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner() -
         assert float(out["pos_y"][0]) == pytest.approx(float(ref["pos_y"][0]), abs=1e-6)
 
     for record in (1691, 7960):
-        row = ds.samples[record]
+        row = ds.rows[record]
         assert int(row["seed_t"]["action_id"][0]) == ACT_ATTACK_AIR_N
         assert int(row["seed_t"]["floor_skip_segment_id_u16"][0]) == 0xFFFF
         assert int(row["seed_t"]["floor_skip_segment_valid_u8"][0]) == 0
@@ -6092,7 +6090,7 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner() -
             assert int(out[field][0]) == int(ref[field][0]), (record, field)
         assert float(out["pos_y"][0]) == pytest.approx(float(ref["pos_y"][0]), abs=1e-6)
 
-    released = ds.samples[7843]
+    released = ds.rows[7843]
     assert int(released["seed_t"]["action_id"][0]) == ACT_ATTACK_AIR_N
     assert int(released["seed_t"]["floor_skip_segment_id_u16"][0]) == 0xFFFF
     assert int(released["seed_t"]["floor_skip_segment_valid_u8"][0]) == 0
@@ -6104,7 +6102,7 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner() -
         float(released["ref_t1"]["pos_y"][0]), abs=2e-4
     )
 
-    downheld = ds.samples[10297]
+    downheld = ds.rows[10297]
     assert int(downheld["seed_t"]["action_id"][0]) == ACT_ATTACK_AIR_N
     assert int(downheld["seed_t"]["floor_skip_segment_id_u16"][0]) == 0xFFFF
     assert int(downheld["seed_t"]["floor_skip_segment_valid_u8"][0]) == 0
@@ -6135,14 +6133,14 @@ def test_marth_attackairn_late_cmd0_tail_needs_current_fod_platform_source() -> 
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,
     #   mpColl_80044838_Floor}
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    dataset_path = root / "replays/validation/marth/InternalPowerlessWallaby.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_path}")
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
     for record in (1037, 1038):
-        row = ds.samples[record]
+        row = ds.rows[record]
         assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_N
         assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0]) == 0
         assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][1]) == 0
@@ -6160,7 +6158,7 @@ def test_marth_attackairn_late_cmd0_tail_needs_current_fod_platform_source() -> 
         )
 
     for record, expected_ground in ((488, 0), (3095, 1)):
-        row = ds.samples[record]
+        row = ds.rows[record]
         assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_N
         assert any(int(v) != 0 for v in row["seed_t"]["stage_fod_platform_height_source_u8"])
         assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_AIR_N
@@ -6194,16 +6192,16 @@ def test_yoshi_guard_player_nudge_floor_loss_enters_missfoot_cnm_1086() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     p = 1
 
-    control = ds.samples[1085]
+    control = ds.rows[1085]
     assert int(control["seed_t"]["action_id"][p]) == ACT_GUARD
     assert int(control["ref_t1"]["action_id"][p]) == ACT_GUARD
     control_out = _run_one_step(ds, 1085)
@@ -6213,7 +6211,7 @@ def test_yoshi_guard_player_nudge_floor_loss_enters_missfoot_cnm_1086() -> None:
         float(control["ref_t1"]["pos_x"][p]), abs=1e-6
     )
 
-    row = ds.samples[1086]
+    row = ds.rows[1086]
     assert int(row["seed_t"]["action_id"][p]) == ACT_GUARD
     assert int(row["ref_t1"]["action_id"][p]) == ACT_MISS_FOOT
     out = _run_one_step(ds, 1086)
@@ -6228,9 +6226,9 @@ def test_yoshi_guard_player_nudge_floor_loss_enters_missfoot_cnm_1086() -> None:
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
     [
-        ("datasets/marth/replays/validation/marth/FemaleFarOffSalmon.msl", 11615, 0),
-        ("datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl", 2540, 1),
-        ("datasets/marth/replays/validation/marth/DraftyHealthyHare.msl", 10438, 1),
+        ("replays/validation/marth/FemaleFarOffSalmon.slpz", 11615, 0),
+        ("replays/validation/marth/VictoriousSpitefulAlpaca.slpz", 2540, 1),
+        ("replays/validation/marth/DraftyHealthyHare.slpz", 10438, 1),
     ],
     ids=["marth_locked_missfoot", "falco_locked_missfoot", "fox_locked_missfoot"],
 )
@@ -6251,9 +6249,9 @@ def test_locked_missfoot_first_floor_contact_stays_airborne(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
 
     seed = row["seed_t"]
     ref = row["ref_t1"]
@@ -6283,16 +6281,16 @@ def test_no_lock_missfoot_late_floor_contact_lands_feh_3266() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "FlippantEnchantedHorse.msl"
+        "replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_rel}")
+    ds = load_replay_buffers(str(dataset_path))
     record = 3266
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
 

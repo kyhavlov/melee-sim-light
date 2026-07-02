@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row, _skip_if_required_artifacts_missing
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -24,8 +24,8 @@ class _Case:
     [
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "QuerulousGrandDinosaur.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.slpz"
             ),
             target_record=454,
             attacker_p=0,
@@ -34,8 +34,8 @@ class _Case:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "QuerulousGrandDinosaur.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.slpz"
             ),
             target_record=4105,
             attacker_p=0,
@@ -44,8 +44,8 @@ class _Case:
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "QuerulousGrandDinosaur.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.slpz"
             ),
             target_record=8122,
             attacker_p=0,
@@ -66,14 +66,14 @@ def test_throwlw_release_combo_continuation_target_pm1_both_players_strict_lock(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target = int(case.target_record)
     rows = (target - 1, target, target + 1)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     seed = samples[target]["seed_t"]
     ref = samples[target]["ref_t1"]

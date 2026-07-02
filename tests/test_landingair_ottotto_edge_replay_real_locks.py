@@ -5,12 +5,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
-_AGG = Path("datasets/aggregate_recent/replays/validation/aggregate_recent")
-_IAT = _AGG / "ImpassionedAlarmedTarsier.msl"
-_PPA = _AGG / "PriceyPartialAlbatross.msl"
+_AGG = Path("replays/validation/aggregate_recent")
+_IAT = _AGG / "ImpassionedAlarmedTarsier.slpz"
+_PPA = _AGG / "PriceyPartialAlbatross.slpz"
 
 ACT_LANDING_AIR_N = 70
 ACT_FALL = 29
@@ -35,38 +36,33 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 def _rollout_to_record(*, dataset_path: Path, start: int, target: int) -> tuple[np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > target, f"dataset too short for record={target}"
-    samples = ds.samples
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > target, f"replay too short for record={target}"
+    samples = ds.rows
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start : start + 1, :seed_stride].copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, target + 1):
-            prev_input_bytes = samples_u8[
-                record : record + 1, prev_input_off : prev_input_off + input_stride
-            ].copy()
-            input_bytes = samples_u8[
-                record : record + 1, input_off : input_off + input_stride
-            ].copy()
+            prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+            input_bytes = input_u8[record : record + 1, :input_stride].copy()
             binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
         out = out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
@@ -81,7 +77,7 @@ def test_landingairn_edge_collision_enters_ottotto_instead_of_fall() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _IAT
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_IAT}")
+        pytest.skip(f"missing local replay: {_IAT}")
 
     out, ref = _rollout_to_record(dataset_path=dataset_path, start=5053, target=5059)
     p = 1
@@ -103,7 +99,7 @@ def test_landingairn_not_at_edge_does_not_enter_ottotto_early() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _IAT
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_IAT}")
+        pytest.skip(f"missing local replay: {_IAT}")
 
     out, ref = _rollout_to_record(dataset_path=dataset_path, start=5053, target=5056)
     p = 1
@@ -120,7 +116,7 @@ def test_damage_grounded_floor_index_traverses_from_ledge_to_main_floor() -> Non
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _IAT
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_IAT}")
+        pytest.skip(f"missing local replay: {_IAT}")
 
     out, ref = _rollout_to_record(dataset_path=dataset_path, start=5052, target=5078)
     p = 1
@@ -143,7 +139,7 @@ def test_damagefly_floor_projection_uses_current_bottom_contact_ppa_5056() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _PPA
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_PPA}")
+        pytest.skip(f"missing local replay: {_PPA}")
 
     out, ref = _rollout_to_record(dataset_path=dataset_path, start=5053, target=5056)
     p = 0

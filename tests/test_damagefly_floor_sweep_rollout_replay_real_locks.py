@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_DAMAGE_FLY_HI = 0x0057
@@ -41,46 +41,46 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 def _dataset_path(root: Path) -> Path:
     dataset_rel = (
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _aggregate_dataset_path(root: Path, name: str) -> Path:
-    dataset_rel = f"datasets/aggregate_recent/replays/validation/aggregate_recent/{name}.msl"
+    dataset_rel = f"replays/validation/aggregate_recent/{name}.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _cardinal_dataset_path(root: Path, name: str) -> Path:
-    dataset_rel = f"datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/{name}.msl"
+    dataset_rel = f"replays/validation/cardinal_1.0_recent/{name}.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _fod_dataset_path(root: Path, name: str) -> Path:
-    dataset_rel = f"datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/{name}.msl"
+    dataset_rel = f"replays/validation/fountain_of_dreams_recent/{name}.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _sheik_demo2_dataset_path(root: Path) -> Path:
     dataset_rel = (
-        "datasets/sheik/replays/validation/sheik/sheik_demo_game_2.msl"
+        "replays/validation/sheik/sheik_demo_game_2.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
@@ -93,8 +93,8 @@ def _binding_sizes():
 def _run_one_step(
     dataset_path: Path, record: int, *, ucf_cardinals_1_0_enabled: bool = False
 ) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
     binding, seed_stride, input_stride, compare_stride = _binding_sizes()
@@ -111,7 +111,7 @@ def _run_one_step(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=ucf_cardinals_1_0_enabled,
         ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
     )
@@ -133,8 +133,8 @@ def _run_one_step_mutated_seed(
     *,
     ucf_cardinals_1_0_enabled: bool = False,
 ) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1].copy()
     assert int(row.shape[0]) == 1
     mutate(row["seed_t"])
 
@@ -152,7 +152,7 @@ def _run_one_step_mutated_seed(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=ucf_cardinals_1_0_enabled,
         ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
     )
@@ -174,7 +174,9 @@ def _run_rollout_records(
     *,
     ucf_cardinals_1_0_enabled: bool = False,
 ) -> dict[int, tuple[np.void, np.void]]:
-    samples = ds.samples
+    if isinstance(ds, (str, Path)):
+        ds = load_replay_buffers(str(ds))
+    samples = ds.rows
     target_max = max(target_records)
     targets = set(target_records)
     assert int(samples.shape[0]) > target_max
@@ -187,7 +189,7 @@ def _run_rollout_records(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=ucf_cardinals_1_0_enabled,
         ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
     )
@@ -643,7 +645,7 @@ def test_fod_damagefly_rollout_uses_grizumi_collision_height_from_direct_events(
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,

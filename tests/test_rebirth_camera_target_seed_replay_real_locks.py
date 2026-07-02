@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class _ControlCase:
     "case",
     [
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=1920,
             p=1,
             expected_out_state_flags_4=128,
@@ -48,7 +48,7 @@ class _ControlCase:
             note="F04 over-set late-Rebirth blocker: the missing camera target is a valid on-stage world point, not a replay-fit visibility toggle",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=2710,
             p=0,
             expected_out_state_flags_4=0,
@@ -60,7 +60,7 @@ class _ControlCase:
             note="F04 under-set dead-flow blocker: mixed-direction family still has a concrete camera target and radius on the seed row",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=3227,
             p=0,
             expected_out_state_flags_4=128,
@@ -72,7 +72,7 @@ class _ControlCase:
             note="F04 over-set late-Rebirth blocker on the opposite facing: the camera target mirrors with facing while the mismatch remains runtime-owned",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=705,
             p=1,
             expected_out_state_flags_4=0,
@@ -84,7 +84,7 @@ class _ControlCase:
             note="F04 under-set blocker: seeded camera target stays causal on the damage-side family as well",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=4514,
             p=0,
             expected_out_state_flags_4=128,
@@ -96,7 +96,7 @@ class _ControlCase:
             note="F04 over-set late-Rebirth blocker for Falco: the target point and radius differ by character data, not replay heuristics",
         ),
         _BlockerCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=2534,
             p=0,
             expected_out_state_flags_4=0,
@@ -121,10 +121,10 @@ def test_rebirth_camera_target_seed_locks_mixed_direction_blockers(case: _Blocke
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = case.p
     seed = samples[case.target_record]["seed_t"]
 
@@ -149,13 +149,13 @@ def test_rebirth_camera_target_seed_locks_mixed_direction_blockers(case: _Blocke
     "case",
     [
         _ControlCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=1888,
             p=1,
             note="pre-Rebirth dead-flow control has no valid camera target pose yet, so the seeded target lanes must stay zero",
         ),
         _ControlCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             record=1889,
             p=1,
             note="the row before the first actual Rebirth seed still has no valid camera target source and must not be synthesized",
@@ -166,10 +166,10 @@ def test_rebirth_camera_target_seed_negative_controls(case: _ControlCase) -> Non
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[case.record]["seed_t"]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[case.record]["seed_t"]
     assert float(seed["camera_target_world_x_f32"][case.p]) == pytest.approx(0.0), case.note
     assert float(seed["camera_target_world_y_f32"][case.p]) == pytest.approx(0.0), case.note
     assert float(seed["camera_target_world_z_f32"][case.p]) == pytest.approx(0.0), case.note

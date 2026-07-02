@@ -5,10 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
-from tests.replay_dataset_loader import load_replay_dataset as read_dataset
-from tests.replay_dataset_loader import replay_dataset_available
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
 
 
@@ -40,9 +38,9 @@ def _input_bytes(rows: np.ndarray, field: str, *, stride: int) -> np.ndarray:
 
 
 def _step_one_dataset_row(dataset_path: Path, record: int, *, seed_mutator=None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: record={record}"
 
     row = samples[record : record + 1]
     seed = row["seed_t"].copy()
@@ -62,7 +60,7 @@ def _step_one_dataset_row(dataset_path: Path, record: int, *, seed_mutator=None)
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -77,16 +75,16 @@ def _step_one_dataset_row(dataset_path: Path, record: int, *, seed_mutator=None)
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "victim", "expected_action", "expected_anim", "expected_on_ground"),
     [
-        ("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl", 7484, 0, 224, 252, 0),
-        ("datasets/sheik/replays/validation/sheik/UnusedLivelyLouse.msl", 3493, 0, 224, 252, 0),
-        ("datasets/sheik/replays/validation/sheik/BeautifulDistantWolverine.msl", 3787, 1, 224, 252, 0),
-        ("datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl", 143, 1, 227, 255, 1),
-        ("datasets/sheik/replays/validation/sheik/BeautifulDistantWolverine.msl", 362, 0, 227, 255, 1),
-        ("datasets/aggregate_recent/replays/validation/marth/LoudDullGoat.msl", 5525, 0, 226, 254, 1),
-        ("datasets/aggregate_recent/replays/validation/marth/MetallicUniqueGrouse.msl", 561, 0, 226, 254, 1),
-        ("datasets/aggregate_recent/replays/validation/marth/MetallicUniqueGrouse.msl", 5067, 0, 226, 254, 1),
+        ("replays/validation/sheik/StiffLustrousZebra.slpz", 7484, 0, 224, 252, 0),
+        ("replays/validation/sheik/UnusedLivelyLouse.slpz", 3493, 0, 224, 252, 0),
+        ("replays/validation/sheik/BeautifulDistantWolverine.slpz", 3787, 1, 224, 252, 0),
+        ("replays/validation/sheik/AttractiveAnyClam.slpz", 143, 1, 227, 255, 1),
+        ("replays/validation/sheik/BeautifulDistantWolverine.slpz", 362, 0, 227, 255, 1),
+        ("replays/validation/marth/LoudDullGoat.slpz", 5525, 0, 226, 254, 1),
+        ("replays/validation/marth/MetallicUniqueGrouse.slpz", 561, 0, 226, 254, 1),
+        ("replays/validation/marth/MetallicUniqueGrouse.slpz", 5067, 0, 226, 254, 1),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
             5619,
             1,
             226,
@@ -141,7 +139,7 @@ def test_capturepulled_lw_fresh_cross_floor_entry_selects_hi_before_lw_anchor() 
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
     #   fn_800DB230,fn_800DAC78,ftCo_CapturePulledLw_Phys}
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/marth/InternalPowerlessWallaby.msl"
+    dataset_path = root / "replays/validation/marth/InternalPowerlessWallaby.slpz"
 
     seed, out, ref = _step_one_dataset_row(dataset_path, 7312)
     victim = 0
@@ -158,8 +156,8 @@ def test_capturepulled_lw_fresh_cross_floor_entry_selects_hi_before_lw_anchor() 
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "victim"),
     [
-        ("datasets/aggregate_recent/replays/validation/marth/DraftyHealthyHare.msl", 9358, 1),
-        ("datasets/aggregate_recent/replays/validation/marth/ExtraLargeScaryHornet.msl", 9699, 0),
+        ("replays/validation/marth/DraftyHealthyHare.slpz", 9358, 1),
+        ("replays/validation/marth/ExtraLargeScaryHornet.slpz", 9699, 0),
     ],
 )
 def test_capturepulled_lw_fresh_dash_pull_non_landingfallspecial_stays_lw(
@@ -358,11 +356,11 @@ def test_capturewait_breakout_uses_pre_input_stick_and_carries_floor_wss() -> No
     #   ftCo_CaptureWaitHi_Anim,fn_800DC044,fn_800DC070}
     # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
     root = Path(__file__).resolve().parents[1]
-    ds_path = root / "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    ds_path = root / "replays/validation/marth/WellWornSmallGoshawk.slpz"
 
-    ds = read_dataset(str(ds_path))
+    ds = load_replay_buffers(str(ds_path))
     for record, seed_action in ((5162, 227), (5303, 224)):
-        row = ds.samples[record]
+        row = ds.rows[record]
         seed, ref, out = _run_one_step_row(ds_path, record, 0)
         assert int(seed["action_id"][0]) == seed_action
         assert int(seed["capture_breakout_pending_u8"][0]) == 1
@@ -425,9 +423,9 @@ def test_grab_breakout_cut_actions_end_through_common_source_paths() -> None:
 @pytest.mark.parametrize(
     ("dataset_name", "record", "player"),
     [
-        ("QuestionableHarmfulPanther.msl", 3110, 0),
-        ("WellWornSmallGoshawk.msl", 5180, 0),
-        ("WellWornSmallGoshawk.msl", 5322, 0),
+        ("QuestionableHarmfulPanther.slpz", 3110, 0),
+        ("WellWornSmallGoshawk.slpz", 5180, 0),
+        ("WellWornSmallGoshawk.slpz", 5322, 0),
     ],
 )
 def test_capturejump_floor_contact_uses_aircatchhit_basic_landing(
@@ -442,7 +440,7 @@ def test_capturejump_floor_contact_uses_aircatchhit_basic_landing(
     #   ftCo_CaptureJump_Phys,ftCo_CaptureJump_Coll}
     # refs/melee/src/melee/ft/ft_081B.c::{ftCo_AirCatchHit_Coll,ft_80082B1C}
     root = Path(__file__).resolve().parents[1]
-    ds_path = root / "datasets/marth/replays/validation/marth" / dataset_name
+    ds_path = root / "replays/validation/marth" / dataset_name
     seed, ref, out = _run_one_step_row(ds_path, record, player)
 
     assert int(seed["action_id"][player]) == 230  # CaptureJump
@@ -516,7 +514,7 @@ def test_fallspecial_keeps_landingfallspecial_despite_basic_landing_callback_cla
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ft_800831CC}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
     root = Path(__file__).resolve().parents[1]
-    ds_path = root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    ds_path = root / "replays/validation/doubles_recent/Game_20260509T152622.slpz"
 
     seed, ref, out = _run_one_step_row(
         ds_path,
@@ -545,16 +543,16 @@ def test_doubles_capturewait_seed_lanes_prevent_zero_timer_false_breakout() -> N
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2, 3, 4],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
+    samples = ds.rows
     records = np.array([360, 390, 5129], dtype=np.int64)
     rows = samples[records]
-    assert int(ds.header["num_players"]) == 4
+    assert int(ds.num_players) == 4
 
     victim_ports = np.array([2, 2, 1], dtype=np.int64)
     for i, victim_p in enumerate(victim_ports):
@@ -589,20 +587,20 @@ def test_capturewait_mash_trigger_rows_and_blocker_control_are_replay_exact() ->
     root = Path(__file__).resolve().parents[1]
 
     modeled_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     blocker_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
     modeled_path = root / modeled_rel
     blocker_path = root / blocker_rel
-    if not replay_dataset_available(modeled_path) or not replay_dataset_available(blocker_path):
-        pytest.skip("missing local datasets for capturewait mash replay locks")
+    if not modeled_path.exists() or not blocker_path.exists():
+        pytest.skip("missing local replays for capturewait mash replay locks")
 
-    modeled = read_dataset(str(modeled_path)).samples[[8256, 8257, 8258, 8259]]
-    blocker = read_dataset(str(blocker_path)).samples[[980, 981, 982, 983, 3208, 3209]]
+    modeled = load_replay_buffers(str(modeled_path)).rows[[8256, 8257, 8258, 8259]]
+    blocker = load_replay_buffers(str(blocker_path)).rows[[980, 981, 982, 983, 3208, 3209]]
     victim_p = 0
     owner_p = 1
 
@@ -673,7 +671,7 @@ def test_capturewait_owner_earlier_first_steady_rows_are_replay_exact() -> None:
     cases = (
         (
             root
-            / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             10714,
             1,
             227,
@@ -681,7 +679,7 @@ def test_capturewait_owner_earlier_first_steady_rows_are_replay_exact() -> None:
         ),
         (
             root
-            / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             10934,
             1,
             227,
@@ -689,7 +687,7 @@ def test_capturewait_owner_earlier_first_steady_rows_are_replay_exact() -> None:
         ),
         (
             root
-            / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            / "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
             4367,
             1,
             224,
@@ -715,7 +713,7 @@ def test_capturewait_first_steady_seed_reconstruction_keeps_visible_timer_bounda
     root = Path(__file__).resolve().parents[1]
     cases = (
         (
-            root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl",
+            root / "replays/validation/doubles_recent/Game_20260509T152622.slpz",
             360,
             2,
             3,
@@ -740,9 +738,9 @@ def test_capturewait_expired_anim_rate_timer_resets_stale_replay_speed() -> None
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
     root = Path(__file__).resolve().parents[1]
     cases = (
-        (root / "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl", 2560, 1),
-        (root / "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl", 5298, 1),
-        (root / "datasets/sheik/replays/validation/sheik/SnarlingHelplessBeaver.msl", 859, 1),
+        (root / "replays/validation/sheik/AttractiveAnyClam.slpz", 2560, 1),
+        (root / "replays/validation/sheik/AttractiveAnyClam.slpz", 5298, 1),
+        (root / "replays/validation/sheik/SnarlingHelplessBeaver.slpz", 859, 1),
     )
     for dataset_path, record, victim_p in cases:
         seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, victim_p)
@@ -753,7 +751,7 @@ def test_capturewait_expired_anim_rate_timer_resets_stale_replay_speed() -> None
         assert int(out_row["action_frame"][victim_p]) == int(ref_row["action_frame"][victim_p])
 
     dataset_path, record, victim_p = cases[0]
-    rows = read_dataset(str(dataset_path)).samples[[record]].copy()
+    rows = load_replay_buffers(str(dataset_path)).rows[[record]].copy()
     seed = rows["seed_t"].copy()
     seed["capture_wait_anim_rate_timer_f32"][0, victim_p] = np.float32(1.0)
     binding = pytest.importorskip("msl_binding")

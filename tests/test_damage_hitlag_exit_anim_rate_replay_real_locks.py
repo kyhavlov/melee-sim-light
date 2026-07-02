@@ -10,7 +10,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -26,19 +26,19 @@ class _DamageHitlagExitRateCase:
     "case",
     [
         _DamageHitlagExitRateCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=7648,
             player=0,
             note="DamageFlyN hitlag exit advances action_frame 1->2 (QGD)",
         ),
         _DamageHitlagExitRateCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=1714,
             player=0,
             note="DamageFlyN hitlag exit advances action_frame 1->2 (TBK early)",
         ),
         _DamageHitlagExitRateCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=5408,
             player=0,
             note="DamageFlyN hitlag exit advances action_frame 1->2 (TBK late)",
@@ -62,13 +62,13 @@ def test_damage_hitlag_exit_zero_seed_rate_restores_hidden_damage_anim_rate(
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = int(case.target_record)
     player = int(case.player)
-    assert int(samples.shape[0]) > target_record, f"dataset too short: record={target_record}"
+    assert int(samples.shape[0]) > target_record, f"replay too short: record={target_record}"
 
     target = samples[target_record]
     seed = target["seed_t"]

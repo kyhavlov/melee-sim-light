@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.eval.dataset import SEED_DTYPE
+from tools.eval.validation_dtypes import SEED_DTYPE
 
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h

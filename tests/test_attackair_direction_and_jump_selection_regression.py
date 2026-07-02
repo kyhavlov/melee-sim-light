@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 _STICK_MAX = 80.0
 _BUTTON_A = 0x0100
@@ -99,8 +100,8 @@ class _Case:
     cluster: str
 
 
-_BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
-_AGG_BASE = "datasets/aggregate_recent/replays/validation/aggregate_recent"
+_BASE = "replays/validation/cardinal_1.0_recent"
+_AGG_BASE = "replays/validation/aggregate_recent"
 
 
 @pytest.mark.integration
@@ -108,25 +109,25 @@ _AGG_BASE = "datasets/aggregate_recent/replays/validation/aggregate_recent"
     "case",
     [
         # AttackAirB (67) should not be mis-selected to AttackAirHi (68) on c-stick edge.
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 1306, 0, 25, 67, 70, "attackair_cstick_back"),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 545, 0, 26, 67, 70, "attackair_cstick_back"),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 1306, 0, 25, 67, 70, "attackair_cstick_back"),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 545, 0, 26, 67, 70, "attackair_cstick_back"),
         # AttackAirF (66) should not be mis-selected to AttackAirHi (68) on A-press + main stick.
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 4495, 1, 25, 66, 69, "attackair_a_forward"),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 5979, 1, 25, 66, 69, "attackair_a_forward"),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 4495, 1, 25, 66, 69, "attackair_a_forward"),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 5979, 1, 25, 66, 69, "attackair_a_forward"),
         # KneeBend->Jump should use previous-frame stick for JumpF/JumpB selection.
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 282, 0, 24, 25, 16, "kneebend_jump_dir"),
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 780, 1, 24, 25, 16, "kneebend_jump_dir"),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 282, 0, 24, 25, 16, "kneebend_jump_dir"),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 780, 1, 24, 25, 16, "kneebend_jump_dir"),
         # KneeBend->Jump direction reads deadzoned fp->input.lstick.x (common input update path).
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 7011, 0, 24, 25, 16, "kneebend_jump_dir_deadzone"),
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 4233, 1, 24, 25, 16, "kneebend_jump_dir_deadzone"),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 7011, 0, 24, 25, 16, "kneebend_jump_dir_deadzone"),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 4233, 1, 24, 25, 16, "kneebend_jump_dir_deadzone"),
         # KneeBend Anim -> JumpF/B is pre-input; Fighter_Spaghetti can still overwrite x671 before
         # Jump IASA observes ft_did_jump on the next frame.
-        _Case(f"{_AGG_BASE}/FavorableSuperficialPig.msl", 5145, 1, 24, 25, 16, "kneebend_jump_tilt_timer"),
-        _Case(f"{_AGG_BASE}/FavorableSuperficialPig.msl", 5146, 1, 25, 28, 19, "jumpf_frame0_tap_jump"),
+        _Case(f"{_AGG_BASE}/FavorableSuperficialPig.slpz", 5145, 1, 24, 25, 16, "kneebend_jump_tilt_timer"),
+        _Case(f"{_AGG_BASE}/FavorableSuperficialPig.slpz", 5146, 1, 25, 28, 19, "jumpf_frame0_tap_jump"),
         # Raw Z maps into the fighter x668 A lane before common Jump-family AttackAir checks.
-        _Case(f"{_AGG_BASE}/BlondHardHippopotamus.msl", 6234, 1, 25, 65, 68, "attackair_z_a_lane"),
-        _Case(f"{_AGG_BASE}/BlondHardHippopotamus.msl", 7585, 1, 24, 65, 68, "attackair_z_a_lane"),
-        _Case(f"{_AGG_BASE}/HungryImportantSnake.msl", 7994, 1, 27, 69, 72, "jumpaerial_z_a_lane"),
+        _Case(f"{_AGG_BASE}/BlondHardHippopotamus.slpz", 6234, 1, 25, 65, 68, "attackair_z_a_lane"),
+        _Case(f"{_AGG_BASE}/BlondHardHippopotamus.slpz", 7585, 1, 24, 65, 68, "attackair_z_a_lane"),
+        _Case(f"{_AGG_BASE}/HungryImportantSnake.slpz", 7994, 1, 27, 69, 72, "jumpaerial_z_a_lane"),
     ],
 )
 def test_attackair_direction_and_jump_selection_cluster_records(case: _Case) -> None:
@@ -137,11 +138,11 @@ def test_attackair_direction_and_jump_selection_cluster_records(case: _Case) -> 
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > int(case.record), f"dataset too short: num_records={int(ds.samples.shape[0])}"
-    row = ds.samples[case.record : case.record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > int(case.record), f"replay too short: num_records={int(ds.rows.shape[0])}"
+    row = ds.rows[case.record : case.record + 1]
     p = int(case.p)
 
     seed = row["seed_t"][0]
@@ -231,7 +232,7 @@ def test_attackair_direction_and_jump_selection_cluster_records(case: _Case) -> 
         assert (int(inp["buttons"]) & 0x0800) != 0
         assert (int(prev_inp["buttons"]) & 0x0800) != 0
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
 
@@ -244,15 +245,15 @@ def test_jumpaerial_z_as_a_lane_requires_fresh_edge() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_missing_local_artifacts(root)
 
-    dataset_rel = f"{_AGG_BASE}/HungryImportantSnake.msl"
+    dataset_rel = f"{_AGG_BASE}/HungryImportantSnake.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 7994
     p = 1
-    row = ds.samples[record : record + 1].copy()
+    row = ds.rows[record : record + 1].copy()
 
     assert int(row["seed_t"]["action_id"][0, p]) == 27  # JumpAerialF
     assert int(row["ref_t1"]["action_id"][0, p]) == 69  # AttackAirLw from fresh Z edge
@@ -262,7 +263,7 @@ def test_jumpaerial_z_as_a_lane_requires_fresh_edge() -> None:
     row["prev_input_t"]["p"][0, p]["buttons"] = np.uint16(
         int(row["prev_input_t"]["p"][0, p]["buttons"]) | _BUTTON_Z
     )
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(out["action_id"][p]) == 27
     assert int(out["animation_index"][p]) == 18
 
@@ -277,20 +278,20 @@ def test_kneebend_jumpf_rollout_preserves_post_input_tap_jump_timer() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_missing_local_artifacts(root)
 
-    dataset_rel = f"{_AGG_BASE}/FavorableSuperficialPig.msl"
+    dataset_rel = f"{_AGG_BASE}/FavorableSuperficialPig.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    rows = ds.samples[5145:5147]
+    ds = load_replay_buffers(str(dataset_path))
+    rows = ds.rows[5145:5147]
     p = 1
     assert int(rows.shape[0]) == 2
     assert int(rows[0]["seed_t"]["action_id"][p]) == 24  # KneeBend
     assert int(rows[0]["ref_t1"]["action_id"][p]) == 25  # JumpF
     assert int(rows[1]["ref_t1"]["action_id"][p]) == 28  # JumpAerialB
 
-    out = _rollout_records(binding=binding, rows=rows, num_players=int(ds.header["num_players"]))
+    out = _rollout_records(binding=binding, rows=rows, num_players=int(ds.num_players))
     assert int(out[0]["action_id"][p]) == int(rows[0]["ref_t1"]["action_id"][p])
     assert int(out[0]["jumps_left"][p]) == int(rows[0]["ref_t1"]["jumps_left"][p])
     assert int(out[1]["action_id"][p]) == int(rows[1]["ref_t1"]["action_id"][p])

@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -16,14 +17,14 @@ def test_shine_air_turn_does_not_drop_to_end_one_step_early() -> None:
     # - out.action_id becomes 368 (SpecialAirLwEnd) one step early.
     #
     # Representative records (seed==ref at t, ref stays in TURN at t+1):
-    # - TreasuredBackKangaroo.msl record 943 p=0
-    # - AttachedGoodNaturedGuanaco.msl record 2741 p=1
+    # - TreasuredBackKangaroo.slpz record 943 p=0
+    # - AttachedGoodNaturedGuanaco.slpz record 2741 p=1
     root = Path(__file__).resolve().parents[1]
-    base = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+    base = "replays/validation/cardinal_1.0_recent"
 
     cases = [
-        (f"{base}/TreasuredBackKangaroo.msl", 943, 0),
-        (f"{base}/AttachedGoodNaturedGuanaco.msl", 2741, 1),
+        (f"{base}/TreasuredBackKangaroo.slpz", 943, 0),
+        (f"{base}/AttachedGoodNaturedGuanaco.slpz", 2741, 1),
     ]
 
     binding = importlib.import_module("msl_binding")
@@ -35,12 +36,12 @@ def test_shine_air_turn_does_not_drop_to_end_one_step_early() -> None:
     for rel, record, p in cases:
         dataset_path = root / rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {rel}")
+            pytest.skip(f"missing local replay: {rel}")
 
-        ds = read_dataset(str(dataset_path))
-        samples = ds.samples
+        ds = load_replay_buffers(str(dataset_path))
+        samples = ds.rows
         num_records = int(samples.shape[0])
-        assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+        assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
         chunk_view = samples[record : record + 1]
         assert int(chunk_view.shape[0]) == 1
@@ -49,7 +50,7 @@ def test_shine_air_turn_does_not_drop_to_end_one_step_early() -> None:
         assert int(chunk_view["seed_t"]["action_id"][0, p]) == 369
         assert int(chunk_view["ref_t1"]["action_id"][0, p]) == 369
 
-        handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+        handle = binding.init(batch_size=1, num_players=int(ds.num_players))
         try:
             seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
             prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)

@@ -10,12 +10,13 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_rollout_row(ds_path: Path, start_record: int, target_record: int) -> tuple[np.void, np.void]:
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
     assert 0 <= start_record <= target_record < int(samples.shape[0])
 
     binding = pytest.importorskip("msl_binding")
@@ -31,7 +32,7 @@ def _run_rollout_row(ds_path: Path, start_record: int, target_record: int) -> tu
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         for rec in range(start_record, target_record + 1):
@@ -73,15 +74,15 @@ def test_throwlw_frame25_post_hitlag_attached_callback_positive_lock() -> None:
 
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/debug/fd_mixed_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/fd_mixed_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rec = 5631
     owner_p = 1
     victim_p = 0
-    sample = read_dataset(str(dataset_path)).samples[rec]
+    sample = load_replay_buffers(str(dataset_path)).rows[rec]
     seed = sample["seed_t"]
     assert int(seed["action_id"][owner_p]) == 222  # ThrowLw
     assert int(seed["action_id"][victim_p]) == 242  # ThrownLw
@@ -117,16 +118,16 @@ def test_throwlw_frame25_post_hitlag_falco_laser_keeps_transn_tail_spawn_height(
 
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        / "PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/"
+        / "PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rec = 5631
     owner_p = 1
     victim_p = 0
-    sample = read_dataset(str(dataset_path)).samples[rec]
+    sample = load_replay_buffers(str(dataset_path)).rows[rec]
     seed = sample["seed_t"]
     assert int(seed["action_id"][owner_p]) == 222  # ThrowLw
     assert int(seed["action_id"][victim_p]) == 242  # ThrownLw
@@ -153,11 +154,11 @@ def test_throwlw_frame25_post_hitlag_falco_laser_rollout_keeps_spawn_height() ->
 
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        / "PositiveRevolvingHyena.msl"
+        / "replays/validation/aggregate_recent/"
+        / "PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     ref_row, out_row = _run_rollout_row(dataset_path, start_record=5628, target_record=5631)
     assert int(ref_row["items"][1]["exists"]) == 1
@@ -179,15 +180,15 @@ def test_throwlw_frame25_post_hitlag_qgd_phase_controls_do_not_hit_immediately(r
 
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        / "QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     owner_p = 0
     victim_p = 1
-    sample = read_dataset(str(dataset_path)).samples[rec]
+    sample = load_replay_buffers(str(dataset_path)).rows[rec]
     seed = sample["seed_t"]
     assert int(seed["action_id"][owner_p]) == 222  # ThrowLw
     assert int(seed["action_id"][victim_p]) == 242  # ThrownLw
@@ -212,11 +213,11 @@ def test_throwlw_frame25_post_hitlag_qgd_rollout_control_does_not_hit_immediatel
 
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        / "QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     ref_row, out_row = _run_rollout_row(dataset_path, start_record=355, target_record=442)
     owner_p = 0
@@ -246,11 +247,11 @@ def test_falco_throwlw_frame28_pulse_hits_when_step_visible_action_frame_is_29(
 
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        / "QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     owner_p = 0
     victim_p = 1
@@ -279,11 +280,11 @@ def test_falco_throwlw_late_pulse_does_not_reuse_frame28_attached_callback_windo
 
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        / "QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rec = 453
     owner_p = 0

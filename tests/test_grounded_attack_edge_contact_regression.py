@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -17,11 +18,11 @@ def test_grounded_attacks_do_not_spuriously_drop_airborne_near_fd_edge() -> None
     # But the sim previously dropped airborne at t+1 (out.on_ground == 0) near the FD floor edge.
     #
     # Representative offenders:
-    # - AttachedGoodNaturedGuanaco.msl record 2318 p=1 (AttackDash = 50)
-    # - GracefulAttachedTurtle.msl record 3023 p=1 (AttackS4S  = 60)
-    # - QuerulousGrandDinosaur.msl record 9305 p=1 (AttackDash = 50)
+    # - AttachedGoodNaturedGuanaco.slpz record 2318 p=1 (AttackDash = 50)
+    # - GracefulAttachedTurtle.slpz record 3023 p=1 (AttackS4S  = 60)
+    # - QuerulousGrandDinosaur.slpz record 9305 p=1 (AttackDash = 50)
     root = Path(__file__).resolve().parents[1]
-    base = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+    base = "replays/validation/cardinal_1.0_recent"
 
     # Integration policy: skip if required ISO-derived data artifacts are missing locally.
     required = [
@@ -37,9 +38,9 @@ def test_grounded_attacks_do_not_spuriously_drop_airborne_near_fd_edge() -> None
         pytest.skip(f"missing local data artifacts: {', '.join(missing)}")
 
     cases = [
-        (f"{base}/AttachedGoodNaturedGuanaco.msl", 2318, 1, 2),
-        (f"{base}/GracefulAttachedTurtle.msl", 3023, 1, 0),
-        (f"{base}/QuerulousGrandDinosaur.msl", 9305, 1, 2),
+        (f"{base}/AttachedGoodNaturedGuanaco.slpz", 2318, 1, 2),
+        (f"{base}/GracefulAttachedTurtle.slpz", 3023, 1, 0),
+        (f"{base}/QuerulousGrandDinosaur.slpz", 9305, 1, 2),
     ]
 
     binding = importlib.import_module("msl_binding")
@@ -51,12 +52,12 @@ def test_grounded_attacks_do_not_spuriously_drop_airborne_near_fd_edge() -> None
     for rel, record, p, expected_ground_id in cases:
         dataset_path = root / rel
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {rel}")
+            pytest.skip(f"missing local replay: {rel}")
 
-        ds = read_dataset(str(dataset_path))
-        samples = ds.samples
+        ds = load_replay_buffers(str(dataset_path))
+        samples = ds.rows
         num_records = int(samples.shape[0])
-        assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+        assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
         chunk_view = samples[record : record + 1]
         assert int(chunk_view.shape[0]) == 1
@@ -77,7 +78,7 @@ def test_grounded_attacks_do_not_spuriously_drop_airborne_near_fd_edge() -> None
         assert int(ref["hitstun"][p]) == 0
         assert int(ref["ground_id"][p]) == expected_ground_id
 
-        handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+        handle = binding.init(batch_size=1, num_players=int(ds.num_players))
         try:
             seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
             prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -126,12 +127,12 @@ def test_run_off_fd_ledge_still_enters_fall() -> None:
     # should still become airborne (Fall) when leaving the floor.
     root = Path(__file__).resolve().parents[1]
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
 
     required = [
         "data/anims_ecb/fox.bin",
@@ -148,10 +149,10 @@ def test_run_off_fd_ledge_still_enters_fall() -> None:
     record = 3174
     p = 1
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > record, f"replay too short for regression check: num_records={num_records}"
 
     chunk_view = samples[record : record + 1]
     assert int(chunk_view.shape[0]) == 1
@@ -173,7 +174,7 @@ def test_run_off_fd_ledge_still_enters_fall() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)

@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset_window
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffer_window
 
 
 BUTTON_X = 0x0400
@@ -3056,16 +3057,14 @@ def test_landing_same_ground_edge_enters_and_anchors_ottotto_feh_2531() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
     #   ftCo_8009A3C8,ftCo_Ottotto_Coll}
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+        "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     import msl_binding
 
     sizes = msl_binding.sizes()
     input_stride = int(sizes["input"])
-    row_2531 = read_dataset_window(str(dataset_path), 2531, 2532).samples
+    row_2531 = load_replay_buffer_window(str(dataset_path), 2531, 2532).rows
     assert int(row_2531["seed_t"]["action_id"][0, 0]) == ACT_LANDING
     assert int(row_2531["ref_t1"]["action_id"][0, 0]) == ACT_OTTOTTO
 
@@ -3080,7 +3079,7 @@ def test_landing_same_ground_edge_enters_and_anchors_ottotto_feh_2531() -> None:
         float(row_2531["ref_t1"]["pos_x"][0, 0]), abs=1.0e-6
     )
 
-    row_2532 = read_dataset_window(str(dataset_path), 2532, 2533).samples
+    row_2532 = load_replay_buffer_window(str(dataset_path), 2532, 2533).rows
     assert int(row_2532["seed_t"]["action_id"][0, 0]) == ACT_OTTOTTO
     out_2532 = _step_once(
         row_2532["seed_t"].copy(),
@@ -3103,16 +3102,14 @@ def test_landing_same_ground_edge_without_outward_nudge_stays_landing_mvp_3360()
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl"
+        "replays/validation/battlefield_recent/MediumVirtualPig.slpz"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
     import msl_binding
 
     sizes = msl_binding.sizes()
     input_stride = int(sizes["input"])
-    row = read_dataset_window(str(dataset_path), 3360, 3361).samples
+    row = load_replay_buffer_window(str(dataset_path), 3360, 3361).rows
     assert int(row["seed_t"]["action_id"][0, 1]) == ACT_LANDING
     assert int(row["ref_t1"]["action_id"][0, 1]) == ACT_LANDING
 

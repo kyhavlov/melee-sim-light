@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_DAMAGE_FLY_ROLL = 0x005B
@@ -18,12 +19,12 @@ ROLL_CLOCK_REPLAY_FRAME_SEED = 2
 
 def _dataset_path(root: Path) -> Path:
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
@@ -32,18 +33,18 @@ def _bytes(row_field: np.ndarray, stride: int) -> np.ndarray:
 
 
 def _run_one_step(dataset_path: Path, record: int, seed: np.ndarray | None = None) -> tuple[np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed_t = row["seed_t"].copy() if seed is None else seed
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -62,7 +63,7 @@ def _run_one_step(dataset_path: Path, record: int, seed: np.ndarray | None = Non
 
 
 def _run_rollout_to(dataset_path: Path, start_record: int, target_record: int) -> tuple[np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -71,17 +72,17 @@ def _run_rollout_to(dataset_path: Path, start_record: int, target_record: int) -
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     out = np.empty((1, compare_stride), dtype=np.uint8)
     try:
         binding.reseed_seed_rollout(
-            handle, _bytes(ds.samples[start_record : start_record + 1]["seed_t"], seed_stride)
+            handle, _bytes(ds.rows[start_record : start_record + 1]["seed_t"], seed_stride)
         )
         for record in range(start_record, target_record + 1):
-            row = ds.samples[record : record + 1]
+            row = ds.rows[record : record + 1]
             binding.step_input(
                 handle,
                 _bytes(row["prev_input_t"], input_stride),
@@ -90,7 +91,7 @@ def _run_rollout_to(dataset_path: Path, start_record: int, target_record: int) -
         binding.write_compare(handle, out)
     finally:
         binding.destroy(handle)
-    return out.view(COMPARE_DTYPE).reshape(1)[0].copy(), ds.samples[target_record]["ref_t1"].copy()
+    return out.view(COMPARE_DTYPE).reshape(1)[0].copy(), ds.rows[target_record]["ref_t1"].copy()
 
 
 @pytest.mark.integration
@@ -104,8 +105,8 @@ def test_tbk_seeded_live_laser_keeps_frozen_stale_damage_2610() -> None:
     # refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}
     root = Path(__file__).resolve().parents[1]
     dataset_path = _dataset_path(root)
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples[2610:2611]["seed_t"].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows[2610:2611]["seed_t"].copy()
 
     owner = 1
     victim = 0
@@ -185,8 +186,8 @@ def test_tbk_runtime_spawned_laser_freezes_stale_damage_before_previous_shot_sta
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "victim"),
     [
-        ("datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl", 2131, 1),
-        ("datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl", 1109, 0),
+        ("replays/validation/aggregate_recent/TubbyCurlyHerring.slpz", 2131, 1),
+        ("replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz", 1109, 0),
     ],
 )
 def test_aggregate_live_laser_body_damage_controls_remain_exact(
@@ -197,7 +198,7 @@ def test_aggregate_live_laser_body_damage_controls_remain_exact(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     out, ref = _run_one_step(dataset_path, record)
     assert int(out["action_id"][victim]) == int(ref["action_id"][victim])
     assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim])
@@ -216,7 +217,7 @@ def test_tbk_post_detach_throw_blaster_rollout_clock_reaches_damageflyroll_gate(
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     root = Path(__file__).resolve().parents[1]
     dataset_path = _dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -227,7 +228,7 @@ def test_tbk_post_detach_throw_blaster_rollout_clock_reaches_damageflyroll_gate(
     target_record = 2752
     thrower = 1
     victim = 0
-    seed = ds.samples[start_record : start_record + 1]["seed_t"]
+    seed = ds.rows[start_record : start_record + 1]["seed_t"]
     assert int(seed[0]["action_id"][thrower]) == ACT_THROW_HI
     assert int(seed[0]["hitstun"][victim]) > 0
     assert int(seed[0]["last_hit_by"][victim]) == int(seed[0]["source_port0"][thrower])
@@ -235,7 +236,7 @@ def test_tbk_post_detach_throw_blaster_rollout_clock_reaches_damageflyroll_gate(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -244,7 +245,7 @@ def test_tbk_post_detach_throw_blaster_rollout_clock_reaches_damageflyroll_gate(
         binding.reseed_seed_rollout(handle, _bytes(seed, seed_stride))
         assert int(binding.debug_get_rollout_clock_mode(handle, 0)) == ROLL_CLOCK_REPLAY_FRAME_SEED
         for record in range(start_record, target_record + 1):
-            row = ds.samples[record : record + 1]
+            row = ds.rows[record : record + 1]
             binding.step_input(
                 handle,
                 _bytes(row["prev_input_t"], input_stride),
@@ -255,7 +256,7 @@ def test_tbk_post_detach_throw_blaster_rollout_clock_reaches_damageflyroll_gate(
         binding.destroy(handle)
 
     actual = out.view(COMPARE_DTYPE).reshape(1)[0]
-    ref = ds.samples[target_record]["ref_t1"]
+    ref = ds.rows[target_record]["ref_t1"]
     assert int(actual["frame_pre_random_seed"]) == int(ref["frame_pre_random_seed"])
     assert int(actual["action_frame"][thrower]) == int(ref["action_frame"][thrower])
     assert int(actual["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_DAMAGE_FLY_ROLL
@@ -265,13 +266,13 @@ def test_tbk_post_detach_throw_blaster_rollout_clock_reaches_damageflyroll_gate(
 def test_tbk_throw_blaster_rollout_clock_requires_live_same_source_article() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = _dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
 
-    seed = ds.samples[2748:2749]["seed_t"].copy()
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    seed = ds.rows[2748:2749]["seed_t"].copy()
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, _bytes(seed, seed_stride))
         assert int(binding.debug_get_rollout_clock_mode(handle, 0)) == ROLL_CLOCK_REPLAY_FRAME_SEED

@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_FX_SPECIAL_AIR_LW_START = 0x016D
@@ -36,8 +37,8 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
     seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
@@ -51,7 +52,7 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -70,8 +71,8 @@ def _run_rollout_window(dataset_path: Path, *, start_record: int, window_records
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     seed_bytes = (
         np.frombuffer(samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8)
         .copy()
@@ -81,7 +82,7 @@ def _run_rollout_window(dataset_path: Path, *, start_record: int, window_records
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -128,7 +129,7 @@ def test_aerial_shine_loop_applies_reflector_fall_phys() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local aggregate dataset")
@@ -156,8 +157,8 @@ def test_platform_pass_aerial_shine_loop_carries_gravity_delay_pte() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local FoD dataset")
@@ -188,8 +189,8 @@ def test_aerial_shine_loop_landing_carries_air_x_to_ground_speed_ewt() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local FoD dataset")
@@ -218,8 +219,8 @@ def test_grounded_shine_loop_followup_keeps_seeded_ground_speed_ewt() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local FoD dataset")
@@ -240,7 +241,7 @@ def test_aerial_shine_start_delay_does_not_apply_reflector_fall_early() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local aggregate dataset")
@@ -259,7 +260,7 @@ def test_aerial_shine_start_to_loop_handoff_does_not_double_tick_fall() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local aggregate dataset")
@@ -279,7 +280,7 @@ def test_aerial_shine_start_to_turn_handoff_does_not_double_tick_fall() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+        / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local aggregate dataset")
@@ -308,7 +309,7 @@ def test_shine_jumpaerial_entry_clears_hidden_depth_before_laser_body_tch_8969()
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        root / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
     if not dataset_path.exists():
         pytest.skip("missing local aggregate dataset")

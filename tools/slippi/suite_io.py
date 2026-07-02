@@ -79,7 +79,7 @@ def display_path_under_repo(path: str | Path, root: str | Path | None = None) ->
     """Return a stable repo-relative display path when possible.
 
     Keep paths that are syntactically under the checkout before resolving
-    symlinks. This lets worktree-local links such as datasets/ point elsewhere
+    symlinks. This lets worktree-local links such as replays/ point elsewhere
     on disk without leaking the source checkout path into reports.
     """
     repo = Path(root) if root is not None else repo_root()
@@ -94,14 +94,3 @@ def display_path_under_repo(path: str | Path, root: str | Path | None = None) ->
         return p.resolve().relative_to(repo.resolve()).as_posix()
     except ValueError:
         return str(p)
-
-
-def dataset_path_for_suite_replay(
-    suite_name: str,
-    replay_rel_path: str,
-    datasets_dir: str | Path = "datasets",
-) -> Path:
-    root = repo_root()
-    rel = Path(replay_rel_path)
-    out = Path(datasets_dir) / suite_name / rel
-    return (root / out).with_suffix(".msl")

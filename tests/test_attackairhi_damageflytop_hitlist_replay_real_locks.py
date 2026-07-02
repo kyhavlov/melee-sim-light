@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_ATTACK_AIR_HI = 0x0044
@@ -39,52 +40,52 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 def _dataset_path(root: Path) -> Path:
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        "TreasuredBackKangaroo.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _marth_dataset_path(root: Path) -> Path:
-    dataset_rel = "datasets/marth/replays/validation/marth/WellWornSmallGoshawk.msl"
+    dataset_rel = "replays/validation/marth/WellWornSmallGoshawk.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _marth_ipw_dataset_path(root: Path) -> Path:
-    dataset_rel = "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+    dataset_rel = "replays/validation/marth/InternalPowerlessWallaby.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _sheik_dataset_path(root: Path) -> Path:
-    dataset_rel = "datasets/sheik/replays/validation/sheik/ToughOutlyingChicken.msl"
+    dataset_rel = "replays/validation/sheik/ToughOutlyingChicken.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _aggregate_hvg_dataset_path(root: Path) -> Path:
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    dataset_rel = "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
 def _aggregate_sdw_dataset_path(root: Path) -> Path:
-    dataset_rel = "datasets/aggregate_recent/replays/validation/marth/StiffDraftyWalrus.msl"
+    dataset_rel = "replays/validation/marth/StiffDraftyWalrus.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
@@ -96,8 +97,8 @@ def _create_hitbox_frames(root: Path, char_name: str, move_name: str) -> list[in
 
 def _step_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -> tuple[np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -112,7 +113,7 @@ def _step_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -> tu
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -134,8 +135,8 @@ def _pre_combat_hitlist_contains(
     victim: int,
 ) -> list[int]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -148,7 +149,7 @@ def _pre_combat_hitlist_contains(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -167,7 +168,7 @@ def _run_rollout_records(
     dataset_path: Path, start_record: int, records: tuple[int, ...]
 ) -> dict[int, tuple[np.void, np.void]]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -178,7 +179,7 @@ def _run_rollout_records(
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -186,10 +187,10 @@ def _run_rollout_records(
     got: dict[int, tuple[np.void, np.void]] = {}
     try:
         binding.reseed_seed_rollout(
-            handle, _bytes(ds.samples[start_record : start_record + 1]["seed_t"], seed_stride)
+            handle, _bytes(ds.rows[start_record : start_record + 1]["seed_t"], seed_stride)
         )
         for record in range(start_record, max(records) + 1):
-            row = ds.samples[record : record + 1]
+            row = ds.rows[record : record + 1]
             binding.step_input(
                 handle,
                 _bytes(row["prev_input_t"], input_stride),
@@ -219,11 +220,11 @@ def test_attackairhi_create_frame_keeps_same_source_damageflytop_dense_latch_tbk
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     attacker = 1
     victim = 0
-    seed = ds.samples[5247:5248]["seed_t"].copy()
+    seed = ds.rows[5247:5248]["seed_t"].copy()
     assert int(seed[0]["action_id"][attacker]) == ACT_ATTACK_AIR_HI
     assert int(seed[0]["action_frame"][attacker]) == 7
     assert int(seed[0]["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
@@ -265,12 +266,12 @@ def test_sheik_attackairn_dense_latch_covers_damageflyroll_toc_10987() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _sheik_dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     attacker = 1
     victim = 0
     record = 10987
-    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    seed = ds.rows[record : record + 1]["seed_t"].copy()
     seed_row = seed[0]
     assert int(seed_row["char_id"][attacker]) == 22
     assert int(seed_row["action_id"][attacker]) == ACT_ATTACK_AIR_N
@@ -314,15 +315,15 @@ def test_attackairn_current_instance_damage_common_dense_latch_aac_962() -> None
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/AttractiveAnyClam.msl"
+    dataset_path = root / "replays/validation/sheik/AttractiveAnyClam.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
-    ds = read_dataset(str(dataset_path))
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
+    ds = load_replay_buffers(str(dataset_path))
 
     attacker = 1
     victim = 0
     record = 962
-    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    seed = ds.rows[record : record + 1]["seed_t"].copy()
     seed_row = seed[0]
     assert int(seed_row["char_id"][attacker]) == 18
     assert int(seed_row["action_id"][attacker]) == ACT_ATTACK_AIR_N
@@ -359,21 +360,20 @@ def test_attackairn_current_instance_damage_common_dense_latch_aac_962() -> None
 @pytest.mark.integration
 def test_sheik_attackairn_older_same_port_damageflyroll_latch_releases_toc_10988() -> None:
     # Adjacent negative for the current-instance gate: TOC:10988 carries the same dense group victim
-    # from an older same-port NAir episode. Raw-port reconstruction can still recover valid
-    # per-HitCapsule lanes, but `instance_hit_by` no longer names the current NAir action instance.
-    # The source HitCapsule latch is stale for this active frame, so the BODY hit must be admitted;
-    # only the DamageFlyRoll RNG/action choice remains outside this owner.
+    # from an older same-port NAir episode. `instance_hit_by` no longer names the current NAir
+    # action instance, so the source HitCapsule latch is stale for this active frame and the BODY
+    # hit must be admitted; only the DamageFlyRoll RNG/action choice remains outside this owner.
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _sheik_dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     attacker = 1
     victim = 0
     record = 10988
-    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    seed = ds.rows[record : record + 1]["seed_t"].copy()
     seed_row = seed[0]
     assert int(seed_row["action_id"][attacker]) == ACT_ATTACK_AIR_N
     assert int(seed_row["action_id"][victim]) == ACT_DAMAGE_FLY_ROLL
@@ -382,7 +382,7 @@ def test_sheik_attackairn_older_same_port_damageflyroll_latch_releases_toc_10988
     assert int(seed_row["instance_hit_by"][victim]) != int(seed_row["instance_id"][attacker])
     assert int(seed_row["last_hit_by"][victim]) == int(seed_row["source_port0"][attacker])
     assert int(seed_row["combat_hitlist_cd"][attacker, 0, victim]) == 0xFFFF
-    assert [int(v) for v in seed_row["combat_hitlist_hb_valid"][attacker]] == [1, 1, 1, 0]
+    assert [int(v) for v in seed_row["combat_hitlist_hb_valid"][attacker]] == [0, 0, 0, 0]
 
     hitlist_contains = _pre_combat_hitlist_contains(dataset_path, record, seed, attacker, victim)
     assert hitlist_contains == [0, 0, 0, 0]
@@ -409,12 +409,12 @@ def test_marth_attackairhi_hb0_spacie_tail_contact_stays_full_body_sdw_5404() ->
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _aggregate_sdw_dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     attacker = 0
     victim = 1
     record = 5404
-    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    seed = ds.rows[record : record + 1]["seed_t"].copy()
     assert int(seed[0]["action_id"][attacker]) == ACT_ATTACK_AIR_HI
     assert int(seed[0]["action_id"][victim]) == ACT_ATTACK_AIR_HI
 
@@ -430,11 +430,11 @@ def test_attackairhi_next_row_authoritative_empty_hitcapsule_allows_tbk_5248_hit
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     attacker = 1
     victim = 0
-    seed = ds.samples[5248:5249]["seed_t"].copy()
+    seed = ds.rows[5248:5249]["seed_t"].copy()
     assert int(seed[0]["action_id"][attacker]) == ACT_ATTACK_AIR_HI
     assert int(seed[0]["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
     assert int(seed[0]["combat_hitlist_cd"][attacker, 0, victim]) == 0xFFFF
@@ -467,7 +467,7 @@ def test_attackairhi_rollout_create_edge_suppresses_then_releases_tbk_5247() -> 
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     attacker = 1
     victim = 0
@@ -476,7 +476,7 @@ def test_attackairhi_rollout_create_edge_suppresses_then_releases_tbk_5247() -> 
     out_5247, ref_5247 = rows[5247]
     out_5248, ref_5248 = rows[5248]
 
-    seed_5247 = ds.samples[5247]["seed_t"]
+    seed_5247 = ds.rows[5247]["seed_t"]
     assert int(seed_5247["action_id"][attacker]) == ACT_ATTACK_AIR_HI
     assert int(seed_5247["action_id"][victim]) == ACT_DAMAGE_FLY_TOP
     assert int(seed_5247["hitstun"][victim]) == 3
@@ -509,13 +509,13 @@ def test_attackairhi_single_band_create_edge_does_not_materialize_dense_latch_ww
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _marth_dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     attacker = 1
     victim = 0
     start_record = 6168
-    seed_6168 = ds.samples[start_record]["seed_t"]
-    seed_6169 = ds.samples[start_record + 1]["seed_t"]
+    seed_6168 = ds.rows[start_record]["seed_t"]
+    seed_6169 = ds.rows[start_record + 1]["seed_t"]
     assert int(seed_6168["char_id"][attacker]) == 18
     assert int(seed_6168["action_id"][attacker]) == ACT_ATTACK_AIR_HI
     assert int(seed_6168["action_frame"][attacker]) == 3
@@ -570,14 +570,14 @@ def test_attackairhi_noninterrupt_landingfallspecial_trims_stale_dense_latch_ipw
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _marth_ipw_dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     assert _create_hitbox_frames(root, "marth", "ftCo_SM_AttackAirHi") == [5]
 
     attacker = 1
     victim = 0
     record = 2452
-    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    seed = ds.rows[record : record + 1]["seed_t"].copy()
     seed_row = seed[0]
     assert int(seed_row["char_id"][attacker]) == 18
     assert int(seed_row["action_id"][attacker]) == ACT_ATTACK_AIR_HI
@@ -587,7 +587,7 @@ def test_attackairhi_noninterrupt_landingfallspecial_trims_stale_dense_latch_ipw
     assert int(seed_row["on_ground"][victim]) == 1
     assert int(seed_row["hitlag"][victim]) == 0
     assert int(seed_row["hitstun"][victim]) == 0
-    # The regenerated dataset should already carry the source-owned trim: visible
+    # The regenerated replay should already carry the source-owned trim: visible
     # LandingFallSpecial is not enough to preserve the dense victim latch when the hidden
     # allow-interrupt lane is false.
     assert int(seed_row["combat_hitlist_cd"][attacker, 0, victim]) == 0
@@ -616,12 +616,12 @@ def test_attackairn_noninterrupt_landingfallspecial_trims_stale_dense_latch_hvg_
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = _aggregate_hvg_dataset_path(root)
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     attacker = 1
     victim = 0
     record = 386
-    seed = ds.samples[record : record + 1]["seed_t"].copy()
+    seed = ds.rows[record : record + 1]["seed_t"].copy()
     seed_row = seed[0]
     assert int(seed_row["char_id"][attacker]) == 22
     assert int(seed_row["action_id"][attacker]) == ACT_ATTACK_AIR_N

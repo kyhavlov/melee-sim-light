@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
 
 from tests.test_anim_pose import _MAT_BYTES, _pick_first_nonempty_anim, _pick_missing_msid, _read_header
 

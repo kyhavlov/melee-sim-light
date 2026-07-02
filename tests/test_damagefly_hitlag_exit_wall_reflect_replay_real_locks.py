@@ -6,16 +6,17 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 _GAT = (
-    "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-    "GracefulAttachedTurtle.msl"
+    "replays/validation/cardinal_1.0_recent/"
+    "GracefulAttachedTurtle.slpz"
 )
 _FEH = (
-    "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-    "FlippantEnchantedHorse.msl"
+    "replays/validation/dream_land_recent/"
+    "FlippantEnchantedHorse.slpz"
 )
 
 
@@ -26,8 +27,8 @@ def _field_bytes(samples: np.ndarray, record: int, field: str, stride: int) -> n
 
 def _run_one_step(dataset_path: Path, record: int, *, seed_mutator=None) -> tuple[np.void, np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -41,7 +42,7 @@ def _run_one_step(dataset_path: Path, record: int, *, seed_mutator=None) -> tupl
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -61,8 +62,8 @@ def _run_one_step(dataset_path: Path, record: int, *, seed_mutator=None) -> tupl
 
 def _run_rollout(dataset_path: Path, start: int, stop: int) -> tuple[np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -71,7 +72,7 @@ def _run_rollout(dataset_path: Path, start: int, stop: int) -> tuple[np.void, np
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -104,7 +105,7 @@ def test_damageflyroll_hitlag_exit_asdi_wall_hug_enters_flyreflectwall() -> None
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _GAT
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_GAT}")
+        pytest.skip(f"missing local replay: {_GAT}")
 
     p = 0
     seed, ref, out = _run_one_step(dataset_path, 3113)
@@ -127,7 +128,7 @@ def test_damageflyroll_hitlag_exit_wall_reflect_requires_knockback_threshold() -
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _GAT
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_GAT}")
+        pytest.skip(f"missing local replay: {_GAT}")
 
     def clear_horizontal_kb(seed_t: np.ndarray) -> None:
         seed_t["speed_x_attack"][:, 0] = np.float32(0.0)
@@ -150,7 +151,7 @@ def test_damageflytop_sloped_right_wall_hug_enters_flyreflectwall() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _FEH
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_FEH}")
+        pytest.skip(f"missing local replay: {_FEH}")
 
     p = 0
     seed, ref, out = _run_one_step(dataset_path, 9195)

@@ -7,8 +7,9 @@ import struct
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
+from tools.eval.streaming_validation import _load_binding
 
 
 def _skip_if_missing_laser_artifacts(root: Path) -> None:
@@ -69,7 +70,7 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -92,8 +93,8 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
 
 
 def _rollout_rows(dataset_path: Path, start_record: int, end_record_inclusive: int) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = _load_binding()
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -101,7 +102,7 @@ def _rollout_rows(dataset_path: Path, start_record: int, end_record_inclusive: i
     compare_stride = int(sizes["compare"])
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -111,21 +112,18 @@ def _rollout_rows(dataset_path: Path, start_record: int, end_record_inclusive: i
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         rows: dict[int, tuple[np.void, np.void]] = {}
         for record in range(start_record, end_record_inclusive + 1):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             rows[record] = (out_view[0].copy(), samples["ref_t1"][record].copy())
@@ -152,13 +150,13 @@ def test_late_specialairnloop_clear_cmd0_rejects_laser_body_overlap() -> None:
 
     mgs_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+        / "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slpz"
     )
     if not mgs_path.exists():
-        pytest.skip(f"missing local dataset: {mgs_path}")
-    mgs = read_dataset(str(mgs_path))
+        pytest.skip(f"missing local replay: {mgs_path}")
+    mgs = load_replay_buffers(str(mgs_path))
     for record in (112, 113):
-        row = mgs.samples[record : record + 1]
+        row = mgs.rows[record : record + 1]
         assert int(row["seed_t"]["frame_id"][0]) < 0
         assert int(row["seed_t"]["items"][0, 0]["type"]) == 54
         assert int(row["seed_t"]["items"][0, 0]["owner"]) == 1
@@ -171,11 +169,11 @@ def test_late_specialairnloop_clear_cmd0_rejects_laser_body_overlap() -> None:
         assert got_laser is not None and ref_laser is not None
         assert float(got_laser["timer"]) == pytest.approx(float(ref_laser["timer"]), abs=1e-6)
 
-    iat_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    iat_path = root / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     if not iat_path.exists():
-        pytest.skip(f"missing local dataset: {iat_path}")
-    iat = read_dataset(str(iat_path))
-    row = iat.samples[1581:1582]
+        pytest.skip(f"missing local replay: {iat_path}")
+    iat = load_replay_buffers(str(iat_path))
+    row = iat.rows[1581:1582]
     assert int(row["seed_t"]["frame_id"][0]) >= 0
     assert int(row["seed_t"]["action_id"][0, 0]) == 345  # SpecialAirNLoop
     out = _one_step_out_compare(ds=iat, row=row)
@@ -200,10 +198,10 @@ def test_laser_stage_wall_collision_sets_expiry_before_slot_lifecycle_shift() ->
     _skip_if_missing_laser_artifacts(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+        / "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rows = _rollout_rows(dataset_path, start_record=1153, end_record_inclusive=1162)
 
@@ -232,14 +230,14 @@ def test_laser_stage_wall_collision_sets_expiry_before_slot_lifecycle_shift() ->
     ("dataset_rel", "record", "p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             1038,
             0,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-            "ThisVioletRaccoon.msl",
+            "replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.slpz",
             4128,
             0,
         ),
@@ -260,10 +258,10 @@ def test_steady_guard_laser_shield_contact_precedes_stage_expiry(
     _skip_if_missing_laser_artifacts(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row["seed_t"]["action_id"][0, p]) == 179  # Guard
     assert int(row["ref_t1"]["action_id"][0, p]) == 181  # GuardSetOff
     assert int(row["seed_t"]["hitlag"][0, p]) == 0
@@ -293,22 +291,22 @@ def test_grounded_vulnerable_downbackd_laser_body_uses_lbcoll_hurt_radius() -> N
     _skip_if_missing_laser_artifacts(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "FlippantEnchantedHorse.msl"
+        / "replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
-    neg_row = ds.samples[4493:4494]
+    neg_row = ds.rows[4493:4494]
     neg_out = _one_step_out_compare(ds=ds, row=neg_row)
     assert int(neg_row["seed_t"]["action_id"][0, 0]) == 197  # DownBackD
     assert int(neg_row["ref_t1"]["action_id"][0, 0]) == 197
     assert _item_by_instance_and_type(neg_out["items"][0], 892, 55) is not None
     assert _item_by_instance_and_type(neg_row["ref_t1"]["items"][0], 892, 55) is not None
 
-    row = ds.samples[4494:4495]
+    row = ds.rows[4494:4495]
     out = _one_step_out_compare(ds=ds, row=row)
     assert int(row["seed_t"]["action_id"][0, 0]) == 197  # DownBackD
     assert int(row["ref_t1"]["action_id"][0, 0]) == 78  # DamageAir3
@@ -335,8 +333,8 @@ _CASES = [
     _Case(
         name="tbk_shield_adj_pre",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=2216,
         p=0,
@@ -345,8 +343,8 @@ _CASES = [
     _Case(
         name="tbk_shield_sensitive_target",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=2217,
         p=0,
@@ -355,8 +353,8 @@ _CASES = [
     _Case(
         name="tbk_shield_adj_post",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=2218,
         p=0,
@@ -365,8 +363,8 @@ _CASES = [
     _Case(
         name="tbk_guardon_shield_adj_pre",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=4143,
         p=0,
@@ -375,8 +373,8 @@ _CASES = [
     _Case(
         name="tbk_guardon_shield_adj_target0",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=4144,
         p=0,
@@ -385,8 +383,8 @@ _CASES = [
     _Case(
         name="tbk_guardon_shield_adj_target1",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=4145,
         p=0,
@@ -395,8 +393,8 @@ _CASES = [
     _Case(
         name="tbk_guardon_shield_adj_post",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=4146,
         p=0,
@@ -405,8 +403,8 @@ _CASES = [
     _Case(
         name="tbk_real_shield_hit_adj_pre",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=1247,
         p=0,
@@ -415,8 +413,8 @@ _CASES = [
     _Case(
         name="tbk_real_shield_hit_target",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=1248,
         p=0,
@@ -426,8 +424,8 @@ _CASES = [
     _Case(
         name="tbk_real_shield_hit_adj_post",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=1249,
         p=0,
@@ -436,8 +434,8 @@ _CASES = [
     _Case(
         name="agg_phantom_adj_pre",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
         ),
         record=200,
         p=1,
@@ -446,8 +444,8 @@ _CASES = [
     _Case(
         name="agg_phantom_target",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
         ),
         record=201,
         p=1,
@@ -456,8 +454,8 @@ _CASES = [
     _Case(
         name="agg_phantom_adj_post",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
         ),
         record=202,
         p=1,
@@ -466,8 +464,8 @@ _CASES = [
     _Case(
         name="gat_body_adj_pre",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
         ),
         record=4504,
         p=0,
@@ -476,8 +474,8 @@ _CASES = [
     _Case(
         name="gat_body_target",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
         ),
         record=4505,
         p=0,
@@ -486,8 +484,8 @@ _CASES = [
     _Case(
         name="gat_body_adj_post",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
         ),
         record=4506,
         p=0,
@@ -512,8 +510,8 @@ _SHIELD_BOUNCE_CASES = [
     _ShieldBounceCase(
         name="gat_existing_laser_bounce_keepalive_guardreflect",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
         ),
         record=2276,
         p=0,
@@ -524,8 +522,8 @@ _SHIELD_BOUNCE_CASES = [
     _ShieldBounceCase(
         name="gat_existing_laser_bounce_keepalive_shieldstun",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
         ),
         record=5280,
         p=0,
@@ -536,8 +534,8 @@ _SHIELD_BOUNCE_CASES = [
     _ShieldBounceCase(
         name="gat_spawn_frame_no_bounce_keepalive_control_1163",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
         ),
         record=1163,
         p=0,
@@ -548,8 +546,8 @@ _SHIELD_BOUNCE_CASES = [
     _ShieldBounceCase(
         name="gat_spawn_frame_no_bounce_keepalive_control_4326",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
         ),
         record=4326,
         p=0,
@@ -560,8 +558,8 @@ _SHIELD_BOUNCE_CASES = [
     _ShieldBounceCase(
         name="gat_spawn_frame_no_bounce_keepalive_control_9412",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
         ),
         record=9412,
         p=0,
@@ -572,8 +570,8 @@ _SHIELD_BOUNCE_CASES = [
     _ShieldBounceCase(
         name="iat_landingfallspecial_high_shield_no_bounce_seed_destroy",
         dataset_rel=(
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "ImpassionedAlarmedTarsier.msl"
+            "replays/validation/aggregate_recent/"
+            "ImpassionedAlarmedTarsier.slpz"
         ),
         record=3552,
         p=1,
@@ -598,8 +596,8 @@ _DASH_FULL_SHIELD_CASES = [
     _DashFullShieldCase(
         name="tbk_dash_full_shield_turn_adj_pre",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=4141,
         p=0,
@@ -609,8 +607,8 @@ _DASH_FULL_SHIELD_CASES = [
     _DashFullShieldCase(
         name="tbk_dash_full_shield_turn_target",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=4142,
         p=0,
@@ -620,8 +618,8 @@ _DASH_FULL_SHIELD_CASES = [
     _DashFullShieldCase(
         name="tbk_dash_full_shield_turn_adj_post",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=4143,
         p=0,
@@ -631,8 +629,8 @@ _DASH_FULL_SHIELD_CASES = [
     _DashFullShieldCase(
         name="tbk_dash_full_shield_guardreflect_adj_pre",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=7446,
         p=0,
@@ -642,8 +640,8 @@ _DASH_FULL_SHIELD_CASES = [
     _DashFullShieldCase(
         name="tbk_dash_full_shield_guardreflect_target",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.slpz"
         ),
         record=7447,
         p=0,
@@ -653,8 +651,8 @@ _DASH_FULL_SHIELD_CASES = [
     _DashFullShieldCase(
         name="agn_dash_full_shield_body_hit_negative_control",
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
         ),
         record=178,
         p=1,
@@ -681,12 +679,12 @@ def test_items_collision_space_rows_and_adjacent_controls(case: _Case) -> None:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > case.record, (
-        f"dataset too short for regression check: record={case.record} path={case.dataset_rel}"
+        f"replay too short for regression check: record={case.record} path={case.dataset_rel}"
     )
     row = samples[case.record : case.record + 1]
     p = case.p
@@ -808,12 +806,12 @@ def test_laser_shield_bounce_keepalive_and_spawn_frame_destroy_controls(case: _S
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > case.record, (
-        f"dataset too short for regression check: record={case.record} path={case.dataset_rel}"
+        f"replay too short for regression check: record={case.record} path={case.dataset_rel}"
     )
     row = samples[case.record : case.record + 1]
     p = int(case.p)
@@ -853,10 +851,10 @@ def test_laser_shield_bounce_open_residual_gat_destroy_path_not_retained() -> No
     _skip_if_missing_laser_artifacts(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     rows = _rollout_rows(dataset_path, 5223, 5281)
     out_5280, ref_5280 = rows[5280]
@@ -885,13 +883,13 @@ def test_laser_shield_bounce_runtime_rollout_keeps_maj_slot_lifecycle_alive() ->
     _skip_if_missing_laser_artifacts(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
-    ds = read_dataset(str(dataset_path))
-    seed_751 = ds.samples["seed_t"][751]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_751 = ds.rows["seed_t"][751]
     assert not any(int(v) for v in seed_751["item_shield_bounce_valid"])
 
     rows = _rollout_rows(dataset_path, 751, 766)
@@ -937,13 +935,13 @@ def test_laser_shield_bounce_runtime_rollout_keeps_agn_walk_guardreflect_laser_a
     _skip_if_missing_laser_artifacts(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
-    ds = read_dataset(str(dataset_path))
-    seed_4036 = ds.samples["seed_t"][4036]
+    ds = load_replay_buffers(str(dataset_path))
+    seed_4036 = ds.rows["seed_t"][4036]
     assert not any(int(v) for v in seed_4036["item_shield_bounce_valid"])
 
     rows = _rollout_rows(dataset_path, 4036, 4045)
@@ -983,13 +981,13 @@ def test_laser_shield_bounce_locomotion_guardreflect_cap_blocks_iat_compacted_la
     _skip_if_missing_laser_artifacts(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+        / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[11406 : 11406 + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[11406 : 11406 + 1]
     out = _one_step_out_compare(ds=ds, row=row)
     ref = row["ref_t1"]
 
@@ -1018,10 +1016,10 @@ def test_laser_guardreflect_runtime_rollout_final_x14_hitshield_destroys_maj_las
     _skip_if_missing_laser_artifacts(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     rows = _rollout_rows(dataset_path, 192, 202)
     out_201, ref_201 = rows[201]
@@ -1057,28 +1055,28 @@ def test_laser_guardreflect_final_x14_boundary_rows_do_not_overbroaden_hitshield
     cases = [
         (
             root
-            / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             1287,
             0,
             0,
         ),
         (
             root
-            / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             2275,
             0,
             0,
         ),
         (
             root
-            / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            / "replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
             353,
             0,
             0,
         ),
         (
             root
-            / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
             6341,
             1,
             0,
@@ -1086,9 +1084,9 @@ def test_laser_guardreflect_final_x14_boundary_rows_do_not_overbroaden_hitshield
     ]
     for dataset_path, record, p, item_slot in cases:
         if not dataset_path.exists():
-            pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
-        ds = read_dataset(str(dataset_path))
-        row = ds.samples[record : record + 1]
+            pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
+        ds = load_replay_buffers(str(dataset_path))
+        row = ds.rows[record : record + 1]
         out = _one_step_out_compare(ds=ds, row=row)
         ref = row["ref_t1"]
         for field in ("action_id", "action_frame", "animation_index", "hitlag", "instance_id"):
@@ -1115,14 +1113,14 @@ def test_final_x14_seeded_shield_bounce_overrides_guardreflect_keepalive() -> No
     _skip_if_missing_laser_artifacts(root)
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
-    row_pos = ds.samples[9479 : 9480]
+    row_pos = ds.rows[9479 : 9480]
     assert int(row_pos["seed_t"]["action_id"][0, 0]) == 182  # GuardReflect
     assert int(row_pos["seed_t"]["guard_reflect_timer_x14"][0, 0]) == 1
     assert int(row_pos["seed_t"]["item_shield_bounce_valid"][0, 0]) == 1
@@ -1140,7 +1138,7 @@ def test_final_x14_seeded_shield_bounce_overrides_guardreflect_keepalive() -> No
         float(ref_pos["items"][0, 0]["vel_y"]), abs=1e-6
     )
 
-    row_neg = ds.samples[1287 : 1288]
+    row_neg = ds.rows[1287 : 1288]
     assert int(row_neg["seed_t"]["action_id"][0, 0]) == 182  # GuardReflect
     assert int(row_neg["seed_t"]["guard_reflect_timer_x14"][0, 0]) == 1
     assert int(row_neg["seed_t"]["item_shield_bounce_valid"][0, 0]) == 0
@@ -1168,12 +1166,12 @@ def test_laser_dash_full_shield_snapshot_rows(case: _DashFullShieldCase) -> None
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > case.record, (
-        f"dataset too short for regression check: record={case.record} path={case.dataset_rel}"
+        f"replay too short for regression check: record={case.record} path={case.dataset_rel}"
     )
     row = samples[case.record : case.record + 1]
     p = int(case.p)

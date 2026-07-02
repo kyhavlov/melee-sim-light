@@ -6,8 +6,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slpz")
@@ -40,9 +41,9 @@ def _run_one_step(dataset_path: Path, record: int, *, seed_mutator=None) -> tupl
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(record), f"dataset too short for record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(record), f"replay too short for record={record}"
     row = samples[int(record) : int(record) + 1]
     seed_t = row["seed_t"].copy()
     if seed_mutator is not None:
@@ -57,7 +58,7 @@ def _run_one_step(dataset_path: Path, record: int, *, seed_mutator=None) -> tupl
     )
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -75,12 +76,12 @@ def _run_replay_rollout_row(dataset_path: Path, start_record: int, end_record: i
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(end_record), f"dataset too short for record={end_record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(end_record), f"replay too short for record={end_record}"
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(
             samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8
@@ -109,14 +110,14 @@ def _run_one_step_from_slp(slp_path: Path, record: int, *, ports: list[int]) -> 
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
     binding = pytest.importorskip("msl_binding")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=ports,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(record), f"dataset too short for record={record}"
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(record), f"replay too short for record={record}"
     row = samples[int(record) : int(record) + 1]
 
     sizes = binding.sizes()
@@ -136,7 +137,7 @@ def _run_one_step_from_slp(slp_path: Path, record: int, *, ports: list[int]) -> 
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -162,10 +163,10 @@ def test_specialairnloop_hidden_loop_latch_uses_same_action_restart_provenance_f
     # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+        root / "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     restart_seed, restart_ref, restart_out = _run_one_step(dataset_path, 228)
     p = 1
@@ -202,9 +203,9 @@ def test_specialnloop_seed_latch_uses_raw_cmd0_window_not_tail_rws() -> None:
     #   ftFx_SpecialNLoop_Anim,ftFx_SpecialNLoop_IASA}
     # data/scripts/falco.bin (MSLFTSC1 msid 296 set_cmd_var idx=0 at frames 8..22).
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/RipeWealthySeahorse.msl"
+    dataset_path = root / "replays/validation/marth/RipeWealthySeahorse.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _run_one_step(dataset_path, 10773)
     p = 1
@@ -366,8 +367,8 @@ def test_specialairhi_floor_jobj_ecb_bottom_crossing_enters_bound_selfplay_18141
     [
         _FieldCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "BlondHardHippopotamus.msl"
+                "replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.slpz"
             ),
             record=3116,
             player=0,
@@ -377,8 +378,8 @@ def test_specialairhi_floor_jobj_ecb_bottom_crossing_enters_bound_selfplay_18141
         ),
         _FieldCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "DistinctCaringCobra.msl"
+                "replays/validation/aggregate_recent/"
+                "DistinctCaringCobra.slpz"
             ),
             record=6824,
             player=0,
@@ -388,8 +389,8 @@ def test_specialairhi_floor_jobj_ecb_bottom_crossing_enters_bound_selfplay_18141
         ),
         _FieldCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.slpz"
             ),
             record=3145,
             player=0,
@@ -399,8 +400,8 @@ def test_specialairhi_floor_jobj_ecb_bottom_crossing_enters_bound_selfplay_18141
         ),
         _FieldCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.slpz"
             ),
             record=3157,
             player=0,
@@ -410,8 +411,8 @@ def test_specialairhi_floor_jobj_ecb_bottom_crossing_enters_bound_selfplay_18141
         ),
         _FieldCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "QuerulousGrandDinosaur.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.slpz"
             ),
             record=1091,
             player=1,
@@ -421,8 +422,8 @@ def test_specialairhi_floor_jobj_ecb_bottom_crossing_enters_bound_selfplay_18141
         ),
         _FieldCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.slpz"
             ),
             record=4602,
             player=0,
@@ -432,8 +433,8 @@ def test_specialairhi_floor_jobj_ecb_bottom_crossing_enters_bound_selfplay_18141
         ),
         _FieldCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "QuerulousGrandDinosaur.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.slpz"
             ),
             record=9599,
             player=0,
@@ -443,8 +444,8 @@ def test_specialairhi_floor_jobj_ecb_bottom_crossing_enters_bound_selfplay_18141
         ),
         _FieldCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "BlondHardHippopotamus.msl"
+                "replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.slpz"
             ),
             record=7828,
             player=1,
@@ -454,8 +455,8 @@ def test_specialairhi_floor_jobj_ecb_bottom_crossing_enters_bound_selfplay_18141
         ),
         _FieldCase(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "TubbyCurlyHerring.msl"
+                "replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.slpz"
             ),
             record=3367,
             player=1,
@@ -475,7 +476,7 @@ def test_spacie_special_hurtbox_seed_rows_match_replay(case: _FieldCase) -> None
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed, ref, out = _run_one_step(dataset_path, case.record)
     p = int(case.player)
@@ -504,10 +505,10 @@ def test_landing_fallspecial_allow_interrupt_seed_lane_replay_real_lock() -> Non
     #   ftCo_LandingFallSpecial_Enter,ftCo_Landing_IASA}
     dataset_path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 865
     player = 0
@@ -534,11 +535,11 @@ def test_landing_fallspecial_firefox_rate_seed_lane_enters_turn_pte_7232() -> No
     #   ftCo_LandingFallSpecial_Enter,ftCo_Landing_IASA}
     dataset_path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 7232
     player = 0
@@ -561,11 +562,11 @@ def test_landing_fallspecial_sideb_rate_does_not_reconstruct_firefox_allow_inter
     # LandingFallSpecial, so speed rate by itself is not sufficient source authority.
     dataset_path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def _sideb_rate(seed_t: np.ndarray) -> None:
         seed_t["landing_fallspecial_allow_interrupt"][0, player] = np.uint8(0)
@@ -593,10 +594,10 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
     dataset_path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     record = 9035
     player = 1
@@ -616,8 +617,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
     [
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.slpz"
             ),
             record=3159,
             player=0,
@@ -627,8 +628,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.slpz"
             ),
             record=3160,
             player=0,
@@ -638,8 +639,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "QuerulousGrandDinosaur.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.slpz"
             ),
             record=5895,
             player=1,
@@ -649,8 +650,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "FavorableSuperficialPig.msl"
+                "replays/validation/aggregate_recent/"
+                "FavorableSuperficialPig.slpz"
             ),
             record=288,
             player=0,
@@ -660,8 +661,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "TubbyCurlyHerring.msl"
+                "replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.slpz"
             ),
             record=752,
             player=0,
@@ -671,8 +672,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PriceyPartialAlbatross.msl"
+                "replays/validation/aggregate_recent/"
+                "PriceyPartialAlbatross.slpz"
             ),
             record=4178,
             player=0,
@@ -682,8 +683,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "MotionlessAggressiveJay.msl"
+                "replays/validation/aggregate_recent/"
+                "MotionlessAggressiveJay.slpz"
             ),
             record=2005,
             player=0,
@@ -693,8 +694,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PriceyPartialAlbatross.msl"
+                "replays/validation/aggregate_recent/"
+                "PriceyPartialAlbatross.slpz"
             ),
             record=3861,
             player=0,
@@ -704,8 +705,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PutridJoyousOryx.msl"
+                "replays/validation/aggregate_recent/"
+                "PutridJoyousOryx.slpz"
             ),
             record=112,
             player=1,
@@ -715,8 +716,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "BlondHardHippopotamus.msl"
+                "replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.slpz"
             ),
             record=9887,
             player=1,
@@ -726,8 +727,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "FavorableSuperficialPig.msl"
+                "replays/validation/aggregate_recent/"
+                "FavorableSuperficialPig.slpz"
             ),
             record=7606,
             player=0,
@@ -737,8 +738,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "QuerulousGrandDinosaur.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.slpz"
             ),
             record=1090,
             player=1,
@@ -748,8 +749,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/debug/fd_mixed_recent/"
-                "ImpassionedAlarmedTarsier.msl"
+                "replays/validation/fd_mixed_recent/"
+                "ImpassionedAlarmedTarsier.slpz"
             ),
             record=5809,
             player=0,
@@ -759,8 +760,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "DistinctCaringCobra.msl"
+                "replays/validation/aggregate_recent/"
+                "DistinctCaringCobra.slpz"
             ),
             record=1568,
             player=1,
@@ -770,8 +771,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "HungryImportantSnake.msl"
+                "replays/validation/aggregate_recent/"
+                "HungryImportantSnake.slpz"
             ),
             record=578,
             player=1,
@@ -781,8 +782,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "AttachedGoodNaturedGuanaco.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.slpz"
             ),
             record=2378,
             player=0,
@@ -792,8 +793,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             record=5224,
             player=1,
@@ -803,8 +804,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "HungryImportantSnake.msl"
+                "replays/validation/aggregate_recent/"
+                "HungryImportantSnake.slpz"
             ),
             record=1582,
             player=1,
@@ -814,8 +815,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "HungryImportantSnake.msl"
+                "replays/validation/aggregate_recent/"
+                "HungryImportantSnake.slpz"
             ),
             record=1764,
             player=0,
@@ -825,8 +826,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "HungryImportantSnake.msl"
+                "replays/validation/aggregate_recent/"
+                "HungryImportantSnake.slpz"
             ),
             record=559,
             player=1,
@@ -836,8 +837,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "HungryImportantSnake.msl"
+                "replays/validation/aggregate_recent/"
+                "HungryImportantSnake.slpz"
             ),
             record=573,
             player=1,
@@ -847,8 +848,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "ImpassionedAlarmedTarsier.msl"
+                "replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.slpz"
             ),
             record=10513,
             player=1,
@@ -858,8 +859,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "TubbyCurlyHerring.msl"
+                "replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.slpz"
             ),
             record=840,
             player=0,
@@ -869,8 +870,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "DistinctCaringCobra.msl"
+                "replays/validation/aggregate_recent/"
+                "DistinctCaringCobra.slpz"
             ),
             record=5790,
             player=0,
@@ -880,8 +881,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "HilariousVillainousGiraffe.msl"
+                "replays/validation/aggregate_recent/"
+                "HilariousVillainousGiraffe.slpz"
             ),
             record=6550,
             player=1,
@@ -891,8 +892,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "ImpassionedAlarmedTarsier.msl"
+                "replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.slpz"
             ),
             record=8431,
             player=1,
@@ -902,8 +903,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "BlondHardHippopotamus.msl"
+                "replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.slpz"
             ),
             record=666,
             player=1,
@@ -913,8 +914,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PriceyPartialAlbatross.msl"
+                "replays/validation/aggregate_recent/"
+                "PriceyPartialAlbatross.slpz"
             ),
             record=916,
             player=0,
@@ -924,8 +925,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "ImpassionedAlarmedTarsier.msl"
+                "replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.slpz"
             ),
             record=4005,
             player=0,
@@ -935,8 +936,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "TubbyCurlyHerring.msl"
+                "replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.slpz"
             ),
             record=2356,
             player=1,
@@ -946,8 +947,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "ImpassionedAlarmedTarsier.msl"
+                "replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.slpz"
             ),
             record=4327,
             player=0,
@@ -957,8 +958,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "BlondHardHippopotamus.msl"
+                "replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.slpz"
             ),
             record=3014,
             player=0,
@@ -968,8 +969,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "TubbyCurlyHerring.msl"
+                "replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.slpz"
             ),
             record=7232,
             player=1,
@@ -979,8 +980,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "ImpassionedAlarmedTarsier.msl"
+                "replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.slpz"
             ),
             record=140,
             player=1,
@@ -990,8 +991,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "DistinctCaringCobra.msl"
+                "replays/validation/aggregate_recent/"
+                "DistinctCaringCobra.slpz"
             ),
             record=6035,
             player=1,
@@ -1001,8 +1002,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "TubbyCurlyHerring.msl"
+                "replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.slpz"
             ),
             record=6238,
             player=1,
@@ -1012,8 +1013,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "TubbyCurlyHerring.msl"
+                "replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.slpz"
             ),
             record=7430,
             player=1,
@@ -1023,8 +1024,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "DistinctCaringCobra.msl"
+                "replays/validation/aggregate_recent/"
+                "DistinctCaringCobra.slpz"
             ),
             record=5095,
             player=1,
@@ -1034,8 +1035,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "PositiveRevolvingHyena.msl"
+                "replays/validation/aggregate_recent/"
+                "PositiveRevolvingHyena.slpz"
             ),
             record=4835,
             player=1,
@@ -1045,8 +1046,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "BlondHardHippopotamus.msl"
+                "replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.slpz"
             ),
             record=7876,
             player=0,
@@ -1056,8 +1057,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "BlondHardHippopotamus.msl"
+                "replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.slpz"
             ),
             record=4880,
             player=1,
@@ -1067,8 +1068,8 @@ def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> N
         ),
         _Case(
             dataset_rel=(
-                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-                "TubbyCurlyHerring.msl"
+                "replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.slpz"
             ),
             record=6743,
             player=1,
@@ -1166,7 +1167,7 @@ def test_spacie_special_collision_handoff_rows_match_replay(case: _Case) -> None
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed, ref, out = _run_one_step(dataset_path, case.record)
     p = int(case.player)

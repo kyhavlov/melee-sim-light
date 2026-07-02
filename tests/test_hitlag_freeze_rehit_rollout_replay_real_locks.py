@@ -7,7 +7,8 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_row_bytes, replay_buffer_byte_views, replay_buffer_row_bytes
 
 
 def _skip_if_marth_artifacts_missing(root: Path) -> None:
@@ -35,9 +36,9 @@ class FreezeRehitCase:
 
 
 def _precombat_body_counts_after_one_step(dataset_path: Path, record: int) -> tuple[int, int]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record + 1, f"dataset too short for rollout lock: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record + 1, f"replay too short for rollout lock: record={record}"
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -57,7 +58,7 @@ def _precombat_body_counts_after_one_step(dataset_path: Path, record: int) -> tu
         1, input_stride
     )
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -70,24 +71,23 @@ def _precombat_body_counts_after_one_step(dataset_path: Path, record: int) -> tu
 
 
 def _run_rollout_window(dataset_path: Path, start: int, stop: int):
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > stop, f"dataset too short for rollout lock: record={stop}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > stop, f"replay too short for rollout lock: record={stop}"
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    seed_off = "seed_t"
+    prev_off = "prev_input_t"
+    input_off = "input_t"
 
-    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
-        raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
-        return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+    def field_bytes(record: int, group: str, stride: int) -> np.ndarray:
+        return replay_buffer_row_bytes(ds, group, record, stride)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, field_bytes(start, seed_off, seed_stride))
         out_bytes = np.zeros((1, compare_stride), dtype=np.uint8, order="C")
@@ -106,9 +106,9 @@ def _run_rollout_window(dataset_path: Path, start: int, stop: int):
 
 
 def _step_one_record(dataset_path: Path, record: int, seed_t: np.ndarray | None = None) -> tuple[np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > record + 1, f"dataset too short for rollout lock: record={record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > record + 1, f"replay too short for rollout lock: record={record}"
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -125,7 +125,7 @@ def _step_one_record(dataset_path: Path, record: int, seed_t: np.ndarray | None 
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -142,8 +142,8 @@ def _step_one_record(dataset_path: Path, record: int, seed_t: np.ndarray | None 
     [
         FreezeRehitCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "GracefulAttachedTurtle.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.slpz"
             ),
             target_record=5088,
             attacker=1,
@@ -156,8 +156,8 @@ def _step_one_record(dataset_path: Path, record: int, seed_t: np.ndarray | None 
         ),
         FreezeRehitCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "TreasuredBackKangaroo.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "TreasuredBackKangaroo.slpz"
             ),
             target_record=3907,
             attacker=0,
@@ -170,8 +170,8 @@ def _step_one_record(dataset_path: Path, record: int, seed_t: np.ndarray | None 
         ),
         FreezeRehitCase(
             dataset_rel=(
-                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-                "QuerulousGrandDinosaur.msl"
+                "replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.slpz"
             ),
             target_record=9911,
             attacker=1,
@@ -200,17 +200,17 @@ def test_hitlag_freeze_keeps_rehit_suppression_on_followup_frame(case: FreezeReh
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     for rec in (
         case.target_record - 1,
         case.target_record,
         case.target_record + 1,
         case.target_record + case.negative_record_delta,
     ):
-        assert int(samples.shape[0]) > rec + 1, f"dataset too short for rollout lock: record={rec}"
+        assert int(samples.shape[0]) > rec + 1, f"replay too short for rollout lock: record={rec}"
 
     target = samples[case.target_record]
     assert int(target["seed_t"]["char_id"][case.attacker]) == case.attacker_char
@@ -260,12 +260,12 @@ def test_hitlag_frozen_create_frame_materializes_authoritative_hitlist_seed_on_r
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008440}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     attacker = 0
     defender = 1
     start = 1390
@@ -303,12 +303,12 @@ def test_marth_hitlag_exit_uses_body_attribution_to_reconstruct_victims1() -> No
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
     root = Path(__file__).resolve().parents[1]
     _skip_if_marth_artifacts_missing(root)
-    dataset_path = root / "datasets/marth/replays/validation/marth/MetallicUniqueGrouse.msl"
+    dataset_path = root / "replays/validation/marth/MetallicUniqueGrouse.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     attacker = 1
     defender = 0
     first_hit_record = 2110
@@ -341,7 +341,7 @@ def test_marth_hitlag_exit_uses_body_attribution_to_reconstruct_victims1() -> No
         1, input_stride
     )
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
@@ -379,12 +379,12 @@ def test_sheik_vanish_smoke_hitlag_tail_uses_body_attribution_to_reject_rehit() 
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/sheik/replays/validation/sheik/RuralReasonableRat.msl"
+    dataset_path = root / "replays/validation/sheik/RuralReasonableRat.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 2909
     attacker = 0
     defender = 1
@@ -430,12 +430,12 @@ def test_guardsetoff_hitlag_exit_materializes_authoritative_hitcapsule_seed_on_r
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     attacker = 0
     defender = 1
     start = 5355
@@ -460,9 +460,8 @@ def test_guardsetoff_hitlag_exit_materializes_authoritative_hitcapsule_seed_on_r
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    prev_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
-    raw = samples.view(np.uint8).reshape(len(samples), -1)
+    prev_off = "prev_input_t"
+    input_off = "input_t"
     seed_row = samples[start : start + 1].copy()
     seed_row["seed_t"]["combat_hitlist_cd"][0, attacker, :, defender] = np.uint16(0)
     seed_row["seed_t"]["combat_hitlist_victim_iid"][0, attacker, :, defender] = np.uint16(0)
@@ -471,10 +470,10 @@ def test_guardsetoff_hitlag_exit_materializes_authoritative_hitcapsule_seed_on_r
     seed_row["seed_t"]["combat_hitlist_hb_victim_iid"][0, attacker, :, defender] = np.uint16(0)
     seed_bytes = np.frombuffer(seed_row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
 
-    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
-        return np.array(raw[record : record + 1, off : off + stride], dtype=np.uint8, order="C", copy=True)
+    def field_bytes(record: int, group: str, stride: int) -> np.ndarray:
+        return replay_buffer_row_bytes(ds, group, record, stride)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         out_bytes = np.zeros((1, compare_stride), dtype=np.uint8, order="C")
@@ -505,13 +504,13 @@ def test_hitlag_frozen_create_frame_carry_is_per_hitbox_not_attacker_wide() -> N
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008440}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[1390:1391].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[1390:1391].copy()
     attacker = 0
     defender = 1
 
@@ -545,7 +544,7 @@ def test_hitlag_frozen_create_frame_carry_is_per_hitbox_not_attacker_wide() -> N
     )
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)

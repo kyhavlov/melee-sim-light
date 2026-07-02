@@ -266,7 +266,7 @@ def test_phase6_moving_surface_owner_is_packet_driven_not_replay_or_stage_shortc
     for token in (
         "trace",
         "dataset",
-        ".msl",
+        ".slpz",
         ".slp",
         "replay record",
         "hardcoded record",

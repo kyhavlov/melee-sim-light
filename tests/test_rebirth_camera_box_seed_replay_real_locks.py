@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,7 @@ class _Case:
     "case",
     [
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=1920,
             p=1,
             seed_visible_triplet=(1, 1, 0),
@@ -34,7 +34,7 @@ class _Case:
             note="F04 over-set blocker: camera-box bit stays visible on the seed row through late Rebirth/entry flow",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=2710,
             p=0,
             seed_visible_triplet=(0, 0, 1),
@@ -43,7 +43,7 @@ class _Case:
             note="F04 under-set blocker: camera-box bit becomes visible one row after the seed in this DamageFly/Rebirth family",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=3227,
             p=0,
             seed_visible_triplet=(1, 1, 0),
@@ -52,7 +52,7 @@ class _Case:
             note="F04 over-set blocker: late Rebirth visibility stays latched on the seed row",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=705,
             p=1,
             seed_visible_triplet=(0, 0, 1),
@@ -61,7 +61,7 @@ class _Case:
             note="F04 under-set blocker: camera-box bit is absent on the seed row but visible on the next replay row",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=4514,
             p=0,
             seed_visible_triplet=(1, 1, 0),
@@ -70,7 +70,7 @@ class _Case:
             note="F04 over-set blocker: camera-box bit clears on the reference row after staying set on the seed row",
         ),
         _Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=2534,
             p=0,
             seed_visible_triplet=(0, 0, 1),
@@ -92,10 +92,10 @@ def test_rebirth_camera_box_seed_lane_locks_blockers_and_adjacent_controls(case:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = case.p
 
     for rec, expected in zip(

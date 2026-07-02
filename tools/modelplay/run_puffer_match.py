@@ -35,7 +35,6 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument("--p2-checkpoint", type=Path, default=None)
     ap.add_argument("--p2-mode", choices=("checkpoint", "random", "idle"), default="random")
-    ap.add_argument("--start-mode", choices=("sim-init",), default="sim-init")
     ap.add_argument("--max-frames", type=int, default=1200)
     ap.add_argument("--stocks", type=int, default=1)
     ap.add_argument("--out", type=Path, default=Path("reports/modelplay") / f"{_timestamp()}_puffer")
@@ -63,9 +62,8 @@ def main() -> int:
 
     char_ids = (CHAR_IDS[args.p1_char], CHAR_IDS[args.p2_char])
     session = SimSession(
-        dataset_path=None,
         char_ids=char_ids,
-        start_mode=args.start_mode,
+        start_mode="sim-init",
         stocks=args.stocks,
         frame_id=0,
         random_seed=args.seed,
@@ -123,7 +121,7 @@ def main() -> int:
             "checkpoint": str(args.checkpoint),
             "p2_mode": args.p2_mode,
             "p2_checkpoint": None if args.p2_checkpoint is None else str(args.p2_checkpoint),
-            "start_mode": args.start_mode,
+            "start_mode": "sim-init",
             "frames_run": frames_run,
             "final_frame_id": session.current_frame_state.frame_id,
             "final_stocks": session.current_frame_state.stocks[:2].tolist(),
@@ -139,7 +137,7 @@ def main() -> int:
                     "slippi_ai_root": str(args.slippi_ai_root),
                     "p2_checkpoint": None if args.p2_checkpoint is None else str(args.p2_checkpoint),
                     "p2_mode": args.p2_mode,
-                    "start_mode": args.start_mode,
+                    "start_mode": "sim-init",
                     "max_frames": args.max_frames,
                     "stocks": args.stocks,
                     "p1_char": args.p1_char,

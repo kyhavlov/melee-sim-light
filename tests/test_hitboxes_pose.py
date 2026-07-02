@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
 
 from tests.test_anim_pose import _MAT_BYTES, _find_anim_base_offset, _read_header
 from tests.test_hurtboxes_pose import _mtx34_mul_point

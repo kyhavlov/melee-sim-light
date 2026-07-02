@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 from tests.test_items_spawn_joint_replay_real_locks import (
     _skip_if_required_artifacts_missing,
@@ -50,7 +50,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
     "case",
     [
         _ThrowBContextCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=9958,
             thrower_port=1,
             thrower_animf=11.999999046325684,
@@ -58,7 +58,7 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             note="ThrowB hitstun stale-context lock (early pulse window)",
         ),
         _ThrowBContextCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=9968,
             thrower_port=1,
             thrower_animf=25.333335876464844,
@@ -72,10 +72,10 @@ def test_throwb_stale_context_target_pm1_both_players(case: _ThrowBContextCase) 
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    target = ds.samples[case.target_record]
+    ds = load_replay_buffers(str(dataset_path))
+    target = ds.rows[case.target_record]
     thrower = int(case.thrower_port)
     victim = 1 - thrower
 

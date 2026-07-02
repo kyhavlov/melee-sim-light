@@ -5,22 +5,23 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, read_dataset
-from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
+from tools.eval.streaming_validation import _load_binding
 
 
 def _dataset(root: Path):
-    path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    path = root / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     if not path.exists():
         pytest.skip(f"missing dataset: {path}")
-    return read_dataset(str(path))
+    return load_replay_buffers(str(path))
 
 
 def _dataset_selfplay_181413(root: Path):
-    path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260514T181413.msl"
+    path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not path.exists():
         pytest.skip(f"missing dataset: {path}")
-    return read_dataset(str(path))
+    return load_replay_buffers(str(path))
 
 
 def _step_one(ds, record: int, *, mutate_input=None) -> np.void:
@@ -29,14 +30,14 @@ def _step_one(ds, record: int, *, mutate_input=None) -> np.void:
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
         input_bytes = np.empty((1, input_stride), dtype=np.uint8)
         out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-        row = ds.samples[record]
+        row = ds.rows[record]
         seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
         prev_input = np.array(row["prev_input_t"], dtype=INPUT_DTYPE).reshape(())
         cur_input = np.array(row["input_t"], dtype=INPUT_DTYPE).reshape(())
@@ -59,14 +60,14 @@ def _rollout_rows(ds, start_record: int, end_record_inclusive: int, *, mutate_se
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
         input_bytes = np.empty((1, input_stride), dtype=np.uint8)
         out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-        samples = ds.samples
+        samples = ds.rows
         seed_bytes[:] = np.frombuffer(samples[start_record]["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
             1, seed_stride
         )
@@ -102,9 +103,9 @@ def test_opening_lock_timer_one_allows_landing_jump_iasa_maj83() -> None:
     root = Path(__file__).resolve().parents[1]
     ds = _dataset(root)
     out = _step_one(ds, 83)
-    ref = ds.samples[83]["ref_t1"]
+    ref = ds.rows[83]["ref_t1"]
 
-    assert int(ds.samples[83]["seed_t"]["opening_input_lock_timer"][0]) == 1
+    assert int(ds.rows[83]["seed_t"]["opening_input_lock_timer"][0]) == 1
     assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 24
     assert int(out["action_frame"][0]) == int(ref["action_frame"][0]) == 0
 
@@ -120,12 +121,12 @@ def test_opening_lock_clear_held_stick_landing_enters_walk_not_dash_game83() -> 
     root = Path(__file__).resolve().parents[1]
     ds = _dataset_selfplay_181413(root)
     out = _step_one(ds, 83)
-    ref = ds.samples[83]["ref_t1"]
+    ref = ds.rows[83]["ref_t1"]
 
-    assert int(ds.samples[83]["seed_t"]["opening_input_lock_timer"][0]) == 1
-    assert int(ds.samples[83]["seed_t"]["frame_id"]) == -40
-    assert int(ds.samples[83]["prev_input_t"]["p"][0]["main_x"]) == 65
-    assert int(ds.samples[83]["input_t"]["p"][0]["main_x"]) == 80
+    assert int(ds.rows[83]["seed_t"]["opening_input_lock_timer"][0]) == 1
+    assert int(ds.rows[83]["seed_t"]["frame_id"]) == -40
+    assert int(ds.rows[83]["prev_input_t"]["p"][0]["main_x"]) == 65
+    assert int(ds.rows[83]["input_t"]["p"][0]["main_x"]) == 80
     assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 15
     assert float(out["speed_ground_x_self"][0]) == pytest.approx(float(ref["speed_ground_x_self"][0]), abs=1e-6)
     assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=1e-6)
@@ -161,7 +162,7 @@ def test_opening_lock_timer_two_still_blocks_landing_jump_edge() -> None:
 
     out = _step_one(ds, 82, mutate_input=press_xy)
 
-    assert int(ds.samples[82]["seed_t"]["opening_input_lock_timer"][0]) == 2
+    assert int(ds.rows[82]["seed_t"]["opening_input_lock_timer"][0]) == 2
     assert int(out["action_id"][0]) == 42
     assert int(out["action_frame"][0]) == 7
 
@@ -175,10 +176,10 @@ def test_opening_lock_boundary_rollout_reaches_aerial_blaster_maj72() -> None:
     ds = _dataset(root)
     rows = _rollout_rows(ds, 72, 91)
 
-    assert int(rows[83]["action_id"][0]) == int(ds.samples[83]["ref_t1"]["action_id"][0]) == 24
-    assert int(rows[88]["action_id"][0]) == int(ds.samples[88]["ref_t1"]["action_id"][0]) == 25
-    assert int(rows[91]["action_id"][0]) == int(ds.samples[91]["ref_t1"]["action_id"][0]) == 344
-    assert int(rows[91]["on_ground"][0]) == int(ds.samples[91]["ref_t1"]["on_ground"][0]) == 0
+    assert int(rows[83]["action_id"][0]) == int(ds.rows[83]["ref_t1"]["action_id"][0]) == 24
+    assert int(rows[88]["action_id"][0]) == int(ds.rows[88]["ref_t1"]["action_id"][0]) == 25
+    assert int(rows[91]["action_id"][0]) == int(ds.rows[91]["ref_t1"]["action_id"][0]) == 344
+    assert int(rows[91]["on_ground"][0]) == int(ds.rows[91]["ref_t1"]["on_ground"][0]) == 0
 
 
 def test_opening_lock_timer_one_rollout_requires_real_frame_boundary() -> None:

@@ -28,11 +28,11 @@ def test_downdamageu_active_hitlag_sdi_uses_common_damage_owner() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 7598, 1)
     p = 1
@@ -59,11 +59,11 @@ def test_downdamageu_hitlag_exit_asdi_di_uses_same_allow_sdi_lane() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 7599, 1)
     p = 1
@@ -88,11 +88,11 @@ def test_downdamageu_hitlag_no_sdi_without_source_stick_window() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ParallelTemptingElk.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 7597, 1)
     p = 1

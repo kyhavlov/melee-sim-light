@@ -6,16 +6,17 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_MAJ_DATASET = "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+_MAJ_DATASET = "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
 
 
 def _run_one_step(dataset_path: Path, record: int) -> np.void:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > record
 
     sizes = binding.sizes()
@@ -30,7 +31,7 @@ def _run_one_step(dataset_path: Path, record: int) -> np.void:
     input_bytes = row["input_t"].view("u1").reshape(1, input_stride).copy()
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -43,8 +44,8 @@ def _run_one_step(dataset_path: Path, record: int) -> np.void:
 
 def _run_rollout_to_record(dataset_path: Path, *, start_record: int, target_record: int) -> np.void:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > target_record
 
     sizes = binding.sizes()
@@ -56,7 +57,7 @@ def _run_rollout_to_record(dataset_path: Path, *, start_record: int, target_reco
     seed_bytes = samples[start_record : start_record + 1]["seed_t"].view("u1").reshape(1, seed_stride).copy()
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for rec in range(start_record, target_record + 1):
@@ -89,10 +90,10 @@ def test_fall_ledge_floor_first_root_crossing_stays_airborne_then_lands() -> Non
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _MAJ_DATASET
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_MAJ_DATASET}")
+        pytest.skip(f"missing local replay: {_MAJ_DATASET}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = 0
 
     seed_5100 = samples[5100]["seed_t"]
@@ -128,10 +129,10 @@ def test_fall_ledge_floor_lands_after_root_is_already_below_floor() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _MAJ_DATASET
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_MAJ_DATASET}")
+        pytest.skip(f"missing local replay: {_MAJ_DATASET}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = 0
     seed = samples[5101]["seed_t"]
     ref = samples[5101]["ref_t1"]
@@ -153,13 +154,13 @@ def test_fox_fall_ledge_floor_first_root_crossing_still_lands() -> None:
     # immediately in replay, so the guard must not become a shared ordinary-Fall ledge suppressor.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_rel = "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = 5729
     p = 1
     seed = samples[record]["seed_t"]

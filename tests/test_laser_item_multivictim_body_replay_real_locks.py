@@ -5,11 +5,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
-DATASET_REL = "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+DATASET_REL = "replays/validation/doubles_recent/Game_20260509T152622.slpz"
 RECORD_MULTI_VICTIM_LASER = 9048
 P0_ATTACKER_HIT_BY_LASER = 0
 P1_ALREADY_IN_DAMAGE_HIT_BY_LASER = 1
@@ -52,7 +53,7 @@ def _step_row(row: np.ndarray, *, num_players: int) -> np.void:
 
 
 def _rollout_rows(ds, start_record: int, target_record: int) -> tuple[np.void, np.void]:
-    samples = ds.samples
+    samples = ds.rows
     assert 0 <= start_record <= target_record < int(samples.shape[0])
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -60,11 +61,10 @@ def _rollout_rows(ds, start_record: int, target_record: int) -> tuple[np.void, n
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(samples.shape[0], sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -74,18 +74,16 @@ def _rollout_rows(ds, start_record: int, target_record: int) -> tuple[np.void, n
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, target_record + 1):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_bytes)
         out = out_view[0].copy()
@@ -108,17 +106,17 @@ def test_falco_laser_body_damage_dealt_callback_hits_multiple_victims_before_des
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / DATASET_REL
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {DATASET_REL}")
+        pytest.skip(f"missing local replay: {DATASET_REL}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[RECORD_MULTI_VICTIM_LASER : RECORD_MULTI_VICTIM_LASER + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[RECORD_MULTI_VICTIM_LASER : RECORD_MULTI_VICTIM_LASER + 1]
     seed = row["seed_t"][0]
     ref = row["ref_t1"][0]
     assert int(seed["items"][LASER_ITEM_SLOT]["instance_id"]) == LASER_INSTANCE_ID
     assert int(seed["hitlag"][P0_ATTACKER_HIT_BY_LASER]) == 6
     assert int(seed["hitlag"][P1_ALREADY_IN_DAMAGE_HIT_BY_LASER]) == 6
 
-    out = _step_row(row, num_players=int(ds.header["num_players"]))
+    out = _step_row(row, num_players=int(ds.num_players))
 
     assert int(out["action_id"][P0_ATTACKER_HIT_BY_LASER]) == ACT_DAMAGE_LW_1
     assert int(out["hitlag"][P0_ATTACKER_HIT_BY_LASER]) == 3
@@ -144,10 +142,10 @@ def test_multivictim_laser_body_still_respects_item_hitlist_victim_ring() -> Non
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / DATASET_REL
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {DATASET_REL}")
+        pytest.skip(f"missing local replay: {DATASET_REL}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[RECORD_MULTI_VICTIM_LASER : RECORD_MULTI_VICTIM_LASER + 1].copy()
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[RECORD_MULTI_VICTIM_LASER : RECORD_MULTI_VICTIM_LASER + 1].copy()
     seed = row["seed_t"][0]
     seed["item_hitlist_victim_port"][LASER_ITEM_SLOT] = np.uint8(P1_ALREADY_IN_DAMAGE_HIT_BY_LASER)
     seed["item_hitlist_victim_cd"][LASER_ITEM_SLOT] = np.uint8(16)
@@ -156,7 +154,7 @@ def test_multivictim_laser_body_still_respects_item_hitlist_victim_ring() -> Non
         seed["instance_id"][P1_ALREADY_IN_DAMAGE_HIT_BY_LASER]
     )
 
-    out = _step_row(row, num_players=int(ds.header["num_players"]))
+    out = _step_row(row, num_players=int(ds.num_players))
 
     assert int(out["action_id"][P0_ATTACKER_HIT_BY_LASER]) == ACT_DAMAGE_LW_1
     assert int(out["instance_hit_by"][P0_ATTACKER_HIT_BY_LASER]) == LASER_INSTANCE_ID
@@ -180,7 +178,7 @@ def test_laser_fighter_hitcapsule_contact_registers_item_victim_before_later_bod
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {SELFPLAY_182447_SLP}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
@@ -211,14 +209,14 @@ def test_falco_laser_flinching_body_not_suppressed_by_attackairlw_hitcapsule_con
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {EWT_SLP}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    row = ds.samples[5477:5478]
-    out = _step_row(row, num_players=int(ds.header["num_players"]))
+    row = ds.rows[5477:5478]
+    out = _step_row(row, num_players=int(ds.num_players))
     ref = row["ref_t1"][0]
 
     assert int(row["seed_t"][0]["action_id"][0]) == 69  # AttackAirLw.

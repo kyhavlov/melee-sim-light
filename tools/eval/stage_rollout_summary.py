@@ -48,7 +48,7 @@ class StageRolloutSummary:
 
 def _replay_stem(path: str | Path) -> str:
     name = Path(path).name
-    for suffix in (".slpz", ".slp", ".msl"):
+    for suffix in (".slpz", ".slp", ".slpz"):
         if name.endswith(suffix):
             return name[: -len(suffix)]
     return Path(name).stem

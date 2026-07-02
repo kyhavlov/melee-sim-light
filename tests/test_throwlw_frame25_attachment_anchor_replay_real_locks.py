@@ -5,13 +5,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _rollout_window(dataset_path: Path, start_record: int, length: int) -> list[tuple[np.void, np.void]]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) >= start_record + length
 
     sizes = binding.sizes()
@@ -19,7 +20,7 @@ def _rollout_window(dataset_path: Path, start_record: int, length: int) -> list[
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(
             samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8
@@ -58,10 +59,10 @@ def test_throwlw_attached_anchor_uses_float_aobj_and_integer_transn_tail_prh() -
     # refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+        root / "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rows = _rollout_window(dataset_path, start_record=5617, length=10)
     victim = 0
@@ -86,10 +87,10 @@ def test_throwlw_attached_hitlag_freezes_accessory1_anchor_prh() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/debug/fd_mixed_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/fd_mixed_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rows = _rollout_window(dataset_path, start_record=5628, length=3)
     victim = 0
@@ -109,10 +110,10 @@ def test_throwlw_frame25_slowest_rate_attachment_anchor_positive_prh() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/debug/fd_mixed_recent/PositiveRevolvingHyena.msl"
+        / "replays/validation/fd_mixed_recent/PositiveRevolvingHyena.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rows = _rollout_window(dataset_path, start_record=5628, length=8)
     out, ref = rows[7]
@@ -136,11 +137,11 @@ def test_throwlw_frame25_faster_victim_rate_uses_shared_transn_anchor_qgd() -> N
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rows = _rollout_window(dataset_path, start_record=8108, length=3)
     out, ref = rows[2]
@@ -163,10 +164,10 @@ def test_throwlw_release_floor_contact_enters_downbound_fsp() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+        root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     rows = _rollout_window(dataset_path, start_record=9179, length=9)
     out, ref = rows[8]

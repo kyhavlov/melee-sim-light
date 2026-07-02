@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 MSL_ACT_DAMAGE_FLY_N = 90
 
@@ -18,7 +18,7 @@ def _step_row(ds, record: int, *, player: int, prev_main_xy: tuple[int, int] | N
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     seed_t = row["seed_t"].copy()
     prev_input_t = row["prev_input_t"].copy()
     if prev_main_xy is not None:
@@ -37,7 +37,7 @@ def _step_row(ds, record: int, *, player: int, prev_main_xy: tuple[int, int] | N
     )
 
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -65,7 +65,7 @@ def test_damage_hitlag_exit_di_uses_source_msl_trig_for_selfplay_launch() -> Non
     slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
@@ -98,7 +98,7 @@ def test_damage_hitlag_exit_di_requires_prior_frame_stick_owner() -> None:
     slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,

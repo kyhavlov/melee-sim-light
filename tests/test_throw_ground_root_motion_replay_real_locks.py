@@ -8,8 +8,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row, 
 
 
 PRH = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-    "PositiveRevolvingHyena.msl"
+    "replays/validation/aggregate_recent/"
+    "PositiveRevolvingHyena.slpz"
 )
 
 
@@ -19,16 +19,16 @@ PRH = (
     [
         (PRH, 6855, 0, 219, None),  # ThrowF
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "TubbyCurlyHerring.msl",
+            "replays/validation/aggregate_recent/"
+            "TubbyCurlyHerring.slpz",
             5084,
             1,
             220,
             0.0,
         ),  # ThrowB early no-root-motion control
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "TubbyCurlyHerring.msl",
+            "replays/validation/aggregate_recent/"
+            "TubbyCurlyHerring.slpz",
             252,
             1,
             221,
@@ -56,7 +56,7 @@ def test_grounded_throw_phys_uses_throw_direction_root_motion_owner(
     _skip_if_required_artifacts_missing(root)
     ds_path = root / dataset_rel
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     seed, ref, out = _run_one_step_row(ds_path, record, owner)
     assert int(seed["action_id"][owner]) == action_id
@@ -84,7 +84,7 @@ def test_throwf_grounded_phys_does_not_write_attached_victim_velocity() -> None:
     _skip_if_required_artifacts_missing(root)
     ds_path = root / PRH
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {PRH}")
+        pytest.skip(f"missing local replay: {PRH}")
 
     owner = 0
     victim = 1

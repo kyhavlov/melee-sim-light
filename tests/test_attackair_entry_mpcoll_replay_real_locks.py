@@ -11,8 +11,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 
 
 _CDO_POKEMON_STADIUM = (
-    "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-    "CornyDelayedOkapi.msl"
+    "replays/validation/pokemon_stadium_recent/"
+    "CornyDelayedOkapi.slpz"
 )
 
 
@@ -34,7 +34,7 @@ def test_jumpaerial_to_attackair_entry_tick_feeds_same_frame_left_wall_collision
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _CDO_POKEMON_STADIUM
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_CDO_POKEMON_STADIUM}")
+        pytest.skip(f"missing local replay: {_CDO_POKEMON_STADIUM}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 8825, 1)
     p = 1
@@ -56,7 +56,7 @@ def test_jumpaerial_left_wall_adjacent_non_attackair_control_stays_on_source_sta
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _CDO_POKEMON_STADIUM
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {_CDO_POKEMON_STADIUM}")
+        pytest.skip(f"missing local replay: {_CDO_POKEMON_STADIUM}")
 
     seed, ref, out = _run_one_step_row(dataset_path, 8824, 1)
     p = 1

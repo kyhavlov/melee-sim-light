@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -19,22 +20,22 @@ def test_throw_pulse_consumed_clears_after_step_and_does_not_sticky_carry() -> N
     # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     # ThrowB stale-context lock family row.
     record = 8291
     thrower = 1
-    if int(ds.samples.shape[0]) <= record + 1:
-        pytest.skip("dataset too short for target+1 transient check")
+    if int(ds.rows.shape[0]) <= record + 1:
+        pytest.skip("replay too short for target+1 transient check")
 
-    row0 = ds.samples[record]
-    row1 = ds.samples[record + 1]
+    row0 = ds.rows[record]
+    row1 = ds.rows[record + 1]
     assert int(row0["seed_t"]["throw_pulse_consumed"][thrower]) == 1
     assert int(row0["seed_t"]["throw_pulse_crossed_prev_frame"][thrower]) > 0
 
@@ -86,7 +87,7 @@ def test_throw_pulse_consumed_clears_after_step_and_does_not_sticky_carry() -> N
     inp1_bytes = inp1.view(np.uint8).reshape((1, input_stride)).copy()
 
     out_int = np.zeros((1, internals_stride), dtype=np.uint8)
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed0_bytes)
         binding.debug_write_internals(handle, out_int)

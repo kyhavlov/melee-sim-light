@@ -6,30 +6,24 @@ import numpy as np
 import pytest
 
 from tests.test_items_spawn_joint_replay_real_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
+from tools.eval.streaming_validation import _load_binding
 
 
-_PJO = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl")
+_PJO = Path("replays/validation/aggregate_recent/PutridJoyousOryx.slpz")
 
 
 def _byte_views(ds):
-    samples = ds.samples
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
-    return (
-        samples_u8,
-        int(samples.dtype.fields["seed_t"][1]),
-        int(samples.dtype.fields["prev_input_t"][1]),
-        int(samples.dtype.fields["input_t"][1]),
-    )
+    views = replay_buffer_byte_views(ds)
+    return views.seed_t, views.prev_input_t, views.input_t
 
 
 def _step_one(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
     binding = _load_binding()
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    samples_u8, seed_off, prev_input_off, input_off = _byte_views(ds)
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    seed_u8, prev_input_u8, input_u8 = _byte_views(ds)
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -40,11 +34,11 @@ def _step_one(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
     input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
-        prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
-        input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+        seed_bytes[0, :] = seed_u8[record, :seed_stride]
+        prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+        input_bytes[0, :] = input_u8[record, :input_stride]
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_bytes)
@@ -56,9 +50,9 @@ def _step_one(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
 
 def _rollout_to(dataset_path: Path, start_record: int, end_record: int) -> tuple[np.void, np.void]:
     binding = _load_binding()
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    samples_u8, seed_off, prev_input_off, input_off = _byte_views(ds)
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    seed_u8, prev_input_u8, input_u8 = _byte_views(ds)
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -69,15 +63,13 @@ def _rollout_to(dataset_path: Path, start_record: int, end_record: int) -> tuple
     input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[start_record, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, end_record + 1):
-            prev_input_bytes[0, :] = samples_u8[
-                record, prev_input_off : prev_input_off + input_stride
-            ]
-            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+            input_bytes[0, :] = input_u8[record, :input_stride]
             binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_bytes)
     finally:
@@ -88,9 +80,9 @@ def _rollout_to(dataset_path: Path, start_record: int, end_record: int) -> tuple
 
 def _precombat_body_selection_count(dataset_path: Path, record: int) -> int:
     binding = _load_binding()
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    samples_u8, seed_off, prev_input_off, input_off = _byte_views(ds)
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    seed_u8, prev_input_u8, input_u8 = _byte_views(ds)
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -99,11 +91,11 @@ def _precombat_body_selection_count(dataset_path: Path, record: int) -> int:
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     input_bytes = np.empty((1, input_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
-        prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
-        input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+        seed_bytes[0, :] = seed_u8[record, :seed_stride]
+        prev_input_bytes[0, :] = prev_input_u8[record, :input_stride]
+        input_bytes[0, :] = input_u8[record, :input_stride]
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
         binding.debug_refresh_combat_geometry(handle)
@@ -126,7 +118,7 @@ def test_guardreflect_no_submotion_grabbable_capsules_allow_catch_pjo_4240() -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _PJO
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     out, ref = _step_one(dataset_path, 4240)
     assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 213  # CatchPull
@@ -144,7 +136,7 @@ def test_guardreflect_no_submotion_grabbable_capsules_do_not_enable_body_pjo_424
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _PJO
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     assert _precombat_body_selection_count(dataset_path, 4240) == 0
 
@@ -157,7 +149,7 @@ def test_guardreflect_no_submotion_catch_rollout_bridge_pjo_4221_to_4240() -> No
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _PJO
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     out, ref = _rollout_to(dataset_path, 4221, 4240)
     assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 213

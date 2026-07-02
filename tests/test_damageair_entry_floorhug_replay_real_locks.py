@@ -5,10 +5,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-HIS = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+HIS = "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
 
 
 def _rollout_rows(
@@ -20,8 +21,8 @@ def _rollout_rows(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert targets
     assert start_record <= min(targets) <= max(targets) < int(samples.shape[0])
 
@@ -35,7 +36,7 @@ def _rollout_rows(
     out_by_record: dict[int, np.void] = {}
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -74,17 +75,17 @@ def test_fresh_damageair_entry_and_frozen_hitlag_do_not_snap_root_to_floor_his_8
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / HIS
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {HIS}")
+        pytest.skip(f"missing local replay: {HIS}")
 
     ds, out_by_record = _rollout_rows(dataset_path, 8080, (8101, 8102, 8103))
     p = 1
 
-    seed_8101 = ds.samples[8101]["seed_t"]
+    seed_8101 = ds.rows[8101]["seed_t"]
     assert int(seed_8101["action_id"][p]) == 65  # AttackAirN
     assert int(seed_8101["hitlag"][p]) == 0
     assert float(seed_8101["pos_y"][p]) == pytest.approx(1.6300973892211914, abs=1e-6)
 
-    ref_8101 = ds.samples[8101]["ref_t1"]
+    ref_8101 = ds.rows[8101]["ref_t1"]
     out_8101 = out_by_record[8101]
     assert int(ref_8101["action_id"][p]) == 86  # DamageAir3
     assert int(out_8101["action_id"][p]) == 86
@@ -92,14 +93,14 @@ def test_fresh_damageair_entry_and_frozen_hitlag_do_not_snap_root_to_floor_his_8
     assert float(out_8101["pos_y"][p]) == pytest.approx(float(ref_8101["pos_y"][p]), abs=1e-6)
     assert float(out_8101["pos_y"][p]) == pytest.approx(-1.7699027061462402, abs=1e-6)
 
-    seed_8102 = ds.samples[8102]["seed_t"]
+    seed_8102 = ds.rows[8102]["seed_t"]
     assert int(seed_8102["action_id"][p]) == 86
     assert int(seed_8102["tilt_timer_x"][p]) == 0xFE
     assert int(seed_8102["tilt_timer_y"][p]) == 0xFE
-    assert int(ds.samples[8102]["input_t"]["p"]["main_y"][p]) < -100
+    assert int(ds.rows[8102]["input_t"]["p"]["main_y"][p]) < -100
 
     for record, expected_hitlag in ((8102, 7), (8103, 6)):
-        ref = ds.samples[record]["ref_t1"]
+        ref = ds.rows[record]["ref_t1"]
         out = out_by_record[record]
         assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 86
         assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == expected_hitlag

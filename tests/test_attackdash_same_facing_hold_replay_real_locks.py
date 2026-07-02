@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -23,8 +23,8 @@ class _Case:
 _CASES = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
         ),
         record=6298,
         p=1,
@@ -32,8 +32,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
         ),
         record=6299,
         p=1,
@@ -41,8 +41,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
         ),
         record=6300,
         p=1,
@@ -50,8 +50,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
         ),
         record=6301,
         p=1,
@@ -59,8 +59,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
         ),
         record=6302,
         p=1,
@@ -68,8 +68,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
         ),
         record=4249,
         p=1,
@@ -77,8 +77,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
         ),
         record=4250,
         p=1,
@@ -86,8 +86,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
         ),
         record=4251,
         p=1,
@@ -95,8 +95,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
         ),
         record=4252,
         p=1,
@@ -104,8 +104,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
         ),
         record=4253,
         p=1,
@@ -113,8 +113,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+            "replays/validation/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.slpz"
         ),
         record=4254,
         p=1,
@@ -137,13 +137,13 @@ def test_attackdash_same_facing_hold_replay_real_lock(case: _Case) -> None:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     record = int(case.record)
     p = int(case.p)
-    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    assert int(samples.shape[0]) > record, f"replay too short for lock row: record={record}"
 
     row = samples[record : record + 1]
     seed = row["seed_t"][0]

@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 from tools.modelplay.sim_env import build_match_config_array
 from tools.modelplay.state_adapter import STAGE_DEBUG_DTYPE
 from tools.slippi.known_data_artifacts import (
@@ -18,7 +19,7 @@ from tools.slippi.known_data_artifacts import (
     stage_metadata_path_for_stage_id,
 )
 from tools.slippi.seed_history import load_shield_tilt_table_meta
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tests.replay_buffers_loader import load_replay_buffers
 from tests.test_colldata_ecb_substrate import (
     FLOOR_MODE_BOTTOM_SWEEP,
     FLOOR_MODE_ROOT_PROJECTION,
@@ -2200,13 +2201,11 @@ def test_yoshi_landingfallspecial_sustained_slope_projection_replay_real() -> No
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor}
     # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
     root = Path(__file__).resolve().parents[1]
-    path = root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
+    path = root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     p = 1
-    row = ds.samples[5277]
+    row = ds.rows[5277]
     assert int(row["seed_t"]["stage_id"]) == STAGE_YOSHI
     assert int(row["seed_t"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
     assert int(row["seed_t"]["action_frame"][p]) == 18
@@ -2822,15 +2821,13 @@ def test_fod_replay_sparse_velocity_damageair_owner_is_same_platform_specific_pt
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 3466
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_AIR_2
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0]) == 0
     assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0]) == 1
@@ -3002,11 +2999,11 @@ def test_fod_grizumi_min_visible_stop_wait_boundary_matches_second_hidden_descen
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
-    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+    from tests.replay_buffers_loader import load_replay_buffers
 
     import msl_binding
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
     )
@@ -3019,20 +3016,20 @@ def test_fod_grizumi_min_visible_stop_wait_boundary_matches_second_hidden_descen
 
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         msl_binding.reseed_seed_rollout(
             handle,
-            np.frombuffer(ds.samples[0]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+            np.frombuffer(ds.rows[0]["seed_t"].tobytes(order="C"), dtype=np.uint8)
             .copy()
             .reshape(1, seed_stride),
         )
         observed: dict[int, float] = {}
         for record in range(1730):
-            row = ds.samples[record]
+            row = ds.rows[record]
             msl_binding.step_input(
                 handle,
                 np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
@@ -3050,11 +3047,11 @@ def test_fod_grizumi_min_visible_stop_wait_boundary_matches_second_hidden_descen
         msl_binding.destroy(handle)
 
     assert observed[720] == pytest.approx(
-        float(ds.samples[720]["seed_t"]["stage_fod_platform_height_f32"][1]), abs=1e-6
+        float(ds.rows[720]["seed_t"]["stage_fod_platform_height_f32"][1]), abs=1e-6
     )
     assert observed[1728] == pytest.approx(15.0, abs=1e-6)
     assert observed[1729] == pytest.approx(
-        float(ds.samples[1729]["seed_t"]["stage_fod_platform_height_f32"][1]), abs=1e-6
+        float(ds.rows[1729]["seed_t"]["stage_fod_platform_height_f32"][1]), abs=1e-6
     )
 
 
@@ -3069,15 +3066,13 @@ def test_fod_platform_scheduler_rand_range_matches_grizumi_replay_real() -> None
     # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ElatedWearyTermite.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
     import msl_binding
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -3091,19 +3086,19 @@ def test_fod_platform_scheduler_rand_range_matches_grizumi_replay_real() -> None
 
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
     try:
         msl_binding.reseed_seed_rollout(
             handle,
-            np.frombuffer(ds.samples[0]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+            np.frombuffer(ds.rows[0]["seed_t"].tobytes(order="C"), dtype=np.uint8)
             .copy()
             .reshape(1, seed_stride),
         )
         for cur_record in range(0, record):
-            row = ds.samples[cur_record]
+            row = ds.rows[cur_record]
             msl_binding.step_input(
                 handle,
                 np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
@@ -3116,7 +3111,7 @@ def test_fod_platform_scheduler_rand_range_matches_grizumi_replay_real() -> None
         msl_binding.debug_write_stage_state(handle, stage_out)
         pre_stage = stage_out.view(stage_dtype).reshape((1,))[0].copy()
 
-        row = ds.samples[record]
+        row = ds.rows[record]
         msl_binding.step_input(
             handle,
             np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
@@ -3131,10 +3126,10 @@ def test_fod_platform_scheduler_rand_range_matches_grizumi_replay_real() -> None
         msl_binding.destroy(handle)
 
     out = out_buf.view(COMPARE_DTYPE).reshape((1,))[0]
-    ref = ds.samples[record]["ref_t1"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(pre_stage["fod_platform_height_valid"][1]) == 1
     assert float(pre_stage["fod_platform_height"][1]) == pytest.approx(25.0, abs=1e-5)
-    assert int(ds.samples[record]["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(ds.rows[record]["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_B
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING_AIR_B
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 0
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
@@ -3177,15 +3172,13 @@ def test_fod_sustained_landing_does_not_snap_to_live_scheduler_platform() -> Non
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ElatedWearyTermite.slpz"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 838
-    row = ds.samples[record]
+    row = ds.rows[record]
     out = _rollout_replay_to_record(ds, 0, record)
     p = 1
 
@@ -3827,13 +3820,11 @@ def test_fod_passive_follows_live_height_platform_via_80083f88_pte_replay_real()
     # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
-    row = ds.samples[10962]
+    ds = load_replay_buffers(str(path))
+    row = ds.rows[10962]
     out = _step_one_replay_row(ds, 10962)
     ref = row["ref_t1"]
     p = 1
@@ -3873,14 +3864,12 @@ def test_fod_kneebend_projects_down_generated_slope_during_rollout() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ElatedWearyTermite.slpz"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[9753:9754]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[9753:9754]
     out = _step_once(row["seed_t"].copy(), row["prev_input_t"].view("u1").reshape(1, -1).copy(),
                      row["input_t"].view("u1").reshape(1, -1).copy())
     ref = row["ref_t1"][0]
@@ -3908,14 +3897,12 @@ def test_fod_kneebend_to_landingfallspecial_projects_connected_slope_floor() -> 
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ElatedWearyTermite.slpz"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[9755:9756]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[9755:9756]
     seed = row["seed_t"].copy()
     out = _step_once(seed, row["prev_input_t"].view("u1").reshape(1, -1).copy(),
                      row["input_t"].view("u1").reshape(1, -1).copy())
@@ -4206,16 +4193,14 @@ def test_fod_jumpaerial_escapeair_entry_can_waveland_on_static_center_platform_r
     # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpColl_80044628_Floor}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 5925
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
@@ -5548,16 +5533,14 @@ def test_fod_jump_to_aerial_shine_start_rejects_stale_platform_sweep_replay_real
     # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 10580
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_F
     assert int(row["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_START
@@ -5590,13 +5573,11 @@ def test_fod_jump_to_aerial_shine_start_rejects_stale_platform_sweep_replay_real
 def test_guard_drop_through_replay_real_enters_pass_on_frozen_ps_platform() -> None:
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+        / "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
-    row = ds.samples[90]
+    ds = load_replay_buffers(str(path))
+    row = ds.rows[90]
     p = 1
 
     assert int(row["seed_t"]["stage_id"]) == 3
@@ -5616,13 +5597,11 @@ def test_guard_drop_through_replay_real_enters_pass_on_frozen_ps_platform() -> N
 def test_yoshi_stage_object_support_replay_real_keeps_wait_on_raw_non_solid_floor() -> None:
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
-    row = ds.samples[7082]
+    ds = load_replay_buffers(str(path))
+    row = ds.rows[7082]
     p = 1
 
     assert int(row["seed_t"]["stage_id"]) == 8
@@ -5648,13 +5627,11 @@ def test_yoshi_stage_object_support_replay_real_keeps_wait_on_raw_non_solid_floo
 def test_frozen_ps_platform_dash_ignores_inactive_side_wall_replay_real() -> None:
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+        / "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
-    row = ds.samples[6258]
+    ds = load_replay_buffers(str(path))
+    row = ds.rows[6258]
     p = 1
 
     assert int(row["seed_t"]["stage_id"]) == 3
@@ -5680,14 +5657,12 @@ def test_yoshi_cliffjump_down_input_passes_through_platform_rollout_replay_real(
     # in CliffJumpSlow2 instead of entering Landing.
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     out = _rollout_replay_to_record(ds, 6575, 6577)
-    ref = ds.samples[6577]["ref_t1"]
+    ref = ds.rows[6577]["ref_t1"]
     p = 1
 
     assert int(ref["action_id"][p]) == ACT_CLIFF_JUMP_SLOW2
@@ -5708,17 +5683,15 @@ def test_yoshi_escapeair_locked_desired_bottom_waits_then_lands_rollout_replay_r
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800471F8}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+        / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     p = 1
 
     for airborne_record in (146, 147, 148):
         airborne = _rollout_replay_to_record(ds, 0, airborne_record)
-        ref_airborne = ds.samples[airborne_record]["ref_t1"]
+        ref_airborne = ds.rows[airborne_record]["ref_t1"]
         assert int(airborne["action_id"][p]) == int(ref_airborne["action_id"][p]) == ACT_ESCAPE_AIR
         assert int(airborne["action_frame"][p]) == int(ref_airborne["action_frame"][p])
         assert int(airborne["on_ground"][p]) == int(ref_airborne["on_ground"][p]) == 0
@@ -5726,7 +5699,7 @@ def test_yoshi_escapeair_locked_desired_bottom_waits_then_lands_rollout_replay_r
         assert float(airborne["pos_y"][p]) == pytest.approx(float(ref_airborne["pos_y"][p]), abs=1e-6)
 
     landed = _rollout_replay_to_record(ds, 0, 149)
-    ref_landed = ds.samples[149]["ref_t1"]
+    ref_landed = ds.rows[149]["ref_t1"]
     assert int(landed["action_id"][p]) == int(ref_landed["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
     assert int(landed["action_frame"][p]) == int(ref_landed["action_frame"][p]) == 0
     assert int(landed["on_ground"][p]) == int(ref_landed["on_ground"][p]) == 1
@@ -5743,18 +5716,16 @@ def test_fod_downbound_platform_rows_do_not_borrow_platform_carry_snap_replay_re
     # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B2DC
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     out = _step_one_replay_row(ds, 5135)
-    ref = ds.samples[5135]["ref_t1"]
+    ref = ds.rows[5135]["ref_t1"]
     p = 1
 
-    assert int(ds.samples[5135]["seed_t"]["stage_id"]) == 2
-    assert int(ds.samples[5135]["seed_t"]["action_id"][p]) == ACT_DOWN_BOUND_U
+    assert int(ds.rows[5135]["seed_t"]["stage_id"]) == 2
+    assert int(ds.rows[5135]["seed_t"]["action_id"][p]) == ACT_DOWN_BOUND_U
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DOWN_BOUND_U
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 0
@@ -5778,14 +5749,14 @@ def test_fod_downbound_airborne_refreshes_source_trusted_height_platform_floor_r
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
-    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+    from tests.replay_buffers_loader import load_replay_buffers
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
     )
     out = _step_one_replay_row(ds, 1885)
-    row = ds.samples[1885]
+    row = ds.rows[1885]
     ref = row["ref_t1"]
     p = 1
 
@@ -5811,13 +5782,13 @@ def test_fod_downbound_airborne_height_platform_refresh_requires_current_platfor
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
-    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+    from tests.replay_buffers_loader import load_replay_buffers
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
     )
-    row = ds.samples[1885]
+    row = ds.rows[1885]
     p = 1
     import msl_binding
 
@@ -5864,16 +5835,16 @@ def test_fod_downbound_airborne_follows_height_platform_until_hidden_replay_real
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
-    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+    from tests.replay_buffers_loader import load_replay_buffers
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
     )
     p = 1
     for record, expected_ground_id, pos_abs in ((1886, 0, 2.0e-5), (1887, 0, 2.0e-5), (1888, 5, 1.0e-6)):
         out = _step_one_replay_row(ds, record)
-        row = ds.samples[record]
+        row = ds.rows[record]
         ref = row["ref_t1"]
 
         assert int(row["seed_t"]["stage_id"]) == 2
@@ -5892,14 +5863,12 @@ def test_fod_jumpf_down_input_passes_through_platform_rollout_replay_real() -> N
     # but reject it through ftCo_80096CC8 for this callback.
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     out = _rollout_replay_to_record(ds, 10573, 10579)
-    ref = ds.samples[10579]["ref_t1"]
+    ref = ds.rows[10579]["ref_t1"]
     p = 1
 
     assert int(ref["action_id"][p]) == ACT_JUMP_F
@@ -5922,16 +5891,14 @@ def test_fod_jumpf_already_below_transformed_platform_stays_airborne_replay_real
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044948_Floor}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "MilkyGracefulStingray.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 3232
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_F
     assert int(row["ref_t1"]["action_id"][p]) == ACT_JUMP_F
@@ -5956,16 +5923,14 @@ def test_fod_attackair_shallow_transformed_platform_ecb_crossing_stays_airborne_
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "MilkyGracefulStingray.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 3172
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_LW
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ATTACK_AIR_LW
@@ -5986,16 +5951,14 @@ def test_fod_attackair_deep_transformed_platform_crossing_still_lands_replay_rea
     # publishes the normal Landing floor handoff.
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 957
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_B
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ATTACK_AIR_B
@@ -6521,16 +6484,14 @@ def test_fod_jumpf_transformed_platform_crossing_still_lands_replay_real() -> No
     # Jump_Coll landing handoff remains live.
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 9375
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_F
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
@@ -6553,16 +6514,14 @@ def test_fod_damageflytop_static_center_platform_enters_downbound_replay_real() 
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_80046904,mpCheckFloor}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 3668
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_FLY_TOP
     assert int(row["ref_t1"]["action_id"][p]) == ACT_DOWN_BOUND_U
@@ -6591,13 +6550,13 @@ def test_fod_grounded_contact_derives_current_platform_height_replay_real() -> N
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    row = ds.samples[4509]
+    row = ds.rows[4509]
     p = 0
 
     assert int(row["seed_t"]["stage_id"]) == 2
@@ -7284,13 +7243,13 @@ def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_rea
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    row = ds.samples[10353]
+    row = ds.rows[10353]
     p = 0
 
     assert int(row["seed_t"]["stage_id"]) == 2
@@ -7310,12 +7269,12 @@ def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_rea
     assert float(out["pos_x"][p]) == pytest.approx(float(row["ref_t1"]["pos_x"][p]), abs=1e-6)
     assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-5)
 
-    prev_row = ds.samples[10352]
+    prev_row = ds.rows[10352]
     prev_out = _step_one_replay_row(ds, 10352)
     assert int(prev_out["action_id"][p]) == int(prev_row["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_S_END
     assert int(prev_out["on_ground"][p]) == int(prev_row["ref_t1"]["on_ground"][p]) == 0
 
-    right_row = ds.samples[10984]
+    right_row = ds.rows[10984]
     p = 1
     assert int(right_row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_HI_FALL
     assert int(right_row["seed_t"]["on_ground"][p]) == 0
@@ -7338,7 +7297,7 @@ def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_rea
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCommon_8007D7FC
     assert float(right_out["pos_y"][p]) == pytest.approx(float(right_row["ref_t1"]["pos_y"][p]), abs=1e-5)
 
-    right_prev_row = ds.samples[10983]
+    right_prev_row = ds.rows[10983]
     right_prev_out = _step_one_replay_row(ds, 10983)
     assert int(right_prev_row["seed_t"]["stage_fod_platform_height_source_u8"][0]) == 0
     assert int(right_prev_out["action_id"][p]) == int(right_prev_row["ref_t1"]["action_id"][p])
@@ -7346,7 +7305,7 @@ def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_rea
 
 
 def _step_replay_row_with_colldata(ds, record: int):
-    row = ds.samples[record]
+    row = ds.rows[record]
     seed = np.array([row["seed_t"]], dtype=row["seed_t"].dtype)
     prev_input = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy()
     input_t = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy()
@@ -7361,9 +7320,9 @@ def _step_replay_row_with_colldata(ds, record: int):
 @pytest.mark.parametrize(
     ("replay_name", "record", "player"),
     [
-        ("InternalPowerlessWallaby.msl", 1550, 1),
-        ("InternalPowerlessWallaby.msl", 1966, 0),
-        ("InternalPowerlessWallaby.msl", 8480, 1),
+        ("InternalPowerlessWallaby.slpz", 1550, 1),
+        ("InternalPowerlessWallaby.slpz", 1966, 0),
+        ("InternalPowerlessWallaby.slpz", 8480, 1),
     ],
 )
 def test_marth_single_create_attackair_final_floor_without_bottom_owner_stays_airborne(
@@ -7377,12 +7336,10 @@ def test_marth_single_create_attackair_final_floor_without_bottom_owner_stays_ai
     # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
     # data/moves/marth.json moves["ftCo_SM_AttackAirF"].events create/clear_hitboxes
-    path = Path(__file__).resolve().parents[1] / "datasets/marth/replays/validation/marth" / replay_name
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
+    path = Path(__file__).resolve().parents[1] / "replays/validation/marth" / replay_name
 
-    ds = read_dataset(str(path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][player]) == ACT_ATTACK_AIR_F
     assert int(row["ref_t1"]["action_id"][player]) == ACT_ATTACK_AIR_F
     assert int(row["ref_t1"]["on_ground"][player]) == 0
@@ -7408,15 +7365,13 @@ def test_spacie_multicreate_attackairf_final_floor_keeps_landing_negative() -> N
     # data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirF"].events create/clear_hitboxes
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 10549
     player = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][player]) == ACT_ATTACK_AIR_F
     assert int(row["ref_t1"]["action_id"][player]) == ACT_LANDING_AIR_F
     assert int(row["ref_t1"]["on_ground"][player]) == 1
@@ -7450,14 +7405,12 @@ def test_marth_single_create_attackairhi_no_current_height_platform_stays_airbor
     # data/moves/marth.json moves["ftCo_SM_AttackAirHi"].events create/clear_hitboxes
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/marth/replays/validation/marth/InternalPowerlessWallaby.msl"
+        / "replays/validation/marth/InternalPowerlessWallaby.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_HI
     assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0]) == 0
@@ -7498,15 +7451,13 @@ def test_marth_attackairhi_hard_floor_root_projection_requires_bottom_owner() ->
     #   mpColl_80044838_Floor}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/marth/replays/validation/marth/ParallelFamiliarZebra.msl"
+        / "replays/validation/marth/ParallelFamiliarZebra.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 3612
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_HI
     assert int(row["ref_t1"]["action_id"][p]) == ACT_ATTACK_AIR_HI
     assert int(row["ref_t1"]["on_ground"][p]) == 0
@@ -7535,16 +7486,14 @@ def test_fod_attackair_height_platform_no_current_source_stays_pending_replay_re
     # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 3256
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_B
     assert int(row["seed_t"]["action_frame"][p]) == 6
@@ -7589,16 +7538,14 @@ def test_fod_attackair_same_step_height_platform_source_lands_despite_down_input
     # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 9157
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
 
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_B
@@ -7643,18 +7590,16 @@ def test_fod_landing_live_height_platform_reprojects_after_hard_floor_entry_repl
     # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
     import msl_binding
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     p = 0
-    row1537 = ds.samples[1537]
-    row1538 = ds.samples[1538]
+    row1537 = ds.rows[1537]
+    row1538 = ds.rows[1538]
     assert int(row1537["ref_t1"]["action_id"][p]) == ACT_LANDING
     assert int(row1537["ref_t1"]["ground_id"][p]) == 5
     assert int(row1538["ref_t1"]["action_id"][p]) == ACT_LANDING
@@ -7720,16 +7665,14 @@ def test_fod_attackair_hard_floor_slope_lands_despite_unrelated_platform_skip_re
     # data/stages/bin/griz.bin::MSLSTG01 floor segment links/fighter_solid flags
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 9739
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
 
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_N
@@ -7773,16 +7716,14 @@ def test_fod_attackair_hard_slope_root_projection_requires_bottom_sweep_replay_r
     #   mpColl_80044838_Floor}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 1701
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
 
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_N
@@ -7829,16 +7770,14 @@ def test_fod_specialhi_holdair_platform_contact_enters_ground_hold_replay_real()
     # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 4522
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
 
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_HI_HOLD_AIR
@@ -7858,7 +7797,7 @@ def test_fod_specialhi_holdair_platform_contact_enters_ground_hold_replay_real()
         float(ref["speed_ground_x_self"][p]), abs=1e-6
     )
 
-    prev_row = ds.samples[record - 1]
+    prev_row = ds.rows[record - 1]
     prev_out = _step_one_replay_row(ds, record - 1)
     assert int(prev_row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_HI_HOLD_AIR
     assert int(prev_row["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_HI_HOLD_AIR
@@ -7879,16 +7818,14 @@ def test_fod_specialhi_ground_hold_air_launch_carries_colldata_floor_replay_real
     #   ftFx_SpecialHiHold_Anim,ftFx_SpecialAirHi_Enter}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/"
-        "ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 4535
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
 
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_HI_HOLD
@@ -7948,13 +7885,13 @@ def test_fod_soft_platform_airborne_regression_rows_stay_airborne(
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    row = ds.samples[record]
+    row = ds.rows[record]
 
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][player]) == action_id
@@ -7988,7 +7925,7 @@ def test_fod_sustained_damagefly_reseed_uses_current_coll_root_replay_real(
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,
@@ -7996,7 +7933,7 @@ def test_fod_sustained_damagefly_reseed_uses_current_coll_root_replay_real(
     )
     record = 7492
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     seed = row["seed_t"]
 
     assert int(seed["stage_id"]) == 2
@@ -8037,7 +7974,7 @@ def test_nonfod_damagefly_reseed_keeps_previous_row_hard_floor_sweep_replay_real
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,
@@ -8045,7 +7982,7 @@ def test_nonfod_damagefly_reseed_keeps_previous_row_hard_floor_sweep_replay_real
     )
     record = 5208
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     seed = row["seed_t"]
 
     assert int(seed["stage_id"]) != 2
@@ -8074,13 +8011,11 @@ def test_fod_hidden_height_platform_grounded_rider_remaps_to_main_floor_replay_r
     # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
-    row = ds.samples[10971]
+    ds = load_replay_buffers(str(path))
+    row = ds.rows[10971]
     out = _step_one_replay_row(ds, 10971)
     ref = row["ref_t1"]
     seed = row["seed_t"]
@@ -8102,13 +8037,11 @@ def test_fod_visible_height_platform_grounded_rider_stays_on_platform_replay_rea
     # hidden-target remap must not convert ordinary grounded platform carry into main-floor contact.
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+        / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
-    row = ds.samples[10970]
+    ds = load_replay_buffers(str(path))
+    row = ds.rows[10970]
     out = _step_one_replay_row(ds, 10970)
     ref = row["ref_t1"]
     seed = row["seed_t"]
@@ -8138,13 +8071,13 @@ def test_fod_prefix_platform_velocity_keeps_rollout_floor_transform_replay_real(
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    row = ds.samples[3318]
+    row = ds.rows[3318]
     p = 0
 
     assert int(row["seed_t"]["stage_id"]) == 2
@@ -8155,7 +8088,7 @@ def test_fod_prefix_platform_velocity_keeps_rollout_floor_transform_replay_real(
     )
 
     out = _rollout_replay_to_record(ds, 3318, 3338)
-    ref = ds.samples[3338]["ref_t1"]
+    ref = ds.rows[3338]["ref_t1"]
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
@@ -8178,20 +8111,20 @@ def test_fod_prefix_platform_velocity_stops_at_source_target_replay_real() -> No
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    row = ds.samples[5801]
+    row = ds.rows[5801]
     p = 0
 
     assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0]) == 0
     assert float(row["seed_t"]["stage_fod_platform_height_f32"][0]) == pytest.approx(25.0)
 
     out = _rollout_replay_to_record(ds, 5801, 5820)
-    ref = ds.samples[5820]["ref_t1"]
+    ref = ds.rows[5820]["ref_t1"]
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
@@ -8217,14 +8150,14 @@ def test_fod_same_step_platform_contact_defers_velocity_until_next_frame_pte() -
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp),
         ports=None,
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
     p = 0
-    row = ds.samples[3257]
+    row = ds.rows[3257]
 
     assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_B
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_AIR_B
@@ -8241,7 +8174,7 @@ def test_fod_same_step_platform_contact_defers_velocity_until_next_frame_pte() -
     assert float(direct["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=2e-4)
 
     rollout = _rollout_replay_to_record(ds, 3257, 3352)
-    ref = ds.samples[3352]["ref_t1"]
+    ref = ds.rows[3352]["ref_t1"]
     assert int(rollout["action_id"][p]) == int(ref["action_id"][p]) == ACT_ATTACK_AIR_N
     assert int(rollout["hitlag"][p]) == int(ref["hitlag"][p]) == 0
     assert int(rollout["hitstun"][p]) == int(ref["hitstun"][p]) == 0
@@ -8256,17 +8189,15 @@ def test_ps_attackair_platform_endpoint_uses_mpcoll_floor_edge_snap_replay_real(
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+        / "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     out = _rollout_replay_to_record(ds, 2478, 2486)
-    ref = ds.samples[2486]["ref_t1"]
+    ref = ds.rows[2486]["ref_t1"]
     p = 1
 
-    assert int(ds.samples[2486]["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_LW
+    assert int(ds.rows[2486]["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_LW
     assert int(ref["action_id"][p]) == ACT_LANDING
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
@@ -8283,18 +8214,16 @@ def test_fd_damagefly_hard_floor_off_end_does_not_use_platform_endpoint_snap() -
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+        / "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     out = _step_one_replay_row(ds, 5773)
-    ref = ds.samples[5773]["ref_t1"]
+    ref = ds.rows[5773]["ref_t1"]
     p = 1
 
-    assert int(ds.samples[5773]["seed_t"]["stage_id"]) == 32
-    assert int(ds.samples[5773]["seed_t"]["action_id"][p]) == ACT_DAMAGE_FLY_N
+    assert int(ds.rows[5773]["seed_t"]["stage_id"]) == 32
+    assert int(ds.rows[5773]["seed_t"]["action_id"][p]) == ACT_DAMAGE_FLY_N
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_N
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
@@ -8310,22 +8239,20 @@ def test_fod_hidden_return_timer_reappears_platform_for_rollout_reseed_replay_re
     # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/"
-        / "ElatedWearyTermite.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "ElatedWearyTermite.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     start = 3270
     record = 3762
     p = 0
-    seed = ds.samples[start]["seed_t"]
+    seed = ds.rows[start]["seed_t"]
     assert int(seed["stage_fod_platform_hidden_return_valid_u8"][0]) == 1
     assert int(seed["stage_fod_platform_hidden_return_timer_u16"][0]) > 0
 
     out = _rollout_replay_to_record(ds, start, record)
-    ref = ds.samples[record]["ref_t1"]
+    ref = ds.rows[record]["ref_t1"]
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
@@ -8342,23 +8269,21 @@ def test_fod_visible_choice_seed_lands_mgs_attackairlw_on_current_platform() -> 
     # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-        / "MilkyGracefulStingray.msl"
+        / "replays/validation/fountain_of_dreams_recent/"
+        / "MilkyGracefulStingray.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     start = 0
     record = 5344
     p = 0
-    seed = np.array(ds.samples[start]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
+    seed = np.array(ds.rows[start]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
     assert int(seed["stage_fod_platform_visible_choice_valid_u8"][0, 1]) == 1
     assert int(seed["stage_fod_platform_visible_choice_timer_u16"][0, 1]) == 952
     assert int(seed["stage_fod_platform_visible_choice_rng_seed_u32"][0, 1]) == 0x1205135C
 
     out = _rollout_replay_to_record(ds, start, record)
-    ref = ds.samples[record]["ref_t1"]
+    ref = ds.rows[record]["ref_t1"]
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING_AIR_LW
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
@@ -8378,12 +8303,12 @@ def _step_one_replay_row(ds, record: int):
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    row = ds.samples[record]
+    row = ds.rows[record]
     out = np.zeros((1, compare_stride), dtype=np.uint8)
 
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -8410,12 +8335,12 @@ def _step_one_replay_row_rollout(ds, record: int):
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    row = ds.samples[record]
+    row = ds.rows[record]
     out = np.zeros((1, compare_stride), dtype=np.uint8)
 
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -8446,7 +8371,7 @@ def _replay_input_bytes(ds, record: int, field: str) -> np.ndarray:
 
     input_stride = int(msl_binding.sizes()["input"])
     return (
-        np.frombuffer(ds.samples[record][field].tobytes(order="C"), dtype=np.uint8)
+        np.frombuffer(ds.rows[record][field].tobytes(order="C"), dtype=np.uint8)
         .copy()
         .reshape(1, input_stride)
     )
@@ -8462,16 +8387,14 @@ def test_yoshi_jumpaerial_static_platform_release_lands_without_live_floor_skip_
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
     dataset_path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 2913
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == STAGE_YOSHI
     assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
     assert int(row["seed_t"]["floor_skip_segment_valid_u8"][p]) == 0
@@ -8494,16 +8417,14 @@ def test_yoshi_jumpaerial_static_platform_live_floor_skip_still_rejects_release(
     # platform, mpColl_80044628_Floor must keep rejecting it even after the stick has released.
     dataset_path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 2913
     p = 1
-    seed = np.array(ds.samples[record]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
+    seed = np.array(ds.rows[record]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
     seed["floor_skip_segment_valid_u8"][0, p] = np.uint8(1)
     seed["floor_skip_segment_id_u16"][0, p] = np.uint16(5)
 
@@ -8529,14 +8450,12 @@ def test_yoshi_jumpaerial_static_platform_prior_downheld_crossing_carries_hidden
     # prior ECB-bottom crossing, not a generic released-stick platform rejection.
     dataset_path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == STAGE_YOSHI
     assert int(row["seed_t"]["action_id"][p]) == action_id
     assert int(row["seed_t"]["floor_skip_segment_valid_u8"][p]) == 0
@@ -8556,23 +8475,19 @@ def test_yoshi_jumpaerial_static_platform_prior_downheld_crossing_carries_hidden
 def _cnm_dataset():
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-        "CheeryNumbMonkey.msl"
+        / "replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
-    return read_dataset(str(path))
+    return load_replay_buffers(str(path))
 
 
 def _agg_dataset():
     path = (
         Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.slpz"
     )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
-    return read_dataset(str(path))
+    return load_replay_buffers(str(path))
 
 
 @pytest.mark.integration
@@ -8585,7 +8500,7 @@ def test_cnm_throwhi_laser_deferred_shyguy_item_body_owner_replay_real() -> None
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
     ds = _cnm_dataset()
     record = 1870
-    row = ds.samples[record]
+    row = ds.rows[record]
     p = 1
     assert int(row["seed_t"]["stage_id"]) == STAGE_YOSHI
     assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_FLY_TOP
@@ -8609,7 +8524,7 @@ def test_cnm_shyguy_knocked_state_carries_source_hitcapsule_body_owner_replay_re
     ds = _cnm_dataset()
     for record in (3356, 3357):
         out = _step_one_replay_row_rollout(ds, record)
-        ref = ds.samples[record]["ref_t1"]
+        ref = ds.rows[record]["ref_t1"]
         for field in ("action_id", "animation_index", "hitlag", "hitstun", "state_flags"):
             np.testing.assert_array_equal(out[field], ref[field], err_msg=f"{record}:{field}")
 
@@ -8624,7 +8539,7 @@ def test_cnm_shyguy_active_state1_accepts_live_fighter_damage_replay_real() -> N
     # refs/melee/src/melee/it/items/itheiho.c::it_802D8EC8
     ds = _cnm_dataset()
     record = 592
-    row = ds.samples[record]
+    row = ds.rows[record]
     shyguy_slot = 3
     assert int(row["seed_t"]["items"]["type"][shyguy_slot]) == 210
     assert int(row["seed_t"]["items"]["state"][shyguy_slot]) == 1
@@ -8647,7 +8562,7 @@ def test_cnm_shyguy_non_active_states_do_not_use_state1_damage_owner(
     # state-1 live stale-damage path.
     # refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,it_802D9168}
     ds = _cnm_dataset()
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["items"]["type"][slot]) == 210
     assert int(row["seed_t"]["items"]["state"][slot]) == state
 
@@ -8666,7 +8581,7 @@ def test_cnm_speciallw_start_damageflyroll_rng_source_owner_replay_real() -> Non
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     ds = _cnm_dataset()
     record = 7490
-    row = ds.samples[record]
+    row = ds.rows[record]
     p = 1
     assert int(row["seed_t"]["action_id"][0]) == ACT_SQUAT
     assert int(row["ref_t1"]["action_id"][0]) == ACT_FX_SPECIAL_LW_START
@@ -8698,7 +8613,7 @@ def test_cnm_damageflyn_clears_stale_jab_combo_bit_but_terminal_damageflytop_car
     # refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     ds = _cnm_dataset()
-    clear_row = ds.samples[7796]
+    clear_row = ds.rows[7796]
     clear_out = _step_one_replay_row_rollout(ds, 7796)
     assert int(clear_row["seed_t"]["state_flags"][0][0]) & 0x40
     assert int(clear_row["seed_t"]["action_id"][0]) == ACT_WAIT
@@ -8710,7 +8625,7 @@ def test_cnm_damageflyn_clears_stale_jab_combo_bit_but_terminal_damageflytop_car
         (7311, 0, ACT_DOWN_BOUND_D),
         (8294, 1, ACT_DASH),
     ):
-        row = ds.samples[record]
+        row = ds.rows[record]
         out = _step_one_replay_row_rollout(ds, record)
         assert int(row["seed_t"]["action_id"][p]) == source_action
         assert int(row["ref_t1"]["action_id"][p]) == ACT_DAMAGE_FLY_TOP
@@ -8731,7 +8646,7 @@ def test_cnm_specialhi_source_flagged_wall_suppresses_push_only_air_envelope() -
     start = 2783
     record = 2799
     p = 0
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == STAGE_YOSHI
     assert int(row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_HI
     assert int(row["seed_t"]["seed_prev_action_frame"][p]) >= 15
@@ -8752,7 +8667,7 @@ def test_agg_specialhi_base_wall_still_publishes_right_air_envelope() -> None:
     start = 2603
     record = 2625
     p = 1
-    row = ds.samples[record]
+    row = ds.rows[record]
     assert int(row["seed_t"]["stage_id"]) == STAGE_FD
     assert int(row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_HI
     assert int(row["seed_t"]["seed_prev_action_frame"][p]) >= 15
@@ -8766,7 +8681,7 @@ def test_agg_specialhi_base_wall_still_publishes_right_air_envelope() -> None:
 
 
 def _rollout_replay_to_record(ds, start_record: int, target_record: int):
-    seed = np.array(ds.samples[start_record]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
+    seed = np.array(ds.rows[start_record]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
     return _rollout_replay_to_record_from_seed(ds, seed, start_record, target_record)
 
 
@@ -8786,7 +8701,7 @@ def _rollout_replay_to_record_from_seed(
 
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -8796,7 +8711,7 @@ def _rollout_replay_to_record_from_seed(
             np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride),
         )
         for record in range(start_record, target_record + 1):
-            row = ds.samples[record]
+            row = ds.rows[record]
             msl_binding.step_input(
                 handle,
                 np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
@@ -8884,18 +8799,16 @@ def test_marth_attackairb_script_facing_allows_right_cliffcatch_vsa() -> None:
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800443C4,mpColl_80047E14}
     # refs/melee/src/melee/ft/ftcliffcommon.c::{ftCliffCommon_80081298,ftCliffCommon_80081370}
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+    dataset_path = root / "replays/validation/marth/VictoriousSpitefulAlpaca.slpz"
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     start_record = 5072
     record = 5278
     p = 0
     out = _rollout_replay_to_record(ds, start_record, record)
-    ref = ds.samples[record]["ref_t1"]
+    ref = ds.rows[record]["ref_t1"]
 
-    assert int(ds.samples[record]["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(ds.rows[record]["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_CLIFF_CATCH
     assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
@@ -8907,12 +8820,10 @@ def test_marth_attackairb_script_facing_still_respects_down_input_gate_vsa() -> 
     # right ledge-grab bit, but ftCliffCommon_80081298 still rejects ledge catch while holding down
     # past the common drop threshold.
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/marth/replays/validation/marth/VictoriousSpitefulAlpaca.msl"
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+    dataset_path = root / "replays/validation/marth/VictoriousSpitefulAlpaca.slpz"
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[5278]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[5278]
     p = 0
     seed = np.array(row["seed_t"], dtype=SEED_DTYPE).reshape((1,))
     prev_input = np.array(row["prev_input_t"], dtype=INPUT_DTYPE).reshape((1,))

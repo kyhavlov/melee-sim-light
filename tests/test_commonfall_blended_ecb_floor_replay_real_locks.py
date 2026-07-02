@@ -8,7 +8,8 @@ import pytest
 
 from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_FALL = 29
@@ -35,17 +36,17 @@ def _run_rollout_records(ds, *, start_record: int, records: tuple[int, ...]) -> 
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
     try:
-        seed_bytes = ds.samples[start_record : start_record + 1]["seed_t"].view("u1").reshape(
+        seed_bytes = ds.rows[start_record : start_record + 1]["seed_t"].view("u1").reshape(
             1, seed_stride
         ).copy()
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, max_record + 1):
-            row = ds.samples[record : record + 1]
+            row = ds.rows[record : record + 1]
             binding.step_input(
                 handle,
                 row["prev_input_t"].view("u1").reshape(1, input_stride).copy(),
@@ -81,20 +82,20 @@ def test_sheik_demo_commonfall_blended_ecb_lands_on_floor_sweep_rec191() -> None
     #   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80047E14,mpColl_80044628_Floor}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/sheik/replays/validation/sheik/sheik_demo_game.msl"
+    dataset_rel = "replays/validation/sheik/sheik_demo_game.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 0
-    assert int(ds.samples[190]["seed_t"]["action_id"][p]) == ACT_FALL
-    assert int(ds.samples[190]["ref_t1"]["action_id"][p]) == ACT_FALL
-    assert int(ds.samples[191]["seed_t"]["action_id"][p]) == ACT_FALL
-    assert int(ds.samples[191]["seed_t"]["common_fall_blend_valid_u8"][p]) == 1
-    assert float(ds.samples[191]["seed_t"]["common_fall_blend_x4_f32"][p]) > 0.0
-    assert int(ds.samples[191]["ref_t1"]["action_id"][p]) == ACT_LANDING
-    assert int(ds.samples[191]["ref_t1"]["ground_id"][p]) == 1
+    assert int(ds.rows[190]["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(ds.rows[190]["ref_t1"]["action_id"][p]) == ACT_FALL
+    assert int(ds.rows[191]["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(ds.rows[191]["seed_t"]["common_fall_blend_valid_u8"][p]) == 1
+    assert float(ds.rows[191]["seed_t"]["common_fall_blend_x4_f32"][p]) > 0.0
+    assert int(ds.rows[191]["ref_t1"]["action_id"][p]) == ACT_LANDING
+    assert int(ds.rows[191]["ref_t1"]["ground_id"][p]) == 1
 
     rows = _run_rollout_records(ds, start_record=139, records=(190, 191))
 
@@ -105,7 +106,7 @@ def test_sheik_demo_commonfall_blended_ecb_lands_on_floor_sweep_rec191() -> None
     assert float(colldata_190["floor_probe_cur_bottom_y"][p]) > 0.0
 
     out_191, colldata_191 = rows[191]
-    ref_191 = ds.samples[191]["ref_t1"]
+    ref_191 = ds.rows[191]["ref_t1"]
     assert int(out_191["action_id"][p]) == ACT_LANDING
     assert int(out_191["on_ground"][p]) == 1
     assert int(out_191["ground_id"][p]) == int(ref_191["ground_id"][p])
@@ -137,19 +138,19 @@ def test_sheik_demo_commonfall_static_platform_bottom_interval_lands_rec3387_641
     #   mpColl_80044838_Floor}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/sheik/replays/validation/sheik/sheik_demo_game.msl"
+    dataset_rel = "replays/validation/sheik/sheik_demo_game.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     targets = ((3386, 3387, 0, 4), (6412, 6413, 1, 2))
     for before_rec, land_rec, player, ground_id in targets:
-        assert int(ds.samples[before_rec]["seed_t"]["action_id"][player]) == ACT_FALL
-        assert int(ds.samples[before_rec]["ref_t1"]["action_id"][player]) == ACT_FALL
-        assert int(ds.samples[land_rec]["seed_t"]["action_id"][player]) == ACT_FALL
-        assert int(ds.samples[land_rec]["ref_t1"]["action_id"][player]) == ACT_LANDING
-        assert int(ds.samples[land_rec]["ref_t1"]["ground_id"][player]) == ground_id
+        assert int(ds.rows[before_rec]["seed_t"]["action_id"][player]) == ACT_FALL
+        assert int(ds.rows[before_rec]["ref_t1"]["action_id"][player]) == ACT_FALL
+        assert int(ds.rows[land_rec]["seed_t"]["action_id"][player]) == ACT_FALL
+        assert int(ds.rows[land_rec]["ref_t1"]["action_id"][player]) == ACT_LANDING
+        assert int(ds.rows[land_rec]["ref_t1"]["ground_id"][player]) == ground_id
 
         rows = _run_rollout_records(ds, start_record=before_rec, records=(before_rec, land_rec))
 
@@ -160,7 +161,7 @@ def test_sheik_demo_commonfall_static_platform_bottom_interval_lands_rec3387_641
         assert float(colldata_before["floor_probe_cur_bottom_y"][player]) > 27.2000
 
         out_land, colldata_land = rows[land_rec]
-        ref_land = ds.samples[land_rec]["ref_t1"]
+        ref_land = ds.rows[land_rec]["ref_t1"]
         assert int(out_land["action_id"][player]) == ACT_LANDING
         assert int(out_land["on_ground"][player]) == 1
         assert int(out_land["ground_id"][player]) == int(ref_land["ground_id"][player])
@@ -192,15 +193,15 @@ def test_fox_fallspecial_rollout_does_not_borrow_commonfall_blended_ecb_tch_1157
     # data/characters/{fox,falco,sheik,marth}.json::common_fall_blended_ecb_seed_mask
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_rel = "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     p = 0
-    assert int(ds.samples[11574]["seed_t"]["action_id"][p]) == ACT_FALL_SPECIAL
-    assert int(ds.samples[11574]["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(ds.rows[11574]["seed_t"]["action_id"][p]) == ACT_FALL_SPECIAL
+    assert int(ds.rows[11574]["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
 
     fox = json.loads((root / "data/characters/fox.json").read_text())
     falco = json.loads((root / "data/characters/falco.json").read_text())
@@ -213,7 +214,7 @@ def test_fox_fallspecial_rollout_does_not_borrow_commonfall_blended_ecb_tch_1157
 
     rows = _run_rollout_records(ds, start_record=11570, records=(11574,))
     out, _colldata = rows[11574]
-    ref = ds.samples[11574]["ref_t1"]
+    ref = ds.rows[11574]["ref_t1"]
     assert int(out["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
     assert int(out["on_ground"][p]) == 1
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p])

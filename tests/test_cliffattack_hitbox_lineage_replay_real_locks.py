@@ -16,9 +16,9 @@ def test_cliffattackquick_hitbox_extraction_body_hit_bhh_3661() -> None:
     #   ftCo_CliffAttack_Anim,ftCo_CliffAttack_Coll}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _seed, out, ref = _step_one_row(dataset_path, 3661)
     defender = 0
@@ -39,10 +39,10 @@ def test_cliffattackquick_no_damage_contact_preserves_hitcapsule_lineage_gat_822
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
-        root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        root / "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     _seed, out, ref = _step_one_row(dataset_path, 8224)
     for p in (0, 1):

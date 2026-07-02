@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -23,8 +23,8 @@ class _Case:
 _CASES = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz"
         ),
         rows=(522, 523, 524, 525),
         player=0,
@@ -32,8 +32,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         rows=(5162, 5163, 5164, 5165),
         player=0,
@@ -54,14 +54,14 @@ def test_fn_800caf78_dash_jump_rows_and_controls_are_replay_exact(case: _Case) -
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = case.rows
     p = int(case.player)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target_record = rows[case.target_index]
     target = samples[target_record : target_record + 1]

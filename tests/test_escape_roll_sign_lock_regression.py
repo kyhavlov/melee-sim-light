@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -60,19 +61,19 @@ class _Case:
     p: int
 
 
-_BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE = "replays/validation/cardinal_1.0_recent"
 _TARGET_CASES = [
-    _Case("AGG:2040:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 2040, 0),
-    _Case("AGG:1810:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 1810, 0),
-    _Case("AGG:2041:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 2041, 0),
-    _Case("GAT:597:p1", f"{_BASE}/GracefulAttachedTurtle.msl", 597, 1),
-    _Case("TBK:245:p0", f"{_BASE}/TreasuredBackKangaroo.msl", 245, 0),
-    _Case("TBK:748:p1", f"{_BASE}/TreasuredBackKangaroo.msl", 748, 1),
+    _Case("AGG:2040:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 2040, 0),
+    _Case("AGG:1810:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 1810, 0),
+    _Case("AGG:2041:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 2041, 0),
+    _Case("GAT:597:p1", f"{_BASE}/GracefulAttachedTurtle.slpz", 597, 1),
+    _Case("TBK:245:p0", f"{_BASE}/TreasuredBackKangaroo.slpz", 245, 0),
+    _Case("TBK:748:p1", f"{_BASE}/TreasuredBackKangaroo.slpz", 748, 1),
 ]
 _CONTROL_CASES = [
-    _Case("AGG:1811:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 1811, 0),
-    _Case("GAT:598:p1", f"{_BASE}/GracefulAttachedTurtle.msl", 598, 1),
-    _Case("TBK:749:p1", f"{_BASE}/TreasuredBackKangaroo.msl", 749, 1),
+    _Case("AGG:1811:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 1811, 0),
+    _Case("GAT:598:p1", f"{_BASE}/GracefulAttachedTurtle.slpz", 598, 1),
+    _Case("TBK:749:p1", f"{_BASE}/TreasuredBackKangaroo.slpz", 749, 1),
 ]
 
 
@@ -110,11 +111,11 @@ def test_escape_roll_sign_target_rows_exact_t1_parity(case: _Case) -> None:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(case.record), f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(case.record), f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[case.record : case.record + 1]
     p = int(case.p)
 
@@ -128,7 +129,7 @@ def test_escape_roll_sign_target_rows_exact_t1_parity(case: _Case) -> None:
     assert int(row["seed_t"]["hitlag"][0, p]) == 0
     assert int(row["seed_t"]["hitstun"][0, p]) == 0
 
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
     _assert_roll_row_parity(out=out, ref=row["ref_t1"][0], p=p, case_tag=case.tag)
 
 
@@ -141,16 +142,16 @@ def test_escape_roll_sign_adjacent_controls_exact_t1_parity(case: _Case) -> None
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(case.record), f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(case.record), f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[case.record : case.record + 1]
     p = int(case.p)
 
     assert int(row["seed_t"]["action_id"][0, p]) == 233, f"{case.tag} expected seed EscapeF"
     assert int(row["ref_t1"]["action_id"][0, p]) == 233, f"{case.tag} expected ref EscapeF"
 
-    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.num_players))
     _assert_roll_row_parity(out=out, ref=row["ref_t1"][0], p=p, case_tag=case.tag)

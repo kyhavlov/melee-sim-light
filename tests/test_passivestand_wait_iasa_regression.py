@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -20,15 +21,15 @@ def test_passivestand_anim_end_shield_hold_enters_guardon_not_escapef_gat_1157()
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
     root = Path(__file__).resolve().parents[1]
     rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
+        pytest.skip(f"missing local replay: {rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[1157:1158]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[1157:1158]
     p = 0
 
     assert int(row["seed_t"]["action_id"][0, p]) == 201
@@ -47,7 +48,7 @@ def test_passivestand_anim_end_shield_hold_enters_guardon_not_escapef_gat_1157()
     input_bytes = row["input_t"].view("u1").reshape(1, input_stride).copy()
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)

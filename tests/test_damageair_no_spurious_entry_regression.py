@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -74,21 +75,21 @@ class _Case:
     p: int
 
 
-_BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
-_MARTH_VALIDATION = "datasets/aggregate_recent/replays/validation/marth"
-_DOUBLES_VALIDATION = "datasets/doubles_recent/replays/validation/doubles_recent"
+_BASE = "replays/validation/cardinal_1.0_recent"
+_MARTH_VALIDATION = "replays/validation/marth"
+_DOUBLES_VALIDATION = "replays/validation/doubles_recent"
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
     [
-        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 5369, 1),
-        _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 2839, 0),
-        _Case(f"{_BASE}/QuerulousGrandDinosaur.msl", 753, 1),
-        _Case(f"{_BASE}/TreasuredBackKangaroo.msl", 2101, 0),
-        _Case(f"{_MARTH_VALIDATION}/QuestionableHarmfulPanther.msl", 8304, 1),
-        _Case(f"{_DOUBLES_VALIDATION}/Game_20260509T152622.msl", 3229, 3),
+        _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 5369, 1),
+        _Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 2839, 0),
+        _Case(f"{_BASE}/QuerulousGrandDinosaur.slpz", 753, 1),
+        _Case(f"{_BASE}/TreasuredBackKangaroo.slpz", 2101, 0),
+        _Case(f"{_MARTH_VALIDATION}/QuestionableHarmfulPanther.slpz", 8304, 1),
+        _Case(f"{_DOUBLES_VALIDATION}/Game_20260509T152622.slpz", 3229, 3),
     ],
 )
 def test_damageair_anim_end_does_not_spuriously_stay_in_damageair(case: _Case) -> None:
@@ -97,11 +98,11 @@ def test_damageair_anim_end_does_not_spuriously_stay_in_damageair(case: _Case) -
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(case.record), f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(case.record), f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[case.record : case.record + 1]
     p = int(case.p)
 
@@ -114,7 +115,7 @@ def test_damageair_anim_end_does_not_spuriously_stay_in_damageair(case: _Case) -
     assert int(row["seed_t"]["hitstun"][0, p]) == 0
     assert int(row["ref_t1"]["hitstun"][0, p]) == 0
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
 
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["animation_index"][p]) == int(row["ref_t1"]["animation_index"][0, p])
@@ -125,16 +126,16 @@ def test_airborne_damageair_anim_end_exits_to_fall_when_x221c_b6_is_clear() -> N
     binding = pytest.importorskip("msl_binding")
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = f"{_BASE}/AttachedGoodNaturedGuanaco.msl"
+    dataset_rel = f"{_BASE}/AttachedGoodNaturedGuanaco.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 5369
     p = 1
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     # Replay-real airborne DamageAir anim-end family:
@@ -152,7 +153,7 @@ def test_airborne_damageair_anim_end_exits_to_fall_when_x221c_b6_is_clear() -> N
     assert int(row["ref_t1"]["action_id"][0, p]) == 29
     assert int(row["ref_t1"]["on_ground"][0, p]) == 0
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
 
     for field in ("action_id", "animation_index", "on_ground", "action_frame"):
         got = int(out[field][p])
@@ -165,16 +166,16 @@ def test_airborne_damageair_anim_end_x221c_b6_discriminator_blocks_v1_fall_branc
     binding = pytest.importorskip("msl_binding")
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = f"{_BASE}/AttachedGoodNaturedGuanaco.msl"
+    dataset_rel = f"{_BASE}/AttachedGoodNaturedGuanaco.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 5369
     p = 1
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1].copy()
 
     # Discriminator setup for V1 vs V2:
@@ -204,12 +205,12 @@ def test_airborne_damageair_anim_end_x221c_b6_discriminator_blocks_v1_fall_branc
     # - that pass clears the exported fp+0x221C hitstun bit when hitstun==0,
     # - so a full step no longer isolates the branch guard at src/knockdown.c:715.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
-    full_step_out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    full_step_out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
     assert int(full_step_out["action_id"][p]) == 29
 
     # The debug hook isolates knockdown_update_pre_physics() itself, preserving the constructed
     # x221C_b6 input so V1 vs V2 branch ownership is directly testable.
-    out = _debug_knockdown_pre_physics_once(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _debug_knockdown_pre_physics_once(binding=binding, row=row, num_players=int(ds.num_players))
 
     assert int(out["action_id"][p]) == 84
     assert int(out["animation_index"][p]) == 174
@@ -224,16 +225,16 @@ def test_damageair_anim_end_same_frame_rehit_stays_damageair1() -> None:
     binding = pytest.importorskip("msl_binding")
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = f"{_BASE}/TreasuredBackKangaroo.msl"
+    dataset_rel = f"{_BASE}/TreasuredBackKangaroo.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 2610
     p = 0
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     # Locked replay-real preconditions:
@@ -251,7 +252,7 @@ def test_damageair_anim_end_same_frame_rehit_stays_damageair1() -> None:
     assert int(row["ref_t1"]["hitlag"][0, p]) == 3
     assert int(row["ref_t1"]["hitstun"][0, p]) == 9
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
 
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["animation_index"][p]) == int(row["ref_t1"]["animation_index"][0, p])
@@ -271,15 +272,15 @@ def test_damageair_same_frame_body_sweep_family_with_adjacent_controls(record: i
     # - refs/melee/src/melee/it/itcoll.c::it_80272460
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_rel = f"{_BASE}/TreasuredBackKangaroo.msl"
+    dataset_rel = f"{_BASE}/TreasuredBackKangaroo.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     def _laser_ids(items_row: np.ndarray) -> list[int]:
@@ -321,7 +322,7 @@ def test_damageair_same_frame_body_sweep_family_with_adjacent_controls(record: i
 
     ref_lasers = _laser_ids(row["ref_t1"]["items"][0])
 
-    out = _step_one_record(binding=pytest.importorskip("msl_binding"), row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=pytest.importorskip("msl_binding"), row=row, num_players=int(ds.num_players))
 
     for field in ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "action_frame"):
         got = int(out[field][p])
@@ -342,8 +343,8 @@ def test_damageair_same_frame_body_sweep_family_with_adjacent_controls(record: i
 @pytest.mark.parametrize(
     "case,expected_seed_action",
     [
-        (_Case(f"{_BASE}/GracefulAttachedTurtle.msl", 1892, 0), 84),
-        (_Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 2289, 1), 85),
+        (_Case(f"{_BASE}/GracefulAttachedTurtle.slpz", 1892, 0), 84),
+        (_Case(f"{_BASE}/AttachedGoodNaturedGuanaco.slpz", 2289, 1), 85),
     ],
 )
 def test_grounded_damageair_anim_end_exits_to_wait(case: _Case, expected_seed_action: int) -> None:
@@ -352,11 +353,11 @@ def test_grounded_damageair_anim_end_exits_to_wait(case: _Case, expected_seed_ac
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > int(case.record), f"dataset too short: num_records={int(samples.shape[0])}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > int(case.record), f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[case.record : case.record + 1]
     p = int(case.p)
 
@@ -372,7 +373,7 @@ def test_grounded_damageair_anim_end_exits_to_wait(case: _Case, expected_seed_ac
     assert int(row["ref_t1"]["animation_index"][0, p]) == 2
     assert int(row["ref_t1"]["on_ground"][0, p]) == 1
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
 
     for field in ("action_id", "animation_index", "on_ground", "action_frame"):
         got = int(out[field][p])
@@ -390,15 +391,15 @@ def test_common_damage_terminal_fall_static_platform_handoff_pfz(
     _skip_if_required_artifacts_missing(root)
     if not (root / "data/characters/marth.json").exists():
         pytest.skip("missing local extracted artifact: data/characters/marth.json")
-    dataset_rel = f"{_MARTH_VALIDATION}/ParallelFamiliarZebra.msl"
+    dataset_rel = f"{_MARTH_VALIDATION}/ParallelFamiliarZebra.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = 0
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1]
 
     # Replay-real terminal common Damage -> Fall collision boundary:
@@ -418,7 +419,7 @@ def test_common_damage_terminal_fall_static_platform_handoff_pfz(
     assert int(row["ref_t1"]["action_id"][0, p]) == expected_action
     assert int(row["ref_t1"]["on_ground"][0, p]) == expected_grounded
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
 
     for field in ("action_id", "animation_index", "on_ground", "ground_id", "jumps_left", "action_frame"):
         got = int(out[field][p])
@@ -435,16 +436,16 @@ def test_common_damage_terminal_fall_static_platform_handoff_respects_pass_stick
     _skip_if_required_artifacts_missing(root)
     if not (root / "data/characters/marth.json").exists():
         pytest.skip("missing local extracted artifact: data/characters/marth.json")
-    dataset_rel = f"{_MARTH_VALIDATION}/ParallelFamiliarZebra.msl"
+    dataset_rel = f"{_MARTH_VALIDATION}/ParallelFamiliarZebra.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 925
     p = 0
-    samples = ds.samples
-    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    samples = ds.rows
+    assert int(samples.shape[0]) > record, f"replay too short: num_records={int(samples.shape[0])}"
     row = samples[record : record + 1].copy()
 
     # Synthetic source-shaped negative: the same terminal Damage/Fall row must not land on the
@@ -452,7 +453,7 @@ def test_common_damage_terminal_fall_static_platform_handoff_respects_pass_stick
     # refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor platform callback path
     row["input_t"]["p"][0, p]["main_y"] = np.int8(-127)
 
-    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.num_players))
 
     assert int(out["action_id"][p]) == 29
     assert int(out["animation_index"][p]) == 20

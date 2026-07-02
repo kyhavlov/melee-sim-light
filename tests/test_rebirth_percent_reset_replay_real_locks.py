@@ -10,7 +10,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_row_bytes, replay_buffer_byte_views, replay_buffer_row_bytes
 
 
 @dataclass(frozen=True)
@@ -25,23 +26,22 @@ class _RebirthPercentCase:
 def _run_rollout_window(dataset_path: Path, start: int, stop: int):
     import msl_binding
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    seed_off = "seed_t"
+    prev_off = "prev_input_t"
+    input_off = "input_t"
 
-    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
-        raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
-        return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+    def field_bytes(record: int, group: str, stride: int) -> np.ndarray:
+        return replay_buffer_row_bytes(ds, group, record, stride)
 
     handle = msl_binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -66,28 +66,28 @@ def _run_rollout_window(dataset_path: Path, start: int, stop: int):
     "case",
     [
         _RebirthPercentCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
             target_record=6774,
             p=0,
             seed_action=0,
             note="DeadDown -> Rebirth must consume the decomp death-reset percent source on the transition frame",
         ),
         _RebirthPercentCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
             target_record=6929,
             p=0,
             seed_action=2,
             note="DeadRight -> Rebirth resets percent on the same frame Fighter_UnkProcessDeath runs",
         ),
         _RebirthPercentCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             target_record=4482,
             p=0,
             seed_action=4,
             note="DeadUpStar -> Rebirth transition clears percent while preserving the existing Rebirth camera lane",
         ),
         _RebirthPercentCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
             target_record=4021,
             p=1,
             seed_action=1,
@@ -105,10 +105,10 @@ def test_rebirth_percent_reset_target_pm1_replay_real(case: _RebirthPercentCase)
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = case.p
 
     seed_target = samples[case.target_record]["seed_t"]
@@ -145,15 +145,15 @@ def test_rebirth_resets_shield_health_and_damage_lanes_rollout() -> None:
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     p = 1
-    ds = read_dataset(str(dataset_path))
-    seed = ds.samples["seed_t"][1889]
-    ref = ds.samples["ref_t1"][1889]
+    ds = load_replay_buffers(str(dataset_path))
+    seed = ds.rows["seed_t"][1889]
+    ref = ds.rows["ref_t1"][1889]
     assert int(seed["action_id"][p]) == 0  # DeadDown.
     assert int(ref["action_id"][p]) == 12  # Rebirth.
     assert float(seed["shield_hp"][p]) < 60.0

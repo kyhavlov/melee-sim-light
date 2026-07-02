@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -23,8 +23,8 @@ class _Case:
 _CASES = (
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.slpz"
         ),
         target_record=4048,
         port=1,
@@ -32,8 +32,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.slpz"
         ),
         target_record=851,
         port=0,
@@ -41,8 +41,8 @@ _CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz"
         ),
         target_record=3497,
         port=0,
@@ -66,14 +66,14 @@ def test_guardsetoff_post_hitlag_b1_rows_and_adjacent_controls_are_replay_exact(
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     rows = (case.target_record - 1, case.target_record, case.target_record + 1)
     p = case.port
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     target = samples[case.target_record]
     seed = target["seed_t"]

@@ -13,10 +13,8 @@ not gameplay specification; use `agent_docs/SPEC.md` for source-backed mechanics
 - For stage-target selection, use `uv run python -m tools.eval.stage_rollout_summary` before
   choosing a replay. It reads existing validation reports and ranks stages by rollout first
   mismatches per 1k records without changing canonical scoring.
-- For stage-collision owner autopsies, use
-  `uv run python -m tools.eval.locate_rollout_desyncs ... --include-stage-segments` to append
-  seed/current/ref `ground_id` metadata joined from `MSLSTG01` line kind, platform flag/transform,
-  slope, ledge, and material fields.
+- For stage-collision owner autopsies, use validation reports plus `MSLSTG01` metadata to join
+  seed/current/ref `ground_id` context from replay-buffer rows.
 - Use disruptive rollout clusters as a target selector when the owner is rollout-visible, but do
   not over-centralize on them while broad one-step/platform systems are still missing.
 - Treat repeated, early, coherent, or modelplay-visible float residuals as first-class signals.

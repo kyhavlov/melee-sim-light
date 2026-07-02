@@ -5,14 +5,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _dataset_path() -> Path:
     root = Path(__file__).resolve().parents[1]
     return (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
 
 
@@ -115,10 +116,10 @@ def test_attackhi3_shield_pushback_seed_and_exit_rows_stay_replay_exact() -> Non
     # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007CE4C,ftCommon_8007E2A4}
     dataset_path = _dataset_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
 
     expected_kb = {
@@ -151,10 +152,10 @@ def test_attackhi3_shield_pushback_seed_and_exit_rows_stay_replay_exact() -> Non
 def test_attackhi3_shield_pushback_rollout_closes_agn_5167_front_door() -> None:
     dataset_path = _dataset_path()
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     binding = pytest.importorskip("msl_binding")
 
     # Same local window, adjacent owner:

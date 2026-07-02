@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE
-from tests.replay_dataset_loader import load_replay_dataset as read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
@@ -15,9 +15,9 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
             1, seed_stride
@@ -40,16 +40,16 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
 @pytest.mark.parametrize(
     ("dataset", "record", "slot"),
     (
-        ("ShadyDecimalStarling.msl", 5182, 1),
-        ("ShadyDecimalStarling.msl", 5184, 1),
-        ("FlippantEnchantedHorse.msl", 8579, 1),
-        ("FlippantEnchantedHorse.msl", 8581, 2),
+        ("ShadyDecimalStarling.slpz", 5182, 1),
+        ("ShadyDecimalStarling.slpz", 5184, 1),
+        ("FlippantEnchantedHorse.slpz", 8579, 1),
+        ("FlippantEnchantedHorse.slpz", 8581, 2),
     ),
 )
 def test_dream_throwb_state1_lasers_match_visible_item_rows(
     dataset: str, record: int, slot: int
 ) -> None:
-    dataset_path = Path(f"datasets/aggregate_recent/replays/validation/dream_land_recent/{dataset}")
+    dataset_path = Path(f"replays/validation/dream_land_recent/{dataset}")
     seed, ref, out = _step_one_row(dataset_path, record)
     assert int(seed["stage_id"]) == 28
     assert int(ref["items"][slot]["exists"]) == 1
@@ -67,8 +67,8 @@ def test_dream_throwb_state1_lasers_match_visible_item_rows(
 
 def test_dream_throwb_final_pulse_consumes_prior_laser_and_compacts_new_article() -> None:
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "FlippantEnchantedHorse.msl"
+        "replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.slpz"
     )
     seed, ref, out = _step_one_row(dataset_path, 8583)
     victim = 0
@@ -102,8 +102,8 @@ def test_dream_throwb_final_pulse_consumes_prior_laser_and_compacts_new_article(
 
 def test_throwb_laser_non_crossed_body_consume_stays_normal() -> None:
     dataset_path = Path(
-        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
-        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     seed, ref, out = _step_one_row(dataset_path, 2520)
     victim = 0

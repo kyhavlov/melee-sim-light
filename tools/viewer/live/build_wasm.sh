@@ -6,11 +6,7 @@ OUT_DIR="$ROOT/tools/viewer/live/public"
 
 DATA_DIR="${MSL_DATA_DIR:-}"
 if [[ -z "$DATA_DIR" ]]; then
-  if [[ -d "$ROOT/.msl" ]]; then
-    DATA_DIR="$ROOT/.msl"
-  else
-    DATA_DIR="$ROOT/data"
-  fi
+  DATA_DIR="$ROOT/data"
 fi
 if [[ ! -d "$DATA_DIR" ]]; then
   echo "error: extracted simulator data directory not found: $DATA_DIR" >&2

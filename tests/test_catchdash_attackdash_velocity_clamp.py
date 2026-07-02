@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 _ATTACK_DASH = 50
 _CATCH_DASH = 214
@@ -44,13 +45,13 @@ def test_attackdash_into_catchdash_clamps_ground_velocity_to_terminal() -> None:
     # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D8C54,ftCo_CatchDash_Phys}
     root = Path(__file__).resolve().parents[1]
-    rel = "datasets/sheik/replays/validation/sheik/sheik_demo_game.msl"
+    rel = "replays/validation/sheik/sheik_demo_game.slpz"
     path = root / rel
     if not path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
-    ds = read_dataset(str(path))
-    samples = ds.samples
-    num_players = int(ds.header["num_players"])
+        pytest.skip(f"missing local replay: {rel}")
+    ds = load_replay_buffers(str(path))
+    samples = ds.rows
+    num_players = int(ds.num_players)
     n = int(samples.shape[0])
 
     binding = importlib.import_module("msl_binding")
@@ -96,13 +97,13 @@ def test_attackdash_into_catchdash_no_drift_over_grab_freerun() -> None:
     # itself must track the source (no accumulating position drift), since the velocity is clamped at
     # entry and only sheds friction afterward.
     root = Path(__file__).resolve().parents[1]
-    rel = "datasets/sheik/replays/validation/sheik/sheik_demo_game.msl"
+    rel = "replays/validation/sheik/sheik_demo_game.slpz"
     path = root / rel
     if not path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
-    ds = read_dataset(str(path))
-    samples = ds.samples
-    num_players = int(ds.header["num_players"])
+        pytest.skip(f"missing local replay: {rel}")
+    ds = load_replay_buffers(str(path))
+    samples = ds.rows
+    num_players = int(ds.num_players)
     n = int(samples.shape[0])
     binding = importlib.import_module("msl_binding")
 
@@ -125,22 +126,22 @@ def test_attackdash_into_catchdash_no_drift_over_grab_freerun() -> None:
     ss = int(sizes["seed"])
     ins = int(sizes["input"])
     cs = int(sizes["compare"])
-    su8 = samples.view(np.uint8).reshape(n, samples.dtype.itemsize)
-    so = samples.dtype.fields["seed_t"][1]
-    po = samples.dtype.fields["prev_input_t"][1]
-    io = samples.dtype.fields["input_t"][1]
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
     ref = samples["ref_t1"]
     handle = binding.init(batch_size=1, num_players=num_players)
     try:
         sb = np.empty((1, ss), dtype=np.uint8)
-        sb[0, :] = su8[start, so : so + ss]
+        sb[0, :] = seed_u8[start, :ss]
         binding.reseed_seed_rollout(handle, sb)
         max_drift = 0.0
         ob = np.zeros((1, cs), dtype=np.uint8)
         for j in range(start, min(start + 25, n)):
-            pb = su8[j, po : po + ins].reshape(1, ins).copy()
-            ib = su8[j, io : io + ins].reshape(1, ins).copy()
-            sb[0, :] = su8[j, so : so + ss]
+            pb = prev_input_u8[j, :ins].reshape(1, ins).copy()
+            ib = input_u8[j, :ins].reshape(1, ins).copy()
+            sb[0, :] = seed_u8[j, :ss]
             binding.step_input_replay_frame_rng(handle, sb, pb, ib)
             binding.write_compare(handle, ob)
             o = ob.view(COMPARE_DTYPE).reshape((1,))[0]

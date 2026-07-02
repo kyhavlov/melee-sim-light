@@ -7,8 +7,9 @@ import textwrap
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
+from tests.replay_buffers_loader import load_replay_buffers
 
 HIT_GROUNDED = 1 << 9
 HIT_AERIAL = 1 << 10
@@ -83,9 +84,9 @@ def _step_one_sample_with_reseed(
 
 
 def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
-    return _step_one_sample(row, num_players=int(ds.header["num_players"]))
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
+    return _step_one_sample(row, num_players=int(ds.num_players))
 
 
 def _debug_attackhi3_terminal_damagefly_body_hit_applied(
@@ -166,13 +167,13 @@ def test_attackairlw_same_port_stale_owner_rehit_lands_on_replay_frame() -> None
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        / "AttachedGoodNaturedGuanaco.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "AttachedGoodNaturedGuanaco.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
 
     # Replay-real timing lock for the AttackAirLw stale-owner bridge:
     # - Falco Dair keeps same-group hitboxes live across the active window while hitlist ownership
@@ -189,7 +190,7 @@ def test_attackairlw_same_port_stale_owner_rehit_lands_on_replay_frame() -> None
     ]
 
     for record, p, exp_action, exp_hitlag, exp_hitstun, exp_flags in cases:
-        assert int(ds.samples.shape[0]) > record, f"dataset too short for rec={record}"
+        assert int(ds.rows.shape[0]) > record, f"replay too short for rec={record}"
         out, ref = _step_one_row(dataset_path, record)
 
         assert int(ref["action_id"][p]) == exp_action
@@ -208,16 +209,16 @@ def test_attackairlw_damageflytop_fox_tail_pose_rejects_cdo_terminal_hit() -> No
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
-        / "CornyDelayedOkapi.msl"
+        / "replays/validation/pokemon_stadium_recent/"
+        / "CornyDelayedOkapi.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 5241
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for rec={record}"
-    row = ds.samples[record]
+    assert int(ds.rows.shape[0]) > record, f"replay too short for rec={record}"
+    row = ds.rows[record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
 
@@ -249,14 +250,14 @@ def test_attackairlw_damageflytop_fox_tail_pose_rejects_cdo_terminal_hit() -> No
 @pytest.mark.integration
 def test_attackairlw_damageflytop_falco_tail_neighbor_still_hits_hvg() -> None:
     root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     record = 9277
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for rec={record}"
-    row = ds.samples[record]
+    assert int(ds.rows.shape[0]) > record, f"replay too short for rec={record}"
+    row = ds.rows[record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
     attacker = 1
@@ -429,14 +430,14 @@ def test_falco_attackairlw_same_slot_late_payload_preserves_victim_latch_pec_rol
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    samples = ds.samples
-    num_players = int(ds.header["num_players"])
+    samples = ds.rows
+    num_players = int(ds.num_players)
     attacker = 0
     defender = 1
 
@@ -483,18 +484,18 @@ def test_attackhi3_create_edge_waits_one_frame_on_terminal_damageflytop_qgd() ->
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-        / "QuerulousGrandDinosaur.msl"
+        / "replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    ds = load_replay_buffers(str(dataset_path))
     no_hit_record = 7173
     next_hit_record = 7174
-    assert int(ds.samples.shape[0]) > next_hit_record, "dataset too short for QGD AttackHi3 lock"
+    assert int(ds.rows.shape[0]) > next_hit_record, "replay too short for QGD AttackHi3 lock"
 
-    no_hit = ds.samples[no_hit_record]
+    no_hit = ds.rows[no_hit_record]
     assert int(no_hit["seed_t"]["action_id"][0]) == 56  # AttackHi3
     assert int(no_hit["seed_t"]["action_frame"][0]) == 4
     assert int(no_hit["seed_t"]["action_id"][1]) == 90  # DamageFlyTop
@@ -515,7 +516,7 @@ def test_attackhi3_create_edge_waits_one_frame_on_terminal_damageflytop_qgd() ->
     # On the following replay-visible frame the same up-tilt capsules are already live, so the
     # terminal DamageFlyTop target returns to the ordinary ftColl_80078C70 BODY path.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
-    next_hit = ds.samples[next_hit_record]
+    next_hit = ds.rows[next_hit_record]
     assert int(next_hit["seed_t"]["action_id"][0]) == 56  # AttackHi3
     assert int(next_hit["seed_t"]["action_frame"][0]) == 5
     assert int(next_hit["seed_t"]["action_id"][1]) == 90  # DamageFlyTop
@@ -537,16 +538,16 @@ def test_attackhi3_create_edge_waits_one_frame_on_terminal_damageflytop_qgd() ->
     ("dataset_rel", "record", "attacker", "defender", "defender_action"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "BlondHardHippopotamus.msl",
+            "replays/validation/aggregate_recent/"
+            "BlondHardHippopotamus.slpz",
             5412,
             0,
             1,
             76,  # DamageHi3
         ),
         (
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz",
             1848,
             0,
             1,
@@ -560,11 +561,11 @@ def test_attackairlw_authoritative_empty_hb_seed_allows_same_source_damage_follo
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples.shape[0]) > record, f"dataset too short for rec={record}"
-    row = ds.samples[record]
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows.shape[0]) > record, f"replay too short for rec={record}"
+    row = ds.rows[record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
 

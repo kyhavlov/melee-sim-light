@@ -10,7 +10,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -29,7 +30,7 @@ def _run_one_step_with_main_y(dataset_path: Path, record: int, port: int, main_y
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    row = read_dataset(str(dataset_path)).samples[record : record + 1].copy()
+    row = load_replay_buffers(str(dataset_path)).rows[record : record + 1].copy()
     row["input_t"]["p"][0, port]["main_y"] = np.int8(main_y)
     row["prev_input_t"]["p"][0, port]["main_y"] = np.int8(0)
 
@@ -59,14 +60,14 @@ def _run_one_step_with_main_y(dataset_path: Path, record: int, port: int, main_y
     "case",
     [
         _PassiveWallLatchCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            dataset_rel="replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz",
             record=5282,
             port=0,
             expect_instance_bump=True,
             note="CNM timer-expiry PassiveWallJump x8 latch re-enters same action",
         ),
         _PassiveWallLatchCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl",
+            dataset_rel="replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz",
             record=7520,
             port=1,
             expect_instance_bump=False,
@@ -89,7 +90,7 @@ def test_passivewall_timer_expiry_jump_latch_instance_id_boundary(
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed, ref, out = _run_one_step_row(dataset_path, case.record, case.port)
     p = case.port
@@ -111,9 +112,9 @@ def test_passivewall_timer_expiry_current_tap_jump_latches_x8() -> None:
     #   ftCo_800C1E0C,ftCo_PassiveWall_IASA,inlineA0,ftCo_PassiveWall_Anim}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     record = 7520
     port = 1

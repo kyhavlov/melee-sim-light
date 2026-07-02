@@ -1226,7 +1226,7 @@ cover most of it.
 
 ## Phase 5 — Replay burn-down (gate: remaining rows classified char-boundary vs shared debt)
 
-Methodology: locate -> witness -> owner (`make rollout-locate`,
+Methodology: report diff -> witness -> owner (validation reports plus
 `reports/triage/` tooling).
 
 - Re-derive reseed lanes the preprocessor can't see (op52 `x221C_u16_y` event
@@ -1244,13 +1244,13 @@ observable (the capture x2344/x8 matrix and the x670 bridge both burned weeks
 this way), stop A/B-testing configurations and capture truth:
 
 1. **Hidden-lane engine dumps** (full JIT speed, minutes per window):
-   `tools.dolphin.forensic_row_dump --row <dataset>:<rec>:<p>` captures a
-   frame window around any dataset row. The v12 dump records the hidden
+   use explicit replay path + record + player coordinates to capture a
+   frame window around any validation row. The v12 dump records the hidden
    fighter lanes (`fp+0x670/0x674` input timers, `fp+0x2344/48/4C` capture
    words, TransN position, `fp+0x1A50` GrabMash latches) plus per-frame
    hitbox world centers, items, hitlists. Alignment that always holds:
    dump row R = end-of-frame R-1 state + the input record for frame R;
-   dataset seed row F = dump row F+1. Validate a derivation by diffing the
+   validation seed row F = dump row F+1. Validate a derivation by diffing the
    seed lane against the dump lane over the whole window BEFORE changing
    the engine — 50 exact rows is a proof, a matrix of suite totals is not.
    The required Dolphin build is pinned by the `refs/Ishiiruka` submodule
@@ -1275,9 +1275,9 @@ Process rules learned the hard way (apply to ALL ports):
   contradicts the shipped instructions (disassembly + RAM constants both
   check out), the answer is a gecko: the x670 "bridge-favored class" was
   UCF 0.84's tumble component hooking the DamageFall IASA compare.
-- **Datasets must be regenerated after ANY seed-derivation change**
-  (`make preprocess` for every suite). Seed lanes are baked into .msl files;
-  a derivation fix that isn't re-preprocessed silently tests nothing.
+- **Validation reports must be regenerated after ANY seed-derivation change.**
+  Normal validation derives seed lanes directly from replay files; rerun the
+  affected validation suites instead of relying on cache regeneration.
 - **Baseline-stash attribution before repinning stale locks.** When
   newly-runnable tests fail (e.g. after building local debug datasets from
   `replays/debug/*.slp`), prove provenance before touching pins: stash the

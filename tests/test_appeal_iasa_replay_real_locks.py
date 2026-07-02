@@ -5,12 +5,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
-from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
+from tools.eval.streaming_validation import _load_binding
 from tools.slippi.known_data_artifacts import read_mslftsc1_v1
 
 
-_HVG = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl")
+_HVG = Path("replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz")
 
 ACT_WAIT = 14
 ACT_WALK_SLOW = 15
@@ -36,15 +37,8 @@ STATE_FLAG_ALLOW_INTERRUPT = 0x80
 
 
 def _byte_views(ds):
-    samples = ds.samples
-    stride = int(samples.dtype.itemsize)
-    u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), stride)
-    return (
-        u8,
-        int(samples.dtype.fields["seed_t"][1]),
-        int(samples.dtype.fields["prev_input_t"][1]),
-        int(samples.dtype.fields["input_t"][1]),
-    )
+    views = replay_buffer_byte_views(ds)
+    return views.seed_t, views.prev_input_t, views.input_t
 
 
 def _step_one(
@@ -55,9 +49,9 @@ def _step_one(
     mutate_prev_input=None,
     mutate_input=None,
 ) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    samples_u8, seed_off, prev_input_off, input_off = _byte_views(ds)
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    seed_u8, prev_input_u8, input_u8 = _byte_views(ds)
 
     binding = _load_binding()
     sizes = binding.sizes()
@@ -65,11 +59,9 @@ def _step_one(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    seed_bytes = samples_u8[record : record + 1, seed_off : seed_off + seed_stride].copy()
-    prev_input_bytes = samples_u8[
-        record : record + 1, prev_input_off : prev_input_off + input_stride
-    ].copy()
-    input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+    seed_bytes = seed_u8[record : record + 1, :seed_stride].copy()
+    prev_input_bytes = prev_input_u8[record : record + 1, :input_stride].copy()
+    input_bytes = input_u8[record : record + 1, :input_stride].copy()
     if mutate_seed is not None:
         seed_view = seed_bytes.view(samples["seed_t"].dtype).reshape(1)
         mutate_seed(seed_view[0])
@@ -83,7 +75,7 @@ def _step_one(
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -97,9 +89,9 @@ def _step_one(
 
 
 def _rollout_to(dataset_path: Path, start_record: int, target_record: int) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    samples_u8, seed_off, prev_input_off, input_off = _byte_views(ds)
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    seed_u8, prev_input_u8, input_u8 = _byte_views(ds)
 
     binding = _load_binding()
     sizes = binding.sizes()
@@ -107,11 +99,11 @@ def _rollout_to(dataset_path: Path, start_record: int, target_record: int) -> tu
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    seed_bytes = samples_u8[start_record : start_record + 1, seed_off : seed_off + seed_stride].copy()
+    seed_bytes = seed_u8[start_record : start_record + 1, :seed_stride].copy()
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -120,8 +112,8 @@ def _rollout_to(dataset_path: Path, start_record: int, target_record: int) -> tu
         for record in range(start_record, target_record + 1):
             binding.step_input(
                 handle,
-                samples_u8[record : record + 1, prev_input_off : prev_input_off + input_stride].copy(),
-                samples_u8[record : record + 1, input_off : input_off + input_stride].copy(),
+                prev_input_u8[record : record + 1, :input_stride].copy(),
+                input_u8[record : record + 1, :input_stride].copy(),
             )
             binding.write_compare(handle, out_bytes)
     finally:
@@ -140,7 +132,7 @@ def test_wait_dpad_up_edge_enters_common_appeal_one_step_and_rollout() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _HVG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     seed, ref, out = _step_one(dataset_path, 619)
     assert int(seed["action_id"][0]) == ACT_WAIT
@@ -163,7 +155,7 @@ def test_common_appeal_requires_dpad_up_edge_not_held_button() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _HVG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def hold_dpad_up(prev_input):
         prev_input["p"][0]["buttons"] = np.uint16(
@@ -199,7 +191,7 @@ def test_wait_dpad_up_combined_inputs_keep_higher_priority_iasa(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _HVG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def add_button(cur_input):
         cur_input["p"][0]["buttons"] = np.uint16(
@@ -222,7 +214,7 @@ def test_walk_dpad_up_edge_enters_common_appeal_from_non_wait_source() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _HVG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def source_walk(seed):
         seed["action_id"][0] = np.uint16(ACT_WALK_SLOW)
@@ -251,7 +243,7 @@ def test_dash_and_run_dpad_up_edge_enter_common_appeal_after_priority_chain(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _HVG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def source_motion(seed):
         seed["action_id"][0] = np.uint16(source_action)
@@ -278,7 +270,7 @@ def test_dash_and_run_dpad_up_plus_a_keeps_attack_priority(
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _HVG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def source_motion(seed):
         seed["action_id"][0] = np.uint16(source_action)
@@ -320,7 +312,7 @@ def test_common_appeal_stale_allow_interrupt_seed_does_not_open_iasa_without_scr
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / _HVG
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     def source_appeal(seed):
         seed["action_id"][0] = np.uint16(ACT_APPEAL_SR)

@@ -28,11 +28,11 @@ def test_guardsetoff_escape_turnover_window_is_replay_exact() -> None:
     _skip_if_required_artifacts_missing(root)
 
     dataset_path = root / (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "GracefulAttachedTurtle.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip("missing local dataset artifacts")
+        pytest.skip("missing local replay artifacts")
 
     p = 0
     for rec in (9414, 9415, 9416, 9417, 9418):
@@ -56,11 +56,11 @@ def test_guardsetoff_guard_escape_n_same_callback_nudge_does_not_stale_carry_ppa
     _skip_if_required_artifacts_missing(root)
 
     dataset_path = root / (
-        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "PriceyPartialAlbatross.msl"
+        "replays/validation/aggregate_recent/"
+        "PriceyPartialAlbatross.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip("missing local dataset artifacts")
+        pytest.skip("missing local replay artifacts")
 
     p = 1
     seed, ref_row, out_row = _run_one_step_row(dataset_path, 5364, p)

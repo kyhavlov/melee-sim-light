@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _rollout_row(dataset_path: Path, *, start_record: int, target_record: int) -> tuple[np.void, np.void]:
@@ -15,8 +16,8 @@ def _rollout_row(dataset_path: Path, *, start_record: int, target_record: int) -
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert 0 <= start_record <= target_record < int(samples.shape[0])
 
     seed_bytes = np.frombuffer(
@@ -28,7 +29,7 @@ def _rollout_row(dataset_path: Path, *, start_record: int, target_record: int) -
 
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -62,10 +63,10 @@ def test_escapeair_terminal_fallspecial_landing_rollout_keeps_allow_interrupt_cl
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+        / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     )
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path}")
+        pytest.skip(f"missing local replay: {dataset_path}")
 
     ref, out = _rollout_row(dataset_path, start_record=3543, target_record=3574)
 

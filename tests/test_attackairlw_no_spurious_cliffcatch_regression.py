@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @pytest.mark.integration
@@ -15,17 +16,17 @@ def test_attackairlw_no_spurious_cliffcatch_9152_9154_p1_regression() -> None:
     # replay stays in AttackAirLw (69) at t+1 but the sim previously entered CliffCatch (252).
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
     )
     dataset_path = root / expected_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {expected_rel}")
+        pytest.skip(f"missing local replay: {expected_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     num_records = int(samples.shape[0])
-    assert num_records > 9154, f"dataset too short for regression check: num_records={num_records}"
+    assert num_records > 9154, f"replay too short for regression check: num_records={num_records}"
 
     # records 9152..9154 inclusive
     chunk_view = samples[9152:9155]
@@ -48,7 +49,7 @@ def test_attackairlw_no_spurious_cliffcatch_9152_9154_p1_regression() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=3, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=3, num_players=int(ds.num_players))
     try:
         seed_bytes = np.empty((3, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((3, input_stride), dtype=np.uint8)

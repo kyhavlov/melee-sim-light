@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
 
 from tests.test_anim_pose import _find_anim_base_offset, _read_header
 from tests.test_hitboxes_pose import _active_hitboxes_at_frame, _read_hitbox_events

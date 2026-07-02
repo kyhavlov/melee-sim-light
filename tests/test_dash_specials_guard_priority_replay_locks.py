@@ -5,10 +5,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
-_BASE = Path("datasets/aggregate_recent/replays/validation")
+_BASE = Path("replays/validation")
 _ACT_DASH = 20
 _ACT_FALCO_SPECIAL_S_START = 347
 
@@ -51,19 +52,19 @@ def test_dash_sideb_input_preempts_same_frame_guardreflect() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{
     #   ftCo_SpecialS_CheckInput,ftCo_SpecialS_HasInput}
     root = Path(__file__).resolve().parents[1]
-    path = root / _BASE / "dream_land_recent/ShadyDecimalStarling.msl"
+    path = root / _BASE / "dream_land_recent/ShadyDecimalStarling.slpz"
     if not path.exists():
-        pytest.skip(f"missing local dataset: {_BASE / 'dream_land_recent/ShadyDecimalStarling.msl'}")
+        pytest.skip(f"missing local replay: {_BASE / 'dream_land_recent/ShadyDecimalStarling.slpz'}")
 
-    ds = read_dataset(str(path))
+    ds = load_replay_buffers(str(path))
     record = 3171
-    if int(ds.samples.shape[0]) <= record:
-        pytest.skip(f"dataset too short for record {record}: {path}")
+    if int(ds.rows.shape[0]) <= record:
+        pytest.skip(f"replay too short for record {record}: {path}")
 
-    row = ds.samples[record : record + 1]
+    row = ds.rows[record : record + 1]
     p = 1
     assert int(row["seed_t"]["action_id"][0, p]) == _ACT_DASH
     assert int(row["ref_t1"]["action_id"][0, p]) == _ACT_FALCO_SPECIAL_S_START
 
-    out = _step_one_record(row, int(ds.header["num_players"]))
+    out = _step_one_record(row, int(ds.num_players))
     assert int(out["action_id"][p]) == _ACT_FALCO_SPECIAL_S_START

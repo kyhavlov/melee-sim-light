@@ -9,7 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_DAMAGE_AIR_2 = 0x0055
@@ -32,7 +32,7 @@ class _Case:
 
 _LANDING_CLEAR_CASES = (
     _Case(
-        dataset_rel="datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+        dataset_rel="replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz",
         record=306,
         port=1,
         note="Cheery DamageAir2 -> Landing clears x221C_b6 on Landing_Enter_Basic",
@@ -42,7 +42,7 @@ _LANDING_CLEAR_CASES = (
         ref_hitstun=0,
     ),
     _Case(
-        dataset_rel="datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl",
+        dataset_rel="replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz",
         record=705,
         port=1,
         note="ThisViolet later DamageAir2 -> Landing clears x221C_b6 on Landing_Enter_Basic",
@@ -53,8 +53,8 @@ _LANDING_CLEAR_CASES = (
     ),
     _Case(
         dataset_rel=(
-            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl"
+            "replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.slpz"
         ),
         record=3599,
         port=1,
@@ -86,11 +86,11 @@ def test_damageair2_landing_entry_clears_hitstun_flag(case: _Case) -> None:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > case.record, f"dataset too short for lock row: record={case.record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > case.record, f"replay too short for lock row: record={case.record}"
     row = samples[case.record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
@@ -120,15 +120,15 @@ def test_ongoing_damageair2_hitstun_flag_still_tracks_damage_state_owner() -> No
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    dataset_path = root / "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     p = 1
     record = 305
-    assert int(samples.shape[0]) > record, "dataset too short for lock row"
+    assert int(samples.shape[0]) > record, "replay too short for lock row"
     row = samples[record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
@@ -155,7 +155,7 @@ class _DownDamageCase:
 
 _DOWN_DAMAGE_CARRY_CASES = (
     _DownDamageCase(
-        dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+        dataset_rel="replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
         record=5484,
         port=1,
         note="Motionless DownDamageD keeps x221C_b6 after visible hitstun scalar reaches zero",
@@ -163,7 +163,7 @@ _DOWN_DAMAGE_CARRY_CASES = (
         ref_hitstun=0,
     ),
     _DownDamageCase(
-        dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+        dataset_rel="replays/validation/aggregate_recent/HungryImportantSnake.slpz",
         record=5221,
         port=0,
         note="Hungry DownDamageD carries x221C_b6 with no visible hitstun scalar",
@@ -171,7 +171,7 @@ _DOWN_DAMAGE_CARRY_CASES = (
         ref_hitstun=0,
     ),
     _DownDamageCase(
-        dataset_rel="datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl",
+        dataset_rel="replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz",
         record=1181,
         port=0,
         note="ThisViolet DownDamageD keeps x221C_b6 through the DownDamage anim callback",
@@ -200,11 +200,11 @@ def test_downdamaged_preserves_hitstun_flag_independent_of_visible_hitstun(case:
 
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    assert int(samples.shape[0]) > case.record, f"dataset too short for lock row: record={case.record}"
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
+    assert int(samples.shape[0]) > case.record, f"replay too short for lock row: record={case.record}"
     row = samples[case.record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
@@ -233,9 +233,9 @@ def test_downdamaged_does_not_synthesize_missing_hitstun_flag() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    dataset_path = root / "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz"
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        pytest.skip(f"missing local replay: {dataset_path.relative_to(root)}")
 
     p = 1
     record = 5484

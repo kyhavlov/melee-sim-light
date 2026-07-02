@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.slippi.make_dataset_from_slp import (
+from tools.slippi.validation_buffer_seed import (
     _derive_source_clear_processhit_damage_pending_phase_seed_lane,
 )
 

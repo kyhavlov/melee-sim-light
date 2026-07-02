@@ -7,7 +7,8 @@ import numpy as np
 import pytest
 
 from tests.test_items_spawn_joint_replay_real_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 BUTTON_L = 0x0040
@@ -134,7 +135,7 @@ class _ReplayCase:
     "case",
     [
         _ReplayCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl",
+            dataset_rel="replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz",
             record=9403,
             p=1,
             expected_action=ACT_PASS,
@@ -142,7 +143,7 @@ class _ReplayCase:
             note="soft-platform GuardReflect->Pass expired x14 live x18",
         ),
         _ReplayCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            dataset_rel="replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz",
             record=4735,
             p=1,
             expected_action=ACT_KNEE_BEND,
@@ -150,7 +151,7 @@ class _ReplayCase:
             note="GuardReflect->KneeBend live x14/x18",
         ),
         _ReplayCase(
-            dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            dataset_rel="replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
             record=734,
             p=0,
             expected_action=ACT_KNEE_BEND,
@@ -164,10 +165,10 @@ def test_guard_reflect_exit_timer_bits_replay_real_locks(case: _ReplayCase) -> N
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[case.record]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[case.record]
     seed = row["seed_t"]
     ref = row["ref_t1"]
     assert int(seed["action_id"][case.p]) == ACT_GUARD_REFLECT, case.note
@@ -187,7 +188,7 @@ def test_guard_reflect_exit_timer_bits_replay_real_locks(case: _ReplayCase) -> N
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)

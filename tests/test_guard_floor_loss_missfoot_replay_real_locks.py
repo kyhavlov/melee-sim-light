@@ -11,8 +11,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 
 
 _HVG = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-    "HilariousVillainousGiraffe.msl"
+    "replays/validation/aggregate_recent/"
+    "HilariousVillainousGiraffe.slpz"
 )
 
 
@@ -22,7 +22,7 @@ def test_landing_terminal_guardon_floor_loss_enters_missfoot_replay_real_lock() 
     _skip_if_required_artifacts_missing(root)
     ds_path = root / _HVG
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset artifact: {ds_path}")
+        pytest.skip(f"missing local replay artifact: {ds_path}")
 
     seed, ref, out = _run_one_step_row(ds_path, 520, 1)
 
@@ -54,7 +54,7 @@ def test_landing_terminal_floor_loss_without_guard_entry_does_not_missfoot() -> 
     _skip_if_required_artifacts_missing(root)
     ds_path = root / _HVG
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset artifact: {ds_path}")
+        pytest.skip(f"missing local replay artifact: {ds_path}")
 
     def clear_shield(seed_t):
         seed_t["shield_hp"][0, 1] = 0.0
@@ -76,7 +76,7 @@ def test_guard_floor_loss_missfoot_adjacent_rows_remain_exact(record: int) -> No
     _skip_if_required_artifacts_missing(root)
     ds_path = root / _HVG
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset artifact: {ds_path}")
+        pytest.skip(f"missing local replay artifact: {ds_path}")
 
     _seed, ref, out = _run_one_step_row(ds_path, record, 1)
     assert int(out["action_id"][1]) == int(ref["action_id"][1])

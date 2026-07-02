@@ -10,8 +10,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 @dataclass(frozen=True)
@@ -24,14 +24,14 @@ class _Case:
     ref_anim: int
 
 
-_AGG_DEBUG = "datasets/aggregate_recent/replays/debug/fd_mixed_recent"
-_AGG_VALID = "datasets/aggregate_recent/replays/validation/aggregate_recent"
-_AGG_CARDINAL = "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent"
+_AGG_DEBUG = "replays/validation/fd_mixed_recent"
+_AGG_VALID = "replays/validation/aggregate_recent"
+_AGG_CARDINAL = "replays/validation/cardinal_1.0_recent"
 
 
 _CASES = [
     _Case(
-        f"{_AGG_DEBUG}/PriceyPartialAlbatross.msl",
+        f"{_AGG_DEBUG}/PriceyPartialAlbatross.slpz",
         2357,
         0,
         251,  # MissFoot
@@ -39,7 +39,7 @@ _CASES = [
         216,  # ftCo_SM_CliffCatch
     ),
     _Case(
-        f"{_AGG_DEBUG}/TubbyCurlyHerring.msl",
+        f"{_AGG_DEBUG}/TubbyCurlyHerring.slpz",
         6012,
         0,
         251,  # MissFoot
@@ -47,7 +47,7 @@ _CASES = [
         216,  # ftCo_SM_CliffCatch
     ),
     _Case(
-        f"{_AGG_DEBUG}/BlondHardHippopotamus.msl",
+        f"{_AGG_DEBUG}/BlondHardHippopotamus.slpz",
         4879,
         0,
         253,  # CliffWait
@@ -55,7 +55,7 @@ _CASES = [
         219,  # ftCo_SM_CliffClimbSlow
     ),
     _Case(
-        f"{_AGG_DEBUG}/PutridJoyousOryx.msl",
+        f"{_AGG_DEBUG}/PutridJoyousOryx.slpz",
         5254,
         0,
         253,  # CliffWait
@@ -63,7 +63,7 @@ _CASES = [
         221,  # ftCo_SM_CliffAttackSlow
     ),
     _Case(
-        f"{_AGG_DEBUG}/BlondHardHippopotamus.msl",
+        f"{_AGG_DEBUG}/BlondHardHippopotamus.slpz",
         4931,
         0,
         254,  # CliffClimbSlow
@@ -71,7 +71,7 @@ _CASES = [
         219,  # ftCo_SM_CliffClimbSlow
     ),
     _Case(
-        f"{_AGG_DEBUG}/DistinctCaringCobra.msl",
+        f"{_AGG_DEBUG}/DistinctCaringCobra.slpz",
         1791,
         0,
         253,  # CliffWait terminal x1990 frame
@@ -79,7 +79,7 @@ _CASES = [
         217,  # ftCo_SM_CliffWait
     ),
     _Case(
-        f"{_AGG_DEBUG}/BlondHardHippopotamus.msl",
+        f"{_AGG_DEBUG}/BlondHardHippopotamus.slpz",
         3633,
         1,
         252,  # CliffCatch terminal row
@@ -87,7 +87,7 @@ _CASES = [
         222,  # ftCo_SM_CliffAttackQuick
     ),
     _Case(
-        f"{_AGG_DEBUG}/PositiveRevolvingHyena.msl",
+        f"{_AGG_DEBUG}/PositiveRevolvingHyena.slpz",
         8079,
         0,
         252,  # CliffCatch terminal row
@@ -95,7 +95,7 @@ _CASES = [
         225,  # ftCo_SM_CliffJumpSlow1
     ),
     _Case(
-        f"{_AGG_DEBUG}/TubbyCurlyHerring.msl",
+        f"{_AGG_DEBUG}/TubbyCurlyHerring.slpz",
         6337,
         0,
         253,  # CliffWait
@@ -103,7 +103,7 @@ _CASES = [
         217,  # ftCo_SM_CliffWait
     ),
     _Case(
-        f"{_AGG_DEBUG}/PriceyPartialAlbatross.msl",
+        f"{_AGG_DEBUG}/PriceyPartialAlbatross.slpz",
         2383,
         0,
         253,  # CliffWait
@@ -111,7 +111,7 @@ _CASES = [
         222,  # ftCo_SM_CliffAttackQuick
     ),
     _Case(
-        f"{_AGG_VALID}/PositiveRevolvingHyena.msl",
+        f"{_AGG_VALID}/PositiveRevolvingHyena.slpz",
         8072,
         0,
         29,   # Fall, cooldown terminal seed
@@ -119,7 +119,7 @@ _CASES = [
         216,  # ftCo_SM_CliffCatch
     ),
     _Case(
-        f"{_AGG_VALID}/HilariousVillainousGiraffe.msl",
+        f"{_AGG_VALID}/HilariousVillainousGiraffe.slpz",
         6546,
         0,
         255,  # CliffClimbQuick terminal
@@ -127,7 +127,7 @@ _CASES = [
         7,    # ftCo_SM_WalkSlow
     ),
     _Case(
-        f"{_AGG_VALID}/TubbyCurlyHerring.msl",
+        f"{_AGG_VALID}/TubbyCurlyHerring.slpz",
         4372,
         0,
         255,  # CliffClimbQuick terminal
@@ -135,7 +135,7 @@ _CASES = [
         12,   # ftCo_SM_Dash
     ),
     _Case(
-        f"{_AGG_VALID}/BlondHardHippopotamus.msl",
+        f"{_AGG_VALID}/BlondHardHippopotamus.slpz",
         9786,
         0,
         257,  # CliffAttackQuick terminal
@@ -143,7 +143,7 @@ _CASES = [
         30,   # ftCo_SM_Squat
     ),
     _Case(
-        f"{_AGG_VALID}/DistinctCaringCobra.msl",
+        f"{_AGG_VALID}/DistinctCaringCobra.slpz",
         1843,
         0,
         259,  # CliffEscapeQuick terminal
@@ -151,7 +151,7 @@ _CASES = [
         30,   # ftCo_SM_Squat
     ),
     _Case(
-        f"{_AGG_VALID}/DistinctCaringCobra.msl",
+        f"{_AGG_VALID}/DistinctCaringCobra.slpz",
         3572,
         1,
         193,  # DownDamageD floor-contact fallback
@@ -159,7 +159,7 @@ _CASES = [
         193,  # ftCo_SM_DownDamageD
     ),
     _Case(
-        f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+        f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.slpz",
         4565,
         0,
         183,  # DownBoundU airborne floor-index refresh
@@ -167,7 +167,7 @@ _CASES = [
         183,  # ftCo_SM_DownBoundU
     ),
     _Case(
-        f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+        f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.slpz",
         782,
         0,
         85,   # DamageAir2 same-action floor contact
@@ -175,7 +175,7 @@ _CASES = [
         175,  # ftCo_SM_DamageAir2
     ),
     _Case(
-        f"{_AGG_CARDINAL}/TreasuredBackKangaroo.msl",
+        f"{_AGG_CARDINAL}/TreasuredBackKangaroo.slpz",
         4429,
         1,
         85,   # DamageAir2 same-action floor contact, fastfall bit must remain visible
@@ -183,7 +183,7 @@ _CASES = [
         175,  # ftCo_SM_DamageAir2
     ),
     _Case(
-        f"{_AGG_CARDINAL}/GracefulAttachedTurtle.msl",
+        f"{_AGG_CARDINAL}/GracefulAttachedTurtle.slpz",
         8607,
         0,
         245,  # Ottotto jump input loses edge floor through KneeBend_Coll -> Fall
@@ -191,7 +191,7 @@ _CASES = [
         20,   # ftCo_SM_Fall
     ),
     _Case(
-        f"{_AGG_CARDINAL}/QuerulousGrandDinosaur.msl",
+        f"{_AGG_CARDINAL}/QuerulousGrandDinosaur.slpz",
         3334,
         1,
         16,   # WalkMiddle edge handoff enters Ottotto instead of generic Fall
@@ -199,7 +199,7 @@ _CASES = [
         210,  # ftCo_SM_Ottotto
     ),
     _Case(
-        f"{_AGG_VALID}/HilariousVillainousGiraffe.msl",
+        f"{_AGG_VALID}/HilariousVillainousGiraffe.slpz",
         5095,
         0,
         245,  # Ottotto IASA crouch enters Squat through ftCo_800D5FB0
@@ -207,7 +207,7 @@ _CASES = [
         30,   # ftCo_SM_Squat
     ),
     _Case(
-        f"{_AGG_VALID}/TubbyCurlyHerring.msl",
+        f"{_AGG_VALID}/TubbyCurlyHerring.slpz",
         10089,
         1,
         245,  # Ottotto anim-end enters OttottoWait
@@ -215,7 +215,7 @@ _CASES = [
         211,  # ftCo_SM_OttottoWait
     ),
     _Case(
-        f"{_AGG_VALID}/PriceyPartialAlbatross.msl",
+        f"{_AGG_VALID}/PriceyPartialAlbatross.slpz",
         1597,
         0,
         245,  # Ottotto held-stick below turn threshold stays teetering
@@ -223,7 +223,7 @@ _CASES = [
         210,  # ftCo_SM_Ottotto
     ),
     _Case(
-        f"{_AGG_VALID}/PriceyPartialAlbatross.msl",
+        f"{_AGG_VALID}/PriceyPartialAlbatross.slpz",
         1598,
         0,
         245,  # Ottotto ordinary Turn IASA after Dash/crouch checks
@@ -277,7 +277,7 @@ def test_missfoot_and_slow_ledge_options_replay_real_rows_exact(case: _Case) -> 
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+        pytest.skip(f"missing local replay: {case.dataset_rel}")
 
     seed, ref_row, out_row = _run_one_step_row(dataset_path, case.record, case.p)
     assert int(seed["action_id"][case.p]) == case.seed_action
@@ -305,13 +305,13 @@ def _physical_electric_capybara_samples() -> tuple[np.ndarray, int]:
     slp_path = root / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(slp_path),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
     )
-    return ds.samples, int(ds.header["num_players"])
+    return ds.rows, int(ds.num_players)
 
 
 def _step_one_row(row: np.ndarray, *, num_players: int) -> np.void:

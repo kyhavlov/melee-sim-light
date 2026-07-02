@@ -9,17 +9,18 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 _DATASET = (
-    "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    "replays/validation/aggregate_recent/DistinctCaringCobra.slpz"
 )
 
 
 def _run_rollout_to_record(ds_path: Path, *, start_record: int, target_record: int) -> np.void:
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > target_record
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -34,7 +35,7 @@ def _run_rollout_to_record(ds_path: Path, *, start_record: int, target_record: i
     input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, target_record + 1):
@@ -55,9 +56,9 @@ def test_damage_anim_end_wait_iasa_squat_rollout_preserves_intermediate_instance
     _skip_if_required_artifacts_missing(root)
     ds_path = root / _DATASET
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {_DATASET}")
-    ds = read_dataset(str(ds_path))
-    samples = ds.samples
+        pytest.skip(f"missing local replay: {_DATASET}")
+    ds = load_replay_buffers(str(ds_path))
+    samples = ds.rows
     p = 0
     start_record = 7818
     target_record = 7832
@@ -81,7 +82,7 @@ def test_damage_anim_end_wait_iasa_instance_bump_does_not_apply_before_anim_end(
     _skip_if_required_artifacts_missing(root)
     ds_path = root / _DATASET
     if not ds_path.exists():
-        pytest.skip(f"missing local dataset: {_DATASET}")
+        pytest.skip(f"missing local replay: {_DATASET}")
     p = 0
     seed, ref, out = _run_one_step_row(ds_path, 7831, p)
     assert int(seed["action_id"][p]) == 77  # DamageHi3

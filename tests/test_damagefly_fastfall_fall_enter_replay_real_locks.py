@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 ACT_FALL = 29
@@ -26,10 +27,10 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 
 def _aggregate_dataset_path(root: Path, name: str) -> Path:
-    dataset_rel = f"datasets/aggregate_recent/replays/validation/aggregate_recent/{name}.msl"
+    dataset_rel = f"replays/validation/aggregate_recent/{name}.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
@@ -40,8 +41,8 @@ def _binding_sizes():
 
 
 def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
     assert int(row.shape[0]) == 1
 
     binding, seed_stride, input_stride, compare_stride = _binding_sizes()
@@ -56,7 +57,7 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -71,8 +72,8 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
 def _run_rollout_records(
     dataset_path: Path, start_record: int, target_records: tuple[int, ...]
 ) -> dict[int, tuple[np.void, np.void]]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_max = max(target_records)
     targets = set(target_records)
     assert int(samples.shape[0]) > target_max
@@ -83,7 +84,7 @@ def _run_rollout_records(
     ).copy().reshape(1, seed_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         out_by_record: dict[int, tuple[np.void, np.void]] = {}

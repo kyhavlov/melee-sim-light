@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_dtypes import COMPARE_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_rollout_window(
@@ -17,8 +18,8 @@ def _run_rollout_window(
     clear_z_window: tuple[int, int] | None = None,
 ) -> tuple[object, dict[int, np.void]]:
     binding = pytest.importorskip("msl_binding")
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     assert int(samples.shape[0]) > stop_record
 
     sizes = binding.sizes()
@@ -31,7 +32,7 @@ def _run_rollout_window(
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     outs: dict[int, np.void] = {}
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         for rec in range(start_record, stop_record + 1):
@@ -69,13 +70,13 @@ def test_downbound_z_macro_a_timer_enters_getup_attack_his_rollout_lock() -> Non
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_rel = "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     ds, outs = _run_rollout_window(dataset_path, start_record=5121, stop_record=5146)
-    samples = ds.samples
+    samples = ds.rows
     p = 0
     target = 5146
     seed = samples[target]["seed_t"]
@@ -101,10 +102,10 @@ def test_downbound_without_z_macro_does_not_enter_getup_attack_his_negative() ->
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
-    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_rel = "replays/validation/aggregate_recent/HungryImportantSnake.slpz"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
     _, outs = _run_rollout_window(
         dataset_path,

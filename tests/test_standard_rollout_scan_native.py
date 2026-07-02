@@ -1,4 +1,5 @@
 import heapq
+from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -6,20 +7,17 @@ import numpy as np
 import pytest
 
 import msl_binding
-from tools.eval.dataset import COMPARE_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE
 from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, first_mismatch_field
-from tools.eval.run_longest_rollout_streaks import (
-    _AttemptResult,
-    DatasetStreaks,
+from tools.eval.streaming_validation import (
+    ValidationStreaks,
     _STANDARD_ROLLOUT_FIELDS,
-    _scan_dataset_streaks,
-    _scan_dataset_streaks_with_native_float_rows,
-    _scan_rollout_streaks,
+    scan_validation_buffers_with_native_float_rows,
 )
 from tools.eval.run_rollout_suite_eval import _float_compare_fields
 from tools.eval.validation_profile import get_validation_profile
 from tools.slippi.suite_io import load_suite, repo_root
-from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
 
 
 @dataclass(frozen=True)
@@ -61,6 +59,155 @@ _OracleHeap = list[
         _OracleFloatOffender,
     ]
 ]
+
+
+@dataclass(frozen=True)
+class _AttemptResult:
+    scored_field: str | None = None
+    ignored_first_field: str | None = None
+
+
+@dataclass(frozen=True)
+class _ScanResult:
+    best_len: int
+    best_start_record: int
+    best_end_record_excl: int
+    streak_histogram: Counter[int]
+    first_mismatch_field_counts: Counter[str]
+    first_mismatch_field_counts_seeded: Counter[str]
+    ignored_first_mismatch_field_counts: Counter[str]
+    ignored_first_mismatch_field_counts_seeded: Counter[str]
+
+
+def _scan_rollout_streaks(
+    *,
+    n: int,
+    reseed_at,
+    attempt_from_current,
+    attempt_seeded_at_record,
+) -> _ScanResult:
+    best_len = 0
+    best_start = 0
+    best_end_excl = 0
+    cur_start = 0
+    cur_len = 0
+    hist: Counter[int] = Counter()
+    mismatch_fields: Counter[str] = Counter()
+    mismatch_fields_seeded: Counter[str] = Counter()
+    ignored_first_fields: Counter[str] = Counter()
+    ignored_first_fields_seeded: Counter[str] = Counter()
+
+    needs_seed = True
+    j = 0
+    while j < n:
+        if needs_seed:
+            reseed_at(cur_start)
+            needs_seed = False
+        attempt = attempt_from_current(j)
+        if attempt.ignored_first_field is not None:
+            ignored_first_fields[attempt.ignored_first_field] += 1
+        if attempt.scored_field is None:
+            cur_len += 1
+            if cur_len > best_len:
+                best_len = cur_len
+                best_start = cur_start
+                best_end_excl = cur_start + cur_len
+            j += 1
+            continue
+        if cur_len > 0:
+            hist[cur_len] += 1
+        mismatch_fields[attempt.scored_field] += 1
+
+        cur_start = j
+        cur_len = 0
+        retry = attempt_seeded_at_record(j)
+        if retry.ignored_first_field is not None:
+            ignored_first_fields_seeded[retry.ignored_first_field] += 1
+        if retry.scored_field is None:
+            cur_len = 1
+            if cur_len > best_len:
+                best_len = cur_len
+                best_start = cur_start
+                best_end_excl = cur_start + cur_len
+            j += 1
+            continue
+        mismatch_fields_seeded[retry.scored_field] += 1
+        cur_start = j + 1
+        cur_len = 0
+        j += 1
+        needs_seed = True
+    if cur_len > 0:
+        hist[cur_len] += 1
+    return _ScanResult(
+        best_len=int(best_len),
+        best_start_record=int(best_start),
+        best_end_record_excl=int(best_end_excl),
+        streak_histogram=hist,
+        first_mismatch_field_counts=mismatch_fields,
+        first_mismatch_field_counts_seeded=mismatch_fields_seeded,
+        ignored_first_mismatch_field_counts=ignored_first_fields,
+        ignored_first_mismatch_field_counts_seeded=ignored_first_fields_seeded,
+    )
+
+
+def _scan_dataset_streaks(
+    *,
+    dataset_path: Path,
+    ds,
+    fields: tuple[str, ...],
+    players: tuple[int, ...],
+    max_records: int,
+    ucf_enabled: bool | None,
+    ucf_cardinals_1_0_enabled: bool | None,
+    profile: str,
+) -> ValidationStreaks:
+    streaks, _float_rows = _scan_dataset_streaks_with_native_float_rows(
+        dataset_path=dataset_path,
+        ds=ds,
+        fields=fields,
+        players=players,
+        max_records=max_records,
+        ucf_enabled=ucf_enabled,
+        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        profile=profile,
+        float_fields=(),
+        float_top=0,
+        float_threshold=0.0,
+        float_dataset_label=None,
+    )
+    return streaks
+
+
+def _scan_dataset_streaks_with_native_float_rows(
+    *,
+    dataset_path: Path,
+    ds,
+    fields: tuple[str, ...],
+    players: tuple[int, ...],
+    max_records: int,
+    ucf_enabled: bool | None,
+    ucf_cardinals_1_0_enabled: bool | None,
+    profile: str,
+    float_fields: tuple[str, ...] = (),
+    float_top: int = 0,
+    float_threshold: float = 0.0,
+    float_dataset_label: str | None = None,
+) -> tuple[ValidationStreaks, dict[str, list[dict]]]:
+    streaks, float_rows, _downstream = scan_validation_buffers_with_native_float_rows(
+        dataset_path=dataset_path,
+        buffers=ds.buffers,
+        fields=fields,
+        players=players,
+        max_records=max_records,
+        ucf_enabled=ucf_enabled,
+        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        profile=profile,
+        float_fields=float_fields,
+        float_top=float_top,
+        float_threshold=float_threshold,
+        float_dataset_label=float_dataset_label,
+    )
+    return streaks, float_rows
 
 
 def _oracle_would_enter_top(heap: _OracleHeap, *, top: int, abs_err: float) -> bool:
@@ -109,11 +256,11 @@ def _suite_entry(*, suite_rel: str, replay_name: str):
     raise AssertionError(f"{replay_name} not found in {suite_rel}")
 
 
-def _build_suite_dataset(*, suite_rel: str, replay_name: str):
+def _build_suite_replay_buffers(*, suite_rel: str, replay_name: str):
     root = repo_root()
     suite, entry = _suite_entry(suite_rel=suite_rel, replay_name=replay_name)
     replay_path = root / entry.replay
-    ds = build_dataset_from_slp(
+    ds = load_replay_buffers(
         slp_path=str(replay_path),
         ports=[int(p) for p in entry.ports],
         ucf_enabled=bool(suite.ucf_enabled),
@@ -125,11 +272,11 @@ def _build_suite_dataset(*, suite_rel: str, replay_name: str):
 def _python_standard_scan(
     ds, *, max_records: int, players: tuple[int, ...], profile_name: str
 ):
-    samples = ds.samples
+    samples = ds.rows
     n = int(samples.shape[0])
     if int(max_records) > 0:
         n = min(int(max_records), n)
-    num_players = int(ds.header["num_players"])
+    num_players = int(ds.num_players)
     players_u8 = np.asarray(players, dtype=np.uint8)
     profile_rl1 = int(profile_name == "rl1_gameplay")
     binding = msl_binding
@@ -143,24 +290,23 @@ def _python_standard_scan(
     input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(samples.shape[0], sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
-    ref_off = int(samples.dtype.fields["ref_t1"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
+    ref_u8 = views.ref_t1
 
     def reseed_at(j: int) -> None:
-        seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[j, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
 
     def attempt(j: int) -> _AttemptResult:
-        seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
-        prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
-        input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
+        seed_bytes[0, :] = seed_u8[j, :seed_stride]
+        prev_input_bytes[0, :] = prev_input_u8[j, :input_stride]
+        input_bytes[0, :] = input_u8[j, :input_stride]
         binding.step_input_replay_frame_rng(handle, seed_bytes, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
-        ref_compare_bytes = samples_u8[j : j + 1, ref_off : ref_off + compare_stride]
+        ref_compare_bytes = ref_u8[j : j + 1, :compare_stride]
         code = int(
             binding.standard_rollout_compare(
                 out_compare_bytes, ref_compare_bytes, players_u8, profile_rl1
@@ -200,11 +346,11 @@ def _python_dataset_streaks(
     max_records: int,
     players: tuple[int, ...],
     profile_name: str,
-) -> DatasetStreaks:
+) -> ValidationStreaks:
     scan = _python_standard_scan(
         ds, max_records=max_records, players=players, profile_name=profile_name
     )
-    samples = ds.samples
+    samples = ds.rows
     seed = samples["seed_t"]
     ref = samples["ref_t1"]
     n = int(samples.shape[0])
@@ -215,7 +361,7 @@ def _python_dataset_streaks(
     if scan.best_len > 0:
         start_seed_frame = int(seed["frame_id"][scan.best_start_record])
         end_ref_frame_incl = int(ref["frame_id"][scan.best_end_record_excl - 1])
-    return DatasetStreaks(
+    return ValidationStreaks(
         dataset=str(dataset_path),
         num_records=int(samples.shape[0]),
         max_records_used=n,
@@ -252,9 +398,9 @@ def _python_collect_rollout_float_offenders_oracle(
     ucf_enabled: bool,
     ucf_cardinals_1_0_enabled: bool,
 ) -> dict[str, list[dict]]:
-    samples = ds.samples
+    samples = ds.rows
     num_records_total = int(samples.shape[0])
-    num_players = int(ds.header["num_players"])
+    num_players = int(ds.num_players)
     n = num_records_total if int(max_records) <= 0 else min(num_records_total, int(max_records))
 
     binding = msl_binding
@@ -275,11 +421,10 @@ def _python_collect_rollout_float_offenders_oracle(
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(num_records_total, sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
+    views = replay_buffer_byte_views(ds)
+    seed_u8 = views.seed_t
+    prev_input_u8 = views.prev_input_t
+    input_u8 = views.input_t
 
     seed = samples["seed_t"]
     ref = samples["ref_t1"]
@@ -291,13 +436,13 @@ def _python_collect_rollout_float_offenders_oracle(
     heaps: dict[str, _OracleHeap] = {field: [] for field in fields}
 
     def reseed_at(j: int) -> None:
-        seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
+        seed_bytes[0, :] = seed_u8[j, :seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)
 
     def step(j: int) -> None:
-        seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
-        prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
-        input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
+        seed_bytes[0, :] = seed_u8[j, :seed_stride]
+        prev_input_bytes[0, :] = prev_input_u8[j, :input_stride]
+        input_bytes[0, :] = input_u8[j, :input_stride]
         binding.step_input_replay_frame_rng(handle, seed_bytes, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
 
@@ -477,7 +622,9 @@ def test_native_standard_rollout_scan_matches_python_orchestration(
     players: tuple[int, ...],
     expect: dict[str, object],
 ) -> None:
-    suite, _entry, replay_path, ds = _build_suite_dataset(suite_rel=suite_rel, replay_name=replay_name)
+    suite, _entry, replay_path, ds = _build_suite_replay_buffers(
+        suite_rel=suite_rel, replay_name=replay_name
+    )
     native = _scan_dataset_streaks(
         dataset_path=replay_path,
         ds=ds,
@@ -563,7 +710,9 @@ def test_native_standard_rollout_float_rows_match_python_collector(
     players: tuple[int, ...],
     top: int,
 ) -> None:
-    suite, _entry, replay_path, ds = _build_suite_dataset(suite_rel=suite_rel, replay_name=replay_name)
+    suite, _entry, replay_path, ds = _build_suite_replay_buffers(
+        suite_rel=suite_rel, replay_name=replay_name
+    )
     dataset_label = str(replay_path.relative_to(repo_root()))
     float_fields = _float_compare_fields()
 

@@ -26,8 +26,8 @@ def _dataset(rel: str) -> Path:
 @pytest.mark.parametrize(
     ("rel", "record", "player"),
     [
-        ("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl", 4980, 0),
-        ("datasets/sheik/replays/validation/sheik/WavyRundownAardvark.msl", 6498, 0),
+        ("replays/validation/sheik/StiffLustrousZebra.slpz", 4980, 0),
+        ("replays/validation/sheik/WavyRundownAardvark.slpz", 6498, 0),
     ],
 )
 def test_sheik_attacklw4_iasa_b_edge_enters_grounded_needle(
@@ -46,7 +46,7 @@ def test_sheik_attacklw4_iasa_without_b_edge_stays_in_attack() -> None:
         input_t["p"]["buttons"][0, 0] = np.uint16(int(input_t["p"]["buttons"][0, 0]) & ~BUTTON_B)
 
     seed, _ref, out = _run_one_step_row(
-        _dataset("datasets/sheik/replays/validation/sheik/StiffLustrousZebra.msl"),
+        _dataset("replays/validation/sheik/StiffLustrousZebra.slpz"),
         4980,
         0,
         input_mutator=clear_b,
@@ -63,7 +63,7 @@ def test_sheik_early_attackhi4_b_edge_waits_for_allow_interrupt() -> None:
     # refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_IASA
     seed, ref, out = _run_one_step_row(
-        _dataset("datasets/sheik/replays/validation/sheik/BeautifulDistantWolverine.msl"),
+        _dataset("replays/validation/sheik/BeautifulDistantWolverine.slpz"),
         2805,
         1,
     )

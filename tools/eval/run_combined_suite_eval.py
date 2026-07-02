@@ -21,22 +21,6 @@ from tools.slippi.slpz import resolve_replay_path
 from tools.slippi.suite_io import load_suite, repo_root
 
 
-_STANDARD_ROLLOUT_FIELDS = ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags")
-
-
-def _parse_csv(s: str) -> tuple[str, ...]:
-    return tuple(x.strip() for x in s.split(",") if x.strip() != "")
-
-
-def _validate_discrete_fields(fields: tuple[str, ...]) -> tuple[str, ...]:
-    if tuple(fields) != _STANDARD_ROLLOUT_FIELDS:
-        raise SystemExit(
-            "error: combined streaming validation supports the standard rollout field set only: "
-            + ",".join(_STANDARD_ROLLOUT_FIELDS)
-        )
-    return tuple(fields)
-
-
 class _CaptureReporter:
     def __init__(self) -> None:
         self.lines: list[str] = []
@@ -63,7 +47,7 @@ def _display_path(path: Path, *, root: Path) -> str:
 
 
 def _combined_dataset_task(task: dict, collect_stats: bool = False) -> dict:
-    from tools.slippi.make_dataset_from_slp import build_validation_buffers_from_slp
+    from tools.slippi.validation_buffer_builder import build_validation_buffers_from_slp
 
     if collect_stats:
         import time
@@ -86,8 +70,6 @@ def _combined_dataset_task(task: dict, collect_stats: bool = False) -> dict:
     one_capture = _CaptureReporter()
     if collect_stats:
         one_step_start = time.perf_counter()
-    if tuple(task["debug_mismatch"]) or tuple(task["debug_float"]):
-        raise ValueError("combined streaming validation does not support one-step debug mismatch modes")
     one_summary = evaluate_validation_buffers(
         dataset_path=dataset_label,
         buffers=buffers,
@@ -194,7 +176,7 @@ def _combined_dataset_shard(shard: list[tuple[int, dict]], collect_stats: bool =
 
         init_start = time.perf_counter()
     import msl_binding  # type: ignore
-    from tools.slippi.make_dataset_from_slp import build_validation_buffers_from_slp  # noqa: F401
+    from tools.slippi.validation_buffer_builder import build_validation_buffers_from_slp  # noqa: F401
 
     # Touch the native module once per worker so init/import cost is charged to the shard, not a
     # particular replay.
@@ -245,7 +227,7 @@ def run_combined_dataset_tasks(
 ) -> tuple[list[dict], list[dict]]:
     if not tasks:
         return [], []
-    from tools.slippi.make_dataset_from_slp import warm_validation_generated_data_cache
+    from tools.slippi.validation_buffer_builder import warm_validation_generated_data_cache
 
     root = Path(str(tasks[0].get("root", repo_root())))
     stage_ids = tuple(sorted({int(t.get("stage_id", 0)) for t in tasks if int(t.get("stage_id", 0)) > 0}))
@@ -335,7 +317,6 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--suite", required=True)
     ap.add_argument("--chunk", type=int, default=64)
-    ap.add_argument("--fields", default="action_id,animation_index,on_ground,hitlag,hitstun,state_flags")
     ap.add_argument("--players", default=None)
     ap.add_argument("--max-records", type=int, default=0)
     ap.add_argument("--profile", default="rl1_gameplay", choices=validation_profile_names())
@@ -344,17 +325,13 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=0)
     ap.add_argument("--exceptions", type=Path, default=Path("replays/validation_exceptions.json"))
     ap.add_argument("--float-top", type=int, default=3)
-    ap.add_argument("--debug-mismatch", default="")
-    ap.add_argument("--debug-limit", type=int, default=10)
-    ap.add_argument("--debug-float", default="")
-    ap.add_argument("--debug-float-limit", type=int, default=10)
     ap.add_argument("--stats-out", type=Path, default=None)
     args = ap.parse_args()
 
     root = repo_root()
     suite_path = (root / args.suite).resolve()
     suite = load_suite(suite_path)
-    fields = _validate_discrete_fields(_parse_csv(str(args.fields)))
+    fields = run_rollout_suite_eval.standard_rollout_fields()
     validation_profile = get_validation_profile(args.profile)
     exceptions_path = (root / args.exceptions).resolve()
     exceptions = load_validation_exceptions(exceptions_path)
@@ -372,10 +349,6 @@ def main() -> None:
             "profile": validation_profile.name,
             "ucf_enabled": bool(suite.ucf_enabled),
             "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
-            "debug_mismatch": tuple(s.strip() for s in args.debug_mismatch.split(",") if s.strip()),
-            "debug_limit": int(args.debug_limit),
-            "debug_float": tuple(s.strip() for s in args.debug_float.split(",") if s.strip()),
-            "debug_float_limit": int(args.debug_float_limit),
             "fields": list(fields),
             "players_csv": args.players,
             "max_records": int(args.max_records),

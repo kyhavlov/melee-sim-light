@@ -5,9 +5,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
-from tests.replay_dataset_loader import load_replay_dataset as read_dataset
-from tools.slippi.make_dataset_from_slp import _derive_dream_whispy_wind_seed_lanes
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers
+from tools.slippi.validation_buffer_items import _derive_dream_whispy_wind_seed_lanes
 from tools.slippi.known_data_artifacts import dream_whispy_metadata
 
 
@@ -48,9 +48,9 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    ds = load_replay_buffers(str(dataset_path))
+    row = ds.rows[record : record + 1]
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
             1, seed_stride
@@ -83,11 +83,11 @@ def _rollout_row_ucf(
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-    ds = read_dataset(str(dataset_path))
-    samples = samples_override if samples_override is not None else ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = samples_override if samples_override is not None else ds.rows
     handle = binding.init(
         batch_size=1,
-        num_players=int(ds.header["num_players"]),
+        num_players=int(ds.num_players),
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -122,12 +122,12 @@ def _rollout_row_ucf(
 
 
 def _base_seed(x: float, y: float, wind_dir: int, *, valid: bool = True) -> np.ndarray:
-    ds = read_dataset(
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/"
-        "FlippantEnchantedHorse.msl"
+    ds = load_replay_buffers(
+        "replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.slpz"
     )
     seed = np.zeros((1,), dtype=SEED_DTYPE)
-    seed[0] = ds.samples[890]["seed_t"]
+    seed[0] = ds.rows[890]["seed_t"]
     seed["pos_x"][0, 0] = np.float32(x)
     seed["pos_y"][0, 0] = np.float32(y)
     seed["stage_dream_whispy_wind_dir_u8"] = np.uint8(wind_dir)
@@ -168,7 +168,7 @@ def test_dream_whispy_wind_direction_magnitude_and_rect_gate() -> None:
 
 def test_dream_whispy_replay_seed_wind_matches_representative_row() -> None:
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+        "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz"
     )
     seed, ref, out = _step_one_row(dataset_path, 890)
     assert int(seed["stage_dream_whispy_wind_valid_u8"]) == 1
@@ -179,7 +179,7 @@ def test_dream_whispy_replay_seed_wind_matches_representative_row() -> None:
 @pytest.mark.integration
 def test_dream_whispy_replay_playback_applies_prefix_lane_each_frame_feh_953() -> None:
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+        "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz"
     )
     ref, out = _rollout_row_ucf(dataset_path, 889, 953, replay_frame_rng=True)
     assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 361
@@ -191,12 +191,12 @@ def test_dream_whispy_replay_playback_applies_prefix_lane_each_frame_feh_953() -
 @pytest.mark.integration
 def test_dream_whispy_first_visible_seed_catchup_is_rollout_advanced_only() -> None:
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+        "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz"
     )
-    ds = read_dataset(str(dataset_path))
-    assert int(ds.samples[889]["seed_t"]["stage_dream_whispy_wind_valid_u8"]) == 0
-    assert int(ds.samples[890]["seed_t"]["stage_dream_whispy_wind_valid_u8"]) == 1
-    assert int(ds.samples[890]["seed_t"]["stage_dream_whispy_wind_timer_u16"]) == 274
+    ds = load_replay_buffers(str(dataset_path))
+    assert int(ds.rows[889]["seed_t"]["stage_dream_whispy_wind_valid_u8"]) == 0
+    assert int(ds.rows[890]["seed_t"]["stage_dream_whispy_wind_valid_u8"]) == 1
+    assert int(ds.rows[890]["seed_t"]["stage_dream_whispy_wind_timer_u16"]) == 274
 
     ref_from_start, out_from_start = _rollout_row_ucf(
         dataset_path, 889, 890, replay_frame_rng=True
@@ -216,15 +216,15 @@ def test_dream_whispy_first_visible_seed_catchup_is_rollout_advanced_only() -> N
 @pytest.mark.integration
 def test_dream_whispy_seed_wind_does_not_stale_carry_after_episode() -> None:
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+        "replays/validation/dream_land_recent/ShadyDecimalStarling.slpz"
     )
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples.copy()
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows.copy()
     samples["seed_t"]["stage_dream_whispy_wind_dir_u8"] = np.uint8(0)
     samples["seed_t"]["stage_dream_whispy_wind_valid_u8"] = np.uint8(0)
     samples["seed_t"]["stage_dream_whispy_wind_timer_u16"] = np.uint16(0)
     dream_wind_dir, dream_wind_valid, dream_wind_timer = _derive_dream_whispy_wind_seed_lanes(
-        samples, stage_id=STAGE_DREAM_LAND_N64, num_players=int(ds.header["num_players"])
+        samples, stage_id=STAGE_DREAM_LAND_N64, num_players=int(ds.num_players)
     )
     samples["seed_t"]["stage_dream_whispy_wind_dir_u8"] = dream_wind_dir
     samples["seed_t"]["stage_dream_whispy_wind_valid_u8"] = dream_wind_valid
@@ -243,15 +243,15 @@ def test_dream_whispy_seed_wind_does_not_stale_carry_after_episode() -> None:
 @pytest.mark.integration
 def test_dream_whispy_sparse_contact_gap_keeps_hidden_xdc_episode_sds_2231() -> None:
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+        "replays/validation/dream_land_recent/ShadyDecimalStarling.slpz"
     )
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples.copy()
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows.copy()
     samples["seed_t"]["stage_dream_whispy_wind_dir_u8"] = np.uint8(0)
     samples["seed_t"]["stage_dream_whispy_wind_valid_u8"] = np.uint8(0)
     samples["seed_t"]["stage_dream_whispy_wind_timer_u16"] = np.uint16(0)
     dream_wind_dir, dream_wind_valid, dream_wind_timer = _derive_dream_whispy_wind_seed_lanes(
-        samples, stage_id=STAGE_DREAM_LAND_N64, num_players=int(ds.header["num_players"])
+        samples, stage_id=STAGE_DREAM_LAND_N64, num_players=int(ds.num_players)
     )
     samples["seed_t"]["stage_dream_whispy_wind_dir_u8"] = dream_wind_dir
     samples["seed_t"]["stage_dream_whispy_wind_valid_u8"] = dream_wind_valid
@@ -270,7 +270,7 @@ def test_dream_whispy_sparse_contact_gap_keeps_hidden_xdc_episode_sds_2231() -> 
 @pytest.mark.integration
 def test_dream_whispy_final_timer_row_does_not_apply_wind_sds_2264() -> None:
     dataset_path = Path(
-        "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+        "replays/validation/dream_land_recent/ShadyDecimalStarling.slpz"
     )
     seed, ref, out = _step_one_row(dataset_path, 2264)
     assert int(seed["stage_dream_whispy_wind_valid_u8"]) == 1

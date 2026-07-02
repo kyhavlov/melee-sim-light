@@ -9,13 +9,13 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _require_dataset(root: Path, dataset_rel: str) -> Path:
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
     return dataset_path
 
 
@@ -34,19 +34,19 @@ def test_throwlw_thrownlw_entry_handoff_target_pm1_reduces_qgd421_position_drift
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl"
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
+    ds = load_replay_buffers(str(dataset_path))
+    samples = ds.rows
     target_record = 421
     rows = (420, 421, 422)
     for rec in rows:
-        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        assert int(samples.shape[0]) > rec, f"replay too short for lock row: record={rec}"
 
     seed = samples[target_record]["seed_t"]
     assert int(seed["action_id"][0]) == 216  # CatchWait
@@ -74,20 +74,20 @@ def test_throwlw_thrownlw_entry_handoff_target_pm1_reduces_qgd421_position_drift
     ("dataset_rel", "record", "victim_p"),
     [
         (
-            "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
+            "replays/validation/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.slpz",
             4072,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.msl",
+            "replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.slpz",
             382,
             1,
         ),
         (
-            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-            "PositiveRevolvingHyena.msl",
+            "replays/validation/aggregate_recent/"
+            "PositiveRevolvingHyena.slpz",
             505,
             0,
         ),
@@ -129,8 +129,8 @@ def test_throwlw_thrownlw_entry_handoff_does_not_move_capturewait_before_throw_e
     _skip_if_required_artifacts_missing(root)
     dataset_path = _require_dataset(
         root,
-        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
-        "QuerulousGrandDinosaur.msl",
+        "replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.slpz",
     )
 
     record = 4071

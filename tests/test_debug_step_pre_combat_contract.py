@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import read_dataset
+from tests.replay_buffers_loader import load_replay_buffers
 
 
 def _run_one_step_timebase(
@@ -35,16 +35,16 @@ def test_debug_step_input_pre_combat_matches_step_timebase_when_no_hit() -> None
 
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
-        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        "replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {dataset_rel}")
+        pytest.skip(f"missing local replay: {dataset_rel}")
 
-    ds = read_dataset(str(dataset_path))
-    rows = ds.samples
-    num_players = int(ds.header["num_players"])
+    ds = load_replay_buffers(str(dataset_path))
+    rows = ds.rows
+    num_players = int(ds.num_players)
     assert num_players == 2
 
     speed = rows["seed_t"]["frame_speed_mul_f32"][:, :num_players].astype(np.float32)
