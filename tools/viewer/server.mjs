@@ -174,6 +174,33 @@ function urlPathToFile(reqUrl) {
   return { filePath: resolved };
 }
 
+function staticHeaders(filePath, stat) {
+  const ext = path.extname(filePath);
+  const etag = `W/"${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs).toString(16)}"`;
+  return {
+    "content-type": contentTypes.get(ext) || "application/octet-stream",
+    "content-length": stat.size,
+    "cache-control": "no-cache",
+    "last-modified": stat.mtime.toUTCString(),
+    etag,
+  };
+}
+
+function requestHasFreshStaticAsset(req, stat, etag) {
+  if (req.headers["if-none-match"] === etag) {
+    return true;
+  }
+  const modifiedSince = req.headers["if-modified-since"];
+  if (!modifiedSince) {
+    return false;
+  }
+  const sinceMs = Date.parse(modifiedSince);
+  if (!Number.isFinite(sinceMs)) {
+    return false;
+  }
+  return stat.mtimeMs <= sinceMs + 999;
+}
+
 function serveStatic(req, res) {
   const result = urlPathToFile(req.url || "/");
   if (!result.filePath) {
@@ -188,12 +215,17 @@ function serveStatic(req, res) {
       res.end("not found\n");
       return;
     }
-    const ext = path.extname(filePath);
-    res.writeHead(200, {
-      "content-type": contentTypes.get(ext) || "application/octet-stream",
-      "content-length": stat.size,
-      "cache-control": "no-store",
-    });
+    const headers = staticHeaders(filePath, stat);
+    if (requestHasFreshStaticAsset(req, stat, headers.etag)) {
+      res.writeHead(304, {
+        "cache-control": headers["cache-control"],
+        "last-modified": headers["last-modified"],
+        etag: headers.etag,
+      });
+      res.end();
+      return;
+    }
+    res.writeHead(200, headers);
     if (req.method === "HEAD") {
       res.end();
       return;

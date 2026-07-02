@@ -41,6 +41,7 @@ required_data=(
   "$DATA_DIR/stage_items/yoshi_shyguy.json"
   "$DATA_DIR/stage_items/dream_whispy.bin"
   "$DATA_DIR/stage_items/dream_whispy.json"
+  "$DATA_DIR/staling/weights.bin"
 )
 
 viewer_chars=(fox falco marth sheik zelda)
@@ -49,12 +50,18 @@ for char in "${viewer_chars[@]}"; do
     "$DATA_DIR/characters/$char.json"
     "$DATA_DIR/scripts/$char.bin"
     "$DATA_DIR/motion_state/owners/$char.bin"
+    "$DATA_DIR/anims/$char.bin"
+    "$DATA_DIR/anims/$char.locals.bin"
+    "$DATA_DIR/anims/$char.dyn.bin"
     "$DATA_DIR/anims/$char.tracks.bin"
     "$DATA_DIR/hitboxes/$char.bin"
     "$DATA_DIR/hurtcaps/$char.bin"
     "$DATA_DIR/ecb/${char}_bottom.bin"
     "$DATA_DIR/ecb/${char}_extents.bin"
     "$DATA_DIR/attack_id/move_id/$char.bin"
+    "$DATA_DIR/shields/$char.bin"
+    "$DATA_DIR/special_msids/$char.json"
+    "$DATA_DIR/staling/move_id/$char.bin"
   )
 done
 
@@ -71,6 +78,19 @@ if [[ "$missing" != 0 ]]; then
 fi
 
 mkdir -p "$OUT_DIR"
+mkdir -p "$ROOT/build/cache"
+
+PACKAGE_DIR="$(mktemp -d "$ROOT/build/cache/viewer-data.XXXXXX")"
+cleanup() {
+  rm -rf "$PACKAGE_DIR"
+}
+trap cleanup EXIT
+
+for path in "${required_data[@]}"; do
+  rel="${path#$DATA_DIR/}"
+  mkdir -p "$PACKAGE_DIR/$(dirname "$rel")"
+  cp "$path" "$PACKAGE_DIR/$rel"
+done
 
 mapfile -t SRC_FILES < <(find "$ROOT/src" -maxdepth 1 -type f -name '*.c' | sort)
 SRC_FILES+=("$ROOT/src/decomp/lb/lb_00ce.c")
@@ -89,8 +109,8 @@ emcc "${SRC_FILES[@]}" \
   -sALLOW_MEMORY_GROWTH=1 \
   -sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_batch_create","_msl_batch_destroy","_msl_batch_init_match","_msl_batch_step_input","_msl_batch_write_compare","_msl_batch_debug_write_processed_input","_msl_batch_debug_write_stage_state","_msl_batch_debug_shield_display_bubbles_world","_msl_batch_debug_hitboxes_world"]' \
   -sEXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
-  --preload-file "$DATA_DIR@/data" \
+  --preload-file "$PACKAGE_DIR@/data" \
   -o "$OUT_DIR/msl_sim.js"
 
-echo "bundled simulator data from $DATA_DIR"
+echo "bundled simulator data from $DATA_DIR ($(du -sh "$PACKAGE_DIR" | awk '{print $1}'))"
 echo "wrote $OUT_DIR/msl_sim.js"

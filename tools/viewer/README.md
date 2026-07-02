@@ -11,12 +11,11 @@ Prerequisites:
 
 - Emscripten (`emcc`) on `PATH` for WASM export of the sim
 - extracted simulator data; defaults to repository-root `data/`, or set `MSL_DATA_DIR`
-- npm dependencies installed under repository-root `tools/viewer/slippi-viewer`
+- network access on first build to install Slippi viewer npm dependencies
 - network access on first build to fetch character display assets from Slippi Lab
 
 ```bash
 cd /path/to/melee-sim-light
-npm --prefix tools/viewer/slippi-viewer install
 make viewer-build
 ```
 
@@ -28,10 +27,11 @@ uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba
 ```
 
 `make viewer-build` writes a self-contained browser asset tree under
-repository-root `build/viewer`. The selected simulator data directory is
-bundled into the WASM output at build time. Character display zips are downloaded into
-repository-root `build/cache/viewer-zips/` and reused on later builds after
-checksum verification.
+repository-root `build/viewer`. The WASM output bundles only the simulator data
+files required by the live viewer, staged from `MSL_DATA_DIR` or repository-root
+`data/`. Character display zips are downloaded into repository-root
+`build/cache/viewer-zips/` and reused on later builds after checksum
+verification.
 
 ## Run
 

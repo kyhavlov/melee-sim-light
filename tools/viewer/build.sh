@@ -23,7 +23,13 @@ fi
 
 "$ROOT/tools/viewer/fetch_assets.sh"
 "$ROOT/tools/viewer/live/build_wasm.sh"
-npm --prefix "$ROOT/tools/viewer/slippi-viewer" run build
+SLIPPI_VIEWER_DIR="$ROOT/tools/viewer/slippi-viewer"
+if [[ ! -d "$SLIPPI_VIEWER_DIR/node_modules" ||
+      "$SLIPPI_VIEWER_DIR/package.json" -nt "$SLIPPI_VIEWER_DIR/node_modules/.package-lock.json" ||
+      "$SLIPPI_VIEWER_DIR/package-lock.json" -nt "$SLIPPI_VIEWER_DIR/node_modules/.package-lock.json" ]]; then
+  npm --prefix "$SLIPPI_VIEWER_DIR" ci
+fi
+npm --prefix "$SLIPPI_VIEWER_DIR" run build
 
 rm -rf "$OUT_DIR"
 mkdir -p \
