@@ -1,19 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 
-from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
 from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 STAGE_FD = 32
 CHAR_FOX = 1
 ACT_DEAD_LEFT = 1
-ACT_DEAD_RIGHT = 2
-ACT_DEAD_UP_FALL = 6
 ACT_WAIT = 14
 SM_WAIT = 2
 
@@ -89,42 +84,3 @@ def test_terminal_source_clear_timer_still_clears_outside_dead_flow() -> None:
     out = _step_once(seed)
     assert int(out["action_id"][0]) == ACT_WAIT
     assert int(out["last_hit_by"][0]) == 6
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    ("dataset_rel", "record", "p", "action_id"),
-    [
-        (
-            "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz",
-            3745,
-            0,
-            ACT_DEAD_RIGHT,
-        ),
-        (
-            "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz",
-            6026,
-            0,
-            ACT_DEAD_LEFT,
-        ),
-        (
-            "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz",
-            7037,
-            1,
-            ACT_DEAD_UP_FALL,
-        ),
-    ],
-)
-def test_replay_real_dead_flow_preserves_last_hit_by_on_terminal_x18c8(
-    dataset_rel: str, record: int, p: int, action_id: int
-) -> None:
-    root = Path(__file__).resolve().parents[1]
-    dataset_path = root / dataset_rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {dataset_rel}")
-
-    seed, ref, out = _run_one_step_row(dataset_path, record, p)
-    assert int(seed["action_id"][p]) == action_id
-    assert int(seed["source_clear_timer_x18c8"][p]) == 1
-    assert int(out["action_id"][p]) == int(ref["action_id"][p])
-    assert int(out["last_hit_by"][p]) == int(ref["last_hit_by"][p])

@@ -135,6 +135,17 @@ If something seems stale, print `melee_sim._native.__file__` before debugging fu
 - Unit / fast tests: `make test`
 - Formatting check: `make fmt-check`
 - Core sim logic changes: `make validate-all`
+- Do not add one-off tests for validation replay rows already covered by `make validate-all` /
+  heldout reports.
+- Prefer source-owner unit tests with synthetic seeds/inputs for mechanics not isolated by
+  validation reports.
+- Add tests for native binding shape, data/extraction contracts, no-allocation/runtime contracts,
+  validation runner/reporting behavior, and modelplay/Dolphin/out-of-band bugs.
+- A replay-row test is allowed only if it is out-of-band from validation coverage or documents why
+  validation reports cannot protect the invariant.
+- Tests that only load a validation replay row to assert normal one-step/rollout parity are
+  presumed redundant; do not add or restore them without documented out-of-band coverage.
+- Do not add one file per mismatch row; fix the owner and cover the owner.
 
 ### Validation Reports
 - Test-only changes should not refresh committed validation reports.

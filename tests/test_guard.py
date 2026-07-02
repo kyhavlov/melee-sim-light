@@ -1,15 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
-import pytest
 
 from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
-from tests.test_combat_ownership_seed_guardrail_locks import (
-    _run_one_step_row,
-    _skip_if_required_artifacts_missing,
-)
 
 
 # Button masks: src/buttons.h (Melee/HSD PAD bits)
@@ -601,84 +594,6 @@ def test_guardreflect_spotdodge_preempts_platform_pass() -> None:
     assert int(out_pass["on_ground"][0]) == 0
 
 
-@pytest.mark.integration
-def test_guardsetoff_platform_pass_is_not_admitted_from_empty_iasa_replay_real() -> None:
-    root = Path(__file__).resolve().parents[1]
-    _skip_if_required_artifacts_missing(root)
-
-    dataset_rel = "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz"
-    dataset_path = root / dataset_rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {dataset_rel}")
-
-    # Replay-real lock for the GuardSetOff platform-pass boundary:
-    # - GuardOn/Guard/GuardReflect can call ftCo_8009A080 from IASA.
-    # - GuardSetOff_IASA is empty, so held L/R+down must not enter Pass on these shield-hit rows.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-    #   ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardReflect_IASA,ftCo_GuardSetOff_IASA}
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
-    for record in (653, 654, 655):
-        seed, ref_row, out_row = _run_one_step_row(dataset_path, record, 1)
-        assert int(seed["action_id"][1]) == ACT_GUARD_SET_OFF
-        assert int(ref_row["action_id"][1]) == ACT_GUARD_SET_OFF
-        assert int(out_row["action_id"][1]) == ACT_GUARD_SET_OFF, (
-            f"record={record} expected GuardSetOff got={int(out_row['action_id'][1])}"
-        )
-        assert int(out_row["on_ground"][1]) == int(ref_row["on_ground"][1]) == 1
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    ("dataset_rel", "record", "p", "seed_action"),
-    [
-        (
-            "replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.slpz",
-            1067,
-            1,
-            ACT_GUARD,
-        ),
-        (
-            "replays/validation/yoshis_story_recent/"
-            "PhysicalElectricCapybara.slpz",
-            4046,
-            1,
-            ACT_GUARD,
-        ),
-        (
-            "replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.slpz",
-            7423,
-            1,
-            ACT_GUARD_SET_OFF,
-        ),
-    ],
-)
-def test_guard_platform_pass_uses_hsd_lr_lane_and_destination_guard_replay_real(
-    dataset_rel: str, record: int, p: int, seed_action: int
-) -> None:
-    root = Path(__file__).resolve().parents[1]
-    _skip_if_required_artifacts_missing(root)
-    dataset_path = root / dataset_rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {dataset_rel}")
-
-    # Replay-real locks for ftCo_8009A080 ownership:
-    # - `held_inputs & HSD_PAD_LR` includes analog trigger-held shield inputs.
-    # - When GuardSetOff_Anim ends into Guard before input dispatch, destination Guard_IASA can
-    #   consume the same platform-pass tail.
-    # refs/melee/src/melee/ft/fighter.c:1868-1890
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-    #   ftCo_GuardSetOff_Anim,ftCo_Guard_IASA}
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
-    seed, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
-    assert int(seed["action_id"][p]) == seed_action
-    assert int(ref_row["action_id"][p]) == ACT_PASS
-    assert int(out_row["action_id"][p]) == ACT_PASS
-    assert int(out_row["animation_index"][p]) == int(ref_row["animation_index"][p]) == SM_PASS
-    assert int(out_row["on_ground"][p]) == int(ref_row["on_ground"][p]) == 0
-
-
 def test_guardoff_anim_end_wait_destination_guard_entry_and_precedence() -> None:
     import msl_binding
 
@@ -714,30 +629,6 @@ def test_guardoff_anim_end_wait_destination_guard_entry_and_precedence() -> None
     )
     out_attack_priority = _run_seed_one_step(seed, attack_shield)
     assert int(out_attack_priority["action_id"][0]) not in (ACT_GUARD_ON, ACT_GUARD_REFLECT)
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize("record", [4943, 4944])
-def test_marth_suite_turnrun_iasa_does_not_admit_guard_entry_bsg_replay_real(record: int) -> None:
-    # TurnRun IASA is not a generic grounded locomotion callback. It only checks fn_800CAF78, so
-    # held or freshly pressed shield during TurnRun must not route through ftCo_80091A4C until a
-    # later source owner exits TurnRun to Run/Wait.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_IASA
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
-    root = Path(__file__).resolve().parents[1]
-    _skip_if_required_artifacts_missing(root)
-    dataset_rel = "replays/validation/marth/BountifulScalyGuanaco.slpz"
-    dataset_path = root / dataset_rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {dataset_rel}")
-
-    p = 1
-    seed, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
-    assert int(seed["action_id"][p]) == ACT_TURN_RUN
-    assert int(seed["seed_prev_action_id"][p]) == ACT_TURN_RUN
-    assert int(ref_row["action_id"][p]) == ACT_TURN_RUN
-    assert int(out_row["action_id"][p]) == ACT_TURN_RUN
-    assert int(out_row["animation_index"][p]) == int(ref_row["animation_index"][p]) == SM_TURN_RUN
 
 
 def test_marth_turnrun_iasa_does_not_admit_guard_entry_synthetic_control() -> None:
@@ -799,98 +690,3 @@ def test_run_iasa_still_admits_guard_entry_spacie_control() -> None:
     out_row = _run_seed_one_step(seed, shield)
     assert int(out_row["action_id"][0]) != ACT_CATCH_DASH
     assert int(out_row["action_id"][0]) in (ACT_GUARD_ON, ACT_GUARD_REFLECT)
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    ("dataset_rel", "record", "p"),
-    [
-        (
-            "replays/validation/yoshis_story_recent/"
-            "CheeryNumbMonkey.slpz",
-            679,
-            1,
-        ),
-        (
-            "replays/validation/battlefield_recent/"
-            "DelayedSuperbGuanaco.slpz",
-            2870,
-            1,
-        ),
-        (
-            "replays/validation/dream_land_recent/"
-            "FlippantEnchantedHorse.slpz",
-            2111,
-            1,
-        ),
-        (
-            "replays/validation/aggregate_recent/"
-            "TubbyCurlyHerring.slpz",
-            1721,
-            1,
-        ),
-    ],
-)
-def test_guardoff_anim_end_wait_destination_guardon_replay_real(
-    dataset_rel: str, record: int, p: int
-) -> None:
-    root = Path(__file__).resolve().parents[1]
-    _skip_if_required_artifacts_missing(root)
-    dataset_path = root / dataset_rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {dataset_rel}")
-
-    seed, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
-    assert int(seed["action_id"][p]) == ACT_GUARD_OFF
-    assert int(seed["action_frame"][p]) == 14
-    assert int(ref_row["action_id"][p]) == ACT_GUARD_ON
-    assert int(out_row["action_id"][p]) == ACT_GUARD_ON
-    assert int(out_row["animation_index"][p]) == int(ref_row["animation_index"][p]) == 0xFFFFFFFF
-
-
-@pytest.mark.integration
-def test_guard_jump_oos_does_not_reconsume_kneebend_iasa_positive_revolving_hyena() -> None:
-    root = Path(__file__).resolve().parents[1]
-    _skip_if_required_artifacts_missing(root)
-
-    dataset_rel = "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz"
-    dataset_path = root / dataset_rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {dataset_rel}")
-
-    # Replay-real guard jump OoS rows:
-    # - Guard_IASA can enter KneeBend through ftCo_800CB024.
-    # - The same frame is still the Guard input callback; the fresh KneeBend row must not also
-    #   consume KneeBend_IASA into AttackHi4 before the next frame.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
-    for record in (282, 389):
-        _, ref_row, out_row = _run_one_step_row(dataset_path, record, 1)
-        assert int(ref_row["action_id"][1]) == ACT_KNEE_BEND
-        assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]), (
-            f"record={record} expected_action={int(ref_row['action_id'][1])} "
-            f"got={int(out_row['action_id'][1])}"
-        )
-        assert int(out_row["action_frame"][1]) == int(ref_row["action_frame"][1])
-        assert int(out_row["animation_index"][1]) == int(ref_row["animation_index"][1])
-
-
-@pytest.mark.integration
-def test_guard_snapshot_held_z_does_not_drop_to_guardoff_putrid_joyous_oryx() -> None:
-    root = Path(__file__).resolve().parents[1]
-    _skip_if_required_artifacts_missing(root)
-
-    dataset_rel = "replays/validation/aggregate_recent/PutridJoyousOryx.slpz"
-    dataset_path = root / dataset_rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {dataset_rel}")
-
-    for record in (7475, 7476):
-        _, ref_row, out_row = _run_one_step_row(dataset_path, record, 0)
-        assert int(ref_row["action_id"][0]) == ACT_GUARD
-        assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0]) == ACT_GUARD, (
-            f"record={record} expected_action={int(ref_row['action_id'][0])} "
-            f"got={int(out_row['action_id'][0])}"
-        )
-        assert int(out_row["hitlag"][0]) == int(ref_row["hitlag"][0]) == 0
