@@ -1,7 +1,7 @@
 #ifndef MSL_VALIDATION_BUFFERS_H
 #define MSL_VALIDATION_BUFFERS_H
 
-#include "msl_binding_internal.h"
+#include "msl_py_common.h"
 
 PyObject* msl_validation_init_static_buffers_py(PyObject* self, PyObject* args);
 PyObject* msl_validation_fill_static_player_py(PyObject* self, PyObject* args);

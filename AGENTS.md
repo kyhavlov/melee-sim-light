@@ -80,7 +80,8 @@ Current target domain:
 - CPython extension and native preprocessing helpers live under `bindings/`.
 - Preprocessing/eval derivation is also a hot path. Do not add per-frame/per-item Python loops,
   candidate searches, state maps, or repeated JSON/data reads to seed generation. New seed-lane
-  derivation must use native C (`bindings/msl_preprocess_native.c` / `msl_binding`) or include timing
+  derivation must use native C (`bindings/msl_validation_*.c`, `bindings/msl_preprocess_*.c`,
+  `bindings/msl_binding_*.c`, or `bindings/msl_binding.c`) or include timing
   proof that the Python path is negligible.
 - Normal validation is expected to be fast enough for frequent local use. Treat major validation
   wall-time or single-core throughput regressions as performance bugs.

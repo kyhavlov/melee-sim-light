@@ -1,14 +1,7 @@
-#define PY_SSIZE_T_CLEAN
-#define PY_ARRAY_UNIQUE_SYMBOL MSL_BINDING_ARRAY_API
-#define NO_IMPORT_ARRAY
-#include <Python.h>
+#include "msl_taxonomy_native.h"
 
 #include <stdint.h>
 #include <string.h>
-
-#include <numpy/arrayobject.h>
-
-#include "msl_taxonomy_native.h"
 
 #include "../src/api.h"
 

@@ -476,7 +476,7 @@ def test_catchdash_pre_action_uses_same_immediate_seed_reconstruction_boundary()
 
 
 def test_catch_pre_action_marker_is_named_seed_reconstruction_not_raw_action_range() -> None:
-    src = Path("bindings/msl_preprocess_native.c").read_text()
+    src = Path("bindings/msl_validation_combat.c").read_text()
     assert "msl_py_action_is_catch_family" in src
     assert "cur >= 212u" not in src
     assert "cur <= 218u" not in src

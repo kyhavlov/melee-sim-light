@@ -322,7 +322,7 @@ def test_input_system_inventory_is_closed_and_stale_proxy_wording_is_guarded() -
             r"sim inference: treat held z",
             r"slippi provides raw button bits, not the internal held_inputs/x668 representation",
         ),
-        "bindings/msl_preprocess_native.c": (
+        "bindings/msl_validation_specials.c": (
             r"does not run the climb/drop x8 setter in the same proc",
         ),
     }

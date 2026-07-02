@@ -135,3 +135,64 @@ def test_native_combat_hitlist_rejects_extra_column_side_arrays() -> None:
             input_l=u8,
             input_r=u8,
         )
+
+
+def test_split_native_wrappers_reject_num_players_width_mismatch() -> None:
+    import msl_binding
+
+    n = 2
+    width = 2
+    slots = 1
+    u8 = np.zeros((n, width), dtype=np.uint8)
+    u16 = np.zeros((n, width), dtype=np.uint16)
+    f32 = np.zeros((n, width), dtype=np.float32)
+    item_u8 = np.zeros((n, slots), dtype=np.uint8)
+    item_u16 = np.zeros((n, slots), dtype=np.uint16)
+    item_i8 = np.zeros((n, slots), dtype=np.int8)
+    item_u32 = np.zeros((n, slots), dtype=np.uint32)
+
+    with pytest.raises(ValueError, match="num_players out of range"):
+        msl_binding.derive_item_attack_fields(
+            item_u8,
+            item_u16,
+            item_i8,
+            item_u32,
+            u16,
+            u16,
+            3,
+        )
+
+    with pytest.raises(ValueError, match="num_players out of range"):
+        msl_binding.derive_throw_pulse_seed_lanes(
+            u16,
+            u8,
+            f32,
+            f32,
+            u16,
+            u8,
+            np.zeros((256, 1, 1), dtype=np.int16),
+            np.zeros((256, 1), dtype=np.uint8),
+            np.zeros((256, 1), dtype=np.int16),
+            np.zeros(256, dtype=np.uint16),
+            3,
+            0,
+            0,
+            0,
+        )
+
+    with pytest.raises(ValueError, match="num_players out of range"):
+        msl_binding.derive_rebound_seed_lanes(
+            u16,
+            u16,
+            u8,
+            u8,
+            np.zeros((n - 1, width), dtype=np.float32),
+            np.zeros((n - 1, width), dtype=np.float32),
+            np.zeros((n - 1, width), dtype=np.float32),
+            np.zeros(256, dtype=np.float32),
+            3,
+            0,
+            0,
+            0.0,
+            0.0,
+        )

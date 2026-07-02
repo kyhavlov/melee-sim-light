@@ -1,9 +1,5 @@
 /* Native validation buffer materialization for replay-visible owner families. */
 
-#define PY_SSIZE_T_CLEAN
-#define PY_ARRAY_UNIQUE_SYMBOL MSL_BINDING_ARRAY_API
-#define NO_IMPORT_ARRAY
-
 #include "msl_validation_buffers.h"
 
 #include <stdint.h>
