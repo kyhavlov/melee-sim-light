@@ -1933,7 +1933,8 @@ Before claiming RL 1.0, maintain a current list of:
 - All unique `animation_index` (submotion) values present in the suite.
 - A mapping of those ids → names (from GALE01 `forward.h`) → implementation status in this repo.
 
-(There is already tooling to list suite action_ids: `tools/eval/list_suite_action_ids.py`.)
+(Use validation replay-buffer tooling to list suite action ids; do not rely on deleted
+row-materialization tools.)
 
 Coverage & initialization targets:
 - Action coverage: include every GALE01 action state that appears in the Fox/Falco FD validation suite (and keep this list current as the suite evolves).

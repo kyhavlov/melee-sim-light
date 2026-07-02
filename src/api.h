@@ -551,7 +551,7 @@ typedef struct MslSeed {
   //   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiLanding_Anim,ftFx_SpecialHiFall_Anim,
   //   ftFx_SpecialHiBound_Enter}
   //
-  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // Producer (validation replay-buffer seed derivation):
   // - valid=1: current row is inside a continuous SpecialHi/AirHi/Landing/Fall/Bound pose episode,
   //   and the value is the last source launch/collision rotateModel reconstructed from replay
   //   history.
@@ -658,7 +658,7 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
   // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
   //
-  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // Producer (validation replay-buffer seed derivation):
   // - 0: no throw-pulse stale-latch suppression for this one-step seed row.
   // - 1: pulse was already consumed for this seed-owned throw context (suppress reconstruction).
   //
@@ -676,7 +676,7 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
   // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
   //
-  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // Producer (validation replay-buffer seed derivation):
   // - 0: no projectile pulse crossing in (t-1 -> t) for this seed row.
   // - N: crossed pulse frame number (u8) from data/moves/{fox,falco}.json throw events.
   uint8_t throw_pulse_crossed_prev_frame[MSL_MAX_PLAYERS];
@@ -687,7 +687,7 @@ typedef struct MslSeed {
   //   when their timer reaches <=0, and clears `throw_flags` before processing the command list.
   // - ftFx_Throw_Anim then consumes at most one bool `throw_flags_b0` in that Anim callback.
   //
-  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // Producer (validation replay-buffer seed derivation):
   // - 0: no command-timer `set_throw_spawn_projectile` pulse should be emitted this step.
   // - N: the command pulse frame that should become the single `throw_flags_b0` consume this step.
   // This is prefix-causal over replay history and extracted command timing.
@@ -730,7 +730,7 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
   //
-  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // Producer (validation replay-buffer seed derivation):
   // - 0: no ProcessHit-owned clear override on this row.
   // - 1: consume ProcessHit-owned clear before x18C8 decrement for this one-step row.
   uint8_t source_clear_processhit_damage_pending_phase[MSL_MAX_PLAYERS];
@@ -743,7 +743,7 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/types.h
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   //
-  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // Producer (validation replay-buffer seed derivation):
   // - 0: no seeded pre-gate stream ownership.
   // - 1: consume one pre-gate HSD_Randi before the DamageFlyRoll gate.
   // - 2: consume two pre-gate HSD_Randi calls before the DamageFlyRoll gate.
@@ -760,7 +760,7 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
   //
-  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // Producer (validation replay-buffer seed derivation):
   // - 0: no grounded clear-phase override on this row.
   // - 1: consume grounded clear before x18C8 decrement for this one-step row.
   uint8_t source_clear_grounded_damage_clear_phase[MSL_MAX_PLAYERS];
@@ -775,7 +775,7 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
   //
-  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // Producer (validation replay-buffer seed derivation):
   // - 0: default terminal-clear behavior (clear at `source_clear_timer_x18c8 == 1`).
   // - 1: park source owner and retire the countdown for this seed row.
   uint8_t source_clear_terminal_phase[MSL_MAX_PLAYERS];
@@ -1619,7 +1619,7 @@ typedef struct MslSeed {
   // - Runtime combo/hitlist ownership still uses local slots; only replay-facing source writes use
   //   this lane.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-  // tools/slippi/make_dataset_from_slp.py (`src_ports` selected slot order)
+  // Validation replay buffers provide `src_ports` in selected slot order.
   uint8_t source_port0[MSL_MAX_PLAYERS];
   uint8_t last_hit_by[MSL_MAX_PLAYERS];
   // Grab/throw victim attachment owner identity (seeded; suite-focused).
@@ -1780,7 +1780,7 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007CE4C,ftCommon_8007E2A4}
   float attacker_shield_ground_kb_vel[MSL_MAX_PLAYERS];
   // Populated by replay-history preprocessing:
-  // - tools/slippi/staling_history.py (derive) and tools/slippi/make_dataset_from_slp.py (wire).
+  // - validation replay-buffer staling derivation wires this queue.
   //
   // Runtime usage:
   // - src/combat.c applies the staling multiplier on damaging BODY hits and updates this queue on

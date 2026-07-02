@@ -119,8 +119,8 @@ void timers_update(MslBatch* batch) {
   // State flags (5 bytes) are captured from fighter offsets:
   // (0x2218, 0x221A, 0x221B, 0x221C, 0x221F) in that order.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-  // Dataset packing/layout reference:
-  // tools/slippi/make_dataset_from_slp.py (stack order 0..4 into `state_flags[..., 5]`)
+  // Replay validation buffer packing/layout reference:
+  // stack order 0..4 into `state_flags[..., 5]`.
   // Slippi records fp+0x221A directly. The replay-visible 0x20 bit is the engine's hitlag-active
   // lane (`x221A_b2` in the decomp comments / Slippi docs), not `allow_sdi`. Runtime SDI callbacks
   // consume the explicit internal `damage_allow_sdi` lane instead.

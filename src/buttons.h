@@ -5,7 +5,7 @@
 // Digital button bitmask mapping for `MslInputPlayer.buttons`.
 //
 // Source of truth:
-// - Slippi `buttons_physical` (tools/slippi/make_dataset_from_slp.py)
+// - Slippi `buttons_physical` in replay validation buffers
 // - Dolphin engine-dump capture uses the same stable mapping:
 //   tools/dolphin/dolphin_engine_dump.py
 //

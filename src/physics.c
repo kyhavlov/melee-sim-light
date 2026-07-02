@@ -2450,7 +2450,8 @@ void physics_integrate(MslBatch* batch) {
       //
       // Seed mapping: our `speed_{x,y}_attack` are Slippi post-frame `velocities.knockback_{x,y}`
       // (i.e. the decomp `fp->x8c_kb_vel.{x,y}` knockback velocity term), not a "self velocity".
-      // - tools/slippi/make_dataset_from_slp.py (velocities.knockback_{x,y} → speed_{x,y}_attack)
+      // - validation replay-buffer seed derivation
+      //   (velocities.knockback_{x,y} -> speed_{x,y}_attack)
       //
       // We include `speed_*_attack` in position integration (because it affects where the character is this frame),
       // but we exclude it from gravity/fastfall updates (which operate on `self_vel` only; knockback has its own

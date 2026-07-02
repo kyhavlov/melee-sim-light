@@ -813,8 +813,7 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
 }
 
 static inline int item_key_lt(MslBatch* batch, size_t a, size_t b) {
-  // Sort key matches dataset fixed ordering:
-  // tools/slippi/make_dataset_from_slp.py::_fill_items_fixed sorts by (instance_id, spawn_id, type).
+  // Sort key matches validation fixed-item ordering: (instance_id, spawn_id, type).
   const uint8_t ea = batch->state.item_exists[a] ? 1u : 0u;
   const uint8_t eb = batch->state.item_exists[b] ? 1u : 0u;
   if (ea != eb) {
@@ -9474,7 +9473,7 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
     // - keep the paired `ghostEffectPos[0..2]` lanes in state so rollout can advance the ring as
     //   `ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos` instead of clobbering previous
     //   hitcapsule endpoints with current position.
-    // tools/slippi/make_dataset_from_slp.py::derive_illusion_ghost_pos012
+    // Producer: validation replay-buffer seed derivation (`derive_illusion_ghost_pos012` owner).
     //
     // Retained source-policy boundary for accessory Side-B lanes:
     // - ghostEffectPos[3]

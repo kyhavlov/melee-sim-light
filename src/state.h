@@ -369,7 +369,7 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
   uint8_t* throw_pulse_consumed;
   // Throw projectile pulse crossing lane from the previous replay step (0 = none).
-  // Producer is strictly causal in tools/slippi/make_dataset_from_slp.py.
+  // Producer is strictly causal in validation replay-buffer seed derivation.
   uint8_t* throw_pulse_crossed_prev_frame;
   // Current teacher-forced step's command-timer pending throw projectile pulse (0 = none).
   // This seed-owned lane is authoritative for one step after reseed; rollout falls back to runtime
