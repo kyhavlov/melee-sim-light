@@ -10,6 +10,7 @@
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
+#include "escapeair_collision_owner.h"
 #include "input_axis.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
@@ -25,6 +26,9 @@ static const float k_floor_x_end_clamp = 0.1f;
 static const float k_floor_y_bias = 0.0001f;
 static const float k_mpcoll_substep_max_delta = 6.0f;
 static const float k_ecb_vertical_unit = 1.0f;
+// refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+static const float k_floor_edge_wall_probe_x_offset = 1.0f;
+static const float k_floor_edge_wall_probe_y_offset = 1.0f;
 
 uint8_t msl_mpcoll_80044838_floor_edge_snap_from_bottom(
     MslBatch* batch, int bi, const MslStageFloorGraph* g, int line_idx, float cur_bottom_x,
@@ -179,6 +183,456 @@ uint8_t fallspecial_sloped_ledge_main_floor_first_sustained_airborne_owner(
           batch->state.seed_prev_action_frame[idx] <= 0)
              ? 1u
              : 0u;
+}
+
+uint8_t msl_mpcoll_8004a45c_floor_edge_snap(MslBatch* batch, size_t idx, int bi,
+                                            const MslStageFloorGraph* g, uint32_t stage_id,
+                                            int line_idx, float cur_bottom_x, uint8_t char_id,
+                                            uint32_t anim, uint16_t ecb_frame, uint8_t was_grounded,
+                                            uint16_t* ground_id_out, float* contact_x_out,
+                                            float* contact_y_out, float* floor_nx_out,
+                                            float* floor_ny_out) {
+  if (batch == NULL || g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count ||
+      ground_id_out == NULL || contact_x_out == NULL || contact_y_out == NULL) {
+    return 0u;
+  }
+  const MslStageFloorLine world_line = floor_line_world_for_env(batch, bi, g, line_idx);
+  const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
+  const uint8_t try_left = (cur_bottom_x <= world_line.x0) ? 1u : 0u;
+  const uint8_t try_right = (cur_bottom_x >= world_line.x1) ? 1u : 0u;
+  if (!try_left && !try_right) {
+    return 0u;
+  }
+
+  const float edge_x = try_left ? world_line.x0 : world_line.x1;
+  const float edge_y = try_left ? world_line.y0 : world_line.y1;
+  MslEcbWorldPoints ecb = {0};
+  msl_ecb_world_points_sample(&ecb, char_id, anim, ecb_frame, fd, edge_x, edge_y, was_grounded);
+
+  const float probe_ax =
+      edge_x + (try_left ? k_floor_edge_wall_probe_x_offset : -k_floor_edge_wall_probe_x_offset);
+  const float probe_ay = edge_y + k_floor_edge_wall_probe_y_offset;
+  const float probe_bx = edge_x + (try_left ? ecb.right_rel_x : ecb.left_rel_x);
+  const float probe_by = edge_y + (ecb.side_rel_y - ecb.bottom_rel_y);
+  const MslStageWallGraph* wg = try_left ? stage_collision_get_left_wall_graph(stage_id)
+                                         : stage_collision_get_right_wall_graph(stage_id);
+  if (wall_blocks_floor_edge_probe(wg, probe_ax, probe_ay, probe_bx, probe_by)) {
+    return 0u;
+  }
+
+  int out_line_idx = msl_mplib_8004dd90_floor(batch, bi, g, line_idx, edge_x, edge_y, NULL,
+                                              floor_nx_out, floor_ny_out);
+  if (out_line_idx < 0) {
+    out_line_idx = line_idx;
+  }
+  *ground_id_out = g->lines[(size_t)out_line_idx].segment_i;
+  *contact_x_out = edge_x;
+  *contact_y_out = edge_y;
+  return 1u;
+}
+
+uint8_t msl_mpcoll_8004b108_capture_lw_flat_ledge_carry_owner(const MslBatch* batch, size_t idx,
+                                                              int bi, const MslStageFloorGraph* g,
+                                                              uint32_t stage_id, uint16_t action_id,
+                                                              uint16_t current_ground_id,
+                                                              uint16_t carried_ground_id,
+                                                              int carried_line_idx) {
+  if (batch == NULL || g == NULL || carried_line_idx < 0 ||
+      (size_t)carried_line_idx >= g->line_count || current_ground_id == carried_ground_id ||
+      !is_capture_lw_allow_ground_to_air_collision_action(action_id) ||
+      batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_PASSIVE_STAND_B ||
+      batch->state.action_frame[idx] > 2 ||
+      g->lines[(size_t)carried_line_idx].segment_i != carried_ground_id ||
+      !g->lines[(size_t)carried_line_idx].is_ledge ||
+      stage_collision_floor_line_is_sloped(stage_id, carried_ground_id)) {
+    return 0u;
+  }
+  const uint8_t owner_p = batch->state.grab_owner_port[idx];
+  if (owner_p >= batch->config.num_players) {
+    return 0u;
+  }
+  const size_t owner_idx = msl_idx_player(bi, (int)owner_p);
+  // Source owner:
+  // low Capture callbacks route through ft_8008403C/mpColl_8004B108 while attached to the grab
+  // owner. Flat ledge floors can retain the carried CollData.floor.index when the owner is already
+  // grounded on a different joint-0 floor; sloped/same-floor PulledHi loss stays outside this path.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_CapturePulledLw_Phys,ftCo_CapturePulledLw_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_8008403C
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpColl_8004A908_Floor}
+  return (uint8_t)((batch->state.action_id[owner_idx] == (uint16_t)MSL_ACT_CATCH_DASH_PULL &&
+                    g->lines[(size_t)carried_line_idx].joint_id == 0 &&
+                    batch->state.on_ground[owner_idx] != 0u &&
+                    batch->state.ground_id[owner_idx] != carried_ground_id)
+                       ? 1u
+                       : 0u);
+}
+
+uint8_t msl_mpcoll_8004b108_downbound_project_attack_speed(
+    MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    uint8_t was_grounded, uint16_t floor_segment_id, const MslMpcollFloorContact* source_contact) {
+  if (batch == NULL || g == NULL || was_grounded != 0u ||
+      !action_is_down_bound(batch->state.action_id[idx]) ||
+      batch->state.speed_x_attack[idx] == 0.0f ||
+      fabsf(batch->state.speed_y_attack[idx]) > 0.000001f) {
+    return 0u;
+  }
+
+  float floor_nx =
+      source_contact != NULL ? source_contact->normal_x : batch->state.ground_normal_x[idx];
+  float floor_ny =
+      source_contact != NULL ? source_contact->normal_y : batch->state.ground_normal_y[idx];
+  if (source_contact == NULL && fabsf(floor_nx) <= 0.000001f &&
+      fabsf(floor_ny - 1.0f) <= 0.000001f && floor_segment_id != 0xFFFFu) {
+    const int floor_idx = stage_collision_floor_line_index(stage_id, floor_segment_id);
+    if (!floor_line_normal_for_env(batch, bi, g, floor_idx, &floor_nx, &floor_ny)) {
+      for (size_t line_i = 0; line_i < g->line_count; line_i++) {
+        if (g->lines[line_i].segment_i == floor_segment_id &&
+            floor_line_normal_for_env(batch, bi, g, (int)line_i, &floor_nx, &floor_ny)) {
+          break;
+        }
+      }
+    }
+  }
+
+  const float normal_len = sqrtf(floor_nx * floor_nx + floor_ny * floor_ny);
+  if (normal_len <= 0.000001f) {
+    return 0u;
+  }
+
+  floor_nx /= normal_len;
+  floor_ny /= normal_len;
+  const float ground_kb = batch->state.speed_x_attack[idx];
+  const float old_kb_x = batch->state.speed_x_attack[idx];
+  const float new_kb_x = floor_ny * ground_kb;
+  const float new_kb_y = -floor_nx * ground_kb;
+  batch->state.speed_x_attack[idx] = new_kb_x;
+  batch->state.speed_y_attack[idx] = new_kb_y;
+  batch->state.pos_x[idx] += new_kb_x - old_kb_x;
+
+  float floor_y = 0.0f;
+  const int floor_idx = stage_collision_floor_line_index(stage_id, floor_segment_id);
+  if (floor_line_y_at_x_for_env(batch, bi, g, floor_idx, batch->state.pos_x[idx], &floor_y)) {
+    batch->state.pos_y[idx] = floor_y + k_floor_y_bias;
+    return 1u;
+  }
+  for (size_t line_i = 0; line_i < g->line_count; line_i++) {
+    if (g->lines[line_i].segment_i == floor_segment_id &&
+        floor_line_y_at_x_for_env(batch, bi, g, (int)line_i, batch->state.pos_x[idx], &floor_y)) {
+      batch->state.pos_y[idx] = floor_y + k_floor_y_bias;
+      break;
+    }
+  }
+
+  // DownBound collision projects horizontal damage speed onto the floor tangent after landing, then
+  // re-pins the root to the selected floor. Keep the projection in one mpColl_8004B108 owner packet
+  // so pre-publication and committed-state callers cannot drift apart.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80084F3C,ft_80082708}
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+  // data/stages/bin/*.bin::MSLSTG01 floor normal metadata
+  return 1u;
+}
+
+MslMpcoll800471F8EscapeAirPacket msl_mpcoll_800471f8_escapeair_packet(const MslMpcollContext* ctx,
+                                                                      uint8_t ecb_lock_active,
+                                                                      uint8_t ecb_lock_timer_seed,
+                                                                      float fallback_prev_x,
+                                                                      float fallback_prev_y) {
+  MslMpcoll800471F8EscapeAirPacket packet = {
+      .prev_x = fallback_prev_x,
+      .prev_y = fallback_prev_y,
+      .entry_desired_bottom_owner = 0u,
+  };
+  if (ctx == NULL || ctx->batch == NULL) {
+    return packet;
+  }
+
+  const MslBatch* batch = ctx->batch;
+  const size_t idx = ctx->idx;
+  const uint16_t action_id = ctx->action_id;
+  const uint16_t prev_action_id = ctx->prev_action_id;
+  const uint8_t prev_action_is_jumpaerial = (prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                                             prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
+                                                ? 1u
+                                                : 0u;
+  const uint8_t seed_prev_action_is_jumpaerial =
+      (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+       batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
+          ? 1u
+          : 0u;
+  packet.entry_desired_bottom_owner =
+      (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed != 0u &&
+       seed_prev_action_is_jumpaerial &&
+       (batch->state.pos_y[idx] > k_floor_y_bias ||
+        batch->state.floor_sweep_prev_pos_y[idx] > k_floor_y_bias) &&
+       batch->state.seed_prev_action_frame[idx] <= 2 &&
+       (prev_action_id == (uint16_t)MSL_ACT_ESCAPE_AIR || batch->state.prev_action_frame[idx] <= 2))
+          ? 1u
+          : 0u;
+
+  const uint8_t prev_action_is_jump =
+      (prev_action_id == (uint16_t)MSL_ACT_JUMP_F || prev_action_id == (uint16_t)MSL_ACT_JUMP_B)
+          ? 1u
+          : 0u;
+  const uint8_t seed_prev_action_is_jump =
+      (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_F ||
+       batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_B)
+          ? 1u
+          : 0u;
+  const uint8_t fresh_lr_edge =
+      ((batch->state.input_buttons_pressed[idx] & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R)) != 0u)
+          ? 1u
+          : 0u;
+  const uint8_t frame_start_jumpaerial_owner =
+      ((((ecb_lock_timer_seed != 0u &&
+          (packet.entry_desired_bottom_owner ||
+           stage_collision_floor_line_is_platform(ctx->stage_id, batch->state.ground_id[idx]) ||
+           stage_collision_floor_line_has_platform_transform(ctx->stage_id,
+                                                             batch->state.ground_id[idx])) &&
+          prev_action_is_jumpaerial) ||
+         (ecb_lock_timer_seed == 0u && batch->state.action_frame[idx] <= 1)) &&
+        seed_prev_action_is_jumpaerial))
+          ? 1u
+          : 0u;
+  const uint8_t late_jump_fresh_edge_owner =
+      (ecb_lock_timer_seed == 2u && fresh_lr_edge != 0u && prev_action_is_jump &&
+       seed_prev_action_is_jump && batch->state.seed_prev_action_frame[idx] == 6 &&
+       batch->state.action_frame[idx] <= 1)
+          ? 1u
+          : 0u;
+  const uint8_t use_frame_start_last_pos =
+      ((msl_motion_state_class3_has(ctx->char_id, action_id,
+                                    MSL_MS_CLASS3_PHASE4_ESCAPE_AIR_COLL) &&
+        !ecb_lock_active && ecb_lock_timer_seed == 0u) ||
+       (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+        (frame_start_jumpaerial_owner != 0u || late_jump_fresh_edge_owner != 0u)))
+          ? 1u
+          : 0u;
+  if (use_frame_start_last_pos != 0u) {
+    packet.prev_x = batch->state.prev_pos_x[idx];
+    packet.prev_y = batch->state.prev_pos_y[idx];
+  }
+
+  // Source packet: ftCo_EscapeAir_Coll -> ft_80082C74 -> ft_80081D0C publishes a single
+  // CollData.last_pos / mpCollPrev root into mpColl_800471F8. Keep the JumpAerial entry,
+  // late L/R edge, and class3 phase gates together so the coordinator consumes one previous-root
+  // owner instead of rebuilding several local booleans.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpColl_800471F8}
+  // refs/melee/src/melee/mp/mplib.c::mpLineIntersectionH
+  return packet;
+}
+
+static uint8_t msl_mpcoll_800471f8_escapeair_early_locked_floor(
+    MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    int prefer_line_idx, uint8_t stage_has_only_static_cardinal_hard_floors,
+    uint8_t stage_has_height_platform_transform, float prev_x, float prev_y, float x, float y,
+    float escapeair_bottom_rel0, uint16_t skip_platform_segment_i, const MslCommonParams* c,
+    MslMpcollFloorHit* out) {
+  if (batch == NULL || g == NULL || c == NULL || prefer_line_idx < 0 ||
+      (size_t)prefer_line_idx >= g->line_count || out == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_ESCAPE_AIR) {
+    return 0u;
+  }
+
+  // Source owner: ftCo_EscapeAir_Coll -> ft_80082C74 -> mpColl_800471F8.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,
+  //   mpColl_80044838_Floor}
+  if (g->lines[(size_t)prefer_line_idx].platform_transform_kind !=
+      MSL_STAGE_PLATFORM_TRANSFORM_NONE) {
+    MslMpcollFloorSweepResult hard_floor_sweep = {0};
+    if (mpcoll_collect_bottom_sweep_hit(
+            batch, idx, bi, g, stage_id, prev_x, prev_y + escapeair_bottom_rel0, x,
+            y + escapeair_bottom_rel0, skip_platform_segment_i, -1, -1, c, &hard_floor_sweep) &&
+        hard_floor_sweep.hit_line_idx >= 0 && !hard_floor_sweep.hit_is_platform &&
+        !hard_floor_sweep.hit_has_platform_transform) {
+      batch->state.pos_y[idx] = hard_floor_sweep.hit_y + k_floor_y_bias;
+      out->result_mode = hard_floor_sweep.mode;
+      out->contact.ground_id = hard_floor_sweep.hit_segment_id;
+      out->contact.contact_x = hard_floor_sweep.hit_x;
+      out->contact.contact_y = hard_floor_sweep.hit_y;
+      out->contact.normal_x = hard_floor_sweep.normal_x;
+      out->contact.normal_y = hard_floor_sweep.normal_y;
+      return 1u;
+    }
+  }
+
+  int candidate_lines[5];
+  candidate_lines[0] = prefer_line_idx;
+  candidate_lines[1] = g->lines[(size_t)prefer_line_idx].prev;
+  candidate_lines[2] = g->lines[(size_t)prefer_line_idx].next;
+  candidate_lines[3] = (stage_has_height_platform_transform && candidate_lines[1] >= 0 &&
+                        (size_t)candidate_lines[1] < g->line_count)
+                           ? g->lines[(size_t)candidate_lines[1]].prev
+                           : -1;
+  candidate_lines[4] = (stage_has_height_platform_transform && candidate_lines[2] >= 0 &&
+                        (size_t)candidate_lines[2] < g->line_count)
+                           ? g->lines[(size_t)candidate_lines[2]].next
+                           : -1;
+  for (size_t ci = 0; ci < 5u; ci++) {
+    const int line_idx = candidate_lines[ci];
+    if (line_idx < 0 || (size_t)line_idx >= g->line_count ||
+        g->lines[(size_t)line_idx].is_platform ||
+        stage_collision_floor_line_has_platform_transform(stage_id,
+                                                          g->lines[(size_t)line_idx].segment_i)) {
+      continue;
+    }
+    if (stage_has_height_platform_transform && g->lines[(size_t)line_idx].is_ledge &&
+        (!floor_x_within_line_bounds(batch, bi, g, line_idx,
+                                     batch->state.floor_sweep_prev_pos_x[idx]) ||
+         !floor_x_within_line_bounds(batch, bi, g, line_idx, x))) {
+      continue;
+    }
+    float line_y = 0.0f;
+    if (!floor_line_y_at_x_ed5c_for_env(batch, bi, g, line_idx, x, &line_y)) {
+      continue;
+    }
+    const uint8_t early_root_crossing =
+        (((msl_escapeair_locked_bottom_owner_is_live_hard_floor(
+               batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+           (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR ||
+            batch->state.seed_prev_action_frame[idx] <= 0)) ||
+          (!msl_escapeair_locked_bottom_owner_any(
+               batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+           !stage_has_only_static_cardinal_hard_floors &&
+           batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR)) &&
+         prev_y > line_y + k_floor_y_bias && y <= line_y + k_floor_y_bias)
+            ? 1u
+            : 0u;
+    const uint8_t bottom_crossing = (msl_escapeair_locked_bottom_owner_any(
+                                         batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+                                     prev_y + escapeair_bottom_rel0 > line_y + k_floor_y_bias &&
+                                     y + escapeair_bottom_rel0 <= line_y + k_floor_y_bias)
+                                        ? 1u
+                                        : 0u;
+    if (!bottom_crossing && !early_root_crossing) {
+      continue;
+    }
+    batch->state.pos_y[idx] = line_y + k_floor_y_bias;
+    out->result_mode = (uint8_t)(bottom_crossing ? MSL_MPCOLL_FLOOR_MODE_BOTTOM_SWEEP
+                                                 : MSL_MPCOLL_FLOOR_MODE_ROOT_PROJECTION);
+    out->contact.ground_id = g->lines[(size_t)line_idx].segment_i;
+    out->contact.contact_x = x;
+    out->contact.contact_y = line_y;
+    out->contact.normal_x = 0.0f;
+    out->contact.normal_y = 1.0f;
+    return 1u;
+  }
+  return 0u;
+}
+
+static uint8_t msl_mpcoll_800471f8_escapeair_owner_zero_root_floor(
+    MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    int prefer_line_idx, uint8_t stage_has_height_platform_transform, float prev_y, float x,
+    float y, MslMpcollFloorHit* out) {
+  if (batch == NULL || g == NULL || prefer_line_idx < 0 ||
+      (size_t)prefer_line_idx >= g->line_count || out == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_ESCAPE_AIR) {
+    return 0u;
+  }
+
+  // Same source wrapper as above, but for direct seeds with an active lock and no serialized
+  // desired-bottom owner.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044838_Floor}
+  int candidate_lines[5];
+  candidate_lines[0] = prefer_line_idx;
+  candidate_lines[1] = g->lines[(size_t)prefer_line_idx].prev;
+  candidate_lines[2] = g->lines[(size_t)prefer_line_idx].next;
+  candidate_lines[3] = (stage_has_height_platform_transform && candidate_lines[1] >= 0 &&
+                        (size_t)candidate_lines[1] < g->line_count)
+                           ? g->lines[(size_t)candidate_lines[1]].prev
+                           : -1;
+  candidate_lines[4] = (stage_has_height_platform_transform && candidate_lines[2] >= 0 &&
+                        (size_t)candidate_lines[2] < g->line_count)
+                           ? g->lines[(size_t)candidate_lines[2]].next
+                           : -1;
+  for (size_t ci = 0; ci < 5u; ci++) {
+    const int line_idx = candidate_lines[ci];
+    if (line_idx < 0 || (size_t)line_idx >= g->line_count ||
+        g->lines[(size_t)line_idx].is_platform ||
+        stage_collision_floor_line_has_platform_transform(stage_id,
+                                                          g->lines[(size_t)line_idx].segment_i)) {
+      continue;
+    }
+    const uint8_t line_is_ledge = g->lines[(size_t)line_idx].is_ledge ? 1u : 0u;
+    const uint8_t ledge_span_owner =
+        (line_is_ledge && stage_has_height_platform_transform &&
+         floor_x_within_line_bounds(batch, bi, g, line_idx,
+                                    batch->state.floor_sweep_prev_pos_x[idx]) &&
+         floor_x_within_line_bounds(batch, bi, g, line_idx, x))
+            ? 1u
+            : 0u;
+    if ((line_is_ledge && !ledge_span_owner) ||
+        (!line_is_ledge && !floor_x_within_line_bounds(batch, bi, g, line_idx, x))) {
+      continue;
+    }
+    float line_y = 0.0f;
+    if (!floor_line_y_at_x_for_env(batch, bi, g, line_idx, x, &line_y)) {
+      continue;
+    }
+    if (!(prev_y > line_y + k_floor_y_bias && y <= line_y + k_floor_y_bias)) {
+      continue;
+    }
+    batch->state.pos_y[idx] = line_y + k_floor_y_bias;
+    out->result_mode = (uint8_t)MSL_MPCOLL_FLOOR_MODE_ROOT_PROJECTION;
+    out->contact.ground_id = g->lines[(size_t)line_idx].segment_i;
+    out->contact.contact_x = x;
+    out->contact.contact_y = line_y;
+    out->contact.normal_x = 0.0f;
+    out->contact.normal_y = 1.0f;
+    return 1u;
+  }
+  return 0u;
+}
+
+uint8_t msl_mpcoll_800471f8_escapeair_entry_floor_publication(
+    MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    int prefer_line_idx, uint8_t was_grounded, uint8_t stage_has_only_static_cardinal_hard_floors,
+    uint8_t stage_has_height_platform_transform, uint8_t ecb_lock_timer_seed, float prev_x,
+    float prev_y, float x, float y, float escapeair_bottom_rel0, uint16_t skip_platform_segment_i,
+    const MslCommonParams* c, MslMpcollFloorHit* out) {
+  if (batch == NULL || g == NULL || out == NULL || was_grounded != 0u ||
+      batch->state.action_id[idx] != (uint16_t)MSL_ACT_ESCAPE_AIR || prefer_line_idx < 0 ||
+      ecb_lock_timer_seed == 0u || batch->state.action_frame[idx] > 3 ||
+      batch->state.speed_y_self[idx] >= 0.0f) {
+    return 0u;
+  }
+  if ((stage_has_only_static_cardinal_hard_floors || stage_has_height_platform_transform) &&
+      (msl_escapeair_locked_bottom_owner_any(
+           batch->state.coll_desired_ecb_bottom_locked_owner[idx]) ||
+       batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_ESCAPE_AIR ||
+       batch->state.coll_desired_ecb_bottom_rel_y[idx] > k_floor_y_bias) &&
+      msl_mpcoll_800471f8_escapeair_early_locked_floor(
+          batch, idx, bi, g, stage_id, prefer_line_idx, stage_has_only_static_cardinal_hard_floors,
+          stage_has_height_platform_transform, prev_x, prev_y, x, y, escapeair_bottom_rel0,
+          skip_platform_segment_i, c, out)) {
+    return 1u;
+  }
+  if (!stage_has_only_static_cardinal_hard_floors &&
+      !msl_escapeair_locked_bottom_owner_any(
+          batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+      batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+      msl_mpcoll_800471f8_escapeair_owner_zero_root_floor(
+          batch, idx, bi, g, stage_id, prefer_line_idx, stage_has_height_platform_transform, prev_y,
+          x, y, out)) {
+    return 1u;
+  }
+
+  // Entry floor publication packet for EscapeAir_Coll's ft_80082C74 -> mpColl_800471F8 path.
+  // The early locked bottom and owner-zero root cases are alternate source inputs to the same
+  // `mpColl_80044628_Floor` / `mpColl_80044838_Floor` publication surface.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::{
+  //   mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+  return 0u;
 }
 
 uint8_t msl_mpcoll_80047e14_fallspecial_prephysics_floor_sweep(
@@ -1471,7 +1925,7 @@ uint8_t attackair_flags0_floor_root_projection(
   return 1u;
 }
 
-uint8_t escapeair_locked_floor_bottom_sweep_root_projection(
+static uint8_t escapeair_locked_floor_bottom_sweep_root_projection(
     MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
     uint8_t stage_has_height_platform_transform, const MslEcbWorldPoints* prev_ecb,
     uint16_t skip_platform_segment_i, const MslCommonParams* c, uint16_t* ground_id_out,
@@ -1597,7 +2051,7 @@ uint8_t escapeair_locked_floor_bottom_sweep_root_projection(
   return 1u;
 }
 
-uint8_t escapeair_locked_platform_root_projection(
+static uint8_t escapeair_locked_platform_root_projection(
     MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
     uint16_t skip_platform_segment_i, uint8_t ecb_lock_timer_seed, float start_pose_bottom_rel_y,
     float current_pose_bottom_rel_y, float current_loaded_bottom_rel_y,
@@ -1985,7 +2439,7 @@ uint8_t escapeair_locked_platform_root_projection(
   return 1u;
 }
 
-uint8_t escapeair_locked_hard_floor_zero_bottom_root_projection(
+static uint8_t escapeair_locked_hard_floor_zero_bottom_root_projection(
     MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
     int prefer_line_idx, uint16_t skip_platform_segment_i, uint8_t locked_desired_bottom_owner,
     float locked_desired_bottom_rel_y, const MslCommonParams* c, uint16_t* ground_id_out,
@@ -2057,6 +2511,88 @@ uint8_t escapeair_locked_hard_floor_zero_bottom_root_projection(
   if (floor_ny_out != NULL) {
     *floor_ny_out = ny;
   }
+  return 1u;
+}
+
+uint8_t msl_mpcoll_800471f8_escapeair_locked_root_publication(
+    MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    uint8_t escapeair_locked, uint8_t ecb_lock_timer, uint8_t ecb_lock_timer_seed,
+    uint8_t stage_has_height_platform_transform, const MslEcbWorldPoints* prev_ecb,
+    const MslEcbWorldPoints* cur_ecb, uint16_t skip_platform_segment_i, int prefer_line_idx,
+    uint8_t char_id, uint32_t anim, uint16_t ecb_frame_cur, uint8_t locked_desired_ecb_bottom_valid,
+    const MslCommonParams* c, MslMpcollFloorContact* out, uint8_t* platform_root_hit_out) {
+  if (batch == NULL || g == NULL || cur_ecb == NULL || out == NULL || c == NULL ||
+      escapeair_locked == 0u || batch->state.action_id[idx] != (uint16_t)MSL_ACT_ESCAPE_AIR) {
+    return 0u;
+  }
+  const uint16_t prev_action_id = batch->state.prev_action_id[idx];
+  const uint8_t jump_platform_root_owner =
+      ((prev_action_id == (uint16_t)MSL_ACT_JUMP_F || prev_action_id == (uint16_t)MSL_ACT_JUMP_B ||
+        prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+        prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
+        batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_F ||
+        batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_B ||
+        batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+        batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B))
+          ? 1u
+          : 0u;
+  const int callback_pose_frame =
+      (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+       batch->state.seed_prev_action_frame[idx] >= 0)
+          ? ((int)batch->state.seed_prev_action_frame[idx] + 1)
+          : batch->state.action_frame[idx];
+  const uint8_t locked_desired_root_owner =
+      (locked_desired_ecb_bottom_valid && prev_action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) ? 1u : 0u;
+  const uint8_t sustained_static_platform_root_owner =
+      (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR) ? 1u : 0u;
+
+  uint16_t ground_id = 0xFFFFu;
+  float contact_x = 0.0f;
+  float contact_y = 0.0f;
+  float floor_nx = 0.0f;
+  float floor_ny = 1.0f;
+  if ((ecb_lock_timer >= 4u || jump_platform_root_owner || locked_desired_root_owner ||
+       sustained_static_platform_root_owner) &&
+      (batch->state.speed_y_self[idx] < 0.0f || jump_platform_root_owner) &&
+      escapeair_locked_platform_root_projection(
+          batch, idx, bi, g, stage_id, skip_platform_segment_i, ecb_lock_timer_seed,
+          msl_ecb_bottom_rel_y(char_id, anim, (int)ecb_frame_cur),
+          msl_ecb_bottom_rel_y(char_id, anim, callback_pose_frame), cur_ecb->bottom_rel_y,
+          msl_ecb_top_rel_y(char_id, anim, callback_pose_frame), locked_desired_root_owner,
+          batch->state.coll_desired_ecb_bottom_rel_y[idx], &ground_id, &contact_x, &contact_y,
+          &floor_nx, &floor_ny, c)) {
+    if (platform_root_hit_out != NULL) {
+      *platform_root_hit_out = 1u;
+    }
+  } else if (escapeair_locked_floor_bottom_sweep_root_projection(
+                 batch, idx, bi, g, stage_id, stage_has_height_platform_transform, prev_ecb,
+                 skip_platform_segment_i, c, &ground_id, &contact_x, &contact_y, &floor_nx,
+                 &floor_ny)) {
+    if (platform_root_hit_out != NULL) {
+      *platform_root_hit_out = 1u;
+    }
+  } else if (prefer_line_idx >= 0 && batch->state.speed_y_self[idx] < 0.0f &&
+             escapeair_locked_hard_floor_zero_bottom_root_projection(
+                 batch, idx, bi, g, stage_id, prefer_line_idx, skip_platform_segment_i,
+                 locked_desired_root_owner, batch->state.coll_desired_ecb_bottom_rel_y[idx], c,
+                 &ground_id, &contact_x, &contact_y, &floor_nx, &floor_ny)) {
+  } else {
+    return 0u;
+  }
+
+  *out = (MslMpcollFloorContact){
+      .ground_id = ground_id,
+      .contact_x = contact_x,
+      .contact_y = contact_y,
+      .normal_x = floor_nx,
+      .normal_y = floor_ny,
+  };
+  // Locked-root publication packet for EscapeAir_Coll's ft_80082C74 -> mpColl_800471F8 path.
+  // Platform root projection, locked bottom sweep, and zero-bottom hard-floor root projection are
+  // the same source callback surface with different CollData_X130/ECB inputs.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::{
+  //   mpColl_LoadECB_inline,mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
   return 1u;
 }
 

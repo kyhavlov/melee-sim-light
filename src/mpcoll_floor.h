@@ -98,6 +98,17 @@ typedef struct MslMpcollFloorContact {
   float normal_y;
 } MslMpcollFloorContact;
 
+typedef struct MslMpcollFloorHit {
+  uint8_t result_mode;
+  MslMpcollFloorContact contact;
+} MslMpcollFloorHit;
+
+typedef struct MslMpcoll800471F8EscapeAirPacket {
+  float prev_x;
+  float prev_y;
+  uint8_t entry_desired_bottom_owner;
+} MslMpcoll800471F8EscapeAirPacket;
+
 typedef struct MslMpcollFloorPublication {
   uint8_t on_ground;
   uint8_t result_mode;
@@ -533,6 +544,33 @@ uint8_t msl_mpcoll_80044628_floor_wall_adjacent_fallback(
     const MslMpcollOrderedWallCeilResult* wall_ceil, float cur_bottom_x, float cur_bottom_y,
     uint16_t skip_platform_segment_i, uint16_t* ground_id_out, float* contact_x_out,
     float* contact_y_out, float* floor_nx_out, float* floor_ny_out);
+uint8_t msl_mpcoll_8004a45c_floor_edge_snap(MslBatch* batch, size_t idx, int bi,
+                                            const MslStageFloorGraph* g, uint32_t stage_id,
+                                            int line_idx, float cur_bottom_x, uint8_t char_id,
+                                            uint32_t anim, uint16_t ecb_frame, uint8_t was_grounded,
+                                            uint16_t* ground_id_out, float* contact_x_out,
+                                            float* contact_y_out, float* floor_nx_out,
+                                            float* floor_ny_out);
+uint8_t msl_mpcoll_8004b108_capture_lw_flat_ledge_carry_owner(const MslBatch* batch, size_t idx,
+                                                              int bi, const MslStageFloorGraph* g,
+                                                              uint32_t stage_id, uint16_t action_id,
+                                                              uint16_t current_ground_id,
+                                                              uint16_t carried_ground_id,
+                                                              int carried_line_idx);
+uint8_t msl_mpcoll_8004b108_downbound_project_attack_speed(
+    MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    uint8_t was_grounded, uint16_t floor_segment_id, const MslMpcollFloorContact* source_contact);
+MslMpcoll800471F8EscapeAirPacket msl_mpcoll_800471f8_escapeair_packet(const MslMpcollContext* ctx,
+                                                                      uint8_t ecb_lock_active,
+                                                                      uint8_t ecb_lock_timer_seed,
+                                                                      float fallback_prev_x,
+                                                                      float fallback_prev_y);
+uint8_t msl_mpcoll_800471f8_escapeair_entry_floor_publication(
+    MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    int prefer_line_idx, uint8_t was_grounded, uint8_t stage_has_only_static_cardinal_hard_floors,
+    uint8_t stage_has_height_platform_transform, uint8_t ecb_lock_timer_seed, float prev_x,
+    float prev_y, float x, float y, float escapeair_bottom_rel0, uint16_t skip_platform_segment_i,
+    const MslCommonParams* c, MslMpcollFloorHit* out);
 uint8_t fallspecial_sloped_ledge_main_floor_first_sustained_airborne_owner(
     const MslBatch* batch, size_t idx, const MslStageFloorGraph* g, uint32_t stage_id);
 uint8_t msl_mpcoll_80047e14_fallspecial_prephysics_floor_sweep(
@@ -578,20 +616,10 @@ uint8_t attackair_flags0_floor_root_projection(
     const MslEcbWorldPoints* prev_ecb, const MslEcbWorldPoints* cur_ecb, int prefer_line_idx,
     uint16_t skip_platform_segment_i, const MslCommonParams* c, uint16_t* ground_id_out,
     float* contact_x_out, float* contact_y_out, float* floor_nx_out, float* floor_ny_out);
-uint8_t escapeair_locked_floor_bottom_sweep_root_projection(
+uint8_t msl_mpcoll_800471f8_escapeair_locked_root_publication(
     MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    uint8_t escapeair_locked, uint8_t ecb_lock_timer, uint8_t ecb_lock_timer_seed,
     uint8_t stage_has_height_platform_transform, const MslEcbWorldPoints* prev_ecb,
-    uint16_t skip_platform_segment_i, const MslCommonParams* c, uint16_t* ground_id_out,
-    float* contact_x_out, float* contact_y_out, float* floor_nx_out, float* floor_ny_out);
-uint8_t escapeair_locked_platform_root_projection(
-    MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
-    uint16_t skip_platform_segment_i, uint8_t ecb_lock_timer_seed, float start_pose_bottom_rel_y,
-    float current_pose_bottom_rel_y, float current_loaded_bottom_rel_y,
-    float current_pose_top_rel_y, uint8_t locked_desired_bottom_owner,
-    float locked_desired_bottom_rel_y, uint16_t* ground_id_out, float* contact_x_out,
-    float* contact_y_out, float* floor_nx_out, float* floor_ny_out, const MslCommonParams* c);
-uint8_t escapeair_locked_hard_floor_zero_bottom_root_projection(
-    MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
-    int prefer_line_idx, uint16_t skip_platform_segment_i, uint8_t locked_desired_bottom_owner,
-    float locked_desired_bottom_rel_y, const MslCommonParams* c, uint16_t* ground_id_out,
-    float* contact_x_out, float* contact_y_out, float* floor_nx_out, float* floor_ny_out);
+    const MslEcbWorldPoints* cur_ecb, uint16_t skip_platform_segment_i, int prefer_line_idx,
+    uint8_t char_id, uint32_t anim, uint16_t ecb_frame_cur, uint8_t locked_desired_ecb_bottom_valid,
+    const MslCommonParams* c, MslMpcollFloorContact* out, uint8_t* platform_root_hit_out);
