@@ -35,6 +35,7 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_COMMON_GROUNDED_B108_COLL,
     CLASS2_COMMON_GROUNDED_COLL,
     CLASS2_CATCH_START_FLOOR_LOSS,
+    CLASS2_CLIFF_HOLD_PHYS_SNAP,
     CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE,
     CLASS2_FALL_LIKE_ACTION,
     CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA,
@@ -935,7 +936,7 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
         "ftCo_Landing_IASA",
     }
 
-    def expected_bits(anim_cb: str, iasa_cb: str, coll_cb: str) -> int:
+    def expected_bits(anim_cb: str, iasa_cb: str, phys_cb: str, coll_cb: str) -> int:
         bits = 0
         if iasa_cb in fresh_guardon_item_shielddesc_iasa:
             bits |= CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA
@@ -998,6 +999,8 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
             or anim_cb in {"ftCo_Jump_Anim", "ftCo_JumpAerial_Anim", "ftCo_EscapeAir_Anim"}
         ):
             bits |= CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE
+        if phys_cb in {"ftCo_CliffCatch_Phys", "ftCo_CliffJump1_Phys", "ftCo_CliffWait_Phys"}:
+            bits |= CLASS2_CLIFF_HOLD_PHYS_SNAP
         if (
             anim_cb == "ftCo_Wait_Anim"
             or anim_cb == "ftCo_Landing_Anim"
@@ -1023,13 +1026,15 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
     for label, table in (("fox", fox), ("falco", falco)):
         for action_id in range(len(table.class2_bits)):
             iasa_cb = symbols[int(table.iasa_cb_id[action_id])]
+            phys_cb = symbols[int(table.phys_cb_id[action_id])]
             coll_cb = symbols[int(table.coll_cb_id[action_id])]
             anim_cb = symbols[int(table.anim_cb_id[action_id])]
-            assert int(table.class2_bits[action_id]) == expected_bits(anim_cb, iasa_cb, coll_cb), (
+            assert int(table.class2_bits[action_id]) == expected_bits(anim_cb, iasa_cb, phys_cb, coll_cb), (
                 label,
                 action_id,
                 anim_cb,
                 iasa_cb,
+                phys_cb,
                 coll_cb,
             )
 

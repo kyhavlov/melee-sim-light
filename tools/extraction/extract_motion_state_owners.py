@@ -19,7 +19,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 19
+FORMAT_VERSION = 20
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -69,6 +69,7 @@ CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS = 1 << 10
 CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE = 1 << 11
 CLASS2_LANDING_ROOT_FLOOR_SNAP = 1 << 12
 CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST = 1 << 13
+CLASS2_CLIFF_HOLD_PHYS_SNAP = 1 << 14
 
 CLASS3_PHASE4_ATTACK_AIR_COLL = 1 << 0
 CLASS3_PHASE4_ESCAPE_AIR_COLL = 1 << 1
@@ -593,6 +594,7 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
     bits = 0
     anim_cb = callbacks[0]
     iasa_cb = callbacks[1]
+    phys_cb = callbacks[2]
     coll_cb = callbacks[3]
     if iasa_cb in {
         "ftCo_Wait_IASA",
@@ -748,6 +750,11 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         # live ledge segment/cooldown state remains runtime state.
         # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_CliffCatch.c,ftCo_CliffWait.c,ftCo_Fall.c,ftCo_Jump.c,ftCo_JumpAerial.c,ftCo_EscapeAir.c}
         bits |= CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE
+    if phys_cb in {"ftCo_CliffCatch_Phys", "ftCo_CliffJump1_Phys", "ftCo_CliffWait_Phys"}:
+        # Cliff hold / wait / first ledge-jump physics owns the dedicated ledge snap path. Runtime
+        # collision asks this generated owner bit instead of carrying callback-id literals.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffCatch.c::ftCo_CliffCatch_Phys
+        bits |= CLASS2_CLIFF_HOLD_PHYS_SNAP
     if (
         anim_cb == "ftCo_Wait_Anim"
         or anim_cb == "ftCo_Landing_Anim"
@@ -1047,6 +1054,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "CLIFF_LEDGE_FLOOR_PRESERVE": CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE,
         "LANDING_ROOT_FLOOR_SNAP": CLASS2_LANDING_ROOT_FLOOR_SNAP,
         "GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST": CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST,
+        "CLIFF_HOLD_PHYS_SNAP": CLASS2_CLIFF_HOLD_PHYS_SNAP,
     }
     classes3 = {
         "PHASE4_ATTACK_AIR_COLL": CLASS3_PHASE4_ATTACK_AIR_COLL,

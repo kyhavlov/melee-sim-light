@@ -824,21 +824,6 @@ static inline void sample_collision_ecb_points(MslEcbWorldPoints* out, const Msl
   (void)frame_u16;
 }
 
-static inline uint8_t is_cliff_hold_action(uint16_t a) {
-  // Cliff / ledge hold actions use dedicated snap logic and should not be stage-collided.
-  // Decomp: ftCo_CliffCatch_Phys snaps to the cliff point each frame.
-  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
-  switch (a) {
-    case MSL_ACT_CLIFF_CATCH:
-    case MSL_ACT_CLIFF_WAIT:
-    case MSL_ACT_CLIFF_JUMP_SLOW1:
-    case MSL_ACT_CLIFF_JUMP_QUICK1:
-      return 1;
-    default:
-      return 0;
-  }
-}
-
 static inline uint8_t is_grounded_cliff_option_action(uint16_t a, uint8_t on_ground) {
   if (!on_ground) {
     return 0u;
@@ -3174,7 +3159,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         mpcoll_clear_wall_ceiling_and_env_provenance(batch, idx);
         continue;
       }
-      if (is_cliff_hold_action(action_id)) {
+      if (msl_motion_state_cliff_hold_phys_snap(ctx.char_id, action_id)) {
         mpcoll_clear_wall_ceiling_contacts(batch, idx);
         continue;
       }

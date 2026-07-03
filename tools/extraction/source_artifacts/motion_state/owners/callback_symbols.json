@@ -35,6 +35,7 @@
   },
   "classes2": {
     "CATCH_START_FLOOR_LOSS": 512,
+    "CLIFF_HOLD_PHYS_SNAP": 16384,
     "CLIFF_LEDGE_FLOOR_PRESERVE": 2048,
     "COMMON_AIRBORNE_COLL": 4,
     "COMMON_GROUNDED_B108_COLL": 2,
@@ -4679,5 +4680,5 @@
       "symbol": "ftpickupitem_Phys"
     }
   ],
-  "version": 19
+  "version": 20
 }

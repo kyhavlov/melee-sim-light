@@ -16,7 +16,7 @@ enum {
 };
 
 static const uint8_t k_magic[TABLE_MAGIC_LEN] = {'M', 'S', 'L', 'M', 'S', 'O', '0', '1'};
-static const uint32_t k_format_version = 19;
+static const uint32_t k_format_version = 20;
 
 typedef struct {
   uint8_t* buf;
@@ -403,6 +403,10 @@ uint8_t msl_motion_state_class2_has(uint8_t char_id, uint16_t action_id, uint32_
     return 0u;
   }
   return ((msl_motion_state_class2_bits(char_id, action_id) & class_bit) != 0u) ? 1u : 0u;
+}
+
+uint8_t msl_motion_state_cliff_hold_phys_snap(uint8_t char_id, uint16_t action_id) {
+  return msl_motion_state_class2_has(char_id, action_id, MSL_MS_CLASS2_CLIFF_HOLD_PHYS_SNAP);
 }
 
 uint32_t msl_motion_state_class3_bits(uint8_t char_id, uint16_t action_id) {

@@ -74,6 +74,7 @@ enum {
   MSL_MS_CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE = 1u << 11,
   MSL_MS_CLASS2_LANDING_ROOT_FLOOR_SNAP = 1u << 12,
   MSL_MS_CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST = 1u << 13,
+  MSL_MS_CLASS2_CLIFF_HOLD_PHYS_SNAP = 1u << 14,
 };
 
 enum {
@@ -97,9 +98,10 @@ uint32_t msl_motion_state_class_bits(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_class_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit);
 uint32_t msl_motion_state_class2_bits(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_class2_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit);
+uint8_t msl_motion_state_cliff_hold_phys_snap(uint8_t char_id, uint16_t action_id);
 uint32_t msl_motion_state_class3_bits(uint8_t char_id, uint16_t action_id);
 
-// fx_special_kind (MSLMSO01 v19): per-(char, action) identity of the Fox/Falco bespoke
+// fx_special_kind (MSLMSO01 v20): per-(char, action) identity of the Fox/Falco bespoke
 // special MotionState rows, generated 1:1 from each row's ANIM callback symbol by
 // tools/extraction/extract_motion_state_owners.py (FX_SPECIAL_KIND_BY_ANIM_CB). This is
 // the migration target for `msl_char_id_is_spacie(c) && action_id == MSL_ACT_FX_*`

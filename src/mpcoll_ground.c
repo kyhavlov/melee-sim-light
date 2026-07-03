@@ -57,21 +57,6 @@ static const float k_floor_edge_wall_probe_y_offset = 1.0f;
 // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80042384,mpColl_LoadECB_JObj}
 static const float k_ecb_vertical_unit = 1.0f;
 
-static inline uint8_t is_cliff_hold_action(uint16_t a) {
-  // Cliff / ledge hold actions use dedicated snap logic and should not be stage-grounded.
-  // Decomp: ftCo_CliffCatch_Phys snaps to the cliff point each frame.
-  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
-  switch (a) {
-    case MSL_ACT_CLIFF_CATCH:
-    case MSL_ACT_CLIFF_WAIT:
-    case MSL_ACT_CLIFF_JUMP_SLOW1:
-    case MSL_ACT_CLIFF_JUMP_QUICK1:
-      return 1;
-    default:
-      return 0;
-  }
-}
-
 void mpcoll_ground_apply(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -173,7 +158,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       }
 
       // Cliff / ledge hold actions use their own snap logic and should not be stage-grounded.
-      if (is_cliff_hold_action(action_id)) {
+      if (msl_motion_state_cliff_hold_phys_snap(mpcoll_ctx.char_id, action_id)) {
         batch->state.on_ground[idx] = 0;
         continue;
       }
