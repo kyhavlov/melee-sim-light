@@ -3121,13 +3121,6 @@ uint8_t mpcoll_callback_floor_result_valid(const MslMpcollContext* ctx) {
   return ctx->batch->state.coll_floor_result_valid[ctx->idx] ? 1u : 0u;
 }
 
-uint8_t mpcoll_callback_floor_result_mode(const MslMpcollContext* ctx) {
-  if (!mpcoll_callback_floor_result_valid(ctx)) {
-    return (uint8_t)MSL_MPCOLL_FLOOR_MODE_NONE;
-  }
-  return ctx->batch->state.coll_floor_result_mode[ctx->idx];
-}
-
 uint8_t mpcoll_floor_contact_from_callback_result(const MslMpcollContext* ctx,
                                                   MslMpcollFloorContact* io) {
   if (ctx == NULL || ctx->batch == NULL || io == NULL ||

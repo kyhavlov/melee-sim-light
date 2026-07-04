@@ -342,16 +342,15 @@ uint8_t mpcoll_damageair_action(uint16_t action_id) {
   return msl_damage_owner_is_damage_air_action(action_id);
 }
 
-MslMpcollDamageActiveHitlagFloorOwner mpcoll_damage_active_hitlag_floor_owner(
+uint8_t mpcoll_damage_active_hitlag_stay_airborne_floor_owner(
     const MslBatch* batch, size_t idx, uint16_t action_id, uint8_t prefer_line_valid,
     uint8_t prefer_line_is_platform, uint8_t prefer_line_is_ledge, uint8_t prefer_line_is_slope,
     uint8_t prefer_line_has_platform_transform, uint8_t prefer_line_is_fighter_solid,
     uint8_t prefer_line_is_terminal_cardinal_hard_floor, float prefer_line_root_y,
     float source_prev_root_y, uint8_t downdamage_x_axis_fresh_sdi_edge) {
-  MslMpcollDamageActiveHitlagFloorOwner out = {0u, 0u};
   if (batch == NULL || batch->state.hitlag_pre_timer[idx] == 0u || batch->state.hitlag[idx] == 0u ||
       batch->state.damage_hitlag_downward_sdi_consumed[idx] == 0u) {
-    return out;
+    return 0u;
   }
 
   // Active-hitlag SDI/floor handoff:
@@ -380,9 +379,7 @@ MslMpcollDamageActiveHitlagFloorOwner mpcoll_damage_active_hitlag_floor_owner(
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044948_Floor}
   if (action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
       action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) {
-    out.stay_airborne_floorhug = downdamage_x_axis_fresh_sdi_edge ? 0u : 1u;
-    out.source_floor_current = out.stay_airborne_floorhug;
-    return out;
+    return downdamage_x_axis_fresh_sdi_edge ? 0u : 1u;
   }
 
   if (mpcoll_damageair_action(action_id) && prefer_line_valid && prefer_line_is_fighter_solid &&
@@ -391,25 +388,9 @@ MslMpcollDamageActiveHitlagFloorOwner mpcoll_damage_active_hitlag_floor_owner(
       isfinite(prefer_line_root_y) && isfinite(source_prev_root_y) &&
       source_prev_root_y > (prefer_line_root_y + k_floor_y_bias) &&
       batch->state.pos_y[idx] < (prefer_line_root_y - k_floor_y_bias)) {
-    out.stay_airborne_floorhug = 1u;
-    out.source_floor_current = 1u;
+    return 1u;
   }
-  return out;
-}
-
-void mpcoll_floor_reject_add_damage_active_hitlag_owner(
-    MslMpcollFloorRejectPacket* packet, MslMpcollDamageActiveHitlagFloorOwner owner,
-    uint8_t root_below_bottom_above_floor_owner) {
-  mpcoll_floor_reject_add_if_state(
-      packet, root_below_bottom_above_floor_owner,
-      MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR,
-      MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
-      (uint32_t)(MSL_MPCOLL_PHASE_AIR_473CC | MSL_MPCOLL_PHASE_AIR_477E0));
-  mpcoll_floor_reject_add_if_state(
-      packet, (uint8_t)(owner.stay_airborne_floorhug && owner.source_floor_current),
-      MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE,
-      MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
-      (uint32_t)(MSL_MPCOLL_PHASE_AIR_473CC | MSL_MPCOLL_PHASE_AIR_477E0));
+  return 0u;
 }
 
 uint8_t grounded_damage_hitlag_allows_downward_floor_projection(const MslBatch* batch, size_t idx,

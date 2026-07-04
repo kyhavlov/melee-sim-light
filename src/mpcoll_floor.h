@@ -198,11 +198,6 @@ typedef struct MslMpcollCollDataState {
   MslMpcollSourcePhases source_phases;
 } MslMpcollCollDataState;
 
-typedef struct MslMpcollDamageActiveHitlagFloorOwner {
-  uint8_t stay_airborne_floorhug;
-  uint8_t source_floor_current;
-} MslMpcollDamageActiveHitlagFloorOwner;
-
 typedef struct MslMpcollCarriedCliffLedgeFloorAuthority {
   uint8_t carried_floor_valid;
   uint8_t candidate_matches;
@@ -248,15 +243,12 @@ uint8_t damage_hitlag_floorhug_attempts_downward_sdi(const MslBatch* batch, size
 uint8_t action_uses_active_hitlag_downward_sdi_floorhug(uint16_t action_id, const MslBatch* batch,
                                                         size_t idx);
 uint8_t mpcoll_damageair_action(uint16_t action_id);
-MslMpcollDamageActiveHitlagFloorOwner mpcoll_damage_active_hitlag_floor_owner(
+uint8_t mpcoll_damage_active_hitlag_stay_airborne_floor_owner(
     const MslBatch* batch, size_t idx, uint16_t action_id, uint8_t prefer_line_valid,
     uint8_t prefer_line_is_platform, uint8_t prefer_line_is_ledge, uint8_t prefer_line_is_slope,
     uint8_t prefer_line_has_platform_transform, uint8_t prefer_line_is_fighter_solid,
     uint8_t prefer_line_is_terminal_cardinal_hard_floor, float prefer_line_root_y,
     float source_prev_root_y, uint8_t downdamage_x_axis_fresh_sdi_edge);
-void mpcoll_floor_reject_add_damage_active_hitlag_owner(
-    MslMpcollFloorRejectPacket* packet, MslMpcollDamageActiveHitlagFloorOwner owner,
-    uint8_t root_below_bottom_above_floor_owner);
 uint8_t grounded_damage_hitlag_allows_downward_floor_projection(const MslBatch* batch, size_t idx,
                                                                 uint16_t action_id);
 void stay_airborne_floor_projection_point(float fighter_x, float fighter_y, float bottom_x,
@@ -497,7 +489,6 @@ void mpcoll_record_callback_floor_result(const MslMpcollContext* ctx, uint8_t so
                                          float normal_x, float normal_y);
 void mpcoll_record_escapeair_floor_producer_runtime_authority(const MslMpcollContext* ctx);
 uint8_t mpcoll_callback_floor_result_valid(const MslMpcollContext* ctx);
-uint8_t mpcoll_callback_floor_result_mode(const MslMpcollContext* ctx);
 uint8_t mpcoll_floor_contact_from_callback_result(const MslMpcollContext* ctx,
                                                   MslMpcollFloorContact* io);
 

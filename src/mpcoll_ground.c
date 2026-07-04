@@ -1112,18 +1112,13 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                 c->lstick_deadzone_x)) < c->lstick_tilt_x_thresh)
               ? 1u
               : 0u;
-      const MslMpcollDamageActiveHitlagFloorOwner damage_active_hitlag_floor_owner =
-          mpcoll_damage_active_hitlag_floor_owner(
+      const uint8_t damage_active_hitlag_downward_sdi_airborne_owner =
+          mpcoll_damage_active_hitlag_stay_airborne_floor_owner(
               batch, idx, action_id, (uint8_t)(prefer_line_idx >= 0 && prefer_line_root_y_valid),
               prefer_line_is_platform, prefer_line_is_ledge, prefer_line_is_slope,
               prefer_line_has_platform_transform, prefer_line_is_fighter_solid,
               prefer_line_is_terminal_cardinal_hard_floor, prefer_line_root_y, prev_y,
               downdamage_x_axis_fresh_sdi_edge);
-      const uint8_t damage_active_hitlag_downward_sdi_airborne_owner =
-          (damage_active_hitlag_floor_owner.stay_airborne_floorhug &&
-           damage_active_hitlag_floor_owner.source_floor_current)
-              ? 1u
-              : 0u;
       uint8_t damage_active_hitlag_root_below_bottom_above_floor_owner = 0u;
       if (batch->state.hitlag[idx] != 0u && is_damage_fly_collision_action(action_id) &&
           batch->state.tilt_timer_y_frame_start[idx] >= c->sdi_tilt_max_frames &&
@@ -6393,9 +6388,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                          MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM,
                                          MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
                                          (uint32_t)MSL_MPCOLL_PHASE_GROUND_B108);
-        mpcoll_floor_reject_add_damage_active_hitlag_owner(
-            &final_floor_reject, damage_active_hitlag_floor_owner,
-            damage_active_hitlag_root_below_bottom_above_floor_owner);
+        mpcoll_floor_reject_add_if_state(
+            &final_floor_reject, damage_active_hitlag_root_below_bottom_above_floor_owner,
+            MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR,
+            MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
+            (uint32_t)(MSL_MPCOLL_PHASE_AIR_473CC | MSL_MPCOLL_PHASE_AIR_477E0));
+        mpcoll_floor_reject_add_if_state(
+            &final_floor_reject, damage_active_hitlag_downward_sdi_airborne_owner,
+            MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE,
+            MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
+            (uint32_t)(MSL_MPCOLL_PHASE_AIR_473CC | MSL_MPCOLL_PHASE_AIR_477E0));
         if (final_floor_reject.bits != 0u) {
           if ((final_floor_reject.bits & MSL_MPCOLL_REJECT_SHEIK_VANISH_START1_PLATFORM_PASS) !=
               0u) {
