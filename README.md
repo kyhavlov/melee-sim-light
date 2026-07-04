@@ -47,7 +47,7 @@ env = msl.EnvBatch(batch_size=1024, data_dir="/path/to/data")
 The resolved data directory is process-global native runtime state, so choose it
 before creating simulator batches.
 
-## Minimal Step Loop
+## Examples
 
 ### Python
 
