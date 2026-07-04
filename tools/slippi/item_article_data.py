@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from tools.slippi.known_data_artifacts import (
+from tools.extraction.known_data_artifacts import (
     ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID,
     ITEM_ARTICLE_VALUE_F32,
     ITEM_ARTICLE_VALUE_U16,

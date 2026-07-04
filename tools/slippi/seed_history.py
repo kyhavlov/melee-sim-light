@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.slippi.known_data_artifacts import read_mslstg01_v7, stage_metadata_path_for_stage_id
+from tools.extraction.known_data_artifacts import read_mslstg01_v7, stage_metadata_path_for_stage_id
 
 
 def derive_instance_id_x2073(

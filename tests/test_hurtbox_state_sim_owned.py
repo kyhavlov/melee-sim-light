@@ -7,7 +7,7 @@ import pytest
 
 from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 from tools.extraction.extract_fighter_script_timeline import EVENT_IDS
-from tools.slippi.known_data_artifacts import read_mslftsc1_v1
+from tools.extraction.known_data_artifacts import read_mslftsc1_v1
 
 
 # Character ids (GALE01): Slippi post-frame `character`.

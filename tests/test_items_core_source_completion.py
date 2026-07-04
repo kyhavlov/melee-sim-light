@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.slippi.known_data_artifacts import dream_whispy_metadata, yoshi_shyguy_metadata
+from tools.extraction.known_data_artifacts import dream_whispy_metadata, yoshi_shyguy_metadata
 
 
 ROOT = Path(__file__).resolve().parents[1]

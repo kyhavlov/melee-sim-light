@@ -13,7 +13,7 @@ from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 from tools.slippi.action_state_tables import load_action_state_tables  # noqa: F401
 from tools.slippi.hitstun import hitstun_u16_from_misc_as_and_state_flags3  # noqa: F401
 from tools.slippi.item_article_data import item_article_kind_set, item_article_values_by_sim_char  # noqa: F401
-from tools.slippi.known_data_artifacts import STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT, dream_whispy_metadata, fountain_of_dreams_default_platform_heights, fountain_of_dreams_platform_motion_params, read_mslstg01_v7, stage_metadata_path_for_stage_id, yoshi_shyguy_metadata  # noqa: F401
+from tools.extraction.known_data_artifacts import STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT, dream_whispy_metadata, fountain_of_dreams_default_platform_heights, fountain_of_dreams_platform_motion_params, read_mslstg01_v7, stage_metadata_path_for_stage_id, yoshi_shyguy_metadata  # noqa: F401
 from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso01_v1  # noqa: F401
 from tools.slippi.rollback import finalized_frame_indices  # noqa: F401
 from tools.slippi.slpz import replay_path_for_peppi  # noqa: F401

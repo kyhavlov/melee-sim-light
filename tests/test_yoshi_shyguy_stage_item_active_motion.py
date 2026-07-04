@@ -14,7 +14,7 @@ from tools.slippi.validation_buffer_items import (
     _derive_yoshi_shyguy_seed_lanes,
     _item_common_params,
 )
-from tools.slippi.known_data_artifacts import yoshi_shyguy_metadata
+from tools.extraction.known_data_artifacts import yoshi_shyguy_metadata
 
 
 STAGE_YOSHIS_STORY = 8

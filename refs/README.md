@@ -137,5 +137,3 @@ probe scripts; the old live-memory path was deleted in favor of replay playback
 engine dumps.
 
 ## Community Resources
-
-See `COMMUNITY_RESOURCES.md` for curated second-source links (frame data sites, mechanic deep-dives, ID spreadsheets).

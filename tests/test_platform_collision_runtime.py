@@ -11,7 +11,7 @@ from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 from tests.replay_buffers_loader import load_replay_buffers
 from tools.modelplay.sim_env import build_match_config_array
 from tools.modelplay.state_adapter import STAGE_DEBUG_DTYPE
-from tools.slippi.known_data_artifacts import (
+from tools.extraction.known_data_artifacts import (
     STAGE_PLATFORM_MOTION_KIND_FOD,
     STAGE_METADATA_BIN_BY_STAGE_ID,
     STAGE_OBJECT_SUPPORT_KIND_YOSHI_SHYGUY,

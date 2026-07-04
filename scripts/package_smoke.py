@@ -59,7 +59,7 @@ def main() -> None:
         import importlib.util
         import melee_sim as msl
         import msl_binding
-        from melee_sim._native_access import native
+        from melee_sim import _native as native
         import tools.extraction.known_data_artifacts as artifacts
         import tools.extraction.extract_fighter_anims as extract_fighter_anims
 
@@ -74,7 +74,7 @@ def main() -> None:
         if artifacts.STAGE_MAGIC != b"MSLSTG01":
             raise SystemExit("artifact constants did not import")
         if native.sizes()["gamestate"] != msl.gamestate_dtype().itemsize:
-            raise SystemExit("native access helper did not resolve packaged extension")
+            raise SystemExit("packaged native extension did not resolve")
         if not hasattr(extract_fighter_anims, "extract_one_character"):
             raise SystemExit("fighter animation extractor did not import")
 

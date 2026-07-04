@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
-from tools.slippi.known_data_artifacts import (
+from tools.extraction.known_data_artifacts import (
     fountain_of_dreams_default_platform_heights,
     fountain_of_dreams_platform_motion_params,
 )

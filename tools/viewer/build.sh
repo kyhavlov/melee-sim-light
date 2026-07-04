@@ -54,9 +54,6 @@ cp "$ROOT/tools/viewer/live/gamecube_adapter.js" "$OUT_DIR/tools/viewer/live/gam
 cp "$ROOT/tools/viewer/live/trace_export.js" "$OUT_DIR/tools/viewer/live/trace_export.js"
 cp "$ROOT/tools/viewer/live/viewer_adapter.js" "$OUT_DIR/tools/viewer/live/viewer_adapter.js"
 cp "$ROOT/tools/viewer/live/linux_webhid_setup.sh" "$OUT_DIR/tools/viewer/live/linux_webhid_setup.sh"
-cp "$ROOT/tools/viewer/live/debug_gcadapter_hidraw.js" "$OUT_DIR/tools/viewer/live/debug_gcadapter_hidraw.js"
-cp "$ROOT/tools/viewer/live/debug_gcadapter_libusb.c" "$OUT_DIR/tools/viewer/live/debug_gcadapter_libusb.c"
-cp "$ROOT/tools/viewer/live/debug_gcadapter_libusb.sh" "$OUT_DIR/tools/viewer/live/debug_gcadapter_libusb.sh"
 cp -R "$ROOT/tools/viewer/live/public" "$OUT_DIR/tools/viewer/live/public"
 if [[ -n "$git_commit" ]]; then
   cat >"$OUT_DIR/tools/viewer/live/build_info.js" <<EOF

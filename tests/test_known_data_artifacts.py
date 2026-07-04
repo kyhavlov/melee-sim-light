@@ -32,7 +32,7 @@ from tools.slippi.item_article_data import (
     item_article_kind_set,
     item_article_values_by_sim_char,
 )
-from tools.slippi.known_data_artifacts import (
+from tools.extraction.known_data_artifacts import (
     DREAM_WHISPY_MAGIC,
     DREAM_WHISPY_VERSION,
     ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID,

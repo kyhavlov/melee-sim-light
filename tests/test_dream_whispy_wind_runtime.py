@@ -8,7 +8,7 @@ import pytest
 from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 from tests.replay_buffers_loader import load_replay_buffers
 from tools.slippi.validation_buffer_items import _derive_dream_whispy_wind_seed_lanes
-from tools.slippi.known_data_artifacts import dream_whispy_metadata
+from tools.extraction.known_data_artifacts import dream_whispy_metadata
 
 
 STAGE_DREAM_LAND_N64 = 28

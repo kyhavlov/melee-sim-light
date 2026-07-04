@@ -1913,7 +1913,7 @@ def extract_one_character(
     msl = None
     if use_native:
         try:
-            from melee_sim._native_access import native as msl
+            from melee_sim import _native as msl
         except Exception as exc:
             raise RuntimeError(
                 "melee_sim native bindings are required for fighter animation extraction. "

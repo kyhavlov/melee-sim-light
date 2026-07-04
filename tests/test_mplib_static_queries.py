@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.slippi.known_data_artifacts import read_mslstg01_v7
+from tools.extraction.known_data_artifacts import read_mslstg01_v7
 
 CHECK_FLOOR = 1
 CHECK_CEILING = 2

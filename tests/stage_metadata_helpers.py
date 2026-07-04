@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tools.slippi.known_data_artifacts import read_mslstg01_v7
+from tools.extraction.known_data_artifacts import read_mslstg01_v7
 
 _STAGE_KIND_BY_ID = {
     0: "floor",
