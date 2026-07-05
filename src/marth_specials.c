@@ -13,6 +13,7 @@
 #include "char_params.h"
 #include "char_registry.h"
 #include "common_params.h"
+#include "common_specials.h"
 #include "grab_flow.h"
 #include "ids.h"
 #include "locomotion.h"
@@ -88,6 +89,7 @@ static void ms_enter_specials(MslBatch* batch, const MslCharParams* ch, size_t i
   // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialS.c::{ftMs_SpecialS_Enter,
   //   ftMs_SpecialAirS_Enter}
   if (on_ground) {
+    ftco_specials_apply_grounded_sideb_doenter(batch, ch, idx);
     batch->state.speed_y_self[idx] = 0.0f;
   } else {
     if (ch->specials_air_entry_vel_x_divisor > 0.0f) {

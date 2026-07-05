@@ -11,6 +11,7 @@
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
+#include "common_specials.h"
 #include "dash_iasa.h"
 #include "grab_flow.h"
 #include "ids.h"
@@ -277,9 +278,12 @@ static void sk_enter_vanish_air_end(MslBatch* batch, const MslCharParams* ch, si
 }
 
 static uint8_t sk_action_allows_ground_special(const MslBatch* batch, size_t idx, uint16_t a) {
-  // Grounded common IASA owners that call ftCo_SpecialS_CheckInput before lower-priority
-  // locomotion/attack consumers. This table gates only Sheik/Zelda special entry helpers.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Wait,Squat,Dash,Run,RunDirect,Landing}.c
+  // Grounded common IASA owners that call Sheik/Zelda's B-special dispatchers before
+  // lower-priority locomotion/attack consumers. SquatWait/SquatRv are handled by the Down-B-only
+  // dispatcher below because their IASA path reaches ftCo_800D68C0 but not the full SpecialS/Hi/N
+  // selector.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Wait,Squat}.c
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Dash,Run,RunDirect,Landing}.c
   switch (a) {
     case MSL_ACT_WAIT:
     case MSL_ACT_WALK_SLOW:
@@ -327,6 +331,19 @@ static uint8_t sk_action_allows_ground_special(const MslBatch* batch, size_t idx
       }
       return 0u;
   }
+}
+
+static uint8_t sk_action_allows_ground_down_special(const MslBatch* batch, size_t idx, uint16_t a) {
+  if (a == (uint16_t)MSL_ACT_SQUAT_WAIT || a == (uint16_t)MSL_ACT_SQUAT_RV) {
+    // SquatWait_IASA and SquatRv_IASA call only ftCo_800D68C0 before their lower-priority common
+    // consumers. That helper dispatches the held Down-B lane, so these actions can transform
+    // without also admitting Sheik's neutral/up/side specials from crouch hold states.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+    return 1u;
+  }
+  return sk_action_allows_ground_special(batch, idx, a);
 }
 
 static uint8_t sk_action_allows_air_special(uint16_t a) {
@@ -380,25 +397,8 @@ static void sk_enter_specials(MslBatch* batch, size_t idx, uint8_t ground, float
       batch->state.facing[idx] = (uint8_t)(stick_x > 0.0f);
       batch->state.facing_dir1[idx] = batch->state.facing[idx] ? 1 : -1;
     }
-    const MslCharParams* ch = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
-    if (ch != NULL) {
-      // Shared grounded Side-B entry damps current gr_vel through co_attrs.xB8 and
-      // ft_GetGroundFrictionMultiplier before the character-specific Sheik Chain enter runs;
-      // SpecialSStart_Phys then applies ordinary ft_80084F3C ground friction on the same frame.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
-      // refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
-      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
-      //   ftSk_SpecialS_Enter,ftSk_SpecialSStart_Phys}
-      // data/characters/sheik.json::side_special_ground_entry_vel_mul
-      float friction_mul = batch->state.ground_friction_mul[idx];
-      if (!(friction_mul > 0.0f)) {
-        friction_mul = 1.0f;
-      }
-      batch->state.speed_ground_x_self[idx] += -(batch->state.speed_ground_x_self[idx] *
-                                                 (1.0f - ch->side_special_ground_entry_vel_mul)) *
-                                               friction_mul;
-      batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
-    }
+    ftco_specials_apply_grounded_sideb_doenter(
+        batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
   } else {
     batch->state.speed_y_self[idx] = 0.0f;
   }
@@ -586,7 +586,7 @@ static uint8_t zd_try_enter_transform(MslBatch* batch, const MslCommonParams* c,
   }
   const uint16_t a = batch->state.action_id[idx];
   if (ground) {
-    if (!sk_action_allows_ground_special(batch, idx, a)) {
+    if (!sk_action_allows_ground_down_special(batch, idx, a)) {
       return 0u;
     }
   } else if (!sk_action_allows_air_special(a)) {
@@ -653,6 +653,9 @@ static uint8_t sk_try_enter_b_special(MslBatch* batch, const MslCommonParams* c,
   const uint8_t b_edge =
       ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) != 0u) ? 1u : 0u;
   const uint8_t up_b_present = (batch->state.x686[idx] == 0u) ? 1u : 0u;
+  const float sx = sk_deadzone(sk_stick_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float sy = sk_deadzone(sk_stick_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float ax = fabsf(sx);
   if (ground) {
     if (a == (uint16_t)MSL_ACT_KNEE_BEND) {
       if (batch->state.prev_action_id[idx] != (uint16_t)MSL_ACT_KNEE_BEND || !up_b_present) {
@@ -668,6 +671,18 @@ static uint8_t sk_try_enter_b_special(MslBatch* batch, const MslCommonParams* c,
     if (!b_edge) {
       return 0u;
     }
+    if (a == (uint16_t)MSL_ACT_SQUAT_WAIT || a == (uint16_t)MSL_ACT_SQUAT_RV) {
+      if (sy <= -c->special_stick_y_threshold && ax < c->special_stick_x_threshold_side) {
+        // SquatWait/SquatRv reach ftCo_800D68C0 only; keep this path to Down-B transform rather
+        // than the full grounded B-special selector used by Wait/Squat/Landing.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+        sk_enter_speciallw(batch, ch, idx, 1u);
+        return 1u;
+      }
+      return 0u;
+    }
     if (!sk_action_allows_ground_special(batch, idx, a)) {
       return 0u;
     }
@@ -676,9 +691,6 @@ static uint8_t sk_try_enter_b_special(MslBatch* batch, const MslCommonParams* c,
       return 0u;
     }
   }
-  const float sx = sk_deadzone(sk_stick_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
-  const float sy = sk_deadzone(sk_stick_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-  const float ax = fabsf(sx);
   if (ground) {
     if (a == (uint16_t)MSL_ACT_DASH || a == (uint16_t)MSL_ACT_RUN ||
         a == (uint16_t)MSL_ACT_RUN_DIRECT) {
@@ -776,6 +788,19 @@ uint8_t sheik_special_try_ground_iasa(MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
   return sk_try_enter_b_special(batch, msl_common_params(),
                                 msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK), idx, 1u);
+}
+
+uint8_t sheik_zelda_special_try_ground_iasa(MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.on_ground[idx] == 0u) {
+    return 0u;
+  }
+  if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return sheik_special_try_ground_iasa(batch, idx);
+  }
+  if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA) {
+    return zelda_special_try_transform_iasa(batch, idx, 1u);
+  }
+  return 0u;
 }
 
 uint8_t sheik_special_try_air_iasa(MslBatch* batch, size_t idx) {
@@ -1295,18 +1320,30 @@ void sheik_specials_update_pre_physics(MslBatch* batch) {
         continue;
       }
       const uint16_t a = batch->state.action_id[idx];
+      const uint8_t frame_start_owner =
+          (uint8_t)(batch->state.frame_start_action_id[idx] == batch->state.action_id[idx]);
       if (char_id == (uint8_t)MSL_CHAR_ID_ZELDA) {
         if (zd_action_is_transform(a)) {
           batch->state.animation_index[idx] =
               (uint32_t)msl_motion_state_submotion_id((uint8_t)MSL_CHAR_ID_ZELDA, a);
           zd_update_speciallw(batch, idx, a);
-        } else {
+        } else if (frame_start_owner != 0u) {
+          // Ordinary grounded/airborne Transform entry belongs to the frame-start IASA callback.
+          // Destination actions entered earlier in this simulator pass (for example
+          // SquatWait_IASA -> Dash) must not run their own B-special callback until the next frame.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
           (void)zd_try_enter_transform(batch, c, ch, idx, batch->state.on_ground[idx] ? 1u : 0u);
         }
         continue;
       }
       if (!sheik_action_is_special(a)) {
-        if (sk_try_enter_b_special(batch, c, ch, idx, batch->state.on_ground[idx] ? 1u : 0u)) {
+        if (frame_start_owner != 0u &&
+            sk_try_enter_b_special(batch, c, ch, idx, batch->state.on_ground[idx] ? 1u : 0u)) {
+          // Ordinary B-special entry is IASA-callback owned. Keep the pre-physics sweep from
+          // reinterpreting a same-pass destination action as if its own input callback had run.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
           continue;
         }
         continue;

@@ -7,6 +7,7 @@
 #include "anim_timebase.h"
 #include "buttons.h"
 #include "coll_env_flags.h"
+#include "common_specials.h"
 #include "dash_iasa.h"
 #include "input_axis.h"
 #include "locomotion.h"
@@ -98,9 +99,7 @@ void spacie_dash_iasa_enter_grounded_side_special_start(MslBatch* batch, size_t 
   if (stick_x * facing_dir < -c->special_side_reverse_threshold) {
     batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
   }
-  batch->state.speed_ground_x_self[idx] +=
-      -(batch->state.speed_ground_x_self[idx] * (1.0f - ch->side_special_ground_entry_vel_mul)) *
-      batch->state.ground_friction_mul[idx];
+  ftco_specials_apply_grounded_sideb_doenter(batch, ch, idx);
   if (ch->illusion_ground_vel_x > 0.0f) {
     batch->state.speed_ground_x_self[idx] /= ch->illusion_ground_vel_x;
   }

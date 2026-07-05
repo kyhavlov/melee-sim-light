@@ -111,6 +111,35 @@ static int json_get_u8_or_default(const char* json, const char* key, uint8_t def
   return 0;
 }
 
+static int json_get_bool_u8(const char* json, const char* key, uint8_t* out) {
+  if (json == NULL || key == NULL || out == NULL) {
+    return -1;
+  }
+  char pat[128];
+  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
+  if (n <= 0 || (size_t)n >= sizeof(pat)) {
+    return -1;
+  }
+  const char* p = strstr(json, pat);
+  if (p == NULL) {
+    return -1;
+  }
+  p = strchr(p, ':');
+  if (p == NULL) {
+    return -1;
+  }
+  p = json_skip_ws(p + 1);
+  if (strncmp(p, "true", 4) == 0) {
+    *out = 1u;
+    return 0;
+  }
+  if (strncmp(p, "false", 5) == 0) {
+    *out = 0u;
+    return 0;
+  }
+  return -1;
+}
+
 static int json_get_u16(const char* json, const char* key, uint16_t* out) {
   if (json == NULL || key == NULL || out == NULL) {
     return -1;
@@ -652,6 +681,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "passivewall_vel_x", &out.passivewall_vel_x) != 0 ||
       json_get_f32(buf, "wall_jump_horizontal_velocity", &out.wall_jump_horizontal_velocity) != 0 ||
       json_get_f32(buf, "wall_jump_vertical_velocity", &out.wall_jump_vertical_velocity) != 0 ||
+      json_get_bool_u8(buf, "can_walljump", &out.can_walljump) != 0 ||
       json_get_f32(buf, "walljump_setup_x_delta_threshold",
                    &out.walljump_setup_x_delta_threshold) != 0 ||
       json_get_f32(buf, "ecb_side_y_offset", &out.ecb_side_y_offset) != 0 ||

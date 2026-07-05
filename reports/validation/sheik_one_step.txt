@@ -78,10 +78,10 @@ mismatch.item_state: 21 / 145185 (0.000145)
 mismatch.item_owner: 18 / 145185 (0.000124)
 mismatch.item_instance_id: 18 / 145185 (0.000124)
 ignored_mismatch.state_flags[4]&0x80: 37 / 19358 (0.001911)
-err.pos_x: mae=0.003068 p95=0.000000 max=3.155632
+err.pos_x: mae=0.002999 p95=0.000000 max=3.155632
 err.pos_y: mae=0.001873 p95=0.000000 max=4.824997
-err.speed_air_x_self: mae=0.001507 p95=0.000000 max=2.417599
-err.speed_ground_x_self: mae=0.000367 p95=0.000000 max=1.592013
+err.speed_air_x_self: mae=0.001438 p95=0.000000 max=2.417599
+err.speed_ground_x_self: mae=0.000298 p95=0.000000 max=1.553809
 err.speed_y_self: mae=0.000401 p95=0.000000 max=1.000000
 err.speed_x_attack: mae=0.000018 p95=0.000000 max=0.227272
 err.speed_y_attack: mae=0.000152 p95=0.000000 max=2.950364
@@ -94,7 +94,7 @@ err.item_vel_y: mae=0.018090 p95=0.100000 max=2.700000
 overall.discrete_mismatch: 201 / 1171159
 overall.strict_discrete_mismatch: 238 / 1171159
 overall.ignored_discrete_mismatch: 37
-overall.float_norm_mae_p95: 0.00053026
+overall.float_norm_mae_p95: 0.00052141
 
 == replays/validation/sheik/TenseSameHummingbird.slpz ==
 Records: 11497  Players/scored per record: 2  Total player-frames: 22994
@@ -910,4 +910,4 @@ overall.float_norm_mae_p95: 30.64353158
 overall.discrete_mismatch: 3441 / 22125334
 overall.strict_discrete_mismatch: 4567 / 22125334
 overall.ignored_discrete_mismatch: 1126
-overall.float_norm_mae_p95: 3.70962300
+overall.float_norm_mae_p95: 3.70962255

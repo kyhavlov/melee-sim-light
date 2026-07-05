@@ -109,6 +109,7 @@ ext = Extension(
         "src/config.c",
         "src/data_dir.c",
         "src/common_params.c",
+        "src/common_specials.c",
         "src/char_params.c",
         "src/special_msids.c",
         "src/anim_table.c",

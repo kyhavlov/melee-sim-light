@@ -308,11 +308,13 @@ typedef struct MslCharParams {
   //
   // Source of truth: ISO-extracted `data/characters/*.json` (ftData_x44_t and co attrs).
   // Extractor: tools/extraction/extract_character_attrs.py
-  float ledge_jump_horizontal_velocity;    // fp->co_attrs.ledge_jump_horizontal_velocity
-  float ledge_jump_vertical_velocity;      // fp->co_attrs.ledge_jump_vertical_velocity
-  float passivewall_vel_x;                 // fp->co_attrs.passivewall_vel_x
-  float wall_jump_horizontal_velocity;     // fp->co_attrs.wall_jump_horizontal_velocity
-  float wall_jump_vertical_velocity;       // fp->co_attrs.wall_jump_vertical_velocity
+  float ledge_jump_horizontal_velocity;  // fp->co_attrs.ledge_jump_horizontal_velocity
+  float ledge_jump_vertical_velocity;    // fp->co_attrs.ledge_jump_vertical_velocity
+  float passivewall_vel_x;               // fp->co_attrs.passivewall_vel_x
+  float wall_jump_horizontal_velocity;   // fp->co_attrs.wall_jump_horizontal_velocity
+  float wall_jump_vertical_velocity;     // fp->co_attrs.wall_jump_vertical_velocity
+  uint8_t can_walljump;                  // fp->can_walljump (set by character init files)
+  uint8_t _pad_u8_walljump[3];
   float walljump_setup_x_delta_threshold;  // fp->co_attrs.x148
   // ECB side-point Y offset (added to midpoint between ECB bottom/top).
   // Decomp: ftData_x44_t.unkC is added when building desired_ecb.{left,right}.y in mpColl_LoadECB_JObj.

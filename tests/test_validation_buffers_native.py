@@ -49,7 +49,7 @@ _REPLAYS = (
         ("stage_dream_whispy_wind_valid_u8", "guard_special_enable_timer_x1c"),
         (13272, 2),
         {
-            "seed_t": "510498ec09688780a954b58023075b00",
+            "seed_t": "52fdcce37d474d376ccd8204bc542c56",
             "prev_input_t": "c94a05b021295bc217b2779b0ac6da71",
             "input_t": "4ed5701d19a0bef1936e321cdd1b80a4",
             "ref_t1": "6f355c0c0455ea73fbdd9ea8524dadb9",

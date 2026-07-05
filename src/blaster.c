@@ -12,6 +12,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "common_specials.h"
 #include "dash_iasa.h"
 #include "input_axis.h"
 #include "laser_params.h"
@@ -495,9 +496,7 @@ static inline void enter_side_special_start(MslBatch* batch, size_t idx, const M
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSStart_Enter
     // data/characters/{fox,falco}.json::{side_special_ground_entry_vel_mul,illusion_ground_vel_x}
-    batch->state.speed_ground_x_self[idx] +=
-        -(batch->state.speed_ground_x_self[idx] * (1.0f - ch->side_special_ground_entry_vel_mul)) *
-        batch->state.ground_friction_mul[idx];
+    ftco_specials_apply_grounded_sideb_doenter(batch, ch, idx);
     if (ch->illusion_ground_vel_x > 0.0f) {
       batch->state.speed_ground_x_self[idx] /= ch->illusion_ground_vel_x;
     }

@@ -51,6 +51,8 @@ ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
 ACT_ATTACK_AIR_LW = 0x0045
+ACT_SQUAT_WAIT = 0x0028
+ACT_SQUAT_RV = 0x0029
 ACT_ATTACK_100_START = 0x002F
 ACT_LANDING_AIR_N = 0x0046
 ACT_DAMAGE_N_1 = 0x004E
@@ -92,6 +94,9 @@ CHAR_SHEIK = 7
 CHAR_ZELDA = 19
 
 SM_LANDING = 35
+SM_SQUAT = 30
+SM_SQUAT_WAIT = 31
+SM_SQUAT_RV = 34
 SM_LANDING_AIR_N = 73
 HIT_GROUNDED = 1 << 9
 HIT_AERIAL = 1 << 10
@@ -1521,6 +1526,81 @@ def test_sheik_transform_grounded_bounded_progression_freerun() -> None:
     assert chars[first_finish] == CHAR_ZELDA
     assert acts[-1] == ACT_WAIT
     assert all(a == ACT_SK_SPECIAL_LW for a in acts[:first_finish])
+
+
+def _crouch_seed(char: str, action: int) -> np.ndarray:
+    seed = _seed_base(char)
+    seed["action_id"][0, 0] = np.uint16(action)
+    if action == ACT_SQUAT:
+        seed["animation_index"][0, 0] = np.uint32(SM_SQUAT)
+    elif action == ACT_SQUAT_WAIT:
+        seed["animation_index"][0, 0] = np.uint32(SM_SQUAT_WAIT)
+    elif action == ACT_SQUAT_RV:
+        seed["animation_index"][0, 0] = np.uint32(SM_SQUAT_RV)
+    seed["action_frame"][0, 0] = np.int16(5)
+    seed["anim_frame_f32"][0, 0] = np.float32(5.0)
+    return seed
+
+
+@pytest.mark.parametrize("action", [ACT_SQUAT, ACT_SQUAT_WAIT, ACT_SQUAT_RV])
+def test_sheik_crouch_down_b_enters_transform(action: int) -> None:
+    # Squat_IASA reaches the full grounded special chain; SquatWait_IASA/SquatRv_IASA reach the
+    # ftCo_800D68C0 Down-B lane before lower-priority crouch consumers.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::ftSk_SpecialLw_Enter
+    out = _run(_crouch_seed("sheik", action), [_mk_inputs(buttons=B, main_y=-80)])[0]
+    assert int(out["action_id"][0]) == ACT_SK_SPECIAL_LW
+
+
+@pytest.mark.parametrize("action", [ACT_SQUAT, ACT_SQUAT_WAIT, ACT_SQUAT_RV])
+def test_zelda_crouch_down_b_enters_transform(action: int) -> None:
+    # Zelda uses the same common Down-B dispatch lane for grounded Transform.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
+    # refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_Enter
+    out = _run(_crouch_seed("zelda", action), [_mk_inputs(buttons=B, main_y=-80)])[0]
+    assert int(out["action_id"][0]) == ACT_ZD_SPECIAL_LW
+
+
+@pytest.mark.parametrize("action", [ACT_SQUAT_WAIT, ACT_SQUAT_RV])
+@pytest.mark.parametrize(
+    "inp",
+    [
+        _mk_inputs(buttons=B, main_x=80),
+        _mk_inputs(buttons=B, main_y=80),
+        _mk_inputs(buttons=B),
+    ],
+)
+def test_sheik_squatwait_squatrv_do_not_admit_non_down_b_specials(action: int, inp) -> None:
+    # SquatWait_IASA and SquatRv_IASA call ftCo_800D68C0, not the full SpecialS/Hi/N selector.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+    out = _run(_crouch_seed("sheik", action), [inp])[0]
+    assert int(out["action_id"][0]) not in (
+        ACT_SK_SPECIAL_N_START,
+        ACT_SK_SPECIAL_S_START,
+        ACT_SK_SPECIAL_HI_START_0,
+        ACT_SK_SPECIAL_LW,
+    )
+
+
+@pytest.mark.parametrize("action", [ACT_SQUAT_WAIT, ACT_SQUAT_RV])
+@pytest.mark.parametrize(
+    "inp",
+    [
+        _mk_inputs(buttons=B, main_x=80),
+        _mk_inputs(buttons=B, main_y=80),
+        _mk_inputs(buttons=B),
+    ],
+)
+def test_zelda_squatwait_squatrv_do_not_admit_non_down_b_transform(action: int, inp) -> None:
+    out = _run(_crouch_seed("zelda", action), [inp])[0]
+    assert int(out["action_id"][0]) != ACT_ZD_SPECIAL_LW
 
 
 def test_sheik_transform_aerial_bounded_progression_freerun() -> None:

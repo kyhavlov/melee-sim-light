@@ -539,7 +539,8 @@ static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
     batch->state.walljump_input_timer[idx] = 254u;
     return 0u;
   }
-  if (!(ch->walljump_setup_x_delta_threshold > 0.0f) || !(c->walljump_input_window_frames > 0.0f)) {
+  if (ch->can_walljump == 0u || !(ch->walljump_setup_x_delta_threshold > 0.0f) ||
+      !(c->walljump_input_window_frames > 0.0f)) {
     return 0u;
   }
 
@@ -3380,15 +3381,12 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Squat.c,ftCo_SquatWait.c,ftCo_SquatRv.c}
         if (action_id == MSL_ACT_SQUAT) {
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT;
-          if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA &&
-              (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
-              stick_y <= -c->special_stick_y_threshold) {
-            // Zelda's grounded Down-B can preempt Squat's anim-end SquatWait publication in the
-            // same Fighter_8006A360 callback pass. Keep this bounded to Zelda transform.
+          if (sheik_zelda_special_try_ground_iasa(batch, idx)) {
+            // Squat_IASA runs the grounded B-special dispatcher before Squat's lower-priority
+            // attack/guard/jump/pass consumers and before Squat_Anim's same-pass SquatWait handoff.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_SpecialS_CheckInput
-            // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_Enter
-            zelda_special_enter_transform(batch, idx, 1u);
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
             action_id = batch->state.action_id[idx];
           } else if (anim_finished(cid, (uint16_t)MSL_SM_SQUAT, batch->state.anim_frame_f32[idx])) {
             enter_squat_wait_from_anim_end(batch, idx);
@@ -3433,15 +3431,13 @@ void locomotion_update_pre(MslBatch* batch) {
                fabsf(stick_x) < c->special_stick_x_threshold_side)
                   ? 1u
                   : 0u;
-          if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA &&
-              zelda_special_try_transform_iasa(batch, idx, 1u)) {
-            // Squat/SquatWait IASA checks grounded special dispatch before attacks, guard, jump,
-            // platform pass, Dash, and SquatRv. This bounded Zelda path supports Down-B transform
-            // without enabling Zelda's other specials.
+          if (sheik_zelda_special_try_ground_iasa(batch, idx)) {
+            // Sheik/Zelda special dispatch owns the source split:
+            // - Squat: full grounded special chain.
+            // - SquatWait/SquatRv: ftCo_800D68C0 Down-B lane only.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
-            // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
-            //   ftZd_SpecialLw_Enter,ftZd_SpecialAirLw_Enter}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
             action_id = batch->state.action_id[idx];
           } else if (action_id == MSL_ACT_SQUAT &&
                      blaster_try_enter_ground_from_wait_iasa(batch, c, idx)) {
@@ -4193,6 +4189,14 @@ void locomotion_update_pre(MslBatch* batch) {
         // - plain Wait rows should still honor the decomp ordering where SpecialS/Hi/N/Lw and
         //   then AttackS4/Hi4/Lw4, tilts, and jab beat guard on the same frame.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        if (action_id == MSL_ACT_WAIT && sheik_zelda_special_try_ground_iasa(batch, idx)) {
+          // Wait_IASA's grounded B-special preamble runs before the locomotion tail that can enter
+          // Dash/Run. The later Sheik/Zelda Anim sweep is restricted to frame-start owners, so plain
+          // Wait must dispatch here.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
+          continue;
+        }
         if (action_id == MSL_ACT_WAIT && blaster_try_enter_ground_from_wait_iasa(batch, c, idx)) {
           continue;
         }

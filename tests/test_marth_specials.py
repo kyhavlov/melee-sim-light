@@ -1403,19 +1403,19 @@ def test_reverse_up_b_flips_facing_at_launch() -> None:
 
 
 def test_ground_sideb_momentum_decays() -> None:
-    # ftMs_SpecialAirS1_Coll grounded Phys = ft_80084F3C: dash momentum carried into a ground
-    # side-B must decay under gr_friction (the manual-repro "zoom across the stage" bug).
+    # Grounded Side-B entry runs the common ftCo_SpecialS::doEnter xB8 damping before Marth's
+    # ftMs_SpecialS_Enter; the same-frame SpecialS1 Phys then applies ft_80084F3C friction.
+    # This is the vanilla "stops immediately" owner behind the moving Side-B repro.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::doEnter
     # refs/melee/src/melee/ft/ft_084E.c::ft_80084F3C
     seed = _seed_base("marth")
-    outs = _run(seed, [_mk_inputs(main_x=127)] * 10 + [_mk_inputs(buttons=B, main_x=127)] + [
-        _mk_inputs()
-    ] * 60)
-    acts = [int(o["action_id"][0]) for o in outs]
-    xs = [float(o["pos_x"][0]) for o in outs]
-    i = acts.index(ACT_DB_S1)
-    deltas = [xs[j + 1] - xs[j] for j in range(i, min(i + 30, len(xs) - 1))]
-    assert deltas[0] > 0.5, "no carried momentum at entry (test setup)"
-    assert deltas[-1] < 0.2, f"ground side-B momentum never decayed: {deltas[-5:]}"
+    seed["speed_ground_x_self"][0, 0] = np.float32(1.2)
+    seed["speed_air_x_self"][0, 0] = np.float32(1.2)
+    out = _run(seed, [_mk_inputs(buttons=B, main_x=127)])[0]
+    assert int(out["action_id"][0]) == ACT_DB_S1
+    damped = 1.2 * float(_attrs()["side_special_ground_entry_vel_mul"])
+    expected = damped - float(_attrs()["gr_friction"])
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(expected, abs=1e-6)
 
 
 def test_ds_grounded_landing_never_sticks_in_fallspecial() -> None:
@@ -1722,8 +1722,12 @@ def test_fuzz_live_clip_known_seeds_stay_clean() -> None:
 
     from tools.eval.fuzz_live_clip import Episode, _policy_script, run_episode
 
-    for rng_seed, char in ((571981485, "marth"), (1135808358, "marth"), (1282560985, "marth"),
-                           (2053134993, "fox")):
+    # Seed 571981485 was an old Marth lock whose clean resolution depended on Marth being admitted
+    # to the common walljump/ledge escape path. Marth's `can_walljump=false` data is now enforced
+    # separately, so that seed is no longer a source-valid anti-clip positive.
+    # data/characters/marth.json::can_walljump
+    # refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+    for rng_seed, char in ((1135808358, "marth"), (1282560985, "marth"), (2053134993, "fox")):
         rng = random.Random(rng_seed)
         start_x = rng.choice((55.0, 70.0, 78.0, 83.0, -70.0, -83.0))
         ep = Episode(rng_seed=rng_seed, char=char, start_x=start_x)

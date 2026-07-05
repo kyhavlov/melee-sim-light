@@ -7536,3 +7536,56 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_800D3158,ftCo_800D34E0}`
   - `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044E10_RightWall,mpColl_800454A4_RightWall,mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}`
   - `refs/melee/src/melee/gr/forward.h::{FLATZONE,LAST}`
+
+Manual set13 / character special-source fixes:
+- Walljump admission is character-data gated. `ftWallJump_8008169C` first checks
+  `fp->can_walljump`; runtime now loads `data/characters/*.json::can_walljump` into
+  `MslCharParams` and checks it before the common air walljump post-collision path. Numeric
+  walljump thresholds alone are not authority. Verified extracted values:
+  `data/characters/{marth,zelda}.json::can_walljump=false` and
+  `data/characters/{sheik,fox,falco}.json::can_walljump=true`. Focused runtime coverage locks
+  both the Marth negative and Sheik positive path.
+- Grounded Side-B entry uses the common `ftCo_SpecialS_CheckInput -> doEnter` damping before
+  character-specific Side-B state entry:
+  `gr_vel += -(gr_vel * (1 - co_attrs.xB8)) * ft_GetGroundFrictionMultiplier(fp)`. Runtime owns
+  this once in the common Side-B helper and routes supported grounded Marth, Sheik, and Fox/Falco
+  entries through it before the character entry functions. Zelda's grounded transform path is
+  Down-B, not a grounded Side-B route claimed by this packet. Focused coverage locks the Marth path
+  and the existing grounded Fox/Falco illusion path that applies the character-specific velocity
+  division after the common owner.
+- Sheik/Zelda grounded Transform uses the source-shaped crouch dispatcher split. `Squat_IASA` runs
+  the full grounded special order, including Side-B/Up-B/Neutral-B/Down-B. `SquatWait_IASA` and
+  `SquatRv_IASA` only run the `ftCo_800D68C0` Down-B lane before their lower-priority
+  crouch/attack/guard/jump consumers, so they admit Sheik/Zelda Transform but not non-Down-B
+  specials. Focused positives cover Sheik and Zelda Down-B from `Squat`, `SquatWait`, and
+  `SquatRv`; negatives cover non-Down-B from `SquatWait`/`SquatRv`.
+- EscapeAir adjacent-wall projection is bounded to the source `EscapeAir_Coll -> mpCollPrev ->
+  mpColl_80046904` wall owner and generated `MSLSTG01` ledge adjacency. Fall-family IASA into
+  EscapeAir may project to the carried floor's generated adjacent wall only when the current/previous
+  ECB side candidate reaches that same wall via the stage wall query, or when a carried floor names a
+  generated endpoint wall that matches that floor's own endpoint. The older broad
+  sustained/cardinal-stage handoff and the WIP `prev_action_id == EscapeAir` sustained right-wall
+  owner are not retained. Pre/post sim probe evidence:
+  `manual_repros/set13/marth airdodge teleport.json` frame `1728 -> 1729` moved from
+  `x=47.945679` to `x=-85.565689` at `HEAD` (`dist=133.525943`), and now moves to `x=45.972851`
+  (`dist=2.790000`).
+- Sheik ledgedash/air-dodge clip status: the exact user-reported pre-fix artifact/input is not
+  present in `manual_repros/set13/` or the checked-in repro fixtures, so this packet does not claim a
+  real reported-clip fix. The deterministic live Sheik legal-stage ledgedash sweep is coverage only;
+  it is not proof of the missing reported clip. The random Sheik/FD episode seed `1354821142` and
+  Zelda/BF boundary cases `(1, 6, 'dj_dodge', 95, 2)` / `(1, 6, 'dj_dodge', 127, 2)` remain
+  coverage-only clip leads and are not counted as fixed.
+- Vanilla/Dolphin status: no vanilla/Dolphin confirmation was produced for this packet. The retained
+  fixes are backed by decomp/data anchors plus local before/after probes and focused runtime tests.
+- Source anchors:
+  - `refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}`
+  - `refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0`
+  - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::ftSk_SpecialLw_Enter`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`
+  - `refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904}`
+  - `data/stages/bin/*.bin::MSLSTG01 floor adjacent_{left,right}_wall + ledge metadata`
