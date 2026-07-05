@@ -598,28 +598,36 @@ def test_character_overlay_masks_survive_fresh_extraction() -> None:
     import msl_binding
 
     cases = {
-        "fox": (1, 0, 0, 0),
-        "falco": (22, 0, 0, 0),
-        "marth": (18, (1 << 0) | (1 << 3), (1 << 15) | (1 << 16), 1 << 1),
-        "sheik": (7, 1 << 3, 0, 1 << 0),
+        "fox": (1, 0, 0, 0, 0),
+        "falco": (22, 0, 0, 0, 0),
+        "marth": (18, (1 << 0) | (1 << 3), (1 << 15) | (1 << 16), 1 << 1, 0),
+        "sheik": (7, 1 << 3, 0, 1 << 0, 1),
+        "zelda": (19, 0, 0, 0, 1),
     }
-    for char_name, (sim_char, throw_mask, fallspecial_mask, commonfall_mask) in cases.items():
+    for (
+        char_name,
+        (sim_char, throw_mask, fallspecial_mask, commonfall_mask, escapeair_wall_source),
+    ) in cases.items():
         attrs = json.loads(Path(f"data/characters/{char_name}.json").read_text(encoding="utf-8"))
         assert int(attrs["throw_release_mpcoll_floor_publication_mask"]) == throw_mask
         assert int(attrs["fallspecial_xc0_source_fx_kind_mask"]) == fallspecial_mask
         assert int(attrs["common_fall_blended_ecb_seed_mask"]) == commonfall_mask
+        assert int(attrs["escapeair_carried_floor_wall_source"]) == escapeair_wall_source
 
         runtime = msl_binding.char_params_part_anchors(sim_char)
         assert int(runtime["throw_release_mpcoll_floor_publication_mask"]) == throw_mask
+        assert int(runtime["escapeair_carried_floor_wall_source"]) == escapeair_wall_source
 
 
 @pytest.mark.integration
-def test_sheik_overlay_masks_survive_fresh_character_attr_extraction(tmp_path: Path) -> None:
-    required = [Path("_iso/PlCo.dat"), Path("_iso/PlSk.dat")]
+def test_sheik_zelda_overlay_masks_survive_fresh_character_attr_extraction(
+    tmp_path: Path,
+) -> None:
+    required = [Path("_iso/PlCo.dat"), Path("_iso/PlSk.dat"), Path("_iso/PlZd.dat")]
     missing = [p for p in required if not p.exists()]
     if missing:
         pytest.skip(
-            "missing local _iso assets for Sheik character attr extraction: "
+            "missing local _iso assets for Sheik/Zelda character attr extraction: "
             + ", ".join(str(p) for p in missing)
         )
 
@@ -634,13 +642,14 @@ def test_sheik_overlay_masks_survive_fresh_character_attr_extraction(tmp_path: P
             "--out-dir",
             str(out_dir),
             "--chars",
-            "sheik",
+            "sheik,zelda",
         ],
         check=True,
     )
     attrs = json.loads((out_dir / "sheik.json").read_text(encoding="utf-8"))
     assert int(attrs["throw_release_mpcoll_floor_publication_mask"]) == (1 << 3)
     assert int(attrs["common_fall_blended_ecb_seed_mask"]) == (1 << 0)
+    assert int(attrs["escapeair_carried_floor_wall_source"]) == 1
     assert int(attrs["needle_hitbox_count"]) == 4
     assert attrs["needle_hitbox_size"] == pytest.approx([1.953, 1.953, 1.953, 1.953])
     assert attrs["needle_hitbox_flags"] == [5, 6, 6, 6]
@@ -654,6 +663,38 @@ def test_sheik_overlay_masks_survive_fresh_character_attr_extraction(tmp_path: P
         [3.999743938446045, 1.9998719692230225]
     )
     assert int(attrs["vanish_hitbox_remove_frame"]) == 13
+    zelda_attrs = json.loads((out_dir / "zelda.json").read_text(encoding="utf-8"))
+    assert int(zelda_attrs["throw_release_mpcoll_floor_publication_mask"]) == 0
+    assert int(zelda_attrs["common_fall_blended_ecb_seed_mask"]) == 0
+    assert int(zelda_attrs["escapeair_carried_floor_wall_source"]) == 1
+    assert float(zelda_attrs["zelda_transform_air_gravity"]) > 0.0
+    data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("characters",))
+    chars_dir = data_dir / "characters"
+    for name in ("fox", "falco", "marth"):
+        (chars_dir / f"{name}.json").write_text(
+            Path(f"data/characters/{name}.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    for name in ("sheik", "zelda"):
+        (chars_dir / f"{name}.json").write_text(
+            (out_dir / f"{name}.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import msl_binding;"
+                f"msl_binding.set_data_dir({str(data_dir)!r});"
+                "assert msl_binding.char_params_part_anchors(7)"
+                "['escapeair_carried_floor_wall_source'] == 1;"
+                "assert msl_binding.char_params_part_anchors(19)"
+                "['escapeair_carried_floor_wall_source'] == 1"
+            ),
+        ],
+        check=True,
+    )
 
     subprocess.run(
         [

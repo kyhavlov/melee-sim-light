@@ -988,6 +988,13 @@ Collect before writing any code:
    was still too low. Do not promote that to a shared free-running collision
    rule without aggregate controls or a direct `mpColl_LoadECB_inline` /
    `mpCollInterpolateECB` probe.
+   Sustained ledge-adjacent `EscapeAir_Coll` wall publication is a separate
+   explicit character overlay:
+   `data/characters/<char>.json::escapeair_carried_floor_wall_source`. Only set
+   it when source/probe evidence shows the character's live carried ledge-floor
+   provenance should publish the generated `MSLSTG01` adjacent wall after floor
+   rejection. Sheik/Zelda currently set this; Fox/Falco/Marth are controls that
+   reject a broad all-character sustained owner.
    Marth UAir exposed the strong positive on `LoudDullGoat.slpz:4539:p0`;
    aggregate Falco rows `DistinctCaringCobra.slpz:5573:p1` and
    `ImpassionedAlarmedTarsier.slpz:6428:p1` exposed the tight no-hit and

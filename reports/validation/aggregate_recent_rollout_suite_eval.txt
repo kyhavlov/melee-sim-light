@@ -1334,7 +1334,7 @@ rollout.first_mismatch_total: 15
 rollout.first_mismatch_seeded_total: 15
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_x max_err=0.300003 rec=8358 p=1 seed/ref/out=-63.2253/-64.966/-64.666 actions=88/88/88 category=unclassified
+  1. pos_x max_err=2.14046 rec=5828 p=0 seed/ref/out=64.5518/66.2595/68.4 actions=236/236/236 category=unclassified
   2. pos_y max_err=6.10352e-05 rec=5964 p=1 seed/ref/out=81.8667/80.9333/80.9333 actions=12/12/12 category=unclassified
   3. speed_y_self max_err=4.05312e-06 rec=5963 p=1 seed/ref/out=-0.933331/-0.933329/-0.933333 actions=12/12/12 category=unclassified
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:54

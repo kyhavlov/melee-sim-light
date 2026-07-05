@@ -872,12 +872,23 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         common_fall_blended_ecb_seed_mask = 1 << 1
     if ftdata_symbol == "ftDataSeak":
         common_fall_blended_ecb_seed_mask = 1 << 0
+    # Sustained EscapeAir_Coll carried ledge-floor wall publication overlay. This is kept explicit
+    # instead of inferred from action id or a stage/replay row: Sheik/Zelda probes require the live
+    # carried floor -> adjacent wall owner, while Fox/Falco/Marth validation controls reject
+    # promoting the same sustained owner broadly.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904,mpColl_80044628_Floor}
+    escapeair_carried_floor_wall_source = 0
+    if ftdata_symbol in ("ftDataSeak", "ftDataZelda"):
+        escapeair_carried_floor_wall_source = 1
 
     out = {
         "grab_capture_anchor_part_id": grab_capture_anchor_part_id,
         "throw_release_mpcoll_floor_publication_mask": throw_release_mpcoll_floor_publication_mask,
         "fallspecial_xc0_source_fx_kind_mask": fallspecial_xc0_source_fx_kind_mask,
         "common_fall_blended_ecb_seed_mask": common_fall_blended_ecb_seed_mask,
+        "escapeair_carried_floor_wall_source": escapeair_carried_floor_wall_source,
         "walk_init_vel": f(0x00),
         "walk_accel": f(0x04),
         "walk_max_vel": f(0x08),
@@ -1251,6 +1262,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "throw_release_mpcoll_floor_publication_mask",
         "fallspecial_xc0_source_fx_kind_mask",
         "common_fall_blended_ecb_seed_mask",
+        "escapeair_carried_floor_wall_source",
         "illusion_gravity_delay_start_frames",
         "illusion_air_friction_start",
         "illusion_fall_accel_start",

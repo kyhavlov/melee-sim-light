@@ -1235,10 +1235,10 @@ Common constants:
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_800925A4}`.
   - Decomp refs: `refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}`
 
-Characters (Fox/Falco/Marth/Sheik):
-- `_iso/PlFx.dat`, `_iso/PlFc.dat`, `_iso/PlMs.dat`, `_iso/PlSk.dat` (source)
+Characters (Fox/Falco/Marth/Sheik/Zelda):
+- `_iso/PlFx.dat`, `_iso/PlFc.dat`, `_iso/PlMs.dat`, `_iso/PlSk.dat`, `_iso/PlZd.dat` (source)
 - `data/characters/fox.json`, `data/characters/falco.json`, `data/characters/marth.json`,
-  `data/characters/sheik.json`
+  `data/characters/sheik.json`, `data/characters/zelda.json`
   (movement/ecb/special attrs; decomp-first plus small audited overlays)
   - `rapid_jab_window`: `ftCo_DatAttrs.x98`, the per-character threshold compared against
     `fp+0x1A54` by the common rapid-jab gate.
@@ -1290,6 +1290,19 @@ Characters (Fox/Falco/Marth/Sheik):
       ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}`, the pushed Ishiiruka
       `mpColl_80047E14` / `mpColl_80044628_Floor` Fall-floor probe, and aggregate Fox/Falco
       controls rejecting a shared live-callback publication rule.
+  - `escapeair_carried_floor_wall_source`: runtime-required character attr loaded by
+    `src/char_params.c` from `data/characters/<char>.json`.
+    - Current values: Fox/Falco/Marth `0`; Sheik/Zelda `1`.
+    - This is a sustained `EscapeAir_Coll` carried ledge-floor wall-publication overlay. It gates
+      the live CollData floor provenance path used by `src/mpcoll_wall_ceil.c`; it is not a generic
+      EscapeAir branch, raw character-id proxy, stage exception, replay exception, or hull clamp.
+    - Sources/proof:
+      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
+      `refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}`,
+      `refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904,mpColl_80044628_Floor}`,
+      generated `data/stages/bin/*.bin::MSLSTG01` adjacent-wall metadata, named Sheik/Zelda
+      live-path clip repros, and Fox/Falco/Marth validation controls rejecting a broad sustained
+      all-character owner.
   - `sheik_*` special attrs: runtime-required Sheik character attrs loaded by
     `src/char_params.c` from `data/characters/sheik.json`.
     - Extracted by `tools/extraction/extract_character_attrs.py` using the `seak_special` layout

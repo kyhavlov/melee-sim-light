@@ -1,4 +1,4 @@
-"""Live-path stage-clip fuzzer (DEV-ONLY harness, not part of the test suite).
+"""Live-path stage-clip repro and sweep harness.
 
 Drives the real engine the way the webplay viewer does - ONE reseed at episode start, then
 hundreds of `msl_binding.step_input` frames - and judges the resulting trajectory with a
@@ -7,7 +7,7 @@ is exactly the state space where the clip-through class lived; episodes here kee
 live.
 
 Modes:
-  sweep  (default): deterministic scenario grids covering the three observed clip classes:
+  sweep (default): deterministic scenario grids covering the three observed clip classes:
     - ledgedash: ledge grab -> hang -> release -> double jump inward -> airdodge, over a
       grid of hang lengths, dj delays/drifts, dodge timings and angles, both ledges.
     - fall-into-stage: airborne misc states (DamageFly family, DamageFall, Fall, EscapeAir)
@@ -17,8 +17,8 @@ Modes:
     - boundary-approach: positions outside the hull (below the ledges, beside the walls,
       under the belly) with live drift/jump/dodge approaches INTO the boundary over an
       angle/timing grid.
-  random: the original randomized edge-play input policy (kept for soak coverage and the
-    locked regression seeds).
+  --repro: named deterministic clip repros reduced from boundary/random-policy leads. The
+    `_policy_script` helper is also used by deterministic regression locks outside this module.
 
 Oracle (every supported stage, from data/stages/*.json segment graphs):
   hull-interior - an interior run of the root (ray cast inside the fighter-solid
@@ -31,11 +31,12 @@ Oracle (every supported stage, from data/stages/*.json segment graphs):
 Usage:
   python -m tools.eval.fuzz_live_clip --mode sweep --char marth --stage fd
   python -m tools.eval.fuzz_live_clip --mode sweep --matrix          # all chars x stages
-  python -m tools.eval.fuzz_live_clip --mode random --episodes 600 --char fox --seed 7
+  python -m tools.eval.fuzz_live_clip --repro sheik_fd_seed_1354821142 \
+    --save-trace reports/triage/sheik_fd_seed_1354821142.json
 
 This tool deliberately reuses the test suite's seed/step helpers via a tests/ path import -
-it is a triage/eval harness, never imported by runtime code or the build. If these helpers
-gain a second durable consumer, move them into a tools/eval utility module instead.
+it is a triage/eval harness, not runtime code. If these helpers gain a second durable
+consumer, move them into a tools/eval utility module instead.
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ sys.path.insert(0, "tests")
 from test_char_common_action_coverage import _mk_inputs, _run, _seed_base  # noqa: E402
 
 from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS  # noqa: E402
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE as _INPUT_DTYPE  # noqa: E402
 
 BTN_X = 0x0400
 BTN_L = 0x0040
@@ -148,7 +150,7 @@ def stage_hull(stage: str) -> StageHull:
     return _HULLS[stage]
 
 
-def _judge(stage: str, outs: list) -> list:
+def _judge_hull_interior_details(stage: str, outs: list) -> list[dict]:
     # Trajectory-aware oracle. Two legal ways for the ROOT to be inside the hull while the
     # collision diamond is not: (a) high-diamond poses (incl. live-JObj damage tumbles) dip
     # the root below the floor until the diamond touches and the landing/DownBound snaps;
@@ -202,19 +204,61 @@ def _judge(stage: str, outs: list) -> list:
     if run_start is not None and run_len >= MIN_RUN:
         runs.append((run_start, len(outs)))  # episode ended interior
     for start, end in runs:
+        edge_wall_hug = all(
+            abs(float(outs[j]["pos_x"][0]) - hull.min_x) <= 0.05 or
+            abs(float(outs[j]["pos_x"][0]) - hull.max_x) <= 0.05
+            for j in range(start, min(end, len(outs))))
+        if edge_wall_hug:
+            continue
         # Resolution = a landing OR a ledge grab (CliffCatch/CliffWait) within the grace
-        # window. NOTE (random mode): a run truncated by episode end, or one resolved by a
-        # grab the grace window misses, can read as a violation - the deterministic sweep
-        # families end with long neutral tails and are artifact-free; treat random-mode hits
-        # as leads to triage, not verdicts.
-        resolved = any(
+        # window. A run truncated by episode end, or one resolved by a grab the grace window
+        # misses, can read as a violation. The deterministic repros and sweeps end with neutral
+        # tails so real clips manifest before truncation.
+        resolved_by_ground = any(
             int(outs[j]["on_ground"][0]) or int(outs[j]["action_id"][0]) in (0x00FC, 0x00FD)
             for j in range(end, min(len(outs), end + LAND_GRACE)))
-        if end >= len(outs) or not resolved:
+        # Wall-resolved under-lip transits can exit the hull airborne after mpColl applies a
+        # horizontal wall push. Compare-only fuzzer output has no wall-kind lane, but normal aerial
+        # drift in these scripts does not produce multi-unit one-frame X corrections.
+        resolved_by_wall_push = any(
+            int(outs[j]["action_id"][0]) != 0 and
+            abs(float(outs[j]["pos_x"][0]) - float(outs[j - 1]["pos_x"][0])) > 3.0
+            for j in range(max(1, end), min(len(outs), end + LAND_GRACE)))
+        if end >= len(outs) or not (resolved_by_ground or resolved_by_wall_push):
             o = outs[min(end, len(outs) - 1) - 1]
-            return [("hull-interior", start, round(float(o["pos_x"][0]), 2),
-                     round(float(o["pos_y"][0]), 2), int(o["action_id"][0]))]
+            sample_frame = min(end, len(outs)) - 1
+            o = outs[sample_frame]
+            return [
+                {
+                    "kind": "hull-interior",
+                    "run_start_frame": int(start),
+                    "run_end_frame": int(end),
+                    "sample_frame": int(sample_frame),
+                    "sample_x": round(float(o["pos_x"][0]), 2),
+                    "sample_y": round(float(o["pos_y"][0]), 2),
+                    "sample_action_id": int(o["action_id"][0]),
+                    "resolved": False,
+                    "resolution_window_frames": int(
+                        max(0, min(len(outs), end + LAND_GRACE) - end)),
+                }
+            ]
     return []
+
+
+def _judge(stage: str, outs: list) -> list:
+    details = _judge_hull_interior_details(stage, outs)
+    if not details:
+        return []
+    d = details[0]
+    return [
+        (
+            d["kind"],
+            d["run_start_frame"],
+            d["sample_x"],
+            d["sample_y"],
+            d["sample_action_id"],
+        )
+    ]
 
 
 def _base_seed(char: str, stage: str, *, grounded: bool = True, pos_x: float = 0.0,
@@ -385,8 +429,19 @@ SWEEP_FAMILIES = {
 
 
 # ---------------------------------------------------------------------------
-# Random mode (the original policy; the locked regression seeds replay through this)
+# Named deterministic clip repros
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ClipRepro:
+    name: str
+    char: str
+    stage: str
+    start_x: float
+    rng_seed: int | None
+    case: tuple
+    script: list
 
 
 @dataclass
@@ -396,6 +451,441 @@ class Episode:
     start_x: float
     stage: str = "fd"
     script: list = field(default_factory=list)
+
+
+def _input_row_dict(inp: np.ndarray) -> dict[str, int]:
+    row = inp.view(_INPUT_DTYPE).reshape((1,))[0]["p"][0]
+    return {name: int(row[name]) for name in row.dtype.names}
+
+
+def script_rle(script: list) -> list[dict]:
+    out = []
+    last = None
+    count = 0
+    for inp in script:
+        row = _input_row_dict(inp)
+        compact = {k: v for k, v in row.items() if v != 0}
+        key = tuple(sorted(compact.items()))
+        if key == last:
+            count += 1
+            continue
+        if last is not None:
+            out.append({"frames": count, "input": dict(last)})
+        last = key
+        count = 1
+    if last is not None:
+        out.append({"frames": count, "input": dict(last)})
+    return out
+
+
+def sheik_fd_seed_1354821142_repro() -> ClipRepro:
+    rng = random.Random(1354821142)
+    start_x = rng.choice((55.0, 70.0, 78.0, 83.0, -70.0, -83.0))
+    # Prefix reduced from the random policy episode, plus a neutral resolution tail so the oracle
+    # sees a persistent interior run instead of a truncated in-hull frame.
+    script = _policy_script(rng, 180)[:92] + [_mk_inputs()] * 20
+    return ClipRepro(
+        name="sheik_fd_seed_1354821142",
+        char="sheik",
+        stage="fd",
+        start_x=start_x,
+        rng_seed=1354821142,
+        case=("random-policy-prefix",),
+        script=script,
+    )
+
+
+def zelda_bf_boundary_escapeair_repro(drift: int) -> ClipRepro:
+    if drift not in (95, 127):
+        raise ValueError("supported Zelda/BF boundary repro drift values are 95 and 127")
+    side = 1
+    hull = stage_hull("bf")
+    edge_x = hull.max_x
+    seed, settle = _settled_ground_seed("zelda", "bf", edge_x - side * 12.0)
+    del seed
+    script = list(settle)
+    script += [_mk_inputs(main_x=side * 127)] * 16
+    script += [_mk_inputs(main_x=side * 30)] * 6
+    inward = -side * drift
+    script.append(_mk_inputs(buttons=BTN_X, main_x=inward, main_y=-50))
+    script += [_mk_inputs(main_x=inward, main_y=-50)] * 2
+    script.append(_mk_inputs(buttons=BTN_L, l=255, main_x=inward, main_y=-95))
+    script += [_mk_inputs(main_x=inward, main_y=-95)] * (1 if drift == 95 else 2)
+    script += [_mk_inputs()] * 20
+    return ClipRepro(
+        name=f"zelda_bf_boundary_escapeair_drift_{drift}",
+        char="zelda",
+        stage="bf",
+        start_x=edge_x - side * 12.0,
+        rng_seed=None,
+        case=(side, 6, "dj_dodge", drift, 2),
+        script=script,
+    )
+
+
+def random_policy_clip_repro(char: str, stage: str, rng_seed: int, frames: int = 240) -> ClipRepro:
+    rng = random.Random(rng_seed)
+    hull = stage_hull(stage)
+    span = hull.max_x - hull.min_x
+    start_choices = tuple(hull.min_x + span * t for t in (0.03, 0.15, 0.35, 0.65, 0.85, 0.97))
+    start_x = rng.choice(
+        (55.0, 70.0, 78.0, 83.0, -70.0, -83.0)) if stage == "fd" else rng.choice(
+            start_choices)
+    script = _policy_script(rng, frames) + [_mk_inputs()] * 60
+    if stage != "fd":
+        _seed, settle = _settled_ground_seed(char, stage, start_x)
+        script = settle + script
+    return ClipRepro(
+        name=f"{char}_{stage}_random_{rng_seed}",
+        char=char,
+        stage=stage,
+        start_x=start_x,
+        rng_seed=rng_seed,
+        case=("random-policy", frames),
+        script=script,
+    )
+
+
+def sheik_fod_random_648177039_regression_lock() -> ClipRepro:
+    base = random_policy_clip_repro("sheik", "fod", 648177039)
+    return ClipRepro(
+        name="sheik_fod_random_648177039_pass_pass_regression_lock",
+        char=base.char,
+        stage=base.stage,
+        start_x=base.start_x,
+        rng_seed=base.rng_seed,
+        case=("pass-pass-regression-lock",) + tuple(base.case),
+        script=base.script,
+    )
+
+
+def clip_repro_cases() -> dict[str, ClipRepro]:
+    cases = [
+        sheik_fd_seed_1354821142_repro(),
+        random_policy_clip_repro("sheik", "dl", 856430243),
+        random_policy_clip_repro("sheik", "ps", 856430243),
+        sheik_fod_random_648177039_regression_lock(),
+        zelda_bf_boundary_escapeair_repro(95),
+        zelda_bf_boundary_escapeair_repro(127),
+    ]
+    return {case.name: case for case in cases}
+
+
+def seed_for_repro(repro: ClipRepro) -> np.ndarray:
+    if repro.name == "sheik_fd_seed_1354821142":
+        return _base_seed(repro.char, repro.stage, pos_x=repro.start_x, pos_y=0.0)
+    if repro.case and repro.case[0] == "random-policy" and repro.stage != "fd":
+        seed, _settle = _settled_ground_seed(repro.char, repro.stage, repro.start_x)
+        return seed
+    seed, _settle = _settled_ground_seed(repro.char, repro.stage, repro.start_x)
+    return seed
+
+
+def _json_scalar(v):
+    if isinstance(v, np.generic):
+        return v.item()
+    return v
+
+
+def _stage_line_details(stage: str, segment_id: int) -> dict | None:
+    if segment_id == 0xFFFF or segment_id < 0:
+        return None
+    json_name = STAGES[stage][1]
+    st = json.load(open(f"data/stages/{json_name}.json"))
+    scale = float(st.get("unit_scale", 1.0) or 1.0)
+    by_id = {int(seg["i"]): seg for seg in st["segments"]}
+    seg = by_id.get(int(segment_id))
+    if seg is None:
+        return None
+    adjacent = {}
+    for label, key in (("prev", "prev_id0"), ("next", "next_id0")):
+        adj_id = int(seg.get(key, -1))
+        adj = by_id.get(adj_id)
+        if adj is not None:
+            adjacent[label] = {
+                "segment_id": adj_id,
+                "kind": adj.get("kind"),
+                "fighter_solid": bool(adj.get("fighter_solid")),
+            }
+    return {
+        "segment_id": int(seg["i"]),
+        "kind": seg.get("kind"),
+        "fighter_solid": bool(seg.get("fighter_solid")),
+        "platform": bool(seg.get("platform")),
+        "ledge": bool(seg.get("ledge")),
+        "x0": float(seg["x0"]) * scale,
+        "y0": float(seg["y0"]) * scale,
+        "x1": float(seg["x1"]) * scale,
+        "y1": float(seg["y1"]) * scale,
+        "adjacent": adjacent,
+    }
+
+
+_FLOOR_REJECT_KIND = {
+    0: "none",
+    1: "no_owner",
+    2: "no_runtime_prev",
+    3: "no_bottom_sweep",
+    4: "line_filter",
+    5: "projection",
+    6: "accepted",
+}
+
+_FLOOR_RESULT_KIND = {
+    0: "none",
+    1: "direct",
+    2: "grounded_4a908_retry",
+    3: "stay_airborne",
+}
+
+_WALL_RESULT_KIND = {
+    0: "none",
+    1: "air_persistence",
+    2: "air_envelope",
+    3: "air_point_project",
+    4: "air_persisted_project",
+    5: "grounded_envelope",
+    6: "grounded_point_project",
+}
+
+
+def _adjacent_wall_lines(stage: str, line: dict | None) -> dict:
+    if not line:
+        return {}
+    out = {}
+    for label, adj in line.get("adjacent", {}).items():
+        if adj.get("kind") in ("left_wall", "right_wall"):
+            out[label] = _stage_line_details(stage, int(adj["segment_id"]))
+    return out
+
+
+def _trace_frame_dict(frame: int, inp: np.ndarray, cmp_row, col_row, contact_row, stage: str) -> dict:
+    p = 0
+    pos_x = float(cmp_row["pos_x"][p])
+    pos_y = float(cmp_row["pos_y"][p])
+    left_x = pos_x + float(col_row["current_left_rel_x"][p])
+    right_x = pos_x + float(col_row["current_right_rel_x"][p])
+    bottom_x = pos_x
+    bottom_y = pos_y + float(col_row["current_bottom_rel_y"][p])
+    side_y = pos_y + float(col_row["current_side_rel_y"][p])
+    ground_id = int(cmp_row["ground_id"][p])
+    carried_floor_id = int(col_row["floor_probe_carried_segment_id"][p])
+    wall_id = int(contact_row["wall_id"][p])
+    floor_result_id = int(col_row["floor_result_segment_id"][p])
+    ground_line = _stage_line_details(stage, ground_id)
+    carried_line = _stage_line_details(stage, carried_floor_id)
+    wall_probe_commit_kind = int(col_row["wall_probe_commit_kind"][p])
+    floor_probe_reject_reason = int(col_row["floor_probe_reject_reason"][p])
+    floor_result_mode = int(col_row["floor_result_mode"][p])
+    return {
+        "frame": int(frame),
+        "input": _input_row_dict(inp),
+        "action_id": int(cmp_row["action_id"][p]),
+        "action_frame": float(cmp_row["action_frame"][p]),
+        "pos": {"x": pos_x, "y": pos_y},
+        "speed": {
+            "air_x_self": float(cmp_row["speed_air_x_self"][p]),
+            "ground_x_self": float(cmp_row["speed_ground_x_self"][p]),
+            "y_self": float(cmp_row["speed_y_self"][p]),
+            "x_attack": float(cmp_row["speed_x_attack"][p]),
+            "y_attack": float(cmp_row["speed_y_attack"][p]),
+        },
+        "on_ground": int(cmp_row["on_ground"][p]),
+        "ground_id": ground_id,
+        "ground_line": ground_line,
+        "ground_adjacent_wall_lines": _adjacent_wall_lines(stage, ground_line),
+        "ecb": {
+            "current_valid": int(col_row["current_valid"][p]),
+            "bottom": {"x": bottom_x, "y": bottom_y},
+            "left": {"x": left_x, "y": side_y},
+            "right": {"x": right_x, "y": side_y},
+            "rel": {
+                "bottom_y": float(col_row["current_bottom_rel_y"][p]),
+                "left_x": float(col_row["current_left_rel_x"][p]),
+                "right_x": float(col_row["current_right_rel_x"][p]),
+                "side_y": float(col_row["current_side_rel_y"][p]),
+            },
+        },
+        "floor_probe": {
+            "valid": int(col_row["floor_probe_valid"][p]),
+            "owner": int(col_row["floor_probe_owner"][p]),
+            "reject_reason": int(col_row["floor_probe_reject_reason"][p]),
+            "reject_bits": int(col_row["floor_probe_reject_bits"][p]),
+            "raw_bottom_sweep_hit": int(col_row["floor_probe_raw_bottom_sweep_hit"][p]),
+            "projection_hit": int(col_row["floor_probe_projection_hit"][p]),
+            "carried_source_owned": int(col_row["floor_probe_carried_source_owned"][p]),
+            "carried_runtime_owned": int(col_row["floor_probe_carried_runtime_owned"][p]),
+            "carried_segment_id": carried_floor_id,
+            "carried_line": carried_line,
+            "carried_adjacent_wall_lines": _adjacent_wall_lines(stage, carried_line),
+            "candidate_segment_id": int(col_row["floor_probe_candidate_segment_id"][p]),
+            "projected_segment_id": int(col_row["floor_probe_projected_segment_id"][p]),
+            "reject_kind": _FLOOR_REJECT_KIND.get(floor_probe_reject_reason, "unknown"),
+            "prev_bottom": {
+                "x": float(col_row["floor_probe_prev_bottom_x"][p]),
+                "y": float(col_row["floor_probe_prev_bottom_y"][p]),
+            },
+            "cur_bottom": {
+                "x": float(col_row["floor_probe_cur_bottom_x"][p]),
+                "y": float(col_row["floor_probe_cur_bottom_y"][p]),
+            },
+        },
+        "floor_result": {
+            "valid": int(col_row["floor_result_valid"][p]),
+            "source": int(col_row["floor_result_source"][p]),
+            "mode": floor_result_mode,
+            "mode_kind": _FLOOR_RESULT_KIND.get(floor_result_mode, "unknown"),
+            "segment_id": floor_result_id,
+            "line": _stage_line_details(stage, floor_result_id),
+            "contact": {
+                "x": float(col_row["floor_result_contact_x"][p]),
+                "y": float(col_row["floor_result_contact_y"][p]),
+            },
+            "projected_dy": float(col_row["floor_result_contact_y"][p]) - pos_y,
+        },
+        "wall": {
+            "kind": int(contact_row["wall_kind"][p]),
+            "segment_id": wall_id,
+            "line": _stage_line_details(stage, wall_id),
+            "contact": {
+                "x": float(contact_row["wall_contact_x"][p]),
+                "y": float(contact_row["wall_contact_y"][p]),
+            },
+            "normal": {
+                "x": float(contact_row["wall_normal_x"][p]),
+                "y": float(contact_row["wall_normal_y"][p]),
+            },
+            "projected_dx": float(contact_row["wall_contact_x"][p]) - pos_x,
+            "env_flags": int(contact_row["coll_env_flags"][p]),
+            "prev_env_flags": int(contact_row["coll_prev_env_flags"][p]),
+        },
+        "wall_probe": {
+            "valid": int(col_row["wall_probe_valid"][p]),
+            "side": int(col_row["wall_probe_side"][p]),
+            "commit_kind": wall_probe_commit_kind,
+            "commit_kind_name": _WALL_RESULT_KIND.get(wall_probe_commit_kind, "unknown"),
+            "candidate_count": int(col_row["wall_probe_candidate_count"][p]),
+            "corr_x": float(col_row["wall_probe_corr_x"][p]),
+            "segment_id": int(col_row["wall_probe_segment_id"][p]),
+            "line": _stage_line_details(stage, int(col_row["wall_probe_segment_id"][p])),
+        },
+    }
+
+
+def _source_owner_diagnosis(repro: ClipRepro, first_violation: dict | None) -> dict:
+    if first_violation is None or first_violation.get("frame_detail") is None:
+        return {}
+    detail = first_violation["frame_detail"]
+    floor_probe = detail["floor_probe"]
+    wall_probe = detail["wall_probe"]
+    carried_line = floor_probe.get("carried_line")
+    return {
+        "classification": (
+            "unexpected hull-interior violation after the carried ledge-floor EscapeAir wall "
+            "owner; inspect whether live CollData floor provenance and MSLSTG01 adjacent-wall "
+            "metadata admit a source-shaped wall publication."
+        ),
+        "source_anchors": [
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll",
+            "refs/melee/src/melee/ft/ft_081B.c::ft_80082C74",
+            "refs/melee/src/melee/ft/ft_081B.c::ft_80081D0C",
+            "refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8",
+            "refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904",
+            "refs/melee/src/melee/mp/mpcoll.c::mpColl_80044E10_RightWall",
+            "refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor",
+        ],
+        "mslstg01_evidence": {
+            "carried_floor_segment_id": floor_probe.get("carried_segment_id"),
+            "carried_floor_line": carried_line,
+            "carried_adjacent_wall_lines": floor_probe.get("carried_adjacent_wall_lines"),
+        },
+        "first_hull_violation": {
+            "frame": first_violation["frame"],
+            "point": {"x": first_violation["x"], "y": first_violation["y"]},
+            "action_id": first_violation["action_id"],
+        },
+        "observed_publication": {
+            "floor_reject_kind": floor_probe.get("reject_kind"),
+            "floor_reject_reason": floor_probe.get("reject_reason"),
+            "floor_reject_bits": floor_probe.get("reject_bits"),
+            "wall_candidate_count": wall_probe.get("candidate_count"),
+            "wall_commit_kind": wall_probe.get("commit_kind_name"),
+        },
+        "repro": {
+            "name": repro.name,
+            "character": repro.char,
+            "stage": repro.stage,
+            "start_x": repro.start_x,
+            "rng_seed": repro.rng_seed,
+            "case": repro.case,
+        },
+    }
+
+
+def trace_clip_repro(repro: ClipRepro) -> dict:
+    import msl_binding
+    from test_colldata_ecb_substrate import _colldata_ecb_dtype, _collision_contacts_dtype
+
+    sizes = msl_binding.sizes()
+    seed = seed_for_repro(repro)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    compare = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+    colldata = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+    contacts = np.zeros((1, int(sizes["collision_contacts"])), dtype=np.uint8)
+    frames = []
+    compare_rows = []
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        prev = _mk_inputs()
+        for i, inp in enumerate(repro.script):
+            msl_binding.step_input(handle, prev, inp)
+            msl_binding.write_compare(handle, compare)
+            msl_binding.debug_write_colldata_ecb(handle, colldata)
+            msl_binding.debug_write_collision_contacts(handle, contacts)
+            cmp_row = compare.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            col_row = colldata.view(_colldata_ecb_dtype()).reshape((1,))[0].copy()
+            contact_row = contacts.view(_collision_contacts_dtype()).reshape((1,))[0].copy()
+            compare_rows.append(cmp_row)
+            frames.append(_trace_frame_dict(i, inp, cmp_row, col_row, contact_row, repro.stage))
+            prev = inp
+    finally:
+        msl_binding.destroy(handle)
+
+    violation = _judge(repro.stage, compare_rows)
+    violation_details = _judge_hull_interior_details(repro.stage, compare_rows)
+    first_violation = None
+    if violation_details:
+        detail = violation_details[0]
+        frame = int(detail["run_start_frame"])
+        sample_frame = int(detail["sample_frame"])
+        first_violation = {
+            "kind": detail["kind"],
+            "frame": frame,
+            "run_start_frame": frame,
+            "run_end_frame": int(detail["run_end_frame"]),
+            "sample_frame": sample_frame,
+            "x": float(detail["sample_x"]),
+            "y": float(detail["sample_y"]),
+            "action_id": int(detail["sample_action_id"]),
+            "frame_detail": frames[frame] if frame < len(frames) else None,
+            "sample_frame_detail": frames[sample_frame] if sample_frame < len(frames) else None,
+            "resolution_window_frames": int(detail["resolution_window_frames"]),
+        }
+    return {
+        "name": repro.name,
+        "character": repro.char,
+        "stage": repro.stage,
+        "start_x": repro.start_x,
+        "rng_seed": repro.rng_seed,
+        "case": repro.case,
+        "input_frames": script_rle(repro.script),
+        "script_length": len(repro.script),
+        "violation": violation,
+        "violation_details": violation_details,
+        "first_hull_interior": first_violation,
+        "diagnosis": _source_owner_diagnosis(repro, first_violation),
+        "frames": frames,
+    }
 
 
 def _policy_script(rng: random.Random, frames: int) -> list:
@@ -468,50 +958,34 @@ def run_episode(ep: Episode) -> list:
     return _run_case(seed, settle + ep.script, ep.stage)
 
 
-def run_random(char: str, stage: str, episodes: int, frames: int, master_seed: int) -> list:
-    hull = stage_hull(stage)
-    span = hull.max_x - hull.min_x
-    start_choices = tuple(hull.min_x + span * t for t in (0.03, 0.15, 0.35, 0.65, 0.85, 0.97))
-    master = random.Random(master_seed)
-    found = []
-    for n in range(episodes):
-        ep_seed = master.randrange(1 << 31)
-        rng = random.Random(ep_seed)
-        # FD keeps the historical start set so the locked regression seeds stay reproducible.
-        start_x = rng.choice(
-            (55.0, 70.0, 78.0, 83.0, -70.0, -83.0)) if stage == "fd" else rng.choice(
-                start_choices)
-        ep = Episode(rng_seed=ep_seed, char=char, start_x=start_x, stage=stage)
-        # Neutral resolution tail: without it, a dip in the final frames reads as an
-        # unresolved interior run (episode-truncation false positives).
-        ep.script = _policy_script(rng, frames) + [_mk_inputs()] * 60
-        v = run_episode(ep)
-        if v:
-            found.append({"family": "random", "char": char, "stage": stage,
-                          "rng_seed": ep_seed, "start_x": start_x, "violation": v})
-            print(f"VIOLATION random ep={n} seed={ep_seed} start_x={start_x} {v}")
-        if (n + 1) % 200 == 0:
-            print(f"... {n + 1}/{episodes} random episodes, {len(found)} violations")
-    return found
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=("sweep", "random"), default="sweep")
+    ap.add_argument("--mode", choices=("sweep",), default="sweep")
     ap.add_argument("--char", default="marth")
     ap.add_argument("--stage", default="fd", choices=tuple(STAGES))
     ap.add_argument("--matrix", action="store_true",
                     help="sweep all chars x all stages (ignores --char/--stage)")
     ap.add_argument("--family", default=None, choices=tuple(SWEEP_FAMILIES))
-    ap.add_argument("--episodes", type=int, default=500, help="random mode only")
-    ap.add_argument("--frames", type=int, default=420, help="random mode only")
-    ap.add_argument("--seed", type=int, default=7, help="random mode only")
+    ap.add_argument("--repro", default=None, choices=tuple(clip_repro_cases()),
+                    help="run a named deterministic clip repro")
+    ap.add_argument("--save-trace", default=None,
+                    help="write a detailed named-repro trace JSON to this path")
     ap.add_argument("--save-violations", default=None)
     args = ap.parse_args()
 
     found = []
-    if args.mode == "random":
-        found = run_random(args.char, args.stage, args.episodes, args.frames, args.seed)
+    if args.repro:
+        repro = clip_repro_cases()[args.repro]
+        trace = trace_clip_repro(repro)
+        if trace["violation"]:
+            found = [{"family": "named-repro", "char": repro.char, "stage": repro.stage,
+                      "case": repro.case, "violation": trace["violation"]}]
+        print(f"REPRO {repro.name}: {trace['violation']}")
+        if args.save_trace:
+            Path(args.save_trace).parent.mkdir(parents=True, exist_ok=True)
+            with open(args.save_trace, "w") as f:
+                json.dump(trace, f, indent=1, default=_json_scalar)
+            print(f"saved trace to {args.save_trace}")
     else:
         chars = matrix_chars() if args.matrix else (args.char,)
         stages = tuple(STAGES) if args.matrix else (args.stage,)

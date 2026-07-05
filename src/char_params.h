@@ -193,7 +193,16 @@ typedef struct MslCharParams {
   // Bit order: Fall, FallAerial, FallSpecial. This is a replay seed/provenance overlay for
   // hidden CollData ECB bottom state, not a free-running mpColl branch.
   uint8_t common_fall_blended_ecb_seed_mask;
-  uint8_t _pad_u8_common_fall_ecb_seed[3];
+
+  // Explicit overlay for sustained EscapeAir_Coll carried ledge-floor wall publication. This is a
+  // character-data gate for the CollData/mpColl owner family, not a generic EscapeAir property.
+  //
+  // Source owner:
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+  // - refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // - refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904,mpColl_80044628_Floor}
+  uint8_t escapeair_carried_floor_wall_source;
+  uint8_t _pad_u8_common_fall_ecb_seed[2];
 
   // Fox/Falco side special (Illusion/Phantasm) start/end-state velocities + friction.
   //

@@ -14,6 +14,7 @@
 #include "coll_env_flags.h"
 #include "match_flow.h"
 #include "mpcoll_ecb_points.h"
+#include "mpcoll_floor.h"
 #include "mpcoll_floor_skip.h"
 #include "motion_state_owners.h"
 #include "msl_math.h"
@@ -88,6 +89,52 @@ static inline uint8_t mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(const Ms
   // frame-start Fall only when the caller also proves live runtime wall/floor CollData provenance.
   return mpcoll_wall_ceil_prev_action_is_fall_iasa_escapeair_source(
       batch->state.seed_prev_action_id[idx]);
+}
+
+static inline uint8_t mpcoll_wall_ceil_escapeair_carried_floor_wall_source_owner(uint8_t char_id) {
+  const MslCharParams* ch = msl_char_params_fast(char_id);
+  return (uint8_t)(ch != NULL && ch->escapeair_carried_floor_wall_source != 0u);
+}
+
+static inline uint8_t mpcoll_wall_ceil_escapeair_carried_floor_source_owner(const MslBatch* batch,
+                                                                            size_t idx,
+                                                                            uint8_t char_id) {
+  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_ESCAPE_AIR) {
+    return 0u;
+  }
+  if (mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(batch, idx)) {
+    return 1u;
+  }
+  if (mpcoll_wall_ceil_escapeair_carried_floor_wall_source_owner(char_id) == 0u) {
+    return 0u;
+  }
+  // Sustained EscapeAir_Coll still consumes live CollData floor provenance for characters whose
+  // extracted overlay enables this carried-floor wall owner. The frame-start/sustained split is
+  // callback lifetime: fresh Fall-IASA entries above have their own source owner; otherwise the
+  // live previous action must already be EscapeAir before an elevated floor-probe bottom can carry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904,mpColl_80044628_Floor}
+  const uint8_t floor_probe_bottom_matches_root =
+      (uint8_t)(fabsf(batch->state.coll_floor_probe_cur_bottom_y[idx] - batch->state.pos_y[idx]) <=
+                k_line_end_clamp);
+  const uint8_t sustained_escapeair_callback =
+      (uint8_t)(batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR);
+  const uint8_t floor_reject_allows_wall =
+      (uint8_t)(batch->state.coll_floor_probe_reject_reason[idx] ==
+                    (uint8_t)MSL_MPCOLL_FLOOR_PROBE_REJECT_NO_BOTTOM_SWEEP ||
+                (batch->state.coll_floor_probe_reject_reason[idx] ==
+                     (uint8_t)MSL_MPCOLL_FLOOR_PROBE_REJECT_PROJECTION &&
+                 (batch->state.coll_prev_env_flags[idx] &
+                  ((uint32_t)MSL_COLLIDE_LEFT_WALL_MASK | (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK)) !=
+                     0u));
+  return (uint8_t)(batch->state.coll_floor_probe_valid[idx] != 0u &&
+                   floor_reject_allows_wall != 0u &&
+                   batch->state.coll_floor_probe_carried_source_owned[idx] != 0u &&
+                   batch->state.coll_floor_probe_carried_runtime_owned[idx] != 0u &&
+                   (floor_probe_bottom_matches_root != 0u || sustained_escapeair_callback != 0u) &&
+                   batch->state.coll_floor_probe_carried_segment_id[idx] ==
+                       batch->state.ground_id[idx]);
 }
 
 static inline uint8_t mpcoll_wall_ceil_escapeair_jump_entry_source(const MslBatch* batch,
@@ -3700,7 +3747,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           }
         }
         if (batch->state.wall_kind[idx] == 0 && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-            mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(batch, idx) &&
+            mpcoll_wall_ceil_escapeair_carried_floor_source_owner(batch, idx, char_id) &&
             batch->state.action_frame[idx] <= 1 && fg != NULL && fg->lines != NULL &&
             batch->state.ground_id[idx] != 0xFFFFu &&
             mpcoll_wall_ceil_prev_root_runtime_owned(batch, idx)) {
@@ -3843,8 +3890,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           }
         }
         if (batch->state.wall_kind[idx] == 0 && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-            mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(batch, idx) && fg != NULL &&
-            fg->lines != NULL && batch->state.ground_id[idx] != 0xFFFFu &&
+            mpcoll_wall_ceil_escapeair_carried_floor_source_owner(batch, idx, char_id) &&
+            fg != NULL && fg->lines != NULL && batch->state.ground_id[idx] != 0xFFFFu &&
             mpcoll_wall_ceil_prev_root_runtime_owned(batch, idx)) {
           const int carried_floor_idx =
               stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
@@ -3862,9 +3909,26 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             const MslStageWallLine* wall_line = &lwg->lines[(size_t)adjacent_left_wall_idx];
             const float carried_floor_min_x =
                 (carried_floor->x0 < carried_floor->x1) ? carried_floor->x0 : carried_floor->x1;
-            const uint8_t wall_matches_floor_endpoint =
+            const uint8_t wall_both_endpoints_match_floor =
                 (uint8_t)(fabsf(wall_line->x0 - carried_floor_min_x) <= k_line_end_clamp &&
                           fabsf(wall_line->x1 - carried_floor_min_x) <= k_line_end_clamp);
+            const uint8_t wall_shares_floor_endpoint =
+                (uint8_t)(fabsf(wall_line->x0 - carried_floor_min_x) <= k_line_end_clamp ||
+                          fabsf(wall_line->x1 - carried_floor_min_x) <= k_line_end_clamp);
+            const uint8_t floor_probe_bottom_matches_root =
+                (uint8_t)(fabsf(batch->state.coll_floor_probe_cur_bottom_y[idx] -
+                                batch->state.pos_y[idx]) <= k_line_end_clamp);
+            const uint8_t wall_matches_floor_endpoint =
+                (uint8_t)(wall_both_endpoints_match_floor != 0u ||
+                          (mpcoll_wall_ceil_escapeair_carried_floor_wall_source_owner(char_id) !=
+                               0u &&
+                           floor_probe_bottom_matches_root != 0u &&
+                           wall_shares_floor_endpoint != 0u &&
+                           !(prev_wall_kind == (uint8_t)MSL_WALL_LEFT &&
+                             prev_wall_id == wall_line->segment_i &&
+                             batch->state.coll_wall_commit_runtime[idx] != 0u &&
+                             (batch->state.coll_prev_env_flags[idx] &
+                              (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK) == 0u)));
             const uint8_t current_side_penetrates_adjacent_left =
                 (uint8_t)(left_cur_ecb->left_x <= carried_floor_min_x + k_line_end_clamp);
             const uint8_t prev_left_wall_compatible =
@@ -3873,7 +3937,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             if (wall_matches_floor_endpoint != 0u && current_side_penetrates_adjacent_left != 0u &&
                 prev_left_wall_compatible != 0u) {
               // Left endpoint mirror of the carried ledge-wall owner. The generated adjacent wall
-              // must be the carried floor's own endpoint; this prevents a carried opposite ledge
+              // must share the carried floor's own endpoint; this prevents a carried opposite ledge
               // floor from projecting across the stage to a stale wall id.
               // data/stages/bin/*.bin::MSLSTG01 floor adjacent_left_wall + ledge endpoint
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
@@ -4235,7 +4299,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           }
         }
         if (batch->state.wall_kind[idx] == 0 && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-            mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(batch, idx) &&
+            mpcoll_wall_ceil_escapeair_carried_floor_source_owner(batch, idx, char_id) &&
             batch->state.action_frame[idx] <= 1 && fg != NULL && fg->lines != NULL &&
             batch->state.ground_id[idx] != 0xFFFFu &&
             mpcoll_wall_ceil_prev_root_runtime_owned(batch, idx)) {
@@ -4312,8 +4376,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           }
         }
         if (batch->state.wall_kind[idx] == 0 && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-            mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(batch, idx) && fg != NULL &&
-            fg->lines != NULL && batch->state.ground_id[idx] != 0xFFFFu &&
+            mpcoll_wall_ceil_escapeair_carried_floor_source_owner(batch, idx, char_id) &&
+            fg != NULL && fg->lines != NULL && batch->state.ground_id[idx] != 0xFFFFu &&
             mpcoll_wall_ceil_prev_root_runtime_owned(batch, idx)) {
           const int carried_floor_idx =
               stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
@@ -4331,9 +4395,26 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             const MslStageWallLine* wall_line = &rwg->lines[(size_t)adjacent_right_wall_idx];
             const float carried_floor_max_x =
                 (carried_floor->x0 > carried_floor->x1) ? carried_floor->x0 : carried_floor->x1;
-            const uint8_t wall_matches_floor_endpoint =
+            const uint8_t wall_both_endpoints_match_floor =
                 (uint8_t)(fabsf(wall_line->x0 - carried_floor_max_x) <= k_line_end_clamp &&
                           fabsf(wall_line->x1 - carried_floor_max_x) <= k_line_end_clamp);
+            const uint8_t wall_shares_floor_endpoint =
+                (uint8_t)(fabsf(wall_line->x0 - carried_floor_max_x) <= k_line_end_clamp ||
+                          fabsf(wall_line->x1 - carried_floor_max_x) <= k_line_end_clamp);
+            const uint8_t floor_probe_bottom_matches_root =
+                (uint8_t)(fabsf(batch->state.coll_floor_probe_cur_bottom_y[idx] -
+                                batch->state.pos_y[idx]) <= k_line_end_clamp);
+            const uint8_t wall_matches_floor_endpoint =
+                (uint8_t)(wall_both_endpoints_match_floor != 0u ||
+                          (mpcoll_wall_ceil_escapeair_carried_floor_wall_source_owner(char_id) !=
+                               0u &&
+                           floor_probe_bottom_matches_root != 0u &&
+                           wall_shares_floor_endpoint != 0u &&
+                           !(prev_wall_kind == (uint8_t)MSL_WALL_RIGHT &&
+                             prev_wall_id == wall_line->segment_i &&
+                             batch->state.coll_wall_commit_runtime[idx] != 0u &&
+                             (batch->state.coll_prev_env_flags[idx] &
+                              (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK) == 0u)));
             const uint8_t current_side_penetrates_adjacent_right =
                 (uint8_t)(right_cur_ecb->right_x >= carried_floor_max_x - k_line_end_clamp);
             const uint8_t prev_right_wall_compatible =
@@ -4342,8 +4423,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             if (wall_matches_floor_endpoint != 0u && current_side_penetrates_adjacent_right != 0u &&
                 prev_right_wall_compatible != 0u) {
               // Right endpoint mirror of the carried ledge-wall owner. The generated adjacent wall
-              // must be the carried floor's own endpoint; this prevents a stale carried floor from
-              // projecting EscapeAir across the stage to an opposite wall.
+              // must share the carried floor's own endpoint; this prevents a stale carried floor
+              // from projecting EscapeAir across the stage to an opposite wall.
               // data/stages/bin/*.bin::MSLSTG01 floor adjacent_right_wall + ledge endpoint
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
               // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904}
