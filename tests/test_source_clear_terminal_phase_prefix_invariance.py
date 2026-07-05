@@ -2,7 +2,38 @@ from __future__ import annotations
 
 import numpy as np
 
+from melee_sim import _native as msl_binding
+from tools.slippi.validation_buffer_builder import build_validation_buffers_from_slp
 from tools.slippi.validation_buffer_seed import _derive_source_clear_terminal_phase_seed_lane
+
+
+def _derive_terminal_phase(
+    *,
+    action_id: np.ndarray,
+    action_frame: np.ndarray,
+    state_flags: np.ndarray,
+    combo_count: np.ndarray | None = None,
+    last_attack_landed: np.ndarray | None = None,
+    last_hit_by: np.ndarray | None = None,
+) -> np.ndarray:
+    n = int(action_id.shape[0])
+    return _derive_source_clear_terminal_phase_seed_lane(
+        char_id_u8=np.ones(n, dtype=np.uint8),
+        action_id_u16=np.asarray(action_id, dtype=np.uint16),
+        action_frame_i16=np.asarray(action_frame, dtype=np.int16),
+        hitlag_u16=np.zeros(n, dtype=np.uint16),
+        hitstun_u16=np.zeros(n, dtype=np.uint16),
+        combo_count_u8=np.ones(n, dtype=np.uint8) if combo_count is None else combo_count,
+        last_attack_landed_u8=(
+            np.full(n, 15, dtype=np.uint8) if last_attack_landed is None else last_attack_landed
+        ),
+        source_clear_timer_x18c8_u8=np.array([2, 1], dtype=np.uint8),
+        source_clear_owner_set_phase_u8=np.array([1, 1], dtype=np.uint8),
+        state_flags_u8=np.asarray(state_flags, dtype=np.uint8),
+        last_hit_by_u8=np.array([1, 1], dtype=np.uint8) if last_hit_by is None else last_hit_by,
+        terminal_followup_cmd0_on_by_char_action={(1, 0x0041): 4, (1, 0x0045): 5, (1, 0x00EC): 30},
+        terminal_followup_cmd0_off_by_char_action={(1, 0x0041): 37, (1, 0x0045): 31, (1, 0x00EC): -1},
+    )
 
 
 def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None:
@@ -81,3 +112,60 @@ def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None
 
     assert int(base[2]) == 1, "expected a modeled terminal-phase row in the prefix"
     np.testing.assert_array_equal(base[:cutoff], mutated[:cutoff])
+
+
+def test_source_clear_terminal_phase_wait_entry_uses_default_clear() -> None:
+    # Early Wait-entry terminal rows are owned by Fighter_8006A360's default x18C8 expiry:
+    # x18C4_source_ply clears to sentinel 6 instead of parking the source owner.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    got = _derive_terminal_phase(
+        action_id=np.array([0x000E, 0x000E], dtype=np.uint16),
+        action_frame=np.array([0, 1], dtype=np.int16),
+        state_flags=np.array([[0x04, 0, 0, 0x60, 0], [0x04, 0, 0, 0x60, 0]], dtype=np.uint8),
+    )
+
+    assert int(got[1]) == 0
+
+
+def test_source_clear_terminal_phase_pure_reflect_behavior_wait_remains_outside_owner() -> None:
+    # Pure fp+0x2218 reflect-behavior carry has separate item/reflect provenance and is not the
+    # ordinary Wait-entry terminal clear fixed by Fighter_8006A360.
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218/fp+0x221C lanes)
+    got = _derive_terminal_phase(
+        action_id=np.array([0x000E, 0x000E], dtype=np.uint16),
+        action_frame=np.array([0, 1], dtype=np.int16),
+        state_flags=np.array([[0x04, 0, 0, 0, 0], [0x04, 0, 0, 0, 0]], dtype=np.uint8),
+    )
+
+    assert int(got[1]) == 1
+
+
+def test_source_clear_terminal_phase_motivating_wait_rows_match_last_hit_by() -> None:
+    # Focused replay proof for the first-divergence rows recorded in
+    # reports/triage/combat_owner_worklog.md.
+    cases = (
+        ("replays/validation/marth/WellWornSmallGoshawk.slpz", (1, 2), 408, 0),
+        ("replays/validation/sheik/StiffLustrousZebra.slpz", (1, 2), 340, 0),
+    )
+    for replay, ports, record, player in cases:
+        buffers = build_validation_buffers_from_slp(
+            slp_path=replay,
+            ports=list(ports),
+            ucf_enabled=True,
+            ucf_cardinals_1_0_enabled=True,
+        )
+        n = int(buffers.num_records)
+        handle = msl_binding.init(n, int(buffers.num_players), True, True)
+        out = np.zeros(n, dtype=buffers.ref_t1.dtype)
+        try:
+            msl_binding.reseed_seed(handle, buffers.seed_u8())
+            msl_binding.step_input(handle, buffers.prev_input_u8(), buffers.input_u8())
+            msl_binding.write_compare(handle, out.view(np.uint8).reshape(n, -1))
+        finally:
+            msl_binding.destroy(handle)
+
+        assert int(buffers.seed_t["source_clear_terminal_phase"][record, player]) == 0
+        assert int(buffers.seed_t["source_clear_timer_x18c8"][record, player]) == 1
+        assert int(out["last_hit_by"][record, player]) == int(
+            buffers.ref_t1["last_hit_by"][record, player]
+        )

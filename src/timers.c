@@ -14,6 +14,7 @@
 #include "msl_math.h"
 #include "motion_state_owners.h"
 #include "stage_collision.h"
+#include "state_flags.h"
 
 static inline uint8_t timers_match_flow_dead_action_defers_source_clear(uint16_t action_id) {
   switch (action_id) {
@@ -110,6 +111,31 @@ static inline uint8_t timers_source_clear_active_damagefly_terminal_parks_owner(
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
   return msl_motion_state_common_class_has_fast(batch->state.action_id[idx],
                                                 MSL_MS_CLASS_DAMAGE_FLY);
+}
+
+static inline uint8_t timers_seed_terminal_phase_parks_source_owner(const MslBatch* batch,
+                                                                    size_t idx) {
+  if (batch == NULL || batch->state.source_clear_terminal_phase[idx] == 0u) {
+    return 0u;
+  }
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
+      batch->state.action_frame[idx] <= 1) {
+    const uint8_t flags_2218 =
+        batch->state
+            .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+    const uint8_t flags_221c =
+        batch->state
+            .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+    // Fighter_8006A360's ordinary terminal x18C8 tick clears x18C4_source_ply. A seeded
+    // terminal-phase bridge must not override that on early Wait-entry rows. Pure reflect-behavior
+    // carry remains outside this owner and is left to the existing item/reflect provenance bridge.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218/fp+0x221C/last_hit_by lanes)
+    if (!(flags_2218 == (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR && flags_221c == 0u)) {
+      return 0u;
+    }
+  }
+  return 1u;
 }
 
 void timers_update(MslBatch* batch) {
@@ -1047,7 +1073,7 @@ void timers_update_post_anim(MslBatch* batch) {
       if (t == 1u && batch->state.hitstun[idx] != 0u) {
         continue;
       }
-      if (t == 1u && (batch->state.source_clear_terminal_phase[idx] != 0u ||
+      if (t == 1u && (timers_seed_terminal_phase_parks_source_owner(batch, idx) != 0u ||
                       timers_source_clear_downed_recovery_terminal_parks_owner(batch, idx))) {
         batch->state.source_clear_timer_x18c8[idx] = 0u;
         continue;

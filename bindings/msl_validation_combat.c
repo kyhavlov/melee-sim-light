@@ -22,6 +22,7 @@
 #include "../src/move_tables.h"
 #include "../src/shield_tilt_table.h"
 #include "../src/staling.h"
+#include "../src/state_flags.h"
 
 static int require_validation_u8_rows(PyArrayObject* arr, npy_intp rows, npy_intp min_cols,
                                       const char* name) {
@@ -3950,6 +3951,21 @@ static bool msl_source_clear_terminal_continuation_action(uint16_t action) {
          action == 0x0027u || action == 0x0038u;
 }
 
+static bool msl_source_clear_wait_entry_takes_default_terminal_clear(const uint8_t* sf,
+                                                                     npy_intp sf_w, npy_intp row,
+                                                                     int cur_af) {
+  if (cur_af > 1) return false;
+  const uint8_t flags_2218 = sf[(row * sf_w) + (npy_intp)MSL_STATE_FLAGS_2218_INDEX];
+  const uint8_t flags_221c = sf[(row * sf_w) + (npy_intp)MSL_STATE_FLAGS_221C_INDEX];
+  // Fighter_8006A360 owns the default x18C8 terminal clear. Early Wait rows reached from
+  // ordinary action entry should therefore publish x18C4_source_ply=6, not the parked owner.
+  // Keep the existing pure fp+0x2218 reflect-behavior carry out of this source-clear owner; those
+  // rows are item/reflect provenance, not the ordinary Wait-entry terminal clear fixed here.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218/fp+0x221C/last_hit_by lanes)
+  return !(flags_2218 == (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR && flags_221c == 0u);
+}
+
 PyObject* msl_derive_source_clear_terminal_phase_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* char_obj = NULL;
@@ -4034,6 +4050,10 @@ PyObject* msl_derive_source_clear_terminal_phase_py(PyObject* self, PyObject* ar
     } else if (act == 0x0018u) {
       if (cur_af != 1) continue;
       if ((sf[(i * sf_w) + 3] & 0x60u) == 0u) continue;
+    }
+    if (act == (uint16_t)MSL_ACT_WAIT &&
+        msl_source_clear_wait_entry_takes_default_terminal_clear(sf, sf_w, i, cur_af)) {
+      continue;
     }
     const uint8_t owner = source[i];
     if (owner >= 6u) continue;

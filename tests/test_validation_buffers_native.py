@@ -27,7 +27,7 @@ _REPLAYS = (
         ("capture_grab_timer_f32", "guard_reflect_timer_x14", "stale_attack_instance"),
         (9679, 2),
         {
-            "seed_t": "f96e6ff7533cb99c674e33d5d9732d64",
+            "seed_t": "a04f2532d96ce495088a74426bcf9c0f",
             "prev_input_t": "4c534a65894eed17f4d032806450576b",
             "input_t": "5ce03af38ee16f0157b7d9731f1df95b",
             "ref_t1": "d8dd448157d008e114bcb5f584b4c129",
@@ -49,7 +49,7 @@ _REPLAYS = (
         ("stage_dream_whispy_wind_valid_u8", "guard_special_enable_timer_x1c"),
         (13272, 2),
         {
-            "seed_t": "52fdcce37d474d376ccd8204bc542c56",
+            "seed_t": "ec0a2b0b7906f809da8860f276c92b49",
             "prev_input_t": "c94a05b021295bc217b2779b0ac6da71",
             "input_t": "4ed5701d19a0bef1936e321cdd1b80a4",
             "ref_t1": "6f355c0c0455ea73fbdd9ea8524dadb9",
