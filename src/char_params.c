@@ -893,6 +893,60 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     return -1;
   }
 #undef MSL_GET_ZELDA_F32
+  // Captain Falcon ftCaptain_DatAttrs special attrs. Runtime-required for Falcon (the
+  // Special{N,S,Hi,Lw} state machines consume them directly); zero defaults for the other
+  // ext-attr layouts. The unk0/unk1/ext_x68/specials_unk* fields stay extraction-only until a
+  // runtime consumer names them.
+  // refs/melee/src/melee/ft/chara/ftCaptain/types.h::ftCaptain_DatAttrs
+  const uint8_t require_falcon_special_attrs = (uint8_t)(char_id == (uint8_t)MSL_CHAR_ID_FALCON);
+#define MSL_GET_FALCON_F32(key, field)                                 \
+  (require_falcon_special_attrs ? json_get_f32(buf, (key), &out.field) \
+                                : json_get_f32_or_default(buf, (key), 0.0f, &out.field))
+#define MSL_GET_FALCON_I32(key, field)                                 \
+  (require_falcon_special_attrs ? json_get_i32(buf, (key), &out.field) \
+                                : json_get_i32_or_default(buf, (key), 0, &out.field))
+  if (MSL_GET_FALCON_F32("falcon_specialn_stick_range_y_neg", falcon_specialn_stick_range_y_neg) !=
+          0 ||
+      MSL_GET_FALCON_F32("falcon_specialn_stick_range_y_pos", falcon_specialn_stick_range_y_pos) !=
+          0 ||
+      MSL_GET_FALCON_F32("falcon_specialn_angle_diff", falcon_specialn_angle_diff) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specialn_vel_x", falcon_specialn_vel_x) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specialn_vel_mul", falcon_specialn_vel_mul) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specials_gr_vel_x", falcon_specials_gr_vel_x) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specials_grav", falcon_specials_grav) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specials_terminal_vel", falcon_specials_terminal_vel) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specials_miss_landing_lag", falcon_specials_miss_landing_lag) !=
+          0 ||
+      MSL_GET_FALCON_F32("falcon_specials_hit_landing_lag", falcon_specials_hit_landing_lag) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specialhi_air_friction_mul", falcon_specialhi_air_friction_mul) !=
+          0 ||
+      MSL_GET_FALCON_F32("falcon_specialhi_horz_vel", falcon_specialhi_horz_vel) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specialhi_freefall_air_spd_mul",
+                         falcon_specialhi_freefall_air_spd_mul) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specialhi_landing_lag", falcon_specialhi_landing_lag) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specialhi_input_var", falcon_specialhi_input_var) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specialhi_unk2", falcon_specialhi_unk2) != 0 ||
+      MSL_GET_FALCON_F32("falcon_specialhi_catch_grav", falcon_specialhi_catch_grav) != 0 ||
+      MSL_GET_FALCON_I32("falcon_specialhi_air_var", falcon_specialhi_air_var) != 0 ||
+      MSL_GET_FALCON_I32("falcon_speciallw_unk1", falcon_speciallw_unk1) != 0 ||
+      MSL_GET_FALCON_F32("falcon_speciallw_flame_particle_angle",
+                         falcon_speciallw_flame_particle_angle) != 0 ||
+      MSL_GET_FALCON_F32("falcon_speciallw_on_hit_spd_modifier",
+                         falcon_speciallw_on_hit_spd_modifier) != 0 ||
+      MSL_GET_FALCON_I32("falcon_speciallw_unk2", falcon_speciallw_unk2) != 0 ||
+      MSL_GET_FALCON_F32("falcon_speciallw_ground_lag_mul", falcon_speciallw_ground_lag_mul) != 0 ||
+      MSL_GET_FALCON_F32("falcon_speciallw_landing_lag_mul", falcon_speciallw_landing_lag_mul) !=
+          0 ||
+      MSL_GET_FALCON_F32("falcon_speciallw_ground_traction", falcon_speciallw_ground_traction) !=
+          0 ||
+      MSL_GET_FALCON_F32("falcon_speciallw_air_landing_traction",
+                         falcon_speciallw_air_landing_traction) != 0) {
+    fprintf(stderr, "msl: char params Falcon special attr parse failed in %s\n", path);
+    alloc_free(buf);
+    return -1;
+  }
+#undef MSL_GET_FALCON_F32
+#undef MSL_GET_FALCON_I32
   out.reflector_offset_x = refl_off[0];
   out.reflector_offset_y = refl_off[1];
   out.reflector_offset_z = refl_off[2];

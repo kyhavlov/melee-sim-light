@@ -1,5 +1,6 @@
 #include "action.h"
 #include "shields.h"
+#include "falcon_specials.h"
 #include "marth_specials.h"
 #include "sheik_specials.h"
 
@@ -855,8 +856,8 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
   // refs/melee/src/melee/ft/types.h (fp+0x221C bitfield mapping)
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t) ~(
-      uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  batch->state.state_flags[flags_i] &=
+      (uint8_t)~(uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_on_entered_this_frame[idx] = 1u;
   // Keep the entry-family marker through the entry callback row and its immediate frozen
   // GuardOn_IASA handoff, then consume it below. The two ticks are runtime-only hidden source
@@ -1314,7 +1315,7 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
         const size_t flags_i =
             idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-        batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+        batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_B1;
       }
       uint8_t t18 = batch->state.guard_reflect_timer_x18[idx];
       if (t18 > 0) {
@@ -1326,7 +1327,7 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
           const size_t flags_i =
               idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-          batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
+          batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_B2;
         }
       }
     }
@@ -2298,6 +2299,7 @@ void action_update(MslBatch* batch) {
   blaster_update_pre_physics(batch);
   marth_specials_update_pre_physics(batch);
   sheik_specials_update_pre_physics(batch);
+  falcon_specials_update_pre_physics(batch);
   // Shield recharge is owned by Fighter_ProcessHit_8006D1EC under the `!fp->x221A_b7` gate, not
   // by locomotion. Run it after the frame's state-entry callbacks so the gate observes the current
   // state (for example SpecialLwStart after a shine entry), and do not suppress it during hitlag.

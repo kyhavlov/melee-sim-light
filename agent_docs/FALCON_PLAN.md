@@ -331,3 +331,25 @@ Dolphin build environment if probes become necessary).
   study recorded above. Falcon B-press verified safe no-op live.
   BLOCKED on: falcon .slp replays (user fetching). Do NOT land falcon
   runtime C before the Phase 2 zero-char-C baseline is recorded.
+- 2026-07-06: Phase 2 complete (suite + baseline committed, see above).
+- 2026-07-06: **Falcon Punch (SpecialN/AirN, actions 347/348) live.**
+  `src/falcon_specials.c/.h` (marth-module pattern: entry dispatch with full
+  ftCo b-entry mask, per-action update, phys ownership, frame-preserving
+  Coll swaps 347<->348). Substrate additions:
+  - `move_tables_special_cmd_var_u8_value_at_frame` — the existing cmd-var
+    helper was boolean (value-1/value-0 pulses) and silently dropped
+    Falcon's `set_cmd_var(idx=1, value=2)`; new raw-u8 pulse lane in the
+    move-table cache (additive, existing consumers untouched).
+  - falcon branch in `msl_action_allows_fastfall` (action 348; phase-correct
+    because falcon phys owns cmd1 phases 0/1 and only releases to the
+    generic ft_80084DB0 path in the cmd1==2 tail).
+  - `MslCharParams` falcon_* ext attrs (26 runtime keys, required-for-falcon
+    loud parse like sheik's).
+  Air punch phases verified exact: impulse `1.95 * (facing*cos,sin)(angle)`
+  at script cmd0@50 (consume-once via special_cmd0 latch), `*0.92`/frame
+  decay 50..64 with gravity suspended, ordinary fall + fastfall + drift
+  from 65. Grounded punch root-motion lunge via FA8. 8 decomp-anchored unit
+  tests in `tests/test_falcon_specials.py` (incl. side-B no-op negative and
+  pre-impulse no-fastfall negative). Gates: pytest green (environmental set
+  only), falcon one-step 3400 -> 3377, validate-all existing-char reports
+  byte-identical.

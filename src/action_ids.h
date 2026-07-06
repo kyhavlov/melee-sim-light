@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "ids.h"
 #include "motion_state_owners.h"
 
 // GALE01 action ids (aka `FtMotionId` / `ftCommon_MotionState`) for common locomotion.
@@ -806,9 +807,22 @@ static inline uint8_t msl_action_allows_fastfall(uint8_t char_id, uint16_t actio
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Phys
       // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c
       const uint8_t fx_kind = msl_motion_state_fx_special_kind_fast(char_id, action_id);
-      return (uint8_t)((fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_START &&
-                        fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END) ||
-                       fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL);
+      if ((fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_START &&
+           fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END) ||
+          fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL) {
+        return 1u;
+      }
+      // Falcon SpecialAirN (Falcon Punch, action 348): ftCa_SpecialAirN_Phys calls
+      // ft_80084DB0 only in its cmd_vars[1]==2 tail (script frame 65+). falcon_specials_phys
+      // owns the earlier cmd phases and only releases ownership to the generic air path (which
+      // consults this predicate) once that tail is reached, so this admission is
+      // phase-correct without a frame check here.
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Phys
+      // data/moves/falcon.json::specials_by_msid.302 set_cmd_var(idx=1,value=2)@65
+      if (char_id == (uint8_t)MSL_CHAR_ID_FALCON && action_id == 348u) {
+        return 1u;
+      }
+      return 0u;
     }
   }
 }

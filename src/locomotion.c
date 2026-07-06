@@ -1,5 +1,6 @@
 #include "locomotion.h"
 #include "char_registry.h"
+#include "falcon_specials.h"
 #include "marth_specials.h"
 
 #include <math.h>
@@ -1796,8 +1797,8 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, cons
     batch->state.attack100_x4[idx] = 0u;
     const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
     batch->state.state_flags[flags_i] &=
-        (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
-                             MSL_STATE_FLAG_2218_B2);
+        (uint8_t)~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                            MSL_STATE_FLAG_2218_B2);
     // Attack100Start entry goes through ftCo_800D6B00, which calls ftAnim_8006EBA4
     // immediately after Fighter_ChangeMotionState; the first visible start row is frame 1.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D6B00
@@ -1820,7 +1821,7 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, cons
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{doAttack12Normal,doAttack13}
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
   batch->state.state_flags[flags_i] &=
-      (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1);
+      (uint8_t)~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1);
   batch->state.jab_x0[idx] = 0u;
   if (action_id == (uint16_t)MSL_ACT_ATTACK_11) {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_12;
@@ -5967,6 +5968,14 @@ void locomotion_update_post_collision(MslBatch* batch) {
         batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
         continue;
       }
+      if (was_ground && !now_ground && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+          falcon_special_try_ground_to_air_swap(batch, idx)) {
+        // Falcon grounded special floor loss swaps to the aerial variant at the preserved
+        // animation frame (ftCommon_8007D5D4 + ftCommon_ClampAirDrift in source).
+        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialN_Coll
+        batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+        continue;
+      }
       if (was_ground && !now_ground &&
           (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK ||
            batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA)) {
@@ -6135,6 +6144,17 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // Marth air special ground contact swaps to the grounded variant at the preserved
           // animation frame (ftCommon_8007D7FC grounding bundle below).
           // refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Lw}.c (Air*_Coll handlers)
+          batch->state.jumps_left[idx] = ch->max_jumps;
+          batch->state.fall_fast[idx] = 0u;
+          batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+          batch->state.pos_y[idx] =
+              locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+          continue;
+        } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                   falcon_special_try_air_to_ground_swap(batch, idx)) {
+          // Falcon air special ground contact swaps to the grounded variant at the preserved
+          // animation frame (ftCommon_8007D7FC grounding bundle).
+          // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Coll
           batch->state.jumps_left[idx] = ch->max_jumps;
           batch->state.fall_fast[idx] = 0u;
           batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];

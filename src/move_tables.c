@@ -43,6 +43,13 @@ typedef struct MslMoveTableCache {
   uint8_t cmd_var_value1_pulse_count[MSL_MOVE_TABLE_CMD_VAR_COUNT];
   uint16_t cmd_var_value0_pulses[MSL_MOVE_TABLE_CMD_VAR_COUNT][MSL_MOVE_TABLE_PULSE_CAP];
   uint8_t cmd_var_value0_pulse_count[MSL_MOVE_TABLE_CMD_VAR_COUNT];
+  // Every set_cmd_var pulse with its raw u8 value, in script order. The boolean value1/value0
+  // lanes above cannot represent multi-valued vars (Falcon SpecialAirN cmd1 steps 0->1->2);
+  // move_tables_special_cmd_var_u8_value_at_frame() consumes this lane instead.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Phys
+  uint16_t cmd_var_valueu8_pulse_frames[MSL_MOVE_TABLE_CMD_VAR_COUNT][MSL_MOVE_TABLE_PULSE_CAP];
+  uint8_t cmd_var_valueu8_pulse_values[MSL_MOVE_TABLE_CMD_VAR_COUNT][MSL_MOVE_TABLE_PULSE_CAP];
+  uint8_t cmd_var_valueu8_pulse_count[MSL_MOVE_TABLE_CMD_VAR_COUNT];
   uint16_t throw_flags_pulses[MSL_MOVE_TABLE_THROW_HITBOX_CAP][MSL_MOVE_TABLE_PULSE_CAP];
   uint8_t throw_flags_pulse_count[MSL_MOVE_TABLE_THROW_HITBOX_CAP];
   uint16_t projectile_pulses[MSL_MOVE_TABLE_PULSE_CAP];
@@ -178,6 +185,16 @@ static void move_cache_build_for_msid(uint8_t char_id, uint16_t msid, MslMoveTab
             add_unique_pulse(cache->cmd_var_value0_pulses[idx],
                              &cache->cmd_var_value0_pulse_count[idx],
                              (uint8_t)MSL_MOVE_TABLE_PULSE_CAP, ev->frame);
+          }
+          // Raw-value lane (multi-valued vars): every pulse in script order, including values
+          // the boolean lanes cannot represent. Frame-0 value-0 entry initializers are dropped
+          // (the accessor's default is 0).
+          if ((ev->payload.cmd_var.value != 0u || ev->frame > 0u) &&
+              cache->cmd_var_valueu8_pulse_count[idx] < (uint8_t)MSL_MOVE_TABLE_PULSE_CAP) {
+            const uint8_t n = cache->cmd_var_valueu8_pulse_count[idx];
+            cache->cmd_var_valueu8_pulse_frames[idx][n] = ev->frame;
+            cache->cmd_var_valueu8_pulse_values[idx][n] = ev->payload.cmd_var.value;
+            cache->cmd_var_valueu8_pulse_count[idx] = (uint8_t)(n + 1u);
           }
         }
         break;
@@ -984,6 +1001,29 @@ uint8_t move_tables_special_cmd_var_value_at_frame(uint8_t char_id, uint16_t msi
     }
   }
   return (last_on >= 0 && last_on >= last_off) ? 1u : 0u;
+}
+
+uint8_t move_tables_special_cmd_var_u8_value_at_frame(uint8_t char_id, uint16_t msid,
+                                                      uint8_t var_idx, float anim_frame_f32) {
+  // Raw script-owned cmd var value at a frame: the value of the latest set_cmd_var pulse at or
+  // before the frame (script order breaks same-frame ties; 0 before any pulse). Unlike the
+  // boolean helper above, this supports multi-valued vars such as Falcon SpecialAirN cmd1
+  // (0 -> 1 @50 -> 2 @65).
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Phys
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || var_idx >= (uint8_t)MSL_MOVE_TABLE_CMD_VAR_COUNT) {
+    return 0u;
+  }
+  int best_frame = -1;
+  uint8_t value = 0u;
+  for (uint8_t i = 0; i < cache->cmd_var_valueu8_pulse_count[var_idx]; i++) {
+    const int f = (int)cache->cmd_var_valueu8_pulse_frames[var_idx][i];
+    if ((float)f <= anim_frame_f32 && f >= best_frame) {
+      best_frame = f;
+      value = cache->cmd_var_valueu8_pulse_values[var_idx][i];
+    }
+  }
+  return value;
 }
 
 uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {

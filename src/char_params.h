@@ -439,6 +439,38 @@ typedef struct MslCharParams {
   float zelda_transform_air_gravity;
   float zelda_transform_air_terminal_vel;
   float zelda_transform_finish_start_frame;
+
+  // Captain Falcon ftCaptain_DatAttrs special attrs (falcon_* keys; zero for other ext-attr
+  // layouts). Runtime-required for Falcon: the Special{N,S,Hi,Lw} state machines consume them
+  // directly, so stale Falcon data must fail loudly instead of booting with zeroed specials.
+  // refs/melee/src/melee/ft/chara/ftCaptain/types.h::ftCaptain_DatAttrs
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_Special{N,S,Hi,Lw}.c
+  float falcon_specialn_stick_range_y_neg;
+  float falcon_specialn_stick_range_y_pos;
+  float falcon_specialn_angle_diff;
+  float falcon_specialn_vel_x;
+  float falcon_specialn_vel_mul;
+  float falcon_specials_gr_vel_x;
+  float falcon_specials_grav;
+  float falcon_specials_terminal_vel;
+  float falcon_specials_miss_landing_lag;
+  float falcon_specials_hit_landing_lag;
+  float falcon_specialhi_air_friction_mul;
+  float falcon_specialhi_horz_vel;
+  float falcon_specialhi_freefall_air_spd_mul;
+  float falcon_specialhi_landing_lag;
+  float falcon_specialhi_input_var;
+  float falcon_specialhi_unk2;
+  float falcon_specialhi_catch_grav;
+  int32_t falcon_specialhi_air_var;
+  int32_t falcon_speciallw_unk1;
+  float falcon_speciallw_flame_particle_angle;
+  float falcon_speciallw_on_hit_spd_modifier;
+  int32_t falcon_speciallw_unk2;
+  float falcon_speciallw_ground_lag_mul;
+  float falcon_speciallw_landing_lag_mul;
+  float falcon_speciallw_ground_traction;
+  float falcon_speciallw_air_landing_traction;
 } MslCharParams;
 
 int char_params_init(void);

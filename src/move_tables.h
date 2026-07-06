@@ -243,6 +243,13 @@ uint8_t move_tables_special_throw_flags_window(uint8_t char_id, uint16_t msid,
 uint8_t move_tables_special_cmd_var_value_at_frame(uint8_t char_id, uint16_t msid, uint8_t var_idx,
                                                    float anim_frame_f32);
 
+// Raw u8 cmd var value at a frame (latest set_cmd_var pulse at or before the frame; 0 before
+// any pulse). Supports multi-valued vars the boolean helper cannot represent (Falcon
+// SpecialAirN cmd1 steps 0 -> 1 @50 -> 2 @65).
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Phys
+uint8_t move_tables_special_cmd_var_u8_value_at_frame(uint8_t char_id, uint16_t msid,
+                                                      uint8_t var_idx, float anim_frame_f32);
+
 // Returns the exact command-script cmd_var[0] window without the loop-repeat latch tail used by
 // move_tables_special_cmd0_active_at_frame().
 uint8_t move_tables_special_cmd0_raw_active_at_frame(uint8_t char_id, uint16_t msid,
