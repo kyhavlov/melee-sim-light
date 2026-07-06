@@ -292,6 +292,98 @@ def test_falcon_kick_on_hit_slowdown_scales_travel_velocity() -> None:
         f"(modifier {mod})")
 
 
+# ---------------------------------------------------------------------------
+# Raptor Boost (ftCa_SpecialS; actions 349..352)
+# ---------------------------------------------------------------------------
+
+ACT_FC_S_START = 349
+ACT_FC_S = 350
+ACT_FC_AIR_S_START = 351
+ACT_FC_AIR_S = 352
+ACT_FALL_SPECIAL = 0x0023
+ACT_LANDING_FALL_SPECIAL = 0x002B
+
+SIDE_B = dict(buttons=BTN_B, main_x=127)
+
+
+def _seed_vs(ox: float, grounded: bool = True, y: float = 0.0) -> np.ndarray:
+    seed = _seed(grounded, y)
+    seed["pos_x"][0, 1] = np.float32(ox)
+    seed["facing"][0, 1] = np.uint8(0)
+    return seed
+
+
+def test_raptor_boost_ground_miss_runs_to_wait() -> None:
+    # ftCa_SpecialSStart_Anim: no detect -> anim end -> ft_8008A2BC Wait tail. The inert
+    # detect hitboxes deal no damage.
+    outs = _run(_seed_vs(200.0), [_mk_inputs(**SIDE_B)] + [_mk_inputs()] * 90)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_FC_S_START
+    assert ACT_FC_S not in acts
+    assert ACT_WAIT in acts
+    assert float(outs[-1]["percent"][1]) == 0.0
+
+
+def test_raptor_boost_ground_detect_transitions_to_hit_punch() -> None:
+    # ftCa_SpecialS_OnDetect (inert hitbox touches the fighter during the cmd0 window) ->
+    # onDetectGround -> SpecialS; the hit state's scripted hitbox deals the damage (7.0).
+    outs = _run(_seed_vs(25.0), [_mk_inputs(**SIDE_B)] + [_mk_inputs()] * 90)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_FC_S in acts, f"detect must enter the hit punch: {sorted(set(acts))}"
+    assert float(outs[-1]["percent"][1]) > 0.0
+    assert ACT_WAIT in acts
+
+
+def test_raptor_boost_detects_shielding_opponent() -> None:
+    # The inert shield-overlap branch writes the attacker's unk_gobj too, so Raptor Boost
+    # connects on shield (the punch is then shielded).
+    seed = _seed_vs(25.0)
+    hold_shield = np.zeros((1,), dtype=INPUT_DTYPE)
+    hold_shield["p"][0, 0]["buttons"] = BTN_B
+    hold_shield["p"][0, 0]["main_x"] = 127
+    hold_shield["p"][0, 1]["l"] = 200
+    first = hold_shield.view(np.uint8).reshape((1, INPUT_DTYPE.itemsize))
+    rest = np.zeros((1,), dtype=INPUT_DTYPE)
+    rest["p"][0, 1]["l"] = 200
+    rest_b = rest.view(np.uint8).reshape((1, INPUT_DTYPE.itemsize))
+    outs = _run(seed, [first] + [rest_b] * 80)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_FC_S in acts, f"shield contact must fire OnDetect: {sorted(set(acts))}"
+    # The defender never leaves the guard family into a damage action.
+    o_acts = set(int(o["action_id"][1]) for o in outs)
+    assert not any(0x004B <= a <= 0x005B for a in o_acts), f"fox must shield the punch: {o_acts}"
+
+
+def test_raptor_boost_detect_window_closes_at_cmd0_clear() -> None:
+    # OnDetect gates on the script cmd_vars[0] window (15..35). An opponent placed past the
+    # window's reach must not trigger the hit state even though the dash keeps moving.
+    outs = _run(_seed_vs(70.0), [_mk_inputs(**SIDE_B)] + [_mk_inputs()] * 90)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_FC_S not in acts, f"post-window contact must not detect: {sorted(set(acts))}"
+    assert float(outs[-1]["percent"][1]) == 0.0
+
+
+def test_raptor_boost_air_miss_ends_in_freefall_landing() -> None:
+    # ftCa_SpecialAirSStart_Anim miss end: ftCo_80096900(1,1,0,1,miss_lag) freefall ->
+    # LandingFallSpecial.
+    outs = _run(_seed_vs(200.0, grounded=False, y=80.0), [_mk_inputs(**SIDE_B)] + [_mk_inputs()] * 110)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_FC_AIR_S_START
+    assert ACT_FALL_SPECIAL in acts or ACT_LANDING_FALL_SPECIAL in acts, (
+        f"air miss must reach freefall/landing lag: {sorted(set(acts))}")
+    assert ACT_FC_AIR_S not in acts
+
+
+def test_raptor_boost_air_detect_enters_air_hit_and_lands_with_lag() -> None:
+    # Low flat air dash over a standing opponent: detect -> SpecialAirS (uppercut, 7%) ->
+    # landing -> LandingFallSpecial with hit landing lag.
+    outs = _run(_seed_vs(25.0, grounded=False, y=8.0), [_mk_inputs(**SIDE_B)] + [_mk_inputs()] * 110)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_FC_AIR_S in acts, f"air detect must enter the air hit: {sorted(set(acts))}"
+    assert ACT_LANDING_FALL_SPECIAL in acts
+    assert float(outs[-1]["percent"][1]) > 0.0
+
+
 def test_falcon_kick_no_wall_no_rebound() -> None:
     # The SpecialHiThrow1 rebound requires a wall hug in the facing direction during the
     # script cmd0 window; open FD ground must never produce it. (The rebound positive is

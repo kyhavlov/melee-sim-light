@@ -345,6 +345,11 @@ MSL_STATE_FIELD(specials_air_used, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(falcon_speciallw_hits, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(falcon_speciallw_friction, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(falcon_speciallw_dealt_x1914_frame, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+// Raptor Boost hidden lanes: mv.ca.specials.grav vertical accumulator (air start/hit phys)
+// and the per-frame fp->unk_gobj detect pending flag (inert hitbox contact -> OnDetect).
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c
+MSL_STATE_FIELD(falcon_specials_grav, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(falcon_detect_pending, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(fallspecial_mobility_mul, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_window, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_hitlag_floor_active, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)

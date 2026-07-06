@@ -377,3 +377,31 @@ Dolphin build environment if probes become necessary).
   control, no-wall no-rebound negative; rebound positive is replay-covered
   by the YS ditto HiThrow1 game). Gates: pytest green, falcon one-step
   3377 -> 3310, validate-all existing-char reports byte-identical.
+- 2026-07-06: **Raptor Boost (SpecialS family, actions 349-352) live.**
+  The hurtbox-detect substrate: Raptor Boost Start's hitboxes are
+  HitElement_Inert (element 11, 0 damage) — source ftColl writes the
+  ATTACKER's fp->unk_gobj on BODY or SHIELD contact, and Fighter_ProcessHit
+  fires fp->hurtbox_detect_cb (ftCa_SpecialS_OnDetect) only when the
+  fighter neither dealt nor took damage. Modeled as:
+  - `falcon_specials_inert_detect_pass` at the end of combat_resolve
+    (branch-ladder position preserved; hitlag/hitstun gate), doing the
+    lbColl-shaped sphere-vs-hurtcap overlap for enabled inert hitboxes
+    against living opponents, gated on the script cmd0 window;
+  - `falcon_specials_on_inert_shield_contact` hook inside combat's existing
+    inert shield-overlap branch (which already set the defender x221C_b5
+    flag) — Raptor Boost connects on shield.
+  OnDetect: ground Start->S (vel.y=0, gr_vel *= specials_gr_vel_x); air
+  AirStart->AirS (velocity kept). Entries zero velocity (both variants);
+  air variants run 85134 TransN trajectories with the mv.ca.specials.grav
+  accumulator lane (`falcon_specials_grav`); misses exit via
+  ftCo_80096900(xc=1, miss/hit lag) freefall, landings enter
+  LandingFallSpecial at the source (end+0.1)/lag anim rate; grounded Start
+  wall stop (full wall mask + cmd0 window) exits via ft_8008A2BC in the
+  shared post-collision wall handler. 6 new unit tests incl. shield-detect
+  positive and post-window no-detect negative. Gates: pytest green, falcon
+  one-step 3310 -> 3068 (float p95 0.00093 -> 0.00065), validate-all
+  existing-char reports byte-identical.
+  REMAINING: Falcon Dive (SpecialHi 353-356) — the command grab; needs the
+  catch-bubble arming + victim CaptureCaptain/ThrownFF flow through
+  grab_attachment/throw_flow. Then Phase 4 audit table refresh, rollout
+  rerun, and webplay (Phase 6).

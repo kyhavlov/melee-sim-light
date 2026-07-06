@@ -5502,6 +5502,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                 d_idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
             batch->state.state_flags[d_flags_i] |=
                 (uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
+            // The same source branch writes the ATTACKER's fp->unk_gobj, so detect-driven
+            // specials (Raptor Boost) connect on shielding opponents too.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70 (HitElement_Inert shield branch)
+            falcon_specials_on_inert_shield_contact(batch, a_idx);
 
             // Decomp does not take the normal shield-hit path for inert hitboxes:
             // `if (hit->element != HitElement_Inert) ftColl_80076CBC(...); else victim_fp->x221C_b5=true`.
@@ -7130,6 +7134,10 @@ void combat_resolve(MslBatch* batch) {
   }
 
   combat_preserve_fresh_air_damage_entry_root_y(batch);
+  // Raptor Boost OnDetect runs after the damage passes: Fighter_ProcessHit's branch ladder
+  // reaches fp->unk_gobj only when the fighter neither dealt nor took damage this frame.
+  // refs/melee/src/melee/ft/fighter.c (hurtbox_detect_cb under the unk_gobj else-branch)
+  falcon_specials_inert_detect_pass(batch);
   // `combat_shield_contact_hb_kind` is one-step replay provenance for lbColl_80007BCC /
   // ftColl_80076CBC admission. It is authoritative for the frame seeded by replay validation, but
   // it is not live HitCapsule/ShieldDesc state and must not persist into the next rollout step.

@@ -13,6 +13,9 @@
 #include "char_params.h"
 #include "char_registry.h"
 #include "coll_env_flags.h"
+// combat_internal.h provides idx_hitbox/idx_hurtcap, the hitbox target-flag predicate, and
+// combat_geom.h's sphere/capsule overlap for the Raptor Boost inert-contact detect pass.
+#include "combat_internal.h"
 #include "common_params.h"
 #include "grab_flow.h"
 #include "ids.h"
@@ -126,6 +129,31 @@ static void fc_enter_speciallw(MslBatch* batch, const MslCharParams* ch, size_t 
     batch->state.falcon_speciallw_friction[idx] = 1.0f;
   }
   fc_enter(batch, idx, on_ground ? (uint16_t)FC_ACT_SPECIAL_LW : (uint16_t)FC_ACT_SPECIAL_AIR_LW,
+           0.0f);
+  msl_anim_timebase_tick_once(batch, idx);
+}
+
+static void fc_enter_specials(MslBatch* batch, const MslCharParams* ch, size_t idx,
+                              uint8_t on_ground) {
+  // ftCa_SpecialS_Enter / ftCa_SpecialAirS_Enter (via setupAirStart): clear cmd vars, ZERO
+  // self velocity (both variants; the ground entry also zeroes gr_vel), and reset the
+  // mv.ca.specials.grav accumulator for the air variant. The common SpecialS_CheckInput
+  // doEnter xB8 damping is a dead write here because the char entry zeroes velocity anyway.
+  // take_dmg/death2 callbacks (ftCa_Init_800E28C8) are gfx cleanup only.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+  //   ftCa_SpecialS_Enter,ftCa_SpecialAirS_Enter}
+  (void)ch;
+  fc_reset_cmds(batch, idx);
+  batch->state.falcon_detect_pending[idx] = 0u;
+  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = 0.0f;
+  if (on_ground) {
+    batch->state.speed_ground_x_self[idx] = 0.0f;
+  } else {
+    batch->state.falcon_specials_grav[idx] = 0.0f;
+  }
+  fc_enter(batch, idx,
+           on_ground ? (uint16_t)FC_ACT_SPECIAL_S_START : (uint16_t)FC_ACT_SPECIAL_AIR_S_START,
            0.0f);
   msl_anim_timebase_tick_once(batch, idx);
 }
@@ -282,10 +310,51 @@ static void fc_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
         fc_exit_to_wait_or_fall(batch, c, ch, idx);
       }
       break;
+    // ---- Raptor Boost -----------------------------------------------------
+    case FC_ACT_SPECIAL_S_START:
+      // ftCa_SpecialSStart_Anim: grounded miss runs to anim end -> ft_8008A2BC Wait tail.
+      // The hit branch is the OnDetect transition (combat inert-contact pass).
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialSStart_Anim
+      if (fc_anim_finished(cid, msid, frame)) {
+        fc_exit_to_wait_or_fall(batch, c, ch, idx);
+      }
+      break;
+    case FC_ACT_SPECIAL_S:
+      // ftCa_SpecialS_Anim: grounded hit-punch anim end -> ft_8008A2BC Wait tail.
+      if (fc_anim_finished(cid, msid, frame)) {
+        fc_exit_to_wait_or_fall(batch, c, ch, idx);
+      }
+      break;
+    case FC_ACT_SPECIAL_AIR_S_START:
+      // ftCa_SpecialAirSStart_Anim: air miss anim end -> ftCommon_8007D60C +
+      // (miss_landing_lag == 0 ? Fall : ftCo_80096900(1,1,0,1,miss_lag) freefall).
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirSStart_Anim
+      if (fc_anim_finished(cid, msid, frame)) {
+        if (ch->falcon_specials_miss_landing_lag > 0.0f) {
+          msl_locomotion_enter_fall_special_via_ftco_80096900(batch, idx, /*fallspecial_xc=*/1u,
+                                                              ch->falcon_specials_miss_landing_lag,
+                                                              /*allow_interrupt=*/0u);
+        } else {
+          fc_exit_to_wait_or_fall(batch, c, ch, idx);
+        }
+      }
+      break;
+    case FC_ACT_SPECIAL_AIR_S:
+      // ftCa_SpecialAirS_Anim: air hit anim end -> same shape with hit_landing_lag.
+      if (fc_anim_finished(cid, msid, frame)) {
+        if (ch->falcon_specials_hit_landing_lag > 0.0f) {
+          msl_locomotion_enter_fall_special_via_ftco_80096900(batch, idx, /*fallspecial_xc=*/1u,
+                                                              ch->falcon_specials_hit_landing_lag,
+                                                              /*allow_interrupt=*/0u);
+        } else {
+          fc_exit_to_wait_or_fall(batch, c, ch, idx);
+        }
+      }
+      break;
     default:
-      // SpecialS/Hi families are not ported yet; they are unreachable from this module's
-      // dispatcher (their zones no-op below) and replay-seeded rows keep the fail-closed
-      // generic handling documented in agent_docs/FALCON_PLAN.md.
+      // SpecialHi family is not ported yet; it is unreachable from this module's dispatcher
+      // (its zones no-op below) and replay-seeded rows keep the fail-closed generic handling
+      // documented in agent_docs/FALCON_PLAN.md.
       break;
   }
 }
@@ -430,6 +499,52 @@ uint8_t falcon_specials_phys(MslBatch* batch, size_t idx) {
           return 0u;
       }
     }
+    // ---- Raptor Boost -------------------------------------------------------------------
+    case FC_ACT_SPECIAL_S_START:
+    case FC_ACT_SPECIAL_S:
+      if (!on_ground) {
+        return 0u;  // transient pre-transition frame: generic air handling
+      }
+      // ftCa_SpecialSStart_Phys / ftCa_SpecialS_Phys: ft_80084FA8 (anim root motion owns the
+      // grounded slide; friction fallback otherwise).
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c
+      fc_ground_anim_vel_fa8(batch, ch, idx, msid, frame);
+      return 1u;
+    case FC_ACT_SPECIAL_AIR_S_START: {
+      if (on_ground) {
+        return 0u;
+      }
+      // ftCa_SpecialAirSStart_Phys: ft_80085134 (TransN-owned trajectory), then while the
+      // script's cmd_vars[1] window is live the private grav accumulator overwrites vy.
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirSStart_Phys
+      // data/moves/falcon.json::specials_by_msid.305 set_cmd_var(idx=1)@30
+      fc_air_anim_vel_85134(batch, ch, idx, msid, frame);
+      const uint8_t cmd1 =
+          move_tables_special_cmd_var_u8_value_at_frame(batch->state.char_id[idx], msid, 1u, frame);
+      if (cmd1 == 1u) {
+        float g = batch->state.falcon_specials_grav[idx] - ch->falcon_specials_grav;
+        if (g < -ch->falcon_specials_terminal_vel) {
+          g = -ch->falcon_specials_terminal_vel;
+        }
+        batch->state.falcon_specials_grav[idx] = g;
+        batch->state.speed_y_self[idx] = g;
+      }
+      return 1u;
+    }
+    case FC_ACT_SPECIAL_AIR_S: {
+      if (on_ground) {
+        return 0u;
+      }
+      // ftCa_SpecialAirS_Phys: ft_80085134 + unconditional grav accumulator on vy.
+      fc_air_anim_vel_85134(batch, ch, idx, msid, frame);
+      float g = batch->state.falcon_specials_grav[idx] - ch->falcon_specials_grav;
+      if (g < -ch->falcon_specials_terminal_vel) {
+        g = -ch->falcon_specials_terminal_vel;
+      }
+      batch->state.falcon_specials_grav[idx] = g;
+      batch->state.speed_y_self[idx] = g;
+      return 1u;
+    }
     // ---- Falcon Kick air phases (grounded kick phys is the physics.c grounded chain) ------
     case FC_ACT_SPECIAL_LW: {
       if (on_ground) {
@@ -506,6 +621,125 @@ uint8_t falcon_specials_phys(MslBatch* batch, size_t idx) {
 }
 
 // ---------------------------------------------------------------------------
+// Raptor Boost detect (fp->unk_gobj + hurtbox_detect_cb)
+// ---------------------------------------------------------------------------
+
+// ftCa_SpecialS_OnDetect (via fp->hurtbox_detect_cb): fired by Fighter_ProcessHit when
+// fp->unk_gobj is set (inert-element hitbox touched a fighter BODY or shield) and the fighter
+// neither dealt nor took damage this frame. While the script's cmd_vars[0] window is live and
+// the touched gobj is a fighter, Start transitions into the hit punch:
+// - grounded: ftCommon_8007D7FC + SpecialS at frame 0; vel.y/z = 0; gr_vel *= specials_gr_vel_x.
+// - aerial: SpecialAirS at frame 0; vel.z = 0 (vx/vy kept; the grav accumulator continues).
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+//   ftCa_SpecialS_OnDetect,onDetectGround,onDetectAir}
+static void fc_specials_on_detect(MslBatch* batch, const MslCharParams* ch, size_t idx) {
+  const uint16_t a = batch->state.action_id[idx];
+  if (a == (uint16_t)FC_ACT_SPECIAL_S_START) {
+    batch->state.speed_y_self[idx] = 0.0f;
+    batch->state.speed_ground_x_self[idx] *= ch->falcon_specials_gr_vel_x;
+    fc_enter(batch, idx, (uint16_t)FC_ACT_SPECIAL_S, 0.0f);
+  } else if (a == (uint16_t)FC_ACT_SPECIAL_AIR_S_START) {
+    fc_enter(batch, idx, (uint16_t)FC_ACT_SPECIAL_AIR_S, 0.0f);
+  }
+}
+
+void falcon_specials_on_inert_shield_contact(MslBatch* batch, size_t a_idx) {
+  // Inert-element shield overlap also writes the attacker's fp->unk_gobj (alongside the
+  // defender's x221C_b5 flag), so Raptor Boost connects on shielding opponents.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70 (HitElement_Inert shield branch)
+  if (batch == NULL || batch->state.char_id[a_idx] != (uint8_t)MSL_CHAR_ID_FALCON) {
+    return;
+  }
+  batch->state.falcon_detect_pending[a_idx] = 1u;
+}
+
+void falcon_specials_inert_detect_pass(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_FALCON ||
+          batch->state.stocks[idx] == 0u) {
+        continue;
+      }
+      const uint16_t a = batch->state.action_id[idx];
+      if (a != (uint16_t)FC_ACT_SPECIAL_S_START && a != (uint16_t)FC_ACT_SPECIAL_AIR_S_START) {
+        continue;
+      }
+      // Fighter_ProcessHit branch ladder: taking damage (dmg.int_value) or being frozen in
+      // hitlag wins over the unk_gobj branch, so a falcon that got hit or put into hitlag
+      // this frame does not run OnDetect.
+      // refs/melee/src/melee/ft/fighter.c (fp->unk_gobj else-branch)
+      if (batch->state.hitlag[idx] != 0u || batch->state.hitstun[idx] != 0u) {
+        continue;
+      }
+      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+      if (ch == NULL) {
+        continue;
+      }
+      const uint16_t msid = falcon_special_submotion(a);
+      const float frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+      // OnDetect gates on the live cmd_vars[0] script window (frames 15..35 / 18..35).
+      if (move_tables_special_cmd_var_u8_value_at_frame(batch->state.char_id[idx], msid, 0u,
+                                                        frame) == 0u) {
+        batch->state.falcon_detect_pending[idx] = 0u;
+        continue;
+      }
+      uint8_t detected = batch->state.falcon_detect_pending[idx];
+      // BODY contact: any enabled inert HitCapsule of this falcon overlapping any enabled hurt
+      // capsule of a living opponent fighter (lbColl_8000805C sphere-vs-capsule shape; the
+      // inert branch registers no hitlist entry).
+      // refs/melee/src/melee/ft/ftcoll.c (HitElement_Inert BODY branch: unk_gobj write only)
+      for (int hb = 0; !detected && hb < MSL_MAX_HITBOXES; hb++) {
+        const size_t hb_i = idx_hitbox(bi, p, hb);
+        if (!batch->state.hitbox_enabled[hb_i] ||
+            batch->state.hitbox_element[hb_i] != (uint8_t)MSL_HIT_ELEMENT_INERT) {
+          continue;
+        }
+        const float hx = batch->state.hitbox_x[hb_i];
+        const float hy = batch->state.hitbox_y[hb_i];
+        const float hz = batch->state.hitbox_z[hb_i];
+        const float hr = batch->state.hitbox_radius[hb_i];
+        for (int d = 0; !detected && d < num_players; d++) {
+          if (d == p) {
+            continue;
+          }
+          const size_t d_idx = msl_idx_player(bi, d);
+          if (batch->state.stocks[d_idx] == 0u) {
+            continue;
+          }
+          const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+          if (!combat_hitbox_targets_fighter_ground_state(hb_flags,
+                                                          batch->state.on_ground[d_idx])) {
+            continue;
+          }
+          for (int cap = 0; !detected && cap < MSL_MAX_HURTCAPS; cap++) {
+            const size_t cap_i = idx_hurtcap(bi, d, cap);
+            if (!batch->state.hurtcap_enabled[cap_i]) {
+              continue;
+            }
+            if (combat_sphere_capsule_intersects(
+                    hx, hy, hz, hr, batch->state.hurtcap_a_x[cap_i],
+                    batch->state.hurtcap_a_y[cap_i], batch->state.hurtcap_a_z[cap_i],
+                    batch->state.hurtcap_b_x[cap_i], batch->state.hurtcap_b_y[cap_i],
+                    batch->state.hurtcap_b_z[cap_i], batch->state.hurtcap_radius[cap_i], NULL)) {
+              detected = 1u;
+            }
+          }
+        }
+      }
+      batch->state.falcon_detect_pending[idx] = 0u;
+      if (detected) {
+        fc_specials_on_detect(batch, ch, idx);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Falcon Kick on-hit slowdown + wall rebound
 // ---------------------------------------------------------------------------
 
@@ -539,16 +773,24 @@ void falcon_speciallw_on_deal_dmg_x1914(MslBatch* batch, size_t a_idx) {
 }
 
 uint8_t falcon_special_try_speciallw_wall_rebound(MslBatch* batch, size_t idx) {
-  // ftCa_SpecialLw_Coll rebound: while the script's cmd_vars[0] window is live (frame 15+), a
-  // wall hug in the facing direction clears cmd/throw state, goes airborne (ftCommon_8007D5D4)
-  // and enters SpecialHiThrow1 (the backflip; a Falcon Kick state despite the name). The block
-  // runs after the grounded/air phase handling, so both phases of the travel action rebound.
+  // Post-collision wall transitions:
+  // - ftCa_SpecialLw_Coll rebound: while the kick script's cmd_vars[0] window is live (frame
+  //   15+), a wall HUG in the facing direction clears cmd/throw state, goes airborne
+  //   (ftCommon_8007D5D4) and enters SpecialHiThrow1 (the backflip; a Falcon Kick state
+  //   despite the name). Both phases of the travel action rebound.
+  // - ftCa_SpecialSStart_Coll wall stop: while the Raptor Boost start's cmd_vars[0] window is
+  //   live, a wall CONTACT (full wall mask) in the facing direction ends the dash through
+  //   ft_8008A2BC (Wait + same-proc Wait_IASA tail).
   // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLw_Coll
-  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_FALCON ||
-      batch->state.action_id[idx] != (uint16_t)FC_ACT_SPECIAL_LW) {
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialSStart_Coll
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_FALCON) {
     return 0u;
   }
-  const uint16_t msid = falcon_special_submotion((uint16_t)FC_ACT_SPECIAL_LW);
+  const uint16_t a = batch->state.action_id[idx];
+  if (a != (uint16_t)FC_ACT_SPECIAL_LW && a != (uint16_t)FC_ACT_SPECIAL_S_START) {
+    return 0u;
+  }
+  const uint16_t msid = falcon_special_submotion(a);
   const float frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
   if (move_tables_special_cmd_var_u8_value_at_frame(batch->state.char_id[idx], msid, 0u, frame) ==
       0u) {
@@ -556,6 +798,25 @@ uint8_t falcon_special_try_speciallw_wall_rebound(MslBatch* batch, size_t idx) {
   }
   const uint32_t env = batch->state.coll_env_flags[idx];
   const uint8_t facing_right = (batch->state.facing[idx] != 0u) ? 1u : 0u;
+  if (a == (uint16_t)FC_ACT_SPECIAL_S_START) {
+    // Grounded start only (the air start has no wall stop); full wall mask.
+    if (batch->state.on_ground[idx] == 0u) {
+      return 0u;
+    }
+    const uint8_t wall_in_front =
+        facing_right ? ((env & (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK) != 0u ? 1u : 0u)
+                     : ((env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK) != 0u ? 1u : 0u);
+    if (!wall_in_front) {
+      return 0u;
+    }
+    const MslCommonParams* c = msl_common_params();
+    const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+    if (c == NULL || ch == NULL) {
+      return 0u;
+    }
+    fc_exit_to_wait_or_fall(batch, c, ch, idx);
+    return 1u;
+  }
   const uint8_t wall_in_front =
       facing_right ? ((env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) != 0u ? 1u : 0u)
                    : ((env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) != 0u ? 1u : 0u);
@@ -703,7 +964,11 @@ static uint8_t fc_resolve_and_enter(MslBatch* batch, const MslCommonParams* c,
     // Grounded chain order: SpecialS -> Attack100(up) -> D6824(neutral) -> D68C0(down).
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     if ((mask & FC_B_SIDE) != 0u && b_edge && ax >= c->special_stick_x_threshold_side) {
-      return 0u;  // Raptor Boost: not ported yet
+      if ((sx > 0.0f) != (batch->state.facing[idx] != 0u)) {
+        batch->state.facing[idx] = (uint8_t)(sx > 0.0f);
+      }
+      fc_enter_specials(batch, ch, idx, 1u);
+      return 1u;
     }
     if ((mask & FC_B_UP) != 0u && up_b_present) {
       return 0u;  // Falcon Dive: not ported yet
@@ -729,7 +994,11 @@ static uint8_t fc_resolve_and_enter(MslBatch* batch, const MslCommonParams* c,
     return 1u;
   }
   if ((mask & FC_B_SIDE) != 0u && b_edge && ax >= c->special_stick_x_threshold_side) {
-    return 0u;  // Raptor Boost: not ported yet
+    if ((sx > 0.0f) != (batch->state.facing[idx] != 0u)) {
+      batch->state.facing[idx] = (uint8_t)(sx > 0.0f);
+    }
+    fc_enter_specials(batch, ch, idx, 0u);
+    return 1u;
   }
   if ((mask & FC_B_NEUTRAL) != 0u && b_edge && ax < c->special_stick_x_threshold_side &&
       sy < c->special_stick_y_threshold) {
@@ -975,6 +1244,30 @@ uint8_t falcon_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {
                       : 1.0f);
     return 1u;
   }
+  if (a == (uint16_t)FC_ACT_SPECIAL_AIR_S_START || a == (uint16_t)FC_ACT_SPECIAL_AIR_S) {
+    // Raptor Boost air start/hit landing: ftCo_LandingFallSpecial_Enter with the miss/hit
+    // landing lag; the hit variant first syncs gr_vel from self_vel.x (caller bundle does).
+    // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+    //   ftCa_SpecialAirSStart_Coll,ftCa_SpecialAirS_Coll}
+    const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+    const float lag = (ch == NULL) ? 0.0f
+                      : (a == (uint16_t)FC_ACT_SPECIAL_AIR_S_START)
+                          ? ch->falcon_specials_miss_landing_lag
+                          : ch->falcon_specials_hit_landing_lag;
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING_FALL_SPECIAL;
+    // ftCo_LandingFallSpecial_Enter -> ftCo_Landing_Enter: fixed submotion at
+    // (end + 0.1) / lag so the animation spans the landing lag.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+    //   ftCo_LandingFallSpecial_Enter,ftCo_Landing_Enter}
+    const float ef =
+        msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
+    msl_anim_timebase_enter(batch, idx, 0.0f,
+                            (lag > 0.0f && ef > 0.0f) ? ((ef + 0.1f) / lag) : 1.0f);
+    batch->state.fallspecial_landing_lag[idx] = lag;
+    batch->state.landing_fallspecial_allow_interrupt[idx] = 0u;
+    return 1u;
+  }
   const uint16_t next = falcon_special_ground_variant(a);
   if (next == 0u) {
     return 0u;
@@ -998,6 +1291,27 @@ uint8_t falcon_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
     // same frame; the caller syncs speed_air from gr_vel.
     // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
     //   ftCa_SpecialLw_Coll,ftCa_SpecialLwEnd_Coll,ftCa_SpecialLwEndAir_Coll}
+    return 1u;
+  }
+  if (a == (uint16_t)FC_ACT_SPECIAL_S_START || a == (uint16_t)FC_ACT_SPECIAL_S) {
+    // Raptor Boost grounded start/hit floor loss: ftCommon_ClampAirDrift + FallSpecial with
+    // the miss/hit landing lag (freefall).
+    // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+    //   ftCa_SpecialSStart_Coll,ftCa_SpecialS_Coll}
+    const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+    const float lag = (ch == NULL) ? 0.0f
+                      : (a == (uint16_t)FC_ACT_SPECIAL_S_START)
+                          ? ch->falcon_specials_miss_landing_lag
+                          : ch->falcon_specials_hit_landing_lag;
+    batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+    if (lag > 0.0f) {
+      msl_locomotion_enter_fall_special_via_ftco_80096900(batch, idx, /*fallspecial_xc=*/1u, lag,
+                                                          /*allow_interrupt=*/0u);
+    } else {
+      batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+      batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+      msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    }
     return 1u;
   }
   const uint16_t next = falcon_special_air_variant(a);

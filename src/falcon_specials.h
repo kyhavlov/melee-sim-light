@@ -56,7 +56,15 @@ uint8_t falcon_special_try_ground_to_air_swap(MslBatch* batch, size_t idx);
 // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialHi_800E400C
 void falcon_speciallw_on_deal_dmg_x1914(MslBatch* batch, size_t a_idx);
 
-// Falcon Kick wall rebound (post-collision: script cmd0 window + wall hug in the facing
-// direction -> airborne SpecialHiThrow1 backflip).
+// Falcon Kick wall rebound + Raptor Boost wall stop (post-collision: script cmd0 window +
+// wall contact in the facing direction).
 // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLw_Coll
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialSStart_Coll
 uint8_t falcon_special_try_speciallw_wall_rebound(MslBatch* batch, size_t idx);
+
+// Raptor Boost inert-hitbox detect (fp->unk_gobj -> hurtbox_detect_cb -> OnDetect Start->Hit
+// transition). The pass runs at the end of combat_resolve; the shield hook is called from the
+// inert shield-overlap branch.
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialS_OnDetect
+void falcon_specials_inert_detect_pass(MslBatch* batch);
+void falcon_specials_on_inert_shield_contact(MslBatch* batch, size_t a_idx);

@@ -900,6 +900,9 @@ typedef struct MslStateSoA {
   uint8_t* falcon_speciallw_hits;
   float* falcon_speciallw_friction;
   uint8_t* falcon_speciallw_dealt_x1914_frame;
+  // Raptor Boost: mv.ca.specials.grav accumulator + fp->unk_gobj inert-contact detect flag.
+  float* falcon_specials_grav;
+  uint8_t* falcon_detect_pending;
   float* fallspecial_mobility_mul;
   uint8_t* speciallw_counter_window;
   // Marth Counter descriptor hitlag floor provenance: Anim creation writes MarsAttributes::x60 to
