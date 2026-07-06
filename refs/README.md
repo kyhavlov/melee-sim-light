@@ -26,6 +26,7 @@ git clone https://github.com/doldecomp/melee.git
 git clone https://github.com/project-slippi/slippi-ssbm-asm.git
 git clone https://github.com/project-slippi/slippi-wiki.git
 git clone https://github.com/UnclePunch/UCF.git ucf
+git clone https://github.com/Gurvan/melee-anim-rs.git
 ```
 
 Initialize the pinned Ishiiruka probe checkout through git submodules:
