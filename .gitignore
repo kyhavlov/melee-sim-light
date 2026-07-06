@@ -71,3 +71,6 @@ __pycache__/
 .ruff_cache/
 .venv/
 .env
+
+# Local machine dev notes (not committed)
+DEV_LOCAL.md
