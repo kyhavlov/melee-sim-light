@@ -405,3 +405,55 @@ Dolphin build environment if probes become necessary).
   catch-bubble arming + victim CaptureCaptain/ThrownFF flow through
   grab_attachment/throw_flow. Then Phase 4 audit table refresh, rollout
   rerun, and webplay (Phase 6).
+
+### Falcon Dive design notes (2026-07-06 decomp read; implement next session)
+
+The catch machinery mostly EXISTS in the sim:
+- Dive's grab is ordinary CATCH-element (8) hitboxes from the script
+  (msid 307/308 frame 13, ids 0/1; id 1 is grounded-only and removed at 14;
+  `set_throw_hitbox(idx=1, 6dmg bkb70)` set alongside — the grab-release
+  throw data; `set_airborne_state(2)` at 14).
+- `combat_select_catch_hits_one_mutating` already selects CATCH hitboxes vs
+  grabbable hurtcaps and calls `grab_flow_on_catch_connect(owner, victim)`,
+  which currently returns early unless owner action is Catch/CatchDash.
+  THE FORK POINT: add a falcon branch there for owner actions 353/354
+  (armed by ftCommon_8007E2D0 at Dive enter: grab_cb=ftCa_SpecialLw_800E5128,
+  grabbed_cb=ftCo_8009CA0C, x1A68=2).
+- On connect (attacker side, ftCa_SpecialLw_800E5128): attacker ->
+  SpecialHiCatch(355)@0 flags 2; if victim GROUNDED: x221B_b7=1 and
+  accessory4 snaps the ATTACKER's pos to the victim's each frame
+  (ftCa_SpecialLw_800E550C); if victim AIRBORNE: no snap.
+- Victim side (ftCo_8009CA0C, fp=VICTIM): ftCommon_8007DB58 (damage-cb
+  owner), victim->CaptureCaptain(275)@0, victim.victim_gobj=ATTACKER
+  (bidirectional field: thrown victims keep the thrower there),
+  facing = -attacker.facing; if VICTIM AIRBORNE: ftCo_800DB368(attacker,
+  victim) attach + accessory1=ftCo_800DB464 (victim hangs from the
+  attacker's grab anchor part — grab_attachment substrate);
+  x1A6A=0x1FF (catch-victim mask vs x1A68 re-catch gate);
+  CaptureCaptain Anim/IASA/Phys empty; Coll: `!x2226_b2 -> ft_80083B68`.
+- HiCatch script (msid 309) hits the captured victim with a 5dmg kbg0
+  hitbox at frame 1 (grab impact; ordinary combat vs captured victim).
+- doCatchAnim (HiCatch anim end): attacker -> SpecialHiThrow(356)
+  flags Unk19|KeepGfx; `ftCo_800DE2A8(attacker, victim)` =
+  `ftCo_800DDDE4(attacker, victim, true)` — the SAME throw-release owner
+  the sim already models for ordinary throws (throw_flow) — applying
+  Throw0's `set_throw_hitbox(idx=0, 12dmg kbg82 angle361)` (msid 310
+  frame 0) to the victim; then `ftCo_800DE7C0(victim, NULL, 0)` enters the
+  victim's ThrownFF (271) via the ftCo_8008DCE0 damage machinery. ThrownFF
+  never serializes at post-frame (0/448 scanned games) — the release is
+  decomp-tests + webplay verification only.
+- Throw0 (356): Anim end -> Fall (dive RENEWS after a connect — not
+  freefall); Phys: after the cmd0@45 pulse sets x2_b0, SpecialHi_Phys +
+  specialhi_catch_grav blend; Coll landing -> LandingFallSpecial
+  (specialhi_landing_lag).
+- Whiffed Dive (353/354): mv.ca.specialhi lanes (vel x/y accumulate
+  x74_anim_vel TransN deltas + drift capped by specialhi_horz_vel *
+  air_drift_max with specialhi_air_friction_mul), IASA cmd0@13 pulse ->
+  x2_b1=1 + B-reverse when |stick.x| > specialhi_input_var; ledge grab
+  ONLY when x2_b1; anim end -> ftCo_80096900(1,1,0,
+  specialhi_freefall_air_spd_mul, specialhi_landing_lag) freefall.
+  State lanes needed: falcon_specialhi_vel_x/y, x2_b0, x2_b1 (+x0 counter
+  from specialhi_air_var — consumer not yet identified, extraction-only).
+- SEQUENCING: byte-stability of fox/falco/marth/sheik/zelda after every
+  change (the connect fork touches grab_flow; the release touches
+  throw_flow paths shared by all throws).
