@@ -44,8 +44,19 @@ void falcon_specials_update_pre_physics(MslBatch* batch);
 // player's self-velocity update this frame (the generic physics path must then skip its own).
 uint8_t falcon_specials_phys(MslBatch* batch, size_t idx);
 
-// Collision-callback ground/air variant swaps (preserve the current animation frame).
-// Return 1 when the player's action was swapped; callers own the grounding/floor-loss bundle.
-// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c (Coll handlers)
+// Collision-callback ground/air handling. Return 1 when this module owned the transition
+// (frame-preserving variant swap, same-action kick phase flip, or kick landing entry);
+// callers own the grounding/floor-loss bundle.
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_Special{N,Lw}.c (Coll handlers)
 uint8_t falcon_special_try_air_to_ground_swap(MslBatch* batch, size_t idx);
 uint8_t falcon_special_try_ground_to_air_swap(MslBatch* batch, size_t idx);
+
+// Falcon Kick deal_dmg_cb slowdown (once per frame with dealt damage; combat x1914 attacker
+// paths call this; shield hits are excluded by source branch order).
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialHi_800E400C
+void falcon_speciallw_on_deal_dmg_x1914(MslBatch* batch, size_t a_idx);
+
+// Falcon Kick wall rebound (post-collision: script cmd0 window + wall hug in the facing
+// direction -> airborne SpecialHiThrow1 backflip).
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLw_Coll
+uint8_t falcon_special_try_speciallw_wall_rebound(MslBatch* batch, size_t idx);

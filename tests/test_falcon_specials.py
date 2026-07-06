@@ -214,3 +214,88 @@ def test_air_neutral_b_from_jump_enters_air_punch() -> None:
     outs = _run(_seed(True), [jump] * 5 + [n] * 3 + [b] + [n] * 5)
     acts = [int(o["action_id"][0]) for o in outs]
     assert ACT_FC_SPECIAL_AIR_N in acts, f"jump -> air punch failed: {acts}"
+
+
+# ---------------------------------------------------------------------------
+# Falcon Kick (ftCa_SpecialLw; actions 357..362, rebound 363)
+# ---------------------------------------------------------------------------
+
+ACT_FC_LW = 357
+ACT_FC_LW_END = 358
+ACT_FC_AIR_LW = 359
+ACT_FC_AIR_LW_END = 360
+ACT_FC_AIR_LW_END_AIR = 361
+ACT_FC_LW_END_AIR = 362
+ACT_FC_HI_THROW1 = 363
+
+DOWN_B = dict(buttons=BTN_B, main_y=-127)
+
+
+def _seed_far(grounded: bool = True, pos_y: float = 0.0) -> np.ndarray:
+    # Opponent far away and falcon far left so the travel stays on FD.
+    seed = _seed(grounded, pos_y)
+    seed["pos_x"][0, 0] = np.float32(-70.0)
+    seed["pos_x"][0, 1] = np.float32(70.0)
+    return seed
+
+
+def test_grounded_down_b_enters_falcon_kick_and_exits_through_end() -> None:
+    # ftCa_SpecialLw_Enter -> travel -> ftCa_SpecialLw_Anim_inline grounded -> SpecialLwEnd ->
+    # ftCommon_8007D92C -> Wait.
+    outs = _run(_seed_far(True), [_mk_inputs(**DOWN_B)] + [_mk_inputs()] * 110)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_FC_LW
+    li = max(i for i, a in enumerate(acts) if a == ACT_FC_LW)
+    assert acts[li + 1] == ACT_FC_LW_END, f"travel must chain into LwEnd: {acts[li:li+3]}"
+    assert ACT_WAIT in acts, "kick must settle into Wait"
+    # The travel is anim-root-motion-owned: meaningful forward distance.
+    assert float(outs[40]["pos_x"][0]) > -40.0
+
+
+def test_air_down_b_dive_lands_into_air_lw_end() -> None:
+    # ftCa_SpecialAirLw dive (ft_80085134 anim-owned trajectory) -> landing doColl ->
+    # SpecialAirLwEnd (frame 0, landing-lag rate) -> ft_8008A2BC Wait tail.
+    outs = _run(_seed_far(False, pos_y=60.0), [_mk_inputs(**DOWN_B)] + [_mk_inputs()] * 130)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_FC_AIR_LW
+    assert ACT_FC_AIR_LW_END in acts, f"air kick must land into AirLwEnd: {sorted(set(acts))}"
+    assert ACT_WAIT in acts
+    # No frame-preserving grounded-variant swap for the air kick (distinct motion state).
+    assert ACT_FC_LW not in acts
+    # The dive descends (anim-driven; the animation hops slightly before the dive).
+    assert float(outs[28]["pos_y"][0]) < 55.0
+
+
+def test_falcon_kick_on_hit_slowdown_scales_travel_velocity() -> None:
+    # deal_dmg_cb (ftCa_SpecialHi_800E400C): each dealt hit scales the travel velocity by
+    # speciallw_on_hit_spd_modifier (0.6). Compare per-frame travel dx just after the connect
+    # against a no-target control at the same action frames.
+    a = _attrs()
+    mod = float(a["falcon_speciallw_on_hit_spd_modifier"])
+    seed_hit = _seed_far(True)
+    seed_hit["pos_x"][0, 1] = np.float32(-35.0)  # fox in the kick's path
+    frames = [_mk_inputs(**DOWN_B)] + [_mk_inputs()] * 70
+    outs_hit = _run(seed_hit, frames)
+    outs_ctl = _run(_seed_far(True), frames)
+    # Find the connect (fox percent rises).
+    pct = [float(o["percent"][1]) for o in outs_hit]
+    hit_f = next(i for i, p in enumerate(pct) if p > 0.0)
+    # Skip attacker hitlag (frozen frames), then compare travel speed.
+    f = hit_f + 8
+    dx_hit = float(outs_hit[f + 4]["pos_x"][0]) - float(outs_hit[f]["pos_x"][0])
+    # Control at the same ACTION frame: hitlag froze the anim for the hit row, so compare
+    # against the control's dx around the same anim progress (hit_f-aligned is close enough
+    # given the travel's flat speed profile).
+    dx_ctl = float(outs_ctl[f]["pos_x"][0]) - float(outs_ctl[f - 4]["pos_x"][0])
+    assert dx_hit < dx_ctl * (mod + 0.25), (
+        f"post-hit travel dx {dx_hit:.2f} must be slowed vs control {dx_ctl:.2f} "
+        f"(modifier {mod})")
+
+
+def test_falcon_kick_no_wall_no_rebound() -> None:
+    # The SpecialHiThrow1 rebound requires a wall hug in the facing direction during the
+    # script cmd0 window; open FD ground must never produce it. (The rebound positive is
+    # replay-covered: the falcon suite's YS ditto contains the dump's only HiThrow1 game.)
+    outs = _run(_seed_far(True), [_mk_inputs(**DOWN_B)] + [_mk_inputs()] * 110)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_FC_HI_THROW1 not in acts

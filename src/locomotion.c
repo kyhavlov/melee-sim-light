@@ -5716,6 +5716,11 @@ void locomotion_update_post_collision(MslBatch* batch) {
       if (!now_ground && sheik_special_try_vanish_travel_wallceil_end(batch, idx)) {
         continue;
       }
+      if (falcon_special_try_speciallw_wall_rebound(batch, idx)) {
+        // Falcon Kick wall rebound (both phases of the travel action can trigger it).
+        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLw_Coll
+        continue;
+      }
       if (!now_ground &&
           (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_FLOOR_MASK) != 0u) {
         if (spacie_side_special_air_contact_to_ground(batch, ms, ch, idx, a)) {

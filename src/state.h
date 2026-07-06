@@ -894,6 +894,12 @@ typedef struct MslStateSoA {
   // (0 = use defaults); Counter intercept window (script cmd1; 2 = armed descriptor).
   float* special_stick_angle;
   uint8_t* specials_air_used;
+  // Falcon Kick hidden lanes (mv.ca.speciallw): x0 on-hit count, cumulative on-hit slowdown
+  // multiplier (Inline_Friction), and the once-per-frame deal_dmg_cb firing flag.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c
+  uint8_t* falcon_speciallw_hits;
+  float* falcon_speciallw_friction;
+  uint8_t* falcon_speciallw_dealt_x1914_frame;
   float* fallspecial_mobility_mul;
   uint8_t* speciallw_counter_window;
   // Marth Counter descriptor hitlag floor provenance: Anim creation writes MarsAttributes::x60 to

@@ -2627,6 +2627,59 @@ void physics_integrate(MslBatch* batch) {
                 (int16_t)ch->firefox_launch_reverse_accel_start_frames) {
               gr_vel += ground_friction_step_delta(gr_vel, ch->firefox_launch_reverse_accel);
             }
+          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                     (action_id == 357u || action_id == 358u || action_id == 360u ||
+                      action_id == 362u)) {
+            // Falcon Kick grounded Phys family. gr_vel stays unscaled (source
+            // Inline_Friction scales the frame's projected self_vel AFTER
+            // ApplyGroundMovement, not fp->gr_vel), so the on-hit slowdown rides
+            // grounded_self_vel_for_frame.
+            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+            //   ftCa_SpecialLw_Phys,ftCa_SpecialLwEnd_Phys,ftCa_SpecialAirLwEnd_Phys,
+            //   ftCa_SpecialLwEndAir_Phys,ftCa_Special_Inline_Friction}
+            // refs/melee/src/melee/ft/ft_084E.c::{ft_80085088,ft_800850E0,ft_80084F3C}
+            const uint16_t fc_msid = falcon_special_submotion(action_id);
+            const float fc_frame = physics_cur_anim_frame_f32(batch, idx);
+            uint8_t scaled = 0u;
+            if (action_id == 357u || action_id == 362u) {
+              // ft_80085088 -> ft_800850E0: TransN root motion when the extracted x10_b0 flag
+              // is set for the motion, plain gr_friction step otherwise (no high-speed mul).
+              float dxyz[3];
+              if (physics_action_anim_uses_root_motion(batch->state.char_id[idx],
+                                                       batch->state.animation_index[idx]) &&
+                  physics_try_get_transn_delta_xyz(
+                      ch, batch->state.char_id[idx], batch->state.animation_index[idx],
+                      physics_prev_anim_frame_f32(batch, idx), fc_frame, dxyz)) {
+                gr_vel = dxyz[2] * facing_dir;
+              } else {
+                gr_vel += ground_friction_step_delta(gr_vel, ch->gr_friction);
+              }
+              scaled = (uint8_t)(action_id == 357u);
+            } else {
+              // LwEnd (358) / AirLwEnd (360): the script's cmd_vars[2] window selects the
+              // per-family traction friction; otherwise ft_80084F3C (high-speed mul).
+              // data/moves/falcon.json::specials_by_msid.{312,314} set_cmd_var(idx=2)
+              const uint8_t fc_cmd2 = move_tables_special_cmd_var_u8_value_at_frame(
+                  batch->state.char_id[idx], fc_msid, 2u, fc_frame);
+              if (fc_cmd2 != 0u) {
+                const float traction = (action_id == 358u)
+                                           ? ch->falcon_speciallw_ground_traction
+                                           : ch->falcon_speciallw_air_landing_traction;
+                gr_vel += ground_friction_step_delta(gr_vel, traction * ch->gr_friction);
+              } else {
+                float friction = ch->gr_friction;
+                if (msl_absf(gr_vel) > ch->walk_max_vel) {
+                  friction *= c->high_speed_friction_mul;
+                }
+                gr_vel += ground_friction_step_delta(gr_vel, friction);
+              }
+              scaled = (uint8_t)(action_id == 358u);
+            }
+            if (scaled) {
+              const float fc_f = batch->state.falcon_speciallw_friction[idx];
+              grounded_self_vel_for_frame = gr_vel * ((fc_f > 0.0f) ? fc_f : 1.0f);
+              use_grounded_self_vel_for_frame = 1u;
+            }
           } else if (physics_action_uses_ft_80084FA8(action_id)) {
             // ft_80084FA8 grounded Phys family:
             // - high-speed friction scale gate (walk_max_vel, p_ftCommonData->x6C)

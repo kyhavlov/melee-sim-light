@@ -335,6 +335,16 @@ MSL_STATE_FIELD(sheik_chain_pose_angle, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(sheik_chain_pose_mag, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(special_stick_angle, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(specials_air_used, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+// Falcon Kick hidden lanes (mv.ca.speciallw): x0 on-hit count and the cumulative on-hit
+// slowdown multiplier consumed by the SpecialLw/SpecialLwEnd Inline_Friction scaling. The
+// dealt_x1914 flag models deal_dmg_cb's once-per-Fighter_ProcessHit firing (cleared each
+// frame in the falcon action phase, set by the combat x1914 attacker paths).
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{ftCa_SpecialLw_Enter,
+//   ftCa_SpecialHi_800E400C,ftCa_Special_Inline_Friction}
+// refs/melee/src/melee/ft/fighter.c (fp->deal_dmg_cb under fp->dmg.x1914)
+MSL_STATE_FIELD(falcon_speciallw_hits, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(falcon_speciallw_friction, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(falcon_speciallw_dealt_x1914_frame, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(fallspecial_mobility_mul, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_window, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_hitlag_floor_active, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)

@@ -20,6 +20,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "combat_geom.h"
+#include "falcon_specials.h"
 #include "guard_lifecycle.h"
 #include "common_params.h"
 #include "damage_terminal_owner.h"

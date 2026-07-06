@@ -1713,7 +1713,7 @@ static inline void combat_damage_enter_state(
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   {
     const size_t flags_i = d_idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
-    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+    batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
   }
   // Decomp: ftCo_8008DCE0 clears mv.co.damage.x14 on damage entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
@@ -1970,6 +1970,9 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
   }
+  // Invincible BODY contact still sets fp->dmg.x1914 (ftColl_80076ED8 writes without applying
+  // percent/KB), so deal_dmg_cb owners fire here too.
+  falcon_speciallw_on_deal_dmg_x1914(batch, a_idx);
 }
 
 // Marth Counter intercept (ftMs_SpecialLw): while the script-armed window is live
@@ -2351,6 +2354,8 @@ static inline void combat_body_damage_producer_apply_attacker_side(
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
   }
+  // deal_dmg_cb owners fire from the x1914 dealt-damage path once per frame (Fighter_ProcessHit).
+  falcon_speciallw_on_deal_dmg_x1914(batch, a_idx);
 }
 
 static inline void combat_body_damage_log_entry_init(
@@ -6977,7 +6982,7 @@ void combat_processhit_consume(MslBatch* batch) {
       combat_processhit_apply_expired_phantom_damage(batch, bi, p, idx);
       const size_t flags_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
       batch->state.state_flags[flags_i] &=
-          (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
+          (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
       // fp->dmg.x1838_percentTemp is a per-frame accumulator consumed/reset by Fighter_ProcessHit.
       // We don't simulate the full Fighter_ProcessHit pipeline; clear it at the start of each frame
       // to ensure deterministic intra-frame accumulation during items_update/combat_resolve.

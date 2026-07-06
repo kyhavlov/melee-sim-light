@@ -353,3 +353,27 @@ Dolphin build environment if probes become necessary).
   pre-impulse no-fastfall negative). Gates: pytest green (environmental set
   only), falcon one-step 3400 -> 3377, validate-all existing-char reports
   byte-identical.
+- 2026-07-06: **Falcon Kick (SpecialLw family, actions 357-363) live.**
+  Six-state machine per ftCa_SpecialLw.c: grounded travel 357 (85088
+  root-motion phys in the physics.c grounded chain, following the
+  sheik-chain precedent), LwEnd 358 (cmd2 traction window), air kick 359
+  (pure ft_80085134 anim-owned dive), AirLwEnd 360 landing skid at
+  landing-lag anim rate, AirLwEndAir 361, LwEndAir 362 (cmd0-switched air
+  phys), wall-rebound SpecialHiThrow1 363 (post-collision hook in
+  locomotion; script cmd0 window + facing-direction WALL_HUG). Substrate:
+  - state lanes `falcon_speciallw_{hits,friction,dealt_x1914_frame}`
+    (mv.ca.speciallw); friction lane has an uninitialized-seed guard
+    (0 -> 1.0) pending Phase 5 seed reconstruction.
+  - deal_dmg_cb modeled as `falcon_speciallw_on_deal_dmg_x1914` called from
+    both combat x1914 attacker-hitlag paths (once/frame flag; shield hits
+    excluded by source branch order). On-hit: friction *= 0.6, cap 4 hits.
+  - Inline_Friction placement is source-exact: grounded rows scale the
+    frame's projected self_vel via `grounded_self_vel_for_frame` (gr_vel
+    lane stays unscaled); air 358 compounds on persistent self_vel; 85134
+    rows rescale fresh TransN velocity per frame.
+  Kick phase flips (same-action ground<->air on walk-off/landing for
+  357/358/362) ride the swap-hook returns without an action change.
+  4 new unit tests (travel chain, air dive landing, on-hit slowdown vs
+  control, no-wall no-rebound negative; rebound positive is replay-covered
+  by the YS ditto HiThrow1 game). Gates: pytest green, falcon one-step
+  3377 -> 3310, validate-all existing-char reports byte-identical.
