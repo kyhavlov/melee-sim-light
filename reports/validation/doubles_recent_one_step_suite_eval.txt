@@ -9,11 +9,11 @@ validation.profile.ignored: state_flags[4]&0x80 reason=Slippi fp+0x221F camera-s
 == replays/validation/doubles_recent/Game_20260509T152622.slpz ==
 Records: 9560  Players/scored per record: 4  Total player-frames: 38240
 mismatch.action_id: 21 / 38240 (0.000549)
-mismatch.action_frame: 16 / 38240 (0.000418)
+mismatch.action_frame: 15 / 38240 (0.000392)
 mismatch.on_ground: 7 / 38240 (0.000183)
 mismatch.facing: 2 / 38240 (0.000052)
-mismatch.stocks: 1 / 38240 (0.000026)
-mismatch.jumps_left: 8 / 38240 (0.000209)
+mismatch.stocks: 0 / 38240 (0.000000)
+mismatch.jumps_left: 7 / 38240 (0.000183)
 mismatch.is_dead: 0 / 38240 (0.000000)
 mismatch.hitlag: 31 / 38240 (0.000811)
 mismatch.hitstun: 10 / 38240 (0.000262)
@@ -26,7 +26,7 @@ mismatch.instance_id: 17 / 38240 (0.000445)
 mismatch.last_attack_landed: 2 / 38240 (0.000052)
 mismatch.combo_count: 5 / 38240 (0.000131)
 mismatch.last_hit_by: 38 / 38240 (0.000994)
-mismatch.state_flags: 31 / 191200 (0.000162)
+mismatch.state_flags: 30 / 191200 (0.000157)
 mismatch.item_exists: 6 / 143400 (0.000042)
 mismatch.item_type: 6 / 143400 (0.000042)
 mismatch.item_state: 1 / 143400 (0.000007)
@@ -34,10 +34,10 @@ mismatch.item_owner: 6 / 143400 (0.000042)
 mismatch.item_instance_id: 6 / 143400 (0.000042)
 ignored_mismatch.state_flags[4]&0x80: 76 / 38240 (0.001987)
 err.pos_x: mae=0.000600 p95=0.000000 max=3.959999
-err.pos_y: mae=0.000424 p95=0.000000 max=5.652088
+err.pos_y: mae=0.000517 p95=0.000000 max=5.652088
 err.speed_air_x_self: mae=0.000078 p95=0.000000 max=1.360000
 err.speed_ground_x_self: mae=0.000237 p95=0.000000 max=1.720000
-err.speed_y_self: mae=0.000330 p95=0.000000 max=3.500000
+err.speed_y_self: mae=0.000423 p95=0.000000 max=3.500000
 err.speed_x_attack: mae=0.000388 p95=0.000000 max=3.283563
 err.speed_y_attack: mae=0.000213 p95=0.000000 max=3.536400
 err.percent: mae=0.002135 p95=0.000000 max=11.280003
@@ -46,13 +46,13 @@ err.item_pos_x: mae=0.134624 p95=0.000000 max=128.817566
 err.item_pos_y: mae=0.012806 p95=0.000000 max=9.942838
 err.item_vel_x: mae=0.008295 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.000009 p95=0.000000 max=0.019359
-overall.discrete_mismatch: 247 / 1596520
-overall.strict_discrete_mismatch: 323 / 1596520
+overall.discrete_mismatch: 243 / 1596520
+overall.strict_discrete_mismatch: 319 / 1596520
 overall.ignored_discrete_mismatch: 76
-overall.float_norm_mae_p95: 0.00007857
+overall.float_norm_mae_p95: 0.00008164
 
 == suite summary ==
-overall.discrete_mismatch: 247 / 1596520
-overall.strict_discrete_mismatch: 323 / 1596520
+overall.discrete_mismatch: 243 / 1596520
+overall.strict_discrete_mismatch: 319 / 1596520
 overall.ignored_discrete_mismatch: 76
-overall.float_norm_mae_p95: 0.00007857
+overall.float_norm_mae_p95: 0.00008164

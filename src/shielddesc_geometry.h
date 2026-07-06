@@ -442,13 +442,13 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
           ? 1u
           : 0u;
   // AttackAirN hb0 create-edge vs neutral-input GuardOn raise ShieldDesc.size:
-  // - ftAction_8007121C publishes the authored 12-damage AttackAirN root capsule on the create
+  // - ftAction_8007121C publishes authored 12-damage AttackAirN capsules on the create
   //   edge, then ftColl_80078C70 tests ShieldDesc before BODY for that same HitCapsule.
-  // - When GuardOn is still in the no-submotion x10 raise window with no current main-stick guard
-  //   tilt input, source lbColl_80007BCC still includes ShieldDesc.size/extent. The reduced proxy
-  //   otherwise misses the root shield boundary by a small margin and lets BODY win first.
-  // - Keep this to hb0/create-edge/generated AttackAirN payload; active-tilt GuardOn rows,
-  //   persistent AttackAirN, and later limb slots keep their existing BODY/source-order controls.
+  // - When GuardOn is still in the no-submotion x10 raise window, source lbColl_80007BCC still
+  //   includes ShieldDesc.size for the root capsule. The reduced proxy otherwise can miss the
+  //   authored NAir create packet and let BODY/no-contact win first on neutral shield raise.
+  // - Keep this to the generated hb0/root payload and neutral current input; broad all-slot
+  //   AttackAirN extent changes create false GuardSetOff contacts in rollout controls.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078C70,ftColl_80076CBC}
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}

@@ -5058,6 +5058,59 @@ void mpcoll_ground_apply(MslBatch* batch) {
         }
       }
       if (!on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+          msl_escapeair_locked_bottom_owner_is_live_jumpaerial(
+              batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+          batch->state.coll_desired_ecb_bottom_valid[idx] != 0u && ecb_lock_timer_seed > 1u &&
+          batch->state.speed_y_self[idx] <= 0.0f) {
+        // EscapeAir_Coll routes through ft_80082C74 -> ft_80081D0C -> mpColl_800471F8.
+        // CollData_X130_Locked keeps the pre-entry Jump/JumpAerial ECB bottom for the callback;
+        // if that callback-local bottom reaches a platform/ledge floor, mpColl_80044628_Floor
+        // publishes it before mpColl_80044838_Floor projects the root. Zero-bottom locked entries
+        // use the callback root as the source bottom.
+        // data/motion_state/owners/{fox,falco,sheik,zelda}.bin::MSLMSO01 phase AIR_471F8
+        // data/stages/bin/*.bin::MSLSTG01 fighter_solid/platform/ledge floor metadata
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800471F8,
+        //   mpColl_80044628_Floor,mpColl_80044838_Floor}
+        const float locked_bottom_rel =
+            (batch->state.coll_desired_ecb_bottom_rel_y[idx] > k_floor_y_bias)
+                ? batch->state.coll_desired_ecb_bottom_rel_y[idx]
+                : 0.0f;
+        MslMpcollFloorSweepResult escapeair_locked_floor_sweep = {0};
+        const uint8_t escapeair_locked_floor_sweep_hit = mpcoll_collect_bottom_sweep_floor_result(
+            batch, idx, bi, g, stage_id, prev_x, prev_y + locked_bottom_rel, x,
+            y + locked_bottom_rel, skip_platform_segment_i, -1, -1, c,
+            &escapeair_locked_floor_sweep);
+        const uint8_t locked_sweep_projected =
+            (uint8_t)(escapeair_locked_floor_sweep_hit &&
+                      escapeair_locked_floor_sweep.projected_line_idx >= 0 &&
+                      escapeair_locked_floor_sweep.projected_y_corr >= 0.0f);
+        if (locked_sweep_projected) {
+          const int locked_line_idx = escapeair_locked_floor_sweep.projected_line_idx;
+          const uint16_t locked_segment_i = escapeair_locked_floor_sweep.projected_segment_id;
+          const uint8_t locked_floor_admitted =
+              (locked_line_idx >= 0 && (size_t)locked_line_idx < g->line_count &&
+               floor_line_is_runtime_fighter_solid(g, stage_id, locked_line_idx))
+                  ? 1u
+                  : 0u;
+          if (locked_floor_admitted) {
+            batch->state.pos_y[idx] += escapeair_locked_floor_sweep.projected_y_corr;
+            if (!stage_collision_floor_line_is_platform(stage_id, locked_segment_i) &&
+                !stage_collision_floor_line_has_platform_transform(stage_id, locked_segment_i)) {
+              escapeair_live_nonplatform_root_floor_authority = 1u;
+            }
+            mpcoll_publish_direct_source_floor_hit(
+                &floor_write, (uint8_t)MSL_MPCOLL_FLOOR_MODE_BOTTOM_SWEEP, locked_segment_i,
+                escapeair_locked_floor_sweep.hit_x, escapeair_locked_floor_sweep.hit_y,
+                escapeair_locked_floor_sweep.normal_x, escapeair_locked_floor_sweep.normal_y);
+            mpcoll_record_escapeair_floor_producer_runtime_authority(&mpcoll_ctx);
+            mpcoll_floor_probe_result(&mpcoll_ctx, &escapeair_locked_floor_sweep, 1u, 1u,
+                                      (uint8_t)MSL_MPCOLL_FLOOR_PROBE_ACCEPTED);
+          }
+        }
+      }
+      if (!on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
           escapeair_floor_producer_authority_in != 0u &&
           escapeair_current_root_crosses_carried_floor &&
           !(batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&

@@ -235,6 +235,9 @@ SEED_DTYPE = np.dtype(
         # Hidden fighter kind for stock-share / pending Rebirth rows where Slippi serializes the
         # inter-stock DeadDown slot with char_id=0 and stocks=0 until Rebirth becomes visible.
         ("match_flow_pending_rebirth_char_id", _arr("u1", MAX_PLAYERS)),
+        # Hidden fp+0x2218 byte for that same stock-share wait slot; Slippi publishes zeroes while
+        # gm_16AE still has a live player entity whose Fighter reset does not clear x2218_b1/b5.
+        ("match_flow_pending_rebirth_state_flags_2218", _arr("u1", MAX_PLAYERS)),
         # Match-start fighter input lock countdown (`fp->x221D_b4`).
         # refs/melee/src/melee/ft/ftlib.c::{ftLib_800867E8,ftLib_800868A4}
         # refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkInitLoad_80068914_Inner1}

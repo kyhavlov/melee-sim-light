@@ -479,6 +479,10 @@ typedef struct MslStateSoA {
   uint16_t* thrown_attached_prev_ground_id;  // [batch * players]
   uint8_t* match_flow_timer;
   uint8_t* match_flow_pending_rebirth_char_id;
+  // Hidden fp+0x2218 byte preserved while team stock-share exposes a zeroed DeadDown slot.
+  // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B918
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkInitReset_80067C98,Fighter_ChangeMotionState}
+  uint8_t* match_flow_pending_rebirth_state_flags_2218;
   // DeadUpFall hidden offset/velocity owner (`mv.co.unk_deadup.x50/x5C`).
   //
   // These lanes are not Slippi-visible by themselves, but they are the source-owned pose scratch
@@ -563,6 +567,16 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftanim.c (ftAnim_8006F0FC / ftAnim_SetAnimRate)
   int32_t* anim_frame_fp_q16_16;
   int32_t* frame_speed_mul_fp_q16_16;
+  // GuardSetOff hidden exit anim-rate seed/provenance lane.
+  //
+  // Slippi can expose the source `fp->frame_speed_mul` for GuardSetOff only on the first
+  // non-hitlag post-frame, after Fighter_8006A1BC has ended hitlag and before
+  // Fighter_8006A360 advances animation. Runtime uses this field only when seeded/provenanced,
+  // applies it on that hitlag-exit frame, and clears it immediately afterward; natural
+  // free-running gameplay leaves it zero and uses the live ftCo_80092F2C entry rate.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+  int32_t* guard_setoff_exit_rate_fp_q16_16;
   // Walk Anim callback source velocity (`mv_x0` in ftWalkCommon_800DFDDC).
   //
   // Decomp:

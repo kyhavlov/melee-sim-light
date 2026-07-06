@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
@@ -300,6 +301,85 @@ def test_guardoff_special_chain_requires_seeded_x1c_timer() -> None:
                 assert int(got["action_id"][0]) != ACT_FX_SPECIAL_LW_START
     finally:
         msl_binding.destroy(handle)
+
+
+def test_guardsetoff_hitlag_exit_consumes_hidden_exit_frame_speed_seed_owner() -> None:
+    # Fighter_8006A1BC exits hitlag before Fighter_8006A360 advances animation. A replay seed can
+    # carry GuardSetOff's hidden `fp->frame_speed_mul` through the frozen hitlag segment; the exit
+    # frame must consume that source-owned rate instead of the stale public frozen-segment rate.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD_SET_OFF)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_GUARD_SET_OFF)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(4.0)
+    seed["hitlag"][0, 0] = np.uint16(1)
+    seed["guard_setoff_exit_frame_speed_mul_f32"][0, 0] = np.float32(1.25)
+
+    neutral = _mk_input_bytes(1, input_stride)
+    out = _run_seed_one_step(seed, neutral)
+
+    assert int(out["hitlag"][0]) == 0
+    assert int(out["action_id"][0]) == ACT_GUARD_SET_OFF
+    assert int(out["action_frame"][0]) == 1
+
+
+def test_guardsetoff_exit_frame_speed_seed_lane_derives_frozen_segment_owner() -> None:
+    import msl_binding
+
+    action = np.array(
+        [
+            [ACT_GUARD],
+            [ACT_GUARD_SET_OFF],
+            [ACT_GUARD_SET_OFF],
+            [ACT_GUARD_SET_OFF],
+            [ACT_GUARD],
+        ],
+        dtype=np.uint16,
+    )
+    hitlag = np.array([[0], [3], [2], [0], [0]], dtype=np.uint16)
+    frame_speed = np.array([[1.0], [4.0], [4.0], [1.25], [1.0]], dtype=np.float32)
+
+    got = msl_binding.derive_guard_setoff_exit_frame_speed_seed_lane(
+        action,
+        hitlag,
+        frame_speed,
+        1,
+        ACT_GUARD_SET_OFF,
+    )
+
+    assert got[:, 0].tolist() == pytest.approx([1.25, 1.25, 1.25, 0.0, 0.0])
+
+
+def test_guardsetoff_hitlag_exit_without_hidden_exit_rate_keeps_public_frame_speed() -> None:
+    # Control: without the explicit hidden seed/provenance lane, natural runtime keeps the current
+    # public frame_speed_mul. This proves the bridge is not a broad GuardSetOff exit clamp.
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD_SET_OFF)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_GUARD_SET_OFF)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(4.0)
+    seed["hitlag"][0, 0] = np.uint16(1)
+
+    neutral = _mk_input_bytes(1, input_stride)
+    out = _run_seed_one_step(seed, neutral)
+
+    assert int(out["hitlag"][0]) == 0
+    assert int(out["action_id"][0]) == ACT_GUARD_SET_OFF
+    assert int(out["action_frame"][0]) == 4
 
 
 def test_active_guard_hitlag_does_not_recharge_shield() -> None:

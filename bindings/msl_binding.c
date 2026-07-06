@@ -377,6 +377,10 @@ static PyMethodDef methods[] = {
     {"derive_guard_setoff_post_hitlag_owner", msl_derive_guard_setoff_post_hitlag_owner_py,
      METH_VARARGS,
      "derive_guard_setoff_post_hitlag_owner(action, phase, flags_221c, guard_set_off) -> uint8[:]"},
+    {"derive_guard_setoff_exit_frame_speed_seed_lane",
+     msl_derive_guard_setoff_exit_frame_speed_seed_lane_py, METH_VARARGS,
+     "derive_guard_setoff_exit_frame_speed_seed_lane(action, hitlag, frame_speed, num_players, "
+     "guard_set_off) -> float32[:, :]"},
     {"derive_run_x0", msl_derive_run_x0_py, METH_VARARGS,
      "derive_run_x0(action, hitlag, init, run, run_direct, turn_run) -> uint8[:]"},
     {"derive_runbrake_cmd0", msl_derive_runbrake_cmd0_py, METH_VARARGS,

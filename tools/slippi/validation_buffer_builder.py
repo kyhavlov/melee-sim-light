@@ -158,6 +158,7 @@ from tools.slippi.validation_buffer_fighter import (  # noqa: F401
     _derive_run_anim_source_vel_seed_lane,
     _team_id_from_start_player,
     _derive_match_flow_pending_rebirth_char_id,
+    _derive_match_flow_pending_rebirth_state_flags_2218,
     _derive_facing_dir1_sign,
     _derive_specialhi_rotate_model_seed_lane,
     _derive_kb_smashcharge_active_from_post,
@@ -799,10 +800,13 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     guardsetoff_rate_mask = guardsetoff_rate[:, :num_players] > np.float32(0.0)
     frame_speed_mul_all[:, :num_players][guardsetoff_rate_mask] = guardsetoff_rate[:, :num_players][guardsetoff_rate_mask]
     samples['seed_t']['frame_speed_mul_f32'][:, :num_players] = frame_speed_mul_all[:-1, :num_players]
-    guard_setoff_exit_frame_speed = np.zeros((n_frames, 4), dtype=np.float32)
-    if n_frames > 1 and num_players > 0:
-        exit_mask = (post_action_id_u16[:-1, :num_players] == np.uint16(act_guard_set_off)) & (post_hitlag_u16_all[:-1, :num_players] == np.uint16(1)) & (post_action_id_u16[1:, :num_players] == np.uint16(act_guard_set_off)) & (post_hitlag_u16_all[1:, :num_players] == np.uint16(0)) & np.isfinite(frame_speed_mul_all[1:, :num_players]) & (frame_speed_mul_all[1:, :num_players] > np.float32(0.0))
-        guard_setoff_exit_frame_speed[:-1, :num_players][exit_mask] = frame_speed_mul_all[1:, :num_players][exit_mask]
+    guard_setoff_exit_frame_speed = msl_binding.derive_guard_setoff_exit_frame_speed_seed_lane(
+        _ascontiguousarray(post_action_id_u16, dtype=np.uint16),
+        _ascontiguousarray(post_hitlag_u16_all, dtype=np.uint16),
+        _ascontiguousarray(frame_speed_mul_all, dtype=np.float32),
+        int(num_players),
+        int(act_guard_set_off),
+    )
     samples['seed_t']['guard_setoff_exit_frame_speed_mul_f32'][:, :num_players] = guard_setoff_exit_frame_speed[:-1, :num_players]
     for slot in range(num_players):
         samples['seed_t']['source_clear_processhit_damage_pending_phase'][:, slot] = _derive_source_clear_processhit_damage_pending_phase_seed_lane(action_id_u16=samples['seed_t']['action_id'][:, slot], action_frame_i16=samples['seed_t']['action_frame'][:, slot], on_ground_u8=samples['seed_t']['on_ground'][:, slot], hitlag_u16=samples['seed_t']['hitlag'][:, slot], hitstun_u16=samples['seed_t']['hitstun'][:, slot], combo_count_u8=samples['seed_t']['combo_count'][:, slot], last_attack_landed_u8=samples['seed_t']['last_attack_landed'][:, slot], source_clear_timer_x18c8_u8=samples['seed_t']['source_clear_timer_x18c8'][:, slot], source_clear_owner_set_phase_u8=samples['seed_t']['source_clear_owner_set_phase'][:, slot], colanim_hit_status_x198c_u8=samples['seed_t']['colanim_hit_status_x198c'][:, slot], state_flags_u8=samples['seed_t']['state_flags'][:, slot, :], last_hit_by_u8=samples['seed_t']['last_hit_by'][:, slot])
@@ -1014,6 +1018,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         if np.any(sheik_needle_shoot_rng_owner):
             samples['seed_t']['frame_pre_random_seed'][sheik_needle_shoot_rng_owner] = frame_pre_random_seed[1:][sheik_needle_shoot_rng_owner]
     samples['seed_t']['match_flow_pending_rebirth_char_id'][:, :] = _derive_match_flow_pending_rebirth_char_id(post_action_id_u16=post_action_id_u16, post_char_id_u8=post_char_id_u8, post_stocks_u8=post_stocks_u8_all, match_flow_timer_u8=match_flow_timer_u8_all, static_char_id_u8=static_char_id_u8, team_id_u8=team_id_u8, is_teams=bool(is_teams), num_players=int(num_players))[:-1, :]
+    samples['seed_t']['match_flow_pending_rebirth_state_flags_2218'][:, :] = _derive_match_flow_pending_rebirth_state_flags_2218(post_action_id_u16=post_action_id_u16, post_char_id_u8=post_char_id_u8, post_stocks_u8=post_stocks_u8_all, post_state_flags_u8=post_state_flags_u8, match_flow_timer_u8=match_flow_timer_u8_all, static_char_id_u8=static_char_id_u8, team_id_u8=team_id_u8, is_teams=bool(is_teams), num_players=int(num_players))[:-1, :]
     if int(num_players) == 2:
         grab_owner = derive_grab_owner_port_2p(action_id_u16_2p=post_action_id[:, :2])
         samples['seed_t']['grab_owner_port'][:, :2] = grab_owner[:-1, :]

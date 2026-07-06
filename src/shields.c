@@ -569,6 +569,12 @@ void shields_refresh(MslBatch* batch) {
           (in_guard_reflect && batch->state.prev_action_id[idx] != (uint16_t)MSL_ACT_GUARD_REFLECT)
               ? 1u
               : 0u;
+      const uint8_t guard_family_shielddesc =
+          (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD ||
+           batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_OFF ||
+           batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF)
+              ? 1u
+              : 0u;
 
       // Always clear when the shield is broken / absent (decomp clears x221B_b0 on break).
       if (!(batch->state.stocks[idx] != 0 && batch->state.shield_hp[idx] > 0.0f)) {
@@ -576,10 +582,13 @@ void shields_refresh(MslBatch* batch) {
       } else if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON) {
         // GuardOn entry path creates shield desc via ftCo_80092450 before GuardOn motion state setup.
         // Keep fp+0x221B_b0 ownership aligned on GuardOn entry even when this frame has no resolved
-        // shield bubble radius sample yet.
+        // shield bubble radius sample yet. ftCo_80092450 calls ftColl_8007B1B8, which sets
+        // x221B_b0 and clears x221B_b1..b4; do not carry stale Counter x221B_b1 into ordinary
+        // GuardOn entry snapshots.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092450
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
         f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_B1;
       } else if (entered_guard_reflect) {
         const uint16_t prev_a = batch->state.prev_action_id[idx];
         if (prev_a == (uint16_t)MSL_ACT_GUARD_ON) {
@@ -593,6 +602,15 @@ void shields_refresh(MslBatch* batch) {
         // Preserve.
       } else if (sr > 0.0f) {
         f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        if (guard_family_shielddesc != 0u) {
+          // Sustained common guard-family ShieldDesc publication is owned by the same
+          // ftColl_8007B1B8-created descriptor, so stale non-guard x221B_b1 must not survive.
+          // Do not apply this to every positive-radius descriptor: Marth Counter and other
+          // character specials set x221B_b1/b2/b3/b4 after creating their own descriptors.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+          // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c
+          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_B1;
+        }
       } else {
         f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
       }

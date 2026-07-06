@@ -186,6 +186,23 @@ void timers_update(MslBatch* batch) {
         batch->state.hitlag[idx] = hl;
       }
 
+      if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+          batch->state.hitlag_pre_timer[idx] != 0u && hl == 0u &&
+          batch->state.guard_setoff_exit_rate_fp_q16_16[idx] > 0) {
+        // GuardSetOff hidden exit-rate owner:
+        // Fighter_8006A1BC decrements hitlag at prio 0, then Fighter_8006A360 advances
+        // `fp->cur_anim_frame` with the live `fp->frame_speed_mul` before GuardSetOff_Anim runs.
+        // Replay reseeds can initialize this hidden rate from the first non-hitlag GuardSetOff
+        // publication; natural gameplay leaves the lane zero and keeps the live ftCo_80092F2C
+        // entry rate.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+        batch->state.frame_speed_mul_fp_q16_16[idx] =
+            batch->state.guard_setoff_exit_rate_fp_q16_16[idx];
+        batch->state.guard_setoff_exit_rate_fp_q16_16[idx] = 0;
+      }
+
       // Per-frame hitlag gate (see src/state.h for rationale).
       // Decomp update gate: refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (`if (!fp->x2219_b5)`).
       batch->state.hitlag_started_frame[idx] = (hl > 0) ? 1u : 0u;

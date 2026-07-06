@@ -703,7 +703,7 @@ uint8_t mpcoll_materialize_active_damage_hitlag_stay_airborne_floor(
       (damage_post_hitlag_owner && ctx->batch->state.ground_id[ctx->idx] != 0xFFFFu &&
        line->segment_i == ctx->batch->state.ground_id[ctx->idx] &&
        !common_damage_post_unlock_pose_bottom_above_floor &&
-       mpcoll_floor_sweep_prev_root_is_source_owned(ctx->batch, ctx->idx) &&
+       mpcoll_floor_sweep_prev_root_is_runtime_owned(ctx->batch, ctx->idx) &&
        floor_x_within_line_bounds(ctx->batch, ctx->bi, ctx->floor_graph, ctx->prefer_floor_line_idx,
                                   ctx->batch->state.pos_x[ctx->idx]) &&
        floor_x_within_line_bounds(ctx->batch, ctx->bi, ctx->floor_graph, ctx->prefer_floor_line_idx,

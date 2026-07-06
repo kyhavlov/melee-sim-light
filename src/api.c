@@ -2415,6 +2415,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
       batch->state.match_flow_pending_rebirth_char_id[idx] =
           seed->match_flow_pending_rebirth_char_id[p];
+      batch->state.match_flow_pending_rebirth_state_flags_2218[idx] =
+          seed->match_flow_pending_rebirth_state_flags_2218[p];
       if (seed->opening_input_lock_timer[p] > batch->state.opening_input_lock_timer[bi]) {
         batch->state.opening_input_lock_timer[bi] = seed->opening_input_lock_timer[p];
       }
@@ -2585,19 +2587,18 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.common_fall_blend_x4[idx] = seed->common_fall_blend_x4_f32[p];
         batch->state.common_fall_blend_msid[idx] = seed->common_fall_blend_msid_u16[p];
       }
-      // Narrow GuardSetOff hidden-rate override:
-      // frame_speed_mul_f32 above remains strictly causal. For GuardSetOff last-hitlag rows,
-      // Slippi exposes the ftCo_80092F2C x19A4/lightshield-owned rate only after hitlag exits, so
-      // preprocessing may seed this explicit GuardSetOff-only lane instead of weakening the general
-      // frame_speed_mul_f32 contract.
+      // GuardSetOff hidden exit-rate owner:
+      // frame_speed_mul_f32 above remains strictly causal. This explicit GuardSetOff-only lane
+      // carries the replay-visible `fp->frame_speed_mul` source value from the shield-hit entry /
+      // frozen hitlag segment until Fighter_8006A1BC exits hitlag and Fighter_8006A360 consumes it
+      // for the first non-hitlag animation advance.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
       const float guard_setoff_exit_rate = seed->guard_setoff_exit_frame_speed_mul_f32[p];
-      if (seed->action_id[p] == (uint16_t)MSL_ACT_GUARD_SET_OFF && seed->hitlag[p] == 1u &&
-          seed->guard_setoff_hitlag_exit_phase_u8[p] == 2u && isfinite(guard_setoff_exit_rate) &&
-          guard_setoff_exit_rate > 0.0f) {
-        batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(guard_setoff_exit_rate);
-      }
+      batch->state.guard_setoff_exit_rate_fp_q16_16[idx] =
+          (isfinite(guard_setoff_exit_rate) && guard_setoff_exit_rate > 0.0f)
+              ? msl_q16_16_from_f32(guard_setoff_exit_rate)
+              : 0;
       float walk_anim_source_vel = seed->walk_anim_source_vel_f32[p];
       if (!isfinite(walk_anim_source_vel)) {
         walk_anim_source_vel = 0.0f;

@@ -170,13 +170,17 @@ def _derive_match_flow_pending_rebirth_char_id(*, post_action_id_u16: np.ndarray
     out = np.zeros((n_frames, 4), dtype=np.uint8)
     if not bool(is_teams) or n_players <= 2:
         return out
-    active = np.zeros(4, dtype=np.uint8)
+    active_char = np.zeros(4, dtype=np.uint8)
+    last_visible_char = np.zeros(4, dtype=np.uint8)
     for frame in range(n_frames):
         for slot in range(n_players):
+            visible_char = int(post_char_id_u8[frame, slot])
+            if visible_char != 0:
+                last_visible_char[slot] = np.uint8(visible_char)
             static_char = int(static_char_id_u8[slot])
             is_zeroed_dead = int(post_action_id_u16[frame, slot]) == 0 and int(post_char_id_u8[frame, slot]) == 0 and (int(post_stocks_u8[frame, slot]) == 0) and (int(match_flow_timer_u8[frame, slot]) > 0) and (static_char != 0)
             if not is_zeroed_dead:
-                active[slot] = 0
+                active_char[slot] = 0
                 continue
             teammate_has_stock_share = False
             for other in range(n_players):
@@ -188,13 +192,57 @@ def _derive_match_flow_pending_rebirth_char_id(*, post_action_id_u16: np.ndarray
                     teammate_has_stock_share = True
                     break
             if not teammate_has_stock_share:
-                active[slot] = 0
+                active_char[slot] = 0
                 continue
             fresh_zero_transition = frame == 0 or int(post_action_id_u16[frame - 1, slot]) != 0 or int(post_char_id_u8[frame - 1, slot]) != 0 or (int(post_stocks_u8[frame - 1, slot]) != 0)
             if fresh_zero_transition:
-                active[slot] = 1
-            if active[slot] != 0:
-                out[frame, slot] = np.uint8(static_char)
+                active_char[slot] = last_visible_char[slot] if int(last_visible_char[slot]) != 0 else np.uint8(static_char)
+            if active_char[slot] != 0:
+                out[frame, slot] = active_char[slot]
+    return out
+
+
+def _derive_match_flow_pending_rebirth_state_flags_2218(*, post_action_id_u16: np.ndarray, post_char_id_u8: np.ndarray, post_stocks_u8: np.ndarray, post_state_flags_u8: np.ndarray, match_flow_timer_u8: np.ndarray, static_char_id_u8: np.ndarray, team_id_u8: np.ndarray, is_teams: bool, num_players: int) -> np.ndarray:
+    """Derive hidden fp+0x2218 for team-stock pending Rebirth rows.
+
+    Slippi publishes the waiting stock-share slot as zeroed DeadDown, but gm_16AE still polls a
+    live player entity. Fighter_UnkInitReset_80067C98 and Fighter_ChangeMotionState clear
+    reflecting/x2218_b6/b7 but do not clear x2218_b1 or x2218_b5, so preserve only those two bits
+    from the last visible fighter row through the zeroed wait slot.
+    """
+    n_frames = int(post_action_id_u16.shape[0])
+    n_players = int(num_players)
+    out = np.zeros((n_frames, 4), dtype=np.uint8)
+    if not bool(is_teams) or n_players <= 2:
+        return out
+    active_flags = np.zeros(4, dtype=np.uint8)
+    last_visible_flags = np.zeros(4, dtype=np.uint8)
+    preserve_mask = np.uint8(0x40 | 0x04)
+    for frame in range(n_frames):
+        for slot in range(n_players):
+            if int(post_char_id_u8[frame, slot]) != 0:
+                last_visible_flags[slot] = np.uint8(int(post_state_flags_u8[frame, slot, 0]) & int(preserve_mask))
+            static_char = int(static_char_id_u8[slot])
+            is_zeroed_dead = int(post_action_id_u16[frame, slot]) == 0 and int(post_char_id_u8[frame, slot]) == 0 and (int(post_stocks_u8[frame, slot]) == 0) and (int(match_flow_timer_u8[frame, slot]) > 0) and (static_char != 0)
+            if not is_zeroed_dead:
+                active_flags[slot] = 0
+                continue
+            teammate_has_stock_share = False
+            for other in range(n_players):
+                if other == slot:
+                    continue
+                if int(team_id_u8[other]) != int(team_id_u8[slot]):
+                    continue
+                if int(post_stocks_u8[frame, other]) > 1:
+                    teammate_has_stock_share = True
+                    break
+            if not teammate_has_stock_share:
+                active_flags[slot] = 0
+                continue
+            fresh_zero_transition = frame == 0 or int(post_action_id_u16[frame - 1, slot]) != 0 or int(post_char_id_u8[frame - 1, slot]) != 0 or (int(post_stocks_u8[frame - 1, slot]) != 0)
+            if fresh_zero_transition:
+                active_flags[slot] = last_visible_flags[slot]
+            out[frame, slot] = active_flags[slot]
     return out
 
 

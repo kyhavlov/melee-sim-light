@@ -202,9 +202,9 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
       batch->state.action_frame[idx] >= 1 &&
       (escapeair_entry_bottom_sweep_still_above_floor ||
        (!source_floor_carries_locked_ecb && stage_has_sloped_ledge_main_floor))) {
-    // Runtime EscapeAir entry can happen during JumpAerial IASA before Fighter_procMap. On
-    // JumpAerial pass-through from a source floor-domain line still carries CollData_X130_Locked
-    // when source `ftCo_EscapeAir_Coll` calls `mpColl_LoadECB_inline`, preserving the pre-entry
+    // Runtime EscapeAir entry can happen during JumpAerial IASA before Fighter_procMap.
+    // Pass-through from a source floor-domain line still carries CollData_X130_Locked when source
+    // `ftCo_EscapeAir_Coll` calls `mpColl_LoadECB_inline`, preserving the pre-entry
     // desired_ecb.bottom for the first EscapeAir callback only while the frame-start provenance is
     // still sustained JumpAerial. On generated sloped-ledge/main-floor shells, a stale visible
     // platform floor id can be off-domain while the following `EscapeAir_Coll` floor search is about

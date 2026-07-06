@@ -41,6 +41,82 @@ PyObject* msl_derive_guard_setoff_post_hitlag_owner_py(PyObject* self, PyObject*
   return (PyObject*)out;
 }
 
+PyObject* msl_derive_guard_setoff_exit_frame_speed_seed_lane_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* action_obj = NULL;
+  PyObject* hitlag_obj = NULL;
+  PyObject* frame_speed_obj = NULL;
+  int num_players = 0;
+  int act_guard_set_off = 0;
+  if (!PyArg_ParseTuple(args, "OOOii", &action_obj, &hitlag_obj, &frame_speed_obj, &num_players,
+                        &act_guard_set_off)) {
+    return NULL;
+  }
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 2, "action_id_u16");
+  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT16, 2, "hitlag_u16");
+  PyArrayObject* frame_speed =
+      require_contiguous_array(frame_speed_obj, NPY_FLOAT32, 2, "frame_speed_mul_f32");
+  if (action == NULL || hitlag == NULL || frame_speed == NULL) return NULL;
+  const npy_intp n = PyArray_DIM(action, 0);
+  const npy_intp width = PyArray_DIM(action, 1);
+  if (PyArray_DIM(hitlag, 0) != n || PyArray_DIM(frame_speed, 0) != n ||
+      PyArray_DIM(hitlag, 1) != width || PyArray_DIM(frame_speed, 1) != width) {
+    PyErr_SetString(PyExc_ValueError, "GuardSetOff exit-rate inputs must have the same shape");
+    return NULL;
+  }
+  if (num_players < 0 || num_players > width) {
+    PyErr_SetString(PyExc_ValueError, "num_players is outside the input width");
+    return NULL;
+  }
+  npy_intp dims[2] = {n, width};
+  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(2, dims, NPY_FLOAT32, 0);
+  if (out == NULL) return NULL;
+
+  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  const uint16_t* hl = (const uint16_t*)PyArray_DATA(hitlag);
+  const float* rate = (const float*)PyArray_DATA(frame_speed);
+  float* out_p = (float*)PyArray_DATA(out);
+  for (int p = 0; p < num_players; p++) {
+    npy_intp i = 0;
+    while (i < n) {
+      const npy_intp idx = i * width + p;
+      if ((int)a[idx] != act_guard_set_off || hl[idx] == 0u) {
+        i++;
+        continue;
+      }
+
+      const npy_intp start = i;
+      while (i < n && (int)a[i * width + p] == act_guard_set_off && hl[i * width + p] > 0u) {
+        i++;
+      }
+      if (i >= n || (int)a[i * width + p] != act_guard_set_off || hl[i * width + p] != 0u) {
+        continue;
+      }
+
+      const float exit_rate = rate[i * width + p];
+      if (!(isfinite(exit_rate) && exit_rate > 0.0f)) {
+        continue;
+      }
+
+      // GuardSetOff hitlag hides the `fp->frame_speed_mul` value that source consumes when
+      // Fighter_8006A1BC exits hitlag and Fighter_8006A360 advances animation. The replay-visible
+      // first non-hitlag GuardSetOff row publishes that rate; seed it across the frozen segment,
+      // plus the immediately preceding shield-hit entry row, so rollouts that start before or
+      // inside the segment carry the same source-owned value until exit.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+      for (npy_intp j = start; j < i; j++) {
+        out_p[j * width + p] = exit_rate;
+      }
+      if (start > 0 && (int)a[(start - 1) * width + p] != act_guard_set_off) {
+        out_p[(start - 1) * width + p] = exit_rate;
+      }
+    }
+  }
+  return (PyObject*)out;
+}
+
 PyObject* msl_derive_run_x0_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* action_obj = NULL;

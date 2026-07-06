@@ -820,6 +820,16 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D4FF4
   // refs/melee/src/melee/gm/gm_16AE.c (team stock-share / respawn flow)
   uint8_t match_flow_pending_rebirth_char_id[MSL_MAX_PLAYERS];
+  // Hidden fp+0x2218 byte for the same pending stock-share/Rebirth rows.
+  //
+  // Slippi serializes the waiting team-stock-share slot as zeroed DeadDown, but gm_16AE still
+  // polls a live player entity. Fighter_UnkInitReset_80067C98 clears x2218_b4/b6/b7 and
+  // Fighter_ChangeMotionState clears x2218_b4/b6; neither clears x2218_b1 or x2218_b5 before
+  // Rebirth becomes visible again.
+  // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B918
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkInitReset_80067C98,Fighter_ChangeMotionState}
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 -> state_flags[0])
+  uint8_t match_flow_pending_rebirth_state_flags_2218[MSL_MAX_PLAYERS];
   // Match-start fighter input lock countdown (`fp->x221D_b4`).
   //
   // Decomp / asset anchors:
@@ -1163,13 +1173,13 @@ typedef struct MslSeed {
   //
   // This is intentionally separate from frame_speed_mul_f32. The general frame_speed_mul_f32 seed
   // remains strictly causal; this field is a narrow replay-facing reconstruction for GuardSetOff
-  // last-hitlag rows where Slippi exposes the hidden ftCo_80092F2C x19A4/lightshield-owned rate
-  // only on the first future non-hitlag GuardSetOff row.
+  // rows where Slippi exposes the hidden GuardSetOff `fp->frame_speed_mul` only on the first
+  // future non-hitlag GuardSetOff row.
   //
   // Seed representation:
   // - 0.0: no explicit GuardSetOff exit-rate override.
-  // - >0.0: use this rate only when reseeding a GuardSetOff last-hitlag row
-  //   (guard_setoff_hitlag_exit_phase_u8 == 2).
+  // - >0.0: carry this rate only through a GuardSetOff shield-hit entry / frozen hitlag segment
+  //   and consume it on the hitlag-exit frame.
   //
   // Decomp / ownership anchors:
   // - ftCo_80092F2C computes the entry rate from fp->x19A4 and fp->lightshield_amount.

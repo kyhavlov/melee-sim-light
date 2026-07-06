@@ -66,6 +66,7 @@ ACT_JUMP_AERIAL_F = 0x001B
 ACT_FALL = 0x001D
 ACT_SQUAT = 0x0027
 ACT_GUARD_ON = 0x00B2
+ACT_GUARD = 0x00B3
 ACT_GUARD_REFLECT = 0x00B6
 ACT_THROW_F = 0x00DB
 ACT_THROW_B = 0x00DC
@@ -861,6 +862,44 @@ def test_counter_shielddesc_state_flags_do_not_leak_to_fox_action_overlap() -> N
     seed["state_flags"][0, 0, 2] = np.uint8(0)
     outs = _run(seed, [_mk_inputs()])
     assert int(outs[0]["state_flags"][0, 2]) & 0xC0 == 0
+
+
+@pytest.mark.integration
+def test_guardon_entry_clears_stale_counter_x221b_b1_real_row() -> None:
+    # Ordinary GuardOn entry creates a fresh ShieldDesc through ftCo_80092450 -> ftColl_8007B1B8.
+    # That source sets fp+0x221B_b0 and clears b1..b4, so stale Counter x221B_b1 from the previous
+    # source action must not publish on same-frame GuardOn entry snapshots.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092450
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+    path = "replays/validation/marth/WellWornSmallGoshawk.slpz"
+    record = 2071
+    p = 1
+    out, seed, ref = _step_real_row(path, record)
+    assert int(seed["state_flags"][p, 2]) == 0x40
+    assert int(ref["action_id"][p]) == ACT_GUARD_ON
+    assert int(ref["state_flags"][p, 2]) == 0x80
+    assert int(out["action_id"][p]) == ACT_GUARD_ON
+    assert int(out["state_flags"][p, 2]) == 0x80
+
+
+def test_guard_family_descriptor_publication_clears_stale_counter_x221b_b1_synthetic_owner() -> None:
+    # Synthetic positive for sustained common guard-family ShieldDesc publication. Guard/GuardOff/
+    # GuardSetOff retain the ftColl-created shield descriptor; stale Counter b1 is not owned by
+    # that descriptor and must not survive while the ordinary guard shield remains active.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,ftCo_800928CC}
+    seed = _seed_base("marth")
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD)
+    seed["action_frame"][0, 0] = np.int16(4)
+    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
+    seed["anim_frame_f32"][0, 0] = np.float32(-1.0)
+    seed["shield_hp"][0, 0] = np.float32(60.0)
+    seed["state_flags"][0, 0, 2] = np.uint8(0xC0)
+
+    outs = _run(seed, [_mk_inputs(l=200)])
+
+    assert int(outs[0]["action_id"][0]) == ACT_GUARD
+    assert int(outs[0]["state_flags"][0, 2]) == 0x80
 
 
 def test_counter_states_enter_and_exit() -> None:

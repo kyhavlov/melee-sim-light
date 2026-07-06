@@ -224,6 +224,16 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       if (!step_keep_fighter_8006cda4_pre_gate_count(batch, bi, p, num_players)) {
         batch->state.fighter_8006cda4_pre_gate_consume_count[idx] = 0u;
       }
+      if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_GUARD_SET_OFF ||
+          batch->state.hitlag[idx] == 0u) {
+        // `seed_t.guard_setoff_exit_frame_speed_mul_f32` initializes a hidden GuardSetOff
+        // hitlag-exit owner. Keep it only while the seeded/live fighter is actually in the frozen
+        // GuardSetOff segment; timers_update consumes it on the exit frame before animation ticks.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+        batch->state.guard_setoff_exit_rate_fp_q16_16[idx] = 0;
+      }
       // `seed_t.source_clear_grounded_damage_clear_phase` is a one-step bridge for grounded
       // source-owner clear ownership (`ftCommon_800804FC` path). Consume within this frame only.
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
@@ -373,9 +383,11 @@ static inline void cache_floor_sweep_prev_pos(MslBatch* batch) {
   // replay seed surface provides that previous sweep endpoint explicitly.
   //
   // In rollout, do not overwrite the current sweep endpoint with the current root at frame start:
-  // DamageFly floor-contact rows can need the prior frame's sweep root to see the floor crossing.
-  // The next endpoint is promoted after physics records prev_pos_* for this frame.
-  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // DamageFly floor-contact rows can need the prior callback's sweep root to see the floor
+  // crossing. The next endpoint is promoted post-frame from the callback-published root, matching
+  // `ft_081B` wrappers that assign `coll_data.last_pos = coll_data.cur_pos` before writing the
+  // next callback root.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_80081DD4}
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpCheckFloor}
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {

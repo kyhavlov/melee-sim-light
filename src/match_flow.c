@@ -6,12 +6,14 @@
 #include "anim_timebase.h"
 #include "attack_identity.h"
 #include "blaster.h"
+#include "buttons.h"
 #include "char_params.h"
 #include "combat.h"
 #include "common_params.h"
 #include "input_axis.h"
 #include "instance_id.h"
 #include "stage_collision.h"
+#include "state_flags.h"
 #include "staling.h"
 #include "trigger_input.h"
 
@@ -57,6 +59,25 @@ static inline uint8_t match_flow_is_dead_up_fall_hitcamera_action(uint16_t a) {
   return (uint8_t)(a == MSL_ACT_DEAD_UP_FALL_HIT_CAMERA ||
                    a == MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_FLAT ||
                    a == MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_ICE);
+}
+
+static inline int match_flow_team_stock_share_donor(const MslBatch* batch, int bi, int p) {
+  if (batch == NULL || batch->state.is_teams[bi] == 0u) {
+    return -1;
+  }
+  const int num_players = (int)batch->config.num_players;
+  const size_t idx = msl_idx_player(bi, p);
+  const uint8_t team = batch->state.team_id[idx];
+  for (int other = 0; other < num_players; other++) {
+    if (other == p) {
+      continue;
+    }
+    const size_t oidx = msl_idx_player(bi, other);
+    if (batch->state.team_id[oidx] == team && batch->state.stocks[oidx] > 1u) {
+      return other;
+    }
+  }
+  return -1;
 }
 
 static inline void match_flow_identity_reset_Fighter_UnkInitReset_80067C98_subset(MslBatch* batch,
@@ -121,6 +142,52 @@ static inline void match_flow_zero_common_velocities(MslBatch* batch, size_t idx
   batch->state.speed_y_self[idx] = 0.0f;
   batch->state.speed_x_attack[idx] = 0.0f;
   batch->state.speed_y_attack[idx] = 0.0f;
+}
+
+static inline void rebirth_refresh_velocity_to_platform(MslBatch* batch, size_t idx,
+                                                        uint32_t stage_id, int port0) {
+  if (batch == NULL) {
+    return;
+  }
+  MslStagePoint2 respawn = {0};
+  if (!stage_collision_get_respawn_point(stage_id, port0, &respawn)) {
+    return;
+  }
+  const uint8_t t = batch->state.match_flow_timer[idx];
+  if (t == 0u) {
+    batch->state.speed_air_x_self[idx] = 0.0f;
+    batch->state.speed_y_self[idx] = 0.0f;
+    return;
+  }
+  // Rebirth_Phys recomputes self_vel each frame from the current pose to the spawn-platform
+  // target, dividing by the already-decremented Rebirth timer.
+  // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_Rebirth_Anim,ftCo_Rebirth_Phys}
+  batch->state.speed_air_x_self[idx] = (respawn.x - batch->state.pos_x[idx]) / (float)t;
+  batch->state.speed_y_self[idx] = (respawn.y - batch->state.pos_y[idx]) / (float)t;
+}
+
+static inline void match_flow_pending_rebirth_store_x2218(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t raw =
+      batch->state
+          .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+  // Fighter_UnkInitReset_80067C98 clears x2218_b4/b6/b7, and Fighter_ChangeMotionState clears
+  // reflecting/x2218_b6. x2218_b1 and x2218_b5 are not reset by either owner, so preserve only
+  // those source-backed raw bits while Slippi exposes the pending stock-share slot as zeroed.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkInitReset_80067C98,Fighter_ChangeMotionState}
+  batch->state.match_flow_pending_rebirth_state_flags_2218[idx] =
+      raw & (uint8_t)(MSL_STATE_FLAG_2218_B1 | MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR);
+}
+
+static inline void match_flow_pending_rebirth_restore_x2218(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  batch->state
+      .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX] =
+      batch->state.match_flow_pending_rebirth_state_flags_2218[idx];
 }
 
 static inline float entry_x20(const MslBatch* batch, size_t idx) {
@@ -368,6 +435,7 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   batch->state.speed_y_attack[idx] = 0.0f;
   batch->state.match_flow_timer[idx] = (uint8_t)(frames > 0 ? (frames > 255 ? 255 : frames) : 0);
   batch->state.match_flow_pending_rebirth_char_id[idx] = 0u;
+  batch->state.match_flow_pending_rebirth_state_flags_2218[idx] = 0u;
 }
 
 static inline void enter_eliminated_dead_slot(MslBatch* batch, size_t idx) {
@@ -422,6 +490,69 @@ static inline void enter_eliminated_dead_slot(MslBatch* batch, size_t idx) {
   batch->state.grab_owner_port[idx] = 0xFFu;
   batch->state.match_flow_timer[idx] = 0u;
   batch->state.match_flow_pending_rebirth_char_id[idx] = 0u;
+  batch->state.match_flow_pending_rebirth_state_flags_2218[idx] = 0u;
+  for (size_t k = 0; k < (size_t)MSL_STATE_FLAGS_BYTES; k++) {
+    batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + k] = 0u;
+  }
+  msl_anim_timebase_seed(batch, idx, 0.0f, 0.0f);
+}
+
+static inline void enter_team_stock_share_wait_slot(MslBatch* batch, size_t idx,
+                                                    uint8_t pending_char, uint8_t timer) {
+  if (batch == NULL) {
+    return;
+  }
+  // Teams stock-share waiting slot:
+  // - fn_8016B918 polls zero-stock team players that still have a player entity and waits for a
+  //   START trigger.
+  // - fn_8016B918_inline selects the first same-team donor with Player_GetStocks(i) > 1.
+  // Keep the visible slot zeroed like Slippi while preserving the hidden fighter kind needed by
+  // fn_8016719C / ftCo_800D4FF4 when the share trigger arrives.
+  // refs/melee/src/melee/gm/gm_16AE.c::{fn_8016B918,fn_8016B918_inline}
+  // refs/melee/src/melee/gm/gm_1601.c::fn_8016719C
+  batch->state.char_id[idx] = 0u;
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_DEAD_DOWN;
+  batch->state.animation_index[idx] = 0u;
+  batch->state.stocks[idx] = 0u;
+  batch->state.percent[idx] = 0.0f;
+  batch->state.percent_temp[idx] = 0.0f;
+  batch->state.shield_hp[idx] = 0.0f;
+  batch->state.lightshield_amount[idx] = 0.0f;
+  batch->state.jumps_left[idx] = 0u;
+  batch->state.facing[idx] = 0u;
+  batch->state.facing_dir1[idx] = -1;
+  batch->state.pos_x[idx] = 0.0f;
+  batch->state.pos_y[idx] = 0.0f;
+  batch->state.pos_z[idx] = 0.0f;
+  batch->state.on_ground[idx] = 1u;
+  batch->state.ground_id[idx] = 0u;
+  batch->state.ground_contact_x[idx] = 0.0f;
+  batch->state.ground_contact_y[idx] = 0.0f;
+  batch->state.ground_normal_x[idx] = 0.0f;
+  batch->state.ground_normal_y[idx] = 1.0f;
+  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = 0.0f;
+  batch->state.speed_x_attack[idx] = 0.0f;
+  batch->state.speed_y_attack[idx] = 0.0f;
+  batch->state.hitlag[idx] = 0u;
+  batch->state.hitstun[idx] = 0u;
+  batch->state.hurtbox_state[idx] = 0u;
+  batch->state.hurtcap_count[idx] = 0u;
+  batch->state.hitbox_count[idx] = 0u;
+  batch->state.instance_id[idx] = 0u;
+  batch->state.instance_hit_by[idx] = 0u;
+  batch->state.last_hit_by[idx] = 0u;
+  batch->state.last_attack_landed[idx] = 0u;
+  batch->state.attack_id[idx] = 0u;
+  batch->state.attack_instance[idx] = 0u;
+  batch->state.combo_count[idx] = 0u;
+  batch->state.combo_timer_x2098[idx] = 0u;
+  batch->state.combo_victim_port[idx] = 0xFFu;
+  batch->state.combo_victim_instance_id[idx] = 0u;
+  batch->state.grab_owner_port[idx] = 0xFFu;
+  batch->state.match_flow_timer[idx] = timer;
+  batch->state.match_flow_pending_rebirth_char_id[idx] = pending_char;
   for (size_t k = 0; k < (size_t)MSL_STATE_FLAGS_BYTES; k++) {
     batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + k] = 0u;
   }
@@ -439,6 +570,14 @@ static inline void match_flow_apply_stock_loss(MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/pl/plstale.c::plStale_ResetStaleMoveTableForPlayer
   staling_queue_reset_for_player(batch, idx);
   batch->state.stocks[idx] = (uint8_t)(batch->state.stocks[idx] - 1u);
+  if (batch->state.stocks[idx] == 0u) {
+    const size_t bi = idx / (size_t)MSL_MAX_PLAYERS;
+    if (bi < (size_t)batch->batch_size && batch->state.is_teams[bi] != 0u &&
+        batch->state.char_id[idx] != 0u) {
+      batch->state.match_flow_pending_rebirth_char_id[idx] = batch->state.char_id[idx];
+      match_flow_pending_rebirth_store_x2218(batch, idx);
+    }
+  }
 }
 
 static inline void enter_rebirth_wait(MslBatch* batch, size_t idx, uint32_t stage_id, int port0) {
@@ -754,20 +893,7 @@ void match_flow_update_pre_anim(MslBatch* batch) {
         if (t > 0u) {
           t--;
         }
-        if (t == 0u) {
-          // Team stock-share / pending-Rebirth rows can be replay-visible zeroed DeadDown slots
-          // until the source countdown reaches Rebirth. Restore the hidden fighter kind only at
-          // the actual transition.
-          // refs/melee/src/melee/gm/gm_16AE.c
-          // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D4FF4
-          batch->state.char_id[idx] = pending_char;
-          batch->state.stocks[idx] = 1u;
-          enter_rebirth(batch, idx, c, stage_id, match_flow_respawn_port0(batch, idx, p));
-        } else {
-          enter_eliminated_dead_slot(batch, idx);
-          batch->state.match_flow_timer[idx] = t;
-          batch->state.match_flow_pending_rebirth_char_id[idx] = pending_char;
-        }
+        enter_team_stock_share_wait_slot(batch, idx, pending_char, t);
         continue;
       }
 
@@ -942,17 +1068,9 @@ void match_flow_update_pre_anim(MslBatch* batch) {
           if (batch->state.stocks[idx] == 0u) {
             const uint8_t pending_char = batch->state.match_flow_pending_rebirth_char_id[idx];
             if (pending_char != 0u) {
-              // Teams stock-share / pending-Rebirth reconstruction:
-              // Slippi can serialize the inter-stock DeadDown slot as char_id=0/stocks=0 while
-              // the source match-flow timer is still counting down to Rebirth. The hidden owner is
-              // the player/fighter kind selected by gm_16AE's stock-share respawn path, not the
-              // zeroed replay-visible slot. Restore it only at the actual Rebirth transition so
-              // earlier DeadDown rows remain replay-visible zeroed slots.
-              // refs/melee/src/melee/gm/gm_16AE.c
-              // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D4FF4
-              batch->state.char_id[idx] = pending_char;
-              batch->state.stocks[idx] = 1u;
-              enter_rebirth(batch, idx, c, stage_id, match_flow_respawn_port0(batch, idx, p));
+              enter_team_stock_share_wait_slot(
+                  batch, idx, pending_char,
+                  (uint8_t)(c->dead_timer_frames > 255 ? 255 : c->dead_timer_frames));
             } else {
               enter_eliminated_dead_slot(batch, idx);
             }
@@ -964,6 +1082,9 @@ void match_flow_update_pre_anim(MslBatch* batch) {
         // Rebirth -> RebirthWait.
         if (t == 0) {
           enter_rebirth_wait(batch, idx, stage_id, match_flow_respawn_port0(batch, idx, p));
+        } else {
+          rebirth_refresh_velocity_to_platform(batch, idx, stage_id,
+                                               match_flow_respawn_port0(batch, idx, p));
         }
       } else if (a == (uint16_t)MSL_ACT_REBIRTH_WAIT) {
         // RebirthWait -> Fall.
@@ -1015,8 +1136,45 @@ void match_flow_update_post_input(MslBatch* batch) {
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    const uint32_t stage_id = batch->state.stage_id[bi];
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.stocks[idx] == 0u && batch->state.char_id[idx] == 0u &&
+          batch->state.action_id[idx] == (uint16_t)MSL_ACT_DEAD_DOWN &&
+          batch->state.match_flow_pending_rebirth_char_id[idx] != 0u &&
+          (batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_START) != 0u) {
+        const int donor = match_flow_team_stock_share_donor(batch, bi, p);
+        if (donor >= 0) {
+          const size_t donor_idx = msl_idx_player(bi, donor);
+          const uint8_t pending_char = batch->state.match_flow_pending_rebirth_char_id[idx];
+          // Team stock-share START owner:
+          // - fn_8016B918 requires teams mode, a zero-stock player slot, and START trigger.
+          // - fn_8016B918_inline picks the first same-team donor with more than one stock.
+          // - On success the donor loses one stock, the recipient gains one stock, and
+          //   fn_8016719C schedules the Rebirth platform path.
+          // refs/melee/src/melee/gm/gm_16AE.c::{fn_8016B918,fn_8016B918_inline}
+          // refs/melee/src/melee/gm/gm_1601.c::fn_8016719C
+          batch->state.stocks[donor_idx] = (uint8_t)(batch->state.stocks[donor_idx] - 1u);
+          batch->state.char_id[idx] = pending_char;
+          batch->state.stocks[idx] = 1u;
+          match_flow_pending_rebirth_restore_x2218(batch, idx);
+          enter_rebirth(batch, idx, c, stage_id, match_flow_respawn_port0(batch, idx, p));
+          // fn_8016B918 runs from game/match flow before the fighter procUpdate that advances
+          // Rebirth's first visible frame. This sim observes START after its pre-input animation
+          // phase, so seed the same post-frame timebase explicitly for the share-enter path.
+          // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B918
+          // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_Rebirth_Anim,ftCo_Rebirth_Phys}
+          if (c->rebirth_timer_frames > 0u) {
+            batch->state.match_flow_timer[idx] =
+                (uint8_t)((c->rebirth_timer_frames - 1u) > 255u ? 255u
+                                                                : (c->rebirth_timer_frames - 1u));
+          }
+          rebirth_refresh_velocity_to_platform(batch, idx, stage_id,
+                                               match_flow_respawn_port0(batch, idx, p));
+          msl_anim_timebase_seed(batch, idx, 1.0f, 1.0f);
+          continue;
+        }
+      }
       if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_REBIRTH_WAIT) {
         continue;
       }

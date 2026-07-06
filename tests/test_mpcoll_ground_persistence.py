@@ -7,6 +7,13 @@ from tests.stage_metadata_helpers import fd_stage_segments
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_DAMAGE_AIR_3 = 0x0056
+
+STAGE_BATTLEFIELD = 2
+CHAR_SHEIK = 7
+CHAR_FOX = 1
+SM_WAIT1_0 = 2
+SM_SHEIK_DAMAGE_AIR_3 = 176
 
 
 def _fd_main_floor_and_right_shared_endpoint() -> tuple[int, float, float]:
@@ -86,3 +93,93 @@ def test_ground_id_persists_at_shared_endpoint_across_frames() -> None:
         assert int(o1["ground_id"][0]) == main_i
     finally:
         msl_binding.destroy(handle)
+
+
+def _damage_air3_under_battlefield_seed() -> np.ndarray:
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(STAGE_BATTLEFIELD)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, 0] = np.uint8(CHAR_SHEIK)
+    seed["char_id"][0, 1] = np.uint8(CHAR_FOX)
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGE_AIR_3)
+    seed["action_frame"][0, 0] = np.int16(28)
+    seed["animation_index"][0, 0] = np.uint32(SM_SHEIK_DAMAGE_AIR_3)
+    seed["anim_frame_f32"][0, 0] = np.float32(28.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["facing_dir1"][0, 0] = np.int8(1)
+    seed["pos_x"][0, 0] = np.float32(43.144248962402344)
+    seed["pos_y"][0, 0] = np.float32(-57.66318130493164)
+    seed["speed_y_self"][0, 0] = np.float32(-2.130000114440918)
+    seed["speed_x_attack"][0, 0] = np.float32(-0.9547246694564819)
+    seed["speed_y_attack"][0, 0] = np.float32(0.20089276134967804)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(5)
+    seed["hitstun"][0, 0] = np.uint16(4)
+
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(44.09897232055664)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-55.734073638916016)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    seed["action_id"][0, 1] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 1] = np.uint32(SM_WAIT1_0)
+    seed["frame_speed_mul_f32"][0, 1] = np.float32(1.0)
+    seed["on_ground"][0, 1] = np.uint8(1)
+    seed["ground_id"][0, 1] = np.uint16(0)
+    return seed
+
+
+def _step_damage_air3_under_battlefield_seed(*, runtime_prev_authority: bool) -> np.void:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed = _damage_air3_under_battlefield_seed()
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+        if runtime_prev_authority:
+            msl_binding.debug_set_floor_sweep_prev_runtime(
+                handle,
+                0,
+                0,
+                float(seed["floor_sweep_prev_pos_x_f32"][0, 0]),
+                float(seed["floor_sweep_prev_pos_y_f32"][0, 0]),
+                1,
+            )
+        inp = np.zeros((1, input_stride), dtype=np.uint8)
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+        msl_binding.step_input(handle, inp, inp)
+        msl_binding.write_compare(handle, out)
+        return out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_damageair3_seed_prev_floor_sweep_does_not_project_to_carried_floor() -> None:
+    out = _step_damage_air3_under_battlefield_seed(runtime_prev_authority=False)
+
+    assert int(out["action_id"][0]) == ACT_DAMAGE_AIR_3
+    assert int(out["action_frame"][0]) == 29
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_x"][0]) == np.float32(42.23943328857422)
+    assert float(out["pos_y"][0]) == np.float32(-59.60279083251953)
+
+
+def test_damageair3_runtime_prev_floor_sweep_keeps_stay_airborne_projection() -> None:
+    out = _step_damage_air3_under_battlefield_seed(runtime_prev_authority=True)
+
+    assert int(out["action_id"][0]) == ACT_DAMAGE_AIR_3
+    assert int(out["action_frame"][0]) == 29
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_x"][0]) == np.float32(47.6036262512207)
+    assert float(out["pos_y"][0]) == np.float32(0.0028750000055879354)

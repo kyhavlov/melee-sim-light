@@ -1625,9 +1625,14 @@ def test_cliff_owned_sloped_ledge_floor_prefix_lands_from_jumpaerial_escapeair()
         (0, 0),
     ],
 )
-def test_cliff_owned_sloped_ledge_floor_prefix_rejects_wrong_or_expired_owner(
+def test_sloped_ledge_floor_prefix_current_source_producer_wins_over_restored_owner(
     cliff_floor_delta: int, ledge_cooldown: int
 ) -> None:
+    # The restored cliff-floor lane is provenance, not the publication result. When the current
+    # EscapeAir callback's floor producer accepts the generated sloped ledge floor, it may publish
+    # that floor even if the restored cliff id is wrong or the ledge cooldown is expired.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
     _rows, carried_floor, _stale_floor = _run_metadata_sloped_cliff_floor_prefix()
     rows, _expected_floor, _stale_floor = _run_metadata_sloped_cliff_floor_prefix(
         cliff_floor_id=carried_floor + cliff_floor_delta,
@@ -1635,8 +1640,9 @@ def test_cliff_owned_sloped_ledge_floor_prefix_rejects_wrong_or_expired_owner(
     )
 
     final = rows[-1]
-    assert int(final["action_id"][0]) != ACT_LANDING_FALL_SPECIAL
-    assert int(final["on_ground"][0]) == 0
+    assert int(final["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(final["on_ground"][0]) == 1
+    assert int(final["ground_id"][0]) == carried_floor
 
 
 @pytest.mark.parametrize("sloped", [False, True])
@@ -1919,9 +1925,9 @@ def test_restored_cliff_floor_requires_live_source_producer(
 @pytest.mark.parametrize(
     ("cliff_floor_id", "ledge_cooldown", "expected_action", "expected_grounded"),
     [
-        (0xFFFF, 20, ACT_ESCAPE_AIR, 0),  # direct later reseed without the hidden lane
-        (2, 0, ACT_ESCAPE_AIR, 0),  # cooldown expired
-        (6, 20, ACT_ESCAPE_AIR, 0),  # wrong-side reconstructed owner
+        (0xFFFF, 20, ACT_LANDING_FALL_SPECIAL, 1),  # current producer, no hidden lane
+        (2, 0, ACT_LANDING_FALL_SPECIAL, 1),  # current producer, cooldown expired
+        (6, 20, ACT_LANDING_FALL_SPECIAL, 1),  # current producer, wrong restored owner
         (2, 20, ACT_LANDING_FALL_SPECIAL, 1),  # same-side carried ledge floor owns handoff
     ],
 )
@@ -1952,6 +1958,7 @@ def test_direct_fall_reseed_cliff_floor_owner_negative_boundaries(
     final = rows[-1]
     assert int(final["on_ground"][0]) == expected_grounded
     assert int(final["action_id"][0]) == expected_action
+    assert int(final["ground_id"][0]) == 2
 
 
 @pytest.mark.parametrize(
@@ -5997,7 +6004,9 @@ def test_fd_damageair_to_attackairhi_entry_bottom_sweep_lands_hard_floor() -> No
     seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(22.251289)
     seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-4.348161)
 
-    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(p, 22.251289, -4.348161, True)
+    )
 
     assert int(out["action_id"][p]) == ACT_LANDING
     assert int(out["on_ground"][p]) == 1
@@ -6050,7 +6059,9 @@ def test_fd_damagefly_to_attackair_entry_bottom_sweep_lands_hard_floor(
     seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(-28.18)
     seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-4.0)
 
-    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(p, -28.18, -4.0, True)
+    )
 
     assert int(out["on_ground"][p]) == 1
     assert int(out["ground_id"][p]) == 1
@@ -6309,7 +6320,9 @@ def test_dream_land_damage_ground_to_attackair_entry_consumes_damage_ecb_floor_c
     seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(22.264)
     seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-7.107)
 
-    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(p, 22.264, -7.107, True)
+    )
 
     assert int(out["action_id"][p]) == ACT_LANDING
     assert int(out["on_ground"][p]) == 1
@@ -6363,7 +6376,9 @@ def test_fd_damage_post_hitlag_carried_hard_floor_projects_airborne(
     seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(49.0)
     seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-14.0)
 
-    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(p, 49.0, -14.0, True)
+    )
 
     assert int(out["action_id"][p]) == damage_action
     assert int(out["on_ground"][p]) == 0
