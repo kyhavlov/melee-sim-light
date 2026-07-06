@@ -728,14 +728,14 @@ def _derive_source_clear_terminal_phase_seed_lane(*, char_id_u8: np.ndarray, act
     - only on terminal timer rows (`t == 1`) under !x221F_b3,
     - only when the active timer run is backed by a causal source-owner set phase edge,
     - only from present/past lanes (`t` and `t-1`), never future frames,
-    - and only while fighter is in decomp-defined down/passive recovery states,
-    - and only in stable ongoing ownership context:
+    - only for source/provenance classes accepted by the native seed-bridge predicate,
+    - only in stable ongoing ownership context:
       - no active hitlag/hitstun at `t` (runtime already has explicit hitstun defer),
       - prior row continuity (`timer 2->1`, same owner, same action progression),
       - active combo provenance (`combo_count > 0 && last_attack_landed > 0`).
 
-    This keeps derivation strict-causal for one-step reseed while matching decomp ownership
-    responsibilities across ftColl combo accounting and Fighter_8006A360 timer ordering.
+    This keeps derivation strict-causal for one-step reseed. Validation-inferred action/frame/flag
+    distinctions are seed/provenance bridge inputs, not free-running gameplay predicates.
     refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
     """
     max_action = max([*(int(action) for _, action in terminal_followup_cmd0_on_by_char_action.keys()), *(int(action) for _, action in terminal_followup_cmd0_off_by_char_action.keys()), 0])

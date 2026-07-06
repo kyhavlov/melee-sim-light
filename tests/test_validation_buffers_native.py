@@ -27,7 +27,7 @@ _REPLAYS = (
         ("capture_grab_timer_f32", "guard_reflect_timer_x14", "stale_attack_instance"),
         (9679, 2),
         {
-            "seed_t": "a04f2532d96ce495088a74426bcf9c0f",
+            "seed_t": "0fb20462454c5ed7aa69b1270f8b515c",
             "prev_input_t": "4c534a65894eed17f4d032806450576b",
             "input_t": "5ce03af38ee16f0157b7d9731f1df95b",
             "ref_t1": "d8dd448157d008e114bcb5f584b4c129",
@@ -38,7 +38,7 @@ _REPLAYS = (
         ("stage_dream_whispy_wind_valid_u8", "stage_dream_whispy_wind_timer_u16"),
         (12471, 2),
         {
-            "seed_t": "ad3853795f7f7881f4ac0223610b5777",
+            "seed_t": "dcab1af2242f2d999207bd3843faf5ee",
             "prev_input_t": "bb15583915bccdc23fe0a4643014264b",
             "input_t": "dcfe3ac41d3a21c8eb1b1f96709503c6",
             "ref_t1": "82e62c74248a30d99839446ab6f7cb9a",
@@ -49,7 +49,7 @@ _REPLAYS = (
         ("stage_dream_whispy_wind_valid_u8", "guard_special_enable_timer_x1c"),
         (13272, 2),
         {
-            "seed_t": "ec0a2b0b7906f809da8860f276c92b49",
+            "seed_t": "0ec3c834f8e64692ccde7bc334d0c27f",
             "prev_input_t": "c94a05b021295bc217b2779b0ac6da71",
             "input_t": "4ed5701d19a0bef1936e321cdd1b80a4",
             "ref_t1": "6f355c0c0455ea73fbdd9ea8524dadb9",
@@ -60,7 +60,7 @@ _REPLAYS = (
         ("stage_fod_platform_height_valid_u8", "floor_skip_segment_valid_u8"),
         (5921, 2),
         {
-            "seed_t": "50cd69282d362dffbd0550827144e690",
+            "seed_t": "0cc7d17f971318526abac4824349576b",
             "prev_input_t": "664369b710a4411fa8377c0a58b37340",
             "input_t": "025ee4e26f59fbabae08972ec2b6f3e2",
             "ref_t1": "dc8978204b6216f86a65ffcecdc72816",
@@ -71,7 +71,7 @@ _REPLAYS = (
         ("item_hidden_callback_flags", "item_reflect_transfer_iid"),
         (11918, 2),
         {
-            "seed_t": "f97b3b65031a78be3aa94b9a683f1a93",
+            "seed_t": "ba2651b683b0f62b5668528b7e2de408",
             "prev_input_t": "93de41527f0d482497cbde739960759d",
             "input_t": "959d3abc039a38e5fd3cc1e96f2be8a6",
             "ref_t1": "44699d3fa431d07288fdeeef53a82d69",
@@ -82,7 +82,7 @@ _REPLAYS = (
         ("stage_yoshi_shyguy_valid_u8", "item_shyguy_hitlag_valid_u8"),
         (8459, 2),
         {
-            "seed_t": "68317de3744a9b7bf500b8dd5271b1c1",
+            "seed_t": "1b7ecb73dcefeca7a17278914a3d4068",
             "prev_input_t": "dcf01da1e89a5602394152b388b867f2",
             "input_t": "7a68112375241015539bc07f88509cd1",
             "ref_t1": "ca0776567391b30dfdf3f0e492c97c28",
@@ -93,7 +93,7 @@ _REPLAYS = (
         ("item_hitlist_victim_iid", "item_hitlist_victim_hitbox_mask"),
         (9439, 2),
         {
-            "seed_t": "48fe7d5ca92390cee61e93b8689079d4",
+            "seed_t": "4adbb337585f857ca9b240708b672d29",
             "prev_input_t": "64c0dff19de83308cecd727461f8d09c",
             "input_t": "cbda5bc05c9f40ddbf347b823063ba7f",
             "ref_t1": "f39d1318101d1a93aa0e30d8eb8212da",
@@ -104,7 +104,7 @@ _REPLAYS = (
         ("guard_x10", "combat_hitlist_hb_valid"),
         (9560, 4),
         {
-            "seed_t": "78e6f901972bfdb4e3cc82e6b9be7456",
+            "seed_t": "3f471cd3d8ac7a91006a0da2fc52334f",
             "prev_input_t": "46e7df1f24b517cdce48f7e8eeab9213",
             "input_t": "d633bfc4ccf8f861f85f9fc330d39450",
             "ref_t1": "cd15eed0977cd64b023ba057e3e4ac9a",

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from melee_sim import _native as msl_binding
-from tools.slippi.validation_buffer_builder import build_validation_buffers_from_slp
 from tools.slippi.validation_buffer_seed import _derive_source_clear_terminal_phase_seed_lane
 
 
@@ -32,7 +30,12 @@ def _derive_terminal_phase(
         state_flags_u8=np.asarray(state_flags, dtype=np.uint8),
         last_hit_by_u8=np.array([1, 1], dtype=np.uint8) if last_hit_by is None else last_hit_by,
         terminal_followup_cmd0_on_by_char_action={(1, 0x0041): 4, (1, 0x0045): 5, (1, 0x00EC): 30},
-        terminal_followup_cmd0_off_by_char_action={(1, 0x0041): 37, (1, 0x0045): 31, (1, 0x00EC): -1},
+        terminal_followup_cmd0_off_by_char_action={
+            (1, 0x0038): 20,
+            (1, 0x0041): 37,
+            (1, 0x0045): 31,
+            (1, 0x00EC): -1,
+        },
     )
 
 
@@ -127,9 +130,9 @@ def test_source_clear_terminal_phase_wait_entry_uses_default_clear() -> None:
     assert int(got[1]) == 0
 
 
-def test_source_clear_terminal_phase_pure_reflect_behavior_wait_remains_outside_owner() -> None:
-    # Pure fp+0x2218 reflect-behavior carry has separate item/reflect provenance and is not the
-    # ordinary Wait-entry terminal clear fixed by Fighter_8006A360.
+def test_source_clear_terminal_phase_pure_reflect_behavior_wait_seed_bridge() -> None:
+    # Pure fp+0x2218 reflect-behavior carry is reconstructed only as a seed/provenance bridge, not
+    # as ordinary Wait-entry gameplay that overrides Fighter_8006A360.
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218/fp+0x221C lanes)
     got = _derive_terminal_phase(
         action_id=np.array([0x000E, 0x000E], dtype=np.uint16),
@@ -140,32 +143,92 @@ def test_source_clear_terminal_phase_pure_reflect_behavior_wait_remains_outside_
     assert int(got[1]) == 1
 
 
-def test_source_clear_terminal_phase_motivating_wait_rows_match_last_hit_by() -> None:
-    # Focused replay proof for the first-divergence rows recorded in
-    # reports/triage/combat_owner_worklog.md.
+def test_source_clear_terminal_phase_generic_expiry_clears_non_bridge_rows() -> None:
+    # These rows are not accepted seed/provenance bridge cases; Fighter_8006A360 remains the
+    # generic terminal owner and clears x18C4_source_ply at expiry.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
     cases = (
-        ("replays/validation/marth/WellWornSmallGoshawk.slpz", (1, 2), 408, 0),
-        ("replays/validation/sheik/StiffLustrousZebra.slpz", (1, 2), 340, 0),
+        (0x0012, 3, [0x40, 0, 0, 0, 0]),  # Turn with fp+0x2218_b1 command/provenance.
+        (0x0027, 2, [0x40, 0, 0, 0, 0]),  # Squat with fp+0x2218_b1.
+        (0x0038, 5, [0, 0, 0, 0, 0]),  # AttackHi3 after opening frame window.
+        (0x0041, 2, [0x40, 0, 0, 0, 0]),  # AttackAirN terminal opening rows.
+        (0x0018, 1, [0x04, 0, 0, 0x20, 0]),  # KneeBend with partial fp+0x221C source flags.
+        (0x000E, 3, [0x40, 0, 0, 0, 0]),  # Wait with fp+0x2218_b1 command/provenance.
+        (0x000E, 13, [0x84, 0, 0, 0, 0]),  # Wait composite allow+reflect is not pure reflect carry.
+        (0x0019, 13, [0x80, 0, 0, 0, 0]),  # JumpF with allow-interrupt raw bit.
+        (0x0019, 10, [0x40, 0, 0, 0, 0]),  # JumpF with fp+0x2218_b1 provenance.
+        (0x0019, 10, [0x20, 0, 0, 0, 0]),  # JumpF with fp+0x2218_b2 provenance.
+        (0x0019, 20, [0, 0, 0, 0, 0]),  # JumpF terminal frame boundary.
+        (0x00E9, 22, [0x04, 0, 0, 0, 0]),  # EscapeF outside late park frames.
+        (0x00E9, 25, [0x40, 0, 0, 0, 0]),  # EscapeF after late park frames.
+        (0x00EC, 8, [0, 0, 0, 0, 0]),  # EscapeAir early terminal rows.
+        (0x00B3, -1, [0xC0, 1, 0x80, 0, 0]),  # Guard composite raw command bits.
     )
-    for replay, ports, record, player in cases:
-        buffers = build_validation_buffers_from_slp(
-            slp_path=replay,
-            ports=list(ports),
-            ucf_enabled=True,
-            ucf_cardinals_1_0_enabled=True,
+    for action, frame, flags in cases:
+        got = _derive_terminal_phase(
+            action_id=np.array([action, action], dtype=np.uint16),
+            action_frame=np.array([frame - 1, frame], dtype=np.int16),
+            state_flags=np.array([flags, flags], dtype=np.uint8),
         )
-        n = int(buffers.num_records)
-        handle = msl_binding.init(n, int(buffers.num_players), True, True)
-        out = np.zeros(n, dtype=buffers.ref_t1.dtype)
-        try:
-            msl_binding.reseed_seed(handle, buffers.seed_u8())
-            msl_binding.step_input(handle, buffers.prev_input_u8(), buffers.input_u8())
-            msl_binding.write_compare(handle, out.view(np.uint8).reshape(n, -1))
-        finally:
-            msl_binding.destroy(handle)
 
-        assert int(buffers.seed_t["source_clear_terminal_phase"][record, player]) == 0
-        assert int(buffers.seed_t["source_clear_timer_x18c8"][record, player]) == 1
-        assert int(out["last_hit_by"][record, player]) == int(
-            buffers.ref_t1["last_hit_by"][record, player]
+        assert int(got[1]) == 0, (action, frame, flags)
+
+    fx_special = _derive_terminal_phase(
+        action_id=np.array([0x015E, 0x015E], dtype=np.uint16),
+        action_frame=np.array([5, 6], dtype=np.int16),
+        state_flags=np.array([[0x80, 0, 0, 0, 0], [0x80, 0, 0, 0, 0]], dtype=np.uint8),
+        last_attack_landed=np.array([9, 9], dtype=np.uint8),
+    )
+    assert int(fx_special[1]) == 0
+
+    attack_air_lw = _derive_terminal_phase(
+        action_id=np.array([0x0045, 0x0045], dtype=np.uint16),
+        action_frame=np.array([9, 10], dtype=np.int16),
+        state_flags=np.array([[0x20, 0, 0, 0, 0], [0x20, 0, 0, 0, 0]], dtype=np.uint8),
+        combo_count=np.array([0, 0], dtype=np.uint8),
+    )
+    assert int(attack_air_lw[1]) == 0
+
+
+def test_source_clear_terminal_phase_positive_seed_bridge_rows_are_modeled() -> None:
+    # Controls for accepted seed/provenance bridge rows. These are not promoted to free-running
+    # gameplay predicates; they derive `source_clear_terminal_phase` for one-step reseed only.
+    cases = (
+        (0x0012, 4, [0x80, 0, 0, 0, 0]),
+        (0x0027, 4, [0, 0, 0, 0, 0]),
+        (0x0038, 2, [0, 0, 0, 0, 0]),
+        (0x0041, 3, [0, 0, 0, 0, 0]),
+        (0x0018, 1, [0x04, 0, 0, 0x60, 0]),
+        (0x0019, 13, [0, 0, 0, 0, 0]),
+        (0x0019, 10, [0x04, 0, 0, 0, 0]),
+        (0x0019, 10, [0x44, 0, 0, 0, 0]),
+        (0x0019, 10, [0x24, 0, 0, 0, 0]),
+        (0x00E9, 23, [0x04, 0, 0, 0, 0]),
+        (0x00E9, 24, [0x40, 0, 0, 0, 0]),
+        (0x00EC, 15, [0x04, 0, 0, 0, 0]),
+        (0x00B3, -1, [0x04, 1, 0x80, 0, 0]),
+    )
+    for action, frame, flags in cases:
+        got = _derive_terminal_phase(
+            action_id=np.array([action, action], dtype=np.uint16),
+            action_frame=np.array([frame - 1, frame], dtype=np.int16),
+            state_flags=np.array([flags, flags], dtype=np.uint8),
         )
+
+        assert int(got[1]) == 1, (action, frame, flags)
+
+    fx_special = _derive_terminal_phase(
+        action_id=np.array([0x015E, 0x015E], dtype=np.uint16),
+        action_frame=np.array([11, 12], dtype=np.int16),
+        state_flags=np.array([[0xC0, 0, 0, 0, 0], [0xC0, 0, 0, 0, 0]], dtype=np.uint8),
+        last_attack_landed=np.array([15, 15], dtype=np.uint8),
+    )
+    assert int(fx_special[1]) == 1
+
+    attack_air_lw = _derive_terminal_phase(
+        action_id=np.array([0x0045, 0x0045], dtype=np.uint16),
+        action_frame=np.array([8, 9], dtype=np.int16),
+        state_flags=np.array([[0x40, 0, 0, 0, 0], [0x40, 0, 0, 0, 0]], dtype=np.uint8),
+        combo_count=np.array([0, 0], dtype=np.uint8),
+    )
+    assert int(attack_air_lw[1]) == 1

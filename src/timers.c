@@ -10,6 +10,7 @@
 #include "buttons.h"
 #include "common_params.h"
 #include "damage_source.h"
+#include "damage_terminal_owner.h"
 #include "input_axis.h"
 #include "msl_math.h"
 #include "motion_state_owners.h"
@@ -39,25 +40,8 @@ static inline uint8_t timers_source_clear_downed_recovery_terminal_parks_owner(
     return 0u;
   }
   const uint16_t action = batch->state.action_id[idx];
-  switch (action) {
-    case MSL_ACT_DOWN_BOUND_U:
-    case MSL_ACT_DOWN_WAIT_U:
-    case MSL_ACT_DOWN_STAND_U:
-    case MSL_ACT_DOWN_ATTACK_U:
-    case MSL_ACT_DOWN_FOWARD_U:
-    case MSL_ACT_DOWN_BACK_U:
-    case MSL_ACT_DOWN_BOUND_D:
-    case MSL_ACT_DOWN_WAIT_D:
-    case MSL_ACT_DOWN_STAND_D:
-    case MSL_ACT_DOWN_ATTACK_D:
-    case MSL_ACT_DOWN_FOWARD_D:
-    case MSL_ACT_DOWN_BACK_D:
-    case MSL_ACT_PASSIVE:
-    case MSL_ACT_PASSIVE_STAND_F:
-    case MSL_ACT_PASSIVE_STAND_B:
-      break;
-    default:
-      return 0u;
+  if (msl_source_clear_terminal_is_downed_recovery_park_action(action) == 0u) {
+    return 0u;
   }
 
   if (batch->state.source_clear_owner_set_phase[idx] == 0u || batch->state.combo_count[idx] == 0u ||
@@ -118,24 +102,24 @@ static inline uint8_t timers_seed_terminal_phase_parks_source_owner(const MslBat
   if (batch == NULL || batch->state.source_clear_terminal_phase[idx] == 0u) {
     return 0u;
   }
-  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
-      batch->state.action_frame[idx] <= 1) {
-    const uint8_t flags_2218 =
-        batch->state
-            .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
-    const uint8_t flags_221c =
-        batch->state
-            .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-    // Fighter_8006A360's ordinary terminal x18C8 tick clears x18C4_source_ply. A seeded
-    // terminal-phase bridge must not override that on early Wait-entry rows. Pure reflect-behavior
-    // carry remains outside this owner and is left to the existing item/reflect provenance bridge.
-    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218/fp+0x221C/last_hit_by lanes)
-    if (!(flags_2218 == (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR && flags_221c == 0u)) {
-      return 0u;
-    }
-  }
-  return 1u;
+  const uint16_t action = batch->state.action_id[idx];
+  const int16_t action_frame = (batch->state.seed_prev_action_frame[idx] >= 0)
+                                   ? (int16_t)(batch->state.seed_prev_action_frame[idx] + 1)
+                                   : batch->state.action_frame[idx];
+  const uint8_t flags_2218 =
+      batch->state
+          .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+  const uint8_t flags_221c =
+      batch->state
+          .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  // `source_clear_terminal_phase` is a one-step reseed/provenance bridge. Natural free-running
+  // gameplay reaches this helper with the lane clear and takes Fighter_8006A360's generic
+  // terminal source clear instead.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  return msl_source_clear_terminal_seed_bridge_parks_source_owner(
+      batch->state.source_clear_terminal_phase[idx], action, action_frame, flags_2218, flags_221c,
+      batch->state.last_attack_landed[idx],
+      msl_motion_state_fx_special_kind_fast(batch->state.char_id[idx], action));
 }
 
 void timers_update(MslBatch* batch) {

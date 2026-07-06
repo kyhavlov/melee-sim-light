@@ -9,6 +9,7 @@
 #include "damage_source.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
+#include "state_flags.h"
 
 enum {
   MSL_DAMAGE_OWNER_FOX_DYNAMIC_TAIL_PART_ID = 18,
@@ -38,6 +39,139 @@ static inline uint8_t msl_damage_owner_is_damage_collision_landing_action(uint16
 
 static inline uint8_t msl_damage_owner_is_damagefly_collision_action(uint16_t action_id) {
   return msl_motion_state_common_class3_has_fast(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
+}
+
+static inline uint8_t msl_source_clear_terminal_is_downed_recovery_park_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DOWN_BOUND_U:
+    case MSL_ACT_DOWN_WAIT_U:
+    case MSL_ACT_DOWN_STAND_U:
+    case MSL_ACT_DOWN_ATTACK_U:
+    case MSL_ACT_DOWN_FOWARD_U:
+    case MSL_ACT_DOWN_BACK_U:
+    case MSL_ACT_DOWN_BOUND_D:
+    case MSL_ACT_DOWN_WAIT_D:
+    case MSL_ACT_DOWN_STAND_D:
+    case MSL_ACT_DOWN_ATTACK_D:
+    case MSL_ACT_DOWN_FOWARD_D:
+    case MSL_ACT_DOWN_BACK_D:
+    case MSL_ACT_PASSIVE:
+    case MSL_ACT_PASSIVE_STAND_F:
+    case MSL_ACT_PASSIVE_STAND_B:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t msl_source_clear_terminal_seed_bridge_followup_action(uint16_t action_id) {
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_ATTACK_AIR_N ||
+                   action_id == (uint16_t)MSL_ACT_ATTACK_AIR_LW ||
+                   action_id == (uint16_t)MSL_ACT_ESCAPE_AIR);
+}
+
+static inline uint8_t msl_source_clear_terminal_seed_bridge_continuation_action(
+    uint16_t action_id) {
+  return (
+      uint8_t)(action_id == (uint16_t)MSL_ACT_TURN || action_id == (uint16_t)MSL_ACT_KNEE_BEND ||
+               action_id == (uint16_t)MSL_ACT_JUMP_F || action_id == (uint16_t)MSL_ACT_JUMP_B ||
+               action_id == (uint16_t)MSL_ACT_SQUAT || action_id == (uint16_t)MSL_ACT_ATTACK_HI3);
+}
+
+static inline uint8_t msl_source_clear_terminal_seed_bridge_has_candidate_action(uint16_t action_id,
+                                                                                 uint8_t fx_kind) {
+  switch (action_id) {
+    case MSL_ACT_WAIT:
+    case MSL_ACT_GUARD:
+    case MSL_ACT_ESCAPE_F:
+    case MSL_ACT_DEAD_UP_STAR:
+    case MSL_ACT_ATTACK_AIR_N:
+    case MSL_ACT_ATTACK_AIR_LW:
+    case MSL_ACT_ESCAPE_AIR:
+    case MSL_ACT_TURN:
+    case MSL_ACT_KNEE_BEND:
+    case MSL_ACT_JUMP_F:
+    case MSL_ACT_JUMP_B:
+    case MSL_ACT_SQUAT:
+    case MSL_ACT_ATTACK_HI3:
+      return 1u;
+    default:
+      return (uint8_t)(msl_source_clear_terminal_is_downed_recovery_park_action(action_id) ||
+                       fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_START);
+  }
+}
+
+static inline uint8_t msl_source_clear_terminal_seed_bridge_parks_source_owner(
+    uint8_t seed_bridge_active, uint16_t action_id, int16_t effective_action_frame,
+    uint8_t flags_2218, uint8_t flags_221c, uint8_t last_attack_landed, uint8_t fx_kind) {
+  // Seed/provenance bridge only. Fighter_8006A360 is the generic x18C8 terminal owner and clears
+  // x18C4_source_ply when the timer expires. This helper reconstructs replay-observed terminal
+  // source publication only when gated by `source_clear_terminal_phase`; it must not be used to
+  // author natural free-running source lifetime.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by/fp+0x2218/fp+0x221C)
+  if (seed_bridge_active == 0u) {
+    return 0u;
+  }
+  if (msl_source_clear_terminal_is_downed_recovery_park_action(action_id) != 0u ||
+      action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
+    return 1u;
+  }
+  if (fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_START) {
+    return (uint8_t)(flags_2218 == 0u || last_attack_landed == 15u);
+  }
+
+  switch (action_id) {
+    case MSL_ACT_WAIT:
+      // Pure reflect-behavior carry is item/reflect provenance; ordinary Wait entry and command
+      // bits stay on Fighter_8006A360's default clear.
+      if ((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_B1) != 0u ||
+          flags_2218 == (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT |
+                                  MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR)) {
+        return 0u;
+      }
+      if (effective_action_frame <= 1) {
+        return (uint8_t)(flags_2218 == (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR &&
+                         flags_221c == 0u);
+      }
+      return 1u;
+    case MSL_ACT_TURN:
+      return (uint8_t)(flags_2218 == 0u ||
+                       flags_2218 == (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT);
+    case MSL_ACT_SQUAT:
+      return (uint8_t)(flags_2218 == 0u);
+    case MSL_ACT_ATTACK_HI3:
+      return (uint8_t)(flags_2218 == 0u && effective_action_frame < 5);
+    case MSL_ACT_ATTACK_AIR_N:
+      return (uint8_t)(effective_action_frame != 2);
+    case MSL_ACT_KNEE_BEND:
+      return (uint8_t)((flags_221c & (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) !=
+                       (uint8_t)MSL_STATE_FLAG_221C_B2);
+    case MSL_ACT_JUMP_F:
+      return (uint8_t)((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u &&
+                       flags_2218 != (uint8_t)MSL_STATE_FLAG_2218_B1 &&
+                       flags_2218 != (uint8_t)MSL_STATE_FLAG_2218_B2 &&
+                       effective_action_frame != 20);
+    case MSL_ACT_JUMP_B:
+      return 1u;
+    case MSL_ACT_ESCAPE_F:
+      return (uint8_t)(effective_action_frame == 23 || effective_action_frame == 24);
+    case MSL_ACT_ESCAPE_AIR:
+      return (uint8_t)(effective_action_frame > 10);
+    case MSL_ACT_ATTACK_AIR_LW:
+      return (uint8_t)(effective_action_frame < 10);
+    case MSL_ACT_GUARD:
+      return (uint8_t)(flags_2218 !=
+                           (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B2 |
+                                     MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) &&
+                       flags_2218 != (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT |
+                                               MSL_STATE_FLAG_2218_B1) &&
+                       flags_2218 !=
+                           (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                                     MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR));
+    default:
+      return 0u;
+  }
 }
 
 static inline uint8_t msl_damage_owner_allows_sdi_action(uint16_t action_id) {

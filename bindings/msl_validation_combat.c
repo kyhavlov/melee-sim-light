@@ -14,12 +14,14 @@
 #include "../src/char_params.h"
 #include "../src/combat_geom.h"
 #include "../src/common_params.h"
+#include "../src/damage_terminal_owner.h"
 #include "../src/hit_elements.h"
 #include "../src/hitboxes_tables.h"
 #include "../src/hurtcaps_tables.h"
 #include "../src/ids.h"
 #include "../src/attack_id_tables.h"
 #include "../src/move_tables.h"
+#include "../src/motion_state_owners.h"
 #include "../src/shield_tilt_table.h"
 #include "../src/staling.h"
 #include "../src/state_flags.h"
@@ -3905,67 +3907,6 @@ PyObject* msl_derive_source_clear_grounded_damage_clear_phase_py(PyObject* self,
   return (PyObject*)out;
 }
 
-static bool msl_source_clear_terminal_action_allowed(uint16_t action) {
-  switch (action) {
-    case 0x000Eu:  // Wait
-    case 0x00B3u:  // Guard
-    case 0x00B7u:  // DownBoundU
-    case 0x00B8u:  // DownWaitU
-    case 0x00BAu:  // DownStandU
-    case 0x00BBu:  // DownAttackU
-    case 0x00BCu:  // DownForwardU
-    case 0x00BDu:  // DownBackU
-    case 0x00BFu:  // DownBoundD
-    case 0x00C0u:  // DownWaitD
-    case 0x00C2u:  // DownStandD
-    case 0x00C3u:  // DownAttackD
-    case 0x00C4u:  // DownForwardD
-    case 0x00C5u:  // DownBackD
-    case 0x00C7u:  // Passive
-    case 0x00C8u:  // PassiveStandF
-    case 0x00C9u:  // PassiveStandB
-    case 0x00E9u:  // EscapeF
-    case 0x015Eu:  // Fox/Falco SpecialAirSStart
-    case 0x0004u:  // DeadUpStar
-    case 0x0041u:  // AttackAirN
-    case 0x0045u:  // AttackAirLw
-    case 0x00ECu:  // EscapeAir
-    case 0x0012u:  // Turn
-    case 0x0018u:  // KneeBend
-    case 0x0019u:  // JumpF
-    case 0x001Au:  // JumpB
-    case 0x0027u:  // Squat
-    case 0x0038u:  // AttackHi3
-      return true;
-    default:
-      return false;
-  }
-}
-
-static bool msl_source_clear_terminal_followup_action(uint16_t action) {
-  return action == 0x0041u || action == 0x0045u || action == 0x00ECu;
-}
-
-static bool msl_source_clear_terminal_continuation_action(uint16_t action) {
-  return action == 0x0012u || action == 0x0018u || action == 0x0019u || action == 0x001Au ||
-         action == 0x0027u || action == 0x0038u;
-}
-
-static bool msl_source_clear_wait_entry_takes_default_terminal_clear(const uint8_t* sf,
-                                                                     npy_intp sf_w, npy_intp row,
-                                                                     int cur_af) {
-  if (cur_af > 1) return false;
-  const uint8_t flags_2218 = sf[(row * sf_w) + (npy_intp)MSL_STATE_FLAGS_2218_INDEX];
-  const uint8_t flags_221c = sf[(row * sf_w) + (npy_intp)MSL_STATE_FLAGS_221C_INDEX];
-  // Fighter_8006A360 owns the default x18C8 terminal clear. Early Wait rows reached from
-  // ordinary action entry should therefore publish x18C4_source_ply=6, not the parked owner.
-  // Keep the existing pure fp+0x2218 reflect-behavior carry out of this source-clear owner; those
-  // rows are item/reflect provenance, not the ordinary Wait-entry terminal clear fixed here.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218/fp+0x221C/last_hit_by lanes)
-  return !(flags_2218 == (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR && flags_221c == 0u);
-}
-
 PyObject* msl_derive_source_clear_terminal_phase_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* char_obj = NULL;
@@ -4016,6 +3957,10 @@ PyObject* msl_derive_source_clear_terminal_phase_py(PyObject* self, PyObject* ar
                     "source_clear_terminal_phase inputs have incompatible shapes");
     return NULL;
   }
+  if (motion_state_owners_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "motion_state_owners_init failed");
+    return NULL;
+  }
   const npy_intp action_cap = PyArray_DIM(cmd0_on, 1);
   npy_intp dims[1] = {n};
   PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
@@ -4040,35 +3985,45 @@ PyObject* msl_derive_source_clear_terminal_phase_py(PyObject* self, PyObject* ar
   for (npy_intp i = 1; i < n; i++) {
     if (timer_p[i] != 1u) continue;
     const uint16_t act = a[i];
-    if (!msl_source_clear_terminal_action_allowed(act)) continue;
-    if (msl_source_clear_terminal_continuation_action(act) && phase_p[i] == 0u) continue;
+    const uint8_t cid = c[i];
+    const uint8_t fx_kind = msl_motion_state_fx_special_kind(cid, act);
+    if (msl_source_clear_terminal_seed_bridge_has_candidate_action(act, fx_kind) == 0u) continue;
+    if (msl_source_clear_terminal_seed_bridge_continuation_action(act) != 0u && phase_p[i] == 0u) {
+      continue;
+    }
     const int cur_af = (int)af[i];
-    if (act == 0x0019u) {
+    if (act == (uint16_t)MSL_ACT_JUMP_F) {
       if (cur_af < 10 || cur_af > 20) continue;
-    } else if (act == 0x001Au) {
+    } else if (act == (uint16_t)MSL_ACT_JUMP_B) {
       if (cur_af < 30) continue;
-    } else if (act == 0x0018u) {
+    } else if (act == (uint16_t)MSL_ACT_KNEE_BEND) {
       if (cur_af != 1) continue;
       if ((sf[(i * sf_w) + 3] & 0x60u) == 0u) continue;
     }
-    if (act == (uint16_t)MSL_ACT_WAIT &&
-        msl_source_clear_wait_entry_takes_default_terminal_clear(sf, sf_w, i, cur_af)) {
+    const uint8_t flags_2218 = sf[(i * sf_w) + (npy_intp)MSL_STATE_FLAGS_2218_INDEX];
+    const uint8_t flags_221c = sf[(i * sf_w) + (npy_intp)MSL_STATE_FLAGS_221C_INDEX];
+    if (msl_source_clear_terminal_seed_bridge_parks_source_owner(
+            1u, act, (int16_t)cur_af, flags_2218, flags_221c, last_attack_p[i], fx_kind) == 0u) {
       continue;
     }
     const uint8_t owner = source[i];
     if (owner >= 6u) continue;
     if (hl[i] != 0u || hs[i] != 0u) continue;
     if (combo_p[i] == 0u || last_attack_p[i] == 0u) {
-      if (!(act == 0x015Eu || act == 0x0045u || act == 0x0018u || act == 0x0019u ||
-            act == 0x001Au)) {
+      if (!(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_START ||
+            act == (uint16_t)MSL_ACT_ATTACK_AIR_LW || act == (uint16_t)MSL_ACT_KNEE_BEND ||
+            act == (uint16_t)MSL_ACT_JUMP_F || act == (uint16_t)MSL_ACT_JUMP_B)) {
         continue;
       }
-      if ((act == 0x0018u || act == 0x0019u || act == 0x001Au) && last_attack_p[i] == 0u) {
+      if ((act == (uint16_t)MSL_ACT_KNEE_BEND || act == (uint16_t)MSL_ACT_JUMP_F ||
+           act == (uint16_t)MSL_ACT_JUMP_B) &&
+          last_attack_p[i] == 0u) {
         continue;
       }
     }
     if ((sf[(i * sf_w) + 4] & 0x10u) != 0u) continue;
-    if (act != 0x00B3u && !msl_source_clear_terminal_continuation_action(act) &&
+    if (act != (uint16_t)MSL_ACT_GUARD &&
+        msl_source_clear_terminal_seed_bridge_continuation_action(act) == 0u &&
         (sf[(i * sf_w) + 1] != 0u || sf[(i * sf_w) + 2] != 0u)) {
       continue;
     }
@@ -4078,26 +4033,28 @@ PyObject* msl_derive_source_clear_terminal_phase_py(PyObject* self, PyObject* ar
     const int prev_af = (int)af[i - 1];
     const bool same_action_progress = (act == prev_act && cur_af == prev_af + 1);
     const bool guard_hold_progress =
-        (act == 0x00B3u && prev_act == 0x00B3u && cur_af == -1 && prev_af == -1);
+        (act == (uint16_t)MSL_ACT_GUARD && prev_act == (uint16_t)MSL_ACT_GUARD && cur_af == -1 &&
+         prev_af == -1);
     const bool continuation_entry_progress =
-        (msl_source_clear_terminal_continuation_action(act) && cur_af == 1 && prev_af >= 0);
+        (msl_source_clear_terminal_seed_bridge_continuation_action(act) != 0u && cur_af == 1 &&
+         prev_af >= 0);
     if (!(same_action_progress || guard_hold_progress || continuation_entry_progress)) continue;
-    if (msl_source_clear_terminal_followup_action(act) || act == 0x0038u) {
-      const uint8_t cid = c[i];
+    if (msl_source_clear_terminal_seed_bridge_followup_action(act) != 0u ||
+        act == (uint16_t)MSL_ACT_ATTACK_HI3) {
       int cmd0_on = -1;
       int cmd0_off = -1;
       if ((npy_intp)act < action_cap) {
         cmd0_on = (int)on_lut[((npy_intp)cid * action_cap) + act];
         cmd0_off = (int)off_lut[((npy_intp)cid * action_cap) + act];
       }
-      if (act == 0x0041u) {
+      if (act == (uint16_t)MSL_ACT_ATTACK_AIR_N) {
         if (cmd0_on < 0 || cur_af >= cmd0_on) continue;
-      } else if (act == 0x00ECu) {
+      } else if (act == (uint16_t)MSL_ACT_ESCAPE_AIR) {
         if (cmd0_on < 0 || cur_af >= cmd0_on) continue;
-      } else if (act == 0x0045u) {
+      } else if (act == (uint16_t)MSL_ACT_ATTACK_AIR_LW) {
         if (cmd0_off < 0 || cur_af >= cmd0_off) continue;
         if (combo_p[i] != 0u) continue;
-      } else if (act == 0x0038u) {
+      } else if (act == (uint16_t)MSL_ACT_ATTACK_HI3) {
         if (cmd0_off < 0 || cur_af >= cmd0_off) continue;
       }
     }
