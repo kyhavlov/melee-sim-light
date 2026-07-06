@@ -611,6 +611,48 @@ SEAK_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
 ]
 
 
+# ftCaptain_DatAttrs layout (refs/melee/src/melee/ft/chara/ftCaptain/types.h). Key names mirror
+# the decomp field names (they are already consumer-semantic there); unknowns keep the decomp's
+# unk/x-offset names so runtime consumers can be renamed together with upstream decomp progress.
+CAPTAIN_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
+    ("falcon_specialn_stick_range_y_neg", 0x00, "f32"),
+    ("falcon_specialn_stick_range_y_pos", 0x04, "f32"),
+    ("falcon_specialn_angle_diff", 0x08, "f32"),
+    ("falcon_specialn_vel_x", 0x0C, "f32"),
+    ("falcon_specialn_vel_mul", 0x10, "f32"),
+    ("falcon_specials_gr_vel_x", 0x14, "f32"),
+    ("falcon_specials_grav", 0x18, "f32"),
+    ("falcon_specials_terminal_vel", 0x1C, "f32"),
+    ("falcon_specials_unk0", 0x20, "f32"),
+    ("falcon_specials_unk1", 0x24, "f32"),
+    ("falcon_specials_unk2", 0x28, "f32"),
+    ("falcon_specials_unk3", 0x2C, "f32"),
+    ("falcon_specials_unk4", 0x30, "f32"),
+    ("falcon_specials_unk5", 0x34, "f32"),
+    ("falcon_specials_miss_landing_lag", 0x38, "f32"),
+    ("falcon_specials_hit_landing_lag", 0x3C, "f32"),
+    ("falcon_specialhi_air_friction_mul", 0x40, "f32"),
+    ("falcon_specialhi_horz_vel", 0x44, "f32"),
+    ("falcon_specialhi_freefall_air_spd_mul", 0x48, "f32"),
+    ("falcon_specialhi_landing_lag", 0x4C, "f32"),
+    ("falcon_specialhi_unk0", 0x50, "f32"),
+    ("falcon_specialhi_unk1", 0x54, "f32"),
+    ("falcon_specialhi_input_var", 0x58, "f32"),
+    ("falcon_specialhi_unk2", 0x5C, "f32"),
+    ("falcon_specialhi_catch_grav", 0x60, "f32"),
+    ("falcon_specialhi_air_var", 0x64, "i32"),
+    ("falcon_ext_x68", 0x68, "f32"),
+    ("falcon_speciallw_unk1", 0x6C, "i32"),
+    ("falcon_speciallw_flame_particle_angle", 0x70, "f32"),
+    ("falcon_speciallw_on_hit_spd_modifier", 0x74, "f32"),
+    ("falcon_speciallw_unk2", 0x78, "i32"),
+    ("falcon_speciallw_ground_lag_mul", 0x7C, "f32"),
+    ("falcon_speciallw_landing_lag_mul", 0x80, "f32"),
+    ("falcon_speciallw_ground_traction", 0x84, "f32"),
+    ("falcon_speciallw_air_landing_traction", 0x88, "f32"),
+]
+
+
 ZELDA_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
     ("zelda_transform_vel_x_divisor", 0x70, "f32"),
     ("zelda_transform_vel_y_divisor", 0x74, "f32"),
@@ -746,6 +788,29 @@ def _extract_seak_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
     if ext_abs == arc.data_base:
         return out
     for key, off, kind in SEAK_SPECIAL_ATTRS_LAYOUT:
+        if kind == "i32":
+            out[key] = int(_i32_be(buf, ext_abs + off))
+        elif kind == "f32":
+            out[key] = float(_f32_be(buf, ext_abs + off))
+        else:  # pragma: no cover - layout table typo
+            raise ValueError(f"unknown layout kind {kind!r} for {key}")
+    return out
+
+
+def _extract_captain_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
+    """Extract Falcon's ftData.x4 ftCaptain_DatAttrs block.
+
+    - refs/melee/src/melee/ft/chara/ftCaptain/types.h::ftCaptain_DatAttrs
+    - refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c (Falcon Punch x0..x10)
+    - refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c (Raptor Boost x14..x3C)
+    - refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c (Falcon Dive x40..x64)
+    - refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c (Falcon Kick x6C..x88)
+    """
+    out: dict = {}
+    ext_abs = arc.ptr32(ftdata_abs + 0x04)
+    if ext_abs == arc.data_base:
+        return out
+    for key, off, kind in CAPTAIN_SPECIAL_ATTRS_LAYOUT:
         if kind == "i32":
             out[key] = int(_i32_be(buf, ext_abs + off))
         elif kind == "f32":
@@ -1037,6 +1102,8 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out.update(_extract_seak_chain_article(buf, arc, ftdata_abs=ftdata_abs))
     elif ext_attr_layout == "zelda_special":
         out.update(_extract_zelda_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
+    elif ext_attr_layout == "captain_special":
+        out.update(_extract_captain_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
     if extract_fox_blaster:
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
@@ -1414,10 +1481,10 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         elif k in existing:
             out[k] = existing[k]
     # Per-character special-attribute families (ext-attr layouts) use mechanic-position
-    # prefixes; carry every extracted special* / sheik_* / zelda_* key after the ordered common
-    # block.
+    # prefixes; carry every extracted special* / <char>_* key after the ordered common block.
+    ext_prefixes = ("special", "sheik_", "zelda_", "falcon_")
     for k in sorted(extracted):
-        if (k.startswith("special") or k.startswith("sheik_") or k.startswith("zelda_")) and k not in out:
+        if k.startswith(ext_prefixes) and k not in out:
             out[k] = extracted[k]
     for k, v in existing.items():
         if k in drop_keys:
@@ -1451,6 +1518,8 @@ def main() -> None:
     # - "mars_sword": MarsAttributes (refs/melee/.../ftMars/types.h) - Marth (and Roy clone).
     # - "seak_special": ftSeakAttributes (refs/melee/.../ftSeak/types.h) - Sheik.
     # - "zelda_special": ftZelda_DatAttrs (refs/melee/.../ftZelda/types.h) - Zelda.
+    # - "captain_special": ftCaptain_DatAttrs (refs/melee/.../ftCaptain/types.h) - Falcon
+    #   (and Ganon clone).
     mapping = {
         "fox": ("PlFx.dat", "ftDataFox", True, None),
         "falco": ("PlFc.dat", "ftDataFalco", True, None),
@@ -1459,7 +1528,7 @@ def main() -> None:
         "peach": ("PlPe.dat", "ftDataPeach", False, None),
         "marth": ("PlMs.dat", "ftDataMars", False, "mars_sword"),
         "puff": ("PlPr.dat", "ftDataPurin", False, None),
-        "falcon": ("PlCa.dat", "ftDataCaptain", False, None),
+        "falcon": ("PlCa.dat", "ftDataCaptain", False, "captain_special"),
     }
     want = [c.strip() for c in args.chars.split(",") if c.strip()]
     for c in want:

@@ -998,10 +998,11 @@ def _ftdata_xc_count(character: str) -> int:
     where `ftData.x10` is a packed `[blend_frames, dynamics_tree_idx]` pair per anim id.
     """
     # Values are ftData_Table_Unk0[internal_id].count from refs/melee/src/melee/ft/ftdata.c
-    # (FTKIND_MAX rows indexed by FighterKind): fox=row 1, sheik=row 7, marth=row 18,
-    # zelda=row 19, falco=row 22.
+    # (FTKIND_MAX rows indexed by FighterKind): fox=row 1, falcon=row 2, sheik=row 7,
+    # marth=row 18, zelda=row 19, falco=row 22.
     return {
         "fox": 327,
+        "falcon": 318,
         "sheik": 317,
         "zelda": 311,
         "falco": 327,

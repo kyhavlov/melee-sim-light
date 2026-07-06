@@ -147,7 +147,8 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     # src/mpcoll_ground.c's Cliff/CollData ledge floor owner.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     assert cb_name(0x00EC, "coll") == "ftCo_EscapeAir_Coll"
-    assert int(fox.coll_cb_id[0x00EC]) == 339
+    # Callback ids renumber by design when a character is added (falcon port: 339 -> 400).
+    assert int(fox.coll_cb_id[0x00EC]) == 400
     assert int(fox.class3_bits[0x00EC]) & CLASS3_PHASE4_ESCAPE_AIR_COLL
 
     assert cb_name(0x002A, "coll") == "ftCo_Landing_Coll"  # Landing

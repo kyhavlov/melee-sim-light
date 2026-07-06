@@ -670,7 +670,7 @@ def test_sheik_zelda_overlay_masks_survive_fresh_character_attr_extraction(
     assert float(zelda_attrs["zelda_transform_air_gravity"]) > 0.0
     data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("characters",))
     chars_dir = data_dir / "characters"
-    for name in ("fox", "falco", "marth"):
+    for name in ("fox", "falco", "marth", "falcon"):
         (chars_dir / f"{name}.json").write_text(
             Path(f"data/characters/{name}.json").read_text(encoding="utf-8"),
             encoding="utf-8",
