@@ -76,6 +76,40 @@ Gate: `build_data` end-to-end; existing chars' data binaries byte-identical.
   the replay action inventory; everything missing (likely Falcon Punch,
   landed Falcon Dive) is decomp-tests + webplay-only verification.
 
+### DONE 2026-07-06 — suite curated + baseline recorded
+
+Suite: `replays/suites/falcon.json`, 8 replays under
+`replays/validation/falcon/` picked by scanning 878 netplay .slp files
+(2026-05 dump; 448 qualified = Falcon + supported opponent + legal stage +
+frozen PS). Scanner: `peppi_py` action-state inventory; falcon char-range
+actions are 347..363 (item swings 341..346), victim `CaptureCaptain`=275,
+`ThrownFF`=271.
+
+Action inventory across the suite (79799 frames): ALL 17 ftCa special states
+present — SpecialN 80f (real grounded punches, DL-vs-Fox), SpecialAirN 193f,
+SStart/S 933/603f, AirSStart/AirS 17/49f, SpecialHi 44f (grounded up-B, FD
+ditto), AirHi 3039f, HiCatch/HiThrow 222/634f (landed dives), Lw/LwEnd
+116/35f, AirLw/AirLwEnd 83/45f, AirLwEndAir/LwEndAir 58/30f, HiThrow1 60f
+(the ONE wall-rebound game in the dump, YS ditto). Victim CaptureCaptain
+222f. `ThrownFF` appears in ZERO of 448 games (never serializes at
+post-frame — Dive release victim goes through it within-frame only):
+decomp-tests + webplay surface.
+
+Zero-char-C baseline (commit d47df152 runtime, no falcon special C):
+- one-step: overall.discrete_mismatch 3400 / 8082437 (0.0421%), strict 3866,
+  float_norm_mae_p95 0.00090 (`reports/validation/falcon_one_step.txt`).
+  Marth's equivalent baseline was 0.107%. Top fields: state_flags 645,
+  action_id 464, animation_index 463, action_frame 461, instance_id 374.
+- rollout: 485 streaks, median 61, p90 352, p95 515, max 988;
+  first_mismatch_total 739 (seeded 603); status NOT-CLEAN as expected
+  (`reports/validation/falcon_rollout.txt`).
+- Full pytest with the suite in-tree: green except the owner-blessed
+  environmental set.
+NOTE: `make validate SUITE=...` without `OUT=` clobbers the PRIMARY report
+(`reports/validation/one_step_suite_eval.txt`) — always pass
+`OUT=reports/validation/falcon_one_step.txt` / `ROLLOUT_OUT='--out
+reports/validation/falcon_rollout.txt'`.
+
 ## Phase 3 — Common-action coverage
 
 Remove falcon from the exclude set in
