@@ -864,6 +864,27 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         continue;
       }
 
+      // Falcon Dive held victim: the owner's hitlag enter/exit recursively propagates the
+      // x2219_b5 freeze flag through the fp->x1A5C held-victim link (the victim's own x195C
+      // hitlag counter stays 0 — Slippi shows hitlag 0 across the connect window), so the
+      // CaptureCaptain anim freezes in lockstep with the owner's hitlag window. Outside that
+      // window the donor figatree plays at the ChangeMotionState entry rate 1 (empty Anim
+      // callback; the delta-derived seed rate lane reads 0 around replay freeze edges and must
+      // not stall the resume row).
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkRecursiveFunc_8006D044,Fighter_8006D10C}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+      if (a == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN) {
+        const uint8_t owner_p = batch->state.grab_owner_port[idx];
+        if (owner_p != 0xFFu && (int)owner_p < num_players && (int)owner_p != p) {
+          const size_t oidx = msl_idx_player(bi, (int)owner_p);
+          if (batch->state.hitlag_started_frame[oidx] != 0) {
+            msl_anim_timebase_recompute_derived(batch, idx);
+            continue;
+          }
+        }
+        batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
+      }
+
       // Decomp: Run animation rate is scaled from current ground velocity:
       // `ftAnim_SetAnimRate(fp, ABS(fp->gr_vel) / fp->co_attrs.run_animation_scaling)`.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim

@@ -2805,6 +2805,25 @@ static inline uint8_t combat_attached_throw_body_hit_suppresses_victim_hitlag(
   return attacker_anim_frame < release_af ? 1u : 0u;
 }
 
+static inline uint8_t combat_attached_falcon_dive_catch_hit_suppresses_victim_hitlag(
+    const MslBatch* batch, const MslCombatBodyDamageLogEntry* e) {
+  // Falcon Dive hold: the SpecialHiCatch scripted BODY pulse damages the held CaptureCaptain
+  // victim without starting the victim's own x195C hitlag (Slippi victim hitlag stays 0 across
+  // the connect window). The victim's freeze instead rides the OWNER's hitlag through the
+  // recursive x2219_b5 propagation over the fp->x1A5C held-victim link (modeled by the
+  // CaptureCaptain owner-slaved gate in anim_timebase.c).
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkRecursiveFunc_8006D044,Fighter_8006D10C}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+  if (batch == NULL || e == NULL || e->attached_grabbed_victim == 0u) {
+    return 0u;
+  }
+  return (batch->state.char_id[e->a_idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+          e->attacker_motion_id == (uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH &&
+          batch->state.action_id[e->d_idx] == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t combat_attached_throw_body_pose_gap_admits_pre_release_contact(
     const MslBatch* batch, size_t a_idx, size_t d_idx, int attacker, size_t hb_i) {
   if (batch == NULL) {
@@ -2884,7 +2903,8 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
       e->attached_grabbed_victim ? MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED : MSL_COMBAT_DAMAGE_FULL;
   if (body_damage_class == MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED) {
     const uint8_t pre_release_throw_body_hit =
-        combat_attached_throw_body_hit_suppresses_victim_hitlag(batch, e);
+        (uint8_t)(combat_attached_throw_body_hit_suppresses_victim_hitlag(batch, e) ||
+                  combat_attached_falcon_dive_catch_hit_suppresses_victim_hitlag(batch, e));
     if (d_hl_increased && pre_release_throw_body_hit == 0u) {
       batch->state.hitlag[d_idx] = d_hl;
       combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);

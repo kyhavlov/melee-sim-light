@@ -505,6 +505,22 @@ Dolphin build environment if probes become necessary).
   attacker's connect-hitlag (~40 rows; read ftCo_CaptureCaptain hitlag
   anim gating), rollout-only grounded Punch pos_x drift (actions=347,
   max_err 23), dive catch-connect speed_y (353->355 lane zeroing).
+- 2026-07-07: **Phase 5 round 2: CaptureCaptain hitlag-share model
+  (one-step 1366 -> 1332; rollout first-mismatch 308 -> 294, seeded 163).**
+  Witness (Game_20260509T030948 rec 3750-3756): the held victim NEVER gets
+  its own x195C hitlag from the HiCatch scripted 5dmg pulse (Slippi victim
+  hitlag lane stays 0), yet its anim freezes exactly across the OWNER's
+  hitlag window. Source mechanism: Fighter_UnkRecursiveFunc_8006D044 /
+  Fighter_8006D10C set/clear the x2219_b5 freeze flag RECURSIVELY through
+  the fp->x1A5C held-victim link (ftCo_8009CA0C sets x1A5C to the
+  CaptureCaptain victim). Two changes: (1) combat.c suppresses victim
+  x195C hitlag for the falcon HiCatch attached BODY pulse (same else-branch
+  as pre-release throw BODY pulses); (2) anim_timebase.c CaptureCaptain
+  gate: freeze iff the grab OWNER is hitlag-frozen, else force rate 1
+  (ChangeMotionState entry rate; empty Anim callback — the delta-derived
+  seed rate lane reads 0 around replay freeze edges and previously stalled
+  the resume row one frame late). Gates: byte-stability (no report churn),
+  23 falcon tests + 38 grab/throw tests + full pytest green.
 
 ### Falcon Dive design notes (2026-07-06 decomp read; implement next session)
 
