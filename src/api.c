@@ -2789,6 +2789,21 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
                      msl_motion_state_fx_special_kind(seed->char_id[p], src) ==
                          (uint8_t)MSL_FX_KIND_SPECIAL_HI_LANDING) {
             landing_lag = (float)phys->firefox_landing_lag_frames;
+          } else if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_FALCON) {
+            // Falcon freefall sources all pass their callsite lag through ftCo_80096900:
+            // Special(Air)Hi whiff, SpecialAirSStart (air Raptor miss), SpecialAirS (air hit).
+            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialHi_Anim,
+            //   ftCa_SpecialAirHi_Anim}
+            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+            //   ftCa_SpecialAirSStart_Anim,ftCa_SpecialAirS_Anim}
+            if (src == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                src == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI) {
+              landing_lag = phys->falcon_specialhi_landing_lag;
+            } else if (src == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START) {
+              landing_lag = phys->falcon_specials_miss_landing_lag;
+            } else if (src == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S) {
+              landing_lag = phys->falcon_specials_hit_landing_lag;
+            }
           }
         }
         batch->state.fallspecial_landing_lag[idx] = landing_lag;

@@ -264,6 +264,34 @@ def _manifest_preprocess_tables(data_root_text: str) -> _ManifestPreprocessTable
                     if int(owners_tbl.submotion_id[a]) in up_msids:
                         origin_lag[a] = float(attrs['specialhi_landing_lag_frames'])
                         origin_allow_interrupt[a] = (0, 0)
+        if 'falcon_specialhi_landing_lag' in attrs:
+            # Falcon freefall origins all enter through ftCo_80096900(..., allow_interrupt=false):
+            # Special(Air)Hi whiff -> specialhi_landing_lag, SpecialAirSStart (air Raptor miss) ->
+            # specials_miss_landing_lag, SpecialAirS (air Raptor hit) -> specials_hit_landing_lag.
+            # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialHi_Anim,
+            #   ftCa_SpecialAirHi_Anim}
+            # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+            #   ftCa_SpecialAirSStart_Anim,ftCa_SpecialAirS_Anim}
+            sm_path = data_root / 'special_msids' / f'{key}.json'
+            if sm_path.exists():
+                sm = _load_json_file(sm_path)
+
+                def _msids(group: str, slot: str) -> set[int]:
+                    vals = (sm.get(group) or {}).get(slot) or {}
+                    return {int(v) for v in vals.values() if isinstance(v, int)}
+
+                lag_by_msid: dict[int, float] = {}
+                for m in _msids('up_air', 'main') | _msids('up_ground', 'main'):
+                    lag_by_msid[m] = float(attrs['falcon_specialhi_landing_lag'])
+                for m in _msids('side_air', 'start'):
+                    lag_by_msid[m] = float(attrs['falcon_specials_miss_landing_lag'])
+                for m in _msids('side_air', 'main'):
+                    lag_by_msid[m] = float(attrs['falcon_specials_hit_landing_lag'])
+                for a in range(len(owners_tbl.submotion_id)):
+                    lag = lag_by_msid.get(int(owners_tbl.submotion_id[a]))
+                    if lag is not None and lag > 0.0:
+                        origin_lag[a] = lag
+                        origin_allow_interrupt[a] = (0, 0)
         char_fallspecial_origin_lag[int(cid)] = origin_lag
         char_fallspecial_origin_allow_interrupt[int(cid)] = origin_allow_interrupt
         char_walk_divisors[int(cid)] = (float(attrs['slow_walk_max']), float(attrs['mid_walk_point']), float(attrs['fast_walk_min']))

@@ -462,6 +462,49 @@ Dolphin build environment if probes become necessary).
     snap, airborne hang riding the attacker, whiff-beyond-reach negative),
     falcon one-step 3068 -> 2750 discrete (float p95 0.00065 -> 0.00050),
     validate-all existing-char reports byte-identical, pytest green.
+- 2026-07-07: **Phase 5 burn-down round 1: one-step 2750 -> 1366 (float p95
+  0.00050 -> 0.00028); rollout first-mismatch 484 -> 308, seeded 371 -> 171.**
+  Method: `collect_mismatch_events` taxonomy over the falcon suite (scratch
+  script; buckets by field x seed/ref/out action), fix the biggest owner,
+  re-measure. Four owners fixed:
+  1. Falcon consume-once cmd-latch reseed (255 facing rows @354 + punch
+     impulse re-fire + Throw0 x2_b0): `cmd_vars[0]` is script-set then
+     ZEROED by the IASA on consume; a reseeded mid-action row re-fired the
+     consume with the current stick (B-reverse). `falcon_specials_reseed_init`
+     now reconstructs special_cmd0/1 as `value_at(seeded frame) != 0`
+     (348 + 356 -> cmd0, 353/354 -> cmd1).
+  2. CAPTURE_CAPTAIN missing from `derive_grab_owner_port` victim lists
+     (seed_history.py, 2p list; 4p left conservative-unseeded): 162
+     state_flags[2]&0x04 (x221B_b5 grab-owner latch) rows @355 collapsed;
+     also feeds the b7 reseed and attachment placement.
+  3. Falcon freefall origin tables (433 rows @43): the LandingFallSpecial
+     allow_interrupt derivation defaults allow=1 for unknown freefall
+     origins, so seeded rows guarded out of dive/raptor landing lag ~20
+     frames early; lag lane defaulted to common 10 vs falcon 30/20/40.
+     Added falcon origin rows (up main -> specialhi 30, side_air start ->
+     miss 20, side_air main -> hit 40, all allow (0,0)) to
+     `validation_buffer_common.py` keyed on the falcon_* attrs, plus the
+     api.c prev-action lag branch for first-row seeds.
+  4. SHARED throw release-edge wait-timer model (~470 rows: falcon dthrow
+     vs fox releasing one step early): source `set_throw_flags` timing is
+     the movescript wait timer (`ftCommand->timer -= frame_speed_mul`,
+     execute while <= 0, ftAction_80073354) — a chained f32 SUBTRACTION
+     that retains +2.4e-7 at the tick where the Q16.16 frame reads the
+     command frame exactly (fox-weight rate 4/3, frame 20). throw_flow.c
+     now replays that chain for BOTH edge sides (replaces the addition-
+     chain prev-only reconstruction; the old marth ThrowHi 11.999999
+     witness still fires correctly — verified analytically n=9 timer
+     +2.38e-7). Gated to release-is-first-timed-flag-event scripts (new
+     move_tables helper) because the timer re-anchors at every executed
+     event; flip-first scripts keep the frame-comparison model.
+     validate-all: existing-char reports byte-identical.
+  Remaining 1366 classified: diffuse shared tails (FALL<->LANDING ECB
+  one-frame swaps both directions, FALL->CLIFF_CATCH admission ulps, fox
+  CLIFF_WAIT 47, marth SpecialNEnd0 20) + falcon-owned small clusters:
+  CaptureCaptain held-victim anim freeze window offset ~3 frames vs the
+  attacker's connect-hitlag (~40 rows; read ftCo_CaptureCaptain hitlag
+  anim gating), rollout-only grounded Punch pos_x drift (actions=347,
+  max_err 23), dive catch-connect speed_y (353->355 lane zeroing).
 
 ### Falcon Dive design notes (2026-07-06 decomp read; implement next session)
 

@@ -1069,6 +1069,27 @@ uint8_t move_tables_throw_has_release(uint8_t char_id, uint16_t throw_action_id)
   return (cache != NULL && cache->throw_flags_hit[0].loaded) ? 1u : 0u;
 }
 
+uint8_t move_tables_throw_release_is_first_timed_flag_event(uint8_t char_id,
+                                                            uint16_t throw_action_id) {
+  // 1 iff the set_throw_flags release (hit idx 0) is not preceded by the facing-flip flag event
+  // (hit idx 1). The movescript wait timer re-anchors at every executed event
+  // (ftAction_800718A4 async timers), so the release-edge f32 timer chain reconstruction in
+  // throw_flow.c is exact only when the release is the script's first timed flag event.
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80073354,ftAction_800718A4}
+  uint16_t msid = 0;
+  if (!throw_msid_from_action(throw_action_id, &msid)) {
+    return 0u;
+  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || !cache->throw_flags_hit[0].loaded) {
+    return 0u;
+  }
+  return (!cache->throw_flags_hit[1].loaded ||
+          cache->throw_flags_hit[1].start_af >= cache->throw_flags_hit[0].start_af)
+             ? 1u
+             : 0u;
+}
+
 uint8_t move_tables_throw_release_frame(uint8_t char_id, uint16_t throw_action_id,
                                         float* out_release_af) {
   if (out_release_af == NULL) {

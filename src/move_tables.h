@@ -435,6 +435,13 @@ uint8_t move_tables_catchattack_grabbed_hit_active(uint8_t char_id, float cur_an
 // Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
 uint8_t move_tables_throw_has_release(uint8_t char_id, uint16_t throw_action_id);
 
+// Returns 1 iff the set_throw_flags release (hit idx 0) is not preceded by the facing-flip flag
+// event (hit idx 1); gates the exact f32 wait-timer chain reconstruction of the release edge
+// (the movescript timer re-anchors at every executed event).
+// refs/melee/src/melee/ft/ftaction.c::{ftAction_80073354,ftAction_800718A4}
+uint8_t move_tables_throw_release_is_first_timed_flag_event(uint8_t char_id,
+                                                            uint16_t throw_action_id);
+
 // Returns 1 and outputs the parsed throw release action-frame threshold.
 //
 // Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_flags.

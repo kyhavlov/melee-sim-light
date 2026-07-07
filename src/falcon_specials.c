@@ -202,13 +202,29 @@ void falcon_specials_reseed_init(MslBatch* batch, int batch_index) {
       continue;
     }
     const uint16_t a = batch->state.action_id[idx];
+    // Consume-once cmd-var latch reconstruction (Slippi does not expose fp->cmd_vars): the
+    // stored anim frame is the frame the last pre-seed update ran with, so the pulse was
+    // already consumed iff the script lane reads latched at that frame. Without this, a
+    // reseeded mid-action row re-fires the consume side effects the real game applied once
+    // (SpecialAirN's velocity impulse, Special(Air)Hi's frame-13 B-reverse from the CURRENT
+    // stick instead of the frame-13 stick, SpecialHiThrow0's x2_b0 phys-blend arm).
+    // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_IASA
+    // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialHi_IASA,
+    //   doAirIASA,ftCa_SpecialHiThrow0_Anim}
+    if (a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_N || a == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW) {
+      batch->state.special_cmd0[idx] = move_tables_special_cmd_var_value_at_frame(
+          batch->state.char_id[idx], falcon_special_submotion(a), 0u,
+          msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+    } else if (a == (uint16_t)MSL_ACT_CA_SPECIAL_HI || a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI) {
+      batch->state.special_cmd1[idx] = move_tables_special_cmd_var_value_at_frame(
+          batch->state.char_id[idx], falcon_special_submotion(a), 0u,
+          msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+    }
     if (a == (uint16_t)MSL_ACT_CA_SPECIAL_HI || a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI ||
         a == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW) {
       // SpecialHi_Phys invariant: post-frame self_vel = TransN_delta(frame) + mv.vel, and the
       // replay carries self_vel; recover mv.ca.specialhi.vel by subtracting the seeded frame's
-      // TransN delta. (The special_cmd0/1 x2_b0/x2_b1 latches self-heal: their set_cmd_var
-      // pulse lanes read 1 from the pulse frame onward and the consume-once latch re-arms in
-      // the next action phase.)
+      // TransN delta.
       const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
       const uint16_t msid = falcon_special_submotion(a);
       const float frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
