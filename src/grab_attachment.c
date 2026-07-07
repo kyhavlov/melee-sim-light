@@ -829,7 +829,13 @@ void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int bi, int victim
   }
 
   const size_t vidx = msl_idx_player(bi, victim_p);
-  if (!msl_action_is_thrown_victim(batch->state.action_id[vidx])) {
+  // Airborne CaptureCaptain hangs from the same reparented XRotN/TransN2 anchor substrate as
+  // attached Thrown* (ftCo_800DB368 reparent + ftCo_800DB464 accessory placement); without this
+  // admission the Falcon Dive hang never snapped the victim to anchor+x1A70 (witness: victim
+  // held ~11u above the source hang across the whole hold).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800DB368,ftCo_800DB464}
+  if (!msl_action_is_thrown_victim(batch->state.action_id[vidx]) &&
+      batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_CAPTAIN) {
     return;
   }
 
@@ -1177,6 +1183,17 @@ void grab_attachment_reseed_init(MslBatch* batch, int batch_index) {
       // (ftCo_Attack100.c::fn_800DAD18), not a persistent x1A70-like offset.
       batch->state.grab_offset_y[vidx] = 0.0f;
       batch->state.grab_offset_z[vidx] = 0.0f;
+      continue;
+    }
+
+    if (batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN) {
+      // CaptureCaptain hangs on the per-fighter STATIC x1A70 vector (Fighter_Create's
+      // TransN-XRotN basis) — a constant, not hidden accumulated state. Reconstructing from the
+      // seeded world would preserve a pre-snap connect-row gap; installing the static offsets
+      // lets the entry-row step snap to anchor+x1A70 exactly like the live path.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800DB368,ftCo_800DB464}
+      grab_attachment_use_static_offsets_for_thrown_entry(batch, batch_index, p, (int)owner);
       continue;
     }
 
