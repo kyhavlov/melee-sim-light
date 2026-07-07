@@ -63,6 +63,10 @@ def _seed(grounded: bool = True, pos_y: float = 0.0, facing: int = 1) -> np.ndar
     seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
     seed["shield_hp"][0, :2] = np.float32(60.0)
     seed["jumps_left"][0, :2] = np.uint8(2)
+    # "No recent horizontal stick flick" (match-init value): a zero-filled x676_x reads as a
+    # flick 0 frames ago and would arm the aerial neutral-B turnaround on the fresh B press.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    seed["x676_x"][0, :2] = np.uint8(0xFE)
     for p in range(2):
         seed["action_id"][0, p] = np.uint16(ACT_WAIT)
         seed["animation_index"][0, p] = np.uint32(SM_WAIT1)
@@ -134,6 +138,26 @@ def test_air_specialn_impulse_at_script_cmd0_pulse() -> None:
     vx55 = float(outs[55]["speed_air_x_self"][0])
     assert vx55 == pytest.approx(vx49 * vel_mul**6, abs=1e-3)
     assert float(outs[55]["speed_y_self"][0]) == pytest.approx(0.0, abs=1e-3)
+
+
+def test_air_specialn_turnaround_b_flips_facing() -> None:
+    # ftCo_SpecialAir_CheckInput neutral-B turnaround: a fresh horizontal flick opposite to
+    # facing (x676_x < x224, x2228_b7 latch) flips facing before the SpecialAirN Enter.
+    # Facing right + fresh leftward flick (x676_x=0, x2228_b7=0) -> enters facing left, and the
+    # frame-50 impulse pushes -x.
+    seed = _seed(False, pos_y=400.0)
+    seed["x676_x"][0, 0] = np.uint8(0)
+    outs = _run(seed, [_mk_inputs(buttons=BTN_B)] + [_mk_inputs()] * 55)
+    assert int(outs[0]["action_id"][0]) == ACT_FC_SPECIAL_AIR_N
+    assert int(outs[0]["facing"][0]) == 0
+    assert float(outs[49]["speed_air_x_self"][0]) < 0.0
+
+
+def test_air_specialn_no_turnaround_without_fresh_flick() -> None:
+    # Same press with the flick latch stale (x676_x=0xFE): no turnaround.
+    outs = _run(_seed(False, pos_y=400.0), [_mk_inputs(buttons=BTN_B)] + [_mk_inputs()] * 3)
+    assert int(outs[0]["action_id"][0]) == ACT_FC_SPECIAL_AIR_N
+    assert int(outs[0]["facing"][0]) == 1
 
 
 def test_air_specialn_stick_angle_tilts_impulse() -> None:

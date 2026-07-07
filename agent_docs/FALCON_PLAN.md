@@ -538,6 +538,27 @@ Dolphin build environment if probes become necessary).
   test_combat_mutations_pass1 on the first attempt). Gates: existing-char
   reports byte-identical, full pytest 2105 passed (known environmental
   failures only).
+- 2026-07-07: **Phase 5 round 4: aerial neutral-B turnaround + connect
+  velocity hygiene (both rollout-witness fixes).** (1) The 23-unit
+  grounded-Punch pos_x rollout drift traced (free-run divergence probe) to
+  falcon entering aerial SpecialN facing the wrong way: the aerial
+  dispatch was missing ftCo_SpecialAir_CheckInput's neutral-B turnaround
+  (x676_x < x224 fresh-flick + x2228_b7 side latch -> flip facing before
+  Enter; aerial chain ONLY — the grounded dispatch has no turnaround
+  clause). Same model fox/sheik dispatches already carry; the whole punch
+  window now free-runs byte-equal to ref. Two new unit tests (turnaround
+  fires on fresh opposite flick; stale latch does not); test seeds now
+  set x676_x=0xFE ("no recent flick" match-init) since a zero-filled lane
+  reads as a flick-this-frame latch. (2) Dive catch-connect: both connect
+  owners zero EVERY attacker velocity lane via ftCommon_8007E2FC
+  (ftCa_SpecialLw_800E5128 + ftCo_8009CA0C); our fork only cleaned the
+  victim, leaving the attacker's dive velocity live under the empty
+  HiCatch Phys (rollout speed_y witness 353->355 seed/ref/out
+  4.7/0/4.3). Both prior float-top entries are gone; new tops are a
+  shared DamageFlyTop KB pos_x item and a falcon-owned CaptureCaptain
+  airborne-hang pos_y (~11u high at rec 7057 Game_20260509T034612 —
+  NEXT: check the thrown-anchor static offsets for the hang). Gates:
+  one-step 1244, byte-stability clean, full pytest 2107 passed.
 
 ### Falcon Dive design notes (2026-07-06 decomp read; implement next session)
 

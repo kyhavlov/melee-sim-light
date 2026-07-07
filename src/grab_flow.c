@@ -1359,6 +1359,17 @@ static void grab_flow_falcon_dive_catch_connect(MslBatch* batch, int bi, int own
   batch->state.special_cmd1[oidx] = 0u;
   batch->state.special_cmd2[oidx] = 0u;
   batch->state.falcon_specialhi_x221b_b7[oidx] = victim_on_ground;
+  // Both connect owners zero EVERY attacker velocity lane (self, anim, ground, kb, shield-kb)
+  // through ftCommon_8007E2FC; SpecialHiCatch_Phys is empty, so the attacker hangs with zero
+  // velocity until doCatchAnim's throw entry.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialLw_800E5128
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2FC
+  batch->state.speed_air_x_self[oidx] = 0.0f;
+  batch->state.speed_y_self[oidx] = 0.0f;
+  batch->state.speed_ground_x_self[oidx] = 0.0f;
+  batch->state.speed_x_attack[oidx] = 0.0f;
+  batch->state.speed_y_attack[oidx] = 0.0f;
 
   // Victim -> CaptureCaptain (non-damaging catch-connect ownership lane; velocity lanes stop
   // driving the constrained victim, same hygiene as the CapturePulled entry above).

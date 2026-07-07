@@ -1378,6 +1378,19 @@ static uint8_t fc_resolve_and_enter(MslBatch* batch, const MslCommonParams* c,
   }
   if ((mask & FC_B_NEUTRAL) != 0u && b_edge && ax < c->special_stick_x_threshold_side &&
       sy < c->special_stick_y_threshold) {
+    // ftCo_SpecialAir_CheckInput neutral-B turnaround: a fresh horizontal flick opposite to
+    // facing (x676_x < p_ftCommonData->x224 with the x2228_b7 side latch) flips facing before
+    // the Enter (aerial chain only — the grounded dispatch has no turnaround clause). Same
+    // model as the fox blaster / sheik dispatch sites.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    if ((float)batch->state.x676_x[idx] < c->special_neutral_reverse_threshold) {
+      const uint8_t facing = batch->state.facing[idx] ? 1u : 0u;
+      const uint8_t x2228_b7 = batch->state.x2228_b7[idx] ? 1u : 0u;
+      if ((facing == 0u && x2228_b7 == 1u) || (facing == 1u && x2228_b7 == 0u)) {
+        batch->state.facing[idx] = facing ? 0u : 1u;
+        batch->state.facing_dir1[idx] = batch->state.facing[idx] ? 1 : -1;
+      }
+    }
     fc_enter_specialn(batch, ch, idx, 0u);
     return 1u;
   }
