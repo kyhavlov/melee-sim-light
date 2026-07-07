@@ -559,6 +559,20 @@ Dolphin build environment if probes become necessary).
   airborne-hang pos_y (~11u high at rec 7057 Game_20260509T034612 —
   NEXT: check the thrown-anchor static offsets for the hang). Gates:
   one-step 1244, byte-stability clean, full pytest 2107 passed.
+- 2026-07-07: **Phase 5 round 5: CaptureCaptain thrown-anchor admission
+  (one-step 1240; rollout first-mismatch 282, seeded 154).** The hang
+  placement was a no-op: apply_thrown_anchor_now early-returns for
+  non-Thrown* victims, so the airborne dive victim rode the hold at the
+  connect-time gap. Admitted 275 to the placement; reseed installs the
+  STATIC x1A70 offsets for 275 (Fighter_Create constant — reconstructing
+  from a pre-snap connect-row world preserves the entry gap). Witness
+  window byte-matches ref including the per-frame anchor wobble. The
+  falcon rollout float tops now contain NO falcon-owned entries — the
+  remaining tail is the shared KB-float / ECB-landing / item debt already
+  classified in round 1, plus ~50 item rows. Phase 5 is at the
+  classified-tail point ADDING_A_CHARACTER.md defines as its gate;
+  further falcon movement now mostly rides shared-debt fixes. NEXT
+  falcon-specific work is Phase 6 webplay (needs the renderer zip).
 
 ### Falcon Dive design notes (2026-07-06 decomp read; implement next session)
 
