@@ -521,6 +521,23 @@ Dolphin build environment if probes become necessary).
   seed rate lane reads 0 around replay freeze edges and previously stalled
   the resume row one frame late). Gates: byte-stability (no report churn),
   23 falcon tests + 38 grab/throw tests + full pytest green.
+- 2026-07-07: **Phase 5 round 3: ledge-hang catch mask + Catch-element
+  BODY/shield exclusion (one-step 1332 -> 1245; rollout first-mismatch
+  294 -> 285, seeded 155).** Witness: our Dive grabbed (then, mask fixed,
+  HIT for 1%) a vulnerable CliffWait Fox that ref leaves untouched.
+  (1) CliffCatch/CliffWait write ftCommon_8007E2F4(fp, 0x1FF) exactly like
+  DownBound (ftcliffcommon.c:87, ftCo_CliffWait.c) — added 252/253 to BOTH
+  catch-mask predicates (kind 1 and kind 2; other Cliff* options write
+  0x20 which no catch kind carries). (2) The decomp fighter BODY-candidate
+  predicate requires element != Catch && != Inert and the shield candidate
+  requires element != Catch (ftcoll.c BODY/shield predicates) — our BODY
+  and shield passes were missing the filters, so the Dive's persistent
+  1-damage catch bubbles dealt BODY damage whenever the catch mask
+  rejected the victim. Inert stays admitted to the shield pass (Raptor
+  Boost inert-detect flag is set from shield overlap — caught by
+  test_combat_mutations_pass1 on the first attempt). Gates: existing-char
+  reports byte-identical, full pytest 2105 passed (known environmental
+  failures only).
 
 ### Falcon Dive design notes (2026-07-06 decomp read; implement next session)
 

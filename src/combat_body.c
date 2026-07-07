@@ -1831,6 +1831,11 @@ uint8_t combat_catch_grabbable_dynamic_hurtcap_world(const MslBatch* batch, size
 }
 
 uint8_t combat_defender_downed_catch_mask_blocks(uint16_t action_id) {
+  // CliffCatch/CliffWait also write ftCommon_8007E2F4(fp, 0x1FF): a ledge-hanging victim is
+  // never catch-selectable (0x1FF masks every catch kind). The other Cliff* options write 0x20,
+  // which no catch kind carries.
+  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c
   switch (action_id) {
     case MSL_ACT_DOWN_BOUND_U:
     case MSL_ACT_DOWN_WAIT_U:
@@ -1838,6 +1843,8 @@ uint8_t combat_defender_downed_catch_mask_blocks(uint16_t action_id) {
     case MSL_ACT_DOWN_BOUND_D:
     case MSL_ACT_DOWN_WAIT_D:
     case MSL_ACT_DOWN_DAMAGE_D:
+    case MSL_ACT_CLIFF_CATCH:
+    case MSL_ACT_CLIFF_WAIT:
       return 1u;
     default:
       return 0u;
@@ -1848,13 +1855,18 @@ uint8_t combat_defender_downed_catch_mask_kind2_blocks(uint16_t action_id) {
   // x1A68=2 (Falcon Dive) vs the downed x1A6A values: DownBound entry writes 0x1FF
   // (0x1FF & 2 != 0 -> blocked); the DownBound/DownDamage -> DownWait handoffs and DownDamage
   // entry write 1 (1 & 2 == 0 -> grabbable by the Dive, unlike ordinary kind-1 catches).
+  // CliffCatch/CliffWait write 0x1FF like DownBound and block kind 2 as well.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_8009794C,ftCo_80097E8C,
   //   ftCo_80097F38}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
+  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
   switch (action_id) {
     case MSL_ACT_DOWN_BOUND_U:
     case MSL_ACT_DOWN_BOUND_D:
+    case MSL_ACT_CLIFF_CATCH:
+    case MSL_ACT_CLIFF_WAIT:
       return 1u;
     default:
       return 0u;

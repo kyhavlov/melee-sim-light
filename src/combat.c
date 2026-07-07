@@ -5292,6 +5292,14 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (!batch->state.hitbox_enabled[hb_i]) {
             continue;
           }
+          // Shield candidates exclude Catch element capsules (Falcon Dive's persistent grab
+          // bubbles must not poke shields when the catch mask rejects the victim). Unlike the
+          // BODY predicate, Inert stays admitted here: the Raptor Boost inert-detect flag is set
+          // from the shield-overlap path.
+          // refs/melee/src/melee/ft/ftcoll.c (shield candidate: element != Catch only)
+          if (batch->state.hitbox_element[hb_i] == (uint8_t)MSL_HIT_ELEMENT_CATCH) {
+            continue;
+          }
           if (clank_skip_hb[attacker][defender][hb_id]) {
             continue;
           }
@@ -5940,6 +5948,16 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
         const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
         if (!batch->state.hitbox_enabled[hb_i]) {
+          continue;
+        }
+        // ftColl's fighter BODY-hit candidate predicate excludes Catch/Inert element capsules —
+        // those participate only in the catch-selection / inert-detect passes. Falcon Dive's
+        // persistent grab bubbles carry damage 1 and otherwise fall through here when the catch
+        // mask rejects the victim (witnessed: ledge-hanging CliffWait victim taking 1% instead
+        // of nothing).
+        // refs/melee/src/melee/ft/ftcoll.c (BODY candidate: element != Catch && != Inert)
+        if (batch->state.hitbox_element[hb_i] == (uint8_t)MSL_HIT_ELEMENT_CATCH ||
+            batch->state.hitbox_element[hb_i] == (uint8_t)MSL_HIT_ELEMENT_INERT) {
           continue;
         }
         if (combat_defer_late_slot_same_frame_speciallw_entry_hit(batch, bi, a_idx, d_idx, attacker,

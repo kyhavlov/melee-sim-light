@@ -62,8 +62,8 @@ rollout.streak_len.median: 197
 rollout.streak_len.p90: 739
 rollout.streak_len.p95: 793
 rollout.streak_len.max: 971
-rollout.first_mismatch_total: 60
-rollout.first_mismatch_seeded_total: 37
+rollout.first_mismatch_total: 54
+rollout.first_mismatch_seeded_total: 30
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=23.2056 rec=4719 p=0 seed/ref/out=-75.3645/-75.6744/-52.4688 actions=347/347/347 category=unclassified
@@ -71,8 +71,8 @@ rollout.float_top_errors:
   3. speed_air_x_self max_err=3.3144 rec=4711 p=0 seed/ref/out=-1.58423/-1.6572/1.6572 actions=347/347/347 category=unclassified
 rollout.float_top_downstream:
   1. pos_x max_err=23.6783 rec=4720 p=0 seed/ref/out=-75.6744/-75.9107/-52.2325 actions=347/347/347 category=downstream_discrete_mismatch
-  2. percent max_err=13 rec=3660 p=0 seed/ref/out=129.91/129.91/142.91 actions=89/89/90 category=downstream_discrete_mismatch
-  3. shield_hp max_err=12.6 rec=1403 p=1 seed/ref/out=59.0076/46.1276/58.7276 actions=178/181/178 category=downstream_discrete_mismatch
+  2. pos_y max_err=18.5074 rec=7282 p=0 seed/ref/out=17.8981/30.1422/11.6348 actions=354/43/354 category=downstream_discrete_mismatch
+  3. percent max_err=13 rec=3660 p=0 seed/ref/out=129.91/129.91/142.91 actions=89/89/90 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1166
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:4
 
@@ -101,12 +101,12 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == replays/validation/falcon/Game_20260509T030948.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 796
-rollout.streak_count: 44
-rollout.streak_len.median: 114
+rollout.streak_count: 43
+rollout.streak_len.median: 123
 rollout.streak_len.p90: 551
 rollout.streak_len.p95: 673
 rollout.streak_len.max: 796
-rollout.first_mismatch_total: 43
+rollout.first_mismatch_total: 42
 rollout.first_mismatch_seeded_total: 24
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -122,16 +122,16 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:258
 == replays/validation/falcon/Game_20260509T034612.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 816
-rollout.streak_count: 40
-rollout.streak_len.median: 103
-rollout.streak_len.p90: 428
-rollout.streak_len.p95: 738
+rollout.streak_count: 39
+rollout.streak_len.median: 105
+rollout.streak_len.p90: 673
+rollout.streak_len.p95: 776
 rollout.streak_len.max: 816
-rollout.first_mismatch_total: 44
-rollout.first_mismatch_seeded_total: 27
+rollout.first_mismatch_total: 43
+rollout.first_mismatch_seeded_total: 26
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_y max_err=31.0455 rec=7070 p=0 seed/ref/out=-29.4768/-29.4768/1.56866 actions=355/355/355 category=unclassified
+  1. pos_y max_err=31.0455 rec=7070 p=0 seed/ref/out=-29.4768/-29.4768/1.56868 actions=355/355/355 category=unclassified
   2. pos_x max_err=13.2721 rec=7072 p=0 seed/ref/out=-98.8272/-99.4799/-86.2078 actions=356/356/356 category=unclassified
   3. speed_y_self max_err=2.0697 rec=7052 p=0 seed/ref/out=2.16485/0/2.0697 actions=354/355/355 category=unclassified
 rollout.float_top_downstream:
@@ -144,12 +144,12 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:6
 == replays/validation/falcon/Game_20260509T035613.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1137
-rollout.streak_count: 30
-rollout.streak_len.median: 141
-rollout.streak_len.p90: 558
+rollout.streak_count: 29
+rollout.streak_len.median: 155
+rollout.streak_len.p90: 746
 rollout.streak_len.p95: 1101
 rollout.streak_len.max: 1137
-rollout.first_mismatch_total: 29
+rollout.first_mismatch_total: 28
 rollout.first_mismatch_seeded_total: 16
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -185,14 +185,14 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:72
 
 == suite summary ==
-overall.rollout.streak_count: 280
-overall.rollout.streak_len.median: 155
-overall.rollout.streak_len.p90: 560
-overall.rollout.streak_len.p95: 776
+overall.rollout.streak_count: 277
+overall.rollout.streak_len.median: 156
+overall.rollout.streak_len.p90: 582
+overall.rollout.streak_len.p95: 793
 overall.rollout.streak_len.max: 1727
 overall.rollout.best_len.max: 1727
-overall.rollout.first_mismatch_total: 294
-overall.rollout.first_mismatch_seeded_total: 163
+overall.rollout.first_mismatch_total: 285
+overall.rollout.first_mismatch_seeded_total: 155
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=64.8642 rec=2188 p=0 seed/ref/out=14.1058/14.1058/78.97 actions=355/355/355 category=unclassified

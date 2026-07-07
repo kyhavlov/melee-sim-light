@@ -53,25 +53,25 @@ overall.float_norm_mae_p95: 0.00023105
 
 == replays/validation/falcon/Game_20260505T215428.slpz ==
 Records: 11776  Players/scored per record: 2  Total player-frames: 23552
-mismatch.action_id: 44 / 23552 (0.001868)
-mismatch.action_frame: 40 / 23552 (0.001698)
+mismatch.action_id: 31 / 23552 (0.001316)
+mismatch.action_frame: 27 / 23552 (0.001146)
 mismatch.on_ground: 15 / 23552 (0.000637)
-mismatch.facing: 8 / 23552 (0.000340)
+mismatch.facing: 1 / 23552 (0.000042)
 mismatch.stocks: 0 / 23552 (0.000000)
 mismatch.jumps_left: 16 / 23552 (0.000679)
 mismatch.is_dead: 0 / 23552 (0.000000)
-mismatch.hitlag: 7 / 23552 (0.000297)
-mismatch.hitstun: 4 / 23552 (0.000170)
+mismatch.hitlag: 5 / 23552 (0.000212)
+mismatch.hitstun: 3 / 23552 (0.000127)
 mismatch.l_cancel: 0 / 23552 (0.000000)
 mismatch.hurtbox_state: 9 / 23552 (0.000382)
 mismatch.ground_id: 6 / 23552 (0.000255)
-mismatch.animation_index: 41 / 23552 (0.001741)
-mismatch.instance_hit_by: 11 / 23552 (0.000467)
-mismatch.instance_id: 33 / 23552 (0.001401)
-mismatch.last_attack_landed: 4 / 23552 (0.000170)
+mismatch.animation_index: 28 / 23552 (0.001189)
+mismatch.instance_hit_by: 4 / 23552 (0.000170)
+mismatch.instance_id: 26 / 23552 (0.001104)
+mismatch.last_attack_landed: 3 / 23552 (0.000127)
 mismatch.combo_count: 3 / 23552 (0.000127)
-mismatch.last_hit_by: 19 / 23552 (0.000807)
-mismatch.state_flags: 32 / 117760 (0.000272)
+mismatch.last_hit_by: 18 / 23552 (0.000764)
+mismatch.state_flags: 23 / 117760 (0.000195)
 mismatch.item_exists: 1 / 176640 (0.000006)
 mismatch.item_type: 1 / 176640 (0.000006)
 mismatch.item_state: 0 / 176640 (0.000000)
@@ -83,18 +83,18 @@ err.pos_y: mae=0.004223 p95=0.000000 max=12.143566
 err.speed_air_x_self: mae=0.000471 p95=0.000000 max=1.157397
 err.speed_ground_x_self: mae=0.000993 p95=0.000000 max=2.293916
 err.speed_y_self: mae=0.000650 p95=0.000000 max=3.500000
-err.speed_x_attack: mae=0.000059 p95=0.000000 max=0.524390
-err.speed_y_attack: mae=0.000547 p95=0.000000 max=6.161063
-err.percent: mae=0.000921 p95=0.000000 max=13.000000
+err.speed_x_attack: mae=0.000037 p95=0.000000 max=0.444001
+err.speed_y_attack: mae=0.000525 p95=0.000000 max=6.161063
+err.percent: mae=0.000879 p95=0.000000 max=13.000000
 err.shield_hp: mae=0.000093 p95=0.000000 max=2.195572
 err.item_pos_x: mae=0.038365 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000053
 err.item_vel_x: mae=0.000002 p95=0.000000 max=0.000214
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000028
-overall.discrete_mismatch: 296 / 1424896
-overall.strict_discrete_mismatch: 407 / 1424896
+overall.discrete_mismatch: 222 / 1424896
+overall.strict_discrete_mismatch: 333 / 1424896
 overall.ignored_discrete_mismatch: 111
-overall.float_norm_mae_p95: 0.00014017
+overall.float_norm_mae_p95: 0.00013751
 
 == replays/validation/falcon/Game_20260506T213015.slpz ==
 Records: 7418  Players/scored per record: 2  Total player-frames: 14836
@@ -233,25 +233,25 @@ overall.float_norm_mae_p95: 0.00049624
 
 == replays/validation/falcon/Game_20260509T034612.slpz ==
 Records: 7147  Players/scored per record: 2  Total player-frames: 14294
-mismatch.action_id: 16 / 14294 (0.001119)
-mismatch.action_frame: 16 / 14294 (0.001119)
+mismatch.action_id: 15 / 14294 (0.001049)
+mismatch.action_frame: 15 / 14294 (0.001049)
 mismatch.on_ground: 15 / 14294 (0.001049)
 mismatch.facing: 0 / 14294 (0.000000)
 mismatch.stocks: 0 / 14294 (0.000000)
 mismatch.jumps_left: 12 / 14294 (0.000840)
 mismatch.is_dead: 0 / 14294 (0.000000)
-mismatch.hitlag: 6 / 14294 (0.000420)
-mismatch.hitstun: 8 / 14294 (0.000560)
+mismatch.hitlag: 4 / 14294 (0.000280)
+mismatch.hitstun: 7 / 14294 (0.000490)
 mismatch.l_cancel: 1 / 14294 (0.000070)
 mismatch.hurtbox_state: 7 / 14294 (0.000490)
 mismatch.ground_id: 5 / 14294 (0.000350)
-mismatch.animation_index: 16 / 14294 (0.001119)
-mismatch.instance_hit_by: 2 / 14294 (0.000140)
-mismatch.instance_id: 14 / 14294 (0.000979)
-mismatch.last_attack_landed: 3 / 14294 (0.000210)
+mismatch.animation_index: 15 / 14294 (0.001049)
+mismatch.instance_hit_by: 1 / 14294 (0.000070)
+mismatch.instance_id: 13 / 14294 (0.000909)
+mismatch.last_attack_landed: 2 / 14294 (0.000140)
 mismatch.combo_count: 1 / 14294 (0.000070)
-mismatch.last_hit_by: 6 / 14294 (0.000420)
-mismatch.state_flags: 29 / 71470 (0.000406)
+mismatch.last_hit_by: 5 / 14294 (0.000350)
+mismatch.state_flags: 26 / 71470 (0.000364)
 mismatch.item_exists: 0 / 107205 (0.000000)
 mismatch.item_type: 0 / 107205 (0.000000)
 mismatch.item_state: 0 / 107205 (0.000000)
@@ -260,21 +260,21 @@ mismatch.item_instance_id: 0 / 107205 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 53 / 14294 (0.003708)
 err.pos_x: mae=0.002675 p95=0.000000 max=8.552101
 err.pos_y: mae=0.008057 p95=0.000000 max=14.221103
-err.speed_air_x_self: mae=0.000401 p95=0.000000 max=1.113037
+err.speed_air_x_self: mae=0.000334 p95=0.000000 max=1.113037
 err.speed_ground_x_self: mae=0.000824 p95=0.000000 max=2.125811
-err.speed_y_self: mae=0.000742 p95=0.000000 max=3.500000
-err.speed_x_attack: mae=0.000537 p95=0.000000 max=4.839860
-err.speed_y_attack: mae=0.000360 p95=0.000000 max=3.024281
-err.percent: mae=0.002650 p95=0.000000 max=18.000000
+err.speed_y_self: mae=0.000497 p95=0.000000 max=2.610000
+err.speed_x_attack: mae=0.000496 p95=0.000000 max=4.839860
+err.speed_y_attack: mae=0.000319 p95=0.000000 max=3.024281
+err.percent: mae=0.002580 p95=0.000000 max=18.000000
 err.shield_hp: mae=0.000016 p95=0.000000 max=0.085716
 err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 157 / 864787
-overall.strict_discrete_mismatch: 210 / 864787
+overall.discrete_mismatch: 144 / 864787
+overall.strict_discrete_mismatch: 197 / 864787
 overall.ignored_discrete_mismatch: 53
-overall.float_norm_mae_p95: 0.00018168
+overall.float_norm_mae_p95: 0.00016372
 
 == replays/validation/falcon/Game_20260509T040146.slpz ==
 Records: 4916  Players/scored per record: 2  Total player-frames: 9832
@@ -367,7 +367,7 @@ overall.ignored_discrete_mismatch: 27
 overall.float_norm_mae_p95: 0.00039205
 
 == suite summary ==
-overall.discrete_mismatch: 1332 / 8082437
-overall.strict_discrete_mismatch: 1799 / 8082437
+overall.discrete_mismatch: 1245 / 8082437
+overall.strict_discrete_mismatch: 1712 / 8082437
 overall.ignored_discrete_mismatch: 467
-overall.float_norm_mae_p95: 0.00027800
+overall.float_norm_mae_p95: 0.00027576
