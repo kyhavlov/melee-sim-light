@@ -11,7 +11,9 @@
 #include "common_params.h"
 #include "dash_iasa.h"
 #include "damage_terminal_owner.h"
+#include "falcon_specials.h"
 #include "grab_attachment.h"
+#include "ids.h"
 #include "guard_lifecycle.h"
 #include "input_axis.h"
 #include "mpcoll_ground.h"
@@ -1322,6 +1324,84 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   return 1u;
 }
 
+// Falcon Dive connect (owner action 353/354 with a CATCH-element script hitbox contact):
+// - attacker (ftCa_SpecialLw_800E5128): -> SpecialHiCatch(355) at frame 0 with NO immediate
+//   anim tick (no ftAnim_8006EBA4 there), grab descriptor disarmed (ftCommon_8007E2FC) and
+//   x1A6A=511 (ungrabbable while carrying; not modeled). GROUNDED victim: the ATTACKER is
+//   constrained under the victim's TransN2 (ftCo_800DB368(victim, attacker)) with x221B_b7=1
+//   and accessory4 (ftCa_SpecialLw_800E550C) snapping attacker.pos to victim.pos each frame.
+//   AIRBORNE victim: x221B_b7=0.
+// - victim (ftCo_8009CA0C): -> CaptureCaptain(275) at frame 0 plus an immediate anim tick
+//   (ftAnim_8006EBA4), victim_gobj=attacker (bidirectional link), facing=-attacker.facing,
+//   x1A6A=0x1FF (un-re-grabbable). AIRBORNE victim is constrained under the attacker's
+//   TransN2 (ftCo_800DB368(attacker, victim)) and accessory1=ftCo_800DB464 drives its world
+//   position from that anchor plus the static x1A70 offsets each frame.
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialLw_800E5128,
+//   ftCa_SpecialLw_800E550C}
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800DB368,ftCo_800DB464}
+static void grab_flow_falcon_dive_catch_connect(MslBatch* batch, int bi, int owner_p,
+                                                int victim_p) {
+  const int num_players = (int)batch->config.num_players;
+  const size_t oidx = msl_idx_player(bi, owner_p);
+  const size_t vidx = msl_idx_player(bi, victim_p);
+  const uint16_t owner_instance_id_pre_connect = batch->state.instance_id[oidx];
+  const uint16_t victim_pre_connect_action = batch->state.action_id[vidx];
+  const uint8_t victim_on_ground = batch->state.on_ground[vidx] ? 1u : 0u;
+
+  // Attacker -> SpecialHiCatch (msid 309). ChangeMotionState without Ft_MF_UpdateCmd clears
+  // the cmd-var latches.
+  batch->state.action_id[oidx] = (uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH;
+  batch->state.animation_index[oidx] =
+      (uint32_t)falcon_special_submotion((uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH);
+  msl_anim_timebase_enter(batch, oidx, 0.0f, 1.0f);
+  batch->state.special_cmd0[oidx] = 0u;
+  batch->state.special_cmd1[oidx] = 0u;
+  batch->state.special_cmd2[oidx] = 0u;
+  batch->state.falcon_specialhi_x221b_b7[oidx] = victim_on_ground;
+
+  // Victim -> CaptureCaptain (non-damaging catch-connect ownership lane; velocity lanes stop
+  // driving the constrained victim, same hygiene as the CapturePulled entry above).
+  batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_CAPTAIN;
+  batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_CAPTAIN;
+  batch->state.facing[vidx] = batch->state.facing[oidx] ? 0u : 1u;
+  msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  msl_anim_timebase_tick_once(batch, vidx);
+  batch->state.speed_air_x_self[vidx] = 0.0f;
+  batch->state.speed_ground_x_self[vidx] = 0.0f;
+  batch->state.speed_y_self[vidx] = 0.0f;
+  batch->state.speed_x_attack[vidx] = 0.0f;
+  batch->state.speed_y_attack[vidx] = 0.0f;
+  clear_outgoing_hitboxes_after_catch_connect(batch, bi, victim_p);
+  batch->state.hitstun[vidx] = 0u;
+  batch->state.instance_hit_by[vidx] = owner_instance_id_pre_connect;
+  {
+    const size_t flags_i =
+        vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+    batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_B3;
+    batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+  }
+  catch_connect_apply_post_shield_release_recharge(batch, msl_common_params(), vidx,
+                                                   victim_pre_connect_action);
+
+  // Decomp has a single victim_gobj pointer per owner; keep exactly one attached victim link.
+  for (int p = 0; p < num_players; p++) {
+    const size_t pidx = msl_idx_player(bi, p);
+    if (p != victim_p && (int)batch->state.grab_owner_port[pidx] == owner_p) {
+      batch->state.grab_owner_port[pidx] = 0xFFu;
+    }
+  }
+  batch->state.attached_victim_port[oidx] = (uint8_t)victim_p;
+  batch->state.grab_owner_port[vidx] = (uint8_t)owner_p;
+
+  if (!victim_on_ground) {
+    // Airborne hang: ftCo_800DB464 places the victim from the reparented anchor plus the
+    // static x1A70 offsets — the same substrate attached Thrown* uses. Steady per-frame
+    // placement runs in grab_attachment_update_pre_collision's CaptureCaptain branch.
+    grab_attachment_use_static_offsets_for_thrown_entry(batch, bi, victim_p, owner_p);
+  }
+}
+
 void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim_p) {
   if (batch == NULL) {
     return;
@@ -1346,6 +1426,16 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
 
   const uint16_t owner_act = batch->state.action_id[oidx];
   const float owner_anim_start = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[oidx]);
+  // Falcon Dive command grab: the owner armed grab kind 2 at Special(Air)Hi entry
+  // (ftCommon_8007E2D0), and combat's catch-selection gate only admits falcon 353/354 here.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialHi_Enter,
+  //   ftCa_SpecialAirHi_Enter}
+  if (batch->state.char_id[oidx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+      (owner_act == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+       owner_act == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI)) {
+    grab_flow_falcon_dive_catch_connect(batch, bi, owner_p, victim_p);
+    return;
+  }
   // Catch/CatchDash connect -> CatchPull/CatchDashPull.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Catch_Coll,ftCo_CatchDash_Coll}
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8
@@ -1473,12 +1563,12 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
     const size_t flags_i =
         vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
+    batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_B3;
   }
   catch_connect_apply_post_shield_release_recharge(batch, msl_common_params(), vidx,
                                                    victim_pre_connect_action);
   const size_t flags_i = vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+  batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 
   // Decomp has a single victim_gobj pointer per owner; keep exactly one attached victim link.
   for (int p = 0; p < num_players; p++) {

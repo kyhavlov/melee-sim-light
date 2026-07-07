@@ -1322,6 +1322,29 @@ void grab_attachment_update_pre_collision(MslBatch* batch) {
           // }
           grab_attachment_apply_thrown_anchor_now(batch, bi, p, (int)owner);
         }
+      } else if (batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN) {
+        // Falcon Dive hold (victim in CaptureCaptain, owner in SpecialHiCatch):
+        // - AIRBORNE victim hangs from the attacker's TransN2 anchor via accessory1
+        //   (ftCo_800DB464 = same anchor-plus-static-x1A70 placement as attached Thrown*).
+        // - GROUNDED victim stands (empty Phys/ordinary Coll); instead the ATTACKER's
+        //   accessory4 (ftCa_SpecialLw_800E550C) snaps attacker.pos to victim.pos each frame
+        //   while x221B_b7 is set.
+        // Accessory callbacks freeze under the respective fighter's hitlag
+        // (Fighter_CallAcessoryCallbacks_8006C624 early-outs under x2219_b5).
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800DB368,ftCo_800DB464}
+        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialLw_800E5128,
+        //   ftCa_SpecialLw_800E550C}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_CallAcessoryCallbacks_8006C624
+        const size_t oidx = msl_idx_player(bi, (int)owner);
+        if (batch->state.on_ground[vidx] == 0u) {
+          if (batch->state.hitlag_started_frame[vidx] == 0u) {
+            grab_attachment_apply_thrown_anchor_now(batch, bi, p, (int)owner);
+          }
+        } else if (batch->state.falcon_specialhi_x221b_b7[oidx] != 0u &&
+                   batch->state.hitlag_started_frame[oidx] == 0u) {
+          batch->state.pos_x[oidx] = batch->state.pos_x[vidx];
+          batch->state.pos_y[oidx] = batch->state.pos_y[vidx];
+        }
       }
     }
   }

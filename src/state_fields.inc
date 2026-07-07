@@ -350,6 +350,14 @@ MSL_STATE_FIELD(falcon_speciallw_dealt_x1914_frame, uint8_t, bp, (size_t)MSL_MAX
 // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c
 MSL_STATE_FIELD(falcon_specials_grav, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(falcon_detect_pending, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+// Falcon Dive hidden lanes: mv.ca.specialhi.vel accumulated velocity (SpecialHi_Phys carries
+// last frame's TransN + drift sum across frames) and the attacker x221B_b7 attach-mode flag
+// (grounded victim: attacker snaps to victim via accessory4; airborne victim: victim hangs from
+// the attacker anchor). x2_b0/x2_b1 ride the shared special_cmd0/special_cmd1 latches.
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c
+MSL_STATE_FIELD(falcon_specialhi_vel_x, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(falcon_specialhi_vel_y, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(falcon_specialhi_x221b_b7, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(fallspecial_mobility_mul, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_window, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_hitlag_floor_active, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)

@@ -1844,6 +1844,23 @@ uint8_t combat_defender_downed_catch_mask_blocks(uint16_t action_id) {
   }
 }
 
+uint8_t combat_defender_downed_catch_mask_kind2_blocks(uint16_t action_id) {
+  // x1A68=2 (Falcon Dive) vs the downed x1A6A values: DownBound entry writes 0x1FF
+  // (0x1FF & 2 != 0 -> blocked); the DownBound/DownDamage -> DownWait handoffs and DownDamage
+  // entry write 1 (1 & 2 == 0 -> grabbable by the Dive, unlike ordinary kind-1 catches).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_8009794C,ftCo_80097E8C,
+  //   ftCo_80097F38}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+  switch (action_id) {
+    case MSL_ACT_DOWN_BOUND_U:
+    case MSL_ACT_DOWN_BOUND_D:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 uint8_t combat_guard_family_body_hurtcap_world(const MslBatch* batch, size_t d_idx,
                                                const MslHurtCap* cap, uint8_t cap_id,
                                                uint16_t cap_count, float* out_ax, float* out_ay,

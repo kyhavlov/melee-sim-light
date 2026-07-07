@@ -1109,7 +1109,14 @@ uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_i
     return 0u;
   }
   uint16_t msid = 0;
-  if (!throw_msid_from_action(throw_action_id, &msid)) {
+  if (char_id == (uint8_t)MSL_CHAR_ID_FALCON &&
+      throw_action_id == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW) {
+    // Falcon Dive release: doCatchAnim enters SpecialHiThrow (msid 310) whose frame-0 script
+    // writes the set_throw_hitbox idx=0 release data the ftCo_800DDDE4 owner applies.
+    // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doCatchAnim
+    // data/moves/falcon.json::specials_by_msid.310 set_throw_hitbox(idx=0)@0
+    msid = 310u;
+  } else if (!throw_msid_from_action(throw_action_id, &msid)) {
     return 0u;
   }
   const MslMoveTableCache* cache = move_cache_get(char_id, msid);

@@ -391,3 +391,102 @@ def test_falcon_kick_no_wall_no_rebound() -> None:
     outs = _run(_seed_far(True), [_mk_inputs(**DOWN_B)] + [_mk_inputs()] * 110)
     acts = [int(o["action_id"][0]) for o in outs]
     assert ACT_FC_HI_THROW1 not in acts
+
+
+# ---------------------------------------------------------------------------
+# Falcon Dive (ftCa_SpecialHi; actions 353..356, victim CaptureCaptain 275)
+# ---------------------------------------------------------------------------
+
+ACT_FC_HI = 353
+ACT_FC_AIR_HI = 354
+ACT_FC_HI_CATCH = 355
+ACT_FC_HI_THROW = 356
+ACT_CAPTURE_CAPTAIN = 275
+
+UP_B = dict(buttons=BTN_B, main_y=127)
+
+
+def test_grounded_up_b_whiff_rises_and_ends_in_freefall() -> None:
+    # ftCa_SpecialHi_Enter (grounded), set_airborne_state@14 launches the rise, and the whiffed
+    # anim end exits through ftCo_80096900(1,1,0,...) freefall -> LandingFallSpecial.
+    outs = _run(_seed_far(True), [_mk_inputs(**UP_B)] + [_mk_inputs()] * 140)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_FC_HI
+    assert max(float(o["pos_y"][0]) for o in outs) > 15.0, "dive must gain height"
+    assert ACT_FALL_SPECIAL in acts or ACT_LANDING_FALL_SPECIAL in acts, (
+        f"whiffed dive must end in freefall/landing lag: {sorted(set(acts))}")
+    assert ACT_FC_HI_CATCH not in acts, "whiff must not enter the catch"
+
+
+def test_air_up_b_enters_air_dive_and_double_jump_is_burned() -> None:
+    # ftCa_SpecialAirHi_Enter via the aerial Up-B zone; the entry burns all jumps
+    # (ftCa_SpecialLw_800E49FC: x1968_jumpsUsed = max_jumps), so mashing jump in the
+    # post-dive freefall never produces JumpAerial (0x1B/0x1C).
+    jump = _mk_inputs(buttons=0x0400)
+    outs = _run(_seed_far(False, pos_y=40.0), [_mk_inputs(**UP_B)] + [jump] * 120)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_FC_AIR_HI
+    assert 0x001B not in acts and 0x001C not in acts, "dive must burn the double jump"
+    assert ACT_FALL_SPECIAL in acts or ACT_LANDING_FALL_SPECIAL in acts
+
+
+def test_dive_grabs_grounded_opponent_hits_and_throws() -> None:
+    # Connect vs a GROUNDED victim (grab hitboxes at frame 13, before the frame-14 airborne
+    # switch): grab_flow's falcon branch -> attacker SpecialHiCatch(355) with x221B_b7 (the
+    # attacker snaps to the victim), victim CaptureCaptain(275). The HiCatch script's 5dmg
+    # hit lands on the held victim (attached-suppressed: no state change), then doCatchAnim
+    # applies Throw0's 12dmg release (ftCo_800DE2A8/ftCo_800DE7C0) into the damage aftermath.
+    seed = _seed_vs(9.0)
+    outs = _run(seed, [_mk_inputs(**UP_B)] + [_mk_inputs()] * 130)
+    acts = [int(o["action_id"][0]) for o in outs]
+    o_acts = [int(o["action_id"][1]) for o in outs]
+    assert ACT_FC_HI_CATCH in acts, f"dive must connect: {sorted(set(acts))}"
+    assert ACT_CAPTURE_CAPTAIN in o_acts, f"victim must be held: {sorted(set(o_acts))}"
+    assert ACT_FC_HI_THROW in acts, "catch anim end must enter the throw"
+    # 5 (HiCatch scripted hit) + 12 (Throw0 release hitbox).
+    assert float(outs[-1]["percent"][1]) >= 16.0, (
+        f"held hit + release must deal 17%: {float(outs[-1]['percent'][1])}")
+    # Victim leaves the hold only through the release damage aftermath (DamageFly family),
+    # never via Landing/Wait straight out of CaptureCaptain.
+    li = max(i for i, a in enumerate(o_acts) if a == ACT_CAPTURE_CAPTAIN)
+    assert 0x0054 <= o_acts[li + 1] <= 0x005B or o_acts[li + 1] == ACT_FALL, (
+        f"release must enter the damage aftermath: {o_acts[li:li+3]}")
+
+
+def test_dive_grabs_airborne_opponent_hanging_from_attacker() -> None:
+    # Connect vs an AIRBORNE victim: no attacker snap (x221B_b7=0); the victim hangs from the
+    # attacker's grab anchor (ftCo_800DB368 + accessory1) and rides the rising dive until the
+    # throw releases.
+    seed = _seed_vs(8.0, grounded=False, y=40.0)
+    # Fox seeded falling from above: by the grab window (frame 13) it has fallen to ~45,
+    # level with the rising dive.
+    seed["pos_y"][0, 1] = np.float32(66.0)
+    seed["on_ground"][0, 1] = np.uint8(0)
+    seed["action_id"][0, 1] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 1] = np.uint32(SM_FALL)
+    outs = _run(seed, [_mk_inputs(**UP_B)] + [_mk_inputs()] * 130)
+    acts = [int(o["action_id"][0]) for o in outs]
+    o_acts = [int(o["action_id"][1]) for o in outs]
+    assert ACT_FC_HI_CATCH in acts, f"air dive must connect: {sorted(set(acts))}"
+    assert ACT_CAPTURE_CAPTAIN in o_acts
+    # While held, the hanging victim tracks the attacker (rides the rise: same-direction dy).
+    held = [i for i, a in enumerate(o_acts) if a == ACT_CAPTURE_CAPTAIN]
+    if len(held) >= 3:
+        f0, f1 = held[1], held[-1]
+        dy_victim = float(outs[f1]["pos_y"][1]) - float(outs[f0]["pos_y"][1])
+        dy_attacker = float(outs[f1]["pos_y"][0]) - float(outs[f0]["pos_y"][0])
+        assert abs(dy_victim - dy_attacker) < 3.0, (
+            f"hanging victim must ride the attacker: victim dy {dy_victim:.2f} vs "
+            f"attacker dy {dy_attacker:.2f}")
+    assert float(outs[-1]["percent"][1]) >= 16.0
+
+
+def test_dive_whiff_beyond_reach_never_catches() -> None:
+    # The grab is script-hitbox-owned (frames 13..14); an opponent far outside its reach must
+    # leave both fighters untouched (no catch, no damage).
+    outs = _run(_seed_vs(200.0), [_mk_inputs(**UP_B)] + [_mk_inputs()] * 130)
+    acts = [int(o["action_id"][0]) for o in outs]
+    o_acts = set(int(o["action_id"][1]) for o in outs)
+    assert ACT_FC_HI_CATCH not in acts
+    assert ACT_CAPTURE_CAPTAIN not in o_acts
+    assert float(outs[-1]["percent"][1]) == 0.0

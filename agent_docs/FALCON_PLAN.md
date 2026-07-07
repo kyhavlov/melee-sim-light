@@ -406,6 +406,63 @@ Dolphin build environment if probes become necessary).
   grab_attachment/throw_flow. Then Phase 4 audit table refresh, rollout
   rerun, and webplay (Phase 6).
 
+- 2026-07-06: **Falcon Dive (SpecialHi family, actions 353-356 + victim
+  CaptureCaptain 275) live.** Implemented per the design notes below; the
+  falcon char-special ids are now shared constants (`MSL_ACT_CA_SPECIAL_*`
+  in action_ids.h, plus `MSL_ACT_CAPTURE_CAPTAIN`/`MSL_SM_CAPTURE_CAPTAIN`)
+  replacing the module-private numerals.
+  - Whiffed dive: `fc_specialhi_phys_core` models SpecialHi_Phys exactly
+    (mv.ca.specialhi.vel lanes `falcon_specialhi_vel_x/y` + 7D050 over-cap
+    x1FC decel / 7D3A8-7D2E8 drift-toward-target + 85134 TransN rebase);
+    same core runs grounded wind-up frames via physics.c's
+    grounded_self_vel_for_frame (no ground friction; falcon 353-356 branch).
+    IASA cmd0@13 arms x2_b1 (special_cmd1) + raw-stick B-reverse
+    (specialhi_input_var); ledge grab admitted ONLY when armed (ledge.c
+    falcon branch, no descending gate); anim end -> ftCo_80096900(xc=1,
+    specialhi_landing_lag) freefall; landing with x2_b1 ->
+    LandingFallSpecial, before the arm -> grounded phase flip.
+  - Connect: catch selection admits falcon 353/354 as x1A68 kind 2
+    (combat.c `catch_kind_x1a68`; kind-2 downed rejection set is DownBound
+    only — the Dive CAN grab DownWait/DownDamage victims, decomp x1A6A=1 vs
+    mask 2). Fork `grab_flow_falcon_dive_catch_connect`: attacker ->
+    SpecialHiCatch(355)@0 (no immediate tick), x221B_b7 =
+    victim-was-grounded (`falcon_specialhi_x221b_b7`); victim ->
+    CaptureCaptain(275)@0 + immediate tick, facing = -attacker, linkage via
+    grab_owner_port/attached_victim_port; airborne victim gets the
+    thrown-anchor static offsets (x1A70 substrate).
+  - Hold: grab_attachment pre-collision drives the airborne victim from the
+    attacker's TransN2 anchor (accessory1/ftCo_800DB464 == attached-Thrown*
+    substrate); grounded-victim mode snaps the ATTACKER to the victim
+    (accessory4/ftCa_SpecialLw_800E550C). CaptureCaptain classified in
+    msl_action_is_grabbed_victim. HiCatch's scripted 5dmg hit lands through
+    the ordinary attached-suppressed BODY path.
+  - Victim pose donor: source plays the ATTACKER-file figatree
+    (PlyTaro_Share_ACTION_TCaptainSpecialHi) on the victim via the
+    ChangeMotionState donor arg; every victim's own row 276 is null, so
+    per-char anim bins have no msid-276 pose for non-falcon chars.
+    hurtboxes.c falls back to the victim's own CapturePulledHi frame-0 pose
+    for hurtcap sampling during the hold (documented approximation; a
+    donor-skeleton bake would be the exact fix).
+  - Release (doCatchAnim at HiCatch anim end): attacker ->
+    SpecialHiThrow(356)@0; release rides `combat_apply_throw_hit` with
+    Throw0's set_throw_hitbox idx=0 (12dmg kbg82 angle361; move_tables maps
+    falcon 356 -> msid 310); same-frame anchor placement then detach into
+    the Fall bridge; grounded-hold release sets the attacker airborne at the
+    victim's position (7D5D4). Throw0: 7D60C airborne hold every frame,
+    cmd0@45 arms x2_b0 -> SpecialHi_Phys + specialhi_catch_grav blend
+    (persistent vy delta), anim end -> Fall (dive renews), landing ->
+    LandingFallSpecial. Orphaned holds (captor knocked out of 355, items
+    only in 1v1) release the victim into CaptureCut in the falcon action
+    phase.
+  - Reseed: `falcon_specials_reseed_init` (api.c, after
+    grab_attachment_reseed_init) recovers mv vel lanes from seeded self_vel
+    minus the frame's TransN delta, and x221B_b7 from the seeded hold
+    linkage.
+  - Gates: 23 falcon unit tests (5 new Dive tests incl. grounded-victim
+    snap, airborne hang riding the attacker, whiff-beyond-reach negative),
+    falcon one-step 3068 -> 2750 discrete (float p95 0.00065 -> 0.00050),
+    validate-all existing-char reports byte-identical, pytest green.
+
 ### Falcon Dive design notes (2026-07-06 decomp read; implement next session)
 
 The catch machinery mostly EXISTS in the sim:

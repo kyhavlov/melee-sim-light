@@ -900,6 +900,11 @@ typedef struct MslStateSoA {
   uint8_t* falcon_speciallw_hits;
   float* falcon_speciallw_friction;
   uint8_t* falcon_speciallw_dealt_x1914_frame;
+  // Falcon Dive: mv.ca.specialhi.vel carried velocity + attacker x221B_b7 attach-mode flag.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c
+  float* falcon_specialhi_vel_x;
+  float* falcon_specialhi_vel_y;
+  uint8_t* falcon_specialhi_x221b_b7;
   // Raptor Boost: mv.ca.specials.grav accumulator + fp->unk_gobj inert-contact detect flag.
   float* falcon_specials_grav;
   uint8_t* falcon_detect_pending;

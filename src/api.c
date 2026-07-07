@@ -57,6 +57,7 @@
 #include "state.h"
 #include "state_flags.h"
 #include "step.h"
+#include "falcon_specials.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
 #include "locomotion.h"
@@ -1140,7 +1141,7 @@ static void msl_batch_copy_runtime_lane(MslBatch* dst, const MslBatch* src, int3
   MSL_BATCH_COPY_FIELD(camera_zoom_hold_x2ba, uint16_t, 1u);
   MSL_BATCH_COPY_FIELD(debug_hit_status_override, uint8_t, (size_t)MSL_MAX_PLAYERS);
   MSL_BATCH_COPY_FIELD(hurtcap_matrix_valid, uint8_t,
-                       (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HURTCAPS);
+                       (size_t)MSL_MAX_PLAYERS*(size_t)MSL_MAX_HURTCAPS);
   MSL_BATCH_COPY_FIELD(hurtcap_matrix, float,
                        (size_t)MSL_MAX_PLAYERS*(size_t)MSL_MAX_HURTCAPS * 12u);
   MSL_BATCH_COPY_FIELD(rng_shadow_seed, uint32_t, 1u);
@@ -3568,6 +3569,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
 
     // Compute decomp-shaped grab attachment offsets (fp->x1A70 analog) for any seeded victims.
     grab_attachment_reseed_init(batch, bi);
+    // Reconstruct hidden Falcon Dive lanes (mv.ca.specialhi.vel, x221B_b7) from visible seed
+    // lanes.
+    falcon_specials_reseed_init(batch, bi);
 
     // Combat hitlist reseed generation:
     // - Seed carries a dense per-(attacker,hit_group,victim) snapshot, but runtime uses per-hitbox
@@ -4304,7 +4308,7 @@ static int msl_batch_apply_replay_frame_camera_box_visibility(MslBatch* batch,
       if (visible != 0u) {
         *f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
       } else {
-        *f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B0;
+        *f221f &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221F_B0;
       }
     }
   }

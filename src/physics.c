@@ -2628,8 +2628,26 @@ void physics_integrate(MslBatch* batch) {
               gr_vel += ground_friction_step_delta(gr_vel, ch->firefox_launch_reverse_accel);
             }
           } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
-                     (action_id == 357u || action_id == 358u || action_id == 360u ||
-                      action_id == 362u)) {
+                     (action_id >= (uint16_t)MSL_ACT_CA_SPECIAL_HI &&
+                      action_id <= (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW)) {
+            // Falcon Dive grounded rows (Special(Air)Hi wind-up before the script's
+            // set_airborne_state@14, plus transient HiCatch/Throw0 grounded frames): none of
+            // the source Phys callbacks touch gr_vel or the ground accel lanes, so NO ground
+            // friction applies. Special(Air)Hi_Phys additionally owns the frame's projected
+            // self velocity (TransN rebase + mv.ca.specialhi.vel), which the falcon phys hook
+            // has already written into the air-x lane.
+            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialHi_Phys,
+            //   ftCa_SpecialHiCatch_Phys,ftCa_SpecialHiThrow0_Phys}
+            if (action_id == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                action_id == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI) {
+              grounded_self_vel_for_frame = batch->state.speed_air_x_self[idx];
+              use_grounded_self_vel_for_frame = 1u;
+            }
+          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                     (action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW ||
+                      action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END ||
+                      action_id == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_LW_END ||
+                      action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END_AIR)) {
             // Falcon Kick grounded Phys family. gr_vel stays unscaled (source
             // Inline_Friction scales the frame's projected self_vel AFTER
             // ApplyGroundMovement, not fp->gr_vel), so the on-hit slowdown rides
@@ -2641,7 +2659,8 @@ void physics_integrate(MslBatch* batch) {
             const uint16_t fc_msid = falcon_special_submotion(action_id);
             const float fc_frame = physics_cur_anim_frame_f32(batch, idx);
             uint8_t scaled = 0u;
-            if (action_id == 357u || action_id == 362u) {
+            if (action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW ||
+                action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END_AIR) {
               // ft_80085088 -> ft_800850E0: TransN root motion when the extracted x10_b0 flag
               // is set for the motion, plain gr_friction step otherwise (no high-speed mul).
               float dxyz[3];
@@ -2654,7 +2673,7 @@ void physics_integrate(MslBatch* batch) {
               } else {
                 gr_vel += ground_friction_step_delta(gr_vel, ch->gr_friction);
               }
-              scaled = (uint8_t)(action_id == 357u);
+              scaled = (uint8_t)(action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW);
             } else {
               // LwEnd (358) / AirLwEnd (360): the script's cmd_vars[2] window selects the
               // per-family traction friction; otherwise ft_80084F3C (high-speed mul).
@@ -2662,7 +2681,7 @@ void physics_integrate(MslBatch* batch) {
               const uint8_t fc_cmd2 = move_tables_special_cmd_var_u8_value_at_frame(
                   batch->state.char_id[idx], fc_msid, 2u, fc_frame);
               if (fc_cmd2 != 0u) {
-                const float traction = (action_id == 358u)
+                const float traction = (action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END)
                                            ? ch->falcon_speciallw_ground_traction
                                            : ch->falcon_speciallw_air_landing_traction;
                 gr_vel += ground_friction_step_delta(gr_vel, traction * ch->gr_friction);
@@ -2673,7 +2692,7 @@ void physics_integrate(MslBatch* batch) {
                 }
                 gr_vel += ground_friction_step_delta(gr_vel, friction);
               }
-              scaled = (uint8_t)(action_id == 358u);
+              scaled = (uint8_t)(action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END);
             }
             if (scaled) {
               const float fc_f = batch->state.falcon_speciallw_friction[idx];

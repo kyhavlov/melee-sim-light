@@ -109,6 +109,15 @@ static inline uint8_t is_airborne_action_with_cliffcatch_check(uint8_t char_id, 
                       a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) &&
                      speed_y_self < 0.0f && special_cmd1 != 0u);
   }
+  // Falcon Dive (Special(Air)Hi): doAirColl runs ftCliffCommon_80081298 ONLY once the script's
+  // cmd_vars[0] IASA pulse armed mv.ca.specialhi.x2_b1 (the shared special_cmd1 latch); before
+  // that the airborne Coll is ft_80083B68 (no ledge). No descending requirement.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doAirColl
+  if (char_id == (uint8_t)MSL_CHAR_ID_FALCON && a >= 341u && a <= 372u) {
+    return (uint8_t)((a == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                      a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI) &&
+                     special_cmd1 != 0u);
+  }
   // Sheik Vanish's three airborne collision callbacks all call ft_CheckGroundAndLedge and then
   // ftCliffCommon_80081298 on the airborne path. The 341..364 action-id range is per-character,
   // so keep this char gate before the shared spacie special-kind lookup below.
@@ -498,8 +507,8 @@ static inline void enter_guard_on_from_cliff_end(MslBatch* batch, const MslCommo
   msl_anim_timebase_seed(batch, idx, -1.0f,
                          msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t) ~(
-      uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  batch->state.state_flags[flags_i] &=
+      (uint8_t)~(uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_release_latched_xc[idx] = 0u;
   batch->state.guard_on_cliff_end_source[idx] = 1u;
   // Same no-submotion GuardOn entry surface as action.c::enter_guard_on and the cliff

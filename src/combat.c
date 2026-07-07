@@ -4506,7 +4506,21 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
     }
 
     const uint16_t a_motion_id = batch->state.action_id[a_idx];
-    if (a_motion_id != (uint16_t)MSL_ACT_CATCH && a_motion_id != (uint16_t)MSL_ACT_CATCH_DASH) {
+    // Catch mask kind (fp->x1A68): ordinary Catch/CatchDash arm kind 1 (ftCo_800D8C54 via
+    // ftCommon_8007E2D0); Falcon Dive arms kind 2 at Special(Air)Hi entry. The kind selects
+    // which downed victims the x1A6A mask rejects below.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54
+    // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialHi_Enter,
+    //   ftCa_SpecialAirHi_Enter}
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2D0
+    uint8_t catch_kind_x1a68 = 0u;
+    if (a_motion_id == (uint16_t)MSL_ACT_CATCH || a_motion_id == (uint16_t)MSL_ACT_CATCH_DASH) {
+      catch_kind_x1a68 = 1u;
+    } else if (batch->state.char_id[a_idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+               (a_motion_id == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                a_motion_id == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI)) {
+      catch_kind_x1a68 = 2u;
+    } else {
       continue;
     }
 
@@ -4555,7 +4569,16 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_8009794C,ftCo_80097E8C,ftCo_80097F38}
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
-      if (combat_defender_downed_catch_mask_blocks(batch->state.action_id[d_idx])) {
+      // Kind-2 (Falcon Dive) rejection set: only DownBound rows still carry x1A6A=0x1FF
+      // (0x1FF & 2 != 0); the DownBound/DownDamage -> DownWait handoffs and DownDamage entry
+      // reset x1A6A to 1, which kind 2 does not mask (1 & 2 == 0) — the Dive can grab downed
+      // victims ordinary catches cannot.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_8009794C,ftCo_80097E8C,
+      //   ftCo_80097F38}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
+      if (catch_kind_x1a68 == 2u
+              ? combat_defender_downed_catch_mask_kind2_blocks(batch->state.action_id[d_idx])
+              : combat_defender_downed_catch_mask_blocks(batch->state.action_id[d_idx])) {
         continue;
       }
 

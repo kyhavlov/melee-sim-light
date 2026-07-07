@@ -40,6 +40,14 @@ static inline uint16_t falcon_special_submotion(uint16_t action_id) {
 // action phase alongside the other char-special modules.
 void falcon_specials_update_pre_physics(MslBatch* batch);
 
+// Replay-reseed reconstruction of the hidden Falcon Dive lanes: mv.ca.specialhi.vel is
+// recovered from the seeded (replay-visible) self velocity minus the seeded frame's TransN
+// delta (SpecialHi_Phys defines self_vel = TransN_delta + mv.vel each frame), and the
+// attacker x221B_b7 attach-mode flag from the seeded hold linkage. Runs from the batch seed
+// path after grab_attachment_reseed_init.
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHi_Phys
+void falcon_specials_reseed_init(MslBatch* batch, int batch_index);
+
 // Per-player physics for falcon special actions. Returns 1 when this module owned the
 // player's self-velocity update this frame (the generic physics path must then skip its own).
 uint8_t falcon_specials_phys(MslBatch* batch, size_t idx);
