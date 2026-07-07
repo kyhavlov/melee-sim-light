@@ -352,7 +352,7 @@ typedef struct MslStateSoA {
   // Internal-only frame-start Damage hitstun snapshot. DamageFlyRoll_Anim decrements and tests
   // this motion-var lane inside its Anim callback, before later shared timer/IASA consumers.
   uint16_t* frame_start_hitstun;
-  // Replay-true previous action snapshot (t-1 -> t), seeded from dataset history for entry-shaped
+  // Replay-true previous action snapshot (t-1 -> t), seeded from validation history for entry-shaped
   // one-step rows. Separate from the runtime cache below.
   uint16_t* seed_prev_action_id;
   int16_t* seed_prev_action_frame;
@@ -433,7 +433,7 @@ typedef struct MslStateSoA {
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
   uint8_t* source_clear_grounded_damage_clear_phase;
   // Terminal source-owner phase for `source_clear_timer_x18c8 == 1` rows. One-step transient lane
-  // produced in dataset tooling; matching runtime owners may also park the source lane while
+  // produced in validation tooling; matching runtime owners may also park the source lane while
   // retiring the countdown.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
@@ -1510,6 +1510,21 @@ typedef struct MslStateSoA {
   uint8_t* item_hidden_body_hit_victim_port;   // [batch * MSL_MAX_ITEMS], 0xFF = none
   uint8_t* item_hidden_body_hit_hurt_height;   // [batch * MSL_MAX_ITEMS]
   uint8_t* item_hidden_callback_flags;         // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_callback_bounce_vel_y_index;       // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_callback_bounce_vel_x_index_sign;  // [batch * MSL_MAX_ITEMS]
+  // One-step/replay seed bridge for SetupBounce's hidden xDDC/xDE0 samples on the same source
+  // Logic109 callback that publishes a bounced Needle. This does not alter free-running gameplay:
+  // live callbacks still consume the source RNG sites, and these lanes are consumed/cleared with
+  // item_hidden_callback_flags in the matching item step.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   it_2725_Logic109_DmgDealt,it_2725_Logic109_DmgReceived,it_2725_Logic109_HitShield,
+  //   itSeakNeedleThrown_SetupBounce}
+  uint8_t* item_sheik_needle_callback_bounce_motion_valid;     // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_callback_bounce_gravity_index;    // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_callback_bounce_min_vel_y_index;  // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_stage_hit_seed_kind;              // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_stage_hit_vel_y_index;            // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_stage_hit_vel_x_index_sign;       // [batch * MSL_MAX_ITEMS]
   // Sheik take-damage-dropped Needle hidden itemVar motion lanes (xDDC terminal min-y, xDE0
   // gravity). Live ftSk_SpecialN_80111FBC drops seed these from itSeakNeedleThrown_SetupDrop; replay
   // seeds of pre-existing state-1/4 Needles leave valid=0 and use visible-velocity reconstruction.

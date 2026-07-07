@@ -393,11 +393,11 @@ mismatch.item_state: 1 / 170640 (0.000006)
 mismatch.item_owner: 1 / 170640 (0.000006)
 mismatch.item_instance_id: 1 / 170640 (0.000006)
 ignored_mismatch.state_flags[4]&0x80: 97 / 22752 (0.004263)
-err.pos_x: mae=0.013146 p95=0.000000 max=122.846573
-err.pos_y: mae=0.013509 p95=0.000000 max=46.295685
-err.speed_air_x_self: mae=0.003462 p95=0.000000 max=16.000000
+err.pos_x: mae=0.009163 p95=0.000000 max=122.846573
+err.pos_y: mae=0.013447 p95=0.000000 max=46.295685
+err.speed_air_x_self: mae=0.000183 p95=0.000000 max=0.980000
 err.speed_ground_x_self: mae=0.000261 p95=0.000000 max=1.182500
-err.speed_y_self: mae=0.000727 p95=0.000000 max=2.940000
+err.speed_y_self: mae=0.000652 p95=0.000000 max=2.940000
 err.speed_x_attack: mae=0.000347 p95=0.000000 max=3.582312
 err.speed_y_attack: mae=0.000529 p95=0.000000 max=4.905607
 err.percent: mae=0.002227 p95=0.000000 max=13.000000
@@ -409,7 +409,7 @@ err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000060
 overall.discrete_mismatch: 213 / 1376496
 overall.strict_discrete_mismatch: 310 / 1376496
 overall.ignored_discrete_mismatch: 97
-overall.float_norm_mae_p95: 0.00035513
+overall.float_norm_mae_p95: 0.00016099
 
 == replays/heldout/spacies/IntrepidWhichRook.slpz ==
 Records: 6752  Players/scored per record: 2  Total player-frames: 13504
@@ -528,9 +528,9 @@ mismatch.item_state: 0 / 114135 (0.000000)
 mismatch.item_owner: 0 / 114135 (0.000000)
 mismatch.item_instance_id: 0 / 114135 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 52 / 15218 (0.003417)
-err.pos_x: mae=0.010403 p95=0.000000 max=16.000000
+err.pos_x: mae=0.004449 p95=0.000000 max=16.000000
 err.pos_y: mae=0.003845 p95=0.000000 max=8.535820
-err.speed_air_x_self: mae=0.005295 p95=0.000000 max=16.000000
+err.speed_air_x_self: mae=0.000392 p95=0.000000 max=2.350000
 err.speed_ground_x_self: mae=0.000677 p95=0.000000 max=2.350000
 err.speed_y_self: mae=0.000619 p95=0.000000 max=3.500000
 err.speed_x_attack: mae=0.000086 p95=0.000000 max=1.090542
@@ -544,10 +544,10 @@ err.item_vel_y: mae=0.000062 p95=0.000000 max=0.702896
 overall.discrete_mismatch: 258 / 920689
 overall.strict_discrete_mismatch: 310 / 920689
 overall.ignored_discrete_mismatch: 52
-overall.float_norm_mae_p95: 0.00042452
+overall.float_norm_mae_p95: 0.00016284
 
 == suite summary ==
 overall.discrete_mismatch: 1864 / 13208723
 overall.strict_discrete_mismatch: 2537 / 13208723
 overall.ignored_discrete_mismatch: 673
-overall.float_norm_mae_p95: 0.00027980
+overall.float_norm_mae_p95: 0.00023973

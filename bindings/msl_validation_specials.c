@@ -394,9 +394,9 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
 
   for (npy_intp p = 0; p < width; p++) {
     uint8_t count = 0u;
+    uint8_t needle_damage_callback_installed = 0u;
     uint16_t prev_action = 0u;
     int16_t prev_frame = -1;
-    uint8_t prev_chain_present = 0u;
     for (npy_intp i = 0; i < n; i++) {
       const npy_intp idx = (i * width) + p;
       const uint16_t action_i = act[idx];
@@ -404,31 +404,41 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
       const uint8_t chain_present_i = (uint8_t)(chain_present_in[idx] != 0u);
       if (ch[idx] != sheik_id) {
         count = 0u;
+        needle_damage_callback_installed = 0u;
         prev_action = action_i;
         prev_frame = frame_i;
-        prev_chain_present = chain_present_i;
         continue;
       }
       if (!msl_py_action_is_sheik_needle_family(action_i)) {
         // fv.sk.x0 is stored Needle count, not SpecialN-local motion state. It persists after
-        // Cancel/End exits and across unrelated Sheik actions until a shootNeedles decrement or
-        // the source damage/death callback clears it.
+        // Cancel/End exits and across unrelated Sheik actions until a shootNeedles decrement or a
+        // still-installed damage/death callback clears it.
         // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
         //   doEnter,ftSk_SpecialNLoop_Anim,ftSk_SpecialNEnd_Anim,shootNeedles,
         //   ftSk_SpecialN_80111FBC}
-        // The take_dmg/death callback clears fv.sk.x0 only when ftSk_Init_80110198 is installed:
-        // the prior action was SpecialN (always installed), or SpecialS while a live Chain article
-        // existed (fv.sk.x8 != NULL, here the prefix-visible Chain-article-present lane).
-        const uint8_t callback_installed =
-            msl_py_action_is_sheik_needle_family(prev_action) ||
-            (msl_py_action_is_sheik_chain_family(prev_action) && prev_chain_present != 0u);
-        if (callback_installed && msl_py_action_clears_sheik_needle_damage_callback(action_i)) {
+        // The take_dmg/death callback is hidden Fighter state, but ordinary motion changes clear
+        // it in Fighter_ChangeMotionState. Therefore it can bridge into an immediate damage/death
+        // entry from SpecialN/Chain, but it does not survive an intervening common action while
+        // the stored count itself does.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Init.c::ftSk_Init_80110198
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+        //   setDmgCallbacks,ftSk_SpecialN_80111FBC,ftSk_SpecialN_801120D4}
+        if (needle_damage_callback_installed != 0u &&
+            msl_py_action_clears_sheik_needle_damage_callback(action_i)) {
           count = 0u;
+          needle_damage_callback_installed = 0u;
+        } else if (msl_py_action_is_sheik_chain_family(action_i) && chain_present_i != 0u) {
+          // Several Chain active callbacks install the same ftSk_Init_80110198 damage/death
+          // callback while fv.sk.x8 points at the live Chain article.
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c
+          needle_damage_callback_installed = 1u;
+        } else {
+          needle_damage_callback_installed = 0u;
         }
         count_out[idx] = count;
         prev_action = action_i;
         prev_frame = frame_i;
-        prev_chain_present = chain_present_i;
         continue;
       }
 
@@ -437,15 +447,19 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
         if (!msl_py_action_is_sheik_needle_family(prev_action) && count == 0u) {
           count = 1u;
         }
+        needle_damage_callback_installed = 1u;
       } else if (msl_py_action_is_sheik_needle_loop(action_i)) {
         if (count == 0u) {
           count = 1u;
         }
+        needle_damage_callback_installed = 1u;
         if (msl_py_action_is_sheik_needle_loop(prev_action) && frame_i == 0 && prev_frame > 0 &&
             count < 6u) {
           count++;
         }
-      } else if (!msl_py_action_is_sheik_needle_cancel(action_i)) {
+      } else if (msl_py_action_is_sheik_needle_cancel(action_i)) {
+        needle_damage_callback_installed = 1u;
+      } else {
         // End rows seed mv.sk.specialn.x0 before this row's End_Anim callback. A fresh Loop->End
         // handoff starts at zero; subsequent End rows expose their post-frame action_frame.
         //
@@ -454,6 +468,7 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
         timer = msl_py_action_is_sheik_needle_loop(prev_action)
                     ? 0u
                     : (uint8_t)(frame_i < 0 ? 0 : (frame_i > 255 ? 255 : frame_i));
+        needle_damage_callback_installed = 1u;
       }
 
       count_out[idx] = count;
@@ -464,7 +479,6 @@ PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args) 
       }
       prev_action = action_i;
       prev_frame = frame_i;
-      prev_chain_present = chain_present_i;
     }
   }
 

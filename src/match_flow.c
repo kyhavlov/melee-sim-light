@@ -166,6 +166,29 @@ static inline void rebirth_refresh_velocity_to_platform(MslBatch* batch, size_t 
   batch->state.speed_y_self[idx] = (respawn.y - batch->state.pos_y[idx]) / (float)t;
 }
 
+static inline void rebirth_refresh_velocity_to_carried_target(MslBatch* batch, size_t idx,
+                                                              uint8_t t) {
+  if (batch == NULL) {
+    return;
+  }
+  if (t == 0u) {
+    batch->state.speed_air_x_self[idx] = 0.0f;
+    batch->state.speed_y_self[idx] = 0.0f;
+    return;
+  }
+  // Sustained Rebirth carries the spawn-platform target in fp->mv.co.common.x4 and recomputes
+  // self_vel from that hidden target after Rebirth_Anim decrements x0. For an already-active
+  // Rebirth seed, the same hidden target is recoverable from the replay-visible source velocity
+  // and the decremented timer:
+  //   x4 = cur_pos + previous_self_vel * x0_after_decrement
+  // This avoids replacing nonzero source spawn-platform X offsets with the static stage fallback.
+  // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_Rebirth_Anim,ftCo_Rebirth_Phys}
+  const float target_x = batch->state.pos_x[idx] + batch->state.speed_air_x_self[idx] * (float)t;
+  const float target_y = batch->state.pos_y[idx] + batch->state.speed_y_self[idx] * (float)t;
+  batch->state.speed_air_x_self[idx] = (target_x - batch->state.pos_x[idx]) / (float)t;
+  batch->state.speed_y_self[idx] = (target_y - batch->state.pos_y[idx]) / (float)t;
+}
+
 static inline void match_flow_pending_rebirth_store_x2218(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -580,12 +603,8 @@ static inline void match_flow_apply_stock_loss(MslBatch* batch, size_t idx) {
   }
 }
 
-static inline void enter_rebirth_wait(MslBatch* batch, size_t idx, uint32_t stage_id, int port0) {
+static inline void enter_rebirth_wait(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
-    return;
-  }
-  MslStagePoint2 respawn = {0};
-  if (!stage_collision_get_respawn_point(stage_id, port0, &respawn)) {
     return;
   }
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_REBIRTH_WAIT;
@@ -596,8 +615,11 @@ static inline void enter_rebirth_wait(MslBatch* batch, size_t idx, uint32_t stag
   // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_Anim
   msl_anim_timebase_seed(batch, idx, -1.0f, 1.0f);
   batch->state.on_ground[idx] = 0;
-  batch->state.pos_x[idx] = respawn.x;
-  batch->state.pos_y[idx] = respawn.y;
+  // Rebirth timer expiry enters RebirthWait through ftCo_800D5600 at the current Rebirth pose.
+  // The source does not reload Player_GetSpawnPlatformPos here; it updates CollData at fp->cur_pos
+  // and changes motion state. RebirthWait_Phys owns the next self_vel.{x,y} publication from the
+  // carried target, so do not preserve arbitrary seeded horizontal lanes through this transition.
+  // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D5600,ftCo_RebirthWait_Phys}
   batch->state.speed_air_x_self[idx] = 0.0f;
   batch->state.speed_ground_x_self[idx] = 0.0f;
   batch->state.speed_y_self[idx] = 0.0f;
@@ -1033,7 +1055,12 @@ void match_flow_update_pre_anim(MslBatch* batch) {
           }
           if (phase4 > 0 && (int)prev_t == phase4 + 1) {
             // ftCo_DeadUpFall_Anim case 3 performs the stock-loss side effect at phase-3 expiry.
+            // It first calls ftCommon_8007E2FC, clearing common velocities before the phase-4
+            // invisible/death hold. Without this, replay-seeded HitCamera phase-4 rows keep the
+            // last phase-3 fall velocity and drift far below the source pose.
             // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_800D34E0}
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2FC
+            match_flow_zero_common_velocities(batch, idx);
             match_flow_apply_stock_loss(batch, idx);
           }
         }
@@ -1081,13 +1108,16 @@ void match_flow_update_pre_anim(MslBatch* batch) {
       } else if (a == (uint16_t)MSL_ACT_REBIRTH) {
         // Rebirth -> RebirthWait.
         if (t == 0) {
-          enter_rebirth_wait(batch, idx, stage_id, match_flow_respawn_port0(batch, idx, p));
+          enter_rebirth_wait(batch, idx);
         } else {
-          rebirth_refresh_velocity_to_platform(batch, idx, stage_id,
-                                               match_flow_respawn_port0(batch, idx, p));
+          rebirth_refresh_velocity_to_carried_target(batch, idx, t);
         }
       } else if (a == (uint16_t)MSL_ACT_REBIRTH_WAIT) {
         // RebirthWait -> Fall.
+        // ftCo_RebirthWait_Phys rewrites self_vel.{x,y} from the carried RebirthWait target each
+        // frame. The sim does not carry that hidden x4 target independently here, so a seeded
+        // arbitrary horizontal lane is not preserved through the RebirthWait physics owner.
+        // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_RebirthWait_Phys
         batch->state.speed_air_x_self[idx] = 0.0f;
         batch->state.speed_ground_x_self[idx] = 0.0f;
         batch->state.speed_y_self[idx] = 0.0f;

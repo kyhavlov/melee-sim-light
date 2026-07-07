@@ -23,6 +23,7 @@ PyObject* msl_stage_left_wall_segment_py(PyObject* self, PyObject* args);
 PyObject* msl_stage_right_wall_segment_py(PyObject* self, PyObject* args);
 PyObject* msl_stage_raw_line_non_kind_py(PyObject* self, PyObject* args);
 PyObject* msl_stage_static_query_py(PyObject* self, PyObject* args);
+PyObject* msl_stage_item_line_hit_py(PyObject* self, PyObject* args);
 PyObject* msl_mpcoll_check_bounding_aabb_py(PyObject* self, PyObject* args);
 PyObject* msl_mpcoll_end_publication_py(PyObject* self, PyObject* args);
 PyObject* msl_stage_match_flow_roles_py(PyObject* self, PyObject* args);

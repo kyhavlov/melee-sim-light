@@ -405,7 +405,7 @@ uint8_t combat_hurt_height_damageflytop_weak_attackairb_head_high_uses_medium(
   }
   // Terminal DamageFlyTop weak BAir selected-height owner:
   // ftColl selected the authored weak BackAir BODY HitCapsule against cap2/head-high while the
-  // victim's DamageFlyTop hitstun was expiring. The replay-reconstructed cap2 height is high, but
+  // victim's DamageFlyTop hitstun was expiring. The seed-reconstructed cap2 height is high, but
   // the source damage-state result follows the selected weak BAir terminal body lane and enters
   // DamageFlyN. Keep this bounded to the concrete weak BAir payload plus selected cap2 source;
   // strong BAir cap2 rows and non-terminal DamageFlyTop keep the generated hurtcap height.
@@ -3070,7 +3070,8 @@ uint8_t combat_sheik_chain_start_terminal_owns_low_hurt_height(const MslBatch* b
       action != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_START) {
     return 0u;
   }
-  if ((source_hb_i % (size_t)MSL_MAX_HITBOXES) != 3u) {
+  const uint8_t hb_id = (uint8_t)(source_hb_i % (size_t)MSL_MAX_HITBOXES);
+  if (hb_id != 3u) {
     return 0u;
   }
   // Chain Start terminal frontier DmgLog height:

@@ -221,3 +221,22 @@ def test_deadupfall_hitcamera_phase3_expiry_loses_stock_once() -> None:
     out = _step_once(seed)
     assert int(out["action_id"][0]) == ACT_DEAD_UP_FALL_HIT_CAMERA
     assert int(out["stocks"][0]) == 3
+
+
+def test_deadupfall_hitcamera_phase3_expiry_clears_fall_velocity_before_phase4() -> None:
+    # ftCo_DeadUpFall_Anim case 3 calls ftCommon_8007E2FC before ftCo_800D34E0, so the invisible
+    # phase-4 death hold does not keep integrating the last phase-3 self velocity.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpFall_Anim
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2FC
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_DEAD_UP_FALL_HIT_CAMERA)
+    seed["animation_index"][0, 0] = np.uint32(SM_DEAD_UP_FALL_HIT_CAMERA)
+    seed["match_flow_timer"][0, 0] = np.uint8(36)
+    seed["speed_y_self"][0, 0] = np.float32(-1.7)
+    seed["pos_y"][0, 0] = np.float32(200.0)
+
+    out = _step_once(seed)
+    assert int(out["action_id"][0]) == ACT_DEAD_UP_FALL_HIT_CAMERA
+    assert int(out["stocks"][0]) == 3
+    assert float(out["speed_y_self"][0]) == pytest.approx(0.0, abs=1e-6)
+    assert float(out["pos_y"][0]) == pytest.approx(200.0, abs=1e-6)

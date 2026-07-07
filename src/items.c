@@ -99,6 +99,14 @@ void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_hidden_body_hit_victim_port[ii] = 0xFFu;
   batch->state.item_hidden_body_hit_hurt_height[ii] = 0u;
   batch->state.item_hidden_callback_flags[ii] = 0u;
+  batch->state.item_sheik_needle_callback_bounce_vel_y_index[ii] = 0xFFu;
+  batch->state.item_sheik_needle_callback_bounce_vel_x_index_sign[ii] = 0xFFu;
+  batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] = 0u;
+  batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] = 0u;
+  batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] = 0u;
+  batch->state.item_sheik_needle_stage_hit_seed_kind[ii] = 0u;
+  batch->state.item_sheik_needle_stage_hit_vel_y_index[ii] = 0u;
+  batch->state.item_sheik_needle_stage_hit_vel_x_index_sign[ii] = 0u;
   batch->state.item_sheik_needle_hidden_drop_valid[ii] = 0u;
   batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] = 0.0f;
   batch->state.item_sheik_needle_hidden_drop_gravity[ii] = 0.0f;
@@ -184,6 +192,14 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint8_t, batch->state.item_hidden_body_hit_victim_port);
   SWAP(uint8_t, batch->state.item_hidden_body_hit_hurt_height);
   SWAP(uint8_t, batch->state.item_hidden_callback_flags);
+  SWAP(uint8_t, batch->state.item_sheik_needle_callback_bounce_vel_y_index);
+  SWAP(uint8_t, batch->state.item_sheik_needle_callback_bounce_vel_x_index_sign);
+  SWAP(uint8_t, batch->state.item_sheik_needle_callback_bounce_motion_valid);
+  SWAP(uint8_t, batch->state.item_sheik_needle_callback_bounce_gravity_index);
+  SWAP(uint8_t, batch->state.item_sheik_needle_callback_bounce_min_vel_y_index);
+  SWAP(uint8_t, batch->state.item_sheik_needle_stage_hit_seed_kind);
+  SWAP(uint8_t, batch->state.item_sheik_needle_stage_hit_vel_y_index);
+  SWAP(uint8_t, batch->state.item_sheik_needle_stage_hit_vel_x_index_sign);
   SWAP(uint8_t, batch->state.item_sheik_needle_hidden_drop_valid);
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_min_vel_y);
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_gravity);
@@ -321,7 +337,7 @@ void items_sort(MslBatch* batch, int bi) {
       i--;
     }
   }
-  // Normalize empty-slot owner to -1 for deterministic dataset parity.
+  // Normalize empty-slot owner to -1 for deterministic validation parity.
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
     const size_t ii = msl_idx_item(bi, it);
     if (!batch->state.item_exists[ii]) {

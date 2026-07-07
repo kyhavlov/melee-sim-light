@@ -74,6 +74,8 @@ typedef struct MslStageFloorLine {
   // line's runtime endpoint orientation. These are stable ISO line ids, not graph indices.
   int16_t raw_prev_id;
   int16_t raw_next_id;
+  int16_t raw_prev_alt_id;
+  int16_t raw_next_alt_id;
   // MSLSTG01 preserved a non-primary endpoint link for this source line. Frozen Stadium uses these
   // alternate floor links for transformation-map adjacency that is not visible from the normalized
   // active floor chain alone.
@@ -387,6 +389,8 @@ const MslStageFloorLine* stage_collision_get_ledge_floor_line(uint32_t stage_id,
 // (it_8029C4D4) and, on hit, sets lifetime=1 and restores the pre-coll position.
 uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float y0, float x1,
                                              float y1);
+uint8_t stage_collision_item_line_hit_floor(uint32_t stage_id, float x0, float y0, float x1,
+                                            float y1, float* hit_x_out, float* hit_y_out);
 
 // Item fixed-ECB wall helper for stage-owned item Coll callbacks. Returns 1 when the fixed ECB's
 // previous-to-current point/edge sweep hits the requested active wall graph. side: 0 = left wall,

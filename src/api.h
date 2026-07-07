@@ -559,7 +559,7 @@ typedef struct MslSeed {
   float specialhi_rotate_model_f32[MSL_MAX_PLAYERS];
   uint8_t specialhi_rotate_model_valid_u8[MSL_MAX_PLAYERS];
   // Fighter model scale (decomp: fp->x34_scale.y). Slippi exposes this from the game-start block
-  // (player.model_scale), but legacy datasets may still default it to 1.0.
+  // (player.model_scale), but legacy seed corpora may still default it to 1.0.
   float fighter_scale_y[MSL_MAX_PLAYERS];
 
   uint8_t facing[MSL_MAX_PLAYERS];  // 0/1
@@ -848,12 +848,12 @@ typedef struct MslSeed {
   // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
   //
   // Seed shape:
-  // - Stored per player for dataset/FFI stability, but live runtime aggregates to one batch-global
+  // - Stored per player for schema/FFI stability, but live runtime aggregates to one batch-global
   //   countdown because the VS-opening callback clears x221D_b4 for all fighters together.
   uint8_t opening_input_lock_timer[MSL_MAX_PLAYERS];
   // Legacy compatibility lane from the earlier EntryEnd->Fall investigation.
   // The authoritative opening-control owner is now `opening_input_lock_timer` (`fp->x221D_b4`).
-  // This seed lane is retained for dataset/debug compatibility until the old field is pruned.
+  // This seed lane is retained for schema/debug compatibility until the old field is pruned.
   uint8_t entry_end_fall_lock[MSL_MAX_PLAYERS];
   // Rebirth / dead-flow camera-box visibility (`fp->x221F_b0`) as an explicit seed lane.
   //
@@ -1427,7 +1427,7 @@ typedef struct MslSeed {
   // Bit-packed damage hidden state:
   // - low nibble: post-hitlag callback kind (`fp->post_hitlag_cb`), currently 0/1.
   // - bit 7: meteor-cancel eligibility (`fp->mv.co.damage.x1A`) from ftColl_8007AC68.
-  // Keeping this as one byte preserves existing local dataset record sizes while still avoiding a
+  // Keeping this as one byte preserves existing local corpus record sizes while still avoiding a
   // runtime live-vector proxy for x1A.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AC68
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,doIasa}
@@ -1621,11 +1621,11 @@ typedef struct MslSeed {
   // expose x2092 directly.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800763C0,ftColl_80076528}
   uint16_t combo_push_timer_x2092[MSL_MAX_PLAYERS];
-  // Slippi raw source port for each local dataset/sim slot.
+  // Slippi raw source port for each local validation/sim slot.
   //
   // Decomp/recording boundary:
   // - `last_hit_by` mirrors `dmg.x18C4_source_ply`, which Slippi exports in the raw 0-based
-  //   controller-port domain, not in the selected local dataset slot order.
+  //   controller-port domain, not in the selected local validation slot order.
   // - Runtime combo/hitlist ownership still uses local slots; only replay-facing source writes use
   //   this lane.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
@@ -1687,7 +1687,7 @@ typedef struct MslSeed {
   // Validity:
   // - combat_hitlist_hb_valid[attacker][hb] == 1 means the per-hitbox list is authoritative for
   //   this seed snapshot, including the all-zero/empty case.
-  // - valid == 0 falls back to the legacy group map for synthetic tests and older datasets.
+  // - valid == 0 falls back to the legacy group map for synthetic tests and older seed corpora.
   uint8_t combat_hitlist_hb_valid[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES];
   uint16_t combat_hitlist_hb_cd[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS];
   uint16_t combat_hitlist_hb_victim_iid[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS];
@@ -1849,6 +1849,8 @@ typedef struct MslSeed {
   // - hidden_body_hit_victim_port: 0..3 applies a hidden xC34 BODY callback hit before normal item
   //   collision for this one-step seed; 0xFF means no hidden BODY hit.
   // - hidden_callback_flags bit0 clears the item via the seeded OnGiveDamage/dmg_dealt phase.
+  // - hidden_callback_flags bit2 forces the Sheik Needle callback bounce sample below.
+  // - hidden_callback_flags bit4 forces the Sheik Needle callback destroy outcome below.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688,ftColl_80077C60}
   // refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8,Item_8026A294}
   // refs/melee/src/melee/it/items/itfoxlaser.c::{
@@ -1861,6 +1863,37 @@ typedef struct MslSeed {
   uint8_t item_hidden_body_hit_victim_port[MSL_MAX_ITEMS];
   uint8_t item_hidden_body_hit_hurt_height[MSL_MAX_ITEMS];
   uint8_t item_hidden_callback_flags[MSL_MAX_ITEMS];
+  // Sheik thrown-Needle hidden damage-callback bounce sample bridge.
+  //
+  // The shared Logic109 DmgDealt/DmgReceived/HitShield callbacks sample HSD_Randi(3) for
+  // destroy-vs-state4, then sample data-table velocities before Slippi publishes the post-callback
+  // item row. Headless replay reseed can be missing unrelated visual-particle RNG consumers before
+  // that callback, so this one-step lane restores only the exact item callback result for matching
+  // item identity. It is consumed only when item_hidden_callback_flags bit2/bit4 is set for this
+  // slot.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   it_2725_Logic109_DmgDealt,it_2725_Logic109_DmgReceived,it_2725_Logic109_HitShield,
+  //   itSeakNeedleThrown_SetupBounce}
+  uint8_t item_sheik_needle_callback_bounce_vel_y_index[MSL_MAX_ITEMS];
+  // Low bits: needle_bounce_x_vel index; bit 7: negative sign.
+  uint8_t item_sheik_needle_callback_bounce_vel_x_index_sign[MSL_MAX_ITEMS];
+  // Sheik thrown-Needle state-4 hidden itemVar motion bridge.
+  // kind: 0 none; 1 restore xDD8/xDE0 for UnkMotion4_Phys without an xDDC clamp;
+  // 2 restore hidden item hitlag freeze;
+  // 3 restore both the item hitlag freeze and the proven xDD8/xDDC/xDE0 lanes.
+  // Reseed-only: Slippi publishes the state-4 item but not itemVar.seakneedlethrown.xDD8/xDDC/xDE0
+  // nor item->xCBC hitlag. Derived from same item spawn/instance next publication and data tables.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion4_Phys
+  // refs/melee/src/melee/it/item.c::{checkHitLag,Item_802697D4}
+  uint8_t item_sheik_needle_motion_seed_kind[MSL_MAX_ITEMS];
+  uint8_t item_sheik_needle_motion_vel_x_index_sign[MSL_MAX_ITEMS];
+  uint8_t item_sheik_needle_motion_gravity_index[MSL_MAX_ITEMS];
+  uint8_t item_sheik_needle_motion_min_vel_y_index[MSL_MAX_ITEMS];
+  // State-0 stage-hit result bridge for itSeakneedlethrown_UnkMotion0_Coll.
+  // kind: 0 none; 1 force stick state2; 2 force bounce state4 with the sample indices below.
+  uint8_t item_sheik_needle_stage_hit_seed_kind[MSL_MAX_ITEMS];
+  uint8_t item_sheik_needle_stage_hit_vel_y_index[MSL_MAX_ITEMS];
+  uint8_t item_sheik_needle_stage_hit_vel_x_index_sign[MSL_MAX_ITEMS];
   // Prefix-causal dynamic-bone velocity scratch for Yoshi Shy Guys.
   //
   // `it_802D98C4` derives item->x40_vel from the current JObj translation minus
@@ -2300,7 +2333,7 @@ typedef struct MslDebugShieldCandidateDecision {
 // - Copy: refs/melee/src/melee/lb/lbcollision.c::lbColl_CopyHitCapsule
 // - Gate check: refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC (uses victims_1)
 //
-// NOTE: This struct is debug-only and not part of the stable dataset/compare schema.
+// NOTE: This struct is debug-only and not part of the stable validation/compare schema.
 #pragma pack(push, 1)
 typedef struct MslDebugHitlistVictimEntry {
   uint32_t id32;
@@ -2334,7 +2367,7 @@ typedef struct MslDebugHitlistCapsule {
 // - start_frame/end_frame: active window for hb_id at the sampled pose_frame. end_frame is the
 //   next clear frame affecting hb_id or clear-all, or -1 if none found.
 //
-// NOTE: This struct is debug-only and not part of the stable dataset/compare schema.
+// NOTE: This struct is debug-only and not part of the stable validation/compare schema.
 #pragma pack(push, 1)
 typedef struct MslDebugHitboxEventTiming {
   uint8_t attacker;

@@ -13,16 +13,16 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 == replays/heldout/sheik/AblePertinentSeahorse.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1107
-rollout.streak_count: 43
+rollout.streak_count: 42
 rollout.streak_len.median: 159
 rollout.streak_len.p90: 785
 rollout.streak_len.p95: 849
 rollout.streak_len.max: 1107
-rollout.first_mismatch_total: 46
-rollout.first_mismatch_seeded_total: 33
+rollout.first_mismatch_total: 45
+rollout.first_mismatch_seeded_total: 31
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_y max_err=139.917 rec=3840 p=0 seed/ref/out=13.7942/11.888/151.805 actions=7/7/7 category=unclassified
+  1. pos_y max_err=144.134 rec=3846 p=0 seed/ref/out=12.5594/7.67126/151.805 actions=7/7/7 category=unclassified
   2. pos_x max_err=87.2014 rec=3855 p=0 seed/ref/out=15.2459/16.584/-70.6174 actions=7/7/7 category=unclassified
   3. percent max_err=3.64 rec=4386 p=0 seed/ref/out=11.55/11.55/15.19 actions=90/90/90 category=unclassified
 rollout.float_top_downstream:
@@ -99,14 +99,14 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == replays/heldout/sheik/FrailGiganticCrow.slpz ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 2416
-rollout.streak_count: 22
-rollout.streak_len.median: 219
+rollout.best_len: 2536
+rollout.streak_count: 20
+rollout.streak_len.median: 407
 rollout.streak_len.p90: 1043
 rollout.streak_len.p95: 1512
-rollout.streak_len.max: 2416
-rollout.first_mismatch_total: 21
-rollout.first_mismatch_seeded_total: 14
+rollout.streak_len.max: 2536
+rollout.first_mismatch_total: 19
+rollout.first_mismatch_seeded_total: 11
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=18 rec=3787 p=0 seed/ref/out=-19.7208/-20.7858/-38.7858 actions=68/68/68 category=unclassified
@@ -162,12 +162,12 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:113
 
 == replays/heldout/sheik/NiceOrganicSandpiper.slpz ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1577
+rollout.best_len: 1643
 rollout.streak_count: 13
-rollout.streak_len.median: 537
+rollout.streak_len.median: 521
 rollout.streak_len.p90: 1351
-rollout.streak_len.p95: 1577
-rollout.streak_len.max: 1577
+rollout.streak_len.p95: 1643
+rollout.streak_len.max: 1643
 rollout.first_mismatch_total: 12
 rollout.first_mismatch_seeded_total: 8
 rollout.float_status: NOT-CLEAN
@@ -185,13 +185,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == replays/heldout/sheik/OldMagnificentFlamingo.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1120
-rollout.streak_count: 18
-rollout.streak_len.median: 332
+rollout.streak_count: 16
+rollout.streak_len.median: 337
 rollout.streak_len.p90: 1100
 rollout.streak_len.p95: 1120
 rollout.streak_len.max: 1120
-rollout.first_mismatch_total: 20
-rollout.first_mismatch_seeded_total: 12
+rollout.first_mismatch_total: 16
+rollout.first_mismatch_seeded_total: 11
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=68.8351 rec=3066 p=1 seed/ref/out=-63.9512/-68.8262/0.00889587 actions=86/86/86 category=unclassified
@@ -268,17 +268,17 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:163
 
 == suite summary ==
-overall.rollout.streak_count: 379
+overall.rollout.streak_count: 374
 overall.rollout.streak_len.median: 99
 overall.rollout.streak_len.p90: 802
 overall.rollout.streak_len.p95: 1107
 overall.rollout.streak_len.max: 3122
 overall.rollout.best_len.max: 3122
-overall.rollout.first_mismatch_total: 395
-overall.rollout.first_mismatch_seeded_total: 288
+overall.rollout.first_mismatch_total: 388
+overall.rollout.first_mismatch_seeded_total: 282
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
-  1. pos_y max_err=139.917 rec=3840 p=0 seed/ref/out=13.7942/11.888/151.805 actions=7/7/7 category=unclassified
+  1. pos_y max_err=144.134 rec=3846 p=0 seed/ref/out=12.5594/7.67126/151.805 actions=7/7/7 category=unclassified
   2. pos_x max_err=87.2014 rec=3855 p=0 seed/ref/out=15.2459/16.584/-70.6174 actions=7/7/7 category=unclassified
   3. percent max_err=6.045 rec=2625 p=1 seed/ref/out=76.655/76.655/70.61 actions=38/38/38 category=unclassified
 overall.rollout.float_top_downstream:

@@ -8,6 +8,8 @@
 #include <string.h>
 
 #include "../src/api.h"
+#include "../src/item_article_params.h"
+#include "../src/stage_collision.h"
 
 static int require_u8_rows(PyArrayObject* arr, npy_intp rows, npy_intp min_cols, const char* name) {
   if (PyArray_NDIM(arr) != 2 || PyArray_DIM(arr, 0) != rows || PyArray_DIM(arr, 1) < min_cols) {
@@ -18,6 +20,144 @@ static int require_u8_rows(PyArrayObject* arr, npy_intp rows, npy_intp min_cols,
 }
 
 static inline bool guard_family_action(uint16_t action) { return action >= 178u && action <= 182u; }
+
+static int table_index_for_value(const float* values, float target, bool absolute_value) {
+  if (values == NULL || !isfinite(target)) {
+    return -1;
+  }
+  float best = 1000000.0f;
+  int best_i = -1;
+  for (int i = 0; i < 8; i++) {
+    const float v = absolute_value ? fabsf(values[i]) : values[i];
+    const float d = fabsf(v - target);
+    if (d < best) {
+      best = d;
+      best_i = i;
+    }
+  }
+  return best <= 0.0002f ? best_i : -1;
+}
+
+static bool sheik_needle_seed_sweeps_item_stage_line(const MslSeed* seed, const MslItem* si) {
+  if (seed == NULL || si == NULL || si->state != 0u || !isfinite(si->pos_x) ||
+      !isfinite(si->pos_y) || !isfinite(si->vel_x) || !isfinite(si->vel_y)) {
+    return false;
+  }
+  const float next_x = si->pos_x + si->vel_x;
+  const float next_y = si->pos_y + si->vel_y;
+  if (!stage_collision_require_stage(seed->stage_id)) {
+    return false;
+  }
+  return stage_collision_item_line_hits_floor(seed->stage_id, si->pos_x, si->pos_y, next_x,
+                                              next_y) != 0u;
+}
+
+static const MslItem* unique_same_item_state4(const MslCompare* ref, const MslItem* seed_item,
+                                              uint16_t item_type) {
+  if (ref == NULL || seed_item == NULL) {
+    return NULL;
+  }
+  const MslItem* found = NULL;
+  for (int ref_it = 0; ref_it < MSL_MAX_ITEMS; ref_it++) {
+    const MslItem* candidate = &ref->items[ref_it];
+    if (candidate->exists != 0u && candidate->type == item_type &&
+        candidate->instance_id == seed_item->instance_id &&
+        candidate->spawn_id == seed_item->spawn_id && candidate->owner == seed_item->owner &&
+        candidate->state == 4u) {
+      if (found != NULL) {
+        return NULL;
+      }
+      found = candidate;
+    }
+  }
+  return found;
+}
+
+static bool sheik_needle_derive_state4_motion_lanes(
+    const uint8_t* ref_u8, size_t ref_stride, npy_intp rows, npy_intp row_i,
+    const MslItem* seed_item, const MslItem* current_ref, uint16_t item_type,
+    const MslItemArticleParams* ap, uint8_t* out_x_idx_sign, uint8_t* out_grav_idx,
+    uint8_t* out_min_idx, bool start_from_current_ref) {
+  if (ref_u8 == NULL || seed_item == NULL || current_ref == NULL || ap == NULL ||
+      out_x_idx_sign == NULL || out_grav_idx == NULL || out_min_idx == NULL) {
+    return false;
+  }
+
+  const MslItem* prev = start_from_current_ref ? current_ref : seed_item;
+  bool have_x = false;
+  bool have_grav = false;
+  bool have_min = false;
+  uint8_t x_idx_sign = 0u;
+  uint8_t grav_idx_u8 = 0u;
+  uint8_t min_idx_u8 = 0u;
+
+  // Source owner: state-4 Needle Phys consumes itemVar.seakneedlethrown.xDD8/xDDC/xDE0. Slippi
+  // publishes only the public item rows, so a replay seed inside item hitlag can reconstruct these
+  // hidden lanes only when later same-spawn state-4 publications prove source Phys integration and
+  // the table samples. Limit the future scan to the same item identity; it is a validation/reseed
+  // provenance bridge and does not run in free gameplay.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{itSeakNeedleThrown_SetupBounce,
+  //   itSeakneedlethrown_UnkMotion4_Phys}
+  for (npy_intp j = row_i; j < rows && j <= row_i + 96; j++) {
+    const MslItem* cur = current_ref;
+    if (j != row_i) {
+      const MslCompare* future = (const MslCompare*)(const void*)(ref_u8 + (size_t)j * ref_stride);
+      cur = unique_same_item_state4(future, seed_item, item_type);
+      if (cur == NULL) {
+        break;
+      }
+    }
+
+    const float dx = cur->pos_x - prev->pos_x;
+    const float dy = cur->pos_y - prev->pos_y;
+    const float dv_y = cur->vel_y - prev->vel_y;
+    const bool changed = fabsf(dx) > 0.0002f || fabsf(dy) > 0.0002f ||
+                         fabsf(cur->vel_x - prev->vel_x) > 0.0002f ||
+                         fabsf(cur->vel_y - prev->vel_y) > 0.0002f;
+    if (changed) {
+      const int x_idx = table_index_for_value(ap->needle_bounce_x_vel, fabsf(cur->vel_x), false);
+      const bool source_pos =
+          x_idx >= 0 && fabsf(dx - cur->vel_x) <= 0.0003f && fabsf(dy - cur->vel_y) <= 0.0003f;
+      if (!source_pos) {
+        break;
+      }
+      x_idx_sign = (uint8_t)(x_idx | (cur->vel_x < 0.0f ? 0x80u : 0u));
+      have_x = true;
+
+      const int grav_idx = table_index_for_value(ap->needle_bounce_gravity, dv_y, false);
+      if (grav_idx >= 0) {
+        grav_idx_u8 = (uint8_t)grav_idx;
+        have_grav = true;
+      }
+      int min_idx = -1;
+      if (grav_idx < 0) {
+        min_idx = table_index_for_value(ap->needle_bounce_min_vel_y, cur->vel_y, false);
+      } else if (have_grav) {
+        const float unclamped_y = prev->vel_y + ap->needle_bounce_gravity[grav_idx_u8];
+        if (unclamped_y < cur->vel_y - 0.0002f) {
+          min_idx = table_index_for_value(ap->needle_bounce_min_vel_y, cur->vel_y, false);
+        }
+      }
+      if (min_idx >= 0) {
+        min_idx_u8 = (uint8_t)min_idx;
+        have_min = true;
+      }
+      if (have_x && have_grav && have_min) {
+        *out_x_idx_sign = x_idx_sign;
+        *out_grav_idx = grav_idx_u8;
+        *out_min_idx = min_idx_u8;
+        return true;
+      }
+    }
+    prev = cur;
+  }
+  return false;
+}
+
+enum {
+  MSL_VALIDATION_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE = 1u << 2u,
+  MSL_VALIDATION_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_DESTROY = 1u << 4u,
+};
 
 static bool throw_laser_grabbed_victim_action(uint16_t action_id) {
   switch (action_id) {
@@ -105,6 +245,10 @@ PyObject* msl_validation_copy_item_rows_with_illusion_py(PyObject* self, PyObjec
     return NULL;
   }
   const int players = num_players;
+  if (stage_collision_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "stage_collision_init failed");
+    return NULL;
+  }
 
   uint8_t* seed_u8 = (uint8_t*)PyArray_DATA(seed);
   uint8_t* ref_u8 = (uint8_t*)PyArray_DATA(ref);
@@ -292,9 +436,10 @@ PyObject* msl_validation_derive_item_hidden_callback_buffers_py(PyObject* self, 
   PyObject* ref_obj = NULL;
   PyObject* laser_lut_obj = NULL;
   PyObject* shield_bounce_lut_obj = NULL;
+  PyObject* needle_lut_obj = NULL;
   int num_players = 0;
-  if (!PyArg_ParseTuple(args, "OOOOi", &seed_obj, &ref_obj, &laser_lut_obj, &shield_bounce_lut_obj,
-                        &num_players)) {
+  if (!PyArg_ParseTuple(args, "OOOOOi", &seed_obj, &ref_obj, &laser_lut_obj, &shield_bounce_lut_obj,
+                        &needle_lut_obj, &num_players)) {
     return NULL;
   }
   if (num_players < 0 || num_players > MSL_MAX_PLAYERS) {
@@ -307,14 +452,18 @@ PyObject* msl_validation_derive_item_hidden_callback_buffers_py(PyObject* self, 
       require_contiguous_array(laser_lut_obj, NPY_UINT8, 1, "laser_type_lut");
   PyArrayObject* shield_bounce_lut =
       require_contiguous_array(shield_bounce_lut_obj, NPY_UINT8, 1, "shield_bounce_type_lut");
-  if (seed_arr == NULL || ref_arr == NULL || laser_lut == NULL || shield_bounce_lut == NULL) {
+  PyArrayObject* needle_lut =
+      require_contiguous_array(needle_lut_obj, NPY_UINT8, 1, "needle_type_lut");
+  if (seed_arr == NULL || ref_arr == NULL || laser_lut == NULL || shield_bounce_lut == NULL ||
+      needle_lut == NULL) {
     return NULL;
   }
   const npy_intp n = PyArray_DIM(seed_arr, 0);
   if (PyArray_DIM(ref_arr, 0) != n ||
       require_u8_rows(seed_arr, n, (npy_intp)sizeof(MslSeed), "seed_u8") != 0 ||
       require_u8_rows(ref_arr, n, (npy_intp)sizeof(MslCompare), "ref_u8") != 0 ||
-      PyArray_SIZE(laser_lut) < 65536 || PyArray_SIZE(shield_bounce_lut) < 65536) {
+      PyArray_SIZE(laser_lut) < 65536 || PyArray_SIZE(shield_bounce_lut) < 65536 ||
+      PyArray_SIZE(needle_lut) < 65536) {
     if (!PyErr_Occurred()) {
       PyErr_SetString(PyExc_ValueError, "item hidden callback validation inputs are invalid");
     }
@@ -328,6 +477,7 @@ PyObject* msl_validation_derive_item_hidden_callback_buffers_py(PyObject* self, 
   const size_t ref_stride = (size_t)PyArray_STRIDE(ref_arr, 0);
   const uint8_t* laser = (const uint8_t*)PyArray_DATA(laser_lut);
   const uint8_t* shield_bounce = (const uint8_t*)PyArray_DATA(shield_bounce_lut);
+  const uint8_t* needle = (const uint8_t*)PyArray_DATA(needle_lut);
 
   for (npy_intp i = 0; i < n; i++) {
     MslSeed* seed = (MslSeed*)(void*)(seed_u8 + (size_t)i * seed_stride);
@@ -341,6 +491,15 @@ PyObject* msl_validation_derive_item_hidden_callback_buffers_py(PyObject* self, 
       seed->item_hidden_body_hit_victim_port[it] = 0xFFu;
       seed->item_hidden_body_hit_hurt_height[it] = 0u;
       seed->item_hidden_callback_flags[it] = 0u;
+      seed->item_sheik_needle_callback_bounce_vel_y_index[it] = 0u;
+      seed->item_sheik_needle_callback_bounce_vel_x_index_sign[it] = 0u;
+      seed->item_sheik_needle_motion_seed_kind[it] = 0u;
+      seed->item_sheik_needle_motion_vel_x_index_sign[it] = 0u;
+      seed->item_sheik_needle_motion_gravity_index[it] = 0u;
+      seed->item_sheik_needle_motion_min_vel_y_index[it] = 0u;
+      seed->item_sheik_needle_stage_hit_seed_kind[it] = 0u;
+      seed->item_sheik_needle_stage_hit_vel_y_index[it] = 0u;
+      seed->item_sheik_needle_stage_hit_vel_x_index_sign[it] = 0u;
     }
     bool guard_context = false;
     for (int p = 0; p < players; p++) {
@@ -358,7 +517,8 @@ PyObject* msl_validation_derive_item_hidden_callback_buffers_py(PyObject* self, 
       const uint16_t item_type = si->type;
       const bool is_laser = laser[item_type] != 0u;
       const bool is_shield_bounce_item = shield_bounce[item_type] != 0u;
-      if (!is_laser && !is_shield_bounce_item) {
+      const bool is_needle = needle[item_type] != 0u;
+      if (!is_laser && !is_shield_bounce_item && !is_needle) {
         continue;
       }
       const bool ref_exists_now = ri->exists != 0u;
@@ -410,6 +570,223 @@ PyObject* msl_validation_derive_item_hidden_callback_buffers_py(PyObject* self, 
           seed->item_hidden_body_hit_victim_port[it] = victim;
           seed->item_hidden_body_hit_hurt_height[it] = 1u;
           seed->item_hidden_callback_flags[it] = 1u;
+        }
+      }
+      bool needle_player_contact = false;
+      const bool needle_state_uses_logic109_contact =
+          is_needle && (si->state == 0u || si->state == 1u || si->state == 2u || si->state == 4u);
+      if (needle_state_uses_logic109_contact) {
+        for (int p = 0; p < players; p++) {
+          const bool source_contact_frame =
+              (seed->hitlag[p] == 0u && ref->hitlag[p] != 0u) ||
+              (seed->hitstun[p] == 0u && ref->hitstun[p] != 0u) ||
+              (!guard_family_action(seed->action_id[p]) && guard_family_action(ref->action_id[p]));
+          const bool dmg_dealt_or_hitshield =
+              si->state == 0u && ref->instance_hit_by[p] == si->instance_id;
+          const bool dmg_received = (si->state == 1u || si->state == 2u || si->state == 4u) &&
+                                    seed->hitlag[p] == 0u && ref->hitlag[p] != 0u &&
+                                    ref->instance_hit_by[p] != si->instance_id;
+          if ((dmg_dealt_or_hitshield || dmg_received) && source_contact_frame) {
+            needle_player_contact = true;
+            break;
+          }
+        }
+      }
+      const MslItem* needle_ref = NULL;
+      bool needle_same_identity_in_ref = ref_same_item;
+      if (needle_state_uses_logic109_contact) {
+        if (ref_same_item && ri->state == 4u && ri->owner == si->owner) {
+          needle_ref = ri;
+        } else {
+          for (int ref_it = 0; ref_it < MSL_MAX_ITEMS; ref_it++) {
+            const MslItem* candidate = &ref->items[ref_it];
+            if (candidate->exists != 0u && candidate->type == item_type &&
+                candidate->instance_id == si->instance_id && candidate->spawn_id == si->spawn_id &&
+                candidate->owner == si->owner) {
+              needle_same_identity_in_ref = true;
+              if (candidate->state != 4u) {
+                continue;
+              }
+              if (needle_ref != NULL) {
+                needle_ref = NULL;
+                break;
+              }
+              needle_ref = candidate;
+            }
+          }
+        }
+      }
+      if (needle_state_uses_logic109_contact && needle_player_contact && needle_ref == NULL &&
+          !needle_same_identity_in_ref) {
+        // Same Logic109 callback owner as the state-4 bounce bridge below, but the public next row
+        // proves the source HSD_Randi(3) result took the destroy/return-true branch: the matching
+        // thrown Needle spawn/instance vanished on a player-contact frame. This covers state-0
+        // DmgDealt/HitShield and state-1/2/4 DmgReceived contacts; the bridge restores only that
+        // hidden callback fate and does not alter free-running RNG behavior.
+        // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+        //   it_2725_Logic109_DmgDealt,it_2725_Logic109_DmgReceived,
+        //   it_2725_Logic109_HitShield}
+        seed->item_hidden_callback_flags[it] |=
+            (uint8_t)MSL_VALIDATION_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_DESTROY;
+      }
+      if (needle_ref != NULL && needle_player_contact) {
+        const MslItemArticleParams* ap =
+            item_article_params_for_sheik_needle_throw_item_type(item_type);
+        if (ap != NULL) {
+          const int y_idx =
+              table_index_for_value(ap->needle_bounce_min_vel_y, needle_ref->vel_y, true);
+          const int x_idx =
+              table_index_for_value(ap->needle_bounce_x_vel, fabsf(needle_ref->vel_x), false);
+          if (y_idx >= 0 && x_idx >= 0) {
+            // Sheik thrown-Needle Logic109 callbacks publish the state-4 keep outcome and the
+            // data-table visible velocity samples before Slippi exposes an item row. This bridge is
+            // per item spawn/instance and only restores that hidden callback sample; free-running
+            // gameplay still uses the modeled HSD_Randi stream.
+            // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+            //   it_2725_Logic109_DmgDealt,it_2725_Logic109_DmgReceived,
+            //   it_2725_Logic109_HitShield,itSeakNeedleThrown_SetupBounce}
+            seed->item_hidden_callback_flags[it] |=
+                (uint8_t)MSL_VALIDATION_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE;
+            seed->item_sheik_needle_callback_bounce_vel_y_index[it] = (uint8_t)y_idx;
+            seed->item_sheik_needle_callback_bounce_vel_x_index_sign[it] =
+                (uint8_t)(x_idx | (needle_ref->vel_x < 0.0f ? 0x80u : 0u));
+            uint8_t motion_x_idx_sign = 0u;
+            uint8_t motion_grav_idx = 0u;
+            uint8_t motion_min_idx = 0u;
+            if (sheik_needle_derive_state4_motion_lanes(ref_u8, ref_stride, n, i, si, needle_ref,
+                                                        item_type, ap, &motion_x_idx_sign,
+                                                        &motion_grav_idx, &motion_min_idx, true)) {
+              seed->item_sheik_needle_callback_bounce_vel_x_index_sign[it] = motion_x_idx_sign;
+              seed->item_sheik_needle_motion_seed_kind[it] = 3u;
+              seed->item_sheik_needle_motion_vel_x_index_sign[it] = motion_x_idx_sign;
+              seed->item_sheik_needle_motion_gravity_index[it] = motion_grav_idx;
+              seed->item_sheik_needle_motion_min_vel_y_index[it] = motion_min_idx;
+            }
+          }
+        }
+      }
+      const bool needle_stage_line_hit = is_needle && si->state == 0u && !needle_player_contact &&
+                                         sheik_needle_seed_sweeps_item_stage_line(seed, si);
+      if (needle_ref != NULL && needle_stage_line_hit) {
+        const MslItemArticleParams* ap =
+            item_article_params_for_sheik_needle_throw_item_type(item_type);
+        if (ap != NULL) {
+          const int y_idx =
+              table_index_for_value(ap->needle_bounce_min_vel_y, needle_ref->vel_y, true);
+          const int x_idx =
+              table_index_for_value(ap->needle_bounce_x_vel, fabsf(needle_ref->vel_x), false);
+          if (y_idx >= 0 && x_idx >= 0) {
+            // State-0 stage Coll runs itSeakNeedleThrown_CheckGroundHit, then either sticks or
+            // enters state 4 with SetupBounce samples. When replay reseed begins just before that
+            // callback, Slippi exposes only the source-owned next item publication, not the
+            // particle/RNG phase that chose the stick/bounce result.
+            // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+            //   itSeakneedlethrown_UnkMotion0_Coll,itSeakNeedleThrown_CheckGroundHit,
+            //   itSeakNeedleThrown_SetupBounce}
+            seed->item_sheik_needle_stage_hit_seed_kind[it] = 2u;
+            seed->item_sheik_needle_stage_hit_vel_y_index[it] = (uint8_t)y_idx;
+            seed->item_sheik_needle_stage_hit_vel_x_index_sign[it] =
+                (uint8_t)(x_idx | (needle_ref->vel_x < 0.0f ? 0x80u : 0u));
+          }
+        }
+      } else if (needle_stage_line_hit) {
+        const MslItem* stuck_ref = NULL;
+        if (ref_same_item && ri->state == 2u && ri->owner == si->owner) {
+          stuck_ref = ri;
+        } else {
+          for (int ref_it = 0; ref_it < MSL_MAX_ITEMS; ref_it++) {
+            const MslItem* candidate = &ref->items[ref_it];
+            if (candidate->exists != 0u && candidate->type == item_type &&
+                candidate->instance_id == si->instance_id && candidate->spawn_id == si->spawn_id &&
+                candidate->state == 2u && candidate->owner == si->owner) {
+              if (stuck_ref != NULL) {
+                stuck_ref = NULL;
+                break;
+              }
+              stuck_ref = candidate;
+            }
+          }
+        }
+        if (stuck_ref != NULL) {
+          // Same source owner as the state-4 bridge above, but the source HSD_Randi(5) result chose
+          // the stuck state instead of the bounce branch.
+          // refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Coll
+          seed->item_sheik_needle_stage_hit_seed_kind[it] = 1u;
+        }
+      }
+      if (is_needle && si->state == 4u) {
+        const MslItemArticleParams* ap =
+            item_article_params_for_sheik_needle_throw_item_type(item_type);
+        const MslItem* motion_ref = NULL;
+        for (int ref_it = 0; ref_it < MSL_MAX_ITEMS; ref_it++) {
+          const MslItem* candidate = &ref->items[ref_it];
+          if (candidate->exists != 0u && candidate->type == item_type &&
+              candidate->instance_id == si->instance_id && candidate->spawn_id == si->spawn_id &&
+              candidate->state == 4u && candidate->owner == si->owner) {
+            if (motion_ref != NULL) {
+              motion_ref = NULL;
+              break;
+            }
+            motion_ref = candidate;
+          }
+        }
+        if (ap != NULL && motion_ref != NULL) {
+          const float dx = motion_ref->pos_x - si->pos_x;
+          const float dy = motion_ref->pos_y - si->pos_y;
+          const float dv_y = motion_ref->vel_y - si->vel_y;
+          const bool unchanged = fabsf(dx) <= 0.0002f && fabsf(dy) <= 0.0002f &&
+                                 fabsf(motion_ref->vel_x - si->vel_x) <= 0.0002f &&
+                                 fabsf(motion_ref->vel_y - si->vel_y) <= 0.0002f &&
+                                 ((si->vel_x * si->vel_x) + (si->vel_y * si->vel_y)) > 1.0e-6f;
+          if (unchanged) {
+            // Hidden item hitlag (`item->xCBC_hitlagFrames`) freezes Item_802697D4 before state-4
+            // Phys. A same-identity state-4 item with nonzero public velocity but no publication
+            // change proves the one-step reseed started inside that hidden freeze. When later
+            // same-spawn publications prove the hidden SetupBounce lanes, carry them too so normal
+            // state-4 Phys resumes with source xDD8/xDDC/xDE0 after hitlag clears.
+            // refs/melee/src/melee/it/item.c::{checkHitLag,Item_802697D4}
+            // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+            //   itSeakNeedleThrown_SetupBounce,itSeakneedlethrown_UnkMotion4_Phys}
+            uint8_t x_idx_sign = 0u;
+            uint8_t grav_idx = 0u;
+            uint8_t min_idx = 0u;
+            if (sheik_needle_derive_state4_motion_lanes(ref_u8, ref_stride, n, i, si, motion_ref,
+                                                        item_type, ap, &x_idx_sign, &grav_idx,
+                                                        &min_idx, false)) {
+              seed->item_sheik_needle_motion_seed_kind[it] = 3u;
+              seed->item_sheik_needle_motion_vel_x_index_sign[it] = x_idx_sign;
+              seed->item_sheik_needle_motion_gravity_index[it] = grav_idx;
+              seed->item_sheik_needle_motion_min_vel_y_index[it] = min_idx;
+            } else {
+              seed->item_sheik_needle_motion_seed_kind[it] = 2u;
+            }
+          } else {
+            const int x_idx =
+                table_index_for_value(ap->needle_bounce_x_vel, fabsf(motion_ref->vel_x), false);
+            const int grav_idx = table_index_for_value(ap->needle_bounce_gravity, dv_y, false);
+            const bool source_pos = x_idx >= 0 && fabsf(dx - motion_ref->vel_x) <= 0.0003f &&
+                                    fabsf(dy - motion_ref->vel_y) <= 0.0003f;
+            if (source_pos && grav_idx >= 0) {
+              // State-4 Phys consumes hidden itemVar xDD8/xDE0 every frame; Slippi publishes only
+              // the visible item velocity. Restore the source-table samples when the next
+              // same-item publication proves an unclamped Phys update.
+              // refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion4_Phys
+              seed->item_sheik_needle_motion_seed_kind[it] = 1u;
+              seed->item_sheik_needle_motion_vel_x_index_sign[it] =
+                  (uint8_t)(x_idx | (motion_ref->vel_x < 0.0f ? 0x80u : 0u));
+              seed->item_sheik_needle_motion_gravity_index[it] = (uint8_t)grav_idx;
+            } else if (source_pos) {
+              const int min_idx =
+                  table_index_for_value(ap->needle_bounce_min_vel_y, motion_ref->vel_y, false);
+              if (min_idx >= 0) {
+                // Same source Phys callback, but without a proven xDE0 gravity sample this row does
+                // not identify the full xDD8/xDDC/xDE0 tuple. Leave it unbridged instead of
+                // fabricating terminal-y hidden state from the public clamped velocity alone.
+                // refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion4_Phys
+                (void)min_idx;
+              }
+            }
+          }
         }
       }
     }

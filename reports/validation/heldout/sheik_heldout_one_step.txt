@@ -27,11 +27,11 @@ mismatch.last_attack_landed: 2 / 15746 (0.000127)
 mismatch.combo_count: 3 / 15746 (0.000191)
 mismatch.last_hit_by: 6 / 15746 (0.000381)
 mismatch.state_flags: 9 / 78730 (0.000114)
-mismatch.item_exists: 4 / 118095 (0.000034)
-mismatch.item_type: 4 / 118095 (0.000034)
-mismatch.item_state: 3 / 118095 (0.000025)
-mismatch.item_owner: 4 / 118095 (0.000034)
-mismatch.item_instance_id: 4 / 118095 (0.000034)
+mismatch.item_exists: 3 / 118095 (0.000025)
+mismatch.item_type: 3 / 118095 (0.000025)
+mismatch.item_state: 2 / 118095 (0.000017)
+mismatch.item_owner: 3 / 118095 (0.000025)
+mismatch.item_instance_id: 3 / 118095 (0.000025)
 ignored_mismatch.state_flags[4]&0x80: 22 / 15746 (0.001397)
 err.pos_x: mae=0.000359 p95=0.000000 max=1.602295
 err.pos_y: mae=0.001836 p95=0.000000 max=7.750597
@@ -42,14 +42,14 @@ err.speed_x_attack: mae=0.000233 p95=0.000000 max=2.858459
 err.speed_y_attack: mae=0.000132 p95=0.000000 max=1.332921
 err.percent: mae=0.002030 p95=0.000000 max=14.000000
 err.shield_hp: mae=0.000000 p95=0.000000 max=0.000690
-err.item_pos_x: mae=0.094282 p95=0.000000 max=12.398113
-err.item_pos_y: mae=0.012529 p95=0.000000 max=8.750100
-err.item_vel_x: mae=0.010963 p95=0.000000 max=4.000000
-err.item_vel_y: mae=0.005482 p95=0.000000 max=2.600000
-overall.discrete_mismatch: 107 / 952633
-overall.strict_discrete_mismatch: 129 / 952633
+err.item_pos_x: mae=0.056694 p95=0.000000 max=12.398113
+err.item_pos_y: mae=0.010768 p95=0.000000 max=8.750100
+err.item_vel_x: mae=0.008144 p95=0.000000 max=4.000000
+err.item_vel_y: mae=0.003446 p95=0.000000 max=2.300000
+overall.discrete_mismatch: 102 / 952633
+overall.strict_discrete_mismatch: 124 / 952633
 overall.ignored_discrete_mismatch: 22
-overall.float_norm_mae_p95: 77.90849838
+overall.float_norm_mae_p95: 48.97108339
 
 == replays/heldout/sheik/MiserlyWhiteCassowary.slpz ==
 Records: 8713  Players/scored per record: 2  Total player-frames: 17426
@@ -72,11 +72,11 @@ mismatch.last_attack_landed: 4 / 17426 (0.000230)
 mismatch.combo_count: 2 / 17426 (0.000115)
 mismatch.last_hit_by: 12 / 17426 (0.000689)
 mismatch.state_flags: 7 / 87130 (0.000080)
-mismatch.item_exists: 1 / 130695 (0.000008)
-mismatch.item_type: 1 / 130695 (0.000008)
-mismatch.item_state: 6 / 130695 (0.000046)
-mismatch.item_owner: 1 / 130695 (0.000008)
-mismatch.item_instance_id: 1 / 130695 (0.000008)
+mismatch.item_exists: 0 / 130695 (0.000000)
+mismatch.item_type: 0 / 130695 (0.000000)
+mismatch.item_state: 1 / 130695 (0.000008)
+mismatch.item_owner: 0 / 130695 (0.000000)
+mismatch.item_instance_id: 0 / 130695 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 35 / 17426 (0.002008)
 err.pos_x: mae=0.004384 p95=0.000000 max=2.946449
 err.pos_y: mae=0.002169 p95=0.000000 max=6.437988
@@ -87,14 +87,14 @@ err.speed_x_attack: mae=0.000288 p95=0.000000 max=2.297229
 err.speed_y_attack: mae=0.000180 p95=0.000000 max=1.726264
 err.percent: mae=0.002131 p95=0.000000 max=12.089996
 err.shield_hp: mae=0.000309 p95=0.000000 max=5.166389
-err.item_pos_x: mae=0.008701 p95=0.000000 max=2.787308
-err.item_pos_y: mae=0.027563 p95=0.100000 max=2.787306
-err.item_vel_x: mae=0.004387 p95=0.000000 max=2.828427
-err.item_vel_y: mae=0.023342 p95=0.100000 max=5.528427
-overall.discrete_mismatch: 86 / 1054273
-overall.strict_discrete_mismatch: 121 / 1054273
+err.item_pos_x: mae=0.000003 p95=0.000000 max=0.004436
+err.item_pos_y: mae=0.008465 p95=0.000000 max=0.260002
+err.item_vel_x: mae=0.002205 p95=0.000000 max=2.828427
+err.item_vel_y: mae=0.012774 p95=0.000000 max=5.528427
+overall.discrete_mismatch: 77 / 1054273
+overall.strict_discrete_mismatch: 112 / 1054273
 overall.ignored_discrete_mismatch: 35
-overall.float_norm_mae_p95: 0.00041663
+overall.float_norm_mae_p95: 0.00037600
 
 == replays/heldout/sheik/OldMagnificentFlamingo.slpz ==
 Records: 7842  Players/scored per record: 2  Total player-frames: 15684
@@ -105,7 +105,7 @@ mismatch.facing: 2 / 15684 (0.000128)
 mismatch.stocks: 0 / 15684 (0.000000)
 mismatch.jumps_left: 5 / 15684 (0.000319)
 mismatch.is_dead: 0 / 15684 (0.000000)
-mismatch.hitlag: 3 / 15684 (0.000191)
+mismatch.hitlag: 2 / 15684 (0.000128)
 mismatch.hitstun: 0 / 15684 (0.000000)
 mismatch.l_cancel: 0 / 15684 (0.000000)
 mismatch.hurtbox_state: 4 / 15684 (0.000255)
@@ -117,11 +117,11 @@ mismatch.last_attack_landed: 0 / 15684 (0.000000)
 mismatch.combo_count: 0 / 15684 (0.000000)
 mismatch.last_hit_by: 7 / 15684 (0.000446)
 mismatch.state_flags: 4 / 78420 (0.000051)
-mismatch.item_exists: 4 / 117630 (0.000034)
-mismatch.item_type: 5 / 117630 (0.000043)
-mismatch.item_state: 19 / 117630 (0.000162)
-mismatch.item_owner: 5 / 117630 (0.000043)
-mismatch.item_instance_id: 5 / 117630 (0.000043)
+mismatch.item_exists: 0 / 117630 (0.000000)
+mismatch.item_type: 0 / 117630 (0.000000)
+mismatch.item_state: 1 / 117630 (0.000009)
+mismatch.item_owner: 0 / 117630 (0.000000)
+mismatch.item_instance_id: 0 / 117630 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 79 / 15684 (0.005037)
 err.pos_x: mae=0.001403 p95=0.000000 max=9.114510
 err.pos_y: mae=0.005140 p95=0.000000 max=68.835129
@@ -132,14 +132,14 @@ err.speed_x_attack: mae=0.000000 p95=0.000000 max=0.000072
 err.speed_y_attack: mae=0.000000 p95=0.000000 max=0.000315
 err.percent: mae=0.000011 p95=0.000000 max=0.060001
 err.shield_hp: mae=0.000009 p95=0.000000 max=0.070000
-err.item_pos_x: mae=0.093336 p95=0.000000 max=99.509537
-err.item_pos_y: mae=0.041926 p95=0.099998 max=13.156890
-err.item_vel_x: mae=0.007384 p95=0.000000 max=1.600000
-err.item_vel_y: mae=0.016933 p95=0.100000 max=2.600000
-overall.discrete_mismatch: 103 / 948882
-overall.strict_discrete_mismatch: 182 / 948882
+err.item_pos_x: mae=0.003894 p95=0.000000 max=3.803787
+err.item_pos_y: mae=0.002883 p95=0.000000 max=0.500002
+err.item_vel_x: mae=0.000307 p95=0.000000 max=0.600000
+err.item_vel_y: mae=0.003226 p95=0.000000 max=2.400000
+overall.discrete_mismatch: 65 / 948882
+overall.strict_discrete_mismatch: 144 / 948882
 overall.ignored_discrete_mismatch: 79
-overall.float_norm_mae_p95: 0.00025167
+overall.float_norm_mae_p95: 0.00006556
 
 == replays/heldout/sheik/FrailGiganticCrow.slpz ==
 Records: 11722  Players/scored per record: 2  Total player-frames: 23444
@@ -150,7 +150,7 @@ mismatch.facing: 0 / 23444 (0.000000)
 mismatch.stocks: 0 / 23444 (0.000000)
 mismatch.jumps_left: 7 / 23444 (0.000299)
 mismatch.is_dead: 0 / 23444 (0.000000)
-mismatch.hitlag: 5 / 23444 (0.000213)
+mismatch.hitlag: 2 / 23444 (0.000085)
 mismatch.hitstun: 3 / 23444 (0.000128)
 mismatch.l_cancel: 1 / 23444 (0.000043)
 mismatch.hurtbox_state: 0 / 23444 (0.000000)
@@ -161,30 +161,30 @@ mismatch.instance_id: 8 / 23444 (0.000341)
 mismatch.last_attack_landed: 1 / 23444 (0.000043)
 mismatch.combo_count: 0 / 23444 (0.000000)
 mismatch.last_hit_by: 7 / 23444 (0.000299)
-mismatch.state_flags: 9 / 117220 (0.000077)
-mismatch.item_exists: 13 / 175830 (0.000074)
-mismatch.item_type: 13 / 175830 (0.000074)
-mismatch.item_state: 24 / 175830 (0.000136)
-mismatch.item_owner: 13 / 175830 (0.000074)
-mismatch.item_instance_id: 13 / 175830 (0.000074)
+mismatch.state_flags: 7 / 117220 (0.000060)
+mismatch.item_exists: 8 / 175830 (0.000045)
+mismatch.item_type: 8 / 175830 (0.000045)
+mismatch.item_state: 4 / 175830 (0.000023)
+mismatch.item_owner: 8 / 175830 (0.000045)
+mismatch.item_instance_id: 8 / 175830 (0.000045)
 ignored_mismatch.state_flags[4]&0x80: 96 / 23444 (0.004095)
-err.pos_x: mae=0.005484 p95=0.000000 max=16.000000
+err.pos_x: mae=0.001619 p95=0.000000 max=16.000000
 err.pos_y: mae=0.001610 p95=0.000000 max=6.743763
-err.speed_air_x_self: mae=0.003249 p95=0.000000 max=16.000000
+err.speed_air_x_self: mae=0.000066 p95=0.000000 max=1.553808
 err.speed_ground_x_self: mae=0.000355 p95=0.000000 max=1.967385
 err.speed_y_self: mae=0.000169 p95=0.000000 max=2.440000
 err.speed_x_attack: mae=0.000001 p95=0.000000 max=0.018833
 err.speed_y_attack: mae=0.000079 p95=0.000000 max=1.856183
 err.percent: mae=0.000015 p95=0.000000 max=0.270000
 err.shield_hp: mae=0.000517 p95=0.000000 max=6.228573
-err.item_pos_x: mae=0.106978 p95=0.000000 max=103.526596
-err.item_pos_y: mae=0.074544 p95=0.100000 max=46.191978
-err.item_vel_x: mae=0.008919 p95=0.000000 max=2.828427
-err.item_vel_y: mae=0.021155 p95=0.100000 max=5.328427
-overall.discrete_mismatch: 186 / 1418362
-overall.strict_discrete_mismatch: 282 / 1418362
+err.item_pos_x: mae=0.038332 p95=0.000000 max=103.526596
+err.item_pos_y: mae=0.018280 p95=0.000000 max=46.191978
+err.item_vel_x: mae=0.001815 p95=0.000000 max=2.828427
+err.item_vel_y: mae=0.005308 p95=0.000000 max=2.828427
+overall.discrete_mismatch: 141 / 1418362
+overall.strict_discrete_mismatch: 237 / 1418362
 overall.ignored_discrete_mismatch: 96
-overall.float_norm_mae_p95: 0.00045707
+overall.float_norm_mae_p95: 0.00009685
 
 == replays/heldout/sheik/WiseTenseMole.slpz ==
 Records: 10146  Players/scored per record: 2  Total player-frames: 20292
@@ -252,11 +252,11 @@ mismatch.last_attack_landed: 3 / 19084 (0.000157)
 mismatch.combo_count: 2 / 19084 (0.000105)
 mismatch.last_hit_by: 14 / 19084 (0.000734)
 mismatch.state_flags: 27 / 95420 (0.000283)
-mismatch.item_exists: 5 / 143130 (0.000035)
-mismatch.item_type: 5 / 143130 (0.000035)
-mismatch.item_state: 4 / 143130 (0.000028)
-mismatch.item_owner: 5 / 143130 (0.000035)
-mismatch.item_instance_id: 5 / 143130 (0.000035)
+mismatch.item_exists: 3 / 143130 (0.000021)
+mismatch.item_type: 3 / 143130 (0.000021)
+mismatch.item_state: 1 / 143130 (0.000007)
+mismatch.item_owner: 3 / 143130 (0.000021)
+mismatch.item_instance_id: 3 / 143130 (0.000021)
 ignored_mismatch.state_flags[4]&0x80: 25 / 19084 (0.001310)
 err.pos_x: mae=0.000602 p95=0.000000 max=5.603386
 err.pos_y: mae=0.001624 p95=0.000000 max=14.968839
@@ -267,14 +267,14 @@ err.speed_x_attack: mae=0.000640 p95=0.000000 max=5.043086
 err.speed_y_attack: mae=0.001067 p95=0.000000 max=4.190874
 err.percent: mae=0.003931 p95=0.000000 max=17.000000
 err.shield_hp: mae=0.000000 p95=0.000000 max=0.001080
-err.item_pos_x: mae=0.065281 p95=0.000000 max=87.366570
-err.item_pos_y: mae=0.024933 p95=0.099998 max=14.154822
-err.item_vel_x: mae=0.002449 p95=0.000000 max=5.000000
-err.item_vel_y: mae=0.008057 p95=0.100000 max=2.300000
-overall.discrete_mismatch: 194 / 1154582
-overall.strict_discrete_mismatch: 219 / 1154582
+err.item_pos_x: mae=0.012743 p95=0.000000 max=16.635223
+err.item_pos_y: mae=0.011643 p95=0.000000 max=10.252837
+err.item_vel_x: mae=0.001998 p95=0.000000 max=5.000000
+err.item_vel_y: mae=0.003661 p95=0.000000 max=0.140000
+overall.discrete_mismatch: 183 / 1154582
+overall.strict_discrete_mismatch: 208 / 1154582
 overall.ignored_discrete_mismatch: 25
-overall.float_norm_mae_p95: 0.00021891
+overall.float_norm_mae_p95: 0.00017966
 
 == replays/heldout/sheik/AblePertinentSeahorse.slpz ==
 Records: 11543  Players/scored per record: 2  Total player-frames: 23086
@@ -285,7 +285,7 @@ mismatch.facing: 5 / 23086 (0.000217)
 mismatch.stocks: 0 / 23086 (0.000000)
 mismatch.jumps_left: 14 / 23086 (0.000606)
 mismatch.is_dead: 0 / 23086 (0.000000)
-mismatch.hitlag: 20 / 23086 (0.000866)
+mismatch.hitlag: 19 / 23086 (0.000823)
 mismatch.hitstun: 11 / 23086 (0.000476)
 mismatch.l_cancel: 2 / 23086 (0.000087)
 mismatch.hurtbox_state: 0 / 23086 (0.000000)
@@ -297,29 +297,29 @@ mismatch.last_attack_landed: 9 / 23086 (0.000390)
 mismatch.combo_count: 8 / 23086 (0.000347)
 mismatch.last_hit_by: 15 / 23086 (0.000650)
 mismatch.state_flags: 41 / 115430 (0.000355)
-mismatch.item_exists: 10 / 173145 (0.000058)
-mismatch.item_type: 10 / 173145 (0.000058)
-mismatch.item_state: 14 / 173145 (0.000081)
-mismatch.item_owner: 10 / 173145 (0.000058)
-mismatch.item_instance_id: 10 / 173145 (0.000058)
+mismatch.item_exists: 6 / 173145 (0.000035)
+mismatch.item_type: 6 / 173145 (0.000035)
+mismatch.item_state: 9 / 173145 (0.000052)
+mismatch.item_owner: 6 / 173145 (0.000035)
+mismatch.item_instance_id: 6 / 173145 (0.000035)
 ignored_mismatch.state_flags[4]&0x80: 113 / 23086 (0.004895)
 err.pos_x: mae=0.007717 p95=0.000000 max=74.481888
-err.pos_y: mae=0.015812 p95=0.000000 max=65.146576
+err.pos_y: mae=0.015750 p95=0.000000 max=65.146576
 err.speed_air_x_self: mae=0.000192 p95=0.000000 max=1.047500
 err.speed_ground_x_self: mae=0.000356 p95=0.000000 max=2.293916
-err.speed_y_self: mae=0.001413 p95=0.000000 max=5.440000
+err.speed_y_self: mae=0.001339 p95=0.000000 max=5.440000
 err.speed_x_attack: mae=0.000166 p95=0.000000 max=1.035155
 err.speed_y_attack: mae=0.000949 p95=0.000000 max=5.870656
 err.percent: mae=0.003609 p95=0.000000 max=18.000000
 err.shield_hp: mae=0.000007 p95=0.000000 max=0.070000
-err.item_pos_x: mae=0.097120 p95=0.000000 max=118.098007
-err.item_pos_y: mae=0.054938 p95=0.060000 max=22.926586
-err.item_vel_x: mae=0.010637 p95=0.000000 max=3.628427
-err.item_vel_y: mae=0.020577 p95=0.040000 max=5.428428
-overall.discrete_mismatch: 321 / 1396703
-overall.strict_discrete_mismatch: 434 / 1396703
+err.item_pos_x: mae=0.030201 p95=0.000000 max=32.986870
+err.item_pos_y: mae=0.028211 p95=0.000000 max=22.926586
+err.item_vel_x: mae=0.007433 p95=0.000000 max=3.628427
+err.item_vel_y: mae=0.011490 p95=0.000000 max=5.428428
+overall.discrete_mismatch: 299 / 1396703
+overall.strict_discrete_mismatch: 412 / 1396703
 overall.ignored_discrete_mismatch: 113
-overall.float_norm_mae_p95: 0.00024926
+overall.float_norm_mae_p95: 0.00021423
 
 == replays/heldout/sheik/CourteousCelebratedZebra.slpz ==
 Records: 3174  Players/scored per record: 2  Total player-frames: 6348
@@ -389,7 +389,7 @@ mismatch.last_hit_by: 22 / 16160 (0.001361)
 mismatch.state_flags: 33 / 80800 (0.000408)
 mismatch.item_exists: 2 / 121200 (0.000017)
 mismatch.item_type: 2 / 121200 (0.000017)
-mismatch.item_state: 5 / 121200 (0.000041)
+mismatch.item_state: 3 / 121200 (0.000025)
 mismatch.item_owner: 2 / 121200 (0.000017)
 mismatch.item_instance_id: 2 / 121200 (0.000017)
 ignored_mismatch.state_flags[4]&0x80: 80 / 16160 (0.004950)
@@ -402,14 +402,14 @@ err.speed_x_attack: mae=0.000918 p95=0.000000 max=3.607959
 err.speed_y_attack: mae=0.001619 p95=0.000000 max=5.088844
 err.percent: mae=0.005696 p95=0.000000 max=14.099998
 err.shield_hp: mae=0.000009 p95=0.000000 max=0.019001
-err.item_pos_x: mae=0.054517 p95=0.000000 max=80.235352
-err.item_pos_y: mae=0.024303 p95=0.019999 max=12.200109
-err.item_vel_x: mae=0.001622 p95=0.000000 max=2.828427
-err.item_vel_y: mae=0.008092 p95=0.000000 max=2.828428
-overall.discrete_mismatch: 233 / 977680
-overall.strict_discrete_mismatch: 313 / 977680
+err.item_pos_x: mae=0.057611 p95=0.000000 max=80.235352
+err.item_pos_y: mae=0.034510 p95=0.000000 max=12.200109
+err.item_vel_x: mae=0.001560 p95=0.000000 max=2.828427
+err.item_vel_y: mae=0.005586 p95=0.000000 max=2.828428
+overall.discrete_mismatch: 231 / 977680
+overall.strict_discrete_mismatch: 311 / 977680
 overall.ignored_discrete_mismatch: 80
-overall.float_norm_mae_p95: 0.00029551
+overall.float_norm_mae_p95: 0.00028134
 
 == replays/heldout/sheik/NiceOrganicSandpiper.slpz ==
 Records: 8260  Players/scored per record: 2  Total player-frames: 16520
@@ -432,11 +432,11 @@ mismatch.last_attack_landed: 1 / 16520 (0.000061)
 mismatch.combo_count: 0 / 16520 (0.000000)
 mismatch.last_hit_by: 14 / 16520 (0.000847)
 mismatch.state_flags: 5 / 82600 (0.000061)
-mismatch.item_exists: 3 / 123900 (0.000024)
-mismatch.item_type: 3 / 123900 (0.000024)
-mismatch.item_state: 5 / 123900 (0.000040)
-mismatch.item_owner: 3 / 123900 (0.000024)
-mismatch.item_instance_id: 3 / 123900 (0.000024)
+mismatch.item_exists: 2 / 123900 (0.000016)
+mismatch.item_type: 2 / 123900 (0.000016)
+mismatch.item_state: 1 / 123900 (0.000008)
+mismatch.item_owner: 2 / 123900 (0.000016)
+mismatch.item_instance_id: 2 / 123900 (0.000016)
 ignored_mismatch.state_flags[4]&0x80: 67 / 16520 (0.004056)
 err.pos_x: mae=0.000554 p95=0.000000 max=1.890442
 err.pos_y: mae=0.001480 p95=0.000000 max=8.999985
@@ -447,14 +447,14 @@ err.speed_x_attack: mae=0.000300 p95=0.000000 max=4.959316
 err.speed_y_attack: mae=0.000223 p95=0.000000 max=2.312567
 err.percent: mae=0.001082 p95=0.000000 max=13.000000
 err.shield_hp: mae=0.000013 p95=0.000000 max=0.070000
-err.item_pos_x: mae=0.025768 p95=0.000000 max=8.485279
-err.item_pos_y: mae=0.032306 p95=0.060000 max=5.285284
-err.item_vel_x: mae=0.006185 p95=0.000000 max=2.828427
-err.item_vel_y: mae=0.013142 p95=0.020000 max=5.028427
-overall.discrete_mismatch: 87 / 999460
-overall.strict_discrete_mismatch: 154 / 999460
+err.item_pos_x: mae=0.018061 p95=0.000000 max=8.485279
+err.item_pos_y: mae=0.015057 p95=0.000000 max=5.285284
+err.item_vel_x: mae=0.002432 p95=0.000000 max=2.828427
+err.item_vel_y: mae=0.003746 p95=0.000000 max=5.028427
+overall.discrete_mismatch: 79 / 999460
+overall.strict_discrete_mismatch: 146 / 999460
 overall.ignored_discrete_mismatch: 67
-overall.float_norm_mae_p95: 0.00013878
+overall.float_norm_mae_p95: 0.00009683
 
 == replays/heldout/sheik/EarlyPreciousLobster.slpz ==
 Records: 7838  Players/scored per record: 2  Total player-frames: 15676
@@ -477,14 +477,14 @@ mismatch.last_attack_landed: 5 / 15676 (0.000319)
 mismatch.combo_count: 6 / 15676 (0.000383)
 mismatch.last_hit_by: 13 / 15676 (0.000829)
 mismatch.state_flags: 26 / 78380 (0.000332)
-mismatch.item_exists: 2 / 117570 (0.000017)
-mismatch.item_type: 2 / 117570 (0.000017)
-mismatch.item_state: 7 / 117570 (0.000060)
-mismatch.item_owner: 2 / 117570 (0.000017)
-mismatch.item_instance_id: 2 / 117570 (0.000017)
+mismatch.item_exists: 1 / 117570 (0.000009)
+mismatch.item_type: 1 / 117570 (0.000009)
+mismatch.item_state: 6 / 117570 (0.000051)
+mismatch.item_owner: 1 / 117570 (0.000009)
+mismatch.item_instance_id: 1 / 117570 (0.000009)
 ignored_mismatch.state_flags[4]&0x80: 46 / 15676 (0.002934)
 err.pos_x: mae=0.002539 p95=0.000000 max=6.565331
-err.pos_y: mae=0.004334 p95=0.000000 max=12.041335
+err.pos_y: mae=0.004334 p95=0.000001 max=12.041335
 err.speed_air_x_self: mae=0.000984 p95=0.000000 max=2.018430
 err.speed_ground_x_self: mae=0.001371 p95=0.000000 max=2.466624
 err.speed_y_self: mae=0.000704 p95=0.000000 max=2.760000
@@ -492,14 +492,14 @@ err.speed_x_attack: mae=0.000492 p95=0.000000 max=1.542416
 err.speed_y_attack: mae=0.000475 p95=0.000000 max=1.489494
 err.percent: mae=0.003228 p95=0.000000 max=10.000000
 err.shield_hp: mae=0.000000 p95=0.000000 max=0.000690
-err.item_pos_x: mae=0.000922 p95=0.000000 max=12.000000
-err.item_pos_y: mae=0.003790 p95=0.000000 max=2.108688
-err.item_vel_x: mae=0.001006 p95=0.000000 max=5.200000
-err.item_vel_y: mae=0.004825 p95=0.000000 max=3.268463
-overall.discrete_mismatch: 217 / 948398
-overall.strict_discrete_mismatch: 263 / 948398
+err.item_pos_x: mae=0.000357 p95=0.000000 max=1.034264
+err.item_pos_y: mae=0.003767 p95=0.000000 max=2.108688
+err.item_vel_x: mae=0.000762 p95=0.000000 max=1.478210
+err.item_vel_y: mae=0.004721 p95=0.000000 max=3.268463
+overall.discrete_mismatch: 212 / 948398
+overall.strict_discrete_mismatch: 258 / 948398
 overall.ignored_discrete_mismatch: 46
-overall.float_norm_mae_p95: 0.00085663
+overall.float_norm_mae_p95: 0.00081440
 
 == replays/heldout/sheik/DazzlingAccomplishedMink.slpz ==
 Records: 8607  Players/scored per record: 2  Total player-frames: 17214
@@ -522,11 +522,11 @@ mismatch.last_attack_landed: 2 / 17214 (0.000116)
 mismatch.combo_count: 2 / 17214 (0.000116)
 mismatch.last_hit_by: 16 / 17214 (0.000929)
 mismatch.state_flags: 12 / 86070 (0.000139)
-mismatch.item_exists: 7 / 129105 (0.000054)
-mismatch.item_type: 9 / 129105 (0.000070)
-mismatch.item_state: 8 / 129105 (0.000062)
-mismatch.item_owner: 8 / 129105 (0.000062)
-mismatch.item_instance_id: 8 / 129105 (0.000062)
+mismatch.item_exists: 5 / 129105 (0.000039)
+mismatch.item_type: 7 / 129105 (0.000054)
+mismatch.item_state: 2 / 129105 (0.000015)
+mismatch.item_owner: 6 / 129105 (0.000046)
+mismatch.item_instance_id: 6 / 129105 (0.000046)
 ignored_mismatch.state_flags[4]&0x80: 49 / 17214 (0.002847)
 err.pos_x: mae=0.001318 p95=0.000000 max=2.329346
 err.pos_y: mae=0.001856 p95=0.000000 max=8.942237
@@ -537,17 +537,17 @@ err.speed_x_attack: mae=0.000290 p95=0.000000 max=4.109546
 err.speed_y_attack: mae=0.000397 p95=0.000000 max=3.698004
 err.percent: mae=0.001426 p95=0.000000 max=17.000000
 err.shield_hp: mae=0.000611 p95=0.000000 max=8.400002
-err.item_pos_x: mae=0.147300 p95=0.000000 max=596.000000
-err.item_pos_y: mae=0.024218 p95=0.000000 max=61.521606
-err.item_vel_x: mae=0.001676 p95=0.000000 max=5.000000
-err.item_vel_y: mae=0.002791 p95=0.000000 max=5.228427
-overall.discrete_mismatch: 191 / 1041447
-overall.strict_discrete_mismatch: 240 / 1041447
+err.item_pos_x: mae=0.143646 p95=0.000000 max=596.000000
+err.item_pos_y: mae=0.018645 p95=0.000000 max=61.521606
+err.item_vel_x: mae=0.001054 p95=0.000000 max=5.000000
+err.item_vel_y: mae=0.001447 p95=0.000000 max=2.702896
+overall.discrete_mismatch: 177 / 1041447
+overall.strict_discrete_mismatch: 226 / 1041447
 overall.ignored_discrete_mismatch: 49
-overall.float_norm_mae_p95: 0.00074780
+overall.float_norm_mae_p95: 0.00048612
 
 == suite summary ==
-overall.discrete_mismatch: 2521 / 12504140
-overall.strict_discrete_mismatch: 3171 / 12504140
+overall.discrete_mismatch: 2362 / 12504140
+overall.strict_discrete_mismatch: 3012 / 12504140
 overall.ignored_discrete_mismatch: 650
-overall.float_norm_mae_p95: 5.37873540
+overall.float_norm_mae_p95: 3.38097647

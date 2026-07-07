@@ -1598,7 +1598,7 @@ void sheik_chain_items_update_anim_phase(MslBatch* batch, int bi) {
       // The owning fighter's hitlag sets fp->x2219_b5. Fighter_8006A360 gates MotionState Anim on
       // !x2219_b5, so ftSk_SpecialS_80110BCC (Chain hitcap cooldown/clear/reactivate) does not run
       // while the owner is frozen. Preserve both the cooldown counter and the x914 HitCapsule
-      // victim rings; partially aged replay-reconstructed windows are still source-owned by that
+      // victim rings; partially aged seed-reconstructed windows are still source-owned by that
       // same skipped callback, not by article/link accessory motion.
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
@@ -1724,11 +1724,14 @@ uint8_t items_spawn_sheik_vanish_smoke_article(MslBatch* batch, size_t owner_idx
 }
 
 static inline uint8_t sheik_needle_item_ground_or_air(uint8_t state) {
-  // Stuck Needle state 2 is fixed to the ground/wall collision line; thrown/dropped/bounce states
-  // remain airborne for ftColl hitcapsule target gates.
+  (void)state;
+  // `it_802762BC` marks the article GA_Air on stage-stick and bounce setup, including stuck state
+  // 2. Fighter HitCapsule -> item hurtbox admission in it_802703E8 uses that live ground_or_air
+  // flag rather than the visual fact that state 2 is stuck to a stage line.
   // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
   //   itSeakneedlethrown_UnkMotion0_Coll,itSeakneedlethrown_UnkMotion2_Coll}
-  return (state == 2u) ? 1u : 0u;
+  // refs/melee/src/melee/it/itmaplib.c::it_802762BC
+  return 0u;
 }
 
 static inline uint8_t sheik_needle_state_accepts_fighter_hitcapsule(uint8_t state) {
@@ -1839,6 +1842,37 @@ static inline uint8_t sheik_needle_article_hitbox_clank_enabled(uint32_t flags) 
   // refs/melee/src/melee/it/itanimlist.c::it_802790C0
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
   return (flags & (uint32_t)MSL_ITEM_ARTICLE_HITBOX_FLAG_CLANK) != 0u ? 1u : 0u;
+}
+
+static inline void sheik_needle_hurtbox_jobj_world_xy(const MslItemArticleParams* params,
+                                                      float item_facing_dir, float* out_x,
+                                                      float* out_y) {
+  if (out_x == NULL || out_y == NULL) {
+    return;
+  }
+  *out_x = 0.0f;
+  *out_y = 0.0f;
+  if (params == NULL || params->needle_hurtbox_bone_id == 0u) {
+    return;
+  }
+  for (uint8_t hb = 0;
+       hb < params->needle_hitbox_count && hb < (uint8_t)MSL_ITEM_ARTICLE_MAX_HITBOXES; hb++) {
+    if (params->needle_hitbox_bone_id[hb] != params->needle_hurtbox_bone_id) {
+      continue;
+    }
+    // The item hurtbox descriptor is bound to the same child JObj as the Needle command-11
+    // HitCapsules. MSLITAR1 carries that child-JObj translation for each extracted hitbox bone; use
+    // the matching bone's translation before applying the hurtbox local offsets. Source
+    // lbColl_8000805C samples HurtCapsule.a/b through HSD_JObjGetMtxPtr(arg1->bone), not the item
+    // root matrix.
+    // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+    // refs/melee/src/melee/it/itcoll.c::it_802703E8
+    // data/items/articles/*.bin (MSLITAR1 needle_hurtbox_bone_id,
+    //   needle_hitbox_jobj_{y,z}_offset)
+    *out_x = item_facing_dir * params->needle_hitbox_jobj_z_offset[hb];
+    *out_y = params->needle_hitbox_jobj_y_offset[hb];
+    return;
+  }
 }
 
 static inline float sheik_needle_state1_4_gravity_from_visible_vel(float vel_y,
@@ -1992,20 +2026,25 @@ static inline uint8_t sheik_needle_item_common_hitlag_frames(int damage_i) {
 // each frame and fall back to the visible-velocity gravity recovery in sheik_needle_motion_step.
 // refs/melee/src/melee/it/items/itseakneedlethrown.c::{itSeakNeedleThrown_SetupBounce,
 //   itSeakneedlethrown_UnkMotion4_Phys}
-static inline void sheik_needle_setup_bounce_hidden_lanes(MslBatch* batch, int bi, size_t ii,
-                                                          const MslItemArticleParams* params) {
+static inline void sheik_needle_setup_bounce_hidden_lanes_with_x_override(
+    MslBatch* batch, int bi, size_t ii, const MslItemArticleParams* params,
+    uint8_t x_override_valid, uint8_t x_override_index_sign) {
   (void)combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_ROT_SIGN2, 2);
   (void)combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_ROT_RATE8, 8);
-  const int xvel_sign = combat_rng_consume_randi_site(
+  int xvel_sign = combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_XVEL_SIGN2, 2);
-  const int xvel_idx = combat_rng_consume_randi_site(
+  int xvel_idx = combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_XVEL8, 8);
   const int ymin_idx = combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_YVEL_MIN8, 8);
   const int grav_idx = combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_GRAVITY8, 8);
+  if (x_override_valid != 0u) {
+    xvel_idx = (int)(x_override_index_sign & 0x7Fu);
+    xvel_sign = (x_override_index_sign & 0x80u) != 0u ? 1 : 0;
+  }
   float vel_x = 0.0f, min_vel_y = 0.0f, gravity = 0.0f;
   if (params != NULL) {
     vel_x = params->needle_bounce_x_vel[xvel_idx & 7] * ((xvel_sign == 0) ? 1.0f : -1.0f);
@@ -2017,6 +2056,11 @@ static inline void sheik_needle_setup_bounce_hidden_lanes(MslBatch* batch, int b
   batch->state.item_sheik_needle_hidden_drop_gravity[ii] = gravity;
   batch->state.item_sheik_needle_hidden_drop_valid[ii] = 1u;
   batch->state.item_vel_x[ii] = vel_x;
+}
+
+static inline void sheik_needle_setup_bounce_hidden_lanes(MslBatch* batch, int bi, size_t ii,
+                                                          const MslItemArticleParams* params) {
+  sheik_needle_setup_bounce_hidden_lanes_with_x_override(batch, bi, ii, params, 0u, 0u);
 }
 
 // Stuck-in-ground state (it_802762BC + itResetVelocity + lifeTimer attr->x4 + Item_80268E5C(2)).
@@ -2032,6 +2076,30 @@ static inline void sheik_needle_enter_stuck_state(MslBatch* batch, size_t ii,
       (params != NULL) ? (float)params->needle_bounce_lifetime_frames : 0.0f;
 }
 
+static inline void sheik_needle_clear_one_step_callback_bridges(MslBatch* batch, size_t ii) {
+  batch->state.item_hidden_callback_flags[ii] &=
+      (uint8_t) ~((uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE |
+                  (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_DESTROY);
+  batch->state.item_sheik_needle_callback_bounce_vel_y_index[ii] = 0u;
+  batch->state.item_sheik_needle_callback_bounce_vel_x_index_sign[ii] = 0u;
+  batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] = 0u;
+  batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] = 0u;
+  batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] = 0u;
+}
+
+static inline void sheik_needle_clear_one_step_stage_hit_bridge(MslBatch* batch, size_t ii) {
+  batch->state.item_sheik_needle_stage_hit_seed_kind[ii] = 0u;
+  batch->state.item_sheik_needle_stage_hit_vel_y_index[ii] = 0u;
+  batch->state.item_sheik_needle_stage_hit_vel_x_index_sign[ii] = 0u;
+}
+
+static inline void sheik_needle_clear_one_step_contact_bridges(MslBatch* batch, size_t ii) {
+  // These lanes are validation/reseed provenance only. Source-owned live itemVar state
+  // (state-4 drift/terminal/gravity) is kept separately in item_sheik_needle_hidden_drop_*.
+  sheik_needle_clear_one_step_callback_bridges(batch, ii);
+  sheik_needle_clear_one_step_stage_hit_bridge(batch, ii);
+}
+
 static inline void sheik_needle_bounce_or_destroy_callback(MslBatch* batch, int bi, size_t ii,
                                                            const MslItemArticleParams* params,
                                                            int hitlag_damage_i) {
@@ -2043,21 +2111,67 @@ static inline void sheik_needle_bounce_or_destroy_callback(MslBatch* batch, int 
   // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
   //   it_2725_Logic109_DmgDealt,it_2725_Logic109_Clanked,it_2725_Logic109_DmgReceived,
   //   it_2725_Logic109_HitShield,itSeakNeedleThrown_SetupBounce}
-  if (combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_KEEP3,
-                                    3) != 0) {
+  const uint8_t bridge =
+      (batch->state.item_hidden_callback_flags[ii] &
+       (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE) != 0u &&
+              params != NULL &&
+              batch->state.item_sheik_needle_callback_bounce_vel_y_index[ii] < 8u &&
+              (batch->state.item_sheik_needle_callback_bounce_vel_x_index_sign[ii] & 0x7Fu) < 8u
+          ? 1u
+          : 0u;
+  const uint8_t motion_bridge =
+      (bridge != 0u && batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] != 0u &&
+       batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] < 8u &&
+       batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] < 8u)
+          ? 1u
+          : 0u;
+  const uint8_t motion_gravity_index =
+      batch->state.item_sheik_needle_callback_bounce_gravity_index[ii];
+  const uint8_t motion_min_vel_y_index =
+      batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii];
+  const uint8_t bridge_y_index = batch->state.item_sheik_needle_callback_bounce_vel_y_index[ii];
+  const uint8_t bridge_x_index_sign =
+      batch->state.item_sheik_needle_callback_bounce_vel_x_index_sign[ii];
+  const uint8_t destroy_bridge =
+      (bridge == 0u && (batch->state.item_hidden_callback_flags[ii] &
+                        (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_DESTROY) != 0u)
+          ? 1u
+          : 0u;
+  sheik_needle_clear_one_step_callback_bridges(batch, ii);
+  const int keep =
+      combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_KEEP3, 3);
+  if (destroy_bridge != 0u || (bridge == 0u && keep != 0)) {
     item_slot_clear(batch, ii);
     return;
   }
 
-  const int y_idx = combat_rng_consume_randi_site(
+  int y_idx = combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_VEL_Y8, 8);
+  if (bridge != 0u) {
+    y_idx = (int)bridge_y_index;
+  }
   batch->state.item_state[ii] = 4u;
   batch->state.item_timer[ii] =
       (params != NULL) ? (float)params->needle_bounce_lifetime_frames : 0.0f;
   batch->state.item_vel_y[ii] =
       (params != NULL) ? fabsf(params->needle_bounce_min_vel_y[y_idx & 7]) : 0.0f;
-  // Capture the SetupBounce horizontal-drift/terminal/gravity lanes (sets item_vel_x = xDD8).
-  sheik_needle_setup_bounce_hidden_lanes(batch, bi, ii, params);
+  // Capture the SetupBounce horizontal-drift/terminal/gravity lanes (sets item_vel_x = xDD8). The
+  // seed bridge is a one-step replay/provenance lane: it still consumes the source RNG sites, then
+  // substitutes the data-table samples proven by the same item's next public state-4 publication.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   it_2725_Logic109_DmgDealt,itSeakNeedleThrown_SetupBounce}
+  sheik_needle_setup_bounce_hidden_lanes_with_x_override(batch, bi, ii, params, bridge,
+                                                         bridge_x_index_sign);
+  if (motion_bridge != 0u && params != NULL) {
+    // One-step/replay bridge for the same source SetupBounce tuple sampled above. The RNG sites are
+    // still consumed in source order; only the hidden xDDC/xDE0 table samples are replaced when
+    // validation proves them from later same-spawn state-4 publications.
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakNeedleThrown_SetupBounce
+    batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] =
+        params->needle_bounce_min_vel_y[motion_min_vel_y_index];
+    batch->state.item_sheik_needle_hidden_drop_gravity[ii] =
+        params->needle_bounce_gravity[motion_gravity_index];
+  }
   sheik_needle_apply_item_hitlag(batch, ii, hitlag_damage_i);
 }
 
@@ -2121,12 +2235,19 @@ static uint8_t sheik_needle_try_fighter_hitbox_damage(MslBatch* batch, int bi, i
     return 0u;
   }
   const int owner = (int)batch->state.item_owner[ii];
+  if (owner < 0 || owner >= (int)batch->config.num_players) {
+    return 0u;
+  }
   const uint8_t item_ga = sheik_needle_item_ground_or_air(batch->state.item_state[ii]);
-  const float ax = batch->state.item_pos_x[ii] + params->needle_hurtbox_a_offset[0];
-  const float ay = batch->state.item_pos_y[ii] + params->needle_hurtbox_a_offset[1];
+  const float item_facing_dir = (batch->state.item_direction[ii] < 0.0f) ? -1.0f : 1.0f;
+  float hurt_jobj_x = 0.0f;
+  float hurt_jobj_y = 0.0f;
+  sheik_needle_hurtbox_jobj_world_xy(params, item_facing_dir, &hurt_jobj_x, &hurt_jobj_y);
+  const float ax = batch->state.item_pos_x[ii] + hurt_jobj_x + params->needle_hurtbox_a_offset[0];
+  const float ay = batch->state.item_pos_y[ii] + hurt_jobj_y + params->needle_hurtbox_a_offset[1];
   const float az = params->needle_hurtbox_a_offset[2];
-  const float bx = batch->state.item_pos_x[ii] + params->needle_hurtbox_b_offset[0];
-  const float by = batch->state.item_pos_y[ii] + params->needle_hurtbox_b_offset[1];
+  const float bx = batch->state.item_pos_x[ii] + hurt_jobj_x + params->needle_hurtbox_b_offset[0];
+  const float by = batch->state.item_pos_y[ii] + hurt_jobj_y + params->needle_hurtbox_b_offset[1];
   const float bz = params->needle_hurtbox_b_offset[2];
   const float hurt_r = params->needle_hurtbox_scale;
   for (int p = 0; p < (int)batch->config.num_players; p++) {
@@ -2158,28 +2279,38 @@ static uint8_t sheik_needle_try_fighter_hitbox_damage(MslBatch* batch, int bi, i
       const float hx1 = batch->state.hitbox_x[hb_i];
       const float hy1 = batch->state.hitbox_y[hb_i];
       const float hz1 = batch->state.hitbox_z[hb_i];
-      const float hx0 =
-          batch->state.hitbox_prev_enabled[hb_i] ? batch->state.hitbox_prev_x[hb_i] : hx1;
-      const float hy0 =
-          batch->state.hitbox_prev_enabled[hb_i] ? batch->state.hitbox_prev_y[hb_i] : hy1;
-      const float hz0 =
-          batch->state.hitbox_prev_enabled[hb_i] ? batch->state.hitbox_prev_z[hb_i] : hz1;
       const float rr = batch->state.hitbox_radius[hb_i] + hurt_r;
+      // Fighter HitCapsule -> item HurtCapsule uses the current HitCapsule packet through
+      // lbColl_8000805C; unlike fast item BODY motion, this source path does not sweep the fighter
+      // HitCapsule's previous publication. Keep the lite sim's item hurtbox test current-only so a
+      // rollout's carried hitbox_prev lane cannot create a replay-invisible item damage callback.
+      // refs/melee/src/melee/it/itcoll.c::it_802706D0
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
       const float d2 =
-          item_segment_segment_dist2(hx0, hy0, hz0, hx1, hy1, hz1, ax, ay, az, bx, by, bz);
+          item_segment_segment_dist2(hx1, hy1, hz1, hx1, hy1, hz1, ax, ay, az, bx, by, bz);
       if (d2 > rr * rr) {
         continue;
       }
 
-      const int damage_i = combat_hitbox_collision_env_damage(batch, p_idx, hb_i);
+      const uint8_t one_step_callback_bridge =
+          (batch->state.item_hidden_callback_flags[ii] &
+           (uint8_t)(MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE |
+                     MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_DESTROY)) != 0u
+              ? 1u
+              : 0u;
+      const int damage_i = one_step_callback_bridge != 0u
+                               ? combat_get_env_dmg(batch->state.hitbox_damage[hb_i])
+                               : combat_hitbox_collision_env_damage(batch, p_idx, hb_i);
       if (damage_i <= 0) {
         return 0u;
       }
       // Fighter HitCapsule -> item hurtbox path:
       // - `it_802703E8` gates x42_b7 item interaction, item ground/air flags, and victims_1.
-      // - The accepted hit copies HitCapsule.damage into fighter->dmg.x1914, item->xCA0/xCA4, and
-      //   the item hitlist. That is the fighter HitCapsule's collision-time damage; it is not
-      //   floored at the thrown Needle BODY damage.
+      // - The accepted hit copies raw HitCapsule.damage into fighter->dmg.x1914, item->xCA0/xCA4,
+      //   and the item hitlist. The one-step bridge uses that raw source payload only when the
+      //   validation seed has already proven this exact Logic109 callback fate; ordinary
+      //   free-running item-hit damage stays on the existing applied-damage path until the broader
+      //   item hurtbox damage owner is audited end to end.
       // - `Item_8026A294` then runs Needle DmgReceived and item hitlag from xCA8.
       // refs/melee/src/melee/it/itcoll.c::{it_802703E8,it_8026F9AC_outline}
       // refs/melee/src/melee/it/item.c::{OnTakeDamageThink,Item_8026A294}
@@ -2783,12 +2914,25 @@ static uint8_t sheik_needle_ground_hit_step(MslBatch* batch, int bi, size_t ii,
   const float vy = batch->state.item_vel_y[ii];
   const float cur_x = batch->state.item_pos_x[ii];
   const float cur_y = batch->state.item_pos_y[ii];
+  const uint8_t stage_bridge_kind = batch->state.item_sheik_needle_stage_hit_seed_kind[ii];
+  const uint8_t stage_bridge_vel_y = batch->state.item_sheik_needle_stage_hit_vel_y_index[ii];
+  const uint8_t stage_bridge_vel_x_sign =
+      batch->state.item_sheik_needle_stage_hit_vel_x_index_sign[ii];
+  sheik_needle_clear_one_step_stage_hit_bridge(batch, ii);
   // The frame-start position (source xDE4, reset to pos each Anim before this frame's motion).
   const float old_x = cur_x - vx;
   const float old_y = cur_y - vy;
-  if (!stage_collision_item_line_hits_floor(stage_id, old_x, old_y, cur_x, cur_y)) {
+  float hit_x = cur_x;
+  float hit_y = cur_y;
+  if (!stage_collision_item_line_hit_floor(stage_id, old_x, old_y, cur_x, cur_y, &hit_x, &hit_y)) {
     return 0u;
   }
+  // itSeakNeedleThrown_CheckGroundHit sweeps xDE4 -> current pos through it_8026EA20 and publishes
+  // the stage-line contact before the state response. Leaving the article at the post-motion
+  // endpoint creates large one-frame discontinuities when a fast Needle crosses hard ground.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakNeedleThrown_CheckGroundHit
+  batch->state.item_pos_x[ii] = hit_x;
+  batch->state.item_pos_y[ii] = hit_y;
   if (state == 4u) {
     sheik_needle_enter_stuck_state(batch, ii, params);
     return 1u;
@@ -2802,17 +2946,26 @@ static uint8_t sheik_needle_ground_hit_step(MslBatch* batch, int bi, size_t ii,
     return 1u;
   }
   // state 0: HSD_Randi(5) -> 0/1/2 stick, 3/4 bounce.
+  const uint8_t stage_bounce_bridge = stage_bridge_kind == 2u && params != NULL &&
+                                              stage_bridge_vel_y < 8u &&
+                                              (stage_bridge_vel_x_sign & 0x7Fu) < 8u
+                                          ? 1u
+                                          : 0u;
   const int r = combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_GROUND_HIT5, 5);
-  if (r < 3) {
+  if (stage_bridge_kind == 1u || (stage_bounce_bridge == 0u && r < 3)) {
     sheik_needle_enter_stuck_state(batch, ii, params);
     return 1u;
   }
-  const int y_idx = combat_rng_consume_randi_site(
+  int y_idx = combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_SHEIK_NEEDLE_DAMAGE_CALLBACK_BOUNCE_VEL_Y8, 8);
+  if (stage_bounce_bridge != 0u) {
+    y_idx = (int)stage_bridge_vel_y;
+  }
   batch->state.item_state[ii] = 4u;
   batch->state.item_timer[ii] = (float)params->needle_bounce_lifetime_frames;
   batch->state.item_vel_y[ii] = fabsf(params->needle_bounce_min_vel_y[y_idx & 7]);
-  sheik_needle_setup_bounce_hidden_lanes(batch, bi, ii, params);
+  sheik_needle_setup_bounce_hidden_lanes_with_x_override(batch, bi, ii, params, stage_bounce_bridge,
+                                                         stage_bridge_vel_x_sign);
   return 1u;
 }
 
@@ -2849,6 +3002,12 @@ void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
       if (sheik_needle_try_body_hit_fighter(batch, bi, it, params, 1u) != 0u) {
         needs_sort = 1u;
       }
+      sheik_needle_clear_one_step_contact_bridges(batch, ii);
+      continue;
+    }
+    if (batch->state.item_hitlag[ii] > 0u) {
+      batch->state.item_hitlag[ii]--;
+      sheik_needle_clear_one_step_contact_bridges(batch, ii);
       continue;
     }
     if (batch->state.item_state[ii] == 4u && batch->state.item_damage[ii] != 0u) {
@@ -2868,12 +3027,9 @@ void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
         // need this source-visible state4+damage+fighter-hitlag reconstruction.
         // refs/melee/src/melee/it/item.c::{checkHitLag,Item_802697D4}
         // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgReceived
+        sheik_needle_clear_one_step_contact_bridges(batch, ii);
         continue;
       }
-    }
-    if (batch->state.item_hitlag[ii] > 0u) {
-      batch->state.item_hitlag[ii]--;
-      continue;
     }
     if (sheik_needle_anim_lifetime_step(batch, ii) != 0u) {
       needs_sort = 1u;
@@ -2889,17 +3045,20 @@ void sheik_needles_update_and_collide(MslBatch* batch, int bi) {
     }
     if (sheik_needle_try_body_hit_fighter(batch, bi, it, params, 0u) != 0u) {
       needs_sort = 1u;
+      sheik_needle_clear_one_step_stage_hit_bridge(batch, ii);
       continue;
     }
     // Source-ordered after the item-vs-fighter Coll: itSeakneedlethrown_UnkMotion{0,1,4}_Coll then
     // test the stage line and stick/bounce the article so thrown Needles stop at the ground.
     if (sheik_needle_ground_hit_step(batch, bi, ii, params, batch->state.stage_id[bi]) != 0u) {
       needs_sort = 1u;
+      sheik_needle_clear_one_step_callback_bridges(batch, ii);
       continue;
     }
     if (sheik_needle_try_fighter_hitbox_damage(batch, bi, it, params) != 0u) {
       needs_sort = 1u;
     }
+    sheik_needle_clear_one_step_contact_bridges(batch, ii);
   }
   if (needs_sort != 0u) {
     items_sort(batch, bi);

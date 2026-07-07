@@ -157,6 +157,90 @@ def test_validation_report_diff_classifies_hard_reds(tmp_path: Path) -> None:
     assert not classification.distribution_only
 
 
+def test_validation_report_diff_keeps_common_replay_regression_hard_when_membership_changes(
+    tmp_path: Path,
+) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    _write_reports(
+        after,
+        one_step="""
+suite: synthetic
+
+== replays/suite/Foo.slpz ==
+overall.discrete_mismatch: 11 / 100
+overall.strict_discrete_mismatch: 13 / 100
+overall.float_norm_mae_p95: 0.25
+
+== replays/suite/Bar.slpz ==
+overall.discrete_mismatch: 20 / 100
+overall.strict_discrete_mismatch: 22 / 100
+overall.float_norm_mae_p95: 0.30
+
+== suite summary ==
+overall.discrete_mismatch: 31 / 200
+overall.strict_discrete_mismatch: 35 / 200
+overall.float_norm_mae_p95: 0.30
+""",
+        rollout="""
+suite: synthetic
+
+== replays/suite/Foo.slpz ==
+rollout.best_len: 1000
+rollout.streak_count: 31
+rollout.streak_len.median: 100
+rollout.streak_len.p90: 200
+rollout.streak_len.p95: 200
+rollout.streak_len.max: 1000
+rollout.first_mismatch_total: 31
+rollout.first_mismatch_seeded_total: 9
+
+== replays/suite/Bar.slpz ==
+rollout.best_len: 800
+rollout.streak_count: 20
+rollout.streak_len.median: 90
+rollout.streak_len.p90: 180
+rollout.streak_len.p95: 180
+rollout.streak_len.max: 800
+rollout.first_mismatch_total: 20
+rollout.first_mismatch_seeded_total: 10
+
+== suite summary ==
+overall.rollout.streak_count: 51
+overall.rollout.streak_len.median: 90
+overall.rollout.streak_len.p90: 180
+overall.rollout.streak_len.p95: 180
+overall.rollout.streak_len.max: 1000
+overall.rollout.best_len.max: 1000
+overall.rollout.first_mismatch_total: 51
+overall.rollout.first_mismatch_seeded_total: 19
+""",
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert any(
+        d.section.endswith("Foo.slpz") and d.metric == "overall.discrete_mismatch"
+        for d in classification.hard
+    )
+    assert any(
+        d.section.endswith("Foo.slpz") and d.metric == "rollout.first_mismatch_total"
+        for d in classification.hard
+    )
+    assert not classification.unclassified
+    assert any(d.section == "suite" for d in classification.distribution_only)
+    assert not any(d.section.endswith("Bar.slpz") for d in classification.hard)
+
+
 def test_validation_report_diff_ignored_lane_only_strict_movement_is_not_hard(
     tmp_path: Path,
 ) -> None:

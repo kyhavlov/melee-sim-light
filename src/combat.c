@@ -4918,7 +4918,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             if (clank_candidate_skip_hb[p1][p0][hb1]) {
               continue;
             }
-            // Clank is a hitbox-vs-hitbox collision owner. Do not let replay-reconstructed BODY
+            // Clank is a hitbox-vs-hitbox collision owner. Do not let seed-reconstructed BODY
             // victim rings suppress the clank predicate before ftColl_8007699C can refresh the
             // same-group victims for this collision pass.
             // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1}
@@ -5910,9 +5910,15 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
         }
 
-        const float hx = batch->state.hitbox_x[hb_i];
-        const float hy = batch->state.hitbox_y[hb_i];
-        const float hz = batch->state.hitbox_z[hb_i];
+        float hx = batch->state.hitbox_x[hb_i];
+        float hy = batch->state.hitbox_y[hb_i];
+        float hz = batch->state.hitbox_z[hb_i];
+        // Sheik Chain publishes fighter HitCapsule positions from live article ItemLink state
+        // through ftSk_SpecialS_UpdateHitboxes; when a solved Chain article is present, use that
+        // source x914 publication instead of the script/root scaffold.
+        // refs/melee/src/melee/it/items/itseakchain.c::it_802BCB88
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::ftSk_SpecialS_UpdateHitboxes
+        (void)sheik_chain_hitbox_world_pos(batch, a_idx, (uint8_t)hb_id, &hx, &hy, &hz);
         const float hr = batch->state.hitbox_radius[hb_i];
         const float hdmg = batch->state.hitbox_damage[hb_i];
 
@@ -6116,7 +6122,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                damageflytop_attackairhi_hb0_matrix_only_unreliable)) {
             // Terminal DamageFlyTop / UpAir hb0 BODY candidate owner:
             // TBK:5248 shows source contact on UpAir hb1 while hb0 is a matrix-only false
-            // positive from replay-reconstructed terminal DamageFlyTop JObj pose. Keep the
+            // positive from seed-reconstructed terminal DamageFlyTop JObj pose. Keep the
             // decomp-shaped matrix path for other DamageFlyTop contacts; only reject this
             // matrix-only lower UpAir capsule over a world-space miss.
             // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}

@@ -902,6 +902,24 @@ def test_guard_family_descriptor_publication_clears_stale_counter_x221b_b1_synth
     assert int(outs[0]["state_flags"][0, 2]) == 0x80
 
 
+def test_counter_descriptor_positive_radius_keeps_counter_x221b_b1_negative() -> None:
+    # Adjacent negative for the sustained ShieldDesc clear: Marth Counter publishes x221B_b1 from
+    # its own special descriptor and must not be erased by the ordinary guard-family stale-bit clear.
+    # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+    seed = _seed_base("marth")
+    seed["action_id"][0, 0] = np.uint16(ACT_COUNTER)
+    seed["action_frame"][0, 0] = np.int16(8)
+    seed["animation_index"][0, 0] = np.uint32(323)
+    seed["anim_frame_f32"][0, 0] = np.float32(8.0)
+    seed["state_flags"][0, 0, 2] = np.uint8(0xC0)
+
+    outs = _run(seed, [_mk_inputs()])
+
+    assert int(outs[0]["action_id"][0]) == ACT_COUNTER
+    assert int(outs[0]["state_flags"][0, 2]) & 0x40
+
+
 def test_counter_states_enter_and_exit() -> None:
     seed = _seed_base("marth")
     outs = _run(seed, [_mk_inputs(buttons=B, main_y=-127)] + [_mk_inputs()] * 70)

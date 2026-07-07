@@ -886,6 +886,25 @@ uint8_t item_guardsetoff_current_shielddesc_allows_item_contact(const MslBatch* 
   const uint8_t flags_2218 =
       batch->state
           .state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+  const MslItemArticleParams* needle_params =
+      item_article_params_for_sheik_needle_throw_item_type(batch->state.item_type[item_idx]);
+  const uint8_t needle_body_callback_bridge =
+      (needle_params != NULL && batch->state.item_state[item_idx] == 0u &&
+       (batch->state.item_hidden_callback_flags[item_idx] &
+        (uint8_t)(MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE |
+                  MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_DESTROY)) != 0u)
+          ? 1u
+          : 0u;
+  if (needle_body_callback_bridge != 0u) {
+    // One-step/reseed provenance bridge: validation derives these state-0 Needle callback bits only
+    // when the next row proves `it_2725_Logic109_DmgDealt` through victim `instance_hit_by` for this
+    // item instance. That source owner is BODY, not Item_80269DC8 ShieldDesc/HitShield, so do not let
+    // stale GuardSetOff x2218/x221B state consume the same article as a shield hit before BODY.
+    // Free-running gameplay never sets this bridge; live ShieldDesc admission below is unchanged.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt
+    return 0u;
+  }
   const uint8_t current_collision_cmd =
       (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
                 MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECTING |
@@ -894,20 +913,6 @@ uint8_t item_guardsetoff_current_shielddesc_allows_item_contact(const MslBatch* 
     return 1u;
   }
   if (batch->state.item_shield_bounce_seed_valid[item_idx] != 0u) {
-    return 1u;
-  }
-  const MslItemArticleParams* needle_params =
-      item_article_params_for_sheik_needle_throw_item_type(batch->state.item_type[item_idx]);
-  if (needle_params != NULL && batch->state.item_state[item_idx] == 0u &&
-      needle_params->needle_lifetime_frames != 0u &&
-      batch->state.item_timer[item_idx] >= (float)needle_params->needle_lifetime_frames) {
-    // A freshly-created thrown Needle's command-11 HitCapsule reaches ftColl_8007925C on its first
-    // active callback even when the defender is in GuardSetOff with no fresh x2218 command bits.
-    // Later same-volley ShieldDesc packets need explicit ShieldBounced provenance or a live command
-    // lane; otherwise stale x221B shield-active state would re-enter Item_80269DC8.
-    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::shootNeedles
-    // refs/melee/src/melee/it/items/itseakneedlethrown.c::{it_802AFD8C,ItemStateTable}
-    // refs/melee/src/melee/it/item.c::Item_80269DC8
     return 1u;
   }
   // GuardSetOff can keep fp+0x221B_b0 shield-active visible after the accepted shield-hit packet,

@@ -972,7 +972,7 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
   // - Preferred lane: per-(attacker, hitbox, victim_port), which mirrors decomp HitCapsule
   //   ownership and preserves empty lists as authoritative when valid.
   // - Fallback lane: legacy dense per-(attacker, hit_group, victim_port) map for synthetic tests
-  //   and older datasets.
+  //   and older seed corpora.
   //
   // We materialize a deterministic list ordering (victim port order) into victims_1 and reset ring.
   //

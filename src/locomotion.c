@@ -2727,7 +2727,7 @@ static inline uint8_t squat_pass_countdown_try_consume(MslBatch* batch, const Ms
           : 0u;
   if (replay_seed_frame &&
       (uint16_t)tilt_timer_y < (uint16_t)c->pass_tilt_max_frames + (uint16_t)c->floor_skip_frames) {
-    // Teacher-forced replay seed reconstruction only: datasets do not serialize
+    // Teacher-forced replay seed reconstruction only: validation rows do not serialize
     // mv.co.squat.x0/x4, but the first reseeded frame can expose a released-stick consume row
     // whose previous/current input and x671 prove that ftCo_80099F9C armed the real latch earlier.
     // Do not use this in free-running runtime; after the seed frame, Squat must carry x0/x4.

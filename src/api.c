@@ -4,6 +4,7 @@
 #include "ids.h"
 
 #include <errno.h>
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,7 @@
 #include "action_ids.h"
 #include "batch_internal.h"
 #include "items.h"
+#include "items_internal.h"
 #include "combat.h"
 #include "combat_geom.h"
 #include "char_params.h"
@@ -2088,7 +2090,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     // - instance_id_counter: prefer explicit seed lane (derived strictly causally in tooling);
     //   fallback to next after max observed instance_id lanes for backward compatibility.
     // - item_spawn_id_counter: prefer explicit seed lane (derived strictly causally in tooling);
-    //   fallback to next after max live item spawn_id for older datasets/tests.
+    //   fallback to next after max live item spawn_id for older seed/test rows.
     uint16_t max_attack_inst = 0;
     uint16_t max_instance_id = 0;
     uint32_t max_item_spawn_id = 0u;
@@ -2240,7 +2242,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // One-step reseed initializes hidden CollData previous/current roots from the replay-visible
         // current root. Native mpColl prev roots are frame-local state; carrying them across reused
         // validation batch slots can make same-frame throw-release Damage* map callbacks sweep from
-        // a previous dataset row. Free-running rollout reseed keeps its existing hidden-history
+        // a previous validation row. Free-running rollout reseed keeps its existing hidden-history
         // initialization path so rollout starts do not perturb later stage/ledge geometry.
         // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_800473CC}
         // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
@@ -3082,7 +3084,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.colanim_hitstun_x198c1_seed[idx] = 1u;
         }
         // Narrow explicit DownBound x1994 seed bridge:
-        // - Slippi merged hurtbox_state can remain 0 on reseeded rows even when dataset/history
+        // - Slippi merged hurtbox_state can remain 0 on reseeded rows even when seed/history
         //   captured an x1994 timer.
         // - The timer is owned by Fighter_8006A360 and is independent of the post-frame ground
         //   bit. Airborne-at-snapshot DownBound rows can floor-contact before the later AttackDash
@@ -3355,7 +3357,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
       //
       // IMPORTANT:
-      // We seed this explicitly from the dataset schema (derived strictly causally from replay
+      // We seed this explicitly from the validation schema (derived strictly causally from replay
       // history in preprocessing) so teacher-forced reseeds preserve the correct compare key even
       // when fp->x2088 (Slippi `instance_id`) is 0.
       //
@@ -3604,20 +3606,21 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       const uint8_t seed_live_chain =
           (sheik_chain_itkind != 0u && item->exists != 0u && item->type == sheik_chain_itkind) ? 1u
                                                                                                : 0u;
-      const uint8_t same_chain_identity = (old_live_chain != 0u && seed_live_chain != 0u &&
-                                           batch->state.item_owner[ii] == item->owner &&
-                                           batch->state.item_instance_id[ii] == item->instance_id &&
-                                           batch->state.item_spawn_id[ii] == item->spawn_id)
-                                              ? 1u
-                                              : 0u;
-      if (same_chain_identity == 0u) {
+      const uint8_t rollout_chain_prefix_continues =
+          (rollout_owned_after == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED &&
+           old_live_chain != 0u && seed_live_chain != 0u &&
+           batch->state.item_owner[ii] == item->owner &&
+           batch->state.item_instance_id[ii] == item->instance_id &&
+           batch->state.item_spawn_id[ii] == item->spawn_id)
+              ? 1u
+              : 0u;
+      if ((old_live_chain != 0u || seed_live_chain != 0u) && rollout_chain_prefix_continues == 0u) {
         // Reseed is a source boundary for Sheik Chain's ItemLink/x2C_b0 frontier and fighter-hitcap
-        // publication cache when the public item identity is absent or replaced. Slippi exposes the
-        // article identity/state/timer, not the Chain's `ItemLink` array or `it_802BCB88`
-        // HitCapsule map, so a reused rollout handle must not carry private hitcaps from an older
-        // slot into a seed with no matching Chain article. If the same public Chain article remains
-        // live, keep the hidden link state: that is the source article continuation produced by the
-        // rollout prefix, while same-source victim cooldown is handled by ftColl/hitlist owners.
+        // publication cache. Slippi exposes the article identity/state/timer, not the Chain's
+        // `ItemLink` array or `it_802BCB88` HitCapsule map, so normal reseed cannot preserve private
+        // Chain state even when the public item identity matches. `reseed_seed_rollout` may continue
+        // the already-solved live Chain article for rollout-prefix retry only; hidden BODY seed lanes
+        // still cannot activate Chain hitcaps.
         // refs/melee/src/melee/it/items/itseakchain.c::{it_802BAF2C,it_802BBD64,it_802BC080,
         //   it_802BCB88}
         items_reseed_clear_sheik_chain_hidden_slot(batch, ii);
@@ -3687,6 +3690,72 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.item_hidden_body_hit_hurt_height[ii] =
           seed->item_hidden_body_hit_hurt_height[it];
       batch->state.item_hidden_callback_flags[ii] = seed->item_hidden_callback_flags[it];
+      batch->state.item_sheik_needle_callback_bounce_vel_y_index[ii] =
+          seed->item_sheik_needle_callback_bounce_vel_y_index[it];
+      batch->state.item_sheik_needle_callback_bounce_vel_x_index_sign[ii] =
+          seed->item_sheik_needle_callback_bounce_vel_x_index_sign[it];
+      batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] = 0u;
+      batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] = 0u;
+      batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] = 0u;
+      if ((seed->item_hidden_callback_flags[it] &
+           (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE) != 0u &&
+          seed->item_sheik_needle_motion_seed_kind[it] == 3u &&
+          seed->item_sheik_needle_motion_gravity_index[it] < 8u &&
+          seed->item_sheik_needle_motion_min_vel_y_index[it] < 8u &&
+          item_article_params_for_sheik_needle_throw_item_type(item->type) != NULL) {
+        // One-step/reseed bridge for Logic109 -> SetupBounce hidden xDDC/xDE0 lanes. The seed row
+        // carries these in the generic Needle motion provenance fields when later same-spawn
+        // state-4 publications prove the source table samples.
+        // refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakNeedleThrown_SetupBounce
+        batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] = 1u;
+        batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] =
+            seed->item_sheik_needle_motion_gravity_index[it];
+        batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] =
+            seed->item_sheik_needle_motion_min_vel_y_index[it];
+      }
+      batch->state.item_sheik_needle_stage_hit_seed_kind[ii] =
+          seed->item_sheik_needle_stage_hit_seed_kind[it];
+      batch->state.item_sheik_needle_stage_hit_vel_y_index[ii] =
+          seed->item_sheik_needle_stage_hit_vel_y_index[it];
+      batch->state.item_sheik_needle_stage_hit_vel_x_index_sign[ii] =
+          seed->item_sheik_needle_stage_hit_vel_x_index_sign[it];
+      // Reseed rows expose the public item velocity but not Sheik Needle itemVar xDD8/xDDC/xDE0.
+      // Clear resident hidden motion lanes so replay-seeded state-1/4 Needles use the visible
+      // velocity reconstruction path instead of inheriting private state from a previous slot owner.
+      // Live callbacks in this step repopulate these lanes through SetupDrop/SetupBounce.
+      // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+      //   itSeakNeedleThrown_SetupDrop,itSeakNeedleThrown_SetupBounce,
+      //   itSeakneedlethrown_UnkMotion1_Phys,itSeakneedlethrown_UnkMotion4_Phys}
+      batch->state.item_sheik_needle_hidden_drop_valid[ii] = 0u;
+      batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] = 0.0f;
+      batch->state.item_sheik_needle_hidden_drop_gravity[ii] = 0.0f;
+      batch->state.item_sheik_needle_hidden_drop_vel_x[ii] = 0.0f;
+      if (item->exists != 0u && item->state == 4u) {
+        const MslItemArticleParams* needle_ap =
+            item_article_params_for_sheik_needle_throw_item_type(item->type);
+        const uint8_t motion_kind = seed->item_sheik_needle_motion_seed_kind[it];
+        if (needle_ap != NULL && (motion_kind == 1u || motion_kind == 3u) &&
+            (seed->item_sheik_needle_motion_vel_x_index_sign[it] & 0x7Fu) < 8u &&
+            seed->item_sheik_needle_motion_gravity_index[it] < 8u &&
+            (motion_kind == 1u || seed->item_sheik_needle_motion_min_vel_y_index[it] < 8u)) {
+          const uint8_t x_idx_sign = seed->item_sheik_needle_motion_vel_x_index_sign[it];
+          const uint8_t x_idx = (uint8_t)(x_idx_sign & 0x7Fu);
+          batch->state.item_sheik_needle_hidden_drop_valid[ii] = 1u;
+          batch->state.item_sheik_needle_hidden_drop_vel_x[ii] =
+              needle_ap->needle_bounce_x_vel[x_idx] * ((x_idx_sign & 0x80u) ? -1.0f : 1.0f);
+          batch->state.item_sheik_needle_hidden_drop_gravity[ii] =
+              needle_ap->needle_bounce_gravity[seed->item_sheik_needle_motion_gravity_index[it]];
+          batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] =
+              motion_kind == 3u ? needle_ap->needle_bounce_min_vel_y
+                                      [seed->item_sheik_needle_motion_min_vel_y_index[it]]
+                                : -FLT_MAX;
+          if (motion_kind == 3u) {
+            batch->state.item_hitlag[ii] = 1u;
+          }
+        } else if (motion_kind == 2u) {
+          batch->state.item_hitlag[ii] = 1u;
+        }
+      }
       batch->state.item_shyguy_prev_vel_y[ii] = seed->item_shyguy_prev_vel_y[it];
       batch->state.item_shyguy_prev_vel_y_valid[ii] =
           seed->item_shyguy_prev_vel_y_valid[it] ? 1u : 0u;
@@ -4020,6 +4089,52 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
     }
 
+    // Seed bridge: bounced Sheik Needle item hitlag on ongoing BODY-hit rows.
+    //
+    // Decomp/runtime shape:
+    // - Needle DmgDealt/DmgReceived/HitShield callbacks can keep the article by entering state 4,
+    //   then generic item hitlag (`item->xCBC_hitlagFrames`, xDC8.x9) freezes Item_802697D4 before
+    //   the state-4 Phys callback moves the bounced Needle.
+    // - Slippi exposes the state-4 item, its xDA8-like instance id, and the victim's damage-source
+    //   lanes, but not item->xCBC. Reconstruct only when the victim's seeded hitlag is from this
+    //   exact Needle identity and owner. The source item xCBC timer is checked/decremented before
+    //   item Anim/Phys, so on an ongoing body-hit row it is one frame ahead of the visible victim
+    //   hitlag countdown; unrelated state-4/stage-bounced Needles keep normal Phys.
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    //   it_2725_Logic109_DmgDealt,it_2725_Logic109_DmgReceived,it_2725_Logic109_HitShield}
+    // refs/melee/src/melee/it/item.c::{checkHitLag,Item_802693E4,Item_802697D4}
+    {
+      const MslItemArticleParams* sheik_ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+      const uint16_t needle_kind = (sheik_ap != NULL) ? sheik_ap->needle_throw_itkind : 0u;
+      if (needle_kind != 0u) {
+        for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+          const size_t ii = msl_idx_item(bi, it);
+          if (batch->state.item_exists[ii] == 0u || batch->state.item_type[ii] != needle_kind ||
+              batch->state.item_state[ii] != 4u || batch->state.item_owner[ii] < 0 ||
+              batch->state.item_owner[ii] >= (int8_t)num_players ||
+              batch->state.item_instance_id[ii] == 0u) {
+            continue;
+          }
+          for (int victim = 0; victim < num_players; victim++) {
+            if (seed->hitlag[victim] == 0u ||
+                seed->instance_hit_by[victim] != batch->state.item_instance_id[ii]) {
+              continue;
+            }
+            const int attacker = msl_damage_source_seed_local_slot_from_port0(
+                seed, num_players, seed->last_hit_by[victim]);
+            if (attacker != (int)batch->state.item_owner[ii]) {
+              continue;
+            }
+            const uint16_t source_item_hitlag = (uint16_t)seed->hitlag[victim] + 1u;
+            if (source_item_hitlag > (uint16_t)batch->state.item_hitlag[ii]) {
+              batch->state.item_hitlag[ii] =
+                  (source_item_hitlag > 255u) ? 255u : (uint8_t)source_item_hitlag;
+            }
+          }
+        }
+      }
+    }
+
     // Next value for plStale_IncrementAttackInstance (global counter).
     uint16_t next = (uint16_t)(max_attack_inst + 1u);
     if (next == 0) {
@@ -4037,7 +4152,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     //   current global counter and then increments, so with no wrap the next counter cannot be
     //   below max(live instance_id)+1.
     //   refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
-    // - If absent (0), fall back to that lower bound for older datasets/tests.
+    // - If absent (0), fall back to that lower bound for older seed/test rows.
     //
     // NOTE(seed bridge): 16-bit wrap is theoretically possible in very long sessions. The replay
     // suites used for one-step validation are far below wrap scale, so we enforce the lower bound
@@ -4058,7 +4173,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     // Seed bridge:
     // - Prefer the explicit seed lane, which preprocessing derives strictly causally from
     //   replay-visible item spawn_id history.
-    // - Enforce a lower bound from live items so older datasets/tests with no seed lane cannot
+    // - Enforce a lower bound from live items so older seed/test rows with no seed lane cannot
     //   reuse an already-live spawn_id.
     // refs/melee/src/melee/it/item.c::Item_80267AA8
     uint32_t next_item_spawn_id = seeded_item_spawn_id_counter;
@@ -4492,6 +4607,97 @@ static int msl_batch_apply_replay_frame_stage_lanes(MslBatch* batch, const uint8
   return 0;
 }
 
+static void msl_batch_apply_replay_frame_item_lanes_for_batch(MslBatch* batch, int bi,
+                                                              const MslSeed* seed) {
+  if (batch == NULL || seed == NULL || bi < 0 || bi >= batch->batch_size) {
+    return;
+  }
+  if (batch->replay_reseed_frame_active == NULL || batch->replay_reseed_frame_active[bi] == 0u) {
+    return;
+  }
+  const uint8_t needle_callback_mask =
+      (uint8_t)((uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE |
+                (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_DESTROY);
+  for (int seed_it = 0; seed_it < MSL_MAX_ITEMS; seed_it++) {
+    const MslItem* item = &seed->items[seed_it];
+    const uint8_t callback_bits =
+        (uint8_t)(seed->item_hidden_callback_flags[seed_it] & needle_callback_mask);
+    const uint8_t stage_kind = seed->item_sheik_needle_stage_hit_seed_kind[seed_it];
+    if (item->exists == 0u || (callback_bits == 0u && stage_kind == 0u)) {
+      continue;
+    }
+
+    int live_slot = -1;
+    for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+      const size_t ii = msl_idx_item(bi, it);
+      if (batch->state.item_exists[ii] != 0u && batch->state.item_type[ii] == item->type &&
+          batch->state.item_instance_id[ii] == item->instance_id &&
+          batch->state.item_spawn_id[ii] == item->spawn_id &&
+          batch->state.item_owner[ii] == item->owner) {
+        if (live_slot >= 0) {
+          live_slot = -2;
+          break;
+        }
+        live_slot = it;
+      }
+    }
+    if (live_slot < 0) {
+      continue;
+    }
+    const size_t ii = msl_idx_item(bi, live_slot);
+    // Replay playback lane for one-step Sheik Needle provenance. Validation preprocessing can
+    // prove the hidden Logic109 destroy/bounce fate or state-0 stage-hit branch from the next public
+    // item row, while normal free-running gameplay uses the modeled HSD_Randi sites and live stage
+    // collision. Apply only to the matching live item identity; the Needle owner consumes and clears
+    // these flags in the same item step.
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    //   it_2725_Logic109_DmgDealt,it_2725_Logic109_DmgReceived,it_2725_Logic109_HitShield,
+    //   itSeakneedlethrown_UnkMotion0_Coll}
+    batch->state.item_hidden_callback_flags[ii] =
+        (uint8_t)((batch->state.item_hidden_callback_flags[ii] & (uint8_t)~needle_callback_mask) |
+                  callback_bits);
+    batch->state.item_sheik_needle_callback_bounce_vel_y_index[ii] =
+        seed->item_sheik_needle_callback_bounce_vel_y_index[seed_it];
+    batch->state.item_sheik_needle_callback_bounce_vel_x_index_sign[ii] =
+        seed->item_sheik_needle_callback_bounce_vel_x_index_sign[seed_it];
+    batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] = 0u;
+    batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] = 0u;
+    batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] = 0u;
+    if ((callback_bits & (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE) != 0u &&
+        seed->item_sheik_needle_motion_seed_kind[seed_it] == 3u &&
+        seed->item_sheik_needle_motion_gravity_index[seed_it] < 8u &&
+        seed->item_sheik_needle_motion_min_vel_y_index[seed_it] < 8u &&
+        item_article_params_for_sheik_needle_throw_item_type(item->type) != NULL) {
+      batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] = 1u;
+      batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] =
+          seed->item_sheik_needle_motion_gravity_index[seed_it];
+      batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] =
+          seed->item_sheik_needle_motion_min_vel_y_index[seed_it];
+    }
+    batch->state.item_sheik_needle_stage_hit_seed_kind[ii] = stage_kind;
+    batch->state.item_sheik_needle_stage_hit_vel_y_index[ii] =
+        seed->item_sheik_needle_stage_hit_vel_y_index[seed_it];
+    batch->state.item_sheik_needle_stage_hit_vel_x_index_sign[ii] =
+        seed->item_sheik_needle_stage_hit_vel_x_index_sign[seed_it];
+  }
+}
+
+static int msl_batch_apply_replay_frame_item_lanes(MslBatch* batch, const uint8_t* seed_bytes,
+                                                   size_t seed_stride_bytes) {
+  if (batch == NULL || seed_bytes == NULL) {
+    return EINVAL;
+  }
+  if (seed_stride_bytes < sizeof(MslSeed)) {
+    return EINVAL;
+  }
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    const MslSeed* seed =
+        (const MslSeed*)(const void*)(seed_bytes + (size_t)bi * seed_stride_bytes);
+    msl_batch_apply_replay_frame_item_lanes_for_batch(batch, bi, seed);
+  }
+  return 0;
+}
+
 static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
   if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
     return;
@@ -4600,6 +4806,10 @@ int msl_batch_step_input_replay_frame_rng(MslBatch* batch, const uint8_t* seed_b
     return err;
   }
   err = msl_batch_apply_replay_frame_stage_lanes(batch, seed_bytes, seed_stride_bytes);
+  if (err != 0) {
+    return err;
+  }
+  err = msl_batch_apply_replay_frame_item_lanes(batch, seed_bytes, seed_stride_bytes);
   if (err != 0) {
     return err;
   }

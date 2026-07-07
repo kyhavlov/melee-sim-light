@@ -244,6 +244,8 @@ static PyMethodDef methods[] = {
     {"stage_static_query", msl_stage_static_query_py, METH_VARARGS,
      "stage_static_query(stage_id, checks, x0, y0, x1, y1, line_skip, joint_skip, joint_only) -> "
      "static mpLib-style line hit dict or None."},
+    {"stage_item_line_hit", msl_stage_item_line_hit_py, METH_VARARGS,
+     "stage_item_line_hit(stage_id, x0, y0, x1, y1) -> item stage-line hit point or None."},
     {"mpcoll_check_bounding_aabb", msl_mpcoll_check_bounding_aabb_py, METH_VARARGS,
      "mpcoll_check_bounding_aabb(prev_x, prev_y, cur_x, cur_y, prev_l, prev_r, prev_b, prev_t, "
      "cur_l, cur_r, cur_b, cur_t, flags, ledge_snap_x, ledge_snap_y, ledge_snap_h) -> dict"},
@@ -526,7 +528,7 @@ static PyMethodDef methods[] = {
     {"validation_derive_item_hidden_callback_buffers",
      msl_validation_derive_item_hidden_callback_buffers_py, METH_VARARGS,
      "validation_derive_item_hidden_callback_buffers(seed_u8, ref_u8, laser_lut, shield_lut, "
-     "players) -> None"},
+     "needle_lut, players) -> None"},
     {"validation_derive_item_reflect_damage_mul_buffers",
      msl_validation_derive_item_reflect_damage_mul_buffers_py, METH_VARARGS,
      "validation_derive_item_reflect_damage_mul_buffers(seed_u8, items_u8, replay fields, "

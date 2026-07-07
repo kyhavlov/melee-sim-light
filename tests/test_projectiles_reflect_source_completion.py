@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import re
 import struct
+import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+
+from test_char_common_action_coverage import _mk_inputs, _run, _seed_base  # noqa: E402
 
 
 def _read(rel: str) -> str:
@@ -153,7 +158,7 @@ def test_laser_runtime_keeps_source_order_for_spawn_collision_and_post_callbacks
             "const uint8_t hidden_victim = batch->state.item_hidden_body_hit_victim_port[ii]",
             "combat_apply_item_hit(",
             "msl_item_reflect_apply_pending_laser_callback(batch, ii)",
-            "const float x0 = batch->state.item_pos_x[ii]",
+            "float x0 = batch->state.item_pos_x[ii]",
             "batch->state.item_pos_x[ii] = x",
             "stage_collision_item_line_hits_floor(stage_id, x0, y0, x, y)",
             "item_try_shine_reflect_contact(",
@@ -161,6 +166,40 @@ def test_laser_runtime_keeps_source_order_for_spawn_collision_and_post_callbacks
             "combat_apply_item_hit(",
         ],
     )
+
+
+def test_throw_laser_birth_frame_marker_does_not_suppress_generic_body_contact() -> None:
+    # Runtime behavior proof for the Throw-side spawn marker: it prevents double-applying spawn
+    # motion when needed, but the ordinary item GObj callback can still run BODY contact in the same
+    # frame. No hidden callback/provenance lane is set here; the 2% Fox laser BODY hit is generic
+    # item-vs-fighter collision.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{
+    #   it_8029C6CC,itFoxlaser_UnkMotion1_Phys,itFoxlaser_UnkMotion1_Coll}
+    shot_itkind, _, _, lifetime, *_ = _laser_record_by_char(1)
+    seed = _seed_base("fox")
+    seed["pos_x"][0, 1] = np.float32(10.0)
+    seed["pos_y"][0, 1] = np.float32(0.0)
+    item = seed["items"][0, 0]
+    item["exists"] = np.uint8(1)
+    item["state"] = np.uint8(1)
+    item["type"] = np.uint16(shot_itkind)
+    item["owner"] = np.int8(0)
+    item["instance_id"] = np.uint16(123)
+    item["attack_id"] = np.uint16(shot_itkind)
+    item["attack_instance"] = np.uint16(1)
+    item["direction"] = np.float32(1.0)
+    item["vel_x"] = np.float32(0.0)
+    item["vel_y"] = np.float32(0.0)
+    item["pos_x"] = np.float32(10.0)
+    item["pos_y"] = np.float32(8.0)
+    item["timer"] = np.float32(lifetime)
+    item["spawn_id"] = np.uint32(1)
+    seed["item_hidden_callback_flags"][0, 0] = np.uint8(1 << 1)  # spawned_this_frame only
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert float(out["percent"][1]) == pytest.approx(2.0, abs=0.01)
+    assert int(out["items"]["exists"][0]) == 0
 
 
 def test_projectile_reflect_comments_do_not_claim_proxy_closure() -> None:

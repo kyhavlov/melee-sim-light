@@ -549,6 +549,15 @@ SEED_DTYPE = np.dtype(
         ("item_hidden_body_hit_victim_port", _arr("u1", MAX_ITEMS)),
         ("item_hidden_body_hit_hurt_height", _arr("u1", MAX_ITEMS)),
         ("item_hidden_callback_flags", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_callback_bounce_vel_y_index", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_callback_bounce_vel_x_index_sign", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_motion_seed_kind", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_motion_vel_x_index_sign", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_motion_gravity_index", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_motion_min_vel_y_index", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_stage_hit_seed_kind", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_stage_hit_vel_y_index", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_stage_hit_vel_x_index_sign", _arr("u1", MAX_ITEMS)),
         # Prefix-causal Shy Guy dynamic-bone velocity scratch.
         # refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
         ("item_shyguy_prev_vel_y", _arr("<f4", MAX_ITEMS)),

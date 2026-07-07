@@ -237,7 +237,7 @@ rollout.first_mismatch_seeded_total: 20
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=148.729 rec=7437 p=1 seed/ref/out=-18.905/-19.2322/129.497 actions=7/7/7 category=unclassified
-  2. pos_y max_err=118.555 rec=7404 p=1 seed/ref/out=16.6385/14.7659/133.321 actions=7/7/7 category=unclassified
+  2. pos_y max_err=123.87 rec=7410 p=1 seed/ref/out=15.1075/9.45085/133.321 actions=7/7/7 category=unclassified
   3. percent max_err=2 rec=1564 p=0 seed/ref/out=97.33/97.33/95.33 actions=368/368/368 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=18 rec=9367 p=1 seed/ref/out=0/0/18 actions=20/20/90 category=downstream_discrete_mismatch
@@ -279,7 +279,7 @@ overall.rollout.first_mismatch_seeded_total: 155
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=148.729 rec=7437 p=1 seed/ref/out=-18.905/-19.2322/129.497 actions=7/7/7 category=unclassified
-  2. pos_y max_err=118.555 rec=7404 p=1 seed/ref/out=16.6385/14.7659/133.321 actions=7/7/7 category=unclassified
+  2. pos_y max_err=123.87 rec=7410 p=1 seed/ref/out=15.1075/9.45085/133.321 actions=7/7/7 category=unclassified
   3. speed_ground_x_self max_err=13.5 rec=10536 p=0 seed/ref/out=0/-16.5/-3 actions=351/348/348 category=unclassified
 overall.rollout.float_top_downstream:
   1. pos_y max_err=109.186 rec=1039 p=0 seed/ref/out=-105.559/-109.186/0.0001 actions=86/86/42 category=downstream_discrete_mismatch

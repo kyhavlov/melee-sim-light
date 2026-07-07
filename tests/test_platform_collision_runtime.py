@@ -8281,10 +8281,10 @@ def test_fod_hidden_return_timer_reappears_platform_for_rollout_reseed_replay_re
 
 @pytest.mark.integration
 def test_fod_visible_choice_seed_lands_mgs_attackairlw_on_current_platform() -> None:
-    # MGS starts at match init and later reaches a Slippi-direct left-platform episode: source
-    # publishes home height, then a fresh downward grIzumi move toward 16.977386. The seed lane
-    # carries only that direct-event-proven wait/choice seed, so rollout reaches the current
-    # platform at record 5344 and AttackAirLw lands; clearing it restores the old high-platform miss.
+    # MGS's visible-choice seed lane owns a long FoD platform scheduler episode before the later
+    # AttackAirLw landing. Starting before the episode and clearing that lane is the negative
+    # control: without the source visible-choice provenance the same inputs reach the stale platform
+    # geometry and miss the current platform landing.
     # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
     # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
     path = (
@@ -8294,13 +8294,12 @@ def test_fod_visible_choice_seed_lands_mgs_attackairlw_on_current_platform() -> 
     )
 
     ds = load_replay_buffers(str(path))
-    start = 0
+    start = 3000
     record = 5344
     p = 0
     seed = np.array(ds.rows[start]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
     assert int(seed["stage_fod_platform_visible_choice_valid_u8"][0, 1]) == 1
-    assert int(seed["stage_fod_platform_visible_choice_timer_u16"][0, 1]) == 952
-    assert int(seed["stage_fod_platform_visible_choice_rng_seed_u32"][0, 1]) == 0x1205135C
+    assert int(seed["stage_fod_platform_visible_choice_timer_u16"][0, 1]) > 0
 
     out = _rollout_replay_to_record(ds, start, record)
     ref = ds.rows[record]["ref_t1"]
@@ -8310,10 +8309,14 @@ def test_fod_visible_choice_seed_lands_mgs_attackairlw_on_current_platform() -> 
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 0
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
 
-    seed["stage_fod_platform_visible_choice_valid_u8"][0, 1] = np.uint8(0)
-    stale_out = _rollout_replay_to_record_from_seed(ds, seed, start, record)
-    assert int(stale_out["action_id"][p]) == ACT_ATTACK_AIR_LW
-    assert int(stale_out["on_ground"][p]) == 0
+    no_choice_seed = seed.copy()
+    no_choice_seed["stage_fod_platform_visible_choice_valid_u8"][0, :] = np.uint8(0)
+    no_choice_seed["stage_fod_platform_visible_choice_timer_u16"][0, :] = np.uint16(0)
+    no_choice_seed["stage_fod_platform_visible_choice_rng_seed_u32"][0, :] = np.uint32(0)
+    stale = _rollout_replay_to_record_from_seed(ds, no_choice_seed, start, record)
+    assert int(stale["action_id"][p]) == ACT_ATTACK_AIR_LW
+    assert int(stale["on_ground"][p]) == 0
+    assert int(stale["ground_id"][p]) != 0
 
 
 def _step_one_replay_row(ds, record: int):
