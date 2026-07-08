@@ -20,7 +20,7 @@ mkdir -p "$CACHE_DIR"
 valid_cached_asset() {
   local path="$1"
   local expected_sha="$2"
-  [[ -f "$path" ]] && printf '%s  %s\n' "$expected_sha" "$path" | sha256sum -c --status
+  [[ -f "$path" ]] && printf '%s  %s\n' "$expected_sha" "$path" | sha256sum -c --status -
 }
 
 while IFS=$'\t' read -r filename expected_sha url; do
@@ -52,7 +52,7 @@ while IFS=$'\t' read -r filename expected_sha url; do
     echo "error: failed to download $url" >&2
     exit 1
   fi
-  if ! printf '%s  %s\n' "$expected_sha" "$tmp" | sha256sum -c --status; then
+  if ! printf '%s  %s\n' "$expected_sha" "$tmp" | sha256sum -c --status -; then
     rm -f "$tmp"
     echo "error: checksum mismatch for $filename" >&2
     exit 1
