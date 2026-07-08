@@ -33,6 +33,9 @@ MSL_STATE_FIELD(stage_dream_whispy_wind_dir, uint8_t, b, 1u)
 MSL_STATE_FIELD(stage_dream_whispy_wind_valid, uint8_t, b, 1u)
 MSL_STATE_FIELD(stage_dream_whispy_wind_timer, uint16_t, b, 1u)
 MSL_STATE_FIELD(opening_input_lock_timer, uint8_t, b, 1u)
+MSL_STATE_FIELD(match_flow_respawn_slot_cooldown, uint8_t,
+                b * (size_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT,
+                (size_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT)
 MSL_STATE_FIELD(stale_attack_instance_counter, uint16_t, b, 1u)
 MSL_STATE_FIELD(instance_id_counter, uint16_t, b, 1u)
 MSL_STATE_FIELD(item_spawn_id_counter, uint32_t, b, 1u)

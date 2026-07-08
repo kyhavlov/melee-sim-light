@@ -6462,6 +6462,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                      (c->phantom_overlap_max_x7a8 + c->phantom_overlap_max_x7a8))))
                   ? 1u
                   : 0u;
+          const uint8_t damagefly_phantom_tiplog_owner =
+              msl_damage_owner_is_damagefly_action(defender_action);
           const uint8_t same_group_primary_full_body =
               (batch->state.hitbox_enable_edge[hb_i] == 0u &&
                combat_hitcapsule_is_authored_same_group_primary(batch, bi, attacker, hb_id))
@@ -6476,7 +6478,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                   : 0u;
           const uint8_t ordinary_fighter_phantom_tiplog_range =
               (!shield_active &&
-               (!same_group_primary_full_body || primary_phantom_has_later_same_group_body) &&
+               (damagefly_phantom_tiplog_owner || !same_group_primary_full_body ||
+                primary_phantom_has_later_same_group_body) &&
                lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8)
                   ? 1u
                   : 0u;
@@ -6491,13 +6494,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                attackairb_overlap_amount <= c->phantom_overlap_max_x7a8)
                   ? 1u
                   : 0u;
-          const uint8_t terminal_damageflytop_phantom_tiplog_range =
-              (defender_action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
-               batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] != 0u &&
-               expected_body_hitlag != 0u && batch->state.hitstun[d_idx] <= expected_body_hitlag &&
-               fighter_phantom_tiplog_range)
-                  ? 1u
-                  : 0u;
           if (fighter_phantom_tiplog_range &&
               (body_damage_logs[defender].count != 0u ||
                batch->state.phantom_damage_timer_x189c[d_idx] != 0u)) {
@@ -6508,7 +6504,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             continue;
           }
           if (!attackairb_stale_owner_candidate && !defender_no_damage &&
-              (batch->state.hitstun[d_idx] == 0u || terminal_damageflytop_phantom_tiplog_range) &&
+              (batch->state.hitstun[d_idx] == 0u || damagefly_phantom_tiplog_owner) &&
               fighter_phantom_tiplog_range) {
             // General fighter BODY phantom-hit lane:
             // - lbColl_8000805C writes HitCapsule.coll_distance from lbColl_80006E58.
@@ -6516,12 +6512,14 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             //   checkTipLog/inlineB1 instead of the percent/KB damage-state path.
             // - Apply this for source-evaluated BODY matrix overlaps below x7A8 when the defender is
             //   not shield-active. Active same-group strict damage leaders remain on the full BODY
-            //   source path; lower-damage limb capsules and equal-damage groups keep the retained
-            //   tip-log reconstruction. Shield rows have a separate Guard/ShieldDesc owner and only
-            //   enter this lane through the guarded shield-poke predicate above.
-            // - Terminal DamageFlyTop keeps the same source branch when remaining hitstun is inside
-            //   the current hit's hitlag horizon: the tiny x7A8 contact starts victim-only hitlag
-            //   without percent/KB, while the next source BODY overlap can still own the full hit.
+            //   source path for non-DamageFly victims; lower-damage limb capsules and equal-damage
+            //   groups keep the retained tip-log reconstruction. Shield rows have a separate
+            //   Guard/ShieldDesc owner and only enter this lane through the guarded shield-poke
+            //   predicate above.
+            // - Active DamageFly states keep the decomp phantom/tip-log branch despite nonzero
+            //   hitstun: a tiny x7A8 contact can start victim-only hitlag without percent/KB, and
+            //   the next source BODY overlap can still own the full hit. Other active Damage*
+            //   hitstun states stay on the ordinary full-BODY path.
             // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
             // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8}
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C

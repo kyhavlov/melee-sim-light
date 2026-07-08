@@ -108,6 +108,7 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "camera_box_radius_f32" in SEED_DTYPE.fields
     assert "camera_target_point_inside_stage_cam_bounds_u8" in SEED_DTYPE.fields
     assert "magnify_damage_counter_x1910" in SEED_DTYPE.fields
+    assert "match_flow_respawn_slot_cooldown" in SEED_DTYPE.fields
     assert "passivewall_timer" in SEED_DTYPE.fields
     assert "walljump_input_timer" in SEED_DTYPE.fields
     assert "walljump_wall_side_i8" in SEED_DTYPE.fields

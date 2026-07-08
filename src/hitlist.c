@@ -1000,27 +1000,48 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
   size_t out_i = 0;
   for (int v = 0; v < (int)batch->config.num_players && out_i < (size_t)MSL_HITLIST_VICTIM_CAP;
        v++) {
-    size_t i;
-    if (use_hitbox_seed) {
-      const size_t hb_base =
-          (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS;
-      i = hb_base + ((a * (size_t)MSL_MAX_HITBOXES + hb) * (size_t)MSL_MAX_PLAYERS + (size_t)v);
-    } else {
-      const size_t group_base = (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS *
-                                (size_t)MSL_MAX_PLAYERS;
-      const size_t g = (size_t)hit_group;
-      i = group_base + ((a * (size_t)MSL_HITLIST_GROUPS + g) * (size_t)MSL_MAX_PLAYERS + (size_t)v);
-    }
-    const uint16_t cd_seed =
-        use_hitbox_seed ? batch->state.combat_hitlist_hb_cd[i] : batch->state.combat_hitlist_cd[i];
+    const size_t hb_base =
+        (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS;
+    const size_t hb_i =
+        hb_base + ((a * (size_t)MSL_MAX_HITBOXES + hb) * (size_t)MSL_MAX_PLAYERS + (size_t)v);
+    const size_t group_base =
+        (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+    const size_t g = (size_t)hit_group;
+    const size_t group_i =
+        group_base + ((a * (size_t)MSL_HITLIST_GROUPS + g) * (size_t)MSL_MAX_PLAYERS + (size_t)v);
+    const uint16_t hb_cd_seed = use_hitbox_seed ? batch->state.combat_hitlist_hb_cd[hb_i] : 0u;
+    const uint16_t group_cd_seed = batch->state.combat_hitlist_cd[group_i];
+    const size_t v_idx = msl_idx_player(bi, v);
+    const size_t a_idx = msl_idx_player(bi, attacker);
+    const uint8_t victim_hitlag_tail =
+        (batch->state.hitlag[v_idx] != 0u || batch->state.hitlag_pre_timer[v_idx] != 0u) ? 1u : 0u;
+    // Per-HitCapsule seed validity is per slot, while the legacy dense map is per victim/group.
+    // If the per-HitCapsule bridge proved another victim but the current victim is present in the
+    // dense same-group map, same-source BODY attribution can still prove that source `inlineB0`
+    // registered this victim into every active HitCapsule with the same group. Keep this as an
+    // hitlag-tail gap fill only when the dense victim iid is current and ProcessHit attribution
+    // names this attacker. Hitstun alone is not enough: Fighter_8006A360 can run action scripts
+    // outside hitlag, so a per-HitCapsule empty seed is the clear/copy source owner and must not be
+    // backfilled.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,inlineB0,ftColl_80076808}
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    const uint8_t use_dense_same_source_gap =
+        (use_hitbox_seed && hb_cd_seed == 0u && group_cd_seed != 0u && victim_hitlag_tail != 0u &&
+         batch->state.combat_hitlist_victim_iid[group_i] != 0u &&
+         batch->state.combat_hitlist_victim_iid[group_i] == batch->state.instance_id[v_idx] &&
+         msl_damage_source_victim_matches_attacker(batch, v_idx, a_idx, attacker))
+            ? 1u
+            : 0u;
+    const uint8_t use_dense_seed = (!use_hitbox_seed || use_dense_same_source_gap) ? 1u : 0u;
+    const size_t i = use_dense_seed ? group_i : hb_i;
+    const uint16_t cd_seed = use_dense_seed ? group_cd_seed : hb_cd_seed;
     if (cd_seed == 0) {
       continue;
     }
-    const uint16_t stored_iid = use_hitbox_seed ? batch->state.combat_hitlist_hb_victim_iid[i]
-                                                : batch->state.combat_hitlist_victim_iid[i];
-    const size_t v_idx = msl_idx_player(bi, v);
-    const size_t a_idx = msl_idx_player(bi, attacker);
-    if (!use_hitbox_seed &&
+    const uint16_t stored_iid = use_dense_seed ? batch->state.combat_hitlist_victim_iid[i]
+                                               : batch->state.combat_hitlist_hb_victim_iid[i];
+    if (use_dense_seed &&
         hitlist_specialhi_action(batch->state.char_id[a_idx], batch->state.action_id[a_idx])) {
       // Dense group seeds are a compatibility surface for replay-derived HitCapsule victims_1,
       // not per-HitCapsule authority. SpecialHi charge/launch spans can carry coarse dense
@@ -1039,7 +1060,7 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
       if (!msl_damage_source_victim_matches_attacker(batch, v_idx, a_idx, attacker)) {
         continue;
       }
-    } else if (is_replay_rollout && !exact_replay_reseed && !use_hitbox_seed) {
+    } else if (is_replay_rollout && !exact_replay_reseed && use_dense_seed) {
       // Dense group seeds are a compatibility surface for replay-derived HitCapsule victims_1.
       // Once a replay rollout advances past its seed frame, the filter below prevents stale dense
       // seeds from becoming a free-running runtime bridge without same-source proof.
@@ -1056,7 +1077,7 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
         // victim pointer.
         // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
         const uint8_t rollout_same_object_rebind =
-            (is_replay_rollout && !use_hitbox_seed &&
+            (is_replay_rollout && use_dense_seed &&
              hitlist_rollout_dense_seed_same_object_rebind_applies(batch, bi, attacker, v))
                 ? 1u
                 : 0u;
@@ -1069,9 +1090,9 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
       }
     }
     MslHitlistVictimEntry* e = &hit->victims_1[out_i++];
-    e->id32 = use_hitbox_seed ? 0u : MSL_HITLIST_FIGHTER_ID32_SEED_DENSE;
-    e->id16 = use_hitbox_seed ? batch->state.combat_hitlist_hb_victim_iid[i]
-                              : batch->state.combat_hitlist_victim_iid[i];
+    e->id32 = use_dense_seed ? MSL_HITLIST_FIGHTER_ID32_SEED_DENSE : 0u;
+    e->id16 = use_dense_seed ? batch->state.combat_hitlist_victim_iid[i]
+                             : batch->state.combat_hitlist_hb_victim_iid[i];
     e->kind_slot = hitlist_fighter_key((uint8_t)v);
     // Seed semantics:
     // - 0xFFFF means "indefinite latch" (decomp: present with timer==0).

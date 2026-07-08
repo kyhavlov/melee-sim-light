@@ -144,13 +144,9 @@ static inline void match_flow_zero_common_velocities(MslBatch* batch, size_t idx
   batch->state.speed_y_attack[idx] = 0.0f;
 }
 
-static inline void rebirth_refresh_velocity_to_platform(MslBatch* batch, size_t idx,
-                                                        uint32_t stage_id, int port0) {
-  if (batch == NULL) {
-    return;
-  }
-  MslStagePoint2 respawn = {0};
-  if (!stage_collision_get_respawn_point(stage_id, port0, &respawn)) {
+static inline void rebirth_refresh_velocity_to_target(MslBatch* batch, size_t idx,
+                                                      const MslStagePoint2* respawn) {
+  if (batch == NULL || respawn == NULL) {
     return;
   }
   const uint8_t t = batch->state.match_flow_timer[idx];
@@ -160,10 +156,11 @@ static inline void rebirth_refresh_velocity_to_platform(MslBatch* batch, size_t 
     return;
   }
   // Rebirth_Phys recomputes self_vel each frame from the current pose to the spawn-platform
-  // target, dividing by the already-decremented Rebirth timer.
-  // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_Rebirth_Anim,ftCo_Rebirth_Phys}
-  batch->state.speed_air_x_self[idx] = (respawn.x - batch->state.pos_x[idx]) / (float)t;
-  batch->state.speed_y_self[idx] = (respawn.y - batch->state.pos_y[idx]) / (float)t;
+  // target, dividing by the already-decremented Rebirth timer. This path uses the
+  // fn_80167638-selected target already resolved by enter_rebirth.
+  // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_Rebirth_Phys
+  batch->state.speed_air_x_self[idx] = (respawn->x - batch->state.pos_x[idx]) / (float)t;
+  batch->state.speed_y_self[idx] = (respawn->y - batch->state.pos_y[idx]) / (float)t;
 }
 
 static inline void rebirth_refresh_velocity_to_carried_target(MslBatch* batch, size_t idx,
@@ -327,16 +324,24 @@ static inline void enter_entry_end(MslBatch* batch, size_t idx, const MslCommonP
   batch->state.pos_y[idx] = base_y + x20;
 }
 
+static inline uint8_t match_flow_resolve_respawn_platform(MslBatch* batch, int bi,
+                                                          uint32_t stage_id, int port0,
+                                                          MslStagePoint2* out_respawn);
+
 static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonParams* c,
-                                 uint32_t stage_id, int port0) {
+                                 uint32_t stage_id, int port0, MslStagePoint2* out_respawn) {
   if (batch == NULL || c == NULL) {
     return;
   }
   MslStageBounds cam = {0};
   MslStagePoint2 respawn = {0};
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
   if (!stage_collision_get_cam_bounds_world(stage_id, &cam) ||
-      !stage_collision_get_respawn_point(stage_id, port0, &respawn)) {
+      !match_flow_resolve_respawn_platform(batch, bi, stage_id, port0, &respawn)) {
     return;
+  }
+  if (out_respawn != NULL) {
+    *out_respawn = respawn;
   }
 
   // Decomp: respawn processing calls ft_800890BC (reset to attackID=1, instance=0).
@@ -641,6 +646,91 @@ static inline int match_flow_respawn_port0(const MslBatch* batch, size_t idx, in
   return (source_port0 < (uint8_t)MSL_MAX_PLAYERS) ? (int)source_port0 : fallback_port0;
 }
 
+static inline uint8_t match_flow_stage_uses_shared_respawn_platform(uint32_t stage_id,
+                                                                    MslStagePoint2* out_base) {
+  MslStagePoint2 base = {0};
+  if (!stage_collision_get_respawn_point(stage_id, 0, &base)) {
+    return 0u;
+  }
+  for (int p = 1; p < MSL_MAX_PLAYERS; p++) {
+    MslStagePoint2 other = {0};
+    if (!stage_collision_get_respawn_point(stage_id, p, &other)) {
+      return 0u;
+    }
+    if (other.x != base.x || other.y != base.y) {
+      if (out_base != NULL) {
+        *out_base = base;
+      }
+      return 0u;
+    }
+  }
+  if (out_base != NULL) {
+    *out_base = base;
+  }
+  return 1u;
+}
+
+static inline uint8_t match_flow_choose_respawn_platform_slot(MslBatch* batch, int bi) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const size_t base = (size_t)bi * (size_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT;
+  for (uint8_t i = 0u; i < (uint8_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT; i++) {
+    if (batch->state.match_flow_respawn_slot_cooldown[base + (size_t)i] == 0u) {
+      return i;
+    }
+  }
+  return 0u;
+}
+
+static inline void match_flow_set_respawn_platform_slot_cooldown(MslBatch* batch, int bi,
+                                                                 uint8_t slot) {
+  if (batch == NULL || slot >= (uint8_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT) {
+    return;
+  }
+  const size_t idx = (size_t)bi * (size_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT + (size_t)slot;
+  batch->state.match_flow_respawn_slot_cooldown[idx] = 0x90u;
+}
+
+static inline void match_flow_tick_respawn_platform_slot_cooldowns(MslBatch* batch, int bi) {
+  if (batch == NULL) {
+    return;
+  }
+  const size_t base = (size_t)bi * (size_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT;
+  for (uint8_t i = 0u; i < (uint8_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT; i++) {
+    const size_t idx = base + (size_t)i;
+    if (batch->state.match_flow_respawn_slot_cooldown[idx] != 0u) {
+      batch->state.match_flow_respawn_slot_cooldown[idx] =
+          (uint8_t)(batch->state.match_flow_respawn_slot_cooldown[idx] - 1u);
+    }
+  }
+}
+
+static inline uint8_t match_flow_resolve_respawn_platform(MslBatch* batch, int bi,
+                                                          uint32_t stage_id, int port0,
+                                                          MslStagePoint2* out_respawn) {
+  if (out_respawn == NULL) {
+    return 0u;
+  }
+  MslStagePoint2 base = {0};
+  if (!match_flow_stage_uses_shared_respawn_platform(stage_id, &base)) {
+    return stage_collision_get_respawn_point(stage_id, port0, out_respawn);
+  }
+  static const float kRespawnSlotOffsetMul[MSL_RESPAWN_PLATFORM_SLOT_COUNT] = {
+      0.0f, 1.0f, -1.0f, 2.0f, 0.0f, 0.0f,
+  };
+  const uint8_t slot = match_flow_choose_respawn_platform_slot(batch, bi);
+  // fn_80167638 uses Stage_80224E38(..., 0) as the base shared platform and adds
+  // 16.0f * lbl_803B7A44[slot], then writes FighterMatchInfo[slot].x8 = 0x90.
+  // Per-port stages in MSLSTG01 have distinct respawn points and do not use this shared table.
+  // refs/melee/src/melee/gm/gm_1601.c::fn_80167638
+  // refs/melee/build/GALE01/asm/melee/gm/gm_1601.s::lbl_803B7A44
+  base.x += 16.0f * kRespawnSlotOffsetMul[slot];
+  match_flow_set_respawn_platform_slot_cooldown(batch, bi, slot);
+  *out_respawn = base;
+  return 1u;
+}
+
 static inline void rebirth_wait_apply_exit_colanim(MslBatch* batch, size_t idx,
                                                    const MslCommonParams* c) {
   if (batch == NULL || c == NULL) {
@@ -902,6 +992,7 @@ void match_flow_update_pre_anim(MslBatch* batch) {
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint32_t stage_id = batch->state.stage_id[bi];
+    match_flow_tick_respawn_platform_slot_cooldowns(batch, bi);
 
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
@@ -1102,7 +1193,7 @@ void match_flow_update_pre_anim(MslBatch* batch) {
               enter_eliminated_dead_slot(batch, idx);
             }
           } else {
-            enter_rebirth(batch, idx, c, stage_id, match_flow_respawn_port0(batch, idx, p));
+            enter_rebirth(batch, idx, c, stage_id, match_flow_respawn_port0(batch, idx, p), NULL);
           }
         }
       } else if (a == (uint16_t)MSL_ACT_REBIRTH) {
@@ -1188,7 +1279,8 @@ void match_flow_update_post_input(MslBatch* batch) {
           batch->state.char_id[idx] = pending_char;
           batch->state.stocks[idx] = 1u;
           match_flow_pending_rebirth_restore_x2218(batch, idx);
-          enter_rebirth(batch, idx, c, stage_id, match_flow_respawn_port0(batch, idx, p));
+          MslStagePoint2 respawn = {0};
+          enter_rebirth(batch, idx, c, stage_id, match_flow_respawn_port0(batch, idx, p), &respawn);
           // fn_8016B918 runs from game/match flow before the fighter procUpdate that advances
           // Rebirth's first visible frame. This sim observes START after its pre-input animation
           // phase, so seed the same post-frame timebase explicitly for the share-enter path.
@@ -1199,8 +1291,7 @@ void match_flow_update_post_input(MslBatch* batch) {
                 (uint8_t)((c->rebirth_timer_frames - 1u) > 255u ? 255u
                                                                 : (c->rebirth_timer_frames - 1u));
           }
-          rebirth_refresh_velocity_to_platform(batch, idx, stage_id,
-                                               match_flow_respawn_port0(batch, idx, p));
+          rebirth_refresh_velocity_to_target(batch, idx, &respawn);
           msl_anim_timebase_seed(batch, idx, 1.0f, 1.0f);
           continue;
         }

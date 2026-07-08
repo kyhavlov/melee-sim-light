@@ -70,6 +70,9 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/if/if_2F72.c::if_802F73C4
   // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
   uint8_t* opening_input_lock_timer;  // [batch]
+  // Global six-slot respawn-platform cooldown table (`FighterMatchInfo[i].x8`).
+  // refs/melee/src/melee/gm/gm_1601.c::{fn_8016758C,fn_80167638}
+  uint8_t* match_flow_respawn_slot_cooldown;  // [batch * MSL_RESPAWN_PLATFORM_SLOT_COUNT]
   // Global stale-attack-instance counter (decomp: plStale_IncrementAttackInstance).
   // One per environment in the batch (per-match global counter).
   // refs/melee/src/melee/pl/plstale.c::plStale_IncrementAttackInstance

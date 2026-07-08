@@ -60,6 +60,8 @@ def test_guard_reflect_timer_counts_down_and_clears_reflect_active_bit() -> None
             ("throw_pending_victim_port", ("u1", (4,))),
             ("throw_pending_hit_idx", ("u1", (4,))),
             ("attached_victim_port", ("u1", (4,))),
+            ("dead_up_fall_offset_y", ("<f4", (4,))),
+            ("dead_up_fall_vel_y", ("<f4", (4,))),
         ],
         align=False,
     )

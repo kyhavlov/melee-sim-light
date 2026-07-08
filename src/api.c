@@ -2101,6 +2101,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     batch->state.frame_id[bi] = seed->frame_id;
     batch->state.frame_pre_random_seed[bi] = seed->frame_pre_random_seed;
     batch->state.stage_id[bi] = seed->stage_id;
+    for (int si = 0; si < MSL_RESPAWN_PLATFORM_SLOT_COUNT; si++) {
+      batch->state
+          .match_flow_respawn_slot_cooldown[(size_t)bi * (size_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT +
+                                            (size_t)si] =
+          seed->match_flow_respawn_slot_cooldown[si];
+    }
     for (int pi = 0; pi < 2; pi++) {
       const size_t pidx = (size_t)bi * 2u + (size_t)pi;
       const float h = seed->stage_fod_platform_height_f32[pi];
@@ -5208,6 +5214,8 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
       out->throw_pending_victim_port[p] = batch->state.throw_pending_victim_port[idx];
       out->throw_pending_hit_idx[p] = batch->state.throw_pending_hit_idx[idx];
       out->attached_victim_port[p] = batch->state.attached_victim_port[idx];
+      out->dead_up_fall_offset_y[p] = batch->state.dead_up_fall_offset_y[idx];
+      out->dead_up_fall_vel_y[p] = batch->state.dead_up_fall_vel_y[idx];
     }
   }
 

@@ -32,6 +32,8 @@ INTERNALS_DTYPE = np.dtype(
         ("throw_pending_victim_port", ("u1", (MAX_PLAYERS,))),
         ("throw_pending_hit_idx", ("u1", (MAX_PLAYERS,))),
         ("attached_victim_port", ("u1", (MAX_PLAYERS,))),
+        ("dead_up_fall_offset_y", ("<f4", (MAX_PLAYERS,))),
+        ("dead_up_fall_vel_y", ("<f4", (MAX_PLAYERS,))),
     ],
     align=False,
 )

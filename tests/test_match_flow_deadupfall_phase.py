@@ -20,6 +20,34 @@ SM_DEAD_UP_FALL_HIT_CAMERA = 0
 ROLLOUT_CLOCK_HSD_RAND_STREAM = 1
 CAMERA_MODE_GAME = 0
 CAMERA_MODE_FREE = 1
+MAX_PLAYERS = 4
+
+
+DEBUG_INTERNALS_DTYPE = np.dtype(
+    [
+        ("tilt_timer_x", ("u1", (MAX_PLAYERS,))),
+        ("turn_frames_to_turn", ("u1", (MAX_PLAYERS,))),
+        ("turn_has_turned", ("u1", (MAX_PLAYERS,))),
+        ("guard_reflect_timer_x14", ("u1", (MAX_PLAYERS,))),
+        ("entry_end_fall_lock", ("u1", (MAX_PLAYERS,))),
+        ("attack_id", ("<u2", (MAX_PLAYERS,))),
+        ("attack_instance", ("<u2", (MAX_PLAYERS,))),
+        ("attack_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
+        ("instance_id", ("<u2", (MAX_PLAYERS,))),
+        ("instance_id_x2073", ("u1", (MAX_PLAYERS,))),
+        ("instance_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
+        ("instance_id_counter", "<u2"),
+        ("item_spawn_id_counter", "<u4"),
+        ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
+        ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
+        ("throw_pending_victim_port", ("u1", (MAX_PLAYERS,))),
+        ("throw_pending_hit_idx", ("u1", (MAX_PLAYERS,))),
+        ("attached_victim_port", ("u1", (MAX_PLAYERS,))),
+        ("dead_up_fall_offset_y", ("<f4", (MAX_PLAYERS,))),
+        ("dead_up_fall_vel_y", ("<f4", (MAX_PLAYERS,))),
+    ],
+    align=False,
+)
 
 
 def _seed_base() -> np.ndarray:
@@ -194,9 +222,11 @@ def test_hsd_owned_top_blast_camera_free_forces_deadupstar_after_roll_consume() 
     assert int(out["action_id"][0]) == ACT_DEAD_UP_STAR
 
 
-def test_deadupfall_hitcamera_hold_expiry_applies_phase3_fall_velocity() -> None:
+def test_deadupfall_hitcamera_hold_expiry_advances_phase3_fall_velocity() -> None:
     # ftCo_DeadUpFall_Anim case 2 writes self_vel.y=x550, then ftCo_DeadUpFall_Phys case 3
-    # immediately applies ftCommon_Fall with x554/x558 before Fighter_procUpdate position integration.
+    # immediately applies ftCommon_Fall with x554/x558. That velocity is added into
+    # mv.co.unk_deadup.x5C/x50 for the hit-camera/effect offset; the fighter root pose and public
+    # velocity lanes remain fixed.
     # refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_DeadUpFall_Phys}
     seed = _seed_base()
     seed["action_id"][0, 0] = np.uint16(ACT_DEAD_UP_FALL_HIT_CAMERA)
@@ -205,8 +235,67 @@ def test_deadupfall_hitcamera_hold_expiry_applies_phase3_fall_velocity() -> None
 
     out = _step_once(seed)
     assert int(out["action_id"][0]) == ACT_DEAD_UP_FALL_HIT_CAMERA
-    assert float(out["speed_y_self"][0]) == pytest.approx(0.8, abs=1e-6)
-    assert float(out["pos_y"][0]) == pytest.approx(40.8, abs=1e-6)
+    assert float(out["speed_y_self"][0]) == pytest.approx(float(np.float32(0.8)), abs=1e-6)
+    assert float(out["pos_y"][0]) == pytest.approx(float(np.float32(40.8)), abs=1e-6)
+
+
+def test_deadupfall_hitcamera_phase3_hidden_offset_advances_each_frame() -> None:
+    # ftCo_DeadUpFall_Phys case 3 applies ftCommon_Fall every phase-3 frame, adds the current
+    # self_vel into mv.co.unk_deadup.x5C/x50, then clears the scratch velocity before the next
+    # frame. The root pose stays fixed; the hidden offset must advance by 0.8, then 0.6 with the
+    # extracted x550/x554 values rather than repeating the first phase-3 tick.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpFall_Phys
+    msl_binding = pytest.importorskip("msl_binding")
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    internals_stride = int(sizes["internals"])
+
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+    assert internals_stride == DEBUG_INTERNALS_DTYPE.itemsize
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_DEAD_UP_FALL_HIT_CAMERA)
+    seed["animation_index"][0, 0] = np.uint32(SM_DEAD_UP_FALL_HIT_CAMERA)
+    seed["match_flow_timer"][0, 0] = np.uint8(76)
+
+    seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+    prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
+    inp = np.zeros((1, input_stride), dtype=np.uint8)
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    internals_raw = np.zeros((1, internals_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.write_compare(handle, out)
+        msl_binding.debug_write_internals(handle, internals_raw)
+        first_out = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        first_int = internals_raw.view(DEBUG_INTERNALS_DTYPE).reshape((1,))[0].copy()
+
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.write_compare(handle, out)
+        msl_binding.debug_write_internals(handle, internals_raw)
+        second_out = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        second_int = internals_raw.view(DEBUG_INTERNALS_DTYPE).reshape((1,))[0].copy()
+    finally:
+        msl_binding.destroy(handle)
+
+    assert int(first_out["action_id"][0]) == ACT_DEAD_UP_FALL_HIT_CAMERA
+    assert int(second_out["action_id"][0]) == ACT_DEAD_UP_FALL_HIT_CAMERA
+    assert float(first_out["pos_y"][0]) == pytest.approx(float(np.float32(40.8)), abs=1e-6)
+    assert float(second_out["pos_y"][0]) == pytest.approx(float(np.float32(41.4)), abs=5e-6)
+    assert float(first_out["speed_y_self"][0]) == pytest.approx(float(np.float32(0.8)), abs=1e-6)
+    assert float(second_out["speed_y_self"][0]) == pytest.approx(float(np.float32(0.6)), abs=1e-6)
+    assert float(first_int["dead_up_fall_offset_y"][0]) == pytest.approx(0.8, abs=1e-6)
+    assert float(second_int["dead_up_fall_offset_y"][0]) == pytest.approx(1.4, abs=1e-6)
+    assert float(first_int["dead_up_fall_vel_y"][0]) == pytest.approx(0.0, abs=1e-6)
+    assert float(second_int["dead_up_fall_vel_y"][0]) == pytest.approx(0.0, abs=1e-6)
 
 
 def test_deadupfall_hitcamera_phase3_expiry_loses_stock_once() -> None:

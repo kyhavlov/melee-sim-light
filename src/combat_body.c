@@ -2822,9 +2822,8 @@ uint8_t combat_hitcapsule_is_authored_same_group_primary(const MslBatch* batch, 
   // - `ftColl_80076ED8` receives the concrete HitCapsule selected by `ftColl_80078C70`, and
   //   `Fighter_ProcessHit` consumes that HitCapsule's authored damage/KB payload.
   // - Multi-capsule same-group scripts encode the source-selected primary capsule as the first
-  //   active maximum-damage HitCapsule in that group. Keep that capsule on the full BODY path;
-  //   later/equal siblings and lower-damage limb capsules may take the `coll_distance < x7A8`
-  //   phantom/tip-log branch.
+  //   active maximum-damage HitCapsule in that group. Keep that capsule on the full BODY path
+  //   outside active DamageFly's tiny-contact phantom/tip-log owner.
   // - This predicate is derived from active MSLHITB1 hitbox table fields (`damage`, `hit_group`,
   //   source HitCapsule id/order), rather than an action id / row slice.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}

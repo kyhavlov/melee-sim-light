@@ -483,7 +483,7 @@ mismatch.item_state: 0 / 116175 (0.000000)
 mismatch.item_owner: 0 / 116175 (0.000000)
 mismatch.item_instance_id: 0 / 116175 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 67 / 15490 (0.004325)
-err.pos_x: mae=0.004222 p95=0.000000 max=16.000000
+err.pos_x: mae=0.003189 p95=0.000000 max=4.049999
 err.pos_y: mae=0.004977 p95=0.000000 max=9.233032
 err.speed_air_x_self: mae=0.000844 p95=0.000000 max=2.151708
 err.speed_ground_x_self: mae=0.000321 p95=0.000000 max=1.168313
@@ -499,7 +499,7 @@ err.item_vel_y: mae=0.000126 p95=0.000000 max=0.702896
 overall.discrete_mismatch: 177 / 937145
 overall.strict_discrete_mismatch: 244 / 937145
 overall.ignored_discrete_mismatch: 67
-overall.float_norm_mae_p95: 0.00023783
+overall.float_norm_mae_p95: 0.00023726
 
 == replays/heldout/marth/VigilantValuableGull.slpz ==
 Records: 9316  Players/scored per record: 2  Total player-frames: 18632
@@ -550,4 +550,4 @@ overall.float_norm_mae_p95: 0.00033919
 overall.discrete_mismatch: 1995 / 14168979
 overall.strict_discrete_mismatch: 2629 / 14168979
 overall.ignored_discrete_mismatch: 634
-overall.float_norm_mae_p95: 0.00024403
+overall.float_norm_mae_p95: 0.00024398

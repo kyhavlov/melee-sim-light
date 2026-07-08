@@ -5862,18 +5862,34 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
             // refs/melee/src/melee/mp/mpcoll.c::{
             // data/stages/bin/*.bin::MSLSTG01 floor flags
-            (action_id == (uint16_t)MSL_ACT_FALL &&
-             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_FALL &&
-             final_ground_line_idx >= 0 && (size_t)final_ground_line_idx < g->line_count &&
-             batch->state.ground_id[idx] == g->lines[(size_t)final_ground_line_idx].segment_i &&
-             g->lines[(size_t)final_ground_line_idx].is_platform &&
-             !resolved_line_has_platform_transform && batch->state.fall_fast[idx] == 0u &&
-             batch->state.speed_y_self[idx] < 0.0f && prev_y < (contact_y - k_floor_y_bias) &&
-             y < (contact_y - k_floor_y_bias) &&
-             !(prev_bottom_y > (contact_y + k_floor_y_bias) &&
-               cur_bottom_y < (contact_y - k_floor_y_bias) &&
-               (common_fall_blended_ecb_consumer != 0u ||
-                batch->state.common_fall_blend_x4[idx] == 0.0f)))
+            ((action_id == (uint16_t)MSL_ACT_FALL &&
+              batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_FALL &&
+              final_ground_line_idx >= 0 && (size_t)final_ground_line_idx < g->line_count &&
+              batch->state.ground_id[idx] == g->lines[(size_t)final_ground_line_idx].segment_i &&
+              g->lines[(size_t)final_ground_line_idx].is_platform &&
+              !resolved_line_has_platform_transform && batch->state.fall_fast[idx] == 0u &&
+              batch->state.speed_y_self[idx] < 0.0f && prev_y < (contact_y - k_floor_y_bias) &&
+              y < (contact_y - k_floor_y_bias) &&
+              !(prev_bottom_y > (contact_y + k_floor_y_bias) &&
+                cur_bottom_y < (contact_y - k_floor_y_bias) &&
+                (common_fall_blended_ecb_consumer != 0u ||
+                 batch->state.common_fall_blend_x4[idx] == 0.0f))) ||
+             (terminal_ground_jump_anim_entered_fall &&
+              // Only suppress the replay-seeded first Fall collision continuation. JumpF/JumpB
+              // rows that terminal-transition during the current frame still use their live
+              // collision callback and can publish a same-frame static-platform landing.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Anim
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+              prev_action_id == (uint16_t)MSL_ACT_FALL &&
+              (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_F ||
+               batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_B) &&
+              (stage_collision_floor_line_is_platform(stage_id, ground_id) ||
+               (final_ground_line_idx >= 0 && (size_t)final_ground_line_idx < g->line_count &&
+                g->lines[(size_t)final_ground_line_idx].is_platform)) &&
+              !resolved_line_has_platform_transform && batch->state.fall_fast[idx] != 0u &&
+              batch->state.speed_y_self[idx] < 0.0f &&
+              floor_publication.result_mode == (uint8_t)MSL_MPCOLL_FLOOR_MODE_BOTTOM_SWEEP &&
+              batch->state.coll_floor_probe_raw_bottom_sweep_hit[idx] == 0u))
                 ? 1u
                 : 0u;
         const uint8_t suppress_fall_attackair_entry_transformed_platform_root_only_land =

@@ -5919,6 +5919,69 @@ def test_fod_jumpf_already_below_transformed_platform_stays_airborne_replay_real
 
 
 @pytest.mark.integration
+def test_battlefield_jumpf_terminal_fall_fastfall_waits_for_bottom_sweep_owner() -> None:
+    # DelayedSuperbGuanaco records 199/200 isolate the terminal JumpF -> Fall soft-platform owner.
+    # ftCo_Jump_Anim enters Fall, then the first ftCo_Fall_Coll callback uses
+    # ft_800831CC/mpColl_80047F40. If the live floor probe rejects the static platform from below,
+    # the final publication must stay airborne; the next Fall row has the source bottom-sweep owner
+    # and lands on Battlefield's side platform.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047F40,mpColl_80044628_Floor}
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz"
+    )
+
+    ds = load_replay_buffers(str(path))
+    p = 1
+
+    first_fall = _step_one_replay_row_rollout(ds, 199)
+    first_ref = ds.rows[199]["ref_t1"]
+    assert int(ds.rows[199]["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(ds.rows[199]["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_F
+    assert int(first_fall["action_id"][p]) == int(first_ref["action_id"][p]) == ACT_FALL
+    assert int(first_fall["on_ground"][p]) == int(first_ref["on_ground"][p]) == 0
+    assert float(first_fall["pos_y"][p]) == pytest.approx(float(first_ref["pos_y"][p]), abs=1e-6)
+
+    landing = _step_one_replay_row_rollout(ds, 200)
+    landing_ref = ds.rows[200]["ref_t1"]
+    assert int(ds.rows[200]["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(ds.rows[200]["seed_t"]["seed_prev_action_id"][p]) == ACT_FALL
+    assert int(landing["action_id"][p]) == int(landing_ref["action_id"][p]) == ACT_LANDING
+    assert int(landing["on_ground"][p]) == int(landing_ref["on_ground"][p]) == 1
+    assert int(landing["ground_id"][p]) == int(landing_ref["ground_id"][p]) == 4
+    assert float(landing["pos_y"][p]) == pytest.approx(float(landing_ref["pos_y"][p]), abs=1e-6)
+
+
+def test_yoshi_same_frame_jumpf_terminal_fall_can_still_land_static_platform() -> None:
+    # The terminal JumpF -> Fall suppressor is only for rows already seeded as Fall with JumpF as the
+    # source previous action. If JumpF reaches terminal animation during the current frame, the
+    # Jump/Fall collision callback can still publish the static platform landing.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    seed = _seed_base(STAGE_YOSHI, ACT_JUMP_F, SM_JUMP_F, 40.093487, 21.040077)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FALCO)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(3)
+    seed["fall_fast"][0, 0] = np.uint8(1)
+    seed["speed_y_self"][0, 0] = np.float32(-3.5)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_F)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(38)
+    seed["action_frame"][0, 0] = np.int16(39)
+    seed["anim_frame_f32"][0, 0] = np.float32(39.0)
+
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][0]) == ACT_LANDING
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_y"][0]) == pytest.approx(23.4501, abs=1e-6)
+
+
+@pytest.mark.integration
 def test_fod_attackair_shallow_transformed_platform_ecb_crossing_stays_airborne_replay_real() -> None:
     # MGS record 3172 is a sustained Falco AttackAirLw continuation under FoD's left moving
     # platform. The transformed platform intersects the live ECB bottom, but both callback root

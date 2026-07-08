@@ -15,6 +15,7 @@ enum { MSL_MAX_PLAYERS = 4 };
 enum { MSL_MAX_ITEMS = 15 };
 enum { MSL_MAX_HURTCAPS = 32 };
 enum { MSL_MAX_HITBOXES = 4 };
+enum { MSL_RESPAWN_PLATFORM_SLOT_COUNT = 6 };
 // Fixed capacity for Sheik Side-B Chain Verlet links (itSeakChain_Attrs x0 link count == 20; the
 // solver runs over a fixed per-item-slot link array, no heap). refs/melee/src/melee/it/items/
 // itseakchain.c::it_802BAF2C
@@ -830,6 +831,16 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkInitReset_80067C98,Fighter_ChangeMotionState}
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 -> state_flags[0])
   uint8_t match_flow_pending_rebirth_state_flags_2218[MSL_MAX_PLAYERS];
+  // Global respawn-platform slot cooldowns (`FighterMatchInfo[i].x8`) for shared-platform stages.
+  //
+  // Source:
+  // - gm_16AE.c calls fn_8016758C once per match-flow frame to decrement the six slot timers.
+  // - gm_1601.c::fn_80167638 picks the first zero slot, applies 16.0f * lbl_803B7A44[i] to the
+  //   base respawn point, then writes 0x90 back to that slot.
+  // refs/melee/src/melee/gm/gm_16AE.c::{fn_8016CFE0,gm_8016D32C_OnFrame}
+  // refs/melee/src/melee/gm/gm_1601.c::{fn_8016758C,fn_80167638}
+  // refs/melee/build/GALE01/asm/melee/gm/gm_1601.s::lbl_803B7A44
+  uint8_t match_flow_respawn_slot_cooldown[MSL_RESPAWN_PLATFORM_SLOT_COUNT];
   // Match-start fighter input lock countdown (`fp->x221D_b4`).
   //
   // Decomp / asset anchors:
@@ -2016,6 +2027,8 @@ typedef struct MslDebugInternals {
   uint8_t throw_pending_victim_port[MSL_MAX_PLAYERS];
   uint8_t throw_pending_hit_idx[MSL_MAX_PLAYERS];
   uint8_t attached_victim_port[MSL_MAX_PLAYERS];
+  float dead_up_fall_offset_y[MSL_MAX_PLAYERS];
+  float dead_up_fall_vel_y[MSL_MAX_PLAYERS];
 } MslDebugInternals;
 
 // Debug/test-only helper: write per-player stage collision contact metadata.

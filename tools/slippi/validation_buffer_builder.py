@@ -1017,6 +1017,10 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         sheik_needle_shoot_rng_owner = np.any(sheik_needle_shoot_rng_owner_by_player, axis=1)
         if np.any(sheik_needle_shoot_rng_owner):
             samples['seed_t']['frame_pre_random_seed'][sheik_needle_shoot_rng_owner] = frame_pre_random_seed[1:][sheik_needle_shoot_rng_owner]
+    roles = msl_binding.stage_match_flow_roles(int(stage_id))
+    respawn_points = roles.get('respawn_points', [])
+    shared_respawn_platform = bool(respawn_points) and all(tuple(p) == tuple(respawn_points[0]) for p in respawn_points)
+    samples['seed_t']['match_flow_respawn_slot_cooldown'][:, :] = msl_binding.derive_match_flow_respawn_slot_cooldown(np.ascontiguousarray(post_action_id_u16[:, :int(num_players)], dtype=np.uint16), int(shared_respawn_platform))[:-1, :]
     samples['seed_t']['match_flow_pending_rebirth_char_id'][:, :] = _derive_match_flow_pending_rebirth_char_id(post_action_id_u16=post_action_id_u16, post_char_id_u8=post_char_id_u8, post_stocks_u8=post_stocks_u8_all, match_flow_timer_u8=match_flow_timer_u8_all, static_char_id_u8=static_char_id_u8, team_id_u8=team_id_u8, is_teams=bool(is_teams), num_players=int(num_players))[:-1, :]
     samples['seed_t']['match_flow_pending_rebirth_state_flags_2218'][:, :] = _derive_match_flow_pending_rebirth_state_flags_2218(post_action_id_u16=post_action_id_u16, post_char_id_u8=post_char_id_u8, post_stocks_u8=post_stocks_u8_all, post_state_flags_u8=post_state_flags_u8, match_flow_timer_u8=match_flow_timer_u8_all, static_char_id_u8=static_char_id_u8, team_id_u8=team_id_u8, is_teams=bool(is_teams), num_players=int(num_players))[:-1, :]
     if int(num_players) == 2:
