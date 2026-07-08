@@ -11,6 +11,8 @@ NORMAL_VALIDATION_TARGETS = (
     "validate-rollout-aggregate",
     "validate-marth",
     "validate-rollout-marth",
+    "validate-falcon",
+    "validate-rollout-falcon",
     "validate-sheik",
     "validate-rollout-sheik",
     "validate-all",

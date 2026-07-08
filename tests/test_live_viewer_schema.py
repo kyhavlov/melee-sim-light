@@ -80,6 +80,8 @@ def _viewer_wasm_required_chars(build_wasm: str) -> set[str]:
 
 
 def _data_key_from_character_label(label: str) -> str:
+    if label == "Captain Falcon":
+        return "falcon"
     return label.lower().replace(" ", "_")
 
 
@@ -128,6 +130,14 @@ def test_live_viewer_supported_characters_have_packaged_animation_zips() -> None
     external_char_map = _viewer_external_char_map(viewer_adapter)
     zip_by_external_id = _viewer_zip_by_external_id(animation_cache)
     packaged_filenames = _asset_manifest_filenames(manifest)
+    expected_zip_by_label = {
+        "Captain Falcon": "captainFalcon.zip",
+        "Falco": "falco.zip",
+        "Fox": "fox.zip",
+        "Marth": "marth.zip",
+        "Sheik": "sheik.zip",
+        "Zelda": "zelda.zip",
+    }
 
     missing: list[str] = []
     for internal_id, label in _live_supported_characters(schema):
@@ -136,6 +146,7 @@ def test_live_viewer_supported_characters_have_packaged_animation_zips() -> None
             f"{label} maps to unknown external id {external_id}"
         )
         zip_filename = Path(zip_by_external_id[external_id]).name
+        assert zip_filename == expected_zip_by_label[label]
         if zip_filename not in packaged_filenames:
             missing.append(f"{label}: {zip_filename}")
 
@@ -151,13 +162,15 @@ def test_live_viewer_transform_characters_map_to_animation_assets() -> None:
     trace_adapter = (root / "tools/viewer/msltrace1.js").read_text()
 
     supported = dict(_live_supported_characters(schema))
+    assert supported[2] == "Captain Falcon"
     assert supported[7] == "Sheik"
     assert supported[19] == "Zelda"
 
     # Live Compare traces expose simulator internal ids. Slippi animation zips are keyed by
-    # external ids, so Sheik/Zelda transform spans need both sides of the public id mapping.
+    # external ids, so characters with divergent public ids need explicit mapping.
     for adapter_source in (viewer_adapter, trace_adapter):
         external = _viewer_external_char_map(adapter_source)
+        assert external[2] == 0
         assert external[7] == 19
         assert external[19] == 18
 

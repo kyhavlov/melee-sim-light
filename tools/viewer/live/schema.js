@@ -1,4 +1,5 @@
 export const CHAR_FOX = 1;
+export const CHAR_FALCON = 2;
 export const CHAR_SHEIK = 7;
 export const CHAR_FALCO = 22;
 export const CHAR_MARTH = 18;
@@ -21,6 +22,7 @@ export const SUPPORTED_STAGES = Object.freeze([
 
 export const SUPPORTED_CHARACTERS = Object.freeze([
   Object.freeze({ id: CHAR_FOX, label: "Fox" }),
+  Object.freeze({ id: CHAR_FALCON, label: "Captain Falcon" }),
   Object.freeze({ id: CHAR_SHEIK, label: "Sheik" }),
   Object.freeze({ id: CHAR_ZELDA, label: "Zelda" }),
   Object.freeze({ id: CHAR_FALCO, label: "Falco" }),

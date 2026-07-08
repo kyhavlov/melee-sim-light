@@ -43,7 +43,17 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     out_dir = tmp_path / "data"
     missing_decomp = tmp_path / "missing_decomp"
     iso_dir.mkdir()
-    for name in ("PlCo.dat", "ItCo.dat", "PlFx.dat", "PlFc.dat", "PlMs.dat", "PlSk.dat", "GrNLa.dat"):
+    for name in (
+        "PlCo.dat",
+        "ItCo.dat",
+        "PlFx.dat",
+        "PlFc.dat",
+        "PlMs.dat",
+        "PlCa.dat",
+        "PlSk.dat",
+        "PlZd.dat",
+        "GrNLa.dat",
+    ):
         (iso_dir / name).write_bytes(b"fake")
 
     commands: list[list[str]] = []
@@ -62,7 +72,7 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
             "--stages",
             "grnla",
             "--chars",
-            "fox,falco,marth,sheik",
+            "fox,falco,marth,falcon,sheik,zelda",
             "--melee-decomp",
             str(missing_decomp),
         ]
@@ -73,9 +83,15 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     assert (out_dir / "staling/move_id/marth.bin").exists()
     assert (out_dir / "attack_id/move_id/marth.bin").exists()
     assert (out_dir / "motion_state/owners/marth.bin").exists()
+    assert (out_dir / "staling/move_id/falcon.bin").exists()
+    assert (out_dir / "attack_id/move_id/falcon.bin").exists()
+    assert (out_dir / "motion_state/owners/falcon.bin").exists()
     assert (out_dir / "staling/move_id/sheik.bin").exists()
     assert (out_dir / "attack_id/move_id/sheik.bin").exists()
     assert (out_dir / "motion_state/owners/sheik.bin").exists()
+    assert (out_dir / "staling/move_id/zelda.bin").exists()
+    assert (out_dir / "attack_id/move_id/zelda.bin").exists()
+    assert (out_dir / "motion_state/owners/zelda.bin").exists()
     assert (out_dir / "motion_state/owners/callback_symbols.json").exists()
     manifest = out_dir / "manifest.json"
     assert manifest.exists()
@@ -89,7 +105,7 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     import json as _json
     import struct as _struct
 
-    for ch in ("fox", "falco", "marth", "sheik"):
+    for ch in ("fox", "falco", "marth", "falcon", "sheik", "zelda"):
         b = (out_dir / "staling" / "move_id" / f"{ch}.bin").read_bytes()
         assert b[:8] == b"MSLSTID1"
         assert _struct.unpack_from("<I", b, 8)[0] == 1, (
@@ -126,6 +142,7 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     assert cb_name("fox", 0x0163, "anim") == "ftFx_SpecialHi_Anim"
     assert cb_name("falco", 0x0163, "coll") == "ftFx_SpecialHi_Coll"
     assert cb_name("marth", 0x015D, "coll") == "ftMs_SpecialAirS1_Coll"
+    assert cb_name("falcon", 0x0161, "coll") == "ftCa_SpecialHi_Coll"
     assert cb_name("sheik", 0x0168, "coll") == "ftSk_SpecialAirHi_Coll"
     assert not any(cmd[0] == "tools.extraction.extract_staling_move_id" for cmd in commands)
     assert not any(cmd[0] == "tools.extraction.extract_attack_id_move_id" for cmd in commands)

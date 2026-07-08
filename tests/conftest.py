@@ -505,7 +505,7 @@ def _ensure_known_data_artifacts() -> None:
         if missing_iso:
             raise RuntimeError(
                 "missing required known-data artifact(s), and cannot rebuild because _iso inputs are missing: "
-                f"{missing_iso}. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco,marth,sheik`"
+                f"{missing_iso}. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco,marth,falcon,sheik,zelda`"
             )
         subprocess.run(
             [
@@ -517,7 +517,7 @@ def _ensure_known_data_artifacts() -> None:
                 "--stages",
                 "grnla,grnba,griz,grps,grst,grop",
                 "--chars",
-                "fox,falco,marth,sheik",
+                "fox,falco,marth,falcon,sheik,zelda",
             ],
             check=True,
         )

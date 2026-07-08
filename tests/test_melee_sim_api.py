@@ -200,6 +200,15 @@ def test_configure_match_populates_default_fox_falco_match() -> None:
         assert np.all(cfg["players"]["facing"][:, 1] == 0)
 
 
+def test_character_enum_exposes_supported_registry_chars() -> None:
+    assert int(msl.Character.FOX) == 1
+    assert int(msl.Character.FALCON) == 2
+    assert int(msl.Character.SHEIK) == 7
+    assert int(msl.Character.MARTH) == 18
+    assert int(msl.Character.ZELDA) == 19
+    assert int(msl.Character.FALCO) == 22
+
+
 def test_configure_match_accepts_explicit_constants_and_seed() -> None:
     with msl.EnvBatch(batch_size=2, length=4) as env:
         buffers = env.allocate_buffers()
