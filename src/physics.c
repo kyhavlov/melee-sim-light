@@ -2045,6 +2045,7 @@ void physics_integrate(MslBatch* batch) {
       const uint8_t marth_special_owned_vel = marth_specials_phys(batch, idx);
       const uint8_t sheik_special_owned_vel = sheik_specials_phys(batch, idx);
       const uint8_t falcon_special_owned_vel = falcon_specials_phys(batch, idx);
+      const uint8_t puff_special_owned_vel = puff_specials_phys(batch, idx);
 
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1 : 0;
       const float vy_self_pre = batch->state.speed_y_self[idx];
@@ -2110,7 +2111,7 @@ void physics_integrate(MslBatch* batch) {
       // proc. We therefore apply gravity/fastfall (and simplified EscapeAir decay) before
       // integrating `pos_*` so our one-step outputs are aligned with the in-engine ordering.
       if (!on_ground && !marth_special_owned_vel && !sheik_special_owned_vel &&
-          !falcon_special_owned_vel) {
+          !falcon_special_owned_vel && !puff_special_owned_vel) {
         // Match-flow and cliff actions are treated as non-physical in this simplified core.
         if (!physics_is_match_flow_airborne(action_id)) {
           if (!physics_action_skip_common_air_helper_first_frame(

@@ -36,5 +36,16 @@ void puff_mjump_turn_tick(MslBatch* batch, const MslCharParams* ch, size_t idx);
 // the action phase.
 void puff_specials_update_pre_physics(MslBatch* batch);
 
-// Reseed reconstruction for hidden ladder state (the turnaround window counter).
+// Reseed reconstruction for hidden ladder state (the turnaround window counter) and the
+// Pound impulse consume-latch.
 void puff_specials_reseed_init(MslBatch* batch, int batch_index);
+
+// Char-special Phys ownership (Pound ground friction/root motion + the aerial cmd ladder's
+// pre-phase-2 phases). Returns 1 when this module owns the fighter's velocity update.
+uint8_t puff_specials_phys(MslBatch* batch, size_t idx);
+
+// Pound ground <-> air phase flips (frame-preserving; 363 <-> 364).
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialS.c::{ftPr_SpecialS_8013D590,
+//   ftPr_SpecialS_8013D5F0}
+uint8_t puff_special_try_ground_to_air_swap(MslBatch* batch, size_t idx);
+uint8_t puff_special_try_air_to_ground_swap(MslBatch* batch, size_t idx);

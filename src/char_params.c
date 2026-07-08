@@ -970,7 +970,12 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       MSL_GET_MJUMP_F32("puff_mjump_v_impulse_2", puff_mjump_v_impulse[1]) != 0 ||
       MSL_GET_MJUMP_F32("puff_mjump_v_impulse_3", puff_mjump_v_impulse[2]) != 0 ||
       MSL_GET_MJUMP_F32("puff_mjump_v_impulse_4", puff_mjump_v_impulse[3]) != 0 ||
-      MSL_GET_MJUMP_F32("puff_mjump_v_impulse_5", puff_mjump_v_impulse[4]) != 0) {
+      MSL_GET_MJUMP_F32("puff_mjump_v_impulse_5", puff_mjump_v_impulse[4]) != 0 ||
+      MSL_GET_MJUMP_F32("puff_pound_stick_range_y_neg", puff_pound_stick_range_y_neg) != 0 ||
+      MSL_GET_MJUMP_F32("puff_pound_stick_range_y_pos", puff_pound_stick_range_y_pos) != 0 ||
+      MSL_GET_MJUMP_F32("puff_pound_angle_diff", puff_pound_angle_diff) != 0 ||
+      MSL_GET_MJUMP_F32("puff_pound_vel", puff_pound_vel) != 0 ||
+      MSL_GET_MJUMP_F32("puff_pound_vel_decay", puff_pound_vel_decay) != 0) {
     fprintf(stderr, "msl: char params multi-jump attr parse failed in %s\n", path);
     alloc_free(buf);
     return -1;

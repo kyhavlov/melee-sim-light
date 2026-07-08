@@ -902,6 +902,14 @@ static inline uint8_t msl_action_allows_fastfall(uint8_t char_id, uint16_t actio
           action_id == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_N) {
         return 1u;
       }
+      // Pound (puff SpecialAirS): same cmd_vars[1] ladder as Falcon's aerial punch — the
+      // module phys owns phases 0/1 and releases to the generic air path (ft_80084DB0) once
+      // the script's phase-2 pulse (frame 40) is reached.
+      // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialS.c::ftPr_SpecialAirS_Phys
+      if (char_id == (uint8_t)MSL_CHAR_ID_PUFF &&
+          action_id == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_S) {
+        return 1u;
+      }
       return 0u;
     }
   }

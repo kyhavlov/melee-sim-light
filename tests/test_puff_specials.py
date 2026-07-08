@@ -171,3 +171,44 @@ def test_no_chain_without_jump_input() -> None:
     acts = [int(o["action_id"][0]) for o in outs]
     assert acts[0] == ACT_PR_F1
     assert all(a not in (ACT_PR_F1 + 1,) for a in acts[1:])
+
+
+ACT_PR_S = 363
+ACT_PR_AIR_S = 364
+
+
+def test_grounded_pound_enters_and_exits_to_wait() -> None:
+    seed = _seed(pos_y=0.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1)
+    b_side = _mk_inputs(buttons=0x0200, main_x=127)
+    outs = _run(seed, [b_side] + [_mk_inputs()] * 90)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_PR_S, f"side-B from Wait must enter Pound: {acts[:4]}"
+    assert ACT_WAIT in acts[30:], f"grounded Pound must return to Wait: {acts[-8:]}"
+
+
+def test_air_pound_impulse_angle_and_decay() -> None:
+    # cmd0 pulse @12: self_vel = pound_vel * (cos, sin)(stick angle); neutral stick -> angle 0.
+    # cmd1==1 phase (12..39): both lanes decay by pound_vel_decay per frame, gravity suspended.
+    a = _attrs()
+    vel = float(a["puff_pound_vel"])
+    decay = float(a["puff_pound_vel_decay"])
+    b_side = _mk_inputs(buttons=0x0200, main_x=127)
+    outs = _run(_seed(pos_y=300.0), [b_side] + [_mk_inputs()] * 50)
+    assert int(outs[0]["action_id"][0]) == ACT_PR_AIR_S
+    # Impulse visible after the frame-12 pulse (one decay step applies the same frame).
+    vx12 = float(outs[11]["speed_air_x_self"][0])
+    assert vx12 == pytest.approx(vel * decay, abs=1e-3), f"vx@12 {vx12}"
+    assert float(outs[11]["speed_y_self"][0]) == pytest.approx(0.0, abs=1e-3)
+    vx13 = float(outs[12]["speed_air_x_self"][0])
+    assert vx13 == pytest.approx(vx12 * decay, abs=1e-3)
+
+
+def test_air_pound_exits_to_fall() -> None:
+    b_side = _mk_inputs(buttons=0x0200, main_x=127)
+    outs = _run(_seed(pos_y=500.0), [b_side] + [_mk_inputs()] * 90)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_PR_AIR_S
+    assert ACT_FALL in acts[40:], f"air Pound must exit to Fall: {acts[-8:]}"

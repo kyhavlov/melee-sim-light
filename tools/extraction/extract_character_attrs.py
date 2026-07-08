@@ -684,6 +684,14 @@ PURIN_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
     ("puff_mjump_v_impulse_3", 0x1C, "f32"),
     ("puff_mjump_v_impulse_4", 0x20, "f32"),
     ("puff_mjump_v_impulse_5", 0x24, "f32"),
+    # Pound (ftPr_SpecialS): stick-angled impulse + per-frame decay.
+    # refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialS.c::{calcAngleRadians,
+    #   ftPr_SpecialAirS_Phys}
+    ("puff_pound_stick_range_y_neg", 0xDC, "f32"),
+    ("puff_pound_stick_range_y_pos", 0xE0, "f32"),
+    ("puff_pound_angle_diff", 0xE4, "f32"),
+    ("puff_pound_vel", 0xF0, "f32"),
+    ("puff_pound_vel_decay", 0xF4, "f32"),
 ]
 
 

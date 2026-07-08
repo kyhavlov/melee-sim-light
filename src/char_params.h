@@ -483,6 +483,13 @@ typedef struct MslCharParams {
   float puff_mjump_drift_accel_mul;
   float puff_mjump_drift_max_mul;
   float puff_mjump_v_impulse[5];
+  // Pound (ftPr_SpecialS): stick-angled impulse + per-frame decay.
+  // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialS.c
+  float puff_pound_stick_range_y_neg;
+  float puff_pound_stick_range_y_pos;
+  float puff_pound_angle_diff;
+  float puff_pound_vel;
+  float puff_pound_vel_decay;
 } MslCharParams;
 
 int char_params_init(void);

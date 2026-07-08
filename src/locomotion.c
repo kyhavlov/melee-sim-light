@@ -6092,8 +6092,11 @@ void locomotion_update_post_collision(MslBatch* batch) {
         batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
         continue;
       }
-      if (was_ground && !now_ground && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
-          falcon_special_try_ground_to_air_swap(batch, idx)) {
+      if (was_ground && !now_ground &&
+          ((batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+            falcon_special_try_ground_to_air_swap(batch, idx)) ||
+           (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_PUFF &&
+            puff_special_try_ground_to_air_swap(batch, idx)))) {
         // Falcon grounded special floor loss swaps to the aerial variant at the preserved
         // animation frame (ftCommon_8007D5D4 + ftCommon_ClampAirDrift in source).
         // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialN_Coll
@@ -6274,8 +6277,10 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.pos_y[idx] =
               locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
           continue;
-        } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
-                   falcon_special_try_air_to_ground_swap(batch, idx)) {
+        } else if ((batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                    falcon_special_try_air_to_ground_swap(batch, idx)) ||
+                   (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_PUFF &&
+                    puff_special_try_air_to_ground_swap(batch, idx))) {
           // Falcon air special ground contact swaps to the grounded variant at the preserved
           // animation frame (ftCommon_8007D7FC grounding bundle).
           // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Coll
