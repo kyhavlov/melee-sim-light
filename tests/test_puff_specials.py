@@ -212,3 +212,52 @@ def test_air_pound_exits_to_fall() -> None:
     acts = [int(o["action_id"][0]) for o in outs]
     assert acts[0] == ACT_PR_AIR_S
     assert ACT_FALL in acts[40:], f"air Pound must exit to Fall: {acts[-8:]}"
+
+
+ACT_PR_LW_L = 369
+ACT_PR_AIR_LW_L = 370
+ACT_PR_LW_R = 371
+ACT_PR_AIR_LW_R = 372
+
+
+def test_grounded_rest_enters_facing_variant_and_exits_to_wait() -> None:
+    seed = _seed(pos_y=0.0, facing=1)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1)
+    b_down = _mk_inputs(buttons=0x0200, main_y=-127)
+    outs = _run(seed, [b_down] + [_mk_inputs()] * 260)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_PR_LW_R, f"down-B facing right must enter SpecialLwR: {acts[:4]}"
+    assert ACT_WAIT in acts[100:], f"Rest must return to Wait: {acts[-8:]}"
+
+
+def test_grounded_rest_left_variant() -> None:
+    seed = _seed(pos_y=0.0, facing=0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1)
+    b_down = _mk_inputs(buttons=0x0200, main_y=-127)
+    outs = _run(seed, [b_down] + [_mk_inputs()] * 2)
+    assert int(outs[0]["action_id"][0]) == ACT_PR_LW_L
+
+
+def test_rest_frame0_invincibility_window() -> None:
+    # set_hit_status@0 -> intangible/invincible until the frame-27 restore (script-driven).
+    seed = _seed(pos_y=0.0, facing=1)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1)
+    b_down = _mk_inputs(buttons=0x0200, main_y=-127)
+    outs = _run(seed, [b_down] + [_mk_inputs()] * 30)
+    hurt = [int(o["hurtbox_state"][0]) for o in outs]
+    assert hurt[2] != 0, f"Rest early frames must be invincible/intangible: {hurt[:8]}"
+    assert hurt[29] == 0, f"Rest must be vulnerable after the frame-27 restore: {hurt[24:31]}"
+
+
+def test_air_rest_exits_to_fall() -> None:
+    b_down = _mk_inputs(buttons=0x0200, main_y=-127)
+    outs = _run(_seed(pos_y=700.0, facing=1), [b_down] + [_mk_inputs()] * 260)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_PR_AIR_LW_R
+    assert ACT_FALL in acts[100:] or ACT_FALL_AERIAL in acts[100:], f"tail: {acts[-6:]}"

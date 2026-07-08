@@ -37,6 +37,9 @@ static inline float pr_facing_dir(const MslBatch* batch, size_t idx) {
 
 static uint8_t puff_b_entry_admissible(const MslBatch* batch, size_t idx, uint16_t a);
 static void pr_enter_pound(MslBatch* batch, size_t idx, uint8_t on_ground);
+static void pr_enter_rest(MslBatch* batch, size_t idx, uint8_t on_ground);
+static inline uint8_t pr_action_is_rest(uint16_t a);
+static inline uint8_t pr_action_is_rest_grounded(uint16_t a);
 
 void puff_mjump_turn_tick(MslBatch* batch, const MslCharParams* ch, size_t idx) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
@@ -70,6 +73,33 @@ void puff_specials_update_pre_physics(MslBatch* batch) {
       const uint16_t a = batch->state.action_id[idx];
       const MslCharParams* ch = msl_char_params_fast(cid);
       if (ch == NULL || cid != (uint8_t)MSL_CHAR_ID_PUFF) {
+        continue;
+      }
+
+      // ---- Rest Anim callbacks --------------------------------------------
+      if (pr_action_is_rest(a)) {
+        // Grounded end -> ft_8008A2BC Wait; air end -> ftCo_Fall_Enter. Same-proc destination
+        // IASA runs like the Pound exits below.
+        // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialLw.c::{ftPr_SpecialLw_Anim,
+        //   ftPr_SpecialAirLw_Anim}
+        if (pr_anim_finished(cid, puff_special_submotion(a), batch->state.anim_frame_f32[idx])) {
+          if (pr_action_is_rest_grounded(a)) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            const float sx = pr_apply_deadzone(pr_stick_unit(batch->state.input_main_x[idx]),
+                                               c->lstick_deadzone_x);
+            const float sy = pr_apply_deadzone(pr_stick_unit(batch->state.input_main_y[idx]),
+                                               c->lstick_deadzone_y);
+            (void)locomotion_wait_iasa_locomotion_subset_try_enter(
+                batch, c, ch, idx, batch->state.input_buttons[idx],
+                batch->state.input_buttons_pressed[idx], sx, sy, batch->state.tilt_timer_x[idx],
+                batch->state.tilt_timer_y[idx], pr_facing_dir(batch, idx), (uint16_t)MSL_ACT_WAIT);
+          } else {
+            msl_locomotion_enter_fall_via_ftco_fall_enter(batch, ch, idx);
+            (void)msl_locomotion_run_fall_iasa_non_special_tail(batch, c, ch, idx);
+          }
+        }
         continue;
       }
 
@@ -130,6 +160,15 @@ void puff_specials_update_pre_physics(MslBatch* batch) {
               batch->state.speed_ground_x_self[idx] *= ch->side_special_ground_entry_vel_mul;
             }
             pr_enter_pound(batch, idx, on_ground);
+            continue;
+          }
+          // Down-B zone -> Rest. Aerial chain checks the down zone before side; grounded
+          // Wait-IASA reaches SpecialLw after the side/neutral owners decline, so a stick in
+          // the down zone (which the side branch above already excluded via its sy guard) is
+          // unambiguous in both chains.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+          if (sy <= -c->special_stick_y_threshold) {
+            pr_enter_rest(batch, idx, on_ground);
             continue;
           }
         }
@@ -271,6 +310,39 @@ static uint8_t puff_b_entry_admissible(const MslBatch* batch, size_t idx, uint16
   }
 }
 
+// Rest (ftPr_SpecialLw 369/371 grounded, 370/372 air; L/R variant by facing). The frame-0
+// full invincibility, the frame-1 hitbox, and the frame-27 vulnerability restore all ride the
+// generic script machinery (set_hit_status/create_hitbox in msids 323..326); the entry
+// accessory4 self-clears on its first call and stays unmodeled.
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialLw.c
+static void pr_enter_rest(MslBatch* batch, size_t idx, uint8_t on_ground) {
+  const uint8_t facing_right = batch->state.facing[idx] ? 1u : 0u;
+  const uint16_t act =
+      on_ground
+          ? (facing_right ? (uint16_t)MSL_ACT_PR_SPECIAL_LW_R : (uint16_t)MSL_ACT_PR_SPECIAL_LW_L)
+          : (facing_right ? (uint16_t)MSL_ACT_PR_SPECIAL_AIR_LW_R
+                          : (uint16_t)MSL_ACT_PR_SPECIAL_AIR_LW_L);
+  batch->state.action_id[idx] = act;
+  batch->state.animation_index[idx] = (uint32_t)puff_special_submotion(act);
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_tick_once(batch, idx);
+  batch->state.special_cmd0[idx] = 0u;
+  batch->state.special_cmd1[idx] = 0u;
+  batch->state.special_cmd2[idx] = 0u;
+}
+
+static inline uint8_t pr_action_is_rest(uint16_t a) {
+  return (uint8_t)(a == (uint16_t)MSL_ACT_PR_SPECIAL_LW_L ||
+                   a == (uint16_t)MSL_ACT_PR_SPECIAL_LW_R ||
+                   a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_LW_L ||
+                   a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_LW_R);
+}
+
+static inline uint8_t pr_action_is_rest_grounded(uint16_t a) {
+  return (uint8_t)(a == (uint16_t)MSL_ACT_PR_SPECIAL_LW_L ||
+                   a == (uint16_t)MSL_ACT_PR_SPECIAL_LW_R);
+}
+
 static void pr_enter_pound(MslBatch* batch, size_t idx, uint8_t on_ground) {
   // ftPr_Special(Air)S_Enter: change motion state at frame 0 and clear cmd_vars[0..3].
   // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialS.c::{ftPr_SpecialS_Enter,
@@ -383,6 +455,50 @@ uint8_t puff_specials_phys(MslBatch* batch, size_t idx) {
       // cmd1 == 2: hand ownership to the generic common-air path (ft_80084DB0).
       return 0u;
     }
+    case MSL_ACT_PR_SPECIAL_LW_L:
+    case MSL_ACT_PR_SPECIAL_LW_R:
+      if (batch->state.on_ground[idx] == 0u) {
+        return 0u;  // transient pre-swap frame
+      }
+      // ftPr_SpecialLw_Phys -> ft_80084F3C (plain grounded friction with the high-speed mul).
+      // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialLw.c::ftPr_SpecialLw_Phys
+      {
+        const MslCommonParams* c = msl_common_params();
+        float friction = ch->gr_friction;
+        const float v = batch->state.speed_ground_x_self[idx];
+        if (fabsf(v) > ch->walk_max_vel && c != NULL) {
+          friction *= c->high_speed_friction_mul;
+        }
+        float nv = v;
+        if (nv > 0.0f) {
+          nv = (nv > friction) ? nv - friction : 0.0f;
+        } else if (nv < 0.0f) {
+          nv = (nv < -friction) ? nv + friction : 0.0f;
+        }
+        batch->state.speed_ground_x_self[idx] = nv;
+      }
+      return 1u;
+    case MSL_ACT_PR_SPECIAL_AIR_LW_L:
+    case MSL_ACT_PR_SPECIAL_AIR_LW_R: {
+      if (batch->state.on_ground[idx] != 0u) {
+        return 0u;  // transient pre-swap frame
+      }
+      // ftPr_SpecialAirLw_Phys -> ft_80084EEC (gravity + terminal + air friction; no drift).
+      // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialLw.c::ftPr_SpecialAirLw_Phys
+      float vy = batch->state.speed_y_self[idx] - ch->grav;
+      if (vy < -ch->terminal_vel) {
+        vy = -ch->terminal_vel;
+      }
+      batch->state.speed_y_self[idx] = vy;
+      float vx = batch->state.speed_air_x_self[idx];
+      if (vx > 0.0f) {
+        vx = (vx > ch->aerial_friction) ? vx - ch->aerial_friction : 0.0f;
+      } else if (vx < 0.0f) {
+        vx = (vx < -ch->aerial_friction) ? vx + ch->aerial_friction : 0.0f;
+      }
+      batch->state.speed_air_x_self[idx] = vx;
+      return 1u;
+    }
     default:
       return 0u;
   }
@@ -395,12 +511,19 @@ uint8_t puff_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
   if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_PUFF) {
     return 0u;
   }
-  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_PR_SPECIAL_S) {
+  const uint16_t a = batch->state.action_id[idx];
+  uint16_t dest = 0u;
+  if (a == (uint16_t)MSL_ACT_PR_SPECIAL_S) {
+    dest = (uint16_t)MSL_ACT_PR_SPECIAL_AIR_S;
+  } else if (a == (uint16_t)MSL_ACT_PR_SPECIAL_LW_L) {
+    dest = (uint16_t)MSL_ACT_PR_SPECIAL_AIR_LW_L;
+  } else if (a == (uint16_t)MSL_ACT_PR_SPECIAL_LW_R) {
+    dest = (uint16_t)MSL_ACT_PR_SPECIAL_AIR_LW_R;
+  } else {
     return 0u;
   }
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_PR_SPECIAL_AIR_S;
-  batch->state.animation_index[idx] =
-      (uint32_t)puff_special_submotion((uint16_t)MSL_ACT_PR_SPECIAL_AIR_S);
+  batch->state.action_id[idx] = dest;
+  batch->state.animation_index[idx] = (uint32_t)puff_special_submotion(dest);
   return 1u;
 }
 
@@ -408,12 +531,19 @@ uint8_t puff_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {
   if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_PUFF) {
     return 0u;
   }
-  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_PR_SPECIAL_AIR_S) {
+  const uint16_t a = batch->state.action_id[idx];
+  uint16_t dest = 0u;
+  if (a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_S) {
+    dest = (uint16_t)MSL_ACT_PR_SPECIAL_S;
+  } else if (a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_LW_L) {
+    dest = (uint16_t)MSL_ACT_PR_SPECIAL_LW_L;
+  } else if (a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_LW_R) {
+    dest = (uint16_t)MSL_ACT_PR_SPECIAL_LW_R;
+  } else {
     return 0u;
   }
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_PR_SPECIAL_S;
-  batch->state.animation_index[idx] =
-      (uint32_t)puff_special_submotion((uint16_t)MSL_ACT_PR_SPECIAL_S);
+  batch->state.action_id[idx] = dest;
+  batch->state.animation_index[idx] = (uint32_t)puff_special_submotion(dest);
   return 1u;
 }
 
