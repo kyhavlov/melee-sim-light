@@ -126,3 +126,24 @@ shared-fix queue.
      reuses ftMario code; megavitamin article like laser substrate) —
      Luigi/Pikachu/Yoshi/Peach/Samus/ICs are heavier. Recommend DK then
      Doc; both dumps already extracted at ~/replays/top14.
+
+### Rollout survey (2026-07-07 decomp skim; implement next)
+
+ftPr_SpecialN.c is ~1470 lines. mv.pr.specialn lanes (types.h): x0 charge
+counter (init da->x34, decremented by da->x38 in the 8013D764 turnaround),
+x4/x8 = -1-initialized frame cursors (x8 drives scaleAnimStep), xC flag,
+x14 roll angle (radians, normalized 0..2pi, drives FtPart_YRotN rot — the
+visual roll; scalar gameplay lanes are what we model), x24/x28 counters,
+x2C = da->xA0 (init), x30, x34 Vec (x34.x latches facing at entry),
+facing_dir latch (restored by ftPr_SpecialS_8013D658 on exit). Charge init
+ftPr_SpecialS_8013DC64. Entries via ftData dispatch: grounded StartR/L 346/
+347 by facing, air 354/355; charge Loop 348/356 (+Full 349/357 at max
+charge); release -> Release/ChargeRelease 350/358 (the ROLL - hidden roll
+speed scales with stored charge); Turn 351/359 on stick reversal mid-roll;
+End R/L 352/353 (+360/361 air); NHit 362 on connect. The da attrs x34/x38/
+xA0 + roll speed/decay constants live in the unexplored middle of
+ftPurinAttributes (0x00-0x33 = mjump, 0xDC-0xF4 = pound; rollout block is
+likely x34-0xA4) — name them from the consumers during implementation.
+Reseed: charge/roll-speed lanes need reconstruction (same class as
+smash-charge seed lanes; roll speed may be recoverable from seeded
+self_vel like falcon's dive vel lanes).
