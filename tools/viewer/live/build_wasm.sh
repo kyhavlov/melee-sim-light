@@ -92,7 +92,10 @@ for path in "${required_data[@]}"; do
   cp "$path" "$PACKAGE_DIR/$rel"
 done
 
-mapfile -t SRC_FILES < <(find "$ROOT/src" -maxdepth 1 -type f -name '*.c' | sort)
+SRC_FILES=()
+while IFS= read -r -d '' f; do
+  SRC_FILES+=("$f")
+done < <(find "$ROOT/src" -maxdepth 1 -type f -name '*.c' -print0 | sort -z)
 SRC_FILES+=("$ROOT/src/decomp/lb/lb_00ce.c")
 
 emcc "${SRC_FILES[@]}" \
