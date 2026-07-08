@@ -2249,13 +2249,22 @@ uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii, size_t reflec
                                        int reflector_port, const MslLaserParams* lp,
                                        uint8_t laser_state, float x0, float y0, float x, float y,
                                        float ux, float uy, float sr, float laser_scale_z) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[reflector_idx])) {
+  if (batch == NULL || lp == NULL) {
+    return 0u;
+  }
+  const uint8_t reflector_char = batch->state.char_id[reflector_idx];
+  const uint8_t reflector_is_spacie = msl_char_id_is_spacie(reflector_char);
+  const uint8_t reflector_is_zelda_nayru =
+      (reflector_char == (uint8_t)MSL_CHAR_ID_ZELDA &&
+       (batch->state.action_id[reflector_idx] == (uint16_t)MSL_ACT_ZD_SPECIAL_N ||
+        batch->state.action_id[reflector_idx] == (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_N) &&
+       batch->state.special_cmd0[reflector_idx] == 2u)
+          ? 1u
+          : 0u;
+  if (reflector_is_spacie == 0u && reflector_is_zelda_nayru == 0u) {
     // Char-family machine-entry gate, NOT an action-id collision: a successful reflect
     // contact INSTALLS the spacie SpecialLwHit state below (the fighter may currently be in
     // any Reflector state). Ownership of that state machine is a registry char property.
-    return 0u;
-  }
-  if (batch == NULL || lp == NULL) {
     return 0u;
   }
 
@@ -2282,6 +2291,8 @@ uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii, size_t reflec
     return 0u;
   }
 
+  const float hit_r = item_laser_reflect_hit_radius(sr, laser_scale_z);
+  const float contact_r = reflector_is_zelda_nayru != 0u ? hit_r : sr;
   uint8_t reflect_hit = 0u;
   const uint8_t off_n =
       (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
@@ -2295,8 +2306,8 @@ uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii, size_t reflec
     const float sy0 = y0 + (uy * s);
     const float sx = x + (ux * s);
     const float sy = y + (uy * s);
-    if (item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, sr, rx, ry, 0.0f,
-                                               rr)) {
+    if (item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, contact_r, rx, ry,
+                                               0.0f, rr)) {
       reflect_hit = 1u;
     }
   }
@@ -2309,16 +2320,17 @@ uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii, size_t reflec
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
   // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
   const uint16_t reflector_action = batch->state.action_id[reflector_idx];
-  const uint8_t shine_loop_origin_overlap =
+  const uint8_t origin_overlap_reflect_owner =
       (msl_motion_state_fx_special_kind(batch->state.char_id[reflector_idx], reflector_action) ==
            (uint8_t)MSL_FX_KIND_SPECIAL_LW_LOOP ||
        msl_motion_state_fx_special_kind(batch->state.char_id[reflector_idx], reflector_action) ==
-           (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_LOOP)
+           (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_LOOP ||
+       reflector_is_zelda_nayru != 0u)
           ? 1u
           : 0u;
-  if (!reflect_hit && shine_loop_origin_overlap) {
-    reflect_hit =
-        item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, sr, rx, ry, 0.0f, rr);
+  if (!reflect_hit && origin_overlap_reflect_owner) {
+    reflect_hit = item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, contact_r, rx,
+                                                         ry, 0.0f, rr);
   }
 
   if (!reflect_hit) {
@@ -2329,23 +2341,43 @@ uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii, size_t reflec
   // - ftColl_CreateReflectHit stores ReflectDesc.damage_mul / speed_mul.
   // - ftColl_80077464 writes both multipliers to item reflect snapshot (`item->xC6C` et al).
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
-  item_apply_shine_reflect_callback(batch, ii, reflector_idx);
   const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
   const int it = (int)(ii % (size_t)MSL_MAX_ITEMS);
-  const uint8_t hidden_body_before_reflect_callback =
-      item_stage_shine_reflected_laser_hidden_body_callback(
-          batch, bi, it, ii, reflector_port, lp, laser_state, x, y, batch->state.item_vel_x[ii],
-          batch->state.item_vel_y[ii], sr, laser_scale_z);
-  if (hidden_body_before_reflect_callback != 0u) {
-    batch->state.item_misc2[ii] = 0u;
-    batch->state.item_misc3[ii] = 0u;
+  float damage_mul = rch->reflector_damage_mul;
+  float speed_mul = rch->reflector_speed_mul;
+  if (reflector_is_zelda_nayru != 0u) {
+    damage_mul = rch->zelda_nayru_reflector_damage_mul;
+    speed_mul = rch->zelda_nayru_reflector_speed_mul;
+  }
+  if (reflector_is_spacie != 0u) {
+    item_apply_shine_reflect_callback(batch, ii, reflector_idx);
+    const uint8_t hidden_body_before_reflect_callback =
+        item_stage_shine_reflected_laser_hidden_body_callback(
+            batch, bi, it, ii, reflector_port, lp, laser_state, x, y, batch->state.item_vel_x[ii],
+            batch->state.item_vel_y[ii], sr, laser_scale_z);
+    if (hidden_body_before_reflect_callback != 0u) {
+      batch->state.item_misc2[ii] = 0u;
+      batch->state.item_misc3[ii] = 0u;
+      msl_item_reflect_commit_owner_snapshot_defer_speed(batch, ii, reflector_port);
+      msl_item_reflect_apply_direction_lane(batch, ii);
+      msl_item_reflect_set_damage_mul(batch, ii, damage_mul);
+      return 1u;
+    }
+  }
+  if (reflector_is_zelda_nayru != 0u) {
+    // Nayru's ReflectDesc follows the generic ftColl_80077464 -> Item_80269F14 ordering: the
+    // owner/xDA8 and damage multiplier are visible on the reflect frame, while the laser callback
+    // consumes the reflected direction on the next item update.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_CreateReflectHit}
+    // refs/melee/src/melee/it/item.c::Item_80269F14
+    // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_Reflected
     msl_item_reflect_commit_owner_snapshot_defer_speed(batch, ii, reflector_port);
     msl_item_reflect_apply_direction_lane(batch, ii);
-    msl_item_reflect_set_damage_mul(batch, ii, rch->reflector_damage_mul);
+    msl_item_reflect_set_damage_mul(batch, ii, damage_mul);
     return 1u;
   }
-  msl_item_reflect_apply_immediate_transfer(batch, ii, reflector_idx, reflector_port,
-                                            rch->reflector_damage_mul, rch->reflector_speed_mul);
+  msl_item_reflect_apply_immediate_transfer(batch, ii, reflector_idx, reflector_port, damage_mul,
+                                            speed_mul);
   return 1u;
 }
 

@@ -536,6 +536,8 @@ static PyMethodDef methods[] = {
      msl_validation_derive_item_reflect_damage_mul_buffers_py, METH_VARARGS,
      "validation_derive_item_reflect_damage_mul_buffers(seed_u8, items_u8, replay fields, "
      "reflector LUT, powershield mul, players) -> None"},
+    {"validation_derive_zelda_din_buffers", msl_validation_derive_zelda_din_buffers_py,
+     METH_VARARGS, "validation_derive_zelda_din_buffers(seed_u8, items_u8, players) -> None"},
     {"validation_derive_yoshi_shyguy_buffers", msl_validation_derive_yoshi_shyguy_buffers_py,
      METH_VARARGS,
      "validation_derive_yoshi_shyguy_buffers(seed_u8, items_u8, frame_rng, params...) -> None"},

@@ -847,8 +847,7 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
   //   ftCo_RunBrake_Enter,ftCo_RunBrake_Anim}
   // data/common/ft_common_data.json::runbrake_anim_freeze_speed_threshold
-  uint8_t*
-      runbrake_freeze_x0;  // [batch * players], 0=clear, 1=frozen, 2=resume pending, 3=cmd1 consumed
+  uint8_t* runbrake_freeze_x0;  // [batch * players], 0=clear, 1=frozen, 3=cmd1 consumed
   // Dash IASA branch latch (decomp: fp->mv.co.dash.x4).
   // - Set by ftCo_Dash_Enter(arg1).
   // - ftCo_Dash_IASA uses (x4 != 0 && cur_anim_frame <= x44) for early-branch gating.
@@ -875,10 +874,12 @@ typedef struct MslStateSoA {
   uint8_t* specialn_blaster_loop_requested;
   uint16_t* specialn_charge_frames;
   uint16_t* speciallw_countered_damage;
-  // Sheik special hidden state. Needle count and the generic latch are live runtime lanes in this
-  // slice; the Vanish travel timer is seed-reconstructed by sheik_vanish_travel_timer_u8 because
-  // Special(Air)HiStart_1 freezes its animation after its explicit entry tick.
+  // Sheik/Zelda special hidden state. Needle count and the generic latch are live runtime lanes in
+  // this slice; the Sheik Vanish / Zelda Farore travel timer is seed-reconstructed by
+  // sheik_vanish_travel_timer_u8 because Special(Air)HiStart_1 freezes its animation after its
+  // explicit entry tick.
   // refs/melee/src/melee/ft/chara/ftSeak/types.h::ftSeak_FighterVars/ftSeak_MotionVars
+  // refs/melee/src/melee/ft/chara/ftZelda/types.h::ftZelda_MotionVars
   uint8_t* sheik_needle_count;   // fv.sk.x0, clamped 0..6
   uint8_t* sheik_special_timer;  // mv.sk.special{n,s,hi}.x0 compact timer
   uint8_t* sheik_special_timer_frame_start;
@@ -1537,6 +1538,15 @@ typedef struct MslStateSoA {
   float* item_sheik_needle_hidden_drop_min_vel_y;  // [batch * MSL_MAX_ITEMS]
   float* item_sheik_needle_hidden_drop_gravity;    // [batch * MSL_MAX_ITEMS]
   float* item_sheik_needle_hidden_drop_vel_x;      // [batch * MSL_MAX_ITEMS]
+  // Zelda Din's Fire itemVar state. The fire article uses xDD8/xDDC/xDE8/xDEC/xDF0; the explosion
+  // article uses xDD4 and xDD8 for charge and base hitbox size.
+  // refs/melee/src/melee/it/items/itzeldadinfire.c
+  // refs/melee/src/melee/it/items/itzeldadinfireexplode.c
+  float* item_zelda_din_charge;             // [batch * MSL_MAX_ITEMS]
+  float* item_zelda_din_angle_offset;       // [batch * MSL_MAX_ITEMS]
+  float* item_zelda_din_base_angle;         // [batch * MSL_MAX_ITEMS]
+  float* item_zelda_din_speed;              // [batch * MSL_MAX_ITEMS]
+  float* item_zelda_din_explode_base_size;  // [batch * MSL_MAX_ITEMS]
   // Sheik Side-B Chain Verlet link state (runtime-only, not serialized; reset on reseed).
   // refs/melee/src/melee/it/items/itseakchain.c::it_802BAF2C
   uint8_t* item_sheik_chain_links_valid;      // [batch * MSL_MAX_ITEMS]

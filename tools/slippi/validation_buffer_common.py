@@ -152,6 +152,8 @@ class _ManifestPreprocessTables:
     zelda_char_id: int
     sheik_vanish_travel_frames: int
     sheik_vanish_ground_contact_min_frames: float
+    zelda_farore_travel_frames: int
+    zelda_farore_ground_contact_min_frames: float
     sheik_chain_release_min_frames: int
 
 def _env_damage_int(dmg: float) -> int:
@@ -220,6 +222,8 @@ def _manifest_preprocess_tables(data_root_text: str) -> _ManifestPreprocessTable
     zelda_char_id = -1
     sheik_vanish_travel_frames = 0
     sheik_vanish_ground_contact_min_frames = 0.0
+    zelda_farore_travel_frames = 0
+    zelda_farore_ground_contact_min_frames = 0.0
     sheik_chain_release_min_frames = 0
     for cid, key in manifest_chars:
         attrs = _load_character_attrs(data_root, key)
@@ -230,6 +234,8 @@ def _manifest_preprocess_tables(data_root_text: str) -> _ManifestPreprocessTable
             sheik_chain_release_min_frames = int(attrs.get('sheik_chain_release_min_frames', 0))
         elif key == 'zelda':
             zelda_char_id = int(cid)
+            zelda_farore_travel_frames = int(attrs.get('zelda_farore_travel_frames', 0))
+            zelda_farore_ground_contact_min_frames = float(attrs.get('zelda_farore_ground_contact_min_frames', 0.0))
         move_file = _load_moves_file(data_root, key)
         move_data = move_file['moves']
         special_move_data = move_file.get('specials_by_msid', {})
@@ -322,7 +328,7 @@ def _manifest_preprocess_tables(data_root_text: str) -> _ManifestPreprocessTable
     rebound_numerator_lut = np.zeros(256, dtype=np.float32)
     for cid, numerator in char_rebound_anim_numerator_frames.items():
         rebound_numerator_lut[int(cid) & 255] = np.float32(float(numerator))
-    return _ManifestPreprocessTables(manifest_chars=manifest_chars, char_landing_air_lag_frames=char_landing_air_lag_frames, char_fallspecial_origin_lag=char_fallspecial_origin_lag, char_fallspecial_origin_allow_interrupt=char_fallspecial_origin_allow_interrupt, char_walk_divisors=char_walk_divisors, char_walk_max=char_walk_max, char_run_scaling=char_run_scaling, char_gr_friction=char_gr_friction, char_gr_friction_lut=char_gr_friction_lut, char_rebound_anim_numerator_frames=char_rebound_anim_numerator_frames, rebound_numerator_lut=rebound_numerator_lut, char_can_walljump=char_can_walljump, char_walljump_setup_x_delta_threshold=char_walljump_setup_x_delta_threshold, active_shield_hit_lut=active_shield_hit_lut, sheik_char_id=sheik_char_id, zelda_char_id=zelda_char_id, sheik_vanish_travel_frames=sheik_vanish_travel_frames, sheik_vanish_ground_contact_min_frames=sheik_vanish_ground_contact_min_frames, sheik_chain_release_min_frames=sheik_chain_release_min_frames)
+    return _ManifestPreprocessTables(manifest_chars=manifest_chars, char_landing_air_lag_frames=char_landing_air_lag_frames, char_fallspecial_origin_lag=char_fallspecial_origin_lag, char_fallspecial_origin_allow_interrupt=char_fallspecial_origin_allow_interrupt, char_walk_divisors=char_walk_divisors, char_walk_max=char_walk_max, char_run_scaling=char_run_scaling, char_gr_friction=char_gr_friction, char_gr_friction_lut=char_gr_friction_lut, char_rebound_anim_numerator_frames=char_rebound_anim_numerator_frames, rebound_numerator_lut=rebound_numerator_lut, char_can_walljump=char_can_walljump, char_walljump_setup_x_delta_threshold=char_walljump_setup_x_delta_threshold, active_shield_hit_lut=active_shield_hit_lut, sheik_char_id=sheik_char_id, zelda_char_id=zelda_char_id, sheik_vanish_travel_frames=sheik_vanish_travel_frames, sheik_vanish_ground_contact_min_frames=sheik_vanish_ground_contact_min_frames, zelda_farore_travel_frames=zelda_farore_travel_frames, zelda_farore_ground_contact_min_frames=zelda_farore_ground_contact_min_frames, sheik_chain_release_min_frames=sheik_chain_release_min_frames)
 
 @functools.lru_cache(maxsize=None)
 def _load_u8_character_attr_lut_cached(data_root_text: str, key: str) -> np.ndarray:

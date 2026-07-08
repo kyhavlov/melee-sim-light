@@ -920,7 +920,11 @@ PyObject* msl_validation_derive_item_reflect_damage_mul_buffers_py(PyObject* sel
           mul = powershield_mul > 0.0 ? (float)powershield_mul : 1.0f;
         } else {
           const float char_mul = reflector[char_data[fighter_idx]];
-          if (char_mul > 0.0f) mul = char_mul;
+          const bool zelda_nayru_owner =
+              char_data[fighter_idx] == 19u && (act == 341u || act == 342u);
+          if (char_data[fighter_idx] != 19u || zelda_nayru_owner) {
+            if (char_mul > 0.0f) mul = char_mul;
+          }
         }
       }
       active_mul[active_idx] = mul;
@@ -933,6 +937,184 @@ PyObject* msl_validation_derive_item_reflect_damage_mul_buffers_py(PyObject* sel
     }
     for (int k = 0; k < MSL_MAX_ITEMS; k++) {
       if (active_valid[k] && !seen[k]) active_valid[k] = false;
+    }
+  }
+  Py_RETURN_NONE;
+}
+
+typedef struct MslValidationZeldaDinTrack {
+  bool valid;
+  uint16_t type;
+  uint32_t spawn_id;
+  int owner;
+  uint16_t instance_id;
+  uint8_t state;
+  float charge;
+} MslValidationZeldaDinTrack;
+
+static int zelda_din_find_track_by_public_identity(MslValidationZeldaDinTrack* tracks,
+                                                   uint16_t type, uint32_t spawn_id) {
+  for (int k = 0; k < MSL_MAX_ITEMS; k++) {
+    if (tracks[k].valid && tracks[k].type == type && tracks[k].spawn_id == spawn_id) {
+      return k;
+    }
+  }
+  return -1;
+}
+
+static int zelda_din_find_track_by_owner_instance(MslValidationZeldaDinTrack* tracks, int owner,
+                                                  uint16_t instance_id) {
+  for (int k = 0; k < MSL_MAX_ITEMS; k++) {
+    if (tracks[k].valid && tracks[k].owner == owner && tracks[k].instance_id == instance_id) {
+      return k;
+    }
+  }
+  return -1;
+}
+
+static int zelda_din_alloc_track(MslValidationZeldaDinTrack* tracks) {
+  for (int k = 0; k < MSL_MAX_ITEMS; k++) {
+    if (!tracks[k].valid) {
+      tracks[k].valid = true;
+      return k;
+    }
+  }
+  tracks[0].valid = true;
+  return 0;
+}
+
+static float zelda_din_clamp_charge(float charge, float max_charge) {
+  if (!isfinite(charge) || charge < 0.0f) {
+    charge = 0.0f;
+  }
+  if (max_charge > 0.0f && charge > max_charge) {
+    charge = max_charge;
+  }
+  return charge;
+}
+
+PyObject* msl_validation_derive_zelda_din_buffers_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* seed_obj = NULL;
+  PyObject* items_obj = NULL;
+  int num_players = 0;
+  if (!PyArg_ParseTuple(args, "OOi", &seed_obj, &items_obj, &num_players)) {
+    return NULL;
+  }
+  if (num_players < 0 || num_players > MSL_MAX_PLAYERS) {
+    PyErr_SetString(PyExc_ValueError, "num_players out of range");
+    return NULL;
+  }
+  PyArrayObject* seed_arr = require_contiguous_array(seed_obj, NPY_UINT8, 2, "seed_u8");
+  PyArrayObject* items_arr = require_contiguous_array_readonly(items_obj, NPY_UINT8, 2, "items_u8");
+  if (seed_arr == NULL || items_arr == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(seed_arr, 0);
+  if (require_u8_rows(seed_arr, n, (npy_intp)sizeof(MslSeed), "seed_u8") != 0 ||
+      PyArray_DIM(items_arr, 0) < n ||
+      require_u8_rows(items_arr, PyArray_DIM(items_arr, 0),
+                      (npy_intp)(sizeof(MslItem) * MSL_MAX_ITEMS), "items_u8") != 0) {
+    if (!PyErr_Occurred()) {
+      PyErr_SetString(PyExc_ValueError, "Zelda Din validation inputs are invalid");
+    }
+    return NULL;
+  }
+  if (item_article_params_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "item_article_params_init failed");
+    return NULL;
+  }
+  const MslItemArticleParams* ap = item_article_params_get((uint8_t)19u);
+  if (ap == NULL || ap->zelda_din_fire_itkind == 0u || ap->zelda_din_fire_explode_itkind == 0u) {
+    PyErr_SetString(PyExc_RuntimeError, "Zelda Din item article params are unavailable");
+    return NULL;
+  }
+
+  uint8_t* seed_u8 = (uint8_t*)PyArray_DATA(seed_arr);
+  const uint8_t* items_u8 = (const uint8_t*)PyArray_DATA(items_arr);
+  const size_t seed_stride = (size_t)PyArray_STRIDE(seed_arr, 0);
+  const size_t items_stride = (size_t)PyArray_STRIDE(items_arr, 0);
+  MslValidationZeldaDinTrack tracks[MSL_MAX_ITEMS] = {0};
+
+  for (npy_intp i = 0; i < n; i++) {
+    MslSeed* seed = (MslSeed*)(void*)(seed_u8 + (size_t)i * seed_stride);
+    const MslItem* items = (const MslItem*)(const void*)(items_u8 + (size_t)i * items_stride);
+    bool seen[MSL_MAX_ITEMS] = {false};
+    for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+      seed->item_zelda_din_charge[it] = 0.0f;
+      seed->item_zelda_din_angle_offset[it] = 0.0f;
+      seed->item_zelda_din_base_angle[it] = 0.0f;
+      seed->item_zelda_din_speed[it] = 0.0f;
+      seed->item_zelda_din_explode_base_size[it] = 0.0f;
+    }
+    for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+      const MslItem* item = &items[it];
+      if (item->exists == 0u) {
+        continue;
+      }
+      const bool is_fire = item->type == ap->zelda_din_fire_itkind;
+      const bool is_explode = item->type == ap->zelda_din_fire_explode_itkind;
+      if (!is_fire && !is_explode) {
+        continue;
+      }
+      int ti = zelda_din_find_track_by_public_identity(tracks, item->type, item->spawn_id);
+      if (ti < 0) {
+        ti = zelda_din_find_track_by_owner_instance(tracks, (int)item->owner, item->instance_id);
+      }
+      if (ti < 0) {
+        ti = zelda_din_alloc_track(tracks);
+        tracks[ti].charge = 0.0f;
+        tracks[ti].state = 0xFFu;
+      }
+      const uint8_t prev_state = tracks[ti].state;
+      tracks[ti].valid = true;
+      tracks[ti].type = item->type;
+      tracks[ti].spawn_id = item->spawn_id;
+      tracks[ti].owner = (int)item->owner;
+      tracks[ti].instance_id = item->instance_id;
+      if (is_fire && item->state == 0u) {
+        // Replay/reseed bridge for Din fire itemVar.xDD8:
+        // itZeldadinfire_UnkMotion0_Anim increments xDD8 once per non-reflected state-0 item
+        // frame while the public life timer counts down from article attrs.x0. Use that visible
+        // timer history to initialize the hidden charge lane for mid-article reseeds.
+        // refs/melee/src/melee/it/items/itzeldadinfire.c::{
+        //   it_802C3BAC,it_802C3D74,itZeldadinfire_UnkMotion0_Anim}
+        const float visible_charge = (float)ap->zelda_din_fire_lifetime_frames - item->timer;
+        tracks[ti].charge =
+            zelda_din_clamp_charge(visible_charge, ap->zelda_din_fire_charge_max_frames);
+      } else {
+        if (prev_state == 0u) {
+          // State 0's Anim increments xDD8 before `ftZd_SpecialLw_8013B574` can switch the item
+          // to release state 1. The first visible state-1/explosion row therefore owns one more
+          // hidden charge frame than the previous public state-0 timer exposes.
+          // refs/melee/src/melee/it/items/itzeldadinfire.c::itZeldadinfire_UnkMotion0_Anim
+          tracks[ti].charge += 1.0f;
+        }
+        tracks[ti].charge =
+            zelda_din_clamp_charge(tracks[ti].charge, ap->zelda_din_fire_charge_max_frames);
+      }
+      tracks[ti].state = item->state;
+      seen[ti] = true;
+      seed->item_zelda_din_charge[it] = tracks[ti].charge;
+      const float vx = item->vel_x;
+      const float vy = item->vel_y;
+      seed->item_zelda_din_speed[it] = sqrtf(vx * vx + vy * vy);
+      const float dir = item->direction < 0.0f ? -1.0f : 1.0f;
+      const float base_angle = dir > 0.0f ? 0.0f : 3.14159265358979323846f;
+      seed->item_zelda_din_base_angle[it] = base_angle;
+      seed->item_zelda_din_angle_offset[it] = atan2f(vy, vx) - base_angle;
+      if (is_explode) {
+        // Explosion itemVar.xDD4 is copied from the fire charge by it_802C4580; Slippi exposes
+        // only the new explosion item. Carry the same tracked charge by owner/instance identity.
+        // refs/melee/src/melee/it/items/itzeldadinfire.c::itZeldadinfire_UnkMotion1_Anim
+        // refs/melee/src/melee/it/items/itzeldadinfireexplode.c::it_802C4580
+        seed->item_zelda_din_explode_base_size[it] = ap->zelda_din_explode_hitbox_size;
+      }
+    }
+    for (int k = 0; k < MSL_MAX_ITEMS; k++) {
+      if (tracks[k].valid && !seen[k]) {
+        tracks[k].valid = false;
+      }
     }
   }
   Py_RETURN_NONE;

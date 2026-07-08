@@ -211,6 +211,7 @@ uint8_t action_is_illusion_setphys(uint8_t char_id, uint16_t action_id_u16);
 uint8_t items_row_has_illusion_setphys_source(const MslBatch* batch, int bi, int num_players);
 void illusion_items_update_and_collide(MslBatch* batch, int bi);
 void lasers_update_and_collide(MslBatch* batch, int bi);
+void zelda_din_fire_update_and_collide(MslBatch* batch, int bi);
 void sheik_held_needles_update_anim_phase(MslBatch* batch, int bi);
 void sheik_chain_items_update_anim_phase(MslBatch* batch, int bi);
 void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int bi, int owner);

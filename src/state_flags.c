@@ -149,6 +149,14 @@ static inline uint8_t state_flags_action_allow_interrupt_at_frame(uint8_t char_i
 
 static inline uint8_t state_flags_2218_action_owns_reflecting(const MslBatch* batch, size_t idx,
                                                               uint16_t action_id) {
+  if (batch != NULL && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA &&
+      (action_id == (uint16_t)MSL_ACT_ZD_SPECIAL_N ||
+       action_id == (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_N)) {
+    // Zelda Nayru's Love creates ReflectDesc only while cmd_var0 is live in the Anim callback.
+    // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialN.c::{
+    //   ftZd_SpecialN_Anim,ftZd_SpecialAirN_Anim}
+    return batch->state.special_cmd0[idx] == 2u ? 1u : 0u;
+  }
   // Reflector ownership comes from the extracted MotionState row identity; the numeric
   // range is shared with other chars' specials (Marth Dancing Blade air stages stay kind 0).
   switch (msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id)) {

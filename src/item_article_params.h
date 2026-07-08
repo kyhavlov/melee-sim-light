@@ -112,6 +112,41 @@ typedef struct MslItemArticleParams {
   float sheik_chain_wall_bounce_x58;  // attr x58 (vel.x *= -x58 on wall hit)
   float sheik_chain_attr_x5c;         // attr x5c
   float sheik_chain_attr_x60;         // attr x60
+  // Zelda Din's Fire article attrs from PlZd.dat plus it_802C4580 explosion HitCapsule data
+  // (MSLITAR1 v17+).
+  // refs/melee/src/melee/it/items/itzeldadinfire.c
+  // refs/melee/src/melee/it/items/itzeldadinfireexplode.c
+  uint16_t zelda_din_fire_itkind;
+  uint16_t zelda_din_fire_explode_itkind;
+  uint16_t zelda_din_fire_lifetime_frames;
+  uint16_t zelda_din_fire_release_lifetime_frames;
+  float zelda_din_fire_charge_max_frames;
+  float zelda_din_fire_scale_min;
+  float zelda_din_fire_scale_max;
+  float zelda_din_fire_initial_angle_offset;
+  float zelda_din_fire_initial_speed;
+  float zelda_din_fire_accel;
+  float zelda_din_fire_speed_max;
+  float zelda_din_fire_stick_threshold;
+  float zelda_din_fire_stick_angle_mul;
+  float zelda_din_fire_angle_max;
+  float zelda_din_explode_charge_max_frames;
+  float zelda_din_explode_scale_min;
+  float zelda_din_explode_scale_max;
+  float zelda_din_explode_damage_base;
+  float zelda_din_explode_damage_charge_mul;
+  uint8_t zelda_din_explode_hitbox_count;
+  float zelda_din_explode_hitbox_size;
+  float zelda_din_explode_hitbox_x_offset;
+  float zelda_din_explode_hitbox_y_offset;
+  float zelda_din_explode_hitbox_z_offset;
+  uint16_t zelda_din_explode_hitbox_angle;
+  uint16_t zelda_din_explode_hitbox_kbg;
+  uint16_t zelda_din_explode_hitbox_wsk;
+  uint16_t zelda_din_explode_hitbox_bkb;
+  uint8_t zelda_din_explode_hitbox_element;
+  int8_t zelda_din_explode_hitbox_shield_damage;
+  uint32_t zelda_din_explode_hitbox_flags;
 } MslItemArticleParams;
 
 // Init-time loader for MSLITAR1 known item/article constants. May perform IO/allocation; call only
@@ -122,6 +157,7 @@ const MslItemArticleParams* item_article_params_get(uint8_t sim_char_id);
 const MslItemArticleParams* item_article_params_for_laser_item_type(uint16_t type);
 const MslItemArticleParams* item_article_params_for_illusion_item_type(uint16_t type);
 const MslItemArticleParams* item_article_params_for_sheik_needle_throw_item_type(uint16_t type);
+const MslItemArticleParams* item_article_params_for_zelda_din_item_type(uint16_t type);
 uint8_t item_article_params_is_illusion_item_type(uint16_t type);
 
 #ifdef __cplusplus

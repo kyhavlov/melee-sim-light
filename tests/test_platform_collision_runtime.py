@@ -78,6 +78,7 @@ ACT_OTTOTTO_WAIT = 0x00F6
 ACT_CLIFF_JUMP_SLOW2 = 0x0105
 ACT_CLIFF_JUMP_QUICK2 = 0x0107
 ACT_CLIFF_CATCH = 0x00FC
+SM_CLIFF_CATCH = 216
 ACT_CLIFF_WAIT = 0x00FD
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
@@ -148,6 +149,7 @@ SM_DAMAGE_FLY_TOP = 180
 
 CHAR_FOX = 1
 CHAR_MARTH = 18
+CHAR_ZELDA = 19
 CHAR_FALCO = 22
 STAGE_POKEMON = 3
 STAGE_FOD = 2
@@ -166,6 +168,8 @@ ACT_FX_SPECIAL_AIR_LW_LOOP = 0x016E
 ACT_FX_SPECIAL_HI_HOLD = 0x0161
 ACT_FX_SPECIAL_HI_HOLD_AIR = 0x0162
 ACT_FX_SPECIAL_HI = 0x0163
+ACT_ZD_SPECIAL_AIR_HI_START_0 = 0x0160
+SM_ZD_SPECIAL_AIR_HI_START = 305
 
 COLLIDE_LEFT_WALL_MASK = 0x0000003F
 COLLIDE_RIGHT_WALL_MASK = 0x00000FC0
@@ -8898,6 +8902,60 @@ def test_marth_attackairb_script_facing_allows_right_cliffcatch_vsa() -> None:
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_CLIFF_CATCH
     assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+
+
+def test_zelda_farore_air_startup_uses_generated_cliffcatch_owner() -> None:
+    # Zelda Farore's aerial startup Coll callback calls ft_CheckGroundAndLedge and then
+    # ftCliffCommon_80081298, so a live right-ledge grab mask during SpecialAirHiStart_0 enters
+    # CliffCatch just like Sheik Vanish's matching source-owner family.
+    # data/motion_state/owners/zelda.bin::MSLMSO01 FT_CHECK_GROUND_LEDGE_AIR_COLL
+    # refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialHi.c::ftZd_SpecialAirHiStart_0_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+    # refs/melee/src/melee/ft/ftcliffcommon.c::{ftCliffCommon_80081298,ftCliffCommon_80081370}
+    seed = _seed_base(
+        STAGE_BATTLEFIELD, ACT_ZD_SPECIAL_AIR_HI_START_0, SM_ZD_SPECIAL_AIR_HI_START, 68.0, -8.0
+    )
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_ZELDA)
+    seed["facing"][0, p] = np.uint8(0)
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["jumps_left"][0, p] = np.uint8(0)
+    seed["action_frame"][0, p] = np.int16(5)
+    seed["anim_frame_f32"][0, p] = np.float32(5.0)
+    seed["speed_air_x_self"][0, p] = np.float32(-0.1)
+    seed["speed_y_self"][0, p] = np.float32(-0.1)
+
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][p]) == ACT_CLIFF_CATCH
+    assert int(out["animation_index"][p]) == SM_CLIFF_CATCH
+    assert int(out["facing"][p]) == 0
+    assert int(out["on_ground"][p]) == 0
+
+
+def test_zelda_farore_air_startup_cliffcatch_respects_down_input_gate() -> None:
+    # Adjacent negative for the same Farore startup ledge window: ftCliffCommon_80081298 rejects
+    # cliff catch while holding down past the common drop threshold.
+    seed = _seed_base(
+        STAGE_BATTLEFIELD, ACT_ZD_SPECIAL_AIR_HI_START_0, SM_ZD_SPECIAL_AIR_HI_START, 68.0, -8.0
+    )
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_ZELDA)
+    seed["facing"][0, p] = np.uint8(0)
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["jumps_left"][0, p] = np.uint8(0)
+    seed["action_frame"][0, p] = np.int16(5)
+    seed["anim_frame_f32"][0, p] = np.float32(5.0)
+    seed["speed_air_x_self"][0, p] = np.float32(-0.1)
+    seed["speed_y_self"][0, p] = np.float32(-0.1)
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, p] = np.int8(-95)
+
+    out = _step_once_rollout(seed, _input_bytes(), input_t)
+
+    assert int(out["action_id"][p]) == ACT_ZD_SPECIAL_AIR_HI_START_0
+    assert int(out["animation_index"][p]) == SM_ZD_SPECIAL_AIR_HI_START
+    assert int(out["on_ground"][p]) == 0
 
 
 @pytest.mark.integration

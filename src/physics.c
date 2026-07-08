@@ -2965,10 +2965,14 @@ void physics_integrate(MslBatch* batch) {
       //   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialHi_80113390,ftSk_SpecialHi_80113A30}
       // data/stages/*.bin::MSLSTG01 floor line platform flags
       const uint8_t sheik_vanish_ground_start_to_air_travel_vertical_defer =
-          (uint8_t)(batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
-                    action_id == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1 &&
-                    batch->state.frame_start_action_id[idx] ==
-                        (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_0 &&
+          (uint8_t)((((batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+                       action_id == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1 &&
+                       batch->state.frame_start_action_id[idx] ==
+                           (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_0)) ||
+                     ((batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA &&
+                       action_id == (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_HI_START_1 &&
+                       batch->state.frame_start_action_id[idx] ==
+                           (uint16_t)MSL_ACT_ZD_SPECIAL_HI_START_0))) &&
                     batch->state.frame_start_on_ground[idx] != 0u &&
                     sheik_vanish_start1_platform_entry != 0u);
       // Position integration uses the (possibly-updated) self velocity plus the separate knockback

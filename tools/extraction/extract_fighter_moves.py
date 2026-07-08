@@ -441,8 +441,20 @@ def _parse_subaction_events(
                     )
                 )
             elif op == 15:
-                out.append(Event(frame=frame, kind="remove_hitbox", data={"idx": int(_u26(w0))}))
+                if item_hitbox_layout:
+                    # Item command table index 5 (`op == 15`) clears all item hitboxes.
+                    # refs/melee/src/melee/it/itanimlist.c::{it_803F22A8,it_802796C4}
+                    out.append(Event(frame=frame, kind="clear_hitboxes", data={}))
+                else:
+                    out.append(Event(frame=frame, kind="remove_hitbox", data={"idx": int(_u26(w0))}))
             elif op == 16:
+                if item_hitbox_layout:
+                    # Item command table index 6 (`it_8027978C`) wraps a nested item visual command.
+                    # It leaves `cmd->u` at the third following word for both low and high
+                    # sub-opcodes after `ptr + 1`, argument reads, and the final `++cmd->u`.
+                    # refs/melee/src/melee/it/itanimlist.c::it_8027978C
+                    pc += 12
+                    continue
                 out.append(Event(frame=frame, kind="clear_hitboxes", data={}))
             elif op == 19:
                 # Set cmd var: idx=2, value=24 (ftAction_80071820).

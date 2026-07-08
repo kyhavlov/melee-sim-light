@@ -592,6 +592,11 @@ MSL_STATE_FIELD(item_sheik_needle_hidden_drop_valid, uint8_t, bi, (size_t)MSL_MA
 MSL_STATE_FIELD(item_sheik_needle_hidden_drop_min_vel_y, float, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_sheik_needle_hidden_drop_gravity, float, bi, (size_t)MSL_MAX_ITEMS)
 MSL_STATE_FIELD(item_sheik_needle_hidden_drop_vel_x, float, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_zelda_din_charge, float, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_zelda_din_angle_offset, float, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_zelda_din_base_angle, float, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_zelda_din_speed, float, bi, (size_t)MSL_MAX_ITEMS)
+MSL_STATE_FIELD(item_zelda_din_explode_base_size, float, bi, (size_t)MSL_MAX_ITEMS)
 // Sheik Side-B Chain Verlet link state (runtime-only, NOT serialized; reset on reseed, free-run
 // accumulation like the needle hidden lanes). Per item slot: a fixed array of MSL_SHEIK_CHAIN_MAX_LINKS
 // links {x2C_b0 active,pos,vel} plus a per-slot validity/initialized flag. Index 0 is the

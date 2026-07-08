@@ -1501,20 +1501,25 @@ typedef struct MslSeed {
   //   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,
   //   ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA}
   uint8_t specialn_blaster_loop_requested[MSL_MAX_PLAYERS];
-  // Sheik Vanish travel hidden timer (`mv.sk.specialhi.x0`).
+  // Sheik Vanish / Zelda Farore travel hidden timer (`mv.{sk,zd}.specialhi.x0`).
   //
   // Decomp owner:
   // - ftSk_SpecialHi_80113A30 / 80113838 enter Special(Air)HiStart_1, freeze animation at frame
   //   35, and seed x0 from ftSeakAttributes::x38.
+  // - ftZd_SpecialHi_80139A9C / 80139C4C enter Special(Air)HiStart_1 with the same frozen-frame
+  //   travel timer shape, seeded from ftZelda_DatAttrs::x48.
   // - ftSk_Special{Air}HiStart_1_Anim decrements x0 and exits only when it reaches zero.
   //
   // Seed representation:
-  // - 0: no seeded travel timer or non-Sheik/non-Vanish action.
+  // - 0: no seeded travel timer or non-Sheik/Zelda teleport travel action.
   // - N>0: remaining source travel frames for one-step reseed inside SpecialHiStart_1 /
   //   SpecialAirHiStart_1.
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
   //   ftSk_SpecialHi_80113838,ftSk_SpecialHi_80113A30,
   //   ftSk_SpecialHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Anim}
+  // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialHi.c::{
+  //   ftZd_SpecialHi_80139A9C,ftZd_SpecialHi_80139C4C,
+  //   ftZd_SpecialHiStart_1_Anim,ftZd_SpecialAirHiStart_1_Anim}
   uint8_t sheik_vanish_travel_timer_u8[MSL_MAX_PLAYERS];
   // Sheik Needle hidden state (`fv.sk.x0`, `mv.sk.specialn.x0`).
   //
@@ -1905,6 +1910,15 @@ typedef struct MslSeed {
   uint8_t item_sheik_needle_stage_hit_seed_kind[MSL_MAX_ITEMS];
   uint8_t item_sheik_needle_stage_hit_vel_y_index[MSL_MAX_ITEMS];
   uint8_t item_sheik_needle_stage_hit_vel_x_index_sign[MSL_MAX_ITEMS];
+  // Zelda Din's Fire itemVar seed lanes. These mirror live item_zelda_din_* state for replay seeds
+  // that begin inside an already-active Din fire/explosion article.
+  // refs/melee/src/melee/it/items/itzeldadinfire.c
+  // refs/melee/src/melee/it/items/itzeldadinfireexplode.c
+  float item_zelda_din_charge[MSL_MAX_ITEMS];
+  float item_zelda_din_angle_offset[MSL_MAX_ITEMS];
+  float item_zelda_din_base_angle[MSL_MAX_ITEMS];
+  float item_zelda_din_speed[MSL_MAX_ITEMS];
+  float item_zelda_din_explode_base_size[MSL_MAX_ITEMS];
   // Prefix-causal dynamic-bone velocity scratch for Yoshi Shy Guys.
   //
   // `it_802D98C4` derives item->x40_vel from the current JObj translation minus

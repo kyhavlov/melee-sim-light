@@ -374,11 +374,14 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftSk_SpecialAirHiStart_0_Coll",
         "ftSk_SpecialAirHiStart_1_Coll",
         "ftSk_SpecialAirHi_Coll",
+        "ftZd_SpecialAirHiStart_0_Coll",
+        "ftZd_SpecialAirHiStart_1_Coll",
+        "ftZd_SpecialAirHi_Coll",
         "ftCo_MissFoot_Coll",
         "ftCo_Pass_Coll",
     }:
         # Fox/Falco aerial Side-B/SpecialHi{HoldAir,AirHi,Fall}, Sheik Vanish aerial
-        # Start0/Start1/End, and common MissFoot/Pass collision callbacks call
+        # Start0/Start1/End, Zelda Farore aerial Start0/Start1/End, and common MissFoot/Pass call
         # ft_CheckGroundAndLedge directly (MissFoot/Pass through ft_80082F28), which snapshots
         # CollData and runs the airborne mpColl floor/wall/ceiling owner without the held-down
         # common-air platform rejection path.
@@ -386,6 +389,8 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         #   ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
         # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
         #   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialAirHi_Coll}
+        # refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialHi.c::{
+        #   ftZd_SpecialAirHiStart_0_Coll,ftZd_SpecialAirHiStart_1_Coll,ftZd_SpecialAirHi_Coll}
         bits |= CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
     if coll_cb == "ftCo_Landing_Coll":
         bits |= CLASS_LANDING_COLL

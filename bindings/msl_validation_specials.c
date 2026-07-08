@@ -5,9 +5,12 @@
 
 #include "../src/anim_pose.h"
 #include "../src/anim_table.h"
+#include "../src/action_ids.h"
 #include "../src/char_params.h"
+#include "../src/char_registry.h"
 #include "../src/common_params.h"
 #include "../src/hitboxes_tables.h"
+#include "../src/sheik_specials.h"
 
 static float vh_randf_after_pre_gate(uint32_t seed_in, int stream_offset_steps, int consume_count) {
   uint32_t seed = seed_in;
@@ -667,8 +670,14 @@ PyObject* msl_derive_zelda_twin_state_flags_2218_py(PyObject* self, PyObject* ar
   return (PyObject*)out;
 }
 
-static inline uint8_t msl_py_action_is_sheik_vanish_air_start1(uint16_t action) {
-  return action == 359u;
+static inline uint8_t msl_py_action_is_teleport_air_start1(uint8_t char_id, uint16_t action) {
+  if (char_id == (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1;
+  }
+  if (char_id == (uint8_t)MSL_CHAR_ID_ZELDA) {
+    return action == (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_HI_START_1;
+  }
+  return 0u;
 }
 
 PyObject* msl_derive_sheik_vanish_floor_skip_segments_py(PyObject* self, PyObject* args) {
@@ -767,7 +776,7 @@ PyObject* msl_derive_sheik_vanish_floor_skip_segments_py(PyObject* self, PyObjec
     for (npy_intp i = 0; i < n; i++) {
       const npy_intp idx = (i * width) + p;
       const uint16_t action_i = act[idx];
-      if (ch[idx] != sheik_id || !msl_py_action_is_sheik_vanish_air_start1(action_i) ||
+      if (ch[idx] != sheik_id || !msl_py_action_is_teleport_air_start1(ch[idx], action_i) ||
           ground[idx] != 0u) {
         active_skip = 0xFFFFu;
         continue;

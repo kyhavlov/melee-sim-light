@@ -265,6 +265,42 @@ for _i, (_key, _vt, _unit) in enumerate(SHEIK_CHAIN_ATTR_FIELDS):
     FIELD_SPECS[_key] = FieldSpec(200 + _i, _vt, _unit)
 SHEIK_CHAIN_ATTR_FIELD_NAMES = tuple(name for name, _vt, _unit in SHEIK_CHAIN_ATTR_FIELDS)
 
+ZELDA_DIN_FIELD_SPECS = {
+    "zelda_din_fire_itkind": FieldSpec(230, ITEM_ARTICLE_VALUE_U16, UNIT_ITEM_KIND),
+    "zelda_din_fire_explode_itkind": FieldSpec(231, ITEM_ARTICLE_VALUE_U16, UNIT_ITEM_KIND),
+    "zelda_din_fire_lifetime_frames": FieldSpec(232, ITEM_ARTICLE_VALUE_U32, UNIT_FRAMES),
+    "zelda_din_fire_charge_max_frames": FieldSpec(233, ITEM_ARTICLE_VALUE_F32, UNIT_FRAMES),
+    "zelda_din_fire_scale_min": FieldSpec(234, ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    "zelda_din_fire_scale_max": FieldSpec(235, ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    "zelda_din_fire_initial_angle_offset": FieldSpec(236, ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    "zelda_din_fire_initial_speed": FieldSpec(237, ITEM_ARTICLE_VALUE_F32, UNIT_VELOCITY),
+    "zelda_din_fire_accel": FieldSpec(238, ITEM_ARTICLE_VALUE_F32, UNIT_VELOCITY),
+    "zelda_din_fire_speed_max": FieldSpec(239, ITEM_ARTICLE_VALUE_F32, UNIT_VELOCITY),
+    "zelda_din_fire_stick_threshold": FieldSpec(240, ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    "zelda_din_fire_stick_angle_mul": FieldSpec(241, ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    "zelda_din_fire_angle_max": FieldSpec(242, ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    "zelda_din_fire_release_lifetime_frames": FieldSpec(243, ITEM_ARTICLE_VALUE_U32, UNIT_FRAMES),
+    "zelda_din_explode_charge_max_frames": FieldSpec(244, ITEM_ARTICLE_VALUE_F32, UNIT_FRAMES),
+    "zelda_din_explode_scale_min": FieldSpec(245, ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    "zelda_din_explode_scale_max": FieldSpec(246, ITEM_ARTICLE_VALUE_F32, UNIT_SCALAR),
+    "zelda_din_explode_damage_base": FieldSpec(247, ITEM_ARTICLE_VALUE_F32, UNIT_DAMAGE),
+    "zelda_din_explode_damage_charge_mul": FieldSpec(248, ITEM_ARTICLE_VALUE_F32, UNIT_DAMAGE),
+    "zelda_din_explode_hitbox_count": FieldSpec(249, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "zelda_din_explode_hitbox_size": FieldSpec(250, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "zelda_din_explode_hitbox_x_offset": FieldSpec(251, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "zelda_din_explode_hitbox_y_offset": FieldSpec(252, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "zelda_din_explode_hitbox_z_offset": FieldSpec(253, ITEM_ARTICLE_VALUE_F32, UNIT_SIZE),
+    "zelda_din_explode_hitbox_angle": FieldSpec(254, ITEM_ARTICLE_VALUE_U16, UNIT_DEGREES),
+    "zelda_din_explode_hitbox_kbg": FieldSpec(255, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "zelda_din_explode_hitbox_wsk": FieldSpec(256, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "zelda_din_explode_hitbox_bkb": FieldSpec(257, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "zelda_din_explode_hitbox_element": FieldSpec(258, ITEM_ARTICLE_VALUE_U16, UNIT_COUNT),
+    "zelda_din_explode_hitbox_shield_damage": FieldSpec(259, ITEM_ARTICLE_VALUE_U16, UNIT_DAMAGE),
+    "zelda_din_explode_hitbox_flags": FieldSpec(260, ITEM_ARTICLE_VALUE_U32, UNIT_FLAGS),
+}
+FIELD_SPECS.update(ZELDA_DIN_FIELD_SPECS)
+ZELDA_DIN_FIELD_NAMES = tuple(ZELDA_DIN_FIELD_SPECS)
+
 
 def _f32(v: float) -> float:
     return struct.unpack("<f", struct.pack("<f", float(v)))[0]
@@ -355,6 +391,13 @@ def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple
                     "Sheik exports MSLITAR1 special article fields but "
                     f"{attrs_dir / f'{ch}.json'} is missing: {', '.join(sorted(missing))}"
                 )
+        if ch == "zelda":
+            missing = [key for key in ZELDA_DIN_FIELD_NAMES if key not in attrs]
+            if missing:
+                raise ValueError(
+                    "Zelda exports MSLITAR1 Din article fields but "
+                    f"{attrs_dir / f'{ch}.json'} is missing: {', '.join(sorted(missing))}"
+                )
         char_id = CHAR_IDS[ch]
         for key, spec in FIELD_SPECS.items():
             if key == "shield_bounce_extra_degrees":
@@ -419,7 +462,7 @@ def main() -> None:
     ap.add_argument("--item-common", type=Path, default=Path("data/items/item_common.json"))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--manifest", type=Path, default=None)
-    ap.add_argument("--chars", type=str, default="fox,falco,sheik")
+    ap.add_argument("--chars", type=str, default=",".join(CHAR_IDS.keys()))
     args = ap.parse_args()
 
     chars = [c.strip() for c in args.chars.split(",") if c.strip()]

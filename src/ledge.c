@@ -109,6 +109,17 @@ static inline uint8_t is_airborne_action_with_cliffcatch_check(uint8_t char_id, 
                       a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) &&
                      speed_y_self < 0.0f && special_cmd1 != 0u);
   }
+  if (msl_motion_state_class_has(char_id, a, MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL) != 0u) {
+    // Generated callback owner for actions whose Coll callback calls ft_CheckGroundAndLedge and
+    // then ftCliffCommon_80081298 on the airborne path, including Zelda Farore's Wind aerial
+    // startup/travel/end and Sheik Vanish's matching source shape.
+    // data/motion_state/owners/{fox,falco,sheik,zelda}.bin::MSLMSO01
+    // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialHi.c::{
+    //   ftZd_SpecialAirHiStart_0_Coll,ftZd_SpecialAirHiStart_1_Coll,ftZd_SpecialAirHi_Coll}
+    // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+    // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298
+    return 1;
+  }
   // Sheik Vanish's three airborne collision callbacks all call ft_CheckGroundAndLedge and then
   // ftCliffCommon_80081298 on the airborne path. The 341..364 action-id range is per-character,
   // so keep this char gate before the shared spacie special-kind lookup below.

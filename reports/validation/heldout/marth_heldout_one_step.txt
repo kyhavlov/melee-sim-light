@@ -204,7 +204,7 @@ mismatch.animation_index: 15 / 16900 (0.000888)
 mismatch.instance_hit_by: 6 / 16900 (0.000355)
 mismatch.instance_id: 11 / 16900 (0.000651)
 mismatch.last_attack_landed: 6 / 16900 (0.000355)
-mismatch.combo_count: 2 / 16900 (0.000118)
+mismatch.combo_count: 0 / 16900 (0.000000)
 mismatch.last_hit_by: 16 / 16900 (0.000947)
 mismatch.state_flags: 24 / 84500 (0.000284)
 mismatch.item_exists: 0 / 126750 (0.000000)
@@ -226,8 +226,8 @@ err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 164 / 1022450
-overall.strict_discrete_mismatch: 179 / 1022450
+overall.discrete_mismatch: 162 / 1022450
+overall.strict_discrete_mismatch: 177 / 1022450
 overall.ignored_discrete_mismatch: 15
 overall.float_norm_mae_p95: 0.00042499
 
@@ -249,7 +249,7 @@ mismatch.animation_index: 6 / 14394 (0.000417)
 mismatch.instance_hit_by: 0 / 14394 (0.000000)
 mismatch.instance_id: 4 / 14394 (0.000278)
 mismatch.last_attack_landed: 0 / 14394 (0.000000)
-mismatch.combo_count: 2 / 14394 (0.000139)
+mismatch.combo_count: 1 / 14394 (0.000069)
 mismatch.last_hit_by: 3 / 14394 (0.000208)
 mismatch.state_flags: 6 / 71970 (0.000083)
 mismatch.item_exists: 0 / 107955 (0.000000)
@@ -271,8 +271,8 @@ err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 44 / 870837
-overall.strict_discrete_mismatch: 60 / 870837
+overall.discrete_mismatch: 43 / 870837
+overall.strict_discrete_mismatch: 59 / 870837
 overall.ignored_discrete_mismatch: 16
 overall.float_norm_mae_p95: 0.00032381
 
@@ -547,7 +547,7 @@ overall.ignored_discrete_mismatch: 57
 overall.float_norm_mae_p95: 0.00033919
 
 == suite summary ==
-overall.discrete_mismatch: 1995 / 14168979
-overall.strict_discrete_mismatch: 2629 / 14168979
+overall.discrete_mismatch: 1992 / 14168979
+overall.strict_discrete_mismatch: 2626 / 14168979
 overall.ignored_discrete_mismatch: 634
 overall.float_norm_mae_p95: 0.00024398

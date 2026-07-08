@@ -111,6 +111,11 @@ void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] = 0.0f;
   batch->state.item_sheik_needle_hidden_drop_gravity[ii] = 0.0f;
   batch->state.item_sheik_needle_hidden_drop_vel_x[ii] = 0.0f;
+  batch->state.item_zelda_din_charge[ii] = 0.0f;
+  batch->state.item_zelda_din_angle_offset[ii] = 0.0f;
+  batch->state.item_zelda_din_base_angle[ii] = 0.0f;
+  batch->state.item_zelda_din_speed[ii] = 0.0f;
+  batch->state.item_zelda_din_explode_base_size[ii] = 0.0f;
   sheik_chain_hidden_clear_slot(batch, ii);
   batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
   batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
@@ -204,6 +209,11 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_min_vel_y);
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_gravity);
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_vel_x);
+  SWAP(float, batch->state.item_zelda_din_charge);
+  SWAP(float, batch->state.item_zelda_din_angle_offset);
+  SWAP(float, batch->state.item_zelda_din_base_angle);
+  SWAP(float, batch->state.item_zelda_din_speed);
+  SWAP(float, batch->state.item_zelda_din_explode_base_size);
   SWAP(uint8_t, batch->state.item_sheik_chain_links_valid);
   SWAP(float, batch->state.item_sheik_chain_prev_stick_x);
   SWAP(float, batch->state.item_sheik_chain_prev_stick_y);
@@ -422,6 +432,7 @@ uint8_t items_row_has_fighter_collision_demand(const MslBatch* batch, int bi) {
     if (laser_params_for_item_type(type) != NULL ||
         item_article_params_is_illusion_item_type(type) != 0u ||
         item_article_params_for_sheik_needle_throw_item_type(type) != NULL ||
+        item_article_params_for_zelda_din_item_type(type) != NULL ||
         // Sheik Vanish smoke state 0 owns an item BODY HitCapsule published by it_802B1D40 ->
         // it_8027518C. It therefore demands fighter hurtcap endpoint geometry just like lasers and
         // thrown Needles before the item collision phase consumes BODY overlap.
@@ -534,6 +545,9 @@ void items_update_collision_phase(MslBatch* batch) {
       // window.
       sheik_vanish_smoke_collide(batch, bi);
       sheik_vanish_smoke_items_update(batch, bi);
+
+      // Zelda Din's Fire charge/explosion articles.
+      zelda_din_fire_update_and_collide(batch, bi);
 
       // Motion + collision/hit apply for existing lasers.
       lasers_update_and_collide(batch, bi);

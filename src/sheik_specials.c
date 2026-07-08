@@ -25,17 +25,7 @@
 #include "stage_collision.h"
 #include "state_flags.h"
 #include "trigger_input.h"
-
-// Zelda Down-B ids from refs/melee/src/melee/ft/chara/ftZelda/forward.h and
-// refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c. Only the demo2-visible transform
-// handoff is runtime-owned here; full hidden Sheik/Zelda twin-entity state and Zelda's other
-// specials stay deferred until a replay reaches them.
-enum {
-  MSL_ACT_ZD_SPECIAL_LW = 355,
-  MSL_ACT_ZD_SPECIAL_LW_2 = 356,
-  MSL_ACT_ZD_SPECIAL_AIR_LW = 357,
-  MSL_ACT_ZD_SPECIAL_AIR_LW_2 = 358,
-};
+#include "zelda_specials.h"
 
 static inline float sk_stick_unit(int8_t v) { return (float)v * (1.0f / 80.0f); }
 
@@ -52,13 +42,6 @@ static uint16_t sk_submotion(uint16_t action_id) {
 static uint8_t sk_anim_finished(const MslBatch* batch, size_t idx, uint16_t action_id) {
   const uint16_t msid = sk_submotion(action_id);
   const float end = msl_anim_end_frame((uint8_t)MSL_CHAR_ID_SHEIK, msid);
-  return (end > 0.0f && msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]) >= end) ? 1u
-                                                                                              : 0u;
-}
-
-static uint8_t zd_anim_finished(const MslBatch* batch, size_t idx, uint16_t action_id) {
-  const uint16_t msid = msl_motion_state_submotion_id((uint8_t)MSL_CHAR_ID_ZELDA, action_id);
-  const float end = msl_anim_end_frame((uint8_t)MSL_CHAR_ID_ZELDA, msid);
   return (end > 0.0f && msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]) >= end) ? 1u
                                                                                               : 0u;
 }
@@ -333,19 +316,6 @@ static uint8_t sk_action_allows_ground_special(const MslBatch* batch, size_t idx
   }
 }
 
-static uint8_t sk_action_allows_ground_down_special(const MslBatch* batch, size_t idx, uint16_t a) {
-  if (a == (uint16_t)MSL_ACT_SQUAT_WAIT || a == (uint16_t)MSL_ACT_SQUAT_RV) {
-    // SquatWait_IASA and SquatRv_IASA call only ftCo_800D68C0 before their lower-priority common
-    // consumers. That helper dispatches the held Down-B lane, so these actions can transform
-    // without also admitting Sheik's neutral/up/side specials from crouch hold states.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
-    return 1u;
-  }
-  return sk_action_allows_ground_special(batch, idx, a);
-}
-
 static uint8_t sk_action_allows_air_special(uint16_t a) {
   switch (a) {
     // ftCo_Jump_IASA runs ftCo_SpecialAir_CheckInput before item throw, EscapeAir, AttackAir, and
@@ -400,6 +370,15 @@ static void sk_enter_specials(MslBatch* batch, size_t idx, uint8_t ground, float
     ftco_specials_apply_grounded_sideb_doenter(
         batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
   } else {
+    const MslCommonParams* c = msl_common_params();
+    if (c != NULL && stick_x * sk_facing_dir(batch, idx) < -c->special_side_reverse_threshold) {
+      // Decomp: ftCo_SpecialAir_CheckInput applies ftCommon_UpdateFacing before calling the
+      // character-specific SpecialAirS enter callback when the side-special stick points behind
+      // the current facing by more than p_ftCommonData->x220.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+      batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
+      batch->state.facing_dir1[idx] = batch->state.facing[idx] ? 1 : -1;
+    }
     batch->state.speed_y_self[idx] = 0.0f;
   }
   batch->state.special_cmd0[idx] = 0u;
@@ -553,76 +532,6 @@ static void sk_enter_speciallw(MslBatch* batch, const MslCharParams* ch, size_t 
            ground ? (uint16_t)MSL_ACT_SK_SPECIAL_LW : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_LW, 0.0f,
            1.0f);
   msl_anim_timebase_tick_once(batch, idx);
-}
-
-static void zd_enter_speciallw(MslBatch* batch, const MslCharParams* ch, size_t idx,
-                               uint8_t ground) {
-  // ftZd_SpecialLw.c::{ftZd_SpecialLw_Enter,ftZd_SpecialAirLw_Enter} via
-  // ftZelda_SpecialLw_StartAction_Helper.
-  if (ch->zelda_transform_vel_x_divisor > 0.0f) {
-    batch->state.speed_air_x_self[idx] /= ch->zelda_transform_vel_x_divisor;
-    batch->state.speed_ground_x_self[idx] /= ch->zelda_transform_vel_x_divisor;
-  }
-  if (ch->zelda_transform_vel_y_divisor > 0.0f) {
-    batch->state.speed_y_self[idx] /= ch->zelda_transform_vel_y_divisor;
-  }
-  batch->state.special_cmd0[idx] = 0u;
-  batch->state.sheik_special_timer[idx] = 0u;
-  batch->state.sheik_special_latch[idx] = 0u;
-  sk_enter(batch, idx,
-           ground ? (uint16_t)MSL_ACT_ZD_SPECIAL_LW : (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW, 0.0f,
-           1.0f);
-  msl_anim_timebase_tick_once(batch, idx);
-}
-
-static uint8_t zd_try_enter_transform(MslBatch* batch, const MslCommonParams* c,
-                                      const MslCharParams* ch, size_t idx, uint8_t ground) {
-  if (batch == NULL || c == NULL || ch == NULL || batch->state.hitlag[idx] != 0u ||
-      batch->state.hitstun[idx] != 0u) {
-    return 0u;
-  }
-  if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u) {
-    return 0u;
-  }
-  const uint16_t a = batch->state.action_id[idx];
-  if (ground) {
-    if (!sk_action_allows_ground_down_special(batch, idx, a)) {
-      return 0u;
-    }
-  } else if (!sk_action_allows_air_special(a)) {
-    return 0u;
-  }
-  const float sy = sk_deadzone(sk_stick_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-  if (sy > -c->special_stick_y_threshold) {
-    return 0u;
-  }
-  // Source ftCo_Special{,Air}_CheckInput dispatches Down-B to Zelda's ftData_SpecialLw entry. This
-  // pass intentionally implements only that transform owner for Zelda.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_SpecialS_CheckInput
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-  // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
-  //   ftZd_SpecialLw_Enter,ftZd_SpecialAirLw_Enter}
-  zd_enter_speciallw(batch, ch, idx, ground);
-  return 1u;
-}
-
-uint8_t zelda_special_try_transform_iasa(MslBatch* batch, size_t idx, uint8_t ground) {
-  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_ZELDA) {
-    return 0u;
-  }
-  return zd_try_enter_transform(batch, msl_common_params(),
-                                msl_char_params_fast((uint8_t)MSL_CHAR_ID_ZELDA), idx, ground);
-}
-
-void zelda_special_enter_transform(MslBatch* batch, size_t idx, uint8_t ground) {
-  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_ZELDA) {
-    return;
-  }
-  const MslCharParams* ch = msl_char_params_fast((uint8_t)MSL_CHAR_ID_ZELDA);
-  if (ch == NULL) {
-    return;
-  }
-  zd_enter_speciallw(batch, ch, idx, ground);
 }
 
 static uint8_t sk_hsd_lr_edge(const MslBatch* batch, const MslCommonParams* c, size_t idx) {
@@ -798,14 +707,19 @@ uint8_t sheik_zelda_special_try_ground_iasa(MslBatch* batch, size_t idx) {
     return sheik_special_try_ground_iasa(batch, idx);
   }
   if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA) {
-    return zelda_special_try_transform_iasa(batch, idx, 1u);
+    return zelda_special_try_ground_iasa(batch, idx);
   }
   return 0u;
 }
 
 uint8_t sheik_special_try_air_iasa(MslBatch* batch, size_t idx) {
-  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
-      batch->state.on_ground[idx] != 0u) {
+  if (batch == NULL || batch->state.on_ground[idx] != 0u) {
+    return 0u;
+  }
+  if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA) {
+    return zelda_special_try_air_iasa(batch, idx);
+  }
+  if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;
   }
   // Common airborne IASA runs ftCo_SpecialAir_CheckInput before item/aerial attack/jump checks.
@@ -1115,11 +1029,16 @@ static uint8_t sk_vanish_wallceil_normal(const MslBatch* batch, size_t idx, floa
 }
 
 uint8_t sheik_special_try_vanish_travel_wallceil_end(MslBatch* batch, size_t idx) {
-  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
-      batch->state.action_id[idx] != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1) {
+  if (batch == NULL ||
+      (batch->state.action_id[idx] != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1 &&
+       batch->state.action_id[idx] != (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_HI_START_1)) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
+  const uint8_t is_zelda = batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA;
+  if (!is_zelda && batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return 0u;
+  }
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
   if (ch == NULL) {
     return 0u;
   }
@@ -1127,6 +1046,9 @@ uint8_t sheik_special_try_vanish_travel_wallceil_end(MslBatch* batch, size_t idx
   float ny = 0.0f;
   if (!sk_vanish_wallceil_normal(batch, idx, &nx, &ny)) {
     return 0u;
+  }
+  if (is_zelda) {
+    return zelda_special_farore_air_travel_wallceil_end(batch, idx, nx, ny);
   }
   const float vx = batch->state.speed_air_x_self[idx];
   const float vy = batch->state.speed_y_self[idx];
@@ -1160,8 +1082,13 @@ uint8_t sheik_special_try_vanish_travel_wallceil_end(MslBatch* batch, size_t idx
 }
 
 uint8_t sheik_special_vanish_air_start1_platform_pass_active(const MslBatch* batch, size_t idx) {
-  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
-      batch->state.action_id[idx] != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1) {
+  if (batch == NULL ||
+      (batch->state.action_id[idx] != (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1 &&
+       batch->state.action_id[idx] != (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_HI_START_1)) {
+    return 0u;
+  }
+  const uint8_t is_zelda = batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA;
+  if (!is_zelda && batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;
   }
   const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
@@ -1169,27 +1096,34 @@ uint8_t sheik_special_vanish_air_start1_platform_pass_active(const MslBatch* bat
   if (ground_id == 0xFFFFu || !stage_collision_floor_line_is_platform(stage_id, ground_id)) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
-  if (ch == NULL || ch->sheik_vanish_travel_frames <= 0 ||
-      !(ch->sheik_vanish_ground_contact_min_frames > 0.0f)) {
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+  const int travel_frames =
+      (ch != NULL) ? (is_zelda ? ch->zelda_farore_travel_frames : ch->sheik_vanish_travel_frames)
+                   : 0;
+  const float contact_min = (ch != NULL) ? (is_zelda ? ch->zelda_farore_ground_contact_min_frames
+                                                     : ch->sheik_vanish_ground_contact_min_frames)
+                                         : 0.0f;
+  if (ch == NULL || travel_frames <= 0 || !(contact_min > 0.0f)) {
     return 0u;
   }
-  const int travel_frames = ch->sheik_vanish_travel_frames;
   const int remaining_after_anim = (int)batch->state.sheik_special_timer[idx];
   const int collision_tick = travel_frames - remaining_after_anim;
   if (collision_tick < 0) {
     return 0u;
   }
-  // ftSk_SpecialAirHiStart_1_Coll increments mv.sk.specialhi.xC, then accepted platform floor
-  // contact consumes ftCo_8009A134/mpUpdateFloorSkip while xC is still below
-  // ftSeakAttributes::x3C. The hidden x0 travel timer and xC are initialized together by
-  // ftSk_SpecialHi_80113A30, so after the Anim callback has decremented x0, `x38 - x0` is the
-  // callback-visible xC value for this collision pass.
+  // ftSk/ftZd SpecialAirHiStart_1_Coll increment the hidden ground-contact counter, then accepted
+  // platform floor contact consumes ftCo_8009A134/mpUpdateFloorSkip while the counter is still
+  // below the character attr threshold. The hidden travel timer and contact counter are initialized
+  // together by the character SpecialHi start owner, so after the Anim callback decrements the
+  // travel timer, `travel_frames - remaining` is the callback-visible contact count.
   // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
   //   ftSk_SpecialHi_80113A30,ftSk_SpecialAirHiStart_1_Anim,
   //   ftSk_SpecialAirHiStart_1_Coll}
+  // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialHi.c::{
+  //   ftZd_SpecialHi_8013A59C,ftZd_SpecialAirHiStart_1_Anim,
+  //   ftZd_SpecialAirHiStart_1_Coll}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
-  return ((float)collision_tick < ch->sheik_vanish_ground_contact_min_frames) ? 1u : 0u;
+  return ((float)collision_tick < contact_min) ? 1u : 0u;
 }
 
 static void sk_update_speciallw(MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch,
@@ -1239,58 +1173,6 @@ static void sk_update_speciallw(MslBatch* batch, const MslCommonParams* c, const
   }
 }
 
-static uint8_t zd_action_is_transform(uint16_t action_id) {
-  return (uint8_t)(action_id >= (uint16_t)MSL_ACT_ZD_SPECIAL_LW &&
-                   action_id <= (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW_2);
-}
-
-static void zd_update_speciallw(MslBatch* batch, size_t idx, uint16_t a) {
-  switch (a) {
-    case MSL_ACT_ZD_SPECIAL_LW:
-    case MSL_ACT_ZD_SPECIAL_AIR_LW:
-      if (zd_anim_finished(batch, idx, a)) {
-        const MslCharParams* sk = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
-        if (sk == NULL) {
-          return;
-        }
-        // Zelda transform start installs `ftZd_SpecialLw_8013AEAC`, which calls ftCommon_8007EFC8
-        // into Sheik and then `ftSk_SpecialLw_80114758` enters Sheik's finish action. Preserve the
-        // source state lanes and swap the one runtime entity back to Sheik.
-        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{ftZd_SpecialLw_Anim,
-        //   ftZd_SpecialAirLw_Anim,ftZd_SpecialLw_8013AEAC}
-        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::ftSk_SpecialLw_80114758
-        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
-        sk_transform_cache_visible_zelda_twin_2218(batch, idx);
-        batch->state.char_id[idx] = (uint8_t)MSL_CHAR_ID_SHEIK;
-        sk_enter(batch, idx,
-                 batch->state.on_ground[idx] ? (uint16_t)MSL_ACT_SK_SPECIAL_LW_2
-                                             : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_LW_2,
-                 sk->sheik_transform_finish_start_frame, 1.0f);
-        // This bounded demo2 transform model does not claim full hidden Sheik twin-entity support.
-        // The replay spans covered here reactivate Sheik with fp+0x2218 clear; keep the Zelda byte
-        // cached separately above so a later Sheik->Zelda handoff can restore it.
-        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
-        //   ftZd_SpecialLw_Anim,ftZd_SpecialAirLw_Anim,ftZd_SpecialLw_8013AEAC}
-        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::ftSk_SpecialLw_80114758
-        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
-        sk_transform_set_live_2218(batch, idx, 0u);
-      }
-      break;
-    case MSL_ACT_ZD_SPECIAL_LW_2:
-      if (zd_anim_finished(batch, idx, a)) {
-        sk_enter_wait(batch, idx);
-      }
-      break;
-    case MSL_ACT_ZD_SPECIAL_AIR_LW_2:
-      if (zd_anim_finished(batch, idx, a)) {
-        sk_enter_fall(batch, idx);
-      }
-      break;
-    default:
-      break;
-  }
-}
-
 void sheik_specials_update_pre_physics(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -1323,18 +1205,7 @@ void sheik_specials_update_pre_physics(MslBatch* batch) {
       const uint8_t frame_start_owner =
           (uint8_t)(batch->state.frame_start_action_id[idx] == batch->state.action_id[idx]);
       if (char_id == (uint8_t)MSL_CHAR_ID_ZELDA) {
-        if (zd_action_is_transform(a)) {
-          batch->state.animation_index[idx] =
-              (uint32_t)msl_motion_state_submotion_id((uint8_t)MSL_CHAR_ID_ZELDA, a);
-          zd_update_speciallw(batch, idx, a);
-        } else if (frame_start_owner != 0u) {
-          // Ordinary grounded/airborne Transform entry belongs to the frame-start IASA callback.
-          // Destination actions entered earlier in this simulator pass (for example
-          // SquatWait_IASA -> Dash) must not run their own B-special callback until the next frame.
-          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
-          (void)zd_try_enter_transform(batch, c, ch, idx, batch->state.on_ground[idx] ? 1u : 0u);
-        }
+        zelda_specials_update_pre_physics_for_fighter(batch, c, ch, idx, frame_start_owner);
         continue;
       }
       if (!sheik_action_is_special(a)) {
@@ -1527,25 +1398,7 @@ uint8_t sheik_specials_phys(MslBatch* batch, size_t idx) {
   }
   const uint16_t a = batch->state.action_id[idx];
   if (char_id == (uint8_t)MSL_CHAR_ID_ZELDA) {
-    switch (a) {
-      case MSL_ACT_ZD_SPECIAL_LW:
-      case MSL_ACT_ZD_SPECIAL_LW_2:
-        // ftZd_SpecialLw{,2}_Phys use ordinary grounded ft_80084F3C.
-        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
-        //   ftZd_SpecialLw_Phys,ftZd_SpecialLw2_Phys}
-        sk_apply_ground_friction_f3c(batch, ch, idx);
-        return 1u;
-      case MSL_ACT_ZD_SPECIAL_AIR_LW:
-      case MSL_ACT_ZD_SPECIAL_AIR_LW_2:
-        // ftZd_SpecialAirLw{,2}_Phys: ftCommon_Fall(fp, x78, x7C), then ftCommon_8007CEF4.
-        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
-        //   ftZd_SpecialAirLw_Phys,ftZd_SpecialAirLw2_Phys}
-        sk_apply_attr_fall_friction_cef4(batch, ch, idx, ch->zelda_transform_air_gravity,
-                                         ch->zelda_transform_air_terminal_vel);
-        return 1u;
-      default:
-        return 0u;
-    }
+    return zelda_specials_phys(batch, idx);
   }
   switch (a) {
     case MSL_ACT_SK_SPECIAL_HI_START_0:
@@ -1649,23 +1502,7 @@ uint8_t sheik_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
     return 0u;
   }
   if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA) {
-    const uint16_t a = batch->state.action_id[idx];
-    switch (a) {
-      case MSL_ACT_ZD_SPECIAL_LW:
-        // ftZd_SpecialLw_Coll floor loss preserves frame into aerial transform start.
-        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B1CC
-        sk_enter(batch, idx, (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW, batch->state.anim_frame_f32[idx],
-                 1.0f);
-        return 1u;
-      case MSL_ACT_ZD_SPECIAL_LW_2:
-        // ftZd_SpecialLw2_Coll floor loss preserves frame into aerial transform finish.
-        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B400
-        sk_enter(batch, idx, (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW_2,
-                 batch->state.anim_frame_f32[idx], 1.0f);
-        return 1u;
-      default:
-        return 0u;
-    }
+    return zelda_special_try_ground_to_air_swap(batch, idx);
   }
   if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;
@@ -1728,23 +1565,7 @@ uint8_t sheik_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {
     return 0u;
   }
   if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA) {
-    const uint16_t a = batch->state.action_id[idx];
-    switch (a) {
-      case MSL_ACT_ZD_SPECIAL_AIR_LW:
-        // ftZd_SpecialAirLw_Coll floor contact preserves frame into grounded transform start.
-        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B238
-        sk_enter(batch, idx, (uint16_t)MSL_ACT_ZD_SPECIAL_LW, batch->state.anim_frame_f32[idx],
-                 1.0f);
-        return 1u;
-      case MSL_ACT_ZD_SPECIAL_AIR_LW_2:
-        // ftZd_SpecialAirLw2_Coll floor contact preserves frame into grounded transform finish.
-        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B46C
-        sk_enter(batch, idx, (uint16_t)MSL_ACT_ZD_SPECIAL_LW_2, batch->state.anim_frame_f32[idx],
-                 1.0f);
-        return 1u;
-      default:
-        return 0u;
-    }
+    return zelda_special_try_air_to_ground_swap(batch, idx);
   }
   if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;

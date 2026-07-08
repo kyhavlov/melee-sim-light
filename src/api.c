@@ -1609,6 +1609,16 @@ static inline uint8_t msl_seed_action_is_sheik_chain(uint16_t action_id) {
          action_id == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S_END;
 }
 
+static inline uint8_t msl_seed_action_is_zelda_din_loop(uint16_t action_id) {
+  return action_id == (uint16_t)MSL_ACT_ZD_SPECIAL_S_LOOP ||
+         action_id == (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_S_LOOP;
+}
+
+static inline uint8_t msl_seed_action_is_zelda_din_start(uint16_t action_id) {
+  return action_id == (uint16_t)MSL_ACT_ZD_SPECIAL_S_START ||
+         action_id == (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_S_START;
+}
+
 static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const MslSeed* seed,
                                                                        int active_players) {
   if (seed == NULL) {
@@ -2715,11 +2725,19 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.attack100_x4[idx] = 0u;
       batch->state.run_x0[idx] = seed->run_x0[p];
       batch->state.runbrake_cmd0[idx] = seed->runbrake_cmd0[p] ? 1u : 0u;
-      batch->state.runbrake_freeze_x0[idx] =
-          (uint8_t)(seed->action_id[p] == (uint16_t)MSL_ACT_RUN_BRAKE &&
-                    seed->frame_speed_mul_f32[p] == 0.0f &&
-                    move_tables_runbrake_cmd1_active(seed->char_id[p], seed->anim_frame_f32[p]) !=
-                        0u);
+      batch->state.runbrake_freeze_x0[idx] = 0u;
+      if (seed->action_id[p] == (uint16_t)MSL_ACT_RUN_BRAKE &&
+          seed->frame_speed_mul_f32[p] == 0.0f &&
+          move_tables_runbrake_cmd1_active(seed->char_id[p], seed->anim_frame_f32[p]) != 0u) {
+        // RunBrake_Anim owns cmd_vars[1] and mv.co.runbrake.x0. A zero frame_speed seed on the
+        // cmd1 script frame proves the source latch is already in the sustained freeze/resume
+        // slice. Nonzero-rate cmd1 rows must leave the command live: vanilla can still run
+        // ftAnim_SetAnimRate(0) during the current Anim callback before publishing this step.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
+        // data/scripts/<char>.bin::MSLFTSC1 ftCo_SM_RunBrake set_cmd_var(idx=1,value=1)
+        // data/common/ft_common_data.json::runbrake_anim_freeze_speed_threshold
+        batch->state.runbrake_freeze_x0[idx] = 1u;
+      }
       batch->state.dash_x4[idx] = seed->dash_x4[p];
       batch->state.shine_release_lag[idx] = seed->shine_release_lag[p];
       batch->state.shine_is_release[idx] = seed->shine_is_release[p];
@@ -2807,6 +2825,22 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.special_cmd0[idx] = 0u;
       batch->state.special_cmd1[idx] = 0u;
       batch->state.special_cmd2[idx] = 0u;
+      if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_ZELDA &&
+          (seed->action_id[p] == (uint16_t)MSL_ACT_ZD_SPECIAL_N ||
+           seed->action_id[p] == (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_N) &&
+          (seed->state_flags[p][MSL_STATE_FLAGS_2218_INDEX] &
+           (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) != 0u) {
+        // Teacher-forced Nayru ReflectDesc reconstruction:
+        // ftZd_SpecialN_Anim calls ftColl_CreateReflectHit when cmd_vars[0] enters the script
+        // window, then uses cmd_vars[0]==2 as the hidden "reflect descriptor live" latch until
+        // the script clears cmd0. Slippi exposes fp->reflecting through state_flags[0] bit0x10,
+        // but not cmd_vars[0], so reseed restores only this source-visible live descriptor state.
+        // Free-running gameplay still derives the latch from the extracted script cmd0 window.
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialN.c::{
+        //   ftZd_SpecialN_Anim,ftZd_SpecialAirN_Anim}
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+        batch->state.special_cmd0[idx] = 2u;
+      }
       // Marth special cmd-var reconstruction (Slippi does not expose fp->cmd_vars):
       // Dolphin Slash phase lanes are source-owned hidden state. cmd_vars[0] is the script launch
       // pulse (frame 6). Descending after launch implies the Phys launch phase ended (cmd2) and
@@ -3299,17 +3333,20 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           seed->motion_entry_instance_id_override_u16[p];
       batch->state.specialn_blaster_loop_requested[idx] =
           seed->specialn_blaster_loop_requested[p] ? 1u : 0u;
-      // Sheik hidden special lanes:
-      // - Vanish travel x0 is seeded because Special(Air)HiStart_1 freezes its animation at frame
-      //   35, so action_frame cannot reconstruct the countdown.
+      // Sheik/Zelda hidden special lanes:
+      // - Sheik Vanish / Zelda Farore travel x0 is seeded because Special(Air)HiStart_1 freezes
+      //   its animation at frame 35, so action_frame cannot reconstruct the countdown.
       // - Needle fv.sk.x0 / mv.sk.specialn.x0 are seeded prefix-causally because End's
       //   accessory4 shootNeedles callback publishes articles from hidden stored count and shoot
       //   timer, not from action id alone.
       // - Chain mv.sk.specials.x0/x4 are seeded prefix-causally because Start and Active can hold
       //   visible animation frames while x0 keeps ticking, and active release is owned by the
       //   previous IASA callback's B-release latch.
+      // - Zelda Din's Fire Loop mv.zd.specials.xC release hold is seeded from the extracted x1C
+      //   timer and visible Loop frame because Loop_IASA decrements xC before accepting B release.
       // refs/melee/src/melee/ft/chara/ftSeak/{types.h,ftSk_SpecialHi.c,ftSk_SpecialN.c,
       //   ftSk_SpecialS.c}
+      // refs/melee/src/melee/ft/chara/ftZelda/ftZd_Special{Hi,S}.c
       batch->state.sheik_needle_count[idx] = seed->sheik_needle_count_u8[p];
       batch->state.zelda_twin_state_flags_2218[idx] = seed->zelda_twin_state_flags_2218_u8[p];
       if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_SHEIK &&
@@ -3317,6 +3354,22 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.sheik_special_timer[idx] = seed->sheik_chain_x0_u8[p];
         batch->state.sheik_special_timer_frame_start[idx] = seed->sheik_chain_x0_u8[p];
         batch->state.sheik_special_latch[idx] = seed->sheik_chain_release_latch_u8[p] ? 1u : 0u;
+      } else if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_ZELDA &&
+                 (msl_seed_action_is_zelda_din_start(seed->action_id[p]) ||
+                  msl_seed_action_is_zelda_din_loop(seed->action_id[p]))) {
+        const MslCharParams* ch = msl_char_params_fast(seed->char_id[p]);
+        int remaining = ch != NULL ? ch->zelda_din_release_hold_min_frames : 0;
+        if (msl_seed_action_is_zelda_din_loop(seed->action_id[p])) {
+          remaining -= 1 + seed->action_frame[p];
+        }
+        if (remaining < 0) {
+          remaining = 0;
+        } else if (remaining > 255) {
+          remaining = 255;
+        }
+        batch->state.sheik_special_timer[idx] = 0u;
+        batch->state.sheik_special_timer_frame_start[idx] = 0u;
+        batch->state.sheik_special_latch[idx] = (uint8_t)remaining;
       } else {
         batch->state.sheik_special_timer[idx] = seed->sheik_needle_specialn_timer_u8[p] != 0u
                                                     ? seed->sheik_needle_specialn_timer_u8[p]
@@ -3736,6 +3789,55 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] = 0.0f;
       batch->state.item_sheik_needle_hidden_drop_gravity[ii] = 0.0f;
       batch->state.item_sheik_needle_hidden_drop_vel_x[ii] = 0.0f;
+      batch->state.item_zelda_din_charge[ii] = 0.0f;
+      batch->state.item_zelda_din_angle_offset[ii] = 0.0f;
+      batch->state.item_zelda_din_base_angle[ii] = 0.0f;
+      batch->state.item_zelda_din_speed[ii] = 0.0f;
+      batch->state.item_zelda_din_explode_base_size[ii] = 0.0f;
+      const MslItemArticleParams* zelda_din_ap =
+          item_article_params_for_zelda_din_item_type(item->type);
+      if (item->exists != 0u && zelda_din_ap != NULL) {
+        const uint8_t is_fire = (item->type == zelda_din_ap->zelda_din_fire_itkind) ? 1u : 0u;
+        if (is_fire != 0u) {
+          float charge = seed->item_zelda_din_charge[it];
+          if (!(charge > 0.0f)) {
+            charge = (float)zelda_din_ap->zelda_din_fire_lifetime_frames - item->timer;
+          }
+          if (charge < 0.0f) {
+            charge = 0.0f;
+          }
+          if (charge > zelda_din_ap->zelda_din_fire_charge_max_frames) {
+            charge = zelda_din_ap->zelda_din_fire_charge_max_frames;
+          }
+          batch->state.item_zelda_din_charge[ii] = charge;
+          const float vx = item->vel_x;
+          const float vy = item->vel_y;
+          const float speed = sqrtf(vx * vx + vy * vy);
+          batch->state.item_zelda_din_speed[ii] =
+              seed->item_zelda_din_speed[it] > 0.0f ? seed->item_zelda_din_speed[it] : speed;
+          const float dir = (item->direction < 0.0f) ? -1.0f : 1.0f;
+          const float base_angle = seed->item_zelda_din_base_angle[it] != 0.0f
+                                       ? seed->item_zelda_din_base_angle[it]
+                                       : (dir > 0.0f ? 0.0f : MSL_PI_F);
+          batch->state.item_zelda_din_base_angle[ii] = base_angle;
+          batch->state.item_zelda_din_angle_offset[ii] =
+              seed->item_zelda_din_angle_offset[it] != 0.0f ? seed->item_zelda_din_angle_offset[it]
+                                                            : (atan2f(vy, vx) - base_angle);
+        } else if (item->type == zelda_din_ap->zelda_din_fire_explode_itkind) {
+          float charge = seed->item_zelda_din_charge[it];
+          if (!(charge > 0.0f)) {
+            charge = zelda_din_ap->zelda_din_explode_charge_max_frames;
+          }
+          if (charge > zelda_din_ap->zelda_din_explode_charge_max_frames) {
+            charge = zelda_din_ap->zelda_din_explode_charge_max_frames;
+          }
+          batch->state.item_zelda_din_charge[ii] = charge;
+          batch->state.item_zelda_din_explode_base_size[ii] =
+              seed->item_zelda_din_explode_base_size[it] > 0.0f
+                  ? seed->item_zelda_din_explode_base_size[it]
+                  : zelda_din_ap->zelda_din_explode_hitbox_size;
+        }
+      }
       if (item->exists != 0u && item->state == 4u) {
         const MslItemArticleParams* needle_ap =
             item_article_params_for_sheik_needle_throw_item_type(item->type);

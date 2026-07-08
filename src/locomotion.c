@@ -1705,6 +1705,27 @@ void locomotion_update_anim_callbacks_pre_input(MslBatch* batch) {
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
         }
+      } else if (action_id == (uint16_t)MSL_ACT_RUN_BRAKE) {
+        const MslCharParams* ch = msl_char_params_fast(char_id);
+        const uint32_t anim = batch->state.animation_index[idx];
+        if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
+          const uint8_t anim_has_frames =
+              (uint8_t)(!anim_finished(char_id, (uint16_t)anim, batch->state.anim_frame_f32[idx]));
+          const uint8_t timer_has_frames =
+              (uint8_t)(ch != NULL && ch->max_run_brake_frames > 0.0f &&
+                        ((float)batch->state.action_frame[idx] + 1.0f) < ch->max_run_brake_frames);
+          if (!(anim_has_frames != 0u && timer_has_frames != 0u)) {
+            // RunBrake_Anim resolves through ft_8008A2BC when either the AObj has no frames
+            // remaining or mv.co.runbrake.frames reaches zero. This runs in Fighter_8006A360 after
+            // the frame's animation advance and before RunBrake_IASA / Wait_IASA input callbacks.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
+            //   ftCo_RunBrake_Anim,ftCo_RunBrake_IASA}
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+            batch->state.runbrake_freeze_x0[idx] = 0u;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          }
+        }
       } else if (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
                  action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) {
         const uint32_t anim = batch->state.animation_index[idx];
@@ -5138,43 +5159,6 @@ void locomotion_update_pre(MslBatch* batch) {
               continue;
             }
             batch->state.tilt_timer_y[idx] = tilt_timer_y;
-          }
-        }
-
-        // RunBrake -> Wait when animation ends.
-        if (action_id == MSL_ACT_RUN_BRAKE) {
-          const uint32_t anim = batch->state.animation_index[idx];
-          if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
-            const uint8_t anim_has_frames = (uint8_t)(!anim_finished(
-                batch->state.char_id[idx], (uint16_t)anim, batch->state.anim_frame_f32[idx]));
-            const uint8_t timer_has_frames =
-                (uint8_t)(ch != NULL && ch->max_run_brake_frames > 0.0f &&
-                          ((float)batch->state.action_frame[idx] + 1.0f) <
-                              ch->max_run_brake_frames);
-            if (!(anim_has_frames != 0u && timer_has_frames != 0u)) {
-              // RunBrake_Anim resolves through ft_8008A2BC when the motion has no frames remaining.
-              // Source checks both ftAnim_IsFramesRemaining and the hidden
-              // mv.co.runbrake.frames timer initialized from co_attrs.max_run_brake_frames.
-              // The destination Wait input callback can then run in the same fighter proc; run the
-              // Wait-owned guard gate before the existing locomotion tail so GuardOn keeps source
-              // priority over Jump/Dash/Squat/Turn/Walk.
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
-              //   ftCo_RunBrake_Enter,ftCo_RunBrake_Anim}
-              // data/characters/<char>.json::max_run_brake_frames
-              // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
-              batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
-              batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
-              batch->state.runbrake_freeze_x0[idx] = 0u;
-              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-              guard_update_grounded(batch, c, idx, 1u);
-              if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT) {
-                (void)wait_iasa_locomotion_subset_try_enter(
-                    batch, c, ch, idx, buttons, buttons_pressed, stick_x, stick_y, tilt_timer_x,
-                    tilt_timer_y, facing_dir, action_id_start);
-              }
-            }
           }
         }
 

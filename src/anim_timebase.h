@@ -7,6 +7,7 @@
 #include "batch_internal.h"
 #include "action_ids.h"
 #include "anim_table.h"
+#include "motion_state_owners.h"
 
 // Deterministic animation/script timebase helpers.
 //
@@ -257,22 +258,22 @@ static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t i
     batch->state.facing_dir1[idx] = batch->state.facing[idx] ? (int8_t)1 : (int8_t)-1;
   }
 
-  // Decomp: Fighter_ChangeMotionState clears `fp->fall_fast` when (flags & Ft_MF_KeepFastFall)==0.
-  // refs/melee/src/melee/ft/fighter.c (see KeepFastFall gate).
-  // refs/melee/src/melee/ft/forward.h (Ft_MF_KeepFastFall = 1<<0).
-  //
-  // This simulator does not plumb the per-transition `flags` argument explicitly; approximate
-  // using the ISO-extracted per-action x4_flags table (same source used for move identity).
-  enum { Ft_MF_KeepFastFall = 1 << 0 };
   if (batch != NULL) {
     const uint16_t a = batch->state.action_id[idx];
+    const uint32_t x4_flags = attack_id_x4_flags_from_action(batch->state.char_id[idx], a);
+    // Decomp: Fighter_ChangeMotionState clears `fp->fall_fast` when
+    // (flags & Ft_MF_KeepFastFall)==0.
+    // refs/melee/src/melee/ft/fighter.c (see KeepFastFall gate).
+    // refs/melee/src/melee/ft/forward.h::Ft_MF_KeepFastFall
+    //
+    // This simulator does not plumb the per-transition `flags` argument explicitly; approximate
+    // using the ISO-extracted per-action x4_flags table (same source used for move identity).
     // Decomp: AttackAir enters with Ft_MF_KeepFastFall unconditionally.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
     if (!(a == (uint16_t)MSL_ACT_ATTACK_AIR_N || a == (uint16_t)MSL_ACT_ATTACK_AIR_F ||
           a == (uint16_t)MSL_ACT_ATTACK_AIR_B || a == (uint16_t)MSL_ACT_ATTACK_AIR_HI ||
           a == (uint16_t)MSL_ACT_ATTACK_AIR_LW)) {
-      const uint32_t x4_flags = attack_id_x4_flags_from_action(batch->state.char_id[idx], a);
-      if ((x4_flags & (uint32_t)Ft_MF_KeepFastFall) == 0u) {
+      if ((x4_flags & (uint32_t)MSL_MOTION_FLAG_KEEP_FASTFALL) == 0u) {
         batch->state.fall_fast[idx] = 0;
       }
     }

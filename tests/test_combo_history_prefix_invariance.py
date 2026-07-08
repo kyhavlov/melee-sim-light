@@ -62,6 +62,50 @@ def test_combo_history_prefix_invariance() -> None:
         assert np.array_equal(pref_timer, full_timer[:k])
 
 
+def test_combo_seed_preserves_victim_on_hitstun_end_row() -> None:
+    # Source order:
+    # Fighter_8006A360 runs ftColl_800764DC before ftCo_8008F744 clears hitstun and writes x2098.
+    # The post-frame row where hitstun first becomes clear must therefore still carry x2094.
+    n_frames = 9
+    num_players = 2
+    src_ports = [1, 2]
+
+    hitlag = np.zeros((n_frames, 4), dtype=np.uint16)
+    hitlag[1, 1] = np.uint16(3)
+    hitlag[2, 1] = np.uint16(2)
+    hitlag[3, 1] = np.uint16(1)
+
+    state_flags = np.zeros((n_frames, 4, 5), dtype=np.uint8)
+    state_flags[1:4, 1, 3] = np.uint8(0x02)
+
+    instance_id = np.zeros((n_frames, 4), dtype=np.uint16)
+    instance_id[:, 0] = np.uint16(100)
+    instance_id[:, 1] = np.uint16(200)
+
+    last_hit_by = np.full((n_frames, 4), 0xFF, dtype=np.uint8)
+    last_hit_by[1, 1] = np.uint8(0)
+
+    port, iid, timer = derive_combo_seed_fields(
+        num_players=num_players,
+        src_ports=src_ports,
+        hitlag=hitlag,
+        state_flags=state_flags,
+        instance_id=instance_id,
+        last_hit_by=last_hit_by,
+        data_root="data",
+    )
+
+    assert int(port[1, 0]) == 1
+    assert int(iid[1, 0]) == 200
+    assert int(port[4, 0]) == 1
+    assert int(timer[4, 1]) == 2
+    assert int(port[5, 0]) == 1
+    assert int(timer[5, 1]) == 1
+    assert int(port[6, 0]) == 1
+    assert int(timer[6, 1]) == 0
+    assert int(port[7, 0]) == 0xFF
+
+
 def test_combo_push_timer_seed_tracks_combo_count_increment_prefix_invariant() -> None:
     common = json.loads(Path("data/common/ft_common_data.json").read_text())
     threshold = int(common["combo_push_count_threshold"])

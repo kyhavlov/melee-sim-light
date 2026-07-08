@@ -382,6 +382,27 @@ enum {
   MSL_ACT_FX_SPECIAL_HI_LANDING = 0x0165,   // ftFx_MS_SpecialHiLanding
   MSL_ACT_FX_SPECIAL_HI_FALL = 0x0166,      // ftFx_MS_SpecialHiFall
   MSL_ACT_FX_SPECIAL_HI_BOUND = 0x0167,     // ftFx_MS_SpecialHiBound
+
+  // Zelda specials.
+  // Source: refs/melee/src/melee/ft/chara/ftZelda/ftZd_Init.c motion table.
+  MSL_ACT_ZD_SPECIAL_N = 341,
+  MSL_ACT_ZD_SPECIAL_AIR_N = 342,
+  MSL_ACT_ZD_SPECIAL_S_START = 343,
+  MSL_ACT_ZD_SPECIAL_S_LOOP = 344,
+  MSL_ACT_ZD_SPECIAL_S_END = 345,
+  MSL_ACT_ZD_SPECIAL_AIR_S_START = 346,
+  MSL_ACT_ZD_SPECIAL_AIR_S_LOOP = 347,
+  MSL_ACT_ZD_SPECIAL_AIR_S_END = 348,
+  MSL_ACT_ZD_SPECIAL_HI_START_0 = 349,
+  MSL_ACT_ZD_SPECIAL_HI_START_1 = 350,
+  MSL_ACT_ZD_SPECIAL_HI = 351,
+  MSL_ACT_ZD_SPECIAL_AIR_HI_START_0 = 352,
+  MSL_ACT_ZD_SPECIAL_AIR_HI_START_1 = 353,
+  MSL_ACT_ZD_SPECIAL_AIR_HI = 354,
+  MSL_ACT_ZD_SPECIAL_LW = 355,
+  MSL_ACT_ZD_SPECIAL_LW_2 = 356,
+  MSL_ACT_ZD_SPECIAL_AIR_LW = 357,
+  MSL_ACT_ZD_SPECIAL_AIR_LW_2 = 358,
   // Decomp:
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
   //   (ftFx_MS_SpecialLwStart=360 .. ftFx_MS_SpecialAirLwTurn=369)

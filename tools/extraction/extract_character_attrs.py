@@ -507,6 +507,104 @@ def _extract_seak_vanish_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
     }
 
 
+def _extract_zelda_din_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
+    """Extract Zelda Din's Fire article attrs and explosion HitCapsule data from ftData.x48_items.
+
+    Source:
+    - refs/melee/src/melee/ft/chara/ftZelda/ftZd_Init.c::ftZd_OnLoad
+    - refs/melee/src/melee/it/items/itzeldadinfire.c
+    - refs/melee/src/melee/it/items/itzeldadinfireexplode.c
+    - refs/melee/src/melee/it/itCommonItems.h::itZeldaDinFire_ItemVars
+    - refs/melee/src/melee/it/itCharItems.h::itZeldaDinFireExplodeAttributes
+    """
+    items_abs = arc.ptr32(ftdata_abs + 0x48)
+    if items_abs == arc.data_base:
+        return {}
+    fire_article_abs = arc.ptr32(items_abs + 0x00)
+    explode_article_abs = arc.ptr32(items_abs + 0x04)
+    if fire_article_abs == arc.data_base or explode_article_abs == arc.data_base:
+        return {}
+    fire_attr_abs = arc.ptr32(fire_article_abs + 0x04)
+    explode_attr_abs = arc.ptr32(explode_article_abs + 0x04)
+    explode_states_abs = arc.ptr32(explode_article_abs + 0x0C)
+    if fire_attr_abs == arc.data_base or explode_attr_abs == arc.data_base:
+        return {}
+
+    out: dict = {
+        "zelda_din_fire_itkind": 108,
+        "zelda_din_fire_explode_itkind": 109,
+        "zelda_din_fire_lifetime_frames": int(max(0, round(float(_f32_be(pl_buf, fire_attr_abs + 0x00))))),
+        "zelda_din_fire_charge_max_frames": float(_f32_be(pl_buf, fire_attr_abs + 0x04)),
+        "zelda_din_fire_scale_min": float(_f32_be(pl_buf, fire_attr_abs + 0x08)),
+        "zelda_din_fire_scale_max": float(_f32_be(pl_buf, fire_attr_abs + 0x0C)),
+        "zelda_din_fire_initial_angle_offset": float(_f32_be(pl_buf, fire_attr_abs + 0x10)),
+        "zelda_din_fire_initial_speed": float(_f32_be(pl_buf, fire_attr_abs + 0x14)),
+        "zelda_din_fire_accel": float(_f32_be(pl_buf, fire_attr_abs + 0x18)),
+        "zelda_din_fire_speed_max": float(_f32_be(pl_buf, fire_attr_abs + 0x1C)),
+        "zelda_din_fire_stick_threshold": float(_f32_be(pl_buf, fire_attr_abs + 0x20)),
+        "zelda_din_fire_stick_angle_mul": float(_f32_be(pl_buf, fire_attr_abs + 0x24)),
+        "zelda_din_fire_angle_max": float(_f32_be(pl_buf, fire_attr_abs + 0x28)),
+        "zelda_din_fire_release_lifetime_frames": int(max(0, round(float(_f32_be(pl_buf, fire_attr_abs + 0x2C))))),
+        "zelda_din_explode_charge_max_frames": float(_f32_be(pl_buf, explode_attr_abs + 0x00)),
+        "zelda_din_explode_scale_min": float(_f32_be(pl_buf, explode_attr_abs + 0x04)),
+        "zelda_din_explode_scale_max": float(_f32_be(pl_buf, explode_attr_abs + 0x08)),
+        "zelda_din_explode_damage_base": float(_f32_be(pl_buf, explode_attr_abs + 0x0C)),
+        "zelda_din_explode_damage_charge_mul": float(_f32_be(pl_buf, explode_attr_abs + 0x10)),
+    }
+
+    if explode_states_abs != arc.data_base:
+        script_abs = arc.ptr32(explode_states_abs + 0x0C)
+        if script_abs != arc.data_base:
+            events = _parse_subaction_events(
+                arc, script_abs, max_frames=80, max_steps_per_frame=500, item_hitbox_layout=True
+            )
+            hitboxes: list[dict] = []
+            for ev in events:
+                if ev.kind == "create_hitbox":
+                    hb = ev.data.get("hitbox")
+                    if isinstance(hb, dict):
+                        hitboxes.append(hb)
+            if hitboxes:
+                hb0 = hitboxes[0]
+                out.update(
+                    {
+                        "zelda_din_explode_hitbox_count": int(min(1, len(hitboxes))),
+                        "zelda_din_explode_hitbox_size": float(hb0.get("size", 0.0)),
+                        "zelda_din_explode_hitbox_x_offset": float(hb0.get("x_offset", 0.0)),
+                        "zelda_din_explode_hitbox_y_offset": float(hb0.get("y_offset", 0.0)),
+                        "zelda_din_explode_hitbox_z_offset": float(hb0.get("z_offset", 0.0)),
+                        "zelda_din_explode_hitbox_angle": int(hb0.get("angle", 0)),
+                        "zelda_din_explode_hitbox_kbg": int(hb0.get("kbg", 0)),
+                        "zelda_din_explode_hitbox_wsk": int(hb0.get("wsk", 0)),
+                        "zelda_din_explode_hitbox_bkb": int(hb0.get("bkb", 0)),
+                        "zelda_din_explode_hitbox_element": int(hb0.get("element", 0)),
+                        "zelda_din_explode_hitbox_shield_damage": int(hb0.get("shield_damage", 0)),
+                        "zelda_din_explode_hitbox_flags": (
+                            ARTICLE_HITBOX_FLAG_TARGET_GROUNDED
+                            if bool(hb0.get("hit_grounded", False))
+                            else 0
+                        )
+                        | (
+                            ARTICLE_HITBOX_FLAG_TARGET_AERIAL
+                            if bool(hb0.get("hit_aerial", False))
+                            else 0
+                        )
+                        | (
+                            ARTICLE_HITBOX_FLAG_BODY_ENABLED
+                            if bool(hb0.get("item_body_enabled", False))
+                            else 0
+                        )
+                        | (
+                            ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY
+                            if bool(hb0.get("item_grabbable_only", False))
+                            else 0
+                        )
+                        | (ARTICLE_HITBOX_FLAG_CLANK if bool(hb0.get("clank", False)) else 0),
+                    }
+                )
+    return out
+
+
 def _extract_wait_anim_choices(buf: bytes, wait_abs: int) -> dict:
     """Extract ftData.x24 WaitStruct roulette entries for Wait animation variants.
 
@@ -612,11 +710,43 @@ SEAK_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
 
 
 ZELDA_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
+    ("zelda_nayru_air_gravity_delay_frames", 0x04, "i32"),
+    ("zelda_nayru_air_vel_x_divisor", 0x08, "f32"),
+    ("zelda_nayru_air_gravity", 0x0C, "f32"),
+    ("zelda_din_release_min_frames", 0x10, "i32"),
+    ("zelda_din_end_min_frames", 0x14, "i32"),
+    ("zelda_din_air_gravity_delay_frames", 0x18, "i32"),
+    ("zelda_din_release_hold_min_frames", 0x1C, "i32"),
+    ("zelda_din_spawn_offset_x", 0x20, "f32"),
+    ("zelda_din_spawn_offset_y", 0x24, "f32"),
+    ("zelda_din_air_gravity", 0x2C, "f32"),
+    ("zelda_din_air_end_fallspecial_lag_frames", 0x34, "f32"),
+    ("zelda_farore_air_entry_vel_x_divisor", 0x38, "f32"),
+    ("zelda_farore_air_entry_vel_y_divisor", 0x3C, "f32"),
+    ("zelda_farore_start_air_gravity", 0x40, "f32"),
+    ("zelda_farore_start_air_terminal_vel", 0x44, "f32"),
+    ("zelda_farore_travel_frames", 0x48, "i32"),
+    ("zelda_farore_ground_contact_min_frames", 0x4C, "f32"),
+    ("zelda_farore_stick_mag_min", 0x50, "f32"),
+    ("zelda_farore_travel_speed_stick_mul", 0x54, "f32"),
+    ("zelda_farore_travel_speed_base", 0x58, "f32"),
+    ("zelda_farore_air_end_drift_mul", 0x5C, "f32"),
+    ("zelda_farore_wall_bounce_degrees", 0x60, "i32"),
+    ("zelda_farore_end_vel_mul", 0x64, "f32"),
+    ("zelda_farore_fallspecial_mobility_mul", 0x68, "f32"),
+    ("zelda_farore_landing_lag_frames", 0x6C, "f32"),
     ("zelda_transform_vel_x_divisor", 0x70, "f32"),
     ("zelda_transform_vel_y_divisor", 0x74, "f32"),
     ("zelda_transform_air_gravity", 0x78, "f32"),
     ("zelda_transform_air_terminal_vel", 0x7C, "f32"),
     ("zelda_transform_finish_start_frame", 0x80, "f32"),
+    ("zelda_nayru_reflector_bone_id", 0x84, "u32"),
+    ("zelda_nayru_reflector_max_damage", 0x88, "i32"),
+    ("zelda_nayru_reflector_offset", 0x8C, "vec3"),
+    ("zelda_nayru_reflector_size", 0x98, "f32"),
+    ("zelda_nayru_reflector_damage_mul", 0x9C, "f32"),
+    ("zelda_nayru_reflector_speed_mul", 0xA0, "f32"),
+    ("zelda_nayru_reflector_behavior", 0xA4, "u8"),
 ]
 
 
@@ -756,14 +886,12 @@ def _extract_seak_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
 
 
 def _extract_zelda_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
-    """Extract the bounded Zelda transform attrs needed for ftZd_SpecialLw.
+    """Extract Zelda's ftData.x4 `ftZelda_DatAttrs` special-move block.
 
-    Zelda's ftData.x4 block is `ftZelda_DatAttrs`. For this pass, only expose the Down-B
-    transform/fall fields consumed by `ftZd_SpecialLw_{Enter,Phys}` and the finish handoff; the rest
-    of Zelda's specials remain out of runtime scope until a replay requires them.
+    The exported keys cover Nayru's Love, Din's Fire fighter control, Farore's Wind, transform, and
+    Nayru's ReflectDesc. Din article-specific item attrs live in item-article data.
     - refs/melee/src/melee/ft/chara/ftZelda/types.h::ftZelda_DatAttrs
-    - refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
-    -   ftZelda_SpecialLw_StartAction_Helper,ftZd_SpecialAirLw_Phys,ftZd_SpecialLw_8013B4D8}
+    - refs/melee/src/melee/ft/chara/ftZelda/ftZd_Special{N,S,Hi,Lw}.c
     """
     out: dict = {}
     ext_abs = arc.ptr32(ftdata_abs + 0x04)
@@ -772,6 +900,18 @@ def _extract_zelda_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
     for key, off, kind in ZELDA_SPECIAL_ATTRS_LAYOUT:
         if kind == "f32":
             out[key] = float(_f32_be(buf, ext_abs + off))
+        elif kind == "i32":
+            out[key] = int(_i32_be(buf, ext_abs + off))
+        elif kind == "u32":
+            out[key] = int(_u32_be(buf, ext_abs + off))
+        elif kind == "u8":
+            out[key] = int(buf[ext_abs + off])
+        elif kind == "vec3":
+            out[key] = [
+                float(_f32_be(buf, ext_abs + off + 0x00)),
+                float(_f32_be(buf, ext_abs + off + 0x04)),
+                float(_f32_be(buf, ext_abs + off + 0x08)),
+            ]
         else:  # pragma: no cover - layout table typo
             raise ValueError(f"unknown layout kind {kind!r} for {key}")
     return out
@@ -1037,6 +1177,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out.update(_extract_seak_chain_article(buf, arc, ftdata_abs=ftdata_abs))
     elif ext_attr_layout == "zelda_special":
         out.update(_extract_zelda_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
+        out.update(_extract_zelda_din_article(buf, arc, ftdata_abs=ftdata_abs))
     if extract_fox_blaster:
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
