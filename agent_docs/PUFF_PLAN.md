@@ -182,8 +182,71 @@ More Rollout mechanics (read continued):
   x0 <= 0 flip x34.x (roll direction) and hand to 8013DA24.
 - End_Anim (352/353/360/361): scale cosmetic; anim end -> facing restore
   (8013D658 from mv facing latch) + ft_8008A2BC Wait.
-- Release PHYS (roll speed from charge) still unread: ftPr_SpecialS_8013D8E4
-  (called in Release_Anim) + the Release/Turn Phys callbacks + NHit(362)
-  + coll (wall bounce/ledge) + the B-hold/release transition out of
-  Loop/Full (likely in Loop IASA or the x21F8 callback) remain to read:
-  ftPr_SpecialN.c lines ~520-1470.
+Rollout survey COMPLETE (2026-07-08; full ftPr_SpecialN.c read + helper
+bodies + ftPurinAttributes struct from ftPurin/types.h):
+- Release trigger: Loop/Full IASA fires when B NOT held
+  (!(held_inputs & 0x200)) -> Release(350)/ChargeRelease(358) at preserved
+  frame with initial vel = x34.x * (da->xC0 * (x2C - da->xA0)).
+- Release grounded Phys per frame: base = x34.x * xC0 * (x2C - xB8)
+  +/- slope influence xC8 * base * |floor.normal.x|; clamped to x4C then
+  x50; ApplyGroundMovement. Charge decays x2C -= xB4/frame while rolling;
+  roll ends (8013DA24 ground-end) when x2C < xB8.
+- Release_Anim end gate: x0-- per frame; when x0 <= 0 AND roll angle x14
+  crosses pi (delta = deg2rad(0.2 * x98 * x34.x * x2C * xBC) per frame) ->
+  8013DA24(air variant for 358). Turn budget x0 init da->x34; on-hit
+  costs x38.
+- Release IASA -> Turn(351): |stick.x| > x68 opposite x34.x; latches
+  x10 = gr_vel, x1C = -0.05 * gr_vel. Turn Phys: gr_vel += xC4 *
+  mpLib_800569EC(floor.flags) * (x1C +/- influence); exits back to Release
+  when velocity crosses zero with |gr_vel| >= |x10 * xD0|. Turn_Anim
+  exhaustion (x0 <= 0): flip x34.x, 8013DA24 end.
+- Air ChargeRelease Phys: self_vel.x = base (same formula), decel x58
+  toward min x5C, ftCommon_Fall(x3C gravity, x40 terminal).
+- On-hit callback 8013D764 (deal_dmg_cb, active in Release/Turn/
+  AirChargeRelease/AirStartTurn): xC=0; x0 -= x38; facing = x34.x; remove
+  hitboxes -> NHit(362) at preserved frame. Ground: self_vel.x = gr_vel *
+  specialn_vel.x (attr x88) + go airborne; air: self_vel.x *= x88. Always
+  self_vel.y = specialn_vel.y (x8C); anim_vel/xE4/gr_vel zeroed;
+  deal_dmg_cb=NULL. NHit Phys = Fall + drift when vy <= -x40; NHit_Coll
+  landing -> facing restore + (xD8==0 ? normal landing : LandingFallSpecial
+  lag xD8). NHit_Anim end (read earlier): air -> Fall.
+- Damage updater 8013D8E4 (per-frame in Release/Turn/AirChargeRelease):
+  speed = |gr_vel| ground / |self_vel.x| air; below xCC -> hitbox disabled
+  (+colanim reset); else enabled with damage = (s32)(x84 * (x80 + speed)),
+  min 1. hitCapsuleToggle: xC counter flips hb0 x4 side-bit every x9C
+  frames.
+- Wall bounce (Release_Coll / AirChargeRelease_Coll): rolling right checks
+  env_flags & 0x3F, left & 0xFC0; on hit: x2C *= xD4 (clamp >= 0),
+  x18 *= xD4, gr_vel/self_vel.x = -vel * xD4, x34.x flips (ground: =
+  SIGNF(gr_vel); air: = -x34.x).
+- Air release landing (AirChargeRelease_Coll): vy' = |self_vel.y * x78|;
+  if vy' < x7C -> ground Release at preserved frame, gr_vel = self_vel.x =
+  x18 * x34.x, x1C = da->x44; else BOUNCE (self_vel.y = vy') with optional
+  stick re-aim (|stick.x| > x68 -> x34.x = sign, vel = x18 * x34.x).
+  x18 = |roll speed| lane (kept in sync by the Phys callbacks).
+- AirStartTurn_Coll landing -> ground Turn at preserved frame, gr_vel =
+  self_vel.x. Ground colls (Start/Loop/Full/Release/Turn/End) floor-loss ->
+  air variant at preserved frame (7D5D4); air Start/ChargeLoop/Full/End
+  landing -> ground variant (7D7FC).
+- End handoff 8013DA24(is_air): facing = x34.x; remove hitboxes; ground ->
+  EndR/L(352/353) with gr_vel *= x90, vy = 0; air -> AirEndR/L(360/361)
+  with self_vel.x *= x90, self_vel.y *= x94, gr_vel = 0. AirEnd_Anim end:
+  facing restore + (xD8 == 0 ? Fall : ftCo_80096900 special-fall with lag
+  xD8).
+- Facing restore 8013D658 (death2/take_dmg cb + End/exit): if mv facing
+  latch != 0, fp->facing_dir = latch; latch = 0 (model scale/rot cosmetic).
+- Shield-hit callback x21F8 = 8014222C: negates self_vel.x, gr_vel, xE4,
+  x10, x14, x18, x1C, facing latch, x34.x, x34.y (full direction
+  reversal on shield contact).
+- ftPurinAttributes types: x34/x38/x70/x9C are s32, specialn_vel Vec2 at
+  0x88, rest floats. Rollout attr map: x34 turn budget, x38 on-hit cost,
+  x3C air gravity, x40 terminal, x44/x54 x1C init g/air, x4C/x50 vel
+  clamps, x58 air decel, x5C air min, x68 stick threshold, x6C turn roll
+  rate, x74 Turn_Coll vel threshold (fast colls use ft_80082888 above it),
+  x78 landing vy scale, x7C bounce threshold, x80/x84 damage base/scale,
+  x88/x8C NHit vel scale/set, x90/x94 end vel scales, x98 release roll
+  rate, x9C hit toggle period, xA0 charge init, xA4 charge max, xA8 charge
+  rate, xAC loop roll rate (deg), xB4 charge decay, xB8 min rolling
+  charge, xBC roll-rate scale, xC0 release vel scale, xC4 turn accel, xC8
+  slope influence, xCC min-damage speed, xD0 turn exit ratio, xD4 wall
+  bounce decay, xD8 landing lag.
