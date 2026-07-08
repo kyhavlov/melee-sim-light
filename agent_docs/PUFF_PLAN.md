@@ -166,3 +166,24 @@ Concrete entry/charge mechanics (read 2026-07-07):
 - Attr offsets so far: x34 (turn budget), x38 (turn cost), x3C (air entry
   vy), x44/x54 (x1C init g/air), x9C (hit toggle period), xA0 (charge
   init), xA4 (charge max), xA8 (charge rate).
+
+More Rollout mechanics (read continued):
+- Loop -> Full (349/357) when charge x2C hits xA4 (keeps cur_anim_frame);
+  x30=1 marks full (colanim pulse 5 once via ftCo_800BFFD0).
+- Loop/Full roll-angle accum per frame: x14 += facing * x2C * deg2rad(xAC)
+  (cosmetic; scalar model can skip x14 EXCEPT Release's turnaround gate
+  reads it — see below).
+- Release_Anim (350/358): angle delta = deg2rad(x2C * 0.2 * da->x98 *
+  facing); x0 (turn budget, init da->x34) decrements per frame; when
+  x0 <= 0 AND the roll angle crosses pi (model upside-down) ->
+  ftPr_SpecialS_8013DA24(end handoff 0x40012). So the END trigger needs
+  the x14 angle lane modeled (charge-scaled angular speed).
+- Turn_Anim (351/359): angle -= 0.2 * da->x6C * facing; x0 decrements; at
+  x0 <= 0 flip x34.x (roll direction) and hand to 8013DA24.
+- End_Anim (352/353/360/361): scale cosmetic; anim end -> facing restore
+  (8013D658 from mv facing latch) + ft_8008A2BC Wait.
+- Release PHYS (roll speed from charge) still unread: ftPr_SpecialS_8013D8E4
+  (called in Release_Anim) + the Release/Turn Phys callbacks + NHit(362)
+  + coll (wall bounce/ledge) + the B-hold/release transition out of
+  Loop/Full (likely in Loop IASA or the x21F8 callback) remain to read:
+  ftPr_SpecialN.c lines ~520-1470.
