@@ -558,6 +558,8 @@ typedef struct MslCommonParams {
   // - `ABS(lstick.x) >= x254` chooses tech-in-place vs tech-roll.
   float tech_window_frames;         // p_ftCommonData->x250
   float tech_roll_stick_threshold;  // p_ftCommonData->x254
+  // Multi-jump ladder drift stick threshold (ftCo_JumpAerialF1_Phys -> ft_80084E1C).
+  float multijump_drift_stick_threshold;  // p_ftCommonData->x258
 
   // Damage landing thresholds (ftCo_Damage_Coll).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll

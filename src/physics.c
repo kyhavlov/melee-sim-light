@@ -1,6 +1,7 @@
 #include "physics.h"
 #include "char_registry.h"
 #include "falcon_specials.h"
+#include "puff_specials.h"
 #include "marth_specials.h"
 #include "sheik_specials.h"
 
@@ -2316,6 +2317,23 @@ void physics_integrate(MslBatch* batch) {
                 // refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC
                 batch->state.speed_air_x_self[idx] = air_apply_friction_step(
                     batch->state.speed_air_x_self[idx], ch->aerial_friction);
+              } else if (puff_action_is_multijump(batch->state.char_id[idx], action_id)) {
+                // Multi-jump ladder drift (ft_80084E1C via ftCo_JumpAerialF1_Phys): drift and
+                // target zero below the p_ftCommonData->x258 stick threshold, caps scaled by the
+                // x2D0 block's xC/x10, NO aerial_drift_base flat term, then the common
+                // ftCommon_8007D140/8007D174 accel step.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_JumpAerialF1_Phys
+                // refs/melee/src/melee/ft/ft_084E.c::ft_80084E1C
+                // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D140,ftCommon_8007D174}
+                float mj_drift = 0.0f;
+                float mj_target = 0.0f;
+                if (msl_absf(stick_x) >= c->multijump_drift_stick_threshold) {
+                  mj_drift = stick_x * (ch->air_drift_stick_mul * ch->puff_mjump_drift_accel_mul);
+                  mj_target = stick_x * (ch->air_drift_max * ch->puff_mjump_drift_max_mul);
+                }
+                batch->state.speed_air_x_self[idx] = air_apply_accel_step(
+                    batch->state.speed_air_x_self[idx], mj_drift, mj_target, ch->aerial_friction,
+                    ch->air_max_horizontal_velocity);
               } else if (physics_action_uses_common_air_drift(batch->state.char_id[idx],
                                                               action_id) ||
                          damage_uses_common_air_helper) {

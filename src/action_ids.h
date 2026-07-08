@@ -384,6 +384,44 @@ enum {
   MSL_ACT_CA_SPECIAL_LW_END_AIR = 0x016A,      // ftCa_MS_SpecialLwEndAir (362)
   MSL_ACT_CA_SPECIAL_HI_THROW1 = 0x016B,       // ftCa_MS_SpecialHiThrow1 (363)
 
+  // Jigglypuff char-special action ids (per-character space above ftCo_MS_Count=341;
+  // consumers must gate on char_id == MSL_CHAR_ID_PUFF). 341..345 are the five midair-jump
+  // ladder states (common ftCo_JumpAerialF1_* callbacks driven by the fp->x2D0 multi-jump
+  // block). Submotion mapping is uniformly action-46 (295..326).
+  // refs/melee/src/melee/ft/chara/ftPurin/forward.h::ftPurin_MotionState
+  MSL_ACT_PR_JUMP_AERIAL_F1 = 0x0155,           // ftPr_MS_JumpAerialF1 (341)
+  MSL_ACT_PR_JUMP_AERIAL_F2 = 0x0156,           // ftPr_MS_JumpAerialF2 (342)
+  MSL_ACT_PR_JUMP_AERIAL_F3 = 0x0157,           // ftPr_MS_JumpAerialF3 (343)
+  MSL_ACT_PR_JUMP_AERIAL_F4 = 0x0158,           // ftPr_MS_JumpAerialF4 (344)
+  MSL_ACT_PR_JUMP_AERIAL_F5 = 0x0159,           // ftPr_MS_JumpAerialF5 (345)
+  MSL_ACT_PR_SPECIAL_N_START_R = 0x015A,        // ftPr_MS_SpecialNStartR (346)
+  MSL_ACT_PR_SPECIAL_N_START_L = 0x015B,        // ftPr_MS_SpecialNStartL (347)
+  MSL_ACT_PR_SPECIAL_N_LOOP = 0x015C,           // ftPr_MS_SpecialNLoop (348)
+  MSL_ACT_PR_SPECIAL_N_FULL = 0x015D,           // ftPr_MS_SpecialNFull (349)
+  MSL_ACT_PR_SPECIAL_N_RELEASE = 0x015E,        // ftPr_MS_SpecialNRelease (350)
+  MSL_ACT_PR_SPECIAL_N_TURN = 0x015F,           // ftPr_MS_SpecialNTurn (351)
+  MSL_ACT_PR_SPECIAL_N_END_R = 0x0160,          // ftPr_MS_SpecialNEndR (352)
+  MSL_ACT_PR_SPECIAL_N_END_L = 0x0161,          // ftPr_MS_SpecialNEndL (353)
+  MSL_ACT_PR_SPECIAL_AIR_N_START_R = 0x0162,    // ftPr_MS_SpecialAirNStartR (354)
+  MSL_ACT_PR_SPECIAL_AIR_N_START_L = 0x0163,    // ftPr_MS_SpecialAirNStartL (355)
+  MSL_ACT_PR_SPECIAL_AIR_N_CHARGE_LOOP = 0x0164,     // ftPr_MS_SpecialAirNChargeLoop (356)
+  MSL_ACT_PR_SPECIAL_AIR_N_CHARGE_FULL = 0x0165,     // ftPr_MS_SpecialAirNChargeFull (357)
+  MSL_ACT_PR_SPECIAL_AIR_N_CHARGE_RELEASE = 0x0166,  // ftPr_MS_SpecialAirNChargeRelease (358)
+  MSL_ACT_PR_SPECIAL_AIR_N_START_TURN = 0x0167,      // ftPr_MS_SpecialAirNStartTurn (359)
+  MSL_ACT_PR_SPECIAL_AIR_N_END_R = 0x0168,      // ftPr_MS_SpecialAirNEndR (360)
+  MSL_ACT_PR_SPECIAL_AIR_N_END_L = 0x0169,      // ftPr_MS_SpecialAirNEndL (361)
+  MSL_ACT_PR_SPECIAL_N_HIT = 0x016A,            // ftPr_MS_SpecialNHit (362)
+  MSL_ACT_PR_SPECIAL_S = 0x016B,                // ftPr_MS_SpecialS (363)
+  MSL_ACT_PR_SPECIAL_AIR_S = 0x016C,            // ftPr_MS_SpecialAirS (364)
+  MSL_ACT_PR_SPECIAL_HI_L = 0x016D,             // ftPr_MS_SpecialHiL (365)
+  MSL_ACT_PR_SPECIAL_AIR_HI_L = 0x016E,         // ftPr_MS_SpecialAirHiL (366)
+  MSL_ACT_PR_SPECIAL_HI_R = 0x016F,             // ftPr_MS_SpecialHiR (367)
+  MSL_ACT_PR_SPECIAL_AIR_HI_R = 0x0170,         // ftPr_MS_SpecialAirHiR (368)
+  MSL_ACT_PR_SPECIAL_LW_L = 0x0171,             // ftPr_MS_SpecialLwL (369)
+  MSL_ACT_PR_SPECIAL_AIR_LW_L = 0x0172,         // ftPr_MS_SpecialAirLwL (370)
+  MSL_ACT_PR_SPECIAL_LW_R = 0x0173,             // ftPr_MS_SpecialLwR (371)
+  MSL_ACT_PR_SPECIAL_AIR_LW_R = 0x0174,         // ftPr_MS_SpecialAirLwR (372)
+
   MSL_ACT_FX_SPECIAL_N_START = 0x0155,      // ftFx_MS_SpecialNStart
   MSL_ACT_FX_SPECIAL_N_LOOP = 0x0156,       // ftFx_MS_SpecialNLoop
   MSL_ACT_FX_SPECIAL_N_END = 0x0157,        // ftFx_MS_SpecialNEnd
@@ -798,6 +836,17 @@ static inline uint8_t msl_action_allows_fastfall(uint8_t char_id, uint16_t actio
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c
   if (msl_action_is_air_locomotion(action_id)) {
     return 1;
+  }
+  // Multi-jump ladder (puff): ftCo_JumpAerialF1_Phys runs ft_80084E1C, which is the same
+  // CheckFallFast + Fall/FallFast gravity head; the DRIFT differs (threshold-gated, scaled
+  // caps) and is owned by the multi-jump branch in physics.c. Char-gated BEFORE the switch:
+  // the 341..345 numeric ids belong to other chars' specials (fox SpecialN family, falcon item
+  // swings) whose fastfall ownership stays with the default fx-kind path below.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_JumpAerialF1_Phys
+  // refs/melee/src/melee/ft/ft_084E.c::ft_80084E1C
+  if (char_id == (uint8_t)MSL_CHAR_ID_PUFF && action_id >= (uint16_t)MSL_ACT_PR_JUMP_AERIAL_F1 &&
+      action_id <= (uint16_t)MSL_ACT_PR_JUMP_AERIAL_F5) {
+    return 1u;
   }
   switch (action_id) {
     // DamageFall uses the common airborne fall helper in its phys callback.

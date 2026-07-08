@@ -471,6 +471,18 @@ typedef struct MslCharParams {
   float falcon_speciallw_landing_lag_mul;
   float falcon_speciallw_ground_traction;
   float falcon_speciallw_air_landing_traction;
+
+  // Multi-jump ladder block (the fp->x2D0 stats; puff/kirby). has_multijump gates the
+  // JumpAerialF1..F5 dispatch fork; absent keys parse as zeros for every other char.
+  // refs/melee/src/melee/ft/types.h::Fighter_x2D0_t
+  // refs/melee/src/melee/ft/chara/ftPurin/ftPr_Init.c (fp->x2D0 = fp->dat_attrs)
+  uint8_t has_multijump;
+  int32_t puff_mjump_turn_frames;
+  float puff_mjump_turn_threshold;
+  float puff_mjump_h_impulse;
+  float puff_mjump_drift_accel_mul;
+  float puff_mjump_drift_max_mul;
+  float puff_mjump_v_impulse[5];
 } MslCharParams;
 
 int char_params_init(void);

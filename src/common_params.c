@@ -36,6 +36,9 @@ static const char* json_parse_double(const char* s, double* out) {
   return end;
 }
 
+static int json_get_f32_with_default(const char* json, const char* key, float default_v,
+                                     float* out);
+
 static int json_get_f32(const char* json, const char* key, float* out) {
   if (json == NULL || key == NULL || out == NULL) {
     return -1;
@@ -64,6 +67,16 @@ static int json_get_f32(const char* json, const char* key, float* out) {
   *out = (float)v;
   return 0;
 }
+
+static int json_get_f32_with_default(const char* json, const char* key, float default_v,
+                                     float* out) {
+  if (json_get_f32(json, key, out) == 0) {
+    return 0;
+  }
+  *out = default_v;
+  return 0;
+}
+
 
 static int json_get_u8(const char* json, const char* key, uint8_t* out) {
   if (json == NULL || key == NULL || out == NULL) {
@@ -520,6 +533,8 @@ int common_params_init(void) {
       json_get_u8(buf, "tech_lr_debounce_frames", &g_params.tech_lr_debounce_frames) != 0 ||
       json_get_f32(buf, "tech_window_frames", &g_params.tech_window_frames) != 0 ||
       json_get_f32(buf, "tech_roll_stick_threshold", &g_params.tech_roll_stick_threshold) != 0 ||
+      json_get_f32_with_default(buf, "multijump_drift_stick_threshold", 0.0f,
+                                &g_params.multijump_drift_stick_threshold) != 0 ||
       json_get_f32(buf, "damage_jump_buffer_window_frames",
                    &g_params.damage_jump_buffer_window_frames) != 0 ||
       json_get_f32(buf, "damagefly_downbound_kb_vel_threshold",

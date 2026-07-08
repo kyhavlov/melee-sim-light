@@ -905,6 +905,9 @@ typedef struct MslStateSoA {
   float* falcon_specialhi_vel_x;
   float* falcon_specialhi_vel_y;
   uint8_t* falcon_specialhi_x221b_b7;
+  // Multi-jump ladder turnaround window (mv.co.jumpaerial.x0; puff/kirby).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
+  uint8_t* puff_mjump_turn_timer;
   // Raptor Boost: mv.ca.specials.grav accumulator + fp->unk_gobj inert-contact detect flag.
   float* falcon_specials_grav;
   uint8_t* falcon_detect_pending;

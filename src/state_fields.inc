@@ -358,6 +358,11 @@ MSL_STATE_FIELD(falcon_detect_pending, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(falcon_specialhi_vel_x, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(falcon_specialhi_vel_y, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(falcon_specialhi_x221b_b7, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+// Multi-jump ladder turnaround window (mv.co.jumpaerial.x0; puff/kirby): frames remaining in
+// the ftCo_800D74A4-armed reverse-jump turn; facing flips when the countdown reaches
+// turn_frames/2 (ft_800CB6EC).
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
+MSL_STATE_FIELD(puff_mjump_turn_timer, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(fallspecial_mobility_mul, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_window, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_hitlag_floor_active, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)

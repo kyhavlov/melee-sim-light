@@ -58,6 +58,7 @@
 #include "state_flags.h"
 #include "step.h"
 #include "falcon_specials.h"
+#include "puff_specials.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
 #include "locomotion.h"
@@ -3587,6 +3588,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     // Reconstruct hidden Falcon Dive lanes (mv.ca.specialhi.vel, x221B_b7) from visible seed
     // lanes.
     falcon_specials_reseed_init(batch, bi);
+    puff_specials_reseed_init(batch, bi);
 
     // Combat hitlist reseed generation:
     // - Seed carries a dense per-(attacker,hit_group,victim) snapshot, but runtime uses per-hitbox

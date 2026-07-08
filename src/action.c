@@ -1,6 +1,7 @@
 #include "action.h"
 #include "shields.h"
 #include "falcon_specials.h"
+#include "puff_specials.h"
 #include "marth_specials.h"
 #include "sheik_specials.h"
 
@@ -2300,6 +2301,7 @@ void action_update(MslBatch* batch) {
   marth_specials_update_pre_physics(batch);
   sheik_specials_update_pre_physics(batch);
   falcon_specials_update_pre_physics(batch);
+  puff_specials_update_pre_physics(batch);
   // Shield recharge is owned by Fighter_ProcessHit_8006D1EC under the `!fp->x221A_b7` gate, not
   // by locomotion. Run it after the frame's state-entry callbacks so the gate observes the current
   // state (for example SpecialLwStart after a shine entry), and do not suppress it during hitlag.

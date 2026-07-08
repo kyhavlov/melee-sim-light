@@ -376,6 +376,7 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftSk_SpecialAirHi_Coll",
         "ftCo_MissFoot_Coll",
         "ftCo_Pass_Coll",
+        "ftCo_JumpAerialF1_Coll",
     }:
         # Fox/Falco aerial Side-B/SpecialHi{HoldAir,AirHi,Fall}, Sheik Vanish aerial
         # Start0/Start1/End, and common MissFoot/Pass collision callbacks call
@@ -575,6 +576,7 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_JumpAerial_Coll",
         "ftCo_CliffJump2_Coll",
         "ftCo_MissFoot_Coll",
+        "ftCo_JumpAerialF1_Coll",
         "ftCo_CaptureJump_Coll",
         "ftFx_SpecialAirNStart_Coll",
         "ftFx_SpecialAirNLoop_Coll",
@@ -683,8 +685,12 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         "ftCo_CliffJump2_Coll",
         "ftCo_MissFoot_Coll",
         "ftCo_Pass_Coll",
+        "ftCo_JumpAerialF1_Coll",
     }:
-        # Phase 3 common airborne owner. This intentionally excludes AttackAir, EscapeAir, Damage,
+        # Phase 3 common airborne owner. The multi-jump ladder Coll (puff/kirby JumpAerialF1..5)
+        # is ft_80082F28 — the same MissFoot/Pass ft_CheckGroundAndLedge shape (walljump consumer
+        # unreachable for puff: can_walljump=false).
+        # refs/melee/src/melee/ft/ft_081B.c::ft_80082F28 This intentionally excludes AttackAir, EscapeAir, Damage,
         # item/projectile, catch/throw/capture, and Fox/Falco bespoke special callbacks.
         # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}
         bits |= CLASS2_COMMON_AIRBORNE_COLL

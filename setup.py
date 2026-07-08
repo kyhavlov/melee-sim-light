@@ -150,6 +150,7 @@ ext = Extension(
         "src/locomotion.c",
         "src/locomotion_landing.c",
         "src/falcon_specials.c",
+        "src/puff_specials.c",
         "src/marth_specials.c",
         "src/sheik_specials.c",
         "src/move_tables.c",

@@ -120,6 +120,11 @@ def main() -> None:
         "tech_lr_debounce_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x1C))),
         "tech_window_frames": float(_f32_be(buf, ft_common_abs + 0x250)),
         "tech_roll_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x254)),
+        # - multi-jump ladder drift stick threshold: ftCo_JumpAerialF1_Phys passes
+        #   p_ftCommonData->x258 into ft_80084E1C; drift/target are zero below it.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_JumpAerialF1_Phys
+        # refs/melee/src/melee/ft/ft_084E.c::ft_80084E1C
+        "multijump_drift_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x258)),
         # Downed / knockdown input thresholds (ftCo_Down / ft_0DF1.c).
         # - Downed rolls: ABS(stick_x) >= x248 and stick angle < x20_radians.
         # - DownStand input: stick.y >= x244 and stick angle >= x20_radians.

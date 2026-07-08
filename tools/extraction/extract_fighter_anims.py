@@ -945,9 +945,21 @@ def _special_anim_msids(character: str) -> list[int]:
             continue
         name, _x4, _x8, _flags_u8 = entry
         # Names are AJ symbols (e.g. PlyFox5K_Share_ACTION_SpecialNStart_figatree).
-        if "Special" in name:
+        # Multi-jump ladders (puff/kirby _ACTION_JumpAerialF<digit>) are char-range states that
+        # need baked poses/end-frames like the specials; the digit requirement keeps every
+        # char's COMMON _ACTION_JumpAerialF figatree handled by the curated common list instead.
+        if "Special" in name or _is_multijump_ladder_anim_name(name):
             out.append(int(msid))
     return sorted(set(out))
+
+
+def _is_multijump_ladder_anim_name(name: str) -> bool:
+    marker = "_ACTION_JumpAerialF"
+    i = name.find(marker)
+    if i < 0:
+        return False
+    j = i + len(marker)
+    return j < len(name) and name[j].isdigit()
 
 
 def _ftkind(character: str) -> int:

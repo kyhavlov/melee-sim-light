@@ -49,9 +49,21 @@ def _scan_special_entries(character: str, *, limit: int = 512) -> list[tuple[int
         if not e:
             continue
         name = e[0]
-        if "Special" in name:
+        # JumpAerialF1..F5: multi-jump ladder states (puff/kirby) — char-range figatrees whose
+        # scripts carry the jump-chain cmd_var window (see the extra_script_msids derivation).
+        # The digit requirement excludes every char's COMMON _ACTION_JumpAerialF figatree.
+        if "Special" in name or _is_multijump_ladder_name(name):
             out.append((msid, name))
     return out
+
+
+def _is_multijump_ladder_name(name: str) -> bool:
+    marker = "_ACTION_JumpAerialF"
+    i = name.find(marker)
+    if i < 0:
+        return False
+    j = i + len(marker)
+    return j < len(name) and name[j].isdigit()
 
 
 def _pick_first(entries: list[tuple[int, str]], *, includes: list[str], excludes: list[str] | None = None) -> int | None:
@@ -286,7 +298,13 @@ def extract_special_msids(*, character: str) -> SpecialMsids:
     extra = sorted(
         int(msid)
         for msid, name in entries
-        if "_ACTION_Special" in name and "FallSpecial" not in name and int(msid) not in covered
+        if (("_ACTION_Special" in name and "FallSpecial" not in name) or
+            # Multi-jump ladders (puff/kirby JumpAerialF1..F5): char-range states whose scripts
+            # carry the jump-chain cmd_var window consumed by ftCo_800D730C /
+            # ftCo_JumpAerial_IASA. The digit requirement keeps every char's COMMON
+            # _ACTION_JumpAerialF figatree out, so existing chars' artifacts are untouched.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D730C
+            _is_multijump_ladder_name(name)) and int(msid) not in covered
     )
     # Fox/Falco: the long-validated runtime special owners (blaster.c/physics.c SpecialHi
     # Bound/Landing handling) consume the ABSENCE of script data for the slot-scheme leftovers

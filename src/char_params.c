@@ -950,6 +950,35 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   }
 #undef MSL_GET_FALCON_F32
 #undef MSL_GET_FALCON_I32
+
+  // Multi-jump ladder block (fp->x2D0; puff/kirby): REQUIRED for chars whose registry id owns
+  // the ladder (stale puff data must fail loudly), zero-defaulted for everyone else.
+  // refs/melee/src/melee/ft/types.h::Fighter_x2D0_t
+  const uint8_t require_multijump_attrs = (uint8_t)(char_id == (uint8_t)MSL_CHAR_ID_PUFF);
+#define MSL_GET_MJUMP_F32(key, field)                              \
+  (require_multijump_attrs ? json_get_f32(buf, (key), &out.field)  \
+                           : json_get_f32_or_default(buf, (key), 0.0f, &out.field))
+#define MSL_GET_MJUMP_I32(key, field)                              \
+  (require_multijump_attrs ? json_get_i32(buf, (key), &out.field)  \
+                           : json_get_i32_or_default(buf, (key), 0, &out.field))
+  if (MSL_GET_MJUMP_I32("puff_mjump_turn_frames", puff_mjump_turn_frames) != 0 ||
+      MSL_GET_MJUMP_F32("puff_mjump_turn_threshold", puff_mjump_turn_threshold) != 0 ||
+      MSL_GET_MJUMP_F32("puff_mjump_h_impulse", puff_mjump_h_impulse) != 0 ||
+      MSL_GET_MJUMP_F32("puff_mjump_drift_accel_mul", puff_mjump_drift_accel_mul) != 0 ||
+      MSL_GET_MJUMP_F32("puff_mjump_drift_max_mul", puff_mjump_drift_max_mul) != 0 ||
+      MSL_GET_MJUMP_F32("puff_mjump_v_impulse_1", puff_mjump_v_impulse[0]) != 0 ||
+      MSL_GET_MJUMP_F32("puff_mjump_v_impulse_2", puff_mjump_v_impulse[1]) != 0 ||
+      MSL_GET_MJUMP_F32("puff_mjump_v_impulse_3", puff_mjump_v_impulse[2]) != 0 ||
+      MSL_GET_MJUMP_F32("puff_mjump_v_impulse_4", puff_mjump_v_impulse[3]) != 0 ||
+      MSL_GET_MJUMP_F32("puff_mjump_v_impulse_5", puff_mjump_v_impulse[4]) != 0) {
+    fprintf(stderr, "msl: char params multi-jump attr parse failed in %s\n", path);
+    alloc_free(buf);
+    return -1;
+  }
+#undef MSL_GET_MJUMP_F32
+#undef MSL_GET_MJUMP_I32
+  out.has_multijump = require_multijump_attrs;
+
   out.reflector_offset_x = refl_off[0];
   out.reflector_offset_y = refl_off[1];
   out.reflector_offset_z = refl_off[2];

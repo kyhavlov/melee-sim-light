@@ -935,6 +935,10 @@ def test_downsmash_enters_from_smash_input(char_name: str) -> None:
 @CHAR_PARAMS
 def test_double_jump_applies_air_multiplier(char_name: str) -> None:
     # Decomp: ftCo_JumpAerial applies jump_v_initial_velocity * air_jump_v_multiplier.
+    # Multi-jump chars (puff) replace the common JumpAerialF/B with the ladder states
+    # (ftPr_MS_JumpAerialF1..F5) whose per-jump vy comes from the fp->x2D0 impulse table;
+    # jumps_left=1 of max_jumps=6 means the LAST rung fires.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D74A4
     a = _char_attrs(char_name)
     seed = _seed_base(char_name, grounded=False, pos_y=600.0)
     seed["action_id"][0, 0] = np.uint16(ACT_FALL)
@@ -942,9 +946,17 @@ def test_double_jump_applies_air_multiplier(char_name: str) -> None:
     seed["jumps_left"][0, 0] = np.uint8(1)
     outs = _run(seed, [_mk_inputs(buttons=0x0400)] + [_mk_inputs()] * 2)
     acts = [int(o["action_id"][0]) for o in outs]
-    assert any(x in (0x001B, 0x001C) for x in acts), f"{char_name}: no double jump: {acts}"
-    vy = float(outs[0]["speed_y_self"][0])
-    expect = float(a["jump_v_initial_velocity"]) * float(a["air_jump_v_multiplier"])
+    is_multijump = "puff_mjump_h_impulse" in a
+    if is_multijump:
+        assert any(341 <= x <= 345 for x in acts), f"{char_name}: no ladder jump: {acts}"
+        vy = float(outs[0]["speed_y_self"][0])
+        max_jumps = int(a["max_jumps"])
+        rung = max_jumps - 1  # jumps used pre-entry with jumps_left=1
+        expect = float(a[f"puff_mjump_v_impulse_{rung}"])
+    else:
+        assert any(x in (0x001B, 0x001C) for x in acts), f"{char_name}: no double jump: {acts}"
+        vy = float(outs[0]["speed_y_self"][0])
+        expect = float(a["jump_v_initial_velocity"]) * float(a["air_jump_v_multiplier"])
     grav = float(a["grav"])
     assert expect - 2.5 * grav <= vy <= expect + 1e-3, (
         f"{char_name}: dj vy {vy} vs {expect} (grav {grav})"

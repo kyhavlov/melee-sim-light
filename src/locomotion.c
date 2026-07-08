@@ -1,6 +1,7 @@
 #include "locomotion.h"
 #include "char_registry.h"
 #include "falcon_specials.h"
+#include "puff_specials.h"
 #include "marth_specials.h"
 
 #include <math.h>
@@ -2855,11 +2856,24 @@ static inline uint16_t jump_aerial_action_from_stick(const MslCommonParams* c, f
                                                             : MSL_ACT_JUMP_AERIAL_B;
 }
 
+static inline uint8_t locomotion_puff_multijump_try_enter(MslBatch* batch,
+                                                          const MslCommonParams* c,
+                                                          const MslCharParams* ch, size_t idx,
+                                                          float stick_x, float facing_dir);
+
 static inline uint8_t locomotion_try_enter_jump_aerial_iasa(
     MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, size_t idx,
     uint8_t jump_input, float stick_x, float facing_dir, uint8_t block_from_jump_aerial) {
   if (batch == NULL || c == NULL || ch == NULL) {
     return 0u;
+  }
+  if (ch->has_multijump) {
+    // Multi-jump chars replace ftCo_JumpAerial_CheckInput with ftCo_800D730C: the chain input
+    // differs (held X/Y or held tap-up once the in-ladder script window opens), so the fork
+    // reads its own lanes instead of the caller's edge-shaped jump_input.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D730C
+    return locomotion_puff_multijump_try_enter(batch, c, ch, idx, stick_x, facing_dir);
   }
   if (!jump_input) {
     return 0u;
@@ -2907,6 +2921,111 @@ static inline uint8_t locomotion_try_enter_jump_aerial_iasa(
   batch->state.tilt_timer_y[idx] = 0xFEu;
   batch->state.fall_fast[idx] = 0;
   batch->state.jumps_left[idx]--;
+  return 1u;
+}
+
+// Multi-jump ladder admission + entry (ftCo_800D730C + ftCo_800D74A4; puff/kirby).
+// - First midair jump (jumps_used == 1): ft_did_jump input (fresh tap-up or X/Y press edge)
+//   plus the ftCommon_8007D5D4 air-jump ECB lock the basic path also takes.
+// - Later jumps: HELD tap-up or HELD X/Y chains, but while inside a ladder state only after the
+//   script's cmd0 window pulse (frame 28 on F1..F4; F5 never re-arms).
+// - Entry (ftCo_800D74A4): action = F1 + jumps_used - 1, self_vel = (stick_x * x8,
+//   x14[jumps_used - 1]) BOTH lanes, cmd_vars cleared, and a reversed stick beyond x4 arms the
+//   turnaround window (one ft_800CB6EC tick applies on the entry frame).
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D730C,ftCo_800D72A0,
+//   ftCo_800D74A4}
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{ft_did_jump,ftCo_800CBAC4,
+//   ft_800CB6EC}
+static inline uint8_t locomotion_puff_multijump_try_enter(MslBatch* batch,
+                                                          const MslCommonParams* c,
+                                                          const MslCharParams* ch, size_t idx,
+                                                          float stick_x, float facing_dir) {
+  if (batch->state.on_ground[idx] != 0u || batch->state.jumps_left[idx] == 0u) {
+    return 0u;
+  }
+  const uint8_t max_jumps = ch->max_jumps;
+  const uint8_t jumps_used = (uint8_t)(max_jumps - batch->state.jumps_left[idx]);
+  if (jumps_used == 0u) {
+    // Grounded jump not consumed yet: the multi-jump chain starts from jumps_used >= 1
+    // (the ground jump). A zero-used airborne row keeps the generic admission out too —
+    // ftCo_800D730C's first branch requires jumps_used == 1.
+    return 0u;
+  }
+  const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+  const uint16_t buttons_held = batch->state.input_buttons[idx];
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+
+  if (jumps_used == 1u) {
+    // ft_did_jump: fresh tap-up (x671 freshness window) or X/Y press edge.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_did_jump
+    const uint8_t did_jump =
+        ((stick_y >= c->tap_jump_threshold &&
+          batch->state.tilt_timer_y[idx] < c->tap_jump_tilt_max_frames) ||
+         (buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0u)
+            ? 1u
+            : 0u;
+    if (!did_jump) {
+      return 0u;
+    }
+    // ftCommon_8007D5D4 ECB lock + ground-to-air hygiene, exactly like the basic air-jump entry.
+    locomotion_apply_jump_enter_ground_to_air(batch, idx);
+    if (batch->state.coll_desired_ecb_bottom_valid[idx] != 0u) {
+      const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+      const uint16_t entry_ground_id = batch->state.ground_id[idx];
+      const uint8_t entry_ground_is_soft_or_transform =
+          (entry_ground_id != 0xFFFFu &&
+           (stage_collision_floor_line_is_platform(stage_id, entry_ground_id) ||
+            stage_collision_floor_line_has_platform_transform(stage_id, entry_ground_id)))
+              ? 1u
+              : 0u;
+      batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
+          msl_escapeair_locked_bottom_owner_for_live_jumpaerial_entry(
+              entry_ground_is_soft_or_transform);
+    }
+  } else {
+    // Later jumps: while inside a ladder state, only after the script's cmd0 window pulse.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D730C,ftCo_800D72A0}
+    const uint16_t a = batch->state.action_id[idx];
+    if (puff_action_is_multijump(batch->state.char_id[idx], a) &&
+        move_tables_special_cmd_var_value_at_frame(
+            batch->state.char_id[idx], puff_special_submotion(a), 0u,
+            msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx])) == 0u) {
+      return 0u;
+    }
+    // Held tap-up (no freshness window) or held X/Y.
+    const uint8_t chain_input =
+        (stick_y >= c->tap_jump_threshold || (buttons_held & (uint16_t)MSL_BUTTON_XY) != 0u) ? 1u
+                                                                                             : 0u;
+    if (!chain_input) {
+      return 0u;
+    }
+  }
+
+  // ftCo_800D74A4 entry.
+  const uint8_t ladder_idx = (uint8_t)(jumps_used - 1u);  // 0..4
+  if (ladder_idx > 4u) {
+    return 0u;
+  }
+  const uint16_t act = (uint16_t)(MSL_ACT_PR_JUMP_AERIAL_F1 + ladder_idx);
+  batch->state.action_id[idx] = act;
+  batch->state.animation_index[idx] = (uint32_t)puff_special_submotion(act);
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.special_cmd0[idx] = 0u;
+  batch->state.special_cmd1[idx] = 0u;
+  batch->state.special_cmd2[idx] = 0u;
+  batch->state.speed_air_x_self[idx] = stick_x * ch->puff_mjump_h_impulse;
+  batch->state.speed_y_self[idx] = ch->puff_mjump_v_impulse[ladder_idx];
+  // Ft_MF_SkipNametagVis carries no KeepFastFall: the motion-state reset clears fastfall.
+  batch->state.fall_fast[idx] = 0u;
+  batch->state.jumps_left[idx]--;
+  // Turnaround window arm + the entry-frame ft_800CB6EC tick.
+  if (stick_x * facing_dir < -ch->puff_mjump_turn_threshold && ch->puff_mjump_turn_frames > 0) {
+    batch->state.puff_mjump_turn_timer[idx] = (uint8_t)ch->puff_mjump_turn_frames;
+  } else {
+    batch->state.puff_mjump_turn_timer[idx] = 0u;
+  }
+  puff_mjump_turn_tick(batch, ch, idx);
   return 1u;
 }
 

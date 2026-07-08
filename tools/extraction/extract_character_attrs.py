@@ -663,6 +663,30 @@ CAPTAIN_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
 ]
 
 
+# ftPurinAttributes head = the fp->x2D0 multi-jump block (ftPr_Init sets fp->x2D0 =
+# fp->dat_attrs). Field semantics from the consumers:
+# - refs/melee/src/melee/ft/types.h::Fighter_x2D0_t (x0 turn frames .. x14[5] y impulse)
+# - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D74A4 (entry: vx =
+#   stick_x * x8, vy = x14[jump-1], turnaround arm when stick opposes facing beyond x4)
+# - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_JumpAerialF1_Phys (drift
+#   accel/max scaled by xC/x10)
+# - refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC (turn window)
+# x28 (state count) / x2C / x30 (start msids) are runtime-owned via the action-id registry.
+# The specials tail of ftPurinAttributes gets named during the Phase 4 consumer reads.
+PURIN_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
+    ("puff_mjump_turn_frames", 0x00, "i32"),
+    ("puff_mjump_turn_threshold", 0x04, "f32"),
+    ("puff_mjump_h_impulse", 0x08, "f32"),
+    ("puff_mjump_drift_accel_mul", 0x0C, "f32"),
+    ("puff_mjump_drift_max_mul", 0x10, "f32"),
+    ("puff_mjump_v_impulse_1", 0x14, "f32"),
+    ("puff_mjump_v_impulse_2", 0x18, "f32"),
+    ("puff_mjump_v_impulse_3", 0x1C, "f32"),
+    ("puff_mjump_v_impulse_4", 0x20, "f32"),
+    ("puff_mjump_v_impulse_5", 0x24, "f32"),
+]
+
+
 ZELDA_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
     ("zelda_transform_vel_x_divisor", 0x70, "f32"),
     ("zelda_transform_vel_y_divisor", 0x74, "f32"),
@@ -821,6 +845,27 @@ def _extract_captain_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
     if ext_abs == arc.data_base:
         return out
     for key, off, kind in CAPTAIN_SPECIAL_ATTRS_LAYOUT:
+        if kind == "i32":
+            out[key] = int(_i32_be(buf, ext_abs + off))
+        elif kind == "f32":
+            out[key] = float(_f32_be(buf, ext_abs + off))
+        else:  # pragma: no cover - layout table typo
+            raise ValueError(f"unknown layout kind {kind!r} for {key}")
+    return out
+
+
+def _extract_purin_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
+    """Extract Puff's ftData.x4 ftPurinAttributes multi-jump head (the fp->x2D0 block).
+
+    - refs/melee/src/melee/ft/chara/ftPurin/types.h::ftPurinAttributes
+    - refs/melee/src/melee/ft/chara/ftPurin/ftPr_Init.c (fp->x2D0 = fp->dat_attrs)
+    - refs/melee/src/melee/ft/types.h::Fighter_x2D0_t
+    """
+    out: dict = {}
+    ext_abs = arc.ptr32(ftdata_abs + 0x04)
+    if ext_abs == arc.data_base:
+        return out
+    for key, off, kind in PURIN_SPECIAL_ATTRS_LAYOUT:
         if kind == "i32":
             out[key] = int(_i32_be(buf, ext_abs + off))
         elif kind == "f32":
@@ -1114,6 +1159,8 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out.update(_extract_zelda_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
     elif ext_attr_layout == "captain_special":
         out.update(_extract_captain_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
+    elif ext_attr_layout == "purin_special":
+        out.update(_extract_purin_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
     if extract_fox_blaster:
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
@@ -1492,7 +1539,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
             out[k] = existing[k]
     # Per-character special-attribute families (ext-attr layouts) use mechanic-position
     # prefixes; carry every extracted special* / <char>_* key after the ordered common block.
-    ext_prefixes = ("special", "sheik_", "zelda_", "falcon_")
+    ext_prefixes = ("special", "sheik_", "zelda_", "falcon_", "puff_")
     for k in sorted(extracted):
         if k.startswith(ext_prefixes) and k not in out:
             out[k] = extracted[k]
@@ -1537,7 +1584,7 @@ def main() -> None:
         "zelda": ("PlZd.dat", "ftDataZelda", False, "zelda_special"),
         "peach": ("PlPe.dat", "ftDataPeach", False, None),
         "marth": ("PlMs.dat", "ftDataMars", False, "mars_sword"),
-        "puff": ("PlPr.dat", "ftDataPurin", False, None),
+        "puff": ("PlPr.dat", "ftDataPurin", False, "purin_special"),
         "falcon": ("PlCa.dat", "ftDataCaptain", False, "captain_special"),
     }
     want = [c.strip() for c in args.chars.split(",") if c.strip()]
