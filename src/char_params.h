@@ -490,6 +490,45 @@ typedef struct MslCharParams {
   float puff_pound_angle_diff;
   float puff_pound_vel;
   float puff_pound_vel_decay;
+  // Rollout (ftPr_SpecialN): charge machine + roll speed + turn + landing tail. Names map to
+  // ftPurinAttributes offsets 0x34..0xD8 (see the extraction layout for the full offset table).
+  // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c
+  // refs/melee/src/melee/ft/chara/ftPurin/types.h::ftPurinAttributes
+  int32_t puff_rollout_turn_budget_frames;   // x34
+  int32_t puff_rollout_turn_budget_hit_cost; // x38
+  float puff_rollout_air_grav;               // x3C
+  float puff_rollout_air_terminal_vel;       // x40
+  float puff_rollout_slope_lane_ground;      // x44 (mv x1C init grounded)
+  float puff_rollout_vel_clamp_a;            // x4C
+  float puff_rollout_vel_clamp_b;            // x50
+  float puff_rollout_slope_lane_air;         // x54 (mv x1C init airborne)
+  float puff_rollout_air_decel;              // x58
+  float puff_rollout_air_min_vel;            // x5C
+  float puff_rollout_turn_stick_threshold;   // x68
+  float puff_rollout_turn_roll_rate;         // x6C
+  float puff_rollout_landing_vy_scale;       // x78
+  float puff_rollout_bounce_vy_threshold;    // x7C
+  float puff_rollout_damage_base;            // x80
+  float puff_rollout_damage_scale;           // x84
+  float puff_rollout_hit_vel_x_mul;          // x88 (specialn_vel.x)
+  float puff_rollout_hit_vel_y;              // x8C (specialn_vel.y)
+  float puff_rollout_end_vel_x_mul;          // x90
+  float puff_rollout_end_vel_y_mul;          // x94
+  float puff_rollout_release_roll_rate;      // x98
+  float puff_rollout_charge_init;            // xA0
+  float puff_rollout_charge_max;             // xA4
+  float puff_rollout_charge_rate;            // xA8
+  float puff_rollout_loop_roll_rate_deg;     // xAC
+  float puff_rollout_charge_decay;           // xB4
+  float puff_rollout_charge_min_rolling;     // xB8
+  float puff_rollout_roll_rate_scale;        // xBC
+  float puff_rollout_release_vel_scale;      // xC0
+  float puff_rollout_turn_accel;             // xC4
+  float puff_rollout_slope_influence;        // xC8
+  float puff_rollout_min_damage_speed;       // xCC
+  float puff_rollout_turn_exit_vel_ratio;    // xD0
+  float puff_rollout_wall_bounce_decay;      // xD4
+  float puff_rollout_landing_lag;            // xD8
 } MslCharParams;
 
 int char_params_init(void);

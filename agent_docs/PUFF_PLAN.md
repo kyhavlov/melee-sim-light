@@ -127,6 +127,55 @@ shared-fix queue.
      Luigi/Pikachu/Yoshi/Peach/Samus/ICs are heavier. Recommend DK then
      Doc; both dumps already extracted at ~/replays/top14.
 
+- 2026-07-08: **Rollout live (346-362); one-step 3948 -> 3826.** Module:
+  neutral-B dispatch zone, the full frozen-anim state machine (KEY replay
+  finding: every internal ChangeMotionState passes anim rate 0 — the 5th
+  arg IS the rate — so Loop/Full/Release/Turn/NHit hold state_age 0 and
+  ALL exits are stateful; Start/End animate at rate 1), phys ownership
+  (charge states own an UNPROJECTED self_vel = facing*1e-4 — new
+  physics.c gate `puff_rollout_ground_charge_state` bypasses the generic
+  gr_vel->self_vel floor projection; Release slope-influenced
+  charge-scaled speed with double clamp; Turn material-scaled x1C accel
+  with the zero-crossing xD0 exit; air release x58 decel to the x5C
+  floor; NHit drift-at-terminal + rollout Fall), locomotion hooks
+  (floor-loss swap family WITHOUT the falcon-style gr_vel->self transfer
+  per 7D5D4; air-release landing/bounce fork; wall bounce off env-flag
+  wall masks — dir==+1 checks the LEFT-facing 0x3F wall on the right),
+  combat deal_dmg hook (8013D764 -> NHit with the -0.13/+1.6 backward
+  hop; ref-confirmed jumps_left drops to max-1 and ground_id persists),
+  pre-combat velocity-scaled hitbox pass (8013D8E4: disable below xCC=2,
+  damage (s32)(3*(2+speed)) — a minimum-charge roll at 0.3 speed whiffs
+  entirely, matching source; also gates Release hb1/hb2 off per the
+  script's set_hitbox_interaction x42_b5=0, an event kind the MSLHITB1
+  artifact does not carry).
+  SHARED-MACHINERY fix (char-gated): hitboxes.c frozen-rate-zero seeded
+  prev-capsule bridge — the frame-0 create on a frozen anim looked like a
+  fresh create edge on every teacher-forced row, clearing HitCapsule
+  victims_1 and re-hitting a shielding victim every seeded frame (found
+  via the fox GuardSetOff segment: melee shield hits take the x19A4
+  branch and never fire deal_dmg_cb, so puff keeps rolling).
+  Reseed: dir from letter/velocity-sign/facing; charge inverted from the
+  velocity formula (slope factor from the seeded normal; Turn-exit rows
+  invert the xD0 threshold instead); budget reseeds at init (the natural
+  end row is unpredictable from a seed — the anim carries no progress);
+  Turn pre_turn = v before the zero crossing (proportional decel keeps
+  the exit un-fired) and 8*|v| after it (any single-row estimate either
+  always or never exits; never-exit costs 1 row per turn vs 4+); frozen
+  states force frame_speed 0 (builder defaults entry rows to 1).
+  Unit tests: +7 (entry/frozen-loop, Full+release speed, budget end ->
+  Wait, Turn decel/reversal exact-step, air entry/charge-fall/landing
+  transfer, air budget end -> FallSpecial -> LandingFallSpecial, on-hit
+  NHit backward hop) = 22 puff tests total. Gates: validate-all
+  byte-identical for existing chars; full pytest green (3 known
+  environmental failures only).
+  Documented residual debt (rollout family, ~31 rows in the one FoD
+  game): release-entry rows seeded from Loop can't see the hidden charge
+  (loop holds age 0); the one true Turn-exit row per turn; slope-boundary
+  rows carry a one-frame floor ambiguity (seeded velocity was produced
+  with the PREVIOUS frame's floor normal); NHit hit_group toggle (x9C)
+  re-arm rehits and rollout-vs-shield x18F4/x21F8 spin-reversal
+  (8014222C) unmodeled (victim-side weak-hit turnaround machinery).
+
 ### Rollout survey (2026-07-07 decomp skim; implement next)
 
 ftPr_SpecialN.c is ~1470 lines. mv.pr.specialn lanes (types.h): x0 charge

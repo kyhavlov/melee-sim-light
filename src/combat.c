@@ -1973,6 +1973,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
   // Invincible BODY contact still sets fp->dmg.x1914 (ftColl_80076ED8 writes without applying
   // percent/KB), so deal_dmg_cb owners fire here too.
   falcon_speciallw_on_deal_dmg_x1914(batch, a_idx);
+  puff_rollout_on_deal_dmg(batch, a_idx);
 }
 
 // Marth Counter intercept (ftMs_SpecialLw): while the script-armed window is live
@@ -2356,6 +2357,7 @@ static inline void combat_body_damage_producer_apply_attacker_side(
   }
   // deal_dmg_cb owners fire from the x1914 dealt-damage path once per frame (Fighter_ProcessHit).
   falcon_speciallw_on_deal_dmg_x1914(batch, a_idx);
+  puff_rollout_on_deal_dmg(batch, a_idx);
 }
 
 static inline void combat_body_damage_log_entry_init(

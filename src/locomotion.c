@@ -5840,6 +5840,11 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLw_Coll
         continue;
       }
+      // Rollout wall bounce (grounded Release and air ChargeRelease). No `continue`: the source
+      // Coll processes the bounce before its floor-loss/landing branches in the same frame.
+      // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::{ftPr_SpecialNRelease_Coll,
+      //   ftPr_SpecialAirNChargeRelease_Coll}
+      (void)puff_rollout_try_wall_bounce(batch, idx);
       if (!now_ground &&
           (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_FLOOR_MASK) != 0u) {
         if (spacie_side_special_air_contact_to_ground(batch, ms, ch, idx, a)) {
@@ -6092,6 +6097,15 @@ void locomotion_update_post_collision(MslBatch* batch) {
         batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
         continue;
       }
+      if (was_ground && !now_ground && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_PUFF &&
+          puff_rollout_try_floor_loss_swap(batch, idx)) {
+        // Rollout grounded floor loss -> air variant at the preserved frame. Unlike the
+        // falcon-shape swap below, ftCommon_8007D5D4 zeroes gr_vel WITHOUT transferring it to
+        // self_vel (the air Phys recomputes the roll speed from charge); lane effects are owned
+        // by the module hook.
+        // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c (grounded *_Coll paths)
+        continue;
+      }
       if (was_ground && !now_ground &&
           ((batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
             falcon_special_try_ground_to_air_swap(batch, idx)) ||
@@ -6276,6 +6290,30 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
           batch->state.pos_y[idx] =
               locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+          continue;
+        } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_PUFF &&
+                   a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_CHARGE_RELEASE) {
+          // Rollout air release ground contact: land into grounded Release, or bounce and stay
+          // airborne (both on the collision-corrected root).
+          // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::
+          //   ftPr_SpecialAirNChargeRelease_Coll
+          const uint8_t kind = puff_rollout_air_release_land_or_bounce(batch, idx);
+          if (kind == 1u) {
+            batch->state.jumps_left[idx] = ch->max_jumps;
+            batch->state.fall_fast[idx] = 0u;
+            batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+            batch->state.pos_y[idx] =
+                locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+            continue;
+          }
+          if (kind == 2u) {
+            batch->state.on_ground[idx] = 0u;
+            batch->state.ground_id[idx] = 0xFFFFu;
+            batch->state.speed_ground_x_self[idx] = 0.0f;
+            batch->state.pos_y[idx] =
+                locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+            continue;
+          }
           continue;
         } else if ((batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
                     falcon_special_try_air_to_ground_swap(batch, idx)) ||

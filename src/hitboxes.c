@@ -2390,11 +2390,32 @@ void hitboxes_refresh(MslBatch* batch) {
           break;
         }
       }
+      uint8_t frozen_rate_zero_seeded_prev_capsules = 0u;
+      if (batch->state.hitbox_prev_bootstrap[idx] == 2u &&
+          batch->state.action_id[idx] == batch->state.prev_action_id[idx] &&
+          batch->state.char_id[idx] == 15u /* MSL_CHAR_ID_PUFF */ &&
+          (batch->state.action_id[idx] == 350u /* ftPr_MS_SpecialNRelease */ ||
+           batch->state.action_id[idx] == 358u /* ftPr_MS_SpecialAirNChargeRelease */)) {
+        // Puff Rollout's Release states hold their anim frozen at the frame-0 create command
+        // (every internal ChangeMotionState passes anim rate 0), so a teacher-forced mid-roll
+        // seed replays the create frame every row without hitlag. The authoritative
+        // per-HitCapsule victims_1 seed proves the capsule already exists; treat it as the
+        // pose_frame-1 active snapshot like the hitlag-frozen case below.
+        // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c (rate-0 ChangeMotionState calls)
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+        for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+          if (hitboxes_has_authoritative_hitlist_seed(batch, bi, p, hb)) {
+            frozen_rate_zero_seeded_prev_capsules = 1u;
+            break;
+          }
+        }
+      }
       const uint8_t frozen_reseed_prev_capsules =
           ((has_no_damage_contact_victim && batch->state.hitlag[idx] != 0u &&
             batch->state.hitbox_prev_bootstrap[idx] == 2u &&
             batch->state.action_id[idx] == batch->state.prev_action_id[idx]) ||
-           frozen_hitlag_seeded_prev_capsules || frozen_hitlag_body_attribution_prev_capsules)
+           frozen_hitlag_seeded_prev_capsules || frozen_hitlag_body_attribution_prev_capsules ||
+           frozen_rate_zero_seeded_prev_capsules)
               ? 1u
               : 0u;
       if (frozen_reseed_prev_capsules) {

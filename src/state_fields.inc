@@ -363,6 +363,19 @@ MSL_STATE_FIELD(falcon_specialhi_x221b_b7, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 // turn_frames/2 (ft_800CB6EC).
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
 MSL_STATE_FIELD(puff_mjump_turn_timer, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+// Rollout (mv.pr.specialn) hidden lanes: x0 turn budget (frames; init da->x34, -1/frame in the
+// Release/Turn family, -da->x38 on hit), x2C charge (init da->xA0, +xA8/frame charging, -xB4/frame
+// rolling, *xD4 on wall bounce), x14 roll angle (radians 0..2pi; gates the Release end), x1C
+// slope/turn accel lane, x10 pre-turn gr_vel (Turn exit threshold), x34.x roll facing (+/-1),
+// facing_dir pending-restore latch (consumed by ftPr_SpecialS_8013D658/setFacingDir on exits).
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c
+MSL_STATE_FIELD(puff_rollout_turn_budget, int16_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(puff_rollout_charge, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(puff_rollout_angle, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(puff_rollout_slope_lane, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(puff_rollout_pre_turn_vel, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(puff_rollout_dir, int8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(puff_rollout_facing_restore, int8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(fallspecial_mobility_mul, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_window, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_hitlag_floor_active, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)

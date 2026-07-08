@@ -283,3 +283,190 @@ def test_air_sing_enters_air_variant() -> None:
     b_up = _mk_inputs(buttons=0x0200, main_y=127)
     outs = _run(_seed(pos_y=700.0, facing=1), [b_up] + [_mk_inputs()] * 3)
     assert int(outs[0]["action_id"][0]) == ACT_PR_AIR_HI_R
+
+
+# ---------------------------------------------------------------------------
+# Rollout (ftPr_MS_SpecialN* 346..362)
+# ---------------------------------------------------------------------------
+# Anchors: refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c. The charge/roll family holds
+# its anim frozen at frame 0 (every internal ChangeMotionState passes anim rate 0), so all the
+# exits below are stateful: charge (x2C), turn budget (x0), roll angle (x14), stick, B-release,
+# and on-hit. Replay coverage carries only 346/348/350/351/362 (one grounded roll into an NHit);
+# Full, End, Turn-exit, and the whole air family live here.
+
+ACT_PR_N_START_R = 346
+ACT_PR_N_START_L = 347
+ACT_PR_N_LOOP = 348
+ACT_PR_N_FULL = 349
+ACT_PR_N_RELEASE = 350
+ACT_PR_N_TURN = 351
+ACT_PR_N_END_R = 352
+ACT_PR_N_END_L = 353
+ACT_PR_AIR_N_START_R = 354
+ACT_PR_AIR_N_LOOP = 356
+ACT_PR_AIR_N_FULL = 357
+ACT_PR_AIR_N_RELEASE = 358
+ACT_PR_AIR_N_END_R = 360
+ACT_PR_AIR_N_END_L = 361
+ACT_PR_N_HIT = 362
+ACT_FALL_SPECIAL = 0x0023
+ACT_LANDING_FALL_SPECIAL = 0x002B
+BTN_B = 0x0200
+
+
+def _ground_seed(facing: int = 1, pos_x: float = 0.0, fox_x: float = 60.0) -> np.ndarray:
+    seed = _seed(pos_y=0.0, facing=facing)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1)
+    seed["pos_x"][0, 0] = np.float32(pos_x)
+    seed["pos_x"][0, 1] = np.float32(fox_x)
+    return seed
+
+
+def test_rollout_grounded_entry_start_then_frozen_charge_loop() -> None:
+    # Neutral-B from grounded Wait -> SpecialNStartR (facing right); the 16-frame Start anim
+    # hands off to the Loop held at frame 0 rate 0 with self_vel.x = facing * 1e-4, gr_vel = 0.
+    # refs: ftPr_SpecialN_Enter / ftPr_SpecialNStart_Anim / ftPr_SpecialNStart_Phys
+    b = _mk_inputs(buttons=BTN_B)
+    outs = _run(_ground_seed(), [b] * 40)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_PR_N_START_R, f"neutral-B must enter StartR: {acts[:4]}"
+    li = acts.index(ACT_PR_N_LOOP)
+    assert 10 <= li <= 20, f"Start (16f anim) must hand to Loop: first loop row {li}"
+    # Frozen loop: action_frame pinned at 0, gr_vel 0, the 1e-4 facing nudge on the air lane.
+    tail = outs[li + 2]
+    assert int(tail["action_id"][0]) == ACT_PR_N_LOOP
+    assert int(tail["action_frame"][0]) == 0
+    assert float(tail["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=1e-6)
+    assert float(tail["speed_air_x_self"][0]) == pytest.approx(1e-4, abs=1e-6)
+
+
+def test_rollout_full_charge_and_release_speed() -> None:
+    # Charge x2C: init 50, +3/frame in Loop, Full at the 180 cap (~44 loop frames); releasing B
+    # rolls at xC0 * (x2C - xB8) = 0.03 * 140 = 4.2 (flat FD, below both clamps).
+    # refs: ftPr_SpecialNLoop_Anim / ftPr_SpecialNFull_IASA / ftPr_SpecialNRelease_Phys
+    a = _attrs()
+    hold = 16 + 50
+    frames = [_mk_inputs(buttons=BTN_B)] * hold + [_mk_inputs()] * 4
+    outs = _run(_ground_seed(), frames)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert ACT_PR_N_FULL in acts, f"holding B past the cap must reach Full: {acts[55:66]}"
+    ri = acts.index(ACT_PR_N_RELEASE)
+    v = float(outs[ri]["speed_ground_x_self"][0])
+    expect = float(a["puff_rollout_release_vel_scale"]) * (
+        float(a["puff_rollout_charge_max"]) - float(a["puff_rollout_charge_min_rolling"])
+    )
+    assert v == pytest.approx(expect, abs=1e-4), f"full-charge roll speed {v} != {expect}"
+
+
+def test_rollout_release_constant_speed_and_budget_end_to_wait() -> None:
+    # Minimum-hold release: charge decay xB4 is 0, so the roll speed holds constant until the
+    # turn budget (90) is spent and the roll angle crosses pi -> EndR -> Wait. Facing preserved.
+    # refs: ftPr_SpecialNRelease_Anim / ftPr_SpecialS_8013DA24 / ftPr_SpecialNEnd_Anim
+    frames = [_mk_inputs(buttons=BTN_B)] * 18 + [_mk_inputs()] * 150
+    outs = _run(_ground_seed(fox_x=-80.0), frames)
+    acts = [int(o["action_id"][0]) for o in outs]
+    ri = acts.index(ACT_PR_N_RELEASE)
+    v0 = float(outs[ri]["speed_ground_x_self"][0])
+    assert v0 > 0.0
+    assert float(outs[ri + 20]["speed_ground_x_self"][0]) == pytest.approx(v0, abs=1e-5)
+    ei = acts.index(ACT_PR_N_END_R)
+    assert 90 <= ei - ri <= 120, f"budget-90 roll must end shortly after: release {ri} end {ei}"
+    assert int(outs[ei]["facing"][0]) == 1
+    assert ACT_WAIT in acts[ei:], f"End must hand to Wait: {acts[-8:]}"
+
+
+def test_rollout_turn_decel_and_reversal_back_to_release() -> None:
+    # Holding the stick opposite the roll -> SpecialNTurn: gr_vel += xC4 * (-0.05 * pre) per
+    # frame on flat ground, crosses zero, and exits back to Release past |pre * xD0| with the
+    # latched facing flip; the Release Phys then snaps to the charge speed in the new direction.
+    # refs: ftPr_SpecialNRelease_IASA / ftPr_SpecialNTurn_Phys / setFacingDir
+    a = _attrs()
+    frames = (
+        [_mk_inputs(buttons=BTN_B)] * 30
+        + [_mk_inputs()] * 5
+        + [_mk_inputs(main_x=-127)] * 60
+    )
+    outs = _run(_ground_seed(fox_x=-80.0), frames)
+    acts = [int(o["action_id"][0]) for o in outs]
+    ri = acts.index(ACT_PR_N_RELEASE)
+    ti = acts.index(ACT_PR_N_TURN)
+    pre = float(outs[ti - 1]["speed_ground_x_self"][0])
+    d1 = pre - float(outs[ti]["speed_ground_x_self"][0])
+    expect_step = float(a["puff_rollout_turn_accel"]) * 0.05 * pre
+    assert d1 == pytest.approx(expect_step, abs=1e-4), f"turn decel {d1} != {expect_step}"
+    # Back to Release, reversed: facing flips and the speed recomputes from charge.
+    rj = ti + next(i for i, x in enumerate(acts[ti:]) if x == ACT_PR_N_RELEASE)
+    assert int(outs[rj]["facing"][0]) == 0, "post-turn facing must flip left"
+    v_after = float(outs[rj + 1]["speed_ground_x_self"][0])
+    assert v_after == pytest.approx(-pre, abs=2e-2), f"reversed roll speed {v_after} vs {-pre}"
+
+
+def test_rollout_air_entry_charge_fall_and_release_landing_transfer() -> None:
+    # Air neutral-B -> AirNStartR -> frozen AirChargeLoop falling at the rollout gravity/terminal
+    # (x3C/x40); releasing B -> AirChargeRelease with the x58 decel toward the x5C floor; ground
+    # contact lands into grounded Release at the preserved frame with gr_vel = |self_vel.x| * dir.
+    # refs: ftPr_SpecialAirN_Enter / ftPr_SpecialAirNChargeLoop_Phys /
+    #   ftPr_SpecialAirNChargeRelease_{Phys,Coll}
+    a = _attrs()
+    seed = _seed(pos_y=30.0)
+    seed["pos_x"][0, 1] = np.float32(-80.0)
+    frames = [_mk_inputs(buttons=BTN_B)] * 21 + [_mk_inputs()] * 30
+    outs = _run(seed, frames)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_PR_AIR_N_START_R
+    li = acts.index(ACT_PR_AIR_N_LOOP)
+    vy = float(outs[li + 2]["speed_y_self"][0]) - float(outs[li + 3]["speed_y_self"][0])
+    term = float(a["puff_rollout_air_terminal_vel"])
+    at_term = float(outs[li + 3]["speed_y_self"][0]) == pytest.approx(-term, abs=1e-4)
+    assert at_term or vy == pytest.approx(float(a["puff_rollout_air_grav"]), abs=1e-4)
+    ri = acts.index(ACT_PR_AIR_N_RELEASE)
+    assert float(outs[ri]["speed_air_x_self"][0]) > 0.0
+    gi = acts.index(ACT_PR_N_RELEASE)
+    assert gi > ri, "air release must land into grounded Release"
+    assert int(outs[gi]["on_ground"][0]) == 1
+    assert float(outs[gi]["speed_ground_x_self"][0]) > 0.0
+
+
+def test_rollout_air_budget_end_freefall_special() -> None:
+    # A full air roll: budget end -> AirNEnd (facing letter by roll dir), whose anim end enters
+    # the ftCo_80096900 freefall with the xD8=30 landing lag (FallSpecial), landing into
+    # LandingFallSpecial.
+    # refs: ftPr_SpecialAirNChargeRelease_Anim / ftPr_SpecialAirNEnd_Anim
+    seed = _seed(pos_y=280.0)
+    seed["pos_x"][0, 0] = np.float32(-40.0)
+    seed["pos_x"][0, 1] = np.float32(-80.0)
+    frames = [_mk_inputs(buttons=BTN_B)] * 18 + [_mk_inputs()] * 340
+    outs = _run(seed, frames)
+    acts = [int(o["action_id"][0]) for o in outs]
+    ri = acts.index(ACT_PR_AIR_N_RELEASE)
+    ei = next(i for i, x in enumerate(acts) if x in (ACT_PR_AIR_N_END_R, ACT_PR_AIR_N_END_L))
+    assert 90 <= ei - ri <= 130, f"air roll must end after the 90-frame budget: {ri}..{ei}"
+    fi = next((i for i, x in enumerate(acts[ei:]) if x == ACT_FALL_SPECIAL), None)
+    assert fi is not None and fi <= 40, f"AirNEnd must exit to FallSpecial: {acts[ei:ei+40]}"
+    assert ACT_LANDING_FALL_SPECIAL in acts[ei:], f"freefall must land with lag: {acts[-8:]}"
+
+
+def test_rollout_on_hit_enters_nhit_with_backward_hop() -> None:
+    # Rolling into a grounded opponent: the deal_dmg cb (8013D764) exits to SpecialNHit at the
+    # preserved frame with self_vel.x = gr_vel * specialn_vel.x (-0.13 backward hop) and
+    # self_vel.y = specialn_vel.y (+1.6); landing takes the xD8=30 LandingFallSpecial lag.
+    # refs: ftPr_SpecialS_8013D764 / ftPr_SpecialNHit_Coll
+    a = _attrs()
+    frames = [_mk_inputs(buttons=BTN_B)] * 46 + [_mk_inputs()] * 120
+    outs = _run(_ground_seed(fox_x=30.0), frames)
+    acts = [int(o["action_id"][0]) for o in outs]
+    ri = acts.index(ACT_PR_N_RELEASE)
+    hi = acts.index(ACT_PR_N_HIT)
+    assert hi > ri, "the roll must connect and exit to NHit"
+    roll_v = float(outs[hi - 1]["speed_ground_x_self"][0])
+    o = outs[hi]
+    assert int(o["on_ground"][0]) == 0, "NHit is airborne"
+    assert float(o["speed_air_x_self"][0]) == pytest.approx(
+        roll_v * float(a["puff_rollout_hit_vel_x_mul"]), abs=2e-2
+    )
+    assert float(o["speed_y_self"][0]) == pytest.approx(
+        float(a["puff_rollout_hit_vel_y"]), abs=0.1
+    )
+    assert ACT_LANDING_FALL_SPECIAL in acts[hi:], f"NHit landing takes the special lag: {acts[-8:]}"

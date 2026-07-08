@@ -10,6 +10,7 @@
 #include "damage_terminal_owner.h"
 #include "damage_source.h"
 #include "hitboxes.h"
+#include "puff_specials.h"
 #include "hitlist.h"
 #include "hurtboxes.h"
 #include "blaster.h"
@@ -748,6 +749,10 @@ static void fighter_callbacks_primitive_refresh_phase(MslBatch* batch, uint8_t r
     hitboxes_refresh(batch);
     hurtboxes_refresh_contact_geometry(batch);
   }
+  // Puff Rollout velocity-scaled hitbox gate/damage (ftPr_SpecialS_8013D8E4): runs after the
+  // script hitbox refresh so the created capsules exist, before combat consumes them.
+  // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialS_8013D8E4
+  puff_rollout_hitbox_speed_damage_refresh(batch);
 }
 
 static void fighter_callbacks_item_collision_and_combat_phase(MslBatch* batch, uint8_t run_combat) {

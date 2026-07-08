@@ -908,6 +908,15 @@ typedef struct MslStateSoA {
   // Multi-jump ladder turnaround window (mv.co.jumpaerial.x0; puff/kirby).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
   uint8_t* puff_mjump_turn_timer;
+  // Rollout (mv.pr.specialn) hidden lanes; see state_fields.inc for the per-lane map.
+  // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c
+  int16_t* puff_rollout_turn_budget;
+  float* puff_rollout_charge;
+  float* puff_rollout_angle;
+  float* puff_rollout_slope_lane;
+  float* puff_rollout_pre_turn_vel;
+  int8_t* puff_rollout_dir;
+  int8_t* puff_rollout_facing_restore;
   // Raptor Boost: mv.ca.specials.grav accumulator + fp->unk_gobj inert-contact detect flag.
   float* falcon_specials_grav;
   uint8_t* falcon_detect_pending;

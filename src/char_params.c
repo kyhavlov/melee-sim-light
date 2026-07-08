@@ -975,7 +975,46 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       MSL_GET_MJUMP_F32("puff_pound_stick_range_y_pos", puff_pound_stick_range_y_pos) != 0 ||
       MSL_GET_MJUMP_F32("puff_pound_angle_diff", puff_pound_angle_diff) != 0 ||
       MSL_GET_MJUMP_F32("puff_pound_vel", puff_pound_vel) != 0 ||
-      MSL_GET_MJUMP_F32("puff_pound_vel_decay", puff_pound_vel_decay) != 0) {
+      MSL_GET_MJUMP_F32("puff_pound_vel_decay", puff_pound_vel_decay) != 0 ||
+      MSL_GET_MJUMP_I32("puff_rollout_turn_budget_frames", puff_rollout_turn_budget_frames) != 0 ||
+      MSL_GET_MJUMP_I32("puff_rollout_turn_budget_hit_cost", puff_rollout_turn_budget_hit_cost) !=
+          0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_air_grav", puff_rollout_air_grav) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_air_terminal_vel", puff_rollout_air_terminal_vel) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_slope_lane_ground", puff_rollout_slope_lane_ground) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_vel_clamp_a", puff_rollout_vel_clamp_a) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_vel_clamp_b", puff_rollout_vel_clamp_b) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_slope_lane_air", puff_rollout_slope_lane_air) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_air_decel", puff_rollout_air_decel) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_air_min_vel", puff_rollout_air_min_vel) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_turn_stick_threshold", puff_rollout_turn_stick_threshold) !=
+          0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_turn_roll_rate", puff_rollout_turn_roll_rate) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_landing_vy_scale", puff_rollout_landing_vy_scale) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_bounce_vy_threshold", puff_rollout_bounce_vy_threshold) !=
+          0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_damage_base", puff_rollout_damage_base) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_damage_scale", puff_rollout_damage_scale) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_hit_vel_x_mul", puff_rollout_hit_vel_x_mul) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_hit_vel_y", puff_rollout_hit_vel_y) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_end_vel_x_mul", puff_rollout_end_vel_x_mul) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_end_vel_y_mul", puff_rollout_end_vel_y_mul) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_release_roll_rate", puff_rollout_release_roll_rate) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_charge_init", puff_rollout_charge_init) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_charge_max", puff_rollout_charge_max) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_charge_rate", puff_rollout_charge_rate) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_loop_roll_rate_deg", puff_rollout_loop_roll_rate_deg) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_charge_decay", puff_rollout_charge_decay) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_charge_min_rolling", puff_rollout_charge_min_rolling) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_roll_rate_scale", puff_rollout_roll_rate_scale) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_release_vel_scale", puff_rollout_release_vel_scale) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_turn_accel", puff_rollout_turn_accel) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_slope_influence", puff_rollout_slope_influence) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_min_damage_speed", puff_rollout_min_damage_speed) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_turn_exit_vel_ratio", puff_rollout_turn_exit_vel_ratio) !=
+          0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_wall_bounce_decay", puff_rollout_wall_bounce_decay) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_landing_lag", puff_rollout_landing_lag) != 0) {
     fprintf(stderr, "msl: char params multi-jump attr parse failed in %s\n", path);
     alloc_free(buf);
     return -1;

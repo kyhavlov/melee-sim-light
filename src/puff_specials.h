@@ -49,3 +49,53 @@ uint8_t puff_specials_phys(MslBatch* batch, size_t idx);
 //   ftPr_SpecialS_8013D5F0}
 uint8_t puff_special_try_ground_to_air_swap(MslBatch* batch, size_t idx);
 uint8_t puff_special_try_air_to_ground_swap(MslBatch* batch, size_t idx);
+
+// ---------------------------------------------------------------------------
+// Rollout (ftPr_SpecialN; actions 346..362)
+// ---------------------------------------------------------------------------
+
+static inline uint8_t puff_action_is_rollout(uint8_t char_id, uint16_t action_id) {
+  return (uint8_t)(char_id == 15u /* MSL_CHAR_ID_PUFF */ && action_id >= 346u &&
+                   action_id <= 362u);
+}
+
+// Grounded Start/Loop/Full own an unprojected self-velocity: ftPr_SpecialNStart_Phys writes
+// fp->self_vel.x = facing * 0.0001f directly (no ftCommon_ApplyGroundMovement), so the generic
+// grounded gr_vel -> self_vel floor-normal projection must not run for these rows.
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialNStart_Phys
+static inline uint8_t puff_rollout_ground_charge_state(uint8_t char_id, uint16_t action_id) {
+  return (uint8_t)(char_id == 15u && action_id >= 346u && action_id <= 349u);
+}
+
+// deal_dmg_cb (ftPr_SpecialS_8013D764): rolling states -> SpecialNHit at the preserved frame
+// with the backward hop (self_vel.x scaled by specialn_vel.x, self_vel.y = specialn_vel.y).
+// Fired from the combat x1914 dealt-damage sites next to falcon's; the action gate makes the
+// call idempotent within a frame (the first call leaves NHit).
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialS_8013D764
+void puff_rollout_on_deal_dmg(MslBatch* batch, size_t a_idx);
+
+// Per-frame velocity-scaled hitbox refresh (ftPr_SpecialS_8013D8E4, run pre-combat after the
+// script hitbox refresh): below da->xCC the roll hitboxes disable; otherwise damage =
+// (s32)(x84 * (x80 + |vel|)), min 1.
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialS_8013D8E4
+void puff_rollout_hitbox_speed_damage_refresh(MslBatch* batch);
+
+// Wall bounce (Release_Coll / AirChargeRelease_Coll): rolling toward a wall reverses direction
+// and decays charge/velocity by da->xD4. Returns 1 when a bounce fired this frame.
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::{ftPr_SpecialNRelease_Coll,
+//   ftPr_SpecialAirNChargeRelease_Coll}
+uint8_t puff_rollout_try_wall_bounce(MslBatch* batch, size_t idx);
+
+// Grounded rollout floor loss -> air variant at the preserved frame. Unlike the falcon-style
+// swaps the source does NOT transfer gr_vel into self_vel (ftCommon_8007D5D4 zeroes gr_vel and
+// leaves self_vel.x; the air Phys recomputes it from charge next frame), so this owns its lane
+// effects and the caller only `continue`s.
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c (grounded *_Coll floor-loss paths)
+uint8_t puff_rollout_try_floor_loss_swap(MslBatch* batch, size_t idx);
+
+// AirChargeRelease ground contact: vy' = |vy * x78|; below x7C lands into grounded Release at
+// the preserved frame (returns 1; caller applies the grounding bundle), else bounces upward
+// with an optional stick re-aim and stays airborne (returns 2; caller keeps the fighter in the
+// air with the collision-corrected root). Returns 0 when not applicable.
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialAirNChargeRelease_Coll
+uint8_t puff_rollout_air_release_land_or_bounce(MslBatch* batch, size_t idx);

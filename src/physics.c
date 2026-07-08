@@ -2947,7 +2947,16 @@ void physics_integrate(MslBatch* batch) {
           vx_self = use_grounded_self_vel_for_frame ? grounded_self_vel_for_frame : gr_vel;
         }
       }
-      if (ground_phys_for_frame) {
+      if (ground_phys_for_frame &&
+          puff_rollout_ground_charge_state(batch->state.char_id[idx], action_id)) {
+        // Puff's grounded rollout charge states (Start/Loop/Full) never call
+        // ftCommon_ApplyGroundMovement: ftPr_SpecialNStart_Phys writes fp->self_vel =
+        // (facing * 0.0001f, 0) directly and zeroes gr_vel, so the projection below must not
+        // overwrite the module-owned self velocity. Position still integrates the raw
+        // (unprojected) 1e-4 nudge like source.
+        // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialNStart_Phys
+        vx_self = batch->state.speed_air_x_self[idx];
+      } else if (ground_phys_for_frame) {
         // Decomp: grounded movement helpers always run ftCommon_ApplyGroundMovement, which projects
         // scalar gr_vel onto CollData.floor.normal before Fighter_procUpdate integrates position.
         // Our `speed_ground_x_self` lane is fp->gr_vel; `speed_air_x_self` / `speed_y_self` are the
