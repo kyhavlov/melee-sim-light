@@ -727,6 +727,15 @@ static inline uint8_t damage_air_try_jump_aerial(MslBatch* batch, const MslCommo
                            c->lstick_deadzone_x)
           : stick_x_cur;
   const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  if (ch->has_multijump) {
+    // ftCo_Damage's jump path (inlineC0) calls ftCo_800CB870, which routes multi-jump chars
+    // into the ftCo_800D730C ladder entry instead of the basic air jump. The jump input was
+    // admitted above (buffered x14 gate or fresh edges); enter the rung directly so the same
+    // frame cannot also chain a second rung through the generic JumpAerial IASA.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D730C,ftCo_800D74A4}
+    return msl_locomotion_puff_multijump_enter(batch, ch, idx, stick_x_entry, facing_dir);
+  }
   const uint16_t act = jump_aerial_action_from_stick(c, stick_x_entry, facing_dir);
   const uint32_t msid = (act == (uint16_t)MSL_ACT_JUMP_AERIAL_F) ? (uint32_t)MSL_SM_JUMP_AERIAL_F
                                                                  : (uint32_t)MSL_SM_JUMP_AERIAL_B;

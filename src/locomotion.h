@@ -41,6 +41,14 @@ void msl_locomotion_enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t
                                                          uint8_t fallspecial_xc, float landing_lag,
                                                          uint8_t allow_interrupt);
 
+// Multi-jump ladder rung entry (ftCo_800D74A4), exported for jump paths that source-route
+// through ftCo_800CB870 (which sends multi-jump chars into ftCo_800D730C): the damage-family
+// jump-out in knockdown.c. Input admission is caller-owned; this performs the entry only.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D74A4
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+uint8_t msl_locomotion_puff_multijump_enter(MslBatch* batch, const MslCharParams* ch, size_t idx,
+                                            float stick_x, float facing_dir);
+
 // ftCo_Fall_Enter entry and the modeled non-special tail of ftCo_Fall_IASA_Inner. Character
 // modules that source-enter Fall from an Anim callback should run their character-special
 // ftCo_SpecialAir_CheckInput equivalent before calling the tail.

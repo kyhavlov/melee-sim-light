@@ -195,6 +195,35 @@ shared-fix queue.
   the family (formula duration incl. percent scaling, mash shortening,
   airborne immunity via the hitbox flag). Suite total unchanged (3826).
 
+- 2026-07-08 (later): **Phase 5 burn-down: damage jump-out fix (one-step
+  3826 -> 3610) + tail classified; puff is at falcon-level.**
+  Taxonomy (field x seed/ref/out action over all 11 replays, 3067 scored
+  discrete): the one live puff-owned bucket was seeds in DamageFly states
+  entering rung F2 with jumps 5->3 where ref enters F1 (46+ rows): the
+  knockdown damage jump-out (`damage_air_try_jump_aerial`) entered the
+  COMMON JumpAerialF and the ladder fork then chained a second rung the
+  same frame (common JumpAerial is outside the fork's cmd0 ladder gate).
+  Source routes ftCo_Damage's inlineC0 through ftCo_800CB870, which sends
+  multi-jump chars into ftCo_800D74A4 — the entry tail is now exported
+  (`msl_locomotion_puff_multijump_enter`) and knockdown routes
+  has_multijump chars into it. validate-all byte-identical (path is
+  has_multijump-gated).
+  Remaining tail classification (shared debt, same classes as falcon):
+  early/late landing detection swaps (FALL/AttackAir <-> Landing rows,
+  the largest class), cliff/ledge rows, GuardSetOff shield rows, falcon
+  SpecialHi family rows (vs-falcon game), fox laser item rows. Puff-owned
+  documented residue: mjump turnaround-window facing (~30 rows; reseed
+  cannot see the armed window), rollout release-entry hidden charge
+  (~2 rows/use), the one true Turn-exit row per turn, slope-boundary
+  one-frame floor ambiguity (float-only).
+  Float p95 (82.8) is a METRIC ARTIFACT, not puff float error: the norm
+  divides each lane's error sum by the lane's |ref| p95 floored at 1e-6;
+  in 4 games the item lanes are ~always empty (ref_p95 = 0) and a handful
+  of fox-laser mismatch rows (types 54/74/56, owner fox — shared blaster
+  substrate) divide by the floor into 1e6+ contributions. Per-fighter
+  float lanes match falcon-suite levels (per-game p95 0.0002-0.0004 in
+  the 7 unaffected games).
+
 ### Rollout survey (2026-07-07 decomp skim; implement next)
 
 ftPr_SpecialN.c is ~1470 lines. mv.pr.specialn lanes (types.h): x0 charge
