@@ -69,3 +69,26 @@ shared-fix queue.
 ## Progress log
 
 - 2026-07-07: plan drafted; awaiting step-0 registration + replay dump.
+- 2026-07-07: **Phases 0-2 done (solo lane; parallel pilot deferred by user).**
+  Phase 0 facts: internal=external id 15; PlPr.dat/ftDataPurin/ftPr_;
+  anim count 327 (ftData_Table_Unk0[15]); action map 341-345 JumpAerialF1-5,
+  346-353 grounded Rollout, 354-361 air Rollout, 362 NHit, 363/364 Pound,
+  365-368 Sing (L/R x ground/air), 369-372 Rest; NO ThrowN part
+  (part_to_joint[51]=0xFF), TransN2 -> parts idx 48; NULL ftData.x24 (no
+  Wait roulette). ftPurinAttributes is 0x100 bytes, mostly unnamed —
+  PURIN_SPECIAL_ATTRS_LAYOUT still to build during Phase 4 consumer reads.
+  Phase 1: registered end-to-end; build_data byte-identity gate held
+  (owners renumber proven pure at symbol level: +80 symbols = 76 ftPr_* +
+  common JumpAerialF1_* set). Three pipeline fixes: anim extractor raw
+  Fighter_Part enum ids -> part_to_joint mapping (appended post-legacy to
+  keep existing bake order), NULL-x24 wait-roulette guard (empty arrays),
+  char_params count-0 acceptance. Coverage suite 42/42 through the
+  generic path (one test fix: dash entry velocity is UNclamped
+  dash_initial_velocity per ftCo_Dash_Enter; puff 1.4 > run terminal 1.1).
+  Phase 2: 11-replay suite from the user's top14 dump (fox x6 incl
+  frozen-PS, falco, marth, sheik, falcon, ditto; all six stages).
+  Coverage gaps for unit tests: air Rollout (only instance vs
+  unregistered Doc), SpecialNFull/EndL. BASELINE (generic path only):
+  one-step discrete 8221 / 11717761 (7.0e-4), float p95 84.44.
+  Next: Phase 3 multi-jump (341-345 dominate every replay), then
+  specials Pound -> Rest -> Rollout -> Sing per the plan order.
