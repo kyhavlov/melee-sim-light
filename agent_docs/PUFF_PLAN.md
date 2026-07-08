@@ -147,3 +147,22 @@ likely x34-0xA4) — name them from the consumers during implementation.
 Reseed: charge/roll-speed lanes need reconstruction (same class as
 smash-charge seed lanes; roll speed may be recoverable from seeded
 self_vel like falcon's dive vel lanes).
+
+Concrete entry/charge mechanics (read 2026-07-07):
+- Enter (346/347 grounded, 354/355 air by facing; x34.x latches facing):
+  cmd_vars 0-3 cleared, ftPr_SpecialS_8013DC64 inits lanes (x0=da->x34
+  turnaround budget, x2C=da->xA0 charge, x1C=da->x44 grounded / da->x54
+  air), grounded zeroes vy; air sets x74_anim_vel.y=da->x3C.
+- Start anim end -> Loop (348/356): cur_anim_frame=0 with anim rate 0
+  (the loop HOLDS frame 0 while charging), gr_vel=self_vel.x=facing*1e-4,
+  model rot cosmetic.
+- Loop per frame: charge x2C += da->xA8, capped at da->xA4; deal_dmg_cb =
+  ftPr_SpecialS_8013D764 (on-hit turnaround consuming x0 -= da->x38);
+  hitCapsuleToggle flips hb0 x4 alternating every da->x9C frames during
+  the roll (dual-sided roll hit).
+- Release: B released during Loop -> Release/ChargeRelease (350/358);
+  roll speed presumably scales with x2C (read the Release Phys next);
+  Full (349/357) at x2C == xA4.
+- Attr offsets so far: x34 (turn budget), x38 (turn cost), x3C (air entry
+  vy), x44/x54 (x1C init g/air), x9C (hit toggle period), xA0 (charge
+  init), xA4 (charge max), xA8 (charge rate).
