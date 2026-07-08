@@ -999,7 +999,7 @@ def _ftdata_xc_count(character: str) -> int:
     """
     # Values are ftData_Table_Unk0[internal_id].count from refs/melee/src/melee/ft/ftdata.c
     # (FTKIND_MAX rows indexed by FighterKind): fox=row 1, falcon=row 2, sheik=row 7,
-    # marth=row 18, zelda=row 19, falco=row 22.
+    # puff=row 15, marth=row 18, zelda=row 19, falco=row 22.
     return {
         "fox": 327,
         "falcon": 318,
@@ -1007,6 +1007,7 @@ def _ftdata_xc_count(character: str) -> int:
         "zelda": 311,
         "falco": 327,
         "marth": 327,
+        "puff": 327,
     }[character]
 
 
@@ -1762,9 +1763,16 @@ def extract_one_character(
     # - Victim attachment uses FtPart_XRotN (2) (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB464).
     # - Grab/capture setup constrains the victim XRotN to the grab owner's FtPart_TransN2 (52)
     #   (refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800DB368).
-    # - Some grab/throw flows also consult FtPart_ThrowN (51) (refs/melee/src/melee/ft/forward.h::Fighter_Part).
-    for part in (2, 52, 51):  # FtPart_XRotN=2, FtPart_TransN2=52, FtPart_ThrowN=51
-        if part not in needed_parts:
+    # FtPart_* are Fighter_Part ENUM ids; fp->parts indices come from the per-char
+    # ftPartsTable[kind]->part_to_joint remap (refs/melee/src/melee/ft/ftparts.c::
+    # ftParts_GetBoneIndex). The raw ids are kept when in range: historical bakes included those
+    # fp->parts indices verbatim, needed_parts ORDER feeds the bake, and existing-char artifacts
+    # must stay byte-identical. Chars whose fp->parts space is smaller than the raw enum ids
+    # (puff: parts_num=50, and no ThrowN: part_to_joint[51]=0xFF) skip them here and get the
+    # correctly MAPPED XRotN/TransN2 parts appended right before the ancestor closure below.
+    part_to_joint_for_anchor, _ins_unused, _j2p_unused = _load_parts_table(character)
+    for part in (2, 52, 51):  # legacy raw ids (FtPart_XRotN=2, FtPart_TransN2=52, FtPart_ThrowN=51)
+        if part < len(part_to_joint_for_anchor) and part not in needed_parts:
             needed_parts.append(part)
 
     # Include additional parts needed for post-frame fidelity beyond move hitboxes.
@@ -1840,6 +1848,18 @@ def extract_one_character(
             needed_parts.append(int(grab_anchor_part))
     except Exception:
         pass
+
+    # Correctly MAPPED grab-attachment parts (ftParts_GetBoneIndex semantics; see the raw-id
+    # legacy block above). Appended LAST so the historical bake order — and therefore every
+    # existing char's artifact bytes — is untouched: for all previously registered chars the
+    # mapped XRotN (2) and TransN2 parts are already in needed_parts by this point (XRotN via
+    # the raw block, TransN2 via the ftData.x8 grab-anchor or hurtcap parts). Chars whose
+    # fp->parts space excludes the raw enum ids (puff) pick up their real anchor parts here.
+    for ftpart in (2, 52):  # FtPart_XRotN, FtPart_TransN2
+        if ftpart < len(part_to_joint_for_anchor):
+            mapped_anchor_part = int(part_to_joint_for_anchor[ftpart])
+            if mapped_anchor_part != 0xFF and mapped_anchor_part not in needed_parts:
+                needed_parts.append(mapped_anchor_part)
 
     closure_parts = _closure_with_ancestors(needed_parts, parent_part)
 

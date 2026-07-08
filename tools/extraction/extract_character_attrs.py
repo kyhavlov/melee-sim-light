@@ -507,7 +507,7 @@ def _extract_seak_vanish_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
     }
 
 
-def _extract_wait_anim_choices(buf: bytes, wait_abs: int) -> dict:
+def _extract_wait_anim_choices(buf: bytes, wait_abs: int, *, data_base: int) -> dict:
     """Extract ftData.x24 WaitStruct roulette entries for Wait animation variants.
 
     Source:
@@ -515,7 +515,17 @@ def _extract_wait_anim_choices(buf: bytes, wait_abs: int) -> dict:
     - refs/melee/src/melee/ft/ftwaitanim.c::getAnimID
 
     The table is a sequence of `{msid, weight}` s32 pairs terminated by {-1, -1}.
+
+    A NULL ftData.x24 (puff) means the char has NO wait roulette: ftCo_8008A7A8 takes the
+    plain Wait path when arg1 == NULL. `arc.ptr32(NULL)` resolves to data_base, so reading
+    there would parse archive-header bytes as roulette entries; emit explicit EMPTY arrays
+    instead (the runtime consumers early-out on wait_anim_choice_count == 0).
     """
+    if wait_abs == data_base:
+        return {
+            "wait_anim_choice_msids": [],
+            "wait_anim_choice_weights": [],
+        }
     if wait_abs < 0 or wait_abs + 8 > len(buf):
         return {}
     msids: list[int] = []
@@ -1086,7 +1096,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         # Decomp: refs/melee/src/melee/ft/types.h::FtSFX / ftData.x4C_sfx.
         "smash_sfx_num": int(_i32_be(buf, arc.ptr32(sfx_abs + 0x00) + 0x00)),
     }
-    out.update(_extract_wait_anim_choices(buf, wait_anim_abs))
+    out.update(_extract_wait_anim_choices(buf, wait_anim_abs, data_base=arc.data_base))
     if ftdata_symbol == "ftDataFox":
         out["damage_post_hitlag_sfx_mid_num"] = 2
         out["damage_post_hitlag_sfx_high_num"] = 2

@@ -730,8 +730,11 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     return -1;
   }
   out.ecb_joint_count = (uint8_t)ecb_joint_count;
-  if (wait_anim_choice_msid_count == 0u ||
-      wait_anim_choice_msid_count != wait_anim_choice_weight_count ||
+  // Count 0 (matched empty arrays) is a real source case: a NULL ftData.x24 means the char has
+  // no Wait roulette and ftCo_8008A7A8 takes the plain Wait path (puff). Consumers early-out on
+  // wait_anim_choice_count == 0.
+  // refs/melee/src/melee/ft/ftwaitanim.c::ftCo_8008A7A8
+  if (wait_anim_choice_msid_count != wait_anim_choice_weight_count ||
       wait_anim_choice_msid_count >
           (sizeof(out.wait_anim_choice_msids) / sizeof(out.wait_anim_choice_msids[0]))) {
     fprintf(stderr, "msl: char params wait_anim_choice counts invalid in %s\n", path);

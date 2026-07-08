@@ -176,12 +176,16 @@ def test_dash_initial_velocity_and_dash_state(char_name: str) -> None:
     assert int(outs[0]["action_id"][0]) == ACT_DASH, "smash-input from Wait must enter Dash"
     v = float(outs[0]["speed_ground_x_self"][0])
     assert v > 0.0
-    assert v <= float(a["dash_run_terminal_velocity"]) + 1e-5
+    # Dash ENTRY applies dash_initial_velocity with no terminal clamp (the clamp lives in the
+    # Dash Phys accel path), and initial dash can EXCEED the run terminal (puff: 1.4 vs 1.1).
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+    dash_cap = max(float(a["dash_run_terminal_velocity"]), float(a["dash_initial_velocity"]))
+    assert v <= dash_cap + 1e-5
     # By frame 2 the dash velocity must be >= the per-char initial dash velocity
-    # (entry impulse + accel), and bounded by the char's dash terminal velocity.
+    # (entry impulse + accel), and bounded by the char's dash velocity cap.
     v2 = float(outs[1]["speed_ground_x_self"][0])
     assert v2 >= float(a["dash_initial_velocity"]) - 0.25
-    assert v2 <= float(a["dash_run_terminal_velocity"]) + 1e-5
+    assert v2 <= dash_cap + 1e-5
 
 
 @CHAR_PARAMS

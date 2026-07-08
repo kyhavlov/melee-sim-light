@@ -2,7 +2,15 @@ from tools.eval import fuzz_live_clip
 
 
 def test_live_clip_matrix_uses_manifest_registered_chars() -> None:
-    assert fuzz_live_clip.matrix_chars() == ("fox", "falco", "marth", "falcon", "sheik", "zelda")
+    assert fuzz_live_clip.matrix_chars() == (
+        "fox",
+        "falco",
+        "marth",
+        "falcon",
+        "puff",
+        "sheik",
+        "zelda",
+    )
 
 
 def test_sheik_fod_ledgedeck_escapeair_sweep_stays_out_of_hull() -> None:

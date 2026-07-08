@@ -2297,2630 +2297,2950 @@
     },
     {
       "id": 551,
-      "symbol": "ftCo_JumpAerial_Anim"
+      "symbol": "ftCo_JumpAerialF1_Anim"
     },
     {
       "id": 552,
-      "symbol": "ftCo_JumpAerial_Coll"
+      "symbol": "ftCo_JumpAerialF1_Coll"
     },
     {
       "id": 553,
-      "symbol": "ftCo_JumpAerial_IASA"
+      "symbol": "ftCo_JumpAerialF1_IASA"
     },
     {
       "id": 554,
-      "symbol": "ftCo_JumpAerial_Phys"
+      "symbol": "ftCo_JumpAerialF1_Phys"
     },
     {
       "id": 555,
-      "symbol": "ftCo_Jump_Anim"
+      "symbol": "ftCo_JumpAerial_Anim"
     },
     {
       "id": 556,
-      "symbol": "ftCo_Jump_Coll"
+      "symbol": "ftCo_JumpAerial_Coll"
     },
     {
       "id": 557,
-      "symbol": "ftCo_Jump_IASA"
+      "symbol": "ftCo_JumpAerial_IASA"
     },
     {
       "id": 558,
-      "symbol": "ftCo_Jump_Phys"
+      "symbol": "ftCo_JumpAerial_Phys"
     },
     {
       "id": 559,
-      "symbol": "ftCo_KinokoGiantEndAir_Anim"
+      "symbol": "ftCo_Jump_Anim"
     },
     {
       "id": 560,
-      "symbol": "ftCo_KinokoGiantEndAir_Coll"
+      "symbol": "ftCo_Jump_Coll"
     },
     {
       "id": 561,
-      "symbol": "ftCo_KinokoGiantEnd_Anim"
+      "symbol": "ftCo_Jump_IASA"
     },
     {
       "id": 562,
-      "symbol": "ftCo_KinokoGiantEnd_Coll"
+      "symbol": "ftCo_Jump_Phys"
     },
     {
       "id": 563,
-      "symbol": "ftCo_KinokoGiantStartAir_Anim"
+      "symbol": "ftCo_KinokoGiantEndAir_Anim"
     },
     {
       "id": 564,
-      "symbol": "ftCo_KinokoGiantStartAir_Coll"
+      "symbol": "ftCo_KinokoGiantEndAir_Coll"
     },
     {
       "id": 565,
-      "symbol": "ftCo_KinokoGiantStart_Anim"
+      "symbol": "ftCo_KinokoGiantEnd_Anim"
     },
     {
       "id": 566,
-      "symbol": "ftCo_KinokoGiantStart_Coll"
+      "symbol": "ftCo_KinokoGiantEnd_Coll"
     },
     {
       "id": 567,
-      "symbol": "ftCo_KinokoSmallEndAir_Anim"
+      "symbol": "ftCo_KinokoGiantStartAir_Anim"
     },
     {
       "id": 568,
-      "symbol": "ftCo_KinokoSmallEndAir_Coll"
+      "symbol": "ftCo_KinokoGiantStartAir_Coll"
     },
     {
       "id": 569,
-      "symbol": "ftCo_KinokoSmallEnd_Anim"
+      "symbol": "ftCo_KinokoGiantStart_Anim"
     },
     {
       "id": 570,
-      "symbol": "ftCo_KinokoSmallEnd_Coll"
+      "symbol": "ftCo_KinokoGiantStart_Coll"
     },
     {
       "id": 571,
-      "symbol": "ftCo_KinokoSmallStartAir_Anim"
+      "symbol": "ftCo_KinokoSmallEndAir_Anim"
     },
     {
       "id": 572,
-      "symbol": "ftCo_KinokoSmallStartAir_Coll"
+      "symbol": "ftCo_KinokoSmallEndAir_Coll"
     },
     {
       "id": 573,
-      "symbol": "ftCo_KinokoSmallStart_Anim"
+      "symbol": "ftCo_KinokoSmallEnd_Anim"
     },
     {
       "id": 574,
-      "symbol": "ftCo_KinokoSmallStart_Coll"
+      "symbol": "ftCo_KinokoSmallEnd_Coll"
     },
     {
       "id": 575,
-      "symbol": "ftCo_KirbyYoshiEgg_Anim"
+      "symbol": "ftCo_KinokoSmallStartAir_Anim"
     },
     {
       "id": 576,
-      "symbol": "ftCo_KirbyYoshiEgg_Coll"
+      "symbol": "ftCo_KinokoSmallStartAir_Coll"
     },
     {
       "id": 577,
-      "symbol": "ftCo_KirbyYoshiEgg_IASA"
+      "symbol": "ftCo_KinokoSmallStart_Anim"
     },
     {
       "id": 578,
-      "symbol": "ftCo_KirbyYoshiEgg_Phys"
+      "symbol": "ftCo_KinokoSmallStart_Coll"
     },
     {
       "id": 579,
-      "symbol": "ftCo_KneeBend_Anim"
+      "symbol": "ftCo_KirbyYoshiEgg_Anim"
     },
     {
       "id": 580,
-      "symbol": "ftCo_KneeBend_Coll"
+      "symbol": "ftCo_KirbyYoshiEgg_Coll"
     },
     {
       "id": 581,
-      "symbol": "ftCo_KneeBend_IASA"
+      "symbol": "ftCo_KirbyYoshiEgg_IASA"
     },
     {
       "id": 582,
-      "symbol": "ftCo_KneeBend_Phys"
+      "symbol": "ftCo_KirbyYoshiEgg_Phys"
     },
     {
       "id": 583,
-      "symbol": "ftCo_LGunShootAir_Anim"
+      "symbol": "ftCo_KneeBend_Anim"
     },
     {
       "id": 584,
-      "symbol": "ftCo_LGunShootAir_Coll"
+      "symbol": "ftCo_KneeBend_Coll"
     },
     {
       "id": 585,
-      "symbol": "ftCo_LGunShootAir_IASA"
+      "symbol": "ftCo_KneeBend_IASA"
     },
     {
       "id": 586,
-      "symbol": "ftCo_LGunShootAir_Phys"
+      "symbol": "ftCo_KneeBend_Phys"
     },
     {
       "id": 587,
-      "symbol": "ftCo_LGunShoot_Anim"
+      "symbol": "ftCo_LGunShootAir_Anim"
     },
     {
       "id": 588,
-      "symbol": "ftCo_LGunShoot_Coll"
+      "symbol": "ftCo_LGunShootAir_Coll"
     },
     {
       "id": 589,
-      "symbol": "ftCo_LGunShoot_IASA"
+      "symbol": "ftCo_LGunShootAir_IASA"
     },
     {
       "id": 590,
-      "symbol": "ftCo_LGunShoot_Phys"
+      "symbol": "ftCo_LGunShootAir_Phys"
     },
     {
       "id": 591,
-      "symbol": "ftCo_LandingAir_Anim"
+      "symbol": "ftCo_LGunShoot_Anim"
     },
     {
       "id": 592,
-      "symbol": "ftCo_LandingAir_Coll"
+      "symbol": "ftCo_LGunShoot_Coll"
     },
     {
       "id": 593,
-      "symbol": "ftCo_LandingAir_IASA"
+      "symbol": "ftCo_LGunShoot_IASA"
     },
     {
       "id": 594,
-      "symbol": "ftCo_LandingAir_Phys"
+      "symbol": "ftCo_LGunShoot_Phys"
     },
     {
       "id": 595,
-      "symbol": "ftCo_Landing_Anim"
+      "symbol": "ftCo_LandingAir_Anim"
     },
     {
       "id": 596,
-      "symbol": "ftCo_Landing_Coll"
+      "symbol": "ftCo_LandingAir_Coll"
     },
     {
       "id": 597,
-      "symbol": "ftCo_Landing_IASA"
+      "symbol": "ftCo_LandingAir_IASA"
     },
     {
       "id": 598,
-      "symbol": "ftCo_Landing_Phys"
+      "symbol": "ftCo_LandingAir_Phys"
     },
     {
       "id": 599,
-      "symbol": "ftCo_LiftTurn_Anim"
+      "symbol": "ftCo_Landing_Anim"
     },
     {
       "id": 600,
-      "symbol": "ftCo_LiftTurn_Coll"
+      "symbol": "ftCo_Landing_Coll"
     },
     {
       "id": 601,
-      "symbol": "ftCo_LiftTurn_IASA"
+      "symbol": "ftCo_Landing_IASA"
     },
     {
       "id": 602,
-      "symbol": "ftCo_LiftTurn_Phys"
+      "symbol": "ftCo_Landing_Phys"
     },
     {
       "id": 603,
-      "symbol": "ftCo_LiftWait_Anim"
+      "symbol": "ftCo_LiftTurn_Anim"
     },
     {
       "id": 604,
-      "symbol": "ftCo_LiftWait_Coll"
+      "symbol": "ftCo_LiftTurn_Coll"
     },
     {
       "id": 605,
-      "symbol": "ftCo_LiftWait_IASA"
+      "symbol": "ftCo_LiftTurn_IASA"
     },
     {
       "id": 606,
-      "symbol": "ftCo_LiftWait_Phys"
+      "symbol": "ftCo_LiftTurn_Phys"
     },
     {
       "id": 607,
-      "symbol": "ftCo_LiftWalk_Anim"
+      "symbol": "ftCo_LiftWait_Anim"
     },
     {
       "id": 608,
-      "symbol": "ftCo_LiftWalk_Coll"
+      "symbol": "ftCo_LiftWait_Coll"
     },
     {
       "id": 609,
-      "symbol": "ftCo_LiftWalk_IASA"
+      "symbol": "ftCo_LiftWait_IASA"
     },
     {
       "id": 610,
-      "symbol": "ftCo_LiftWalk_Phys"
+      "symbol": "ftCo_LiftWait_Phys"
     },
     {
       "id": 611,
-      "symbol": "ftCo_LightThrowAir_Coll"
+      "symbol": "ftCo_LiftWalk_Anim"
     },
     {
       "id": 612,
-      "symbol": "ftCo_LightThrowAir_Phys"
+      "symbol": "ftCo_LiftWalk_Coll"
     },
     {
       "id": 613,
-      "symbol": "ftCo_LightThrowDashDrop_Coll"
+      "symbol": "ftCo_LiftWalk_IASA"
     },
     {
       "id": 614,
-      "symbol": "ftCo_LightThrowDash_Phys"
+      "symbol": "ftCo_LiftWalk_Phys"
     },
     {
       "id": 615,
-      "symbol": "ftCo_LightThrow_Coll"
+      "symbol": "ftCo_LightThrowAir_Coll"
     },
     {
       "id": 616,
-      "symbol": "ftCo_LipstickSwing_Anim"
+      "symbol": "ftCo_LightThrowAir_Phys"
     },
     {
       "id": 617,
-      "symbol": "ftCo_LipstickSwing_Coll"
+      "symbol": "ftCo_LightThrowDashDrop_Coll"
     },
     {
       "id": 618,
-      "symbol": "ftCo_LipstickSwing_IASA"
+      "symbol": "ftCo_LightThrowDash_Phys"
     },
     {
       "id": 619,
-      "symbol": "ftCo_LipstickSwing_Phys"
+      "symbol": "ftCo_LightThrow_Coll"
     },
     {
       "id": 620,
-      "symbol": "ftCo_MissFoot_Anim"
+      "symbol": "ftCo_LipstickSwing_Anim"
     },
     {
       "id": 621,
-      "symbol": "ftCo_MissFoot_Coll"
+      "symbol": "ftCo_LipstickSwing_Coll"
     },
     {
       "id": 622,
-      "symbol": "ftCo_MissFoot_IASA"
+      "symbol": "ftCo_LipstickSwing_IASA"
     },
     {
       "id": 623,
-      "symbol": "ftCo_MissFoot_Phys"
+      "symbol": "ftCo_LipstickSwing_Phys"
     },
     {
       "id": 624,
-      "symbol": "ftCo_OttottoWait_Anim"
+      "symbol": "ftCo_MissFoot_Anim"
     },
     {
       "id": 625,
-      "symbol": "ftCo_OttottoWait_Coll"
+      "symbol": "ftCo_MissFoot_Coll"
     },
     {
       "id": 626,
-      "symbol": "ftCo_OttottoWait_IASA"
+      "symbol": "ftCo_MissFoot_IASA"
     },
     {
       "id": 627,
-      "symbol": "ftCo_OttottoWait_Phys"
+      "symbol": "ftCo_MissFoot_Phys"
     },
     {
       "id": 628,
-      "symbol": "ftCo_Ottotto_Anim"
+      "symbol": "ftCo_OttottoWait_Anim"
     },
     {
       "id": 629,
-      "symbol": "ftCo_Ottotto_Coll"
+      "symbol": "ftCo_OttottoWait_Coll"
     },
     {
       "id": 630,
-      "symbol": "ftCo_Ottotto_IASA"
+      "symbol": "ftCo_OttottoWait_IASA"
     },
     {
       "id": 631,
-      "symbol": "ftCo_Ottotto_Phys"
+      "symbol": "ftCo_OttottoWait_Phys"
     },
     {
       "id": 632,
-      "symbol": "ftCo_ParasolSwing_Anim"
+      "symbol": "ftCo_Ottotto_Anim"
     },
     {
       "id": 633,
-      "symbol": "ftCo_ParasolSwing_Coll"
+      "symbol": "ftCo_Ottotto_Coll"
     },
     {
       "id": 634,
-      "symbol": "ftCo_ParasolSwing_IASA"
+      "symbol": "ftCo_Ottotto_IASA"
     },
     {
       "id": 635,
-      "symbol": "ftCo_ParasolSwing_Phys"
+      "symbol": "ftCo_Ottotto_Phys"
     },
     {
       "id": 636,
-      "symbol": "ftCo_Pass_Anim"
+      "symbol": "ftCo_ParasolSwing_Anim"
     },
     {
       "id": 637,
-      "symbol": "ftCo_Pass_Coll"
+      "symbol": "ftCo_ParasolSwing_Coll"
     },
     {
       "id": 638,
-      "symbol": "ftCo_Pass_IASA"
+      "symbol": "ftCo_ParasolSwing_IASA"
     },
     {
       "id": 639,
-      "symbol": "ftCo_Pass_Phys"
+      "symbol": "ftCo_ParasolSwing_Phys"
     },
     {
       "id": 640,
-      "symbol": "ftCo_PassiveCeil_Anim"
+      "symbol": "ftCo_Pass_Anim"
     },
     {
       "id": 641,
-      "symbol": "ftCo_PassiveCeil_Coll"
+      "symbol": "ftCo_Pass_Coll"
     },
     {
       "id": 642,
-      "symbol": "ftCo_PassiveCeil_IASA"
+      "symbol": "ftCo_Pass_IASA"
     },
     {
       "id": 643,
-      "symbol": "ftCo_PassiveCeil_Phys"
+      "symbol": "ftCo_Pass_Phys"
     },
     {
       "id": 644,
-      "symbol": "ftCo_PassiveStand_Anim"
+      "symbol": "ftCo_PassiveCeil_Anim"
     },
     {
       "id": 645,
-      "symbol": "ftCo_PassiveStand_Coll"
+      "symbol": "ftCo_PassiveCeil_Coll"
     },
     {
       "id": 646,
-      "symbol": "ftCo_PassiveStand_IASA"
+      "symbol": "ftCo_PassiveCeil_IASA"
     },
     {
       "id": 647,
-      "symbol": "ftCo_PassiveStand_Phys"
+      "symbol": "ftCo_PassiveCeil_Phys"
     },
     {
       "id": 648,
-      "symbol": "ftCo_PassiveWall_Anim"
+      "symbol": "ftCo_PassiveStand_Anim"
     },
     {
       "id": 649,
-      "symbol": "ftCo_PassiveWall_Coll"
+      "symbol": "ftCo_PassiveStand_Coll"
     },
     {
       "id": 650,
-      "symbol": "ftCo_PassiveWall_IASA"
+      "symbol": "ftCo_PassiveStand_IASA"
     },
     {
       "id": 651,
-      "symbol": "ftCo_PassiveWall_Phys"
+      "symbol": "ftCo_PassiveStand_Phys"
     },
     {
       "id": 652,
-      "symbol": "ftCo_Passive_Anim"
+      "symbol": "ftCo_PassiveWall_Anim"
     },
     {
       "id": 653,
-      "symbol": "ftCo_Passive_Coll"
+      "symbol": "ftCo_PassiveWall_Coll"
     },
     {
       "id": 654,
-      "symbol": "ftCo_Passive_IASA"
+      "symbol": "ftCo_PassiveWall_IASA"
     },
     {
       "id": 655,
-      "symbol": "ftCo_Passive_Phys"
+      "symbol": "ftCo_PassiveWall_Phys"
     },
     {
       "id": 656,
-      "symbol": "ftCo_RebirthWait_Anim"
+      "symbol": "ftCo_Passive_Anim"
     },
     {
       "id": 657,
-      "symbol": "ftCo_RebirthWait_Coll"
+      "symbol": "ftCo_Passive_Coll"
     },
     {
       "id": 658,
-      "symbol": "ftCo_RebirthWait_IASA"
+      "symbol": "ftCo_Passive_IASA"
     },
     {
       "id": 659,
-      "symbol": "ftCo_RebirthWait_Phys"
+      "symbol": "ftCo_Passive_Phys"
     },
     {
       "id": 660,
-      "symbol": "ftCo_Rebirth_Anim"
+      "symbol": "ftCo_RebirthWait_Anim"
     },
     {
       "id": 661,
-      "symbol": "ftCo_Rebirth_Cam"
+      "symbol": "ftCo_RebirthWait_Coll"
     },
     {
       "id": 662,
-      "symbol": "ftCo_Rebirth_Coll"
+      "symbol": "ftCo_RebirthWait_IASA"
     },
     {
       "id": 663,
-      "symbol": "ftCo_Rebirth_IASA"
+      "symbol": "ftCo_RebirthWait_Phys"
     },
     {
       "id": 664,
-      "symbol": "ftCo_Rebirth_Phys"
+      "symbol": "ftCo_Rebirth_Anim"
     },
     {
       "id": 665,
-      "symbol": "ftCo_ReboundStop_Anim"
+      "symbol": "ftCo_Rebirth_Cam"
     },
     {
       "id": 666,
-      "symbol": "ftCo_Rebound_Anim"
+      "symbol": "ftCo_Rebirth_Coll"
     },
     {
       "id": 667,
-      "symbol": "ftCo_Rebound_Coll"
+      "symbol": "ftCo_Rebirth_IASA"
     },
     {
       "id": 668,
-      "symbol": "ftCo_Rebound_IASA"
+      "symbol": "ftCo_Rebirth_Phys"
     },
     {
       "id": 669,
-      "symbol": "ftCo_Rebound_Phys"
+      "symbol": "ftCo_ReboundStop_Anim"
     },
     {
       "id": 670,
-      "symbol": "ftCo_RunBrake_Anim"
+      "symbol": "ftCo_Rebound_Anim"
     },
     {
       "id": 671,
-      "symbol": "ftCo_RunBrake_Coll"
+      "symbol": "ftCo_Rebound_Coll"
     },
     {
       "id": 672,
-      "symbol": "ftCo_RunBrake_IASA"
+      "symbol": "ftCo_Rebound_IASA"
     },
     {
       "id": 673,
-      "symbol": "ftCo_RunBrake_Phys"
+      "symbol": "ftCo_Rebound_Phys"
     },
     {
       "id": 674,
-      "symbol": "ftCo_RunDirect_Anim"
+      "symbol": "ftCo_RunBrake_Anim"
     },
     {
       "id": 675,
-      "symbol": "ftCo_RunDirect_Coll"
+      "symbol": "ftCo_RunBrake_Coll"
     },
     {
       "id": 676,
-      "symbol": "ftCo_RunDirect_IASA"
+      "symbol": "ftCo_RunBrake_IASA"
     },
     {
       "id": 677,
-      "symbol": "ftCo_RunDirect_Phys"
+      "symbol": "ftCo_RunBrake_Phys"
     },
     {
       "id": 678,
-      "symbol": "ftCo_Run_Anim"
+      "symbol": "ftCo_RunDirect_Anim"
     },
     {
       "id": 679,
-      "symbol": "ftCo_Run_Coll"
+      "symbol": "ftCo_RunDirect_Coll"
     },
     {
       "id": 680,
-      "symbol": "ftCo_Run_IASA"
+      "symbol": "ftCo_RunDirect_IASA"
     },
     {
       "id": 681,
-      "symbol": "ftCo_Run_Phys"
+      "symbol": "ftCo_RunDirect_Phys"
     },
     {
       "id": 682,
-      "symbol": "ftCo_ShieldBreakDown_Anim"
+      "symbol": "ftCo_Run_Anim"
     },
     {
       "id": 683,
-      "symbol": "ftCo_ShieldBreakDown_Coll"
+      "symbol": "ftCo_Run_Coll"
     },
     {
       "id": 684,
-      "symbol": "ftCo_ShieldBreakDown_IASA"
+      "symbol": "ftCo_Run_IASA"
     },
     {
       "id": 685,
-      "symbol": "ftCo_ShieldBreakDown_Phys"
+      "symbol": "ftCo_Run_Phys"
     },
     {
       "id": 686,
-      "symbol": "ftCo_ShieldBreakFall_Anim"
+      "symbol": "ftCo_ShieldBreakDown_Anim"
     },
     {
       "id": 687,
-      "symbol": "ftCo_ShieldBreakFall_Coll"
+      "symbol": "ftCo_ShieldBreakDown_Coll"
     },
     {
       "id": 688,
-      "symbol": "ftCo_ShieldBreakFall_IASA"
+      "symbol": "ftCo_ShieldBreakDown_IASA"
     },
     {
       "id": 689,
-      "symbol": "ftCo_ShieldBreakFall_Phys"
+      "symbol": "ftCo_ShieldBreakDown_Phys"
     },
     {
       "id": 690,
-      "symbol": "ftCo_ShieldBreakFly_Anim"
+      "symbol": "ftCo_ShieldBreakFall_Anim"
     },
     {
       "id": 691,
-      "symbol": "ftCo_ShieldBreakFly_Coll"
+      "symbol": "ftCo_ShieldBreakFall_Coll"
     },
     {
       "id": 692,
-      "symbol": "ftCo_ShieldBreakFly_IASA"
+      "symbol": "ftCo_ShieldBreakFall_IASA"
     },
     {
       "id": 693,
-      "symbol": "ftCo_ShieldBreakFly_Phys"
+      "symbol": "ftCo_ShieldBreakFall_Phys"
     },
     {
       "id": 694,
-      "symbol": "ftCo_ShieldBreakStand_Anim"
+      "symbol": "ftCo_ShieldBreakFly_Anim"
     },
     {
       "id": 695,
-      "symbol": "ftCo_ShieldBreakStand_Coll"
+      "symbol": "ftCo_ShieldBreakFly_Coll"
     },
     {
       "id": 696,
-      "symbol": "ftCo_ShieldBreakStand_IASA"
+      "symbol": "ftCo_ShieldBreakFly_IASA"
     },
     {
       "id": 697,
-      "symbol": "ftCo_ShieldBreakStand_Phys"
+      "symbol": "ftCo_ShieldBreakFly_Phys"
     },
     {
       "id": 698,
-      "symbol": "ftCo_Shouldered_Anim"
+      "symbol": "ftCo_ShieldBreakStand_Anim"
     },
     {
       "id": 699,
-      "symbol": "ftCo_Shouldered_Coll"
+      "symbol": "ftCo_ShieldBreakStand_Coll"
     },
     {
       "id": 700,
-      "symbol": "ftCo_Shouldered_IASA"
+      "symbol": "ftCo_ShieldBreakStand_IASA"
     },
     {
       "id": 701,
-      "symbol": "ftCo_Shouldered_Phys"
+      "symbol": "ftCo_ShieldBreakStand_Phys"
     },
     {
       "id": 702,
-      "symbol": "ftCo_Sleep_Anim"
+      "symbol": "ftCo_Shouldered_Anim"
     },
     {
       "id": 703,
-      "symbol": "ftCo_Sleep_IASA"
+      "symbol": "ftCo_Shouldered_Coll"
     },
     {
       "id": 704,
-      "symbol": "ftCo_SquatRv_Anim"
+      "symbol": "ftCo_Shouldered_IASA"
     },
     {
       "id": 705,
-      "symbol": "ftCo_SquatRv_Coll"
+      "symbol": "ftCo_Shouldered_Phys"
     },
     {
       "id": 706,
-      "symbol": "ftCo_SquatRv_IASA"
+      "symbol": "ftCo_Sleep_Anim"
     },
     {
       "id": 707,
-      "symbol": "ftCo_SquatRv_Phys"
+      "symbol": "ftCo_Sleep_IASA"
     },
     {
       "id": 708,
-      "symbol": "ftCo_SquatWait_Anim"
+      "symbol": "ftCo_SquatRv_Anim"
     },
     {
       "id": 709,
-      "symbol": "ftCo_SquatWait_Coll"
+      "symbol": "ftCo_SquatRv_Coll"
     },
     {
       "id": 710,
-      "symbol": "ftCo_SquatWait_IASA"
+      "symbol": "ftCo_SquatRv_IASA"
     },
     {
       "id": 711,
-      "symbol": "ftCo_SquatWait_Phys"
+      "symbol": "ftCo_SquatRv_Phys"
     },
     {
       "id": 712,
-      "symbol": "ftCo_Squat_Anim"
+      "symbol": "ftCo_SquatWait_Anim"
     },
     {
       "id": 713,
-      "symbol": "ftCo_Squat_Coll"
+      "symbol": "ftCo_SquatWait_Coll"
     },
     {
       "id": 714,
-      "symbol": "ftCo_Squat_IASA"
+      "symbol": "ftCo_SquatWait_IASA"
     },
     {
       "id": 715,
-      "symbol": "ftCo_Squat_Phys"
+      "symbol": "ftCo_SquatWait_Phys"
     },
     {
       "id": 716,
-      "symbol": "ftCo_StarRodSwing_Anim"
+      "symbol": "ftCo_Squat_Anim"
     },
     {
       "id": 717,
-      "symbol": "ftCo_StarRodSwing_Coll"
+      "symbol": "ftCo_Squat_Coll"
     },
     {
       "id": 718,
-      "symbol": "ftCo_StarRodSwing_IASA"
+      "symbol": "ftCo_Squat_IASA"
     },
     {
       "id": 719,
-      "symbol": "ftCo_StarRodSwing_Phys"
+      "symbol": "ftCo_Squat_Phys"
     },
     {
       "id": 720,
-      "symbol": "ftCo_StopCeil_Anim"
+      "symbol": "ftCo_StarRodSwing_Anim"
     },
     {
       "id": 721,
-      "symbol": "ftCo_StopCeil_Coll"
+      "symbol": "ftCo_StarRodSwing_Coll"
     },
     {
       "id": 722,
-      "symbol": "ftCo_StopCeil_IASA"
+      "symbol": "ftCo_StarRodSwing_IASA"
     },
     {
       "id": 723,
-      "symbol": "ftCo_StopCeil_Phys"
+      "symbol": "ftCo_StarRodSwing_Phys"
     },
     {
       "id": 724,
-      "symbol": "ftCo_StopWall_Anim"
+      "symbol": "ftCo_StopCeil_Anim"
     },
     {
       "id": 725,
-      "symbol": "ftCo_StopWall_Coll"
+      "symbol": "ftCo_StopCeil_Coll"
     },
     {
       "id": 726,
-      "symbol": "ftCo_StopWall_IASA"
+      "symbol": "ftCo_StopCeil_IASA"
     },
     {
       "id": 727,
-      "symbol": "ftCo_StopWall_Phys"
+      "symbol": "ftCo_StopCeil_Phys"
     },
     {
       "id": 728,
-      "symbol": "ftCo_SwordSwing_Anim"
+      "symbol": "ftCo_StopWall_Anim"
     },
     {
       "id": 729,
-      "symbol": "ftCo_SwordSwing_Coll"
+      "symbol": "ftCo_StopWall_Coll"
     },
     {
       "id": 730,
-      "symbol": "ftCo_SwordSwing_IASA"
+      "symbol": "ftCo_StopWall_IASA"
     },
     {
       "id": 731,
-      "symbol": "ftCo_SwordSwing_Phys"
+      "symbol": "ftCo_StopWall_Phys"
     },
     {
       "id": 732,
-      "symbol": "ftCo_ThrowB_Anim"
+      "symbol": "ftCo_SwordSwing_Anim"
     },
     {
       "id": 733,
-      "symbol": "ftCo_ThrowB_Coll"
+      "symbol": "ftCo_SwordSwing_Coll"
     },
     {
       "id": 734,
-      "symbol": "ftCo_ThrowB_IASA"
+      "symbol": "ftCo_SwordSwing_IASA"
     },
     {
       "id": 735,
-      "symbol": "ftCo_ThrowB_Phys"
+      "symbol": "ftCo_SwordSwing_Phys"
     },
     {
       "id": 736,
-      "symbol": "ftCo_ThrowF_Anim"
+      "symbol": "ftCo_ThrowB_Anim"
     },
     {
       "id": 737,
-      "symbol": "ftCo_ThrowF_Coll"
+      "symbol": "ftCo_ThrowB_Coll"
     },
     {
       "id": 738,
-      "symbol": "ftCo_ThrowF_IASA"
+      "symbol": "ftCo_ThrowB_IASA"
     },
     {
       "id": 739,
-      "symbol": "ftCo_ThrowF_Phys"
+      "symbol": "ftCo_ThrowB_Phys"
     },
     {
       "id": 740,
-      "symbol": "ftCo_ThrowHi_Anim"
+      "symbol": "ftCo_ThrowF_Anim"
     },
     {
       "id": 741,
-      "symbol": "ftCo_ThrowHi_Cam"
+      "symbol": "ftCo_ThrowF_Coll"
     },
     {
       "id": 742,
-      "symbol": "ftCo_ThrowHi_Coll"
+      "symbol": "ftCo_ThrowF_IASA"
     },
     {
       "id": 743,
-      "symbol": "ftCo_ThrowHi_IASA"
+      "symbol": "ftCo_ThrowF_Phys"
     },
     {
       "id": 744,
-      "symbol": "ftCo_ThrowHi_Phys"
+      "symbol": "ftCo_ThrowHi_Anim"
     },
     {
       "id": 745,
-      "symbol": "ftCo_ThrowLw_Anim"
+      "symbol": "ftCo_ThrowHi_Cam"
     },
     {
       "id": 746,
-      "symbol": "ftCo_ThrowLw_Coll"
+      "symbol": "ftCo_ThrowHi_Coll"
     },
     {
       "id": 747,
-      "symbol": "ftCo_ThrowLw_IASA"
+      "symbol": "ftCo_ThrowHi_IASA"
     },
     {
       "id": 748,
-      "symbol": "ftCo_ThrowLw_Phys"
+      "symbol": "ftCo_ThrowHi_Phys"
     },
     {
       "id": 749,
-      "symbol": "ftCo_ThrownB_Anim"
+      "symbol": "ftCo_ThrowLw_Anim"
     },
     {
       "id": 750,
-      "symbol": "ftCo_ThrownB_Coll"
+      "symbol": "ftCo_ThrowLw_Coll"
     },
     {
       "id": 751,
-      "symbol": "ftCo_ThrownB_IASA"
+      "symbol": "ftCo_ThrowLw_IASA"
     },
     {
       "id": 752,
-      "symbol": "ftCo_ThrownB_Phys"
+      "symbol": "ftCo_ThrowLw_Phys"
     },
     {
       "id": 753,
-      "symbol": "ftCo_ThrownCopyStar_Anim"
+      "symbol": "ftCo_ThrownB_Anim"
     },
     {
       "id": 754,
-      "symbol": "ftCo_ThrownCopyStar_Coll"
+      "symbol": "ftCo_ThrownB_Coll"
     },
     {
       "id": 755,
-      "symbol": "ftCo_ThrownCopyStar_IASA"
+      "symbol": "ftCo_ThrownB_IASA"
     },
     {
       "id": 756,
-      "symbol": "ftCo_ThrownCopyStar_Phys"
+      "symbol": "ftCo_ThrownB_Phys"
     },
     {
       "id": 757,
-      "symbol": "ftCo_ThrownCrazyHand_Anim"
+      "symbol": "ftCo_ThrownCopyStar_Anim"
     },
     {
       "id": 758,
-      "symbol": "ftCo_ThrownCrazyHand_Coll"
+      "symbol": "ftCo_ThrownCopyStar_Coll"
     },
     {
       "id": 759,
-      "symbol": "ftCo_ThrownCrazyHand_IASA"
+      "symbol": "ftCo_ThrownCopyStar_IASA"
     },
     {
       "id": 760,
-      "symbol": "ftCo_ThrownCrazyHand_Phys"
+      "symbol": "ftCo_ThrownCopyStar_Phys"
     },
     {
       "id": 761,
-      "symbol": "ftCo_ThrownF_Anim"
+      "symbol": "ftCo_ThrownCrazyHand_Anim"
     },
     {
       "id": 762,
-      "symbol": "ftCo_ThrownF_Coll"
+      "symbol": "ftCo_ThrownCrazyHand_Coll"
     },
     {
       "id": 763,
-      "symbol": "ftCo_ThrownF_IASA"
+      "symbol": "ftCo_ThrownCrazyHand_IASA"
     },
     {
       "id": 764,
-      "symbol": "ftCo_ThrownF_Phys"
+      "symbol": "ftCo_ThrownCrazyHand_Phys"
     },
     {
       "id": 765,
-      "symbol": "ftCo_ThrownHi_Anim"
+      "symbol": "ftCo_ThrownF_Anim"
     },
     {
       "id": 766,
-      "symbol": "ftCo_ThrownHi_Cam"
+      "symbol": "ftCo_ThrownF_Coll"
     },
     {
       "id": 767,
-      "symbol": "ftCo_ThrownHi_Coll"
+      "symbol": "ftCo_ThrownF_IASA"
     },
     {
       "id": 768,
-      "symbol": "ftCo_ThrownHi_IASA"
+      "symbol": "ftCo_ThrownF_Phys"
     },
     {
       "id": 769,
-      "symbol": "ftCo_ThrownHi_Phys"
+      "symbol": "ftCo_ThrownHi_Anim"
     },
     {
       "id": 770,
-      "symbol": "ftCo_ThrownKirbyStar_Anim"
+      "symbol": "ftCo_ThrownHi_Cam"
     },
     {
       "id": 771,
-      "symbol": "ftCo_ThrownKirbyStar_Coll"
+      "symbol": "ftCo_ThrownHi_Coll"
     },
     {
       "id": 772,
-      "symbol": "ftCo_ThrownKirbyStar_IASA"
+      "symbol": "ftCo_ThrownHi_IASA"
     },
     {
       "id": 773,
-      "symbol": "ftCo_ThrownKirbyStar_Phys"
+      "symbol": "ftCo_ThrownHi_Phys"
     },
     {
       "id": 774,
-      "symbol": "ftCo_ThrownKirby_Anim"
+      "symbol": "ftCo_ThrownKirbyStar_Anim"
     },
     {
       "id": 775,
-      "symbol": "ftCo_ThrownKirby_Coll"
+      "symbol": "ftCo_ThrownKirbyStar_Coll"
     },
     {
       "id": 776,
-      "symbol": "ftCo_ThrownKirby_IASA"
+      "symbol": "ftCo_ThrownKirbyStar_IASA"
     },
     {
       "id": 777,
-      "symbol": "ftCo_ThrownKirby_Phys"
+      "symbol": "ftCo_ThrownKirbyStar_Phys"
     },
     {
       "id": 778,
-      "symbol": "ftCo_ThrownKoopaAirB_Anim"
+      "symbol": "ftCo_ThrownKirby_Anim"
     },
     {
       "id": 779,
-      "symbol": "ftCo_ThrownKoopaAirB_Coll"
+      "symbol": "ftCo_ThrownKirby_Coll"
     },
     {
       "id": 780,
-      "symbol": "ftCo_ThrownKoopaAirB_IASA"
+      "symbol": "ftCo_ThrownKirby_IASA"
     },
     {
       "id": 781,
-      "symbol": "ftCo_ThrownKoopaAirB_Phys"
+      "symbol": "ftCo_ThrownKirby_Phys"
     },
     {
       "id": 782,
-      "symbol": "ftCo_ThrownKoopaAirF_Anim"
+      "symbol": "ftCo_ThrownKoopaAirB_Anim"
     },
     {
       "id": 783,
-      "symbol": "ftCo_ThrownKoopaAirF_Coll"
+      "symbol": "ftCo_ThrownKoopaAirB_Coll"
     },
     {
       "id": 784,
-      "symbol": "ftCo_ThrownKoopaAirF_IASA"
+      "symbol": "ftCo_ThrownKoopaAirB_IASA"
     },
     {
       "id": 785,
-      "symbol": "ftCo_ThrownKoopaAirF_Phys"
+      "symbol": "ftCo_ThrownKoopaAirB_Phys"
     },
     {
       "id": 786,
-      "symbol": "ftCo_ThrownKoopaB_Anim"
+      "symbol": "ftCo_ThrownKoopaAirF_Anim"
     },
     {
       "id": 787,
-      "symbol": "ftCo_ThrownKoopaB_Coll"
+      "symbol": "ftCo_ThrownKoopaAirF_Coll"
     },
     {
       "id": 788,
-      "symbol": "ftCo_ThrownKoopaB_IASA"
+      "symbol": "ftCo_ThrownKoopaAirF_IASA"
     },
     {
       "id": 789,
-      "symbol": "ftCo_ThrownKoopaB_Phys"
+      "symbol": "ftCo_ThrownKoopaAirF_Phys"
     },
     {
       "id": 790,
-      "symbol": "ftCo_ThrownKoopaF_Anim"
+      "symbol": "ftCo_ThrownKoopaB_Anim"
     },
     {
       "id": 791,
-      "symbol": "ftCo_ThrownKoopaF_Coll"
+      "symbol": "ftCo_ThrownKoopaB_Coll"
     },
     {
       "id": 792,
-      "symbol": "ftCo_ThrownKoopaF_IASA"
+      "symbol": "ftCo_ThrownKoopaB_IASA"
     },
     {
       "id": 793,
-      "symbol": "ftCo_ThrownKoopaF_Phys"
+      "symbol": "ftCo_ThrownKoopaB_Phys"
     },
     {
       "id": 794,
-      "symbol": "ftCo_ThrownLw_Anim"
+      "symbol": "ftCo_ThrownKoopaF_Anim"
     },
     {
       "id": 795,
-      "symbol": "ftCo_ThrownLw_Coll"
+      "symbol": "ftCo_ThrownKoopaF_Coll"
     },
     {
       "id": 796,
-      "symbol": "ftCo_ThrownLw_IASA"
+      "symbol": "ftCo_ThrownKoopaF_IASA"
     },
     {
       "id": 797,
-      "symbol": "ftCo_ThrownLw_Phys"
+      "symbol": "ftCo_ThrownKoopaF_Phys"
     },
     {
       "id": 798,
-      "symbol": "ftCo_ThrownMewtwoAir_Anim"
+      "symbol": "ftCo_ThrownLw_Anim"
     },
     {
       "id": 799,
-      "symbol": "ftCo_ThrownMewtwoAir_Coll"
+      "symbol": "ftCo_ThrownLw_Coll"
     },
     {
       "id": 800,
-      "symbol": "ftCo_ThrownMewtwoAir_IASA"
+      "symbol": "ftCo_ThrownLw_IASA"
     },
     {
       "id": 801,
-      "symbol": "ftCo_ThrownMewtwoAir_Phys"
+      "symbol": "ftCo_ThrownLw_Phys"
     },
     {
       "id": 802,
-      "symbol": "ftCo_ThrownMewtwo_Anim"
+      "symbol": "ftCo_ThrownMewtwoAir_Anim"
     },
     {
       "id": 803,
-      "symbol": "ftCo_ThrownMewtwo_Coll"
+      "symbol": "ftCo_ThrownMewtwoAir_Coll"
     },
     {
       "id": 804,
-      "symbol": "ftCo_ThrownMewtwo_IASA"
+      "symbol": "ftCo_ThrownMewtwoAir_IASA"
     },
     {
       "id": 805,
-      "symbol": "ftCo_ThrownMewtwo_Phys"
+      "symbol": "ftCo_ThrownMewtwoAir_Phys"
     },
     {
       "id": 806,
-      "symbol": "ftCo_TurnRun_Anim"
+      "symbol": "ftCo_ThrownMewtwo_Anim"
     },
     {
       "id": 807,
-      "symbol": "ftCo_TurnRun_Coll"
+      "symbol": "ftCo_ThrownMewtwo_Coll"
     },
     {
       "id": 808,
-      "symbol": "ftCo_TurnRun_IASA"
+      "symbol": "ftCo_ThrownMewtwo_IASA"
     },
     {
       "id": 809,
-      "symbol": "ftCo_TurnRun_Phys"
+      "symbol": "ftCo_ThrownMewtwo_Phys"
     },
     {
       "id": 810,
-      "symbol": "ftCo_Turn_Anim"
+      "symbol": "ftCo_TurnRun_Anim"
     },
     {
       "id": 811,
-      "symbol": "ftCo_Turn_Coll"
+      "symbol": "ftCo_TurnRun_Coll"
     },
     {
       "id": 812,
-      "symbol": "ftCo_Turn_IASA"
+      "symbol": "ftCo_TurnRun_IASA"
     },
     {
       "id": 813,
-      "symbol": "ftCo_Turn_Phys"
+      "symbol": "ftCo_TurnRun_Phys"
     },
     {
       "id": 814,
-      "symbol": "ftCo_Wait_Anim"
+      "symbol": "ftCo_Turn_Anim"
     },
     {
       "id": 815,
-      "symbol": "ftCo_Wait_Coll"
+      "symbol": "ftCo_Turn_Coll"
     },
     {
       "id": 816,
-      "symbol": "ftCo_Wait_IASA"
+      "symbol": "ftCo_Turn_IASA"
     },
     {
       "id": 817,
-      "symbol": "ftCo_Wait_Phys"
+      "symbol": "ftCo_Turn_Phys"
     },
     {
       "id": 818,
-      "symbol": "ftCo_Walk_Anim"
+      "symbol": "ftCo_Wait_Anim"
     },
     {
       "id": 819,
-      "symbol": "ftCo_Walk_Coll"
+      "symbol": "ftCo_Wait_Coll"
     },
     {
       "id": 820,
-      "symbol": "ftCo_Walk_IASA"
+      "symbol": "ftCo_Wait_IASA"
     },
     {
       "id": 821,
-      "symbol": "ftCo_Walk_Phys"
+      "symbol": "ftCo_Wait_Phys"
     },
     {
       "id": 822,
-      "symbol": "ftCo_WarpStarFall_Anim"
+      "symbol": "ftCo_Walk_Anim"
     },
     {
       "id": 823,
-      "symbol": "ftCo_WarpStarFall_Cam"
+      "symbol": "ftCo_Walk_Coll"
     },
     {
       "id": 824,
-      "symbol": "ftCo_WarpStarFall_Coll"
+      "symbol": "ftCo_Walk_IASA"
     },
     {
       "id": 825,
-      "symbol": "ftCo_WarpStarFall_IASA"
+      "symbol": "ftCo_Walk_Phys"
     },
     {
       "id": 826,
-      "symbol": "ftCo_WarpStarFall_Phys"
+      "symbol": "ftCo_WarpStarFall_Anim"
     },
     {
       "id": 827,
-      "symbol": "ftCo_WarpStarJump_Anim"
+      "symbol": "ftCo_WarpStarFall_Cam"
     },
     {
       "id": 828,
-      "symbol": "ftCo_WarpStarJump_Cam"
+      "symbol": "ftCo_WarpStarFall_Coll"
     },
     {
       "id": 829,
-      "symbol": "ftCo_WarpStarJump_Coll"
+      "symbol": "ftCo_WarpStarFall_IASA"
     },
     {
       "id": 830,
-      "symbol": "ftCo_WarpStarJump_IASA"
+      "symbol": "ftCo_WarpStarFall_Phys"
     },
     {
       "id": 831,
-      "symbol": "ftCo_WarpStarJump_Phys"
+      "symbol": "ftCo_WarpStarJump_Anim"
     },
     {
       "id": 832,
-      "symbol": "ftCo_YoshiEgg_Anim"
+      "symbol": "ftCo_WarpStarJump_Cam"
     },
     {
       "id": 833,
-      "symbol": "ftCo_YoshiEgg_Coll"
+      "symbol": "ftCo_WarpStarJump_Coll"
     },
     {
       "id": 834,
-      "symbol": "ftCo_YoshiEgg_IASA"
+      "symbol": "ftCo_WarpStarJump_IASA"
     },
     {
       "id": 835,
-      "symbol": "ftCo_YoshiEgg_Phys"
+      "symbol": "ftCo_WarpStarJump_Phys"
     },
     {
       "id": 836,
-      "symbol": "ftFx_AppealS_Anim"
+      "symbol": "ftCo_YoshiEgg_Anim"
     },
     {
       "id": 837,
-      "symbol": "ftFx_AppealS_Coll"
+      "symbol": "ftCo_YoshiEgg_Coll"
     },
     {
       "id": 838,
-      "symbol": "ftFx_AppealS_IASA"
+      "symbol": "ftCo_YoshiEgg_IASA"
     },
     {
       "id": 839,
-      "symbol": "ftFx_AppealS_Phys"
+      "symbol": "ftCo_YoshiEgg_Phys"
     },
     {
       "id": 840,
-      "symbol": "ftFx_SpecialAirHi_Anim"
+      "symbol": "ftFx_AppealS_Anim"
     },
     {
       "id": 841,
-      "symbol": "ftFx_SpecialAirHi_Coll"
+      "symbol": "ftFx_AppealS_Coll"
     },
     {
       "id": 842,
-      "symbol": "ftFx_SpecialAirHi_IASA"
+      "symbol": "ftFx_AppealS_IASA"
     },
     {
       "id": 843,
-      "symbol": "ftFx_SpecialAirHi_Phys"
+      "symbol": "ftFx_AppealS_Phys"
     },
     {
       "id": 844,
-      "symbol": "ftFx_SpecialAirLwEnd_Anim"
+      "symbol": "ftFx_SpecialAirHi_Anim"
     },
     {
       "id": 845,
-      "symbol": "ftFx_SpecialAirLwEnd_Coll"
+      "symbol": "ftFx_SpecialAirHi_Coll"
     },
     {
       "id": 846,
-      "symbol": "ftFx_SpecialAirLwEnd_IASA"
+      "symbol": "ftFx_SpecialAirHi_IASA"
     },
     {
       "id": 847,
-      "symbol": "ftFx_SpecialAirLwEnd_Phys"
+      "symbol": "ftFx_SpecialAirHi_Phys"
     },
     {
       "id": 848,
-      "symbol": "ftFx_SpecialAirLwHit_Anim"
+      "symbol": "ftFx_SpecialAirLwEnd_Anim"
     },
     {
       "id": 849,
-      "symbol": "ftFx_SpecialAirLwHit_Coll"
+      "symbol": "ftFx_SpecialAirLwEnd_Coll"
     },
     {
       "id": 850,
-      "symbol": "ftFx_SpecialAirLwHit_IASA"
+      "symbol": "ftFx_SpecialAirLwEnd_IASA"
     },
     {
       "id": 851,
-      "symbol": "ftFx_SpecialAirLwHit_Phys"
+      "symbol": "ftFx_SpecialAirLwEnd_Phys"
     },
     {
       "id": 852,
-      "symbol": "ftFx_SpecialAirLwLoop_Anim"
+      "symbol": "ftFx_SpecialAirLwHit_Anim"
     },
     {
       "id": 853,
-      "symbol": "ftFx_SpecialAirLwLoop_Coll"
+      "symbol": "ftFx_SpecialAirLwHit_Coll"
     },
     {
       "id": 854,
-      "symbol": "ftFx_SpecialAirLwLoop_IASA"
+      "symbol": "ftFx_SpecialAirLwHit_IASA"
     },
     {
       "id": 855,
-      "symbol": "ftFx_SpecialAirLwLoop_Phys"
+      "symbol": "ftFx_SpecialAirLwHit_Phys"
     },
     {
       "id": 856,
-      "symbol": "ftFx_SpecialAirLwStart_Anim"
+      "symbol": "ftFx_SpecialAirLwLoop_Anim"
     },
     {
       "id": 857,
-      "symbol": "ftFx_SpecialAirLwStart_Coll"
+      "symbol": "ftFx_SpecialAirLwLoop_Coll"
     },
     {
       "id": 858,
-      "symbol": "ftFx_SpecialAirLwStart_IASA"
+      "symbol": "ftFx_SpecialAirLwLoop_IASA"
     },
     {
       "id": 859,
-      "symbol": "ftFx_SpecialAirLwStart_Phys"
+      "symbol": "ftFx_SpecialAirLwLoop_Phys"
     },
     {
       "id": 860,
-      "symbol": "ftFx_SpecialAirLwTurn_Anim"
+      "symbol": "ftFx_SpecialAirLwStart_Anim"
     },
     {
       "id": 861,
-      "symbol": "ftFx_SpecialAirLwTurn_Coll"
+      "symbol": "ftFx_SpecialAirLwStart_Coll"
     },
     {
       "id": 862,
-      "symbol": "ftFx_SpecialAirLwTurn_IASA"
+      "symbol": "ftFx_SpecialAirLwStart_IASA"
     },
     {
       "id": 863,
-      "symbol": "ftFx_SpecialAirLwTurn_Phys"
+      "symbol": "ftFx_SpecialAirLwStart_Phys"
     },
     {
       "id": 864,
-      "symbol": "ftFx_SpecialAirNEnd_Anim"
+      "symbol": "ftFx_SpecialAirLwTurn_Anim"
     },
     {
       "id": 865,
-      "symbol": "ftFx_SpecialAirNEnd_Coll"
+      "symbol": "ftFx_SpecialAirLwTurn_Coll"
     },
     {
       "id": 866,
-      "symbol": "ftFx_SpecialAirNEnd_IASA"
+      "symbol": "ftFx_SpecialAirLwTurn_IASA"
     },
     {
       "id": 867,
-      "symbol": "ftFx_SpecialAirNEnd_Phys"
+      "symbol": "ftFx_SpecialAirLwTurn_Phys"
     },
     {
       "id": 868,
-      "symbol": "ftFx_SpecialAirNLoop_Anim"
+      "symbol": "ftFx_SpecialAirNEnd_Anim"
     },
     {
       "id": 869,
-      "symbol": "ftFx_SpecialAirNLoop_Coll"
+      "symbol": "ftFx_SpecialAirNEnd_Coll"
     },
     {
       "id": 870,
-      "symbol": "ftFx_SpecialAirNLoop_IASA"
+      "symbol": "ftFx_SpecialAirNEnd_IASA"
     },
     {
       "id": 871,
-      "symbol": "ftFx_SpecialAirNLoop_Phys"
+      "symbol": "ftFx_SpecialAirNEnd_Phys"
     },
     {
       "id": 872,
-      "symbol": "ftFx_SpecialAirNStart_Anim"
+      "symbol": "ftFx_SpecialAirNLoop_Anim"
     },
     {
       "id": 873,
-      "symbol": "ftFx_SpecialAirNStart_Coll"
+      "symbol": "ftFx_SpecialAirNLoop_Coll"
     },
     {
       "id": 874,
-      "symbol": "ftFx_SpecialAirNStart_IASA"
+      "symbol": "ftFx_SpecialAirNLoop_IASA"
     },
     {
       "id": 875,
-      "symbol": "ftFx_SpecialAirNStart_Phys"
+      "symbol": "ftFx_SpecialAirNLoop_Phys"
     },
     {
       "id": 876,
-      "symbol": "ftFx_SpecialAirSEnd_Anim"
+      "symbol": "ftFx_SpecialAirNStart_Anim"
     },
     {
       "id": 877,
-      "symbol": "ftFx_SpecialAirSEnd_Coll"
+      "symbol": "ftFx_SpecialAirNStart_Coll"
     },
     {
       "id": 878,
-      "symbol": "ftFx_SpecialAirSEnd_IASA"
+      "symbol": "ftFx_SpecialAirNStart_IASA"
     },
     {
       "id": 879,
-      "symbol": "ftFx_SpecialAirSEnd_Phys"
+      "symbol": "ftFx_SpecialAirNStart_Phys"
     },
     {
       "id": 880,
-      "symbol": "ftFx_SpecialAirSStart_Anim"
+      "symbol": "ftFx_SpecialAirSEnd_Anim"
     },
     {
       "id": 881,
-      "symbol": "ftFx_SpecialAirSStart_Coll"
+      "symbol": "ftFx_SpecialAirSEnd_Coll"
     },
     {
       "id": 882,
-      "symbol": "ftFx_SpecialAirSStart_IASA"
+      "symbol": "ftFx_SpecialAirSEnd_IASA"
     },
     {
       "id": 883,
-      "symbol": "ftFx_SpecialAirSStart_Phys"
+      "symbol": "ftFx_SpecialAirSEnd_Phys"
     },
     {
       "id": 884,
-      "symbol": "ftFx_SpecialAirS_Anim"
+      "symbol": "ftFx_SpecialAirSStart_Anim"
     },
     {
       "id": 885,
-      "symbol": "ftFx_SpecialAirS_Coll"
+      "symbol": "ftFx_SpecialAirSStart_Coll"
     },
     {
       "id": 886,
-      "symbol": "ftFx_SpecialAirS_IASA"
+      "symbol": "ftFx_SpecialAirSStart_IASA"
     },
     {
       "id": 887,
-      "symbol": "ftFx_SpecialAirS_Phys"
+      "symbol": "ftFx_SpecialAirSStart_Phys"
     },
     {
       "id": 888,
-      "symbol": "ftFx_SpecialHiBound_Anim"
+      "symbol": "ftFx_SpecialAirS_Anim"
     },
     {
       "id": 889,
-      "symbol": "ftFx_SpecialHiBound_Coll"
+      "symbol": "ftFx_SpecialAirS_Coll"
     },
     {
       "id": 890,
-      "symbol": "ftFx_SpecialHiBound_IASA"
+      "symbol": "ftFx_SpecialAirS_IASA"
     },
     {
       "id": 891,
-      "symbol": "ftFx_SpecialHiBound_Phys"
+      "symbol": "ftFx_SpecialAirS_Phys"
     },
     {
       "id": 892,
-      "symbol": "ftFx_SpecialHiFall_Anim"
+      "symbol": "ftFx_SpecialHiBound_Anim"
     },
     {
       "id": 893,
-      "symbol": "ftFx_SpecialHiFall_Coll"
+      "symbol": "ftFx_SpecialHiBound_Coll"
     },
     {
       "id": 894,
-      "symbol": "ftFx_SpecialHiFall_IASA"
+      "symbol": "ftFx_SpecialHiBound_IASA"
     },
     {
       "id": 895,
-      "symbol": "ftFx_SpecialHiFall_Phys"
+      "symbol": "ftFx_SpecialHiBound_Phys"
     },
     {
       "id": 896,
-      "symbol": "ftFx_SpecialHiHoldAir_Anim"
+      "symbol": "ftFx_SpecialHiFall_Anim"
     },
     {
       "id": 897,
-      "symbol": "ftFx_SpecialHiHoldAir_Coll"
+      "symbol": "ftFx_SpecialHiFall_Coll"
     },
     {
       "id": 898,
-      "symbol": "ftFx_SpecialHiHoldAir_IASA"
+      "symbol": "ftFx_SpecialHiFall_IASA"
     },
     {
       "id": 899,
-      "symbol": "ftFx_SpecialHiHoldAir_Phys"
+      "symbol": "ftFx_SpecialHiFall_Phys"
     },
     {
       "id": 900,
-      "symbol": "ftFx_SpecialHiHold_Anim"
+      "symbol": "ftFx_SpecialHiHoldAir_Anim"
     },
     {
       "id": 901,
-      "symbol": "ftFx_SpecialHiHold_Coll"
+      "symbol": "ftFx_SpecialHiHoldAir_Coll"
     },
     {
       "id": 902,
-      "symbol": "ftFx_SpecialHiHold_IASA"
+      "symbol": "ftFx_SpecialHiHoldAir_IASA"
     },
     {
       "id": 903,
-      "symbol": "ftFx_SpecialHiHold_Phys"
+      "symbol": "ftFx_SpecialHiHoldAir_Phys"
     },
     {
       "id": 904,
-      "symbol": "ftFx_SpecialHiLanding_Anim"
+      "symbol": "ftFx_SpecialHiHold_Anim"
     },
     {
       "id": 905,
-      "symbol": "ftFx_SpecialHiLanding_Coll"
+      "symbol": "ftFx_SpecialHiHold_Coll"
     },
     {
       "id": 906,
-      "symbol": "ftFx_SpecialHiLanding_IASA"
+      "symbol": "ftFx_SpecialHiHold_IASA"
     },
     {
       "id": 907,
-      "symbol": "ftFx_SpecialHiLanding_Phys"
+      "symbol": "ftFx_SpecialHiHold_Phys"
     },
     {
       "id": 908,
-      "symbol": "ftFx_SpecialHi_Anim"
+      "symbol": "ftFx_SpecialHiLanding_Anim"
     },
     {
       "id": 909,
-      "symbol": "ftFx_SpecialHi_Coll"
+      "symbol": "ftFx_SpecialHiLanding_Coll"
     },
     {
       "id": 910,
-      "symbol": "ftFx_SpecialHi_IASA"
+      "symbol": "ftFx_SpecialHiLanding_IASA"
     },
     {
       "id": 911,
-      "symbol": "ftFx_SpecialHi_Phys"
+      "symbol": "ftFx_SpecialHiLanding_Phys"
     },
     {
       "id": 912,
-      "symbol": "ftFx_SpecialLwEnd_Anim"
+      "symbol": "ftFx_SpecialHi_Anim"
     },
     {
       "id": 913,
-      "symbol": "ftFx_SpecialLwEnd_Coll"
+      "symbol": "ftFx_SpecialHi_Coll"
     },
     {
       "id": 914,
-      "symbol": "ftFx_SpecialLwEnd_IASA"
+      "symbol": "ftFx_SpecialHi_IASA"
     },
     {
       "id": 915,
-      "symbol": "ftFx_SpecialLwEnd_Phys"
+      "symbol": "ftFx_SpecialHi_Phys"
     },
     {
       "id": 916,
-      "symbol": "ftFx_SpecialLwHit_Anim"
+      "symbol": "ftFx_SpecialLwEnd_Anim"
     },
     {
       "id": 917,
-      "symbol": "ftFx_SpecialLwHit_Coll"
+      "symbol": "ftFx_SpecialLwEnd_Coll"
     },
     {
       "id": 918,
-      "symbol": "ftFx_SpecialLwHit_IASA"
+      "symbol": "ftFx_SpecialLwEnd_IASA"
     },
     {
       "id": 919,
-      "symbol": "ftFx_SpecialLwHit_Phys"
+      "symbol": "ftFx_SpecialLwEnd_Phys"
     },
     {
       "id": 920,
-      "symbol": "ftFx_SpecialLwLoop_Anim"
+      "symbol": "ftFx_SpecialLwHit_Anim"
     },
     {
       "id": 921,
-      "symbol": "ftFx_SpecialLwLoop_Coll"
+      "symbol": "ftFx_SpecialLwHit_Coll"
     },
     {
       "id": 922,
-      "symbol": "ftFx_SpecialLwLoop_IASA"
+      "symbol": "ftFx_SpecialLwHit_IASA"
     },
     {
       "id": 923,
-      "symbol": "ftFx_SpecialLwLoop_Phys"
+      "symbol": "ftFx_SpecialLwHit_Phys"
     },
     {
       "id": 924,
-      "symbol": "ftFx_SpecialLwStart_Anim"
+      "symbol": "ftFx_SpecialLwLoop_Anim"
     },
     {
       "id": 925,
-      "symbol": "ftFx_SpecialLwStart_Coll"
+      "symbol": "ftFx_SpecialLwLoop_Coll"
     },
     {
       "id": 926,
-      "symbol": "ftFx_SpecialLwStart_IASA"
+      "symbol": "ftFx_SpecialLwLoop_IASA"
     },
     {
       "id": 927,
-      "symbol": "ftFx_SpecialLwStart_Phys"
+      "symbol": "ftFx_SpecialLwLoop_Phys"
     },
     {
       "id": 928,
-      "symbol": "ftFx_SpecialLwTurn_Anim"
+      "symbol": "ftFx_SpecialLwStart_Anim"
     },
     {
       "id": 929,
-      "symbol": "ftFx_SpecialLwTurn_Coll"
+      "symbol": "ftFx_SpecialLwStart_Coll"
     },
     {
       "id": 930,
-      "symbol": "ftFx_SpecialLwTurn_IASA"
+      "symbol": "ftFx_SpecialLwStart_IASA"
     },
     {
       "id": 931,
-      "symbol": "ftFx_SpecialLwTurn_Phys"
+      "symbol": "ftFx_SpecialLwStart_Phys"
     },
     {
       "id": 932,
-      "symbol": "ftFx_SpecialNEnd_Anim"
+      "symbol": "ftFx_SpecialLwTurn_Anim"
     },
     {
       "id": 933,
-      "symbol": "ftFx_SpecialNEnd_Coll"
+      "symbol": "ftFx_SpecialLwTurn_Coll"
     },
     {
       "id": 934,
-      "symbol": "ftFx_SpecialNEnd_IASA"
+      "symbol": "ftFx_SpecialLwTurn_IASA"
     },
     {
       "id": 935,
-      "symbol": "ftFx_SpecialNEnd_Phys"
+      "symbol": "ftFx_SpecialLwTurn_Phys"
     },
     {
       "id": 936,
-      "symbol": "ftFx_SpecialNLoop_Anim"
+      "symbol": "ftFx_SpecialNEnd_Anim"
     },
     {
       "id": 937,
-      "symbol": "ftFx_SpecialNLoop_Coll"
+      "symbol": "ftFx_SpecialNEnd_Coll"
     },
     {
       "id": 938,
-      "symbol": "ftFx_SpecialNLoop_IASA"
+      "symbol": "ftFx_SpecialNEnd_IASA"
     },
     {
       "id": 939,
-      "symbol": "ftFx_SpecialNLoop_Phys"
+      "symbol": "ftFx_SpecialNEnd_Phys"
     },
     {
       "id": 940,
-      "symbol": "ftFx_SpecialNStart_Anim"
+      "symbol": "ftFx_SpecialNLoop_Anim"
     },
     {
       "id": 941,
-      "symbol": "ftFx_SpecialNStart_Coll"
+      "symbol": "ftFx_SpecialNLoop_Coll"
     },
     {
       "id": 942,
-      "symbol": "ftFx_SpecialNStart_IASA"
+      "symbol": "ftFx_SpecialNLoop_IASA"
     },
     {
       "id": 943,
-      "symbol": "ftFx_SpecialNStart_Phys"
+      "symbol": "ftFx_SpecialNLoop_Phys"
     },
     {
       "id": 944,
-      "symbol": "ftFx_SpecialSEnd_Anim"
+      "symbol": "ftFx_SpecialNStart_Anim"
     },
     {
       "id": 945,
-      "symbol": "ftFx_SpecialSEnd_Coll"
+      "symbol": "ftFx_SpecialNStart_Coll"
     },
     {
       "id": 946,
-      "symbol": "ftFx_SpecialSEnd_IASA"
+      "symbol": "ftFx_SpecialNStart_IASA"
     },
     {
       "id": 947,
-      "symbol": "ftFx_SpecialSEnd_Phys"
+      "symbol": "ftFx_SpecialNStart_Phys"
     },
     {
       "id": 948,
-      "symbol": "ftFx_SpecialSStart_Anim"
+      "symbol": "ftFx_SpecialSEnd_Anim"
     },
     {
       "id": 949,
-      "symbol": "ftFx_SpecialSStart_Coll"
+      "symbol": "ftFx_SpecialSEnd_Coll"
     },
     {
       "id": 950,
-      "symbol": "ftFx_SpecialSStart_IASA"
+      "symbol": "ftFx_SpecialSEnd_IASA"
     },
     {
       "id": 951,
-      "symbol": "ftFx_SpecialSStart_Phys"
+      "symbol": "ftFx_SpecialSEnd_Phys"
     },
     {
       "id": 952,
-      "symbol": "ftFx_SpecialS_Anim"
+      "symbol": "ftFx_SpecialSStart_Anim"
     },
     {
       "id": 953,
-      "symbol": "ftFx_SpecialS_Coll"
+      "symbol": "ftFx_SpecialSStart_Coll"
     },
     {
       "id": 954,
-      "symbol": "ftFx_SpecialS_IASA"
+      "symbol": "ftFx_SpecialSStart_IASA"
     },
     {
       "id": 955,
-      "symbol": "ftFx_SpecialS_Phys"
+      "symbol": "ftFx_SpecialSStart_Phys"
     },
     {
       "id": 956,
-      "symbol": "ftMh_CaptureDamageMasterHand_Anim"
+      "symbol": "ftFx_SpecialS_Anim"
     },
     {
       "id": 957,
-      "symbol": "ftMh_CaptureDamageMasterHand_Coll"
+      "symbol": "ftFx_SpecialS_Coll"
     },
     {
       "id": 958,
-      "symbol": "ftMh_CaptureDamageMasterHand_IASA"
+      "symbol": "ftFx_SpecialS_IASA"
     },
     {
       "id": 959,
-      "symbol": "ftMh_CaptureDamageMasterHand_Phys"
+      "symbol": "ftFx_SpecialS_Phys"
     },
     {
       "id": 960,
-      "symbol": "ftMh_CaptureMasterHand_Anim"
+      "symbol": "ftMh_CaptureDamageMasterHand_Anim"
     },
     {
       "id": 961,
-      "symbol": "ftMh_CaptureMasterHand_Coll"
+      "symbol": "ftMh_CaptureDamageMasterHand_Coll"
     },
     {
       "id": 962,
-      "symbol": "ftMh_CaptureMasterHand_IASA"
+      "symbol": "ftMh_CaptureDamageMasterHand_IASA"
     },
     {
       "id": 963,
-      "symbol": "ftMh_CaptureMasterHand_Phys"
+      "symbol": "ftMh_CaptureDamageMasterHand_Phys"
     },
     {
       "id": 964,
-      "symbol": "ftMh_CaptureWaitMasterHand_Anim"
+      "symbol": "ftMh_CaptureMasterHand_Anim"
     },
     {
       "id": 965,
-      "symbol": "ftMh_CaptureWaitMasterHand_Coll"
+      "symbol": "ftMh_CaptureMasterHand_Coll"
     },
     {
       "id": 966,
-      "symbol": "ftMh_CaptureWaitMasterHand_IASA"
+      "symbol": "ftMh_CaptureMasterHand_IASA"
     },
     {
       "id": 967,
-      "symbol": "ftMh_CaptureWaitMasterHand_Phys"
+      "symbol": "ftMh_CaptureMasterHand_Phys"
     },
     {
       "id": 968,
-      "symbol": "ftMh_ThrownMasterHand_Anim"
+      "symbol": "ftMh_CaptureWaitMasterHand_Anim"
     },
     {
       "id": 969,
-      "symbol": "ftMh_ThrownMasterHand_Coll"
+      "symbol": "ftMh_CaptureWaitMasterHand_Coll"
     },
     {
       "id": 970,
-      "symbol": "ftMh_ThrownMasterHand_IASA"
+      "symbol": "ftMh_CaptureWaitMasterHand_IASA"
     },
     {
       "id": 971,
-      "symbol": "ftMh_ThrownMasterHand_Phys"
+      "symbol": "ftMh_CaptureWaitMasterHand_Phys"
     },
     {
       "id": 972,
-      "symbol": "ftMs_SpecialAirHi_Anim"
+      "symbol": "ftMh_ThrownMasterHand_Anim"
     },
     {
       "id": 973,
-      "symbol": "ftMs_SpecialAirHi_Coll"
+      "symbol": "ftMh_ThrownMasterHand_Coll"
     },
     {
       "id": 974,
-      "symbol": "ftMs_SpecialAirHi_IASA"
+      "symbol": "ftMh_ThrownMasterHand_IASA"
     },
     {
       "id": 975,
-      "symbol": "ftMs_SpecialAirHi_Phys"
+      "symbol": "ftMh_ThrownMasterHand_Phys"
     },
     {
       "id": 976,
-      "symbol": "ftMs_SpecialAirLwHit_Anim"
+      "symbol": "ftMs_SpecialAirHi_Anim"
     },
     {
       "id": 977,
-      "symbol": "ftMs_SpecialAirLwHit_Coll"
+      "symbol": "ftMs_SpecialAirHi_Coll"
     },
     {
       "id": 978,
-      "symbol": "ftMs_SpecialAirLwHit_IASA"
+      "symbol": "ftMs_SpecialAirHi_IASA"
     },
     {
       "id": 979,
-      "symbol": "ftMs_SpecialAirLwHit_Phys"
+      "symbol": "ftMs_SpecialAirHi_Phys"
     },
     {
       "id": 980,
-      "symbol": "ftMs_SpecialAirLw_Anim"
+      "symbol": "ftMs_SpecialAirLwHit_Anim"
     },
     {
       "id": 981,
-      "symbol": "ftMs_SpecialAirLw_Coll"
+      "symbol": "ftMs_SpecialAirLwHit_Coll"
     },
     {
       "id": 982,
-      "symbol": "ftMs_SpecialAirLw_IASA"
+      "symbol": "ftMs_SpecialAirLwHit_IASA"
     },
     {
       "id": 983,
-      "symbol": "ftMs_SpecialAirLw_Phys"
+      "symbol": "ftMs_SpecialAirLwHit_Phys"
     },
     {
       "id": 984,
-      "symbol": "ftMs_SpecialAirNEnd_Anim"
+      "symbol": "ftMs_SpecialAirLw_Anim"
     },
     {
       "id": 985,
-      "symbol": "ftMs_SpecialAirNEnd_Coll"
+      "symbol": "ftMs_SpecialAirLw_Coll"
     },
     {
       "id": 986,
-      "symbol": "ftMs_SpecialAirNEnd_IASA"
+      "symbol": "ftMs_SpecialAirLw_IASA"
     },
     {
       "id": 987,
-      "symbol": "ftMs_SpecialAirNEnd_Phys"
+      "symbol": "ftMs_SpecialAirLw_Phys"
     },
     {
       "id": 988,
-      "symbol": "ftMs_SpecialAirNLoop_Anim"
+      "symbol": "ftMs_SpecialAirNEnd_Anim"
     },
     {
       "id": 989,
-      "symbol": "ftMs_SpecialAirNLoop_Coll"
+      "symbol": "ftMs_SpecialAirNEnd_Coll"
     },
     {
       "id": 990,
-      "symbol": "ftMs_SpecialAirNLoop_IASA"
+      "symbol": "ftMs_SpecialAirNEnd_IASA"
     },
     {
       "id": 991,
-      "symbol": "ftMs_SpecialAirNLoop_Phys"
+      "symbol": "ftMs_SpecialAirNEnd_Phys"
     },
     {
       "id": 992,
-      "symbol": "ftMs_SpecialAirNStart_Anim"
+      "symbol": "ftMs_SpecialAirNLoop_Anim"
     },
     {
       "id": 993,
-      "symbol": "ftMs_SpecialAirNStart_Coll"
+      "symbol": "ftMs_SpecialAirNLoop_Coll"
     },
     {
       "id": 994,
-      "symbol": "ftMs_SpecialAirNStart_IASA"
+      "symbol": "ftMs_SpecialAirNLoop_IASA"
     },
     {
       "id": 995,
-      "symbol": "ftMs_SpecialAirNStart_Phys"
+      "symbol": "ftMs_SpecialAirNLoop_Phys"
     },
     {
       "id": 996,
-      "symbol": "ftMs_SpecialAirS1_Anim"
+      "symbol": "ftMs_SpecialAirNStart_Anim"
     },
     {
       "id": 997,
-      "symbol": "ftMs_SpecialAirS1_Coll"
+      "symbol": "ftMs_SpecialAirNStart_Coll"
     },
     {
       "id": 998,
-      "symbol": "ftMs_SpecialAirS1_IASA"
+      "symbol": "ftMs_SpecialAirNStart_IASA"
     },
     {
       "id": 999,
-      "symbol": "ftMs_SpecialAirS1_Phys"
+      "symbol": "ftMs_SpecialAirNStart_Phys"
     },
     {
       "id": 1000,
-      "symbol": "ftMs_SpecialHi_Anim"
+      "symbol": "ftMs_SpecialAirS1_Anim"
     },
     {
       "id": 1001,
-      "symbol": "ftMs_SpecialHi_Coll"
+      "symbol": "ftMs_SpecialAirS1_Coll"
     },
     {
       "id": 1002,
-      "symbol": "ftMs_SpecialHi_IASA"
+      "symbol": "ftMs_SpecialAirS1_IASA"
     },
     {
       "id": 1003,
-      "symbol": "ftMs_SpecialHi_Phys"
+      "symbol": "ftMs_SpecialAirS1_Phys"
     },
     {
       "id": 1004,
-      "symbol": "ftMs_SpecialLwHit_Anim"
+      "symbol": "ftMs_SpecialHi_Anim"
     },
     {
       "id": 1005,
-      "symbol": "ftMs_SpecialLwHit_Coll"
+      "symbol": "ftMs_SpecialHi_Coll"
     },
     {
       "id": 1006,
-      "symbol": "ftMs_SpecialLwHit_IASA"
+      "symbol": "ftMs_SpecialHi_IASA"
     },
     {
       "id": 1007,
-      "symbol": "ftMs_SpecialLwHit_Phys"
+      "symbol": "ftMs_SpecialHi_Phys"
     },
     {
       "id": 1008,
-      "symbol": "ftMs_SpecialLw_Anim"
+      "symbol": "ftMs_SpecialLwHit_Anim"
     },
     {
       "id": 1009,
-      "symbol": "ftMs_SpecialLw_Coll"
+      "symbol": "ftMs_SpecialLwHit_Coll"
     },
     {
       "id": 1010,
-      "symbol": "ftMs_SpecialLw_IASA"
+      "symbol": "ftMs_SpecialLwHit_IASA"
     },
     {
       "id": 1011,
-      "symbol": "ftMs_SpecialLw_Phys"
+      "symbol": "ftMs_SpecialLwHit_Phys"
     },
     {
       "id": 1012,
-      "symbol": "ftMs_SpecialNEnd_Anim"
+      "symbol": "ftMs_SpecialLw_Anim"
     },
     {
       "id": 1013,
-      "symbol": "ftMs_SpecialNEnd_Coll"
+      "symbol": "ftMs_SpecialLw_Coll"
     },
     {
       "id": 1014,
-      "symbol": "ftMs_SpecialNEnd_IASA"
+      "symbol": "ftMs_SpecialLw_IASA"
     },
     {
       "id": 1015,
-      "symbol": "ftMs_SpecialNEnd_Phys"
+      "symbol": "ftMs_SpecialLw_Phys"
     },
     {
       "id": 1016,
-      "symbol": "ftMs_SpecialNLoop_Anim"
+      "symbol": "ftMs_SpecialNEnd_Anim"
     },
     {
       "id": 1017,
-      "symbol": "ftMs_SpecialNLoop_Coll"
+      "symbol": "ftMs_SpecialNEnd_Coll"
     },
     {
       "id": 1018,
-      "symbol": "ftMs_SpecialNLoop_IASA"
+      "symbol": "ftMs_SpecialNEnd_IASA"
     },
     {
       "id": 1019,
-      "symbol": "ftMs_SpecialNLoop_Phys"
+      "symbol": "ftMs_SpecialNEnd_Phys"
     },
     {
       "id": 1020,
-      "symbol": "ftMs_SpecialNStart_Anim"
+      "symbol": "ftMs_SpecialNLoop_Anim"
     },
     {
       "id": 1021,
-      "symbol": "ftMs_SpecialNStart_Coll"
+      "symbol": "ftMs_SpecialNLoop_Coll"
     },
     {
       "id": 1022,
-      "symbol": "ftMs_SpecialNStart_IASA"
+      "symbol": "ftMs_SpecialNLoop_IASA"
     },
     {
       "id": 1023,
-      "symbol": "ftMs_SpecialNStart_Phys"
+      "symbol": "ftMs_SpecialNLoop_Phys"
     },
     {
       "id": 1024,
-      "symbol": "ftMs_SpecialS2_Anim"
+      "symbol": "ftMs_SpecialNStart_Anim"
     },
     {
       "id": 1025,
-      "symbol": "ftMs_SpecialS2_Coll"
+      "symbol": "ftMs_SpecialNStart_Coll"
     },
     {
       "id": 1026,
-      "symbol": "ftMs_SpecialS2_IASA"
+      "symbol": "ftMs_SpecialNStart_IASA"
     },
     {
       "id": 1027,
-      "symbol": "ftMs_SpecialS2_Phys"
+      "symbol": "ftMs_SpecialNStart_Phys"
     },
     {
       "id": 1028,
-      "symbol": "ftMs_SpecialS3_Anim"
+      "symbol": "ftMs_SpecialS2_Anim"
     },
     {
       "id": 1029,
-      "symbol": "ftMs_SpecialS3_Coll"
+      "symbol": "ftMs_SpecialS2_Coll"
     },
     {
       "id": 1030,
-      "symbol": "ftMs_SpecialS3_IASA"
+      "symbol": "ftMs_SpecialS2_IASA"
     },
     {
       "id": 1031,
-      "symbol": "ftMs_SpecialS3_Phys"
+      "symbol": "ftMs_SpecialS2_Phys"
     },
     {
       "id": 1032,
-      "symbol": "ftMs_SpecialS4_Anim"
+      "symbol": "ftMs_SpecialS3_Anim"
     },
     {
       "id": 1033,
-      "symbol": "ftMs_SpecialS4_Coll"
+      "symbol": "ftMs_SpecialS3_Coll"
     },
     {
       "id": 1034,
-      "symbol": "ftMs_SpecialS4_IASA"
+      "symbol": "ftMs_SpecialS3_IASA"
     },
     {
       "id": 1035,
-      "symbol": "ftMs_SpecialS4_Phys"
+      "symbol": "ftMs_SpecialS3_Phys"
     },
     {
       "id": 1036,
-      "symbol": "ftSk_SpecialAirHiStart_0_Anim"
+      "symbol": "ftMs_SpecialS4_Anim"
     },
     {
       "id": 1037,
-      "symbol": "ftSk_SpecialAirHiStart_0_Coll"
+      "symbol": "ftMs_SpecialS4_Coll"
     },
     {
       "id": 1038,
-      "symbol": "ftSk_SpecialAirHiStart_0_IASA"
+      "symbol": "ftMs_SpecialS4_IASA"
     },
     {
       "id": 1039,
-      "symbol": "ftSk_SpecialAirHiStart_0_Phys"
+      "symbol": "ftMs_SpecialS4_Phys"
     },
     {
       "id": 1040,
-      "symbol": "ftSk_SpecialAirHiStart_1_Anim"
+      "symbol": "ftPr_SpecialAirHi_Anim"
     },
     {
       "id": 1041,
-      "symbol": "ftSk_SpecialAirHiStart_1_Coll"
+      "symbol": "ftPr_SpecialAirHi_Coll"
     },
     {
       "id": 1042,
-      "symbol": "ftSk_SpecialAirHiStart_1_IASA"
+      "symbol": "ftPr_SpecialAirHi_IASA"
     },
     {
       "id": 1043,
-      "symbol": "ftSk_SpecialAirHiStart_1_Phys"
+      "symbol": "ftPr_SpecialAirHi_Phys"
     },
     {
       "id": 1044,
-      "symbol": "ftSk_SpecialAirHi_Anim"
+      "symbol": "ftPr_SpecialAirLw_Anim"
     },
     {
       "id": 1045,
-      "symbol": "ftSk_SpecialAirHi_Coll"
+      "symbol": "ftPr_SpecialAirLw_Coll"
     },
     {
       "id": 1046,
-      "symbol": "ftSk_SpecialAirHi_IASA"
+      "symbol": "ftPr_SpecialAirLw_IASA"
     },
     {
       "id": 1047,
-      "symbol": "ftSk_SpecialAirHi_Phys"
+      "symbol": "ftPr_SpecialAirLw_Phys"
     },
     {
       "id": 1048,
-      "symbol": "ftSk_SpecialAirLw2_Anim"
+      "symbol": "ftPr_SpecialAirNChargeFull_Anim"
     },
     {
       "id": 1049,
-      "symbol": "ftSk_SpecialAirLw2_Coll"
+      "symbol": "ftPr_SpecialAirNChargeFull_Coll"
     },
     {
       "id": 1050,
-      "symbol": "ftSk_SpecialAirLw2_IASA"
+      "symbol": "ftPr_SpecialAirNChargeFull_IASA"
     },
     {
       "id": 1051,
-      "symbol": "ftSk_SpecialAirLw2_Phys"
+      "symbol": "ftPr_SpecialAirNChargeFull_Phys"
     },
     {
       "id": 1052,
-      "symbol": "ftSk_SpecialAirLw_Anim"
+      "symbol": "ftPr_SpecialAirNChargeLoop_Anim"
     },
     {
       "id": 1053,
-      "symbol": "ftSk_SpecialAirLw_Coll"
+      "symbol": "ftPr_SpecialAirNChargeLoop_Coll"
     },
     {
       "id": 1054,
-      "symbol": "ftSk_SpecialAirLw_IASA"
+      "symbol": "ftPr_SpecialAirNChargeLoop_IASA"
     },
     {
       "id": 1055,
-      "symbol": "ftSk_SpecialAirLw_Phys"
+      "symbol": "ftPr_SpecialAirNChargeLoop_Phys"
     },
     {
       "id": 1056,
-      "symbol": "ftSk_SpecialAirNCancel_Anim"
+      "symbol": "ftPr_SpecialAirNChargeRelease_Anim"
     },
     {
       "id": 1057,
-      "symbol": "ftSk_SpecialAirNCancel_Coll"
+      "symbol": "ftPr_SpecialAirNChargeRelease_Coll"
     },
     {
       "id": 1058,
-      "symbol": "ftSk_SpecialAirNCancel_IASA"
+      "symbol": "ftPr_SpecialAirNChargeRelease_IASA"
     },
     {
       "id": 1059,
-      "symbol": "ftSk_SpecialAirNCancel_Phys"
+      "symbol": "ftPr_SpecialAirNChargeRelease_Phys"
     },
     {
       "id": 1060,
-      "symbol": "ftSk_SpecialAirNEnd_Anim"
+      "symbol": "ftPr_SpecialAirNEnd_Anim"
     },
     {
       "id": 1061,
-      "symbol": "ftSk_SpecialAirNEnd_Coll"
+      "symbol": "ftPr_SpecialAirNEnd_Coll"
     },
     {
       "id": 1062,
-      "symbol": "ftSk_SpecialAirNEnd_IASA"
+      "symbol": "ftPr_SpecialAirNEnd_IASA"
     },
     {
       "id": 1063,
-      "symbol": "ftSk_SpecialAirNEnd_Phys"
+      "symbol": "ftPr_SpecialAirNEnd_Phys"
     },
     {
       "id": 1064,
-      "symbol": "ftSk_SpecialAirNLoop_Anim"
+      "symbol": "ftPr_SpecialAirNStartTurn_Anim"
     },
     {
       "id": 1065,
-      "symbol": "ftSk_SpecialAirNLoop_Coll"
+      "symbol": "ftPr_SpecialAirNStartTurn_Coll"
     },
     {
       "id": 1066,
-      "symbol": "ftSk_SpecialAirNLoop_IASA"
+      "symbol": "ftPr_SpecialAirNStartTurn_IASA"
     },
     {
       "id": 1067,
-      "symbol": "ftSk_SpecialAirNLoop_Phys"
+      "symbol": "ftPr_SpecialAirNStartTurn_Phys"
     },
     {
       "id": 1068,
-      "symbol": "ftSk_SpecialAirNStart_Anim"
+      "symbol": "ftPr_SpecialAirNStart_Anim"
     },
     {
       "id": 1069,
-      "symbol": "ftSk_SpecialAirNStart_Coll"
+      "symbol": "ftPr_SpecialAirNStart_Coll"
     },
     {
       "id": 1070,
-      "symbol": "ftSk_SpecialAirNStart_IASA"
+      "symbol": "ftPr_SpecialAirNStart_IASA"
     },
     {
       "id": 1071,
-      "symbol": "ftSk_SpecialAirNStart_Phys"
+      "symbol": "ftPr_SpecialAirNStart_Phys"
     },
     {
       "id": 1072,
-      "symbol": "ftSk_SpecialAirSEnd_Anim"
+      "symbol": "ftPr_SpecialAirS_Anim"
     },
     {
       "id": 1073,
-      "symbol": "ftSk_SpecialAirSEnd_Coll"
+      "symbol": "ftPr_SpecialAirS_Coll"
     },
     {
       "id": 1074,
-      "symbol": "ftSk_SpecialAirSEnd_IASA"
+      "symbol": "ftPr_SpecialAirS_IASA"
     },
     {
       "id": 1075,
-      "symbol": "ftSk_SpecialAirSEnd_Phys"
+      "symbol": "ftPr_SpecialAirS_Phys"
     },
     {
       "id": 1076,
-      "symbol": "ftSk_SpecialAirSStart_Anim"
+      "symbol": "ftPr_SpecialHi_Anim"
     },
     {
       "id": 1077,
-      "symbol": "ftSk_SpecialAirSStart_Coll"
+      "symbol": "ftPr_SpecialHi_Coll"
     },
     {
       "id": 1078,
-      "symbol": "ftSk_SpecialAirSStart_IASA"
+      "symbol": "ftPr_SpecialHi_IASA"
     },
     {
       "id": 1079,
-      "symbol": "ftSk_SpecialAirSStart_Phys"
+      "symbol": "ftPr_SpecialHi_Phys"
     },
     {
       "id": 1080,
-      "symbol": "ftSk_SpecialAirS_Anim"
+      "symbol": "ftPr_SpecialLw_Anim"
     },
     {
       "id": 1081,
-      "symbol": "ftSk_SpecialAirS_Coll"
+      "symbol": "ftPr_SpecialLw_Coll"
     },
     {
       "id": 1082,
-      "symbol": "ftSk_SpecialAirS_IASA"
+      "symbol": "ftPr_SpecialLw_IASA"
     },
     {
       "id": 1083,
-      "symbol": "ftSk_SpecialAirS_Phys"
+      "symbol": "ftPr_SpecialLw_Phys"
     },
     {
       "id": 1084,
-      "symbol": "ftSk_SpecialHiStart_0_Anim"
+      "symbol": "ftPr_SpecialNEnd_Anim"
     },
     {
       "id": 1085,
-      "symbol": "ftSk_SpecialHiStart_0_Coll"
+      "symbol": "ftPr_SpecialNEnd_Coll"
     },
     {
       "id": 1086,
-      "symbol": "ftSk_SpecialHiStart_0_IASA"
+      "symbol": "ftPr_SpecialNEnd_IASA"
     },
     {
       "id": 1087,
-      "symbol": "ftSk_SpecialHiStart_0_Phys"
+      "symbol": "ftPr_SpecialNEnd_Phys"
     },
     {
       "id": 1088,
-      "symbol": "ftSk_SpecialHiStart_1_Anim"
+      "symbol": "ftPr_SpecialNFull_Anim"
     },
     {
       "id": 1089,
-      "symbol": "ftSk_SpecialHiStart_1_Coll"
+      "symbol": "ftPr_SpecialNFull_Coll"
     },
     {
       "id": 1090,
-      "symbol": "ftSk_SpecialHiStart_1_IASA"
+      "symbol": "ftPr_SpecialNFull_IASA"
     },
     {
       "id": 1091,
-      "symbol": "ftSk_SpecialHiStart_1_Phys"
+      "symbol": "ftPr_SpecialNFull_Phys"
     },
     {
       "id": 1092,
-      "symbol": "ftSk_SpecialHi_Anim"
+      "symbol": "ftPr_SpecialNHit_Anim"
     },
     {
       "id": 1093,
-      "symbol": "ftSk_SpecialHi_Coll"
+      "symbol": "ftPr_SpecialNHit_Coll"
     },
     {
       "id": 1094,
-      "symbol": "ftSk_SpecialHi_IASA"
+      "symbol": "ftPr_SpecialNHit_IASA"
     },
     {
       "id": 1095,
-      "symbol": "ftSk_SpecialHi_Phys"
+      "symbol": "ftPr_SpecialNHit_Phys"
     },
     {
       "id": 1096,
-      "symbol": "ftSk_SpecialLw2_Anim"
+      "symbol": "ftPr_SpecialNLoop_Anim"
     },
     {
       "id": 1097,
-      "symbol": "ftSk_SpecialLw2_Coll"
+      "symbol": "ftPr_SpecialNLoop_Coll"
     },
     {
       "id": 1098,
-      "symbol": "ftSk_SpecialLw2_IASA"
+      "symbol": "ftPr_SpecialNLoop_IASA"
     },
     {
       "id": 1099,
-      "symbol": "ftSk_SpecialLw2_Phys"
+      "symbol": "ftPr_SpecialNLoop_Phys"
     },
     {
       "id": 1100,
-      "symbol": "ftSk_SpecialLw_Anim"
+      "symbol": "ftPr_SpecialNRelease_Anim"
     },
     {
       "id": 1101,
-      "symbol": "ftSk_SpecialLw_Coll"
+      "symbol": "ftPr_SpecialNRelease_Coll"
     },
     {
       "id": 1102,
-      "symbol": "ftSk_SpecialLw_IASA"
+      "symbol": "ftPr_SpecialNRelease_IASA"
     },
     {
       "id": 1103,
-      "symbol": "ftSk_SpecialLw_Phys"
+      "symbol": "ftPr_SpecialNRelease_Phys"
     },
     {
       "id": 1104,
-      "symbol": "ftSk_SpecialNCancel_Anim"
+      "symbol": "ftPr_SpecialNStart_Anim"
     },
     {
       "id": 1105,
-      "symbol": "ftSk_SpecialNCancel_Coll"
+      "symbol": "ftPr_SpecialNStart_Coll"
     },
     {
       "id": 1106,
-      "symbol": "ftSk_SpecialNCancel_IASA"
+      "symbol": "ftPr_SpecialNStart_IASA"
     },
     {
       "id": 1107,
-      "symbol": "ftSk_SpecialNCancel_Phys"
+      "symbol": "ftPr_SpecialNStart_Phys"
     },
     {
       "id": 1108,
-      "symbol": "ftSk_SpecialNEnd_Anim"
+      "symbol": "ftPr_SpecialNTurn_Anim"
     },
     {
       "id": 1109,
-      "symbol": "ftSk_SpecialNEnd_Coll"
+      "symbol": "ftPr_SpecialNTurn_Coll"
     },
     {
       "id": 1110,
-      "symbol": "ftSk_SpecialNEnd_IASA"
+      "symbol": "ftPr_SpecialNTurn_IASA"
     },
     {
       "id": 1111,
-      "symbol": "ftSk_SpecialNEnd_Phys"
+      "symbol": "ftPr_SpecialNTurn_Phys"
     },
     {
       "id": 1112,
-      "symbol": "ftSk_SpecialNLoop_Anim"
+      "symbol": "ftPr_SpecialS_Anim"
     },
     {
       "id": 1113,
-      "symbol": "ftSk_SpecialNLoop_Coll"
+      "symbol": "ftPr_SpecialS_Coll"
     },
     {
       "id": 1114,
-      "symbol": "ftSk_SpecialNLoop_IASA"
+      "symbol": "ftPr_SpecialS_IASA"
     },
     {
       "id": 1115,
-      "symbol": "ftSk_SpecialNLoop_Phys"
+      "symbol": "ftPr_SpecialS_Phys"
     },
     {
       "id": 1116,
-      "symbol": "ftSk_SpecialNStart_Anim"
+      "symbol": "ftSk_SpecialAirHiStart_0_Anim"
     },
     {
       "id": 1117,
-      "symbol": "ftSk_SpecialNStart_Coll"
+      "symbol": "ftSk_SpecialAirHiStart_0_Coll"
     },
     {
       "id": 1118,
-      "symbol": "ftSk_SpecialNStart_IASA"
+      "symbol": "ftSk_SpecialAirHiStart_0_IASA"
     },
     {
       "id": 1119,
-      "symbol": "ftSk_SpecialNStart_Phys"
+      "symbol": "ftSk_SpecialAirHiStart_0_Phys"
     },
     {
       "id": 1120,
-      "symbol": "ftSk_SpecialSEnd_Anim"
+      "symbol": "ftSk_SpecialAirHiStart_1_Anim"
     },
     {
       "id": 1121,
-      "symbol": "ftSk_SpecialSEnd_Coll"
+      "symbol": "ftSk_SpecialAirHiStart_1_Coll"
     },
     {
       "id": 1122,
-      "symbol": "ftSk_SpecialSEnd_IASA"
+      "symbol": "ftSk_SpecialAirHiStart_1_IASA"
     },
     {
       "id": 1123,
-      "symbol": "ftSk_SpecialSEnd_Phys"
+      "symbol": "ftSk_SpecialAirHiStart_1_Phys"
     },
     {
       "id": 1124,
-      "symbol": "ftSk_SpecialSStart_Anim"
+      "symbol": "ftSk_SpecialAirHi_Anim"
     },
     {
       "id": 1125,
-      "symbol": "ftSk_SpecialSStart_Coll"
+      "symbol": "ftSk_SpecialAirHi_Coll"
     },
     {
       "id": 1126,
-      "symbol": "ftSk_SpecialSStart_IASA"
+      "symbol": "ftSk_SpecialAirHi_IASA"
     },
     {
       "id": 1127,
-      "symbol": "ftSk_SpecialSStart_Phys"
+      "symbol": "ftSk_SpecialAirHi_Phys"
     },
     {
       "id": 1128,
-      "symbol": "ftSk_SpecialS_Anim"
+      "symbol": "ftSk_SpecialAirLw2_Anim"
     },
     {
       "id": 1129,
-      "symbol": "ftSk_SpecialS_Coll"
+      "symbol": "ftSk_SpecialAirLw2_Coll"
     },
     {
       "id": 1130,
-      "symbol": "ftSk_SpecialS_IASA"
+      "symbol": "ftSk_SpecialAirLw2_IASA"
     },
     {
       "id": 1131,
-      "symbol": "ftSk_SpecialS_Phys"
+      "symbol": "ftSk_SpecialAirLw2_Phys"
     },
     {
       "id": 1132,
-      "symbol": "ftZd_SpecialAirHiStart_0_Anim"
+      "symbol": "ftSk_SpecialAirLw_Anim"
     },
     {
       "id": 1133,
-      "symbol": "ftZd_SpecialAirHiStart_0_Coll"
+      "symbol": "ftSk_SpecialAirLw_Coll"
     },
     {
       "id": 1134,
-      "symbol": "ftZd_SpecialAirHiStart_0_IASA"
+      "symbol": "ftSk_SpecialAirLw_IASA"
     },
     {
       "id": 1135,
-      "symbol": "ftZd_SpecialAirHiStart_0_Phys"
+      "symbol": "ftSk_SpecialAirLw_Phys"
     },
     {
       "id": 1136,
-      "symbol": "ftZd_SpecialAirHiStart_1_Anim"
+      "symbol": "ftSk_SpecialAirNCancel_Anim"
     },
     {
       "id": 1137,
-      "symbol": "ftZd_SpecialAirHiStart_1_Coll"
+      "symbol": "ftSk_SpecialAirNCancel_Coll"
     },
     {
       "id": 1138,
-      "symbol": "ftZd_SpecialAirHiStart_1_IASA"
+      "symbol": "ftSk_SpecialAirNCancel_IASA"
     },
     {
       "id": 1139,
-      "symbol": "ftZd_SpecialAirHiStart_1_Phys"
+      "symbol": "ftSk_SpecialAirNCancel_Phys"
     },
     {
       "id": 1140,
-      "symbol": "ftZd_SpecialAirHi_Anim"
+      "symbol": "ftSk_SpecialAirNEnd_Anim"
     },
     {
       "id": 1141,
-      "symbol": "ftZd_SpecialAirHi_Coll"
+      "symbol": "ftSk_SpecialAirNEnd_Coll"
     },
     {
       "id": 1142,
-      "symbol": "ftZd_SpecialAirHi_IASA"
+      "symbol": "ftSk_SpecialAirNEnd_IASA"
     },
     {
       "id": 1143,
-      "symbol": "ftZd_SpecialAirHi_Phys"
+      "symbol": "ftSk_SpecialAirNEnd_Phys"
     },
     {
       "id": 1144,
-      "symbol": "ftZd_SpecialAirLw2_Anim"
+      "symbol": "ftSk_SpecialAirNLoop_Anim"
     },
     {
       "id": 1145,
-      "symbol": "ftZd_SpecialAirLw2_Coll"
+      "symbol": "ftSk_SpecialAirNLoop_Coll"
     },
     {
       "id": 1146,
-      "symbol": "ftZd_SpecialAirLw2_IASA"
+      "symbol": "ftSk_SpecialAirNLoop_IASA"
     },
     {
       "id": 1147,
-      "symbol": "ftZd_SpecialAirLw2_Phys"
+      "symbol": "ftSk_SpecialAirNLoop_Phys"
     },
     {
       "id": 1148,
-      "symbol": "ftZd_SpecialAirLw_Anim"
+      "symbol": "ftSk_SpecialAirNStart_Anim"
     },
     {
       "id": 1149,
-      "symbol": "ftZd_SpecialAirLw_Coll"
+      "symbol": "ftSk_SpecialAirNStart_Coll"
     },
     {
       "id": 1150,
-      "symbol": "ftZd_SpecialAirLw_IASA"
+      "symbol": "ftSk_SpecialAirNStart_IASA"
     },
     {
       "id": 1151,
-      "symbol": "ftZd_SpecialAirLw_Phys"
+      "symbol": "ftSk_SpecialAirNStart_Phys"
     },
     {
       "id": 1152,
-      "symbol": "ftZd_SpecialAirN_Anim"
+      "symbol": "ftSk_SpecialAirSEnd_Anim"
     },
     {
       "id": 1153,
-      "symbol": "ftZd_SpecialAirN_Coll"
+      "symbol": "ftSk_SpecialAirSEnd_Coll"
     },
     {
       "id": 1154,
-      "symbol": "ftZd_SpecialAirN_IASA"
+      "symbol": "ftSk_SpecialAirSEnd_IASA"
     },
     {
       "id": 1155,
-      "symbol": "ftZd_SpecialAirN_Phys"
+      "symbol": "ftSk_SpecialAirSEnd_Phys"
     },
     {
       "id": 1156,
-      "symbol": "ftZd_SpecialAirSEnd_Anim"
+      "symbol": "ftSk_SpecialAirSStart_Anim"
     },
     {
       "id": 1157,
-      "symbol": "ftZd_SpecialAirSEnd_Coll"
+      "symbol": "ftSk_SpecialAirSStart_Coll"
     },
     {
       "id": 1158,
-      "symbol": "ftZd_SpecialAirSEnd_IASA"
+      "symbol": "ftSk_SpecialAirSStart_IASA"
     },
     {
       "id": 1159,
-      "symbol": "ftZd_SpecialAirSEnd_Phys"
+      "symbol": "ftSk_SpecialAirSStart_Phys"
     },
     {
       "id": 1160,
-      "symbol": "ftZd_SpecialAirSLoop_Anim"
+      "symbol": "ftSk_SpecialAirS_Anim"
     },
     {
       "id": 1161,
-      "symbol": "ftZd_SpecialAirSLoop_Coll"
+      "symbol": "ftSk_SpecialAirS_Coll"
     },
     {
       "id": 1162,
-      "symbol": "ftZd_SpecialAirSLoop_IASA"
+      "symbol": "ftSk_SpecialAirS_IASA"
     },
     {
       "id": 1163,
-      "symbol": "ftZd_SpecialAirSLoop_Phys"
+      "symbol": "ftSk_SpecialAirS_Phys"
     },
     {
       "id": 1164,
-      "symbol": "ftZd_SpecialAirSStart_Anim"
+      "symbol": "ftSk_SpecialHiStart_0_Anim"
     },
     {
       "id": 1165,
-      "symbol": "ftZd_SpecialAirSStart_Coll"
+      "symbol": "ftSk_SpecialHiStart_0_Coll"
     },
     {
       "id": 1166,
-      "symbol": "ftZd_SpecialAirSStart_IASA"
+      "symbol": "ftSk_SpecialHiStart_0_IASA"
     },
     {
       "id": 1167,
-      "symbol": "ftZd_SpecialAirSStart_Phys"
+      "symbol": "ftSk_SpecialHiStart_0_Phys"
     },
     {
       "id": 1168,
-      "symbol": "ftZd_SpecialHiStart_0_Anim"
+      "symbol": "ftSk_SpecialHiStart_1_Anim"
     },
     {
       "id": 1169,
-      "symbol": "ftZd_SpecialHiStart_0_Coll"
+      "symbol": "ftSk_SpecialHiStart_1_Coll"
     },
     {
       "id": 1170,
-      "symbol": "ftZd_SpecialHiStart_0_IASA"
+      "symbol": "ftSk_SpecialHiStart_1_IASA"
     },
     {
       "id": 1171,
-      "symbol": "ftZd_SpecialHiStart_0_Phys"
+      "symbol": "ftSk_SpecialHiStart_1_Phys"
     },
     {
       "id": 1172,
-      "symbol": "ftZd_SpecialHiStart_1_Anim"
+      "symbol": "ftSk_SpecialHi_Anim"
     },
     {
       "id": 1173,
-      "symbol": "ftZd_SpecialHiStart_1_Coll"
+      "symbol": "ftSk_SpecialHi_Coll"
     },
     {
       "id": 1174,
-      "symbol": "ftZd_SpecialHiStart_1_IASA"
+      "symbol": "ftSk_SpecialHi_IASA"
     },
     {
       "id": 1175,
-      "symbol": "ftZd_SpecialHiStart_1_Phys"
+      "symbol": "ftSk_SpecialHi_Phys"
     },
     {
       "id": 1176,
-      "symbol": "ftZd_SpecialHi_Anim"
+      "symbol": "ftSk_SpecialLw2_Anim"
     },
     {
       "id": 1177,
-      "symbol": "ftZd_SpecialHi_Coll"
+      "symbol": "ftSk_SpecialLw2_Coll"
     },
     {
       "id": 1178,
-      "symbol": "ftZd_SpecialHi_IASA"
+      "symbol": "ftSk_SpecialLw2_IASA"
     },
     {
       "id": 1179,
-      "symbol": "ftZd_SpecialHi_Phys"
+      "symbol": "ftSk_SpecialLw2_Phys"
     },
     {
       "id": 1180,
-      "symbol": "ftZd_SpecialLw2_Anim"
+      "symbol": "ftSk_SpecialLw_Anim"
     },
     {
       "id": 1181,
-      "symbol": "ftZd_SpecialLw2_Coll"
+      "symbol": "ftSk_SpecialLw_Coll"
     },
     {
       "id": 1182,
-      "symbol": "ftZd_SpecialLw2_IASA"
+      "symbol": "ftSk_SpecialLw_IASA"
     },
     {
       "id": 1183,
-      "symbol": "ftZd_SpecialLw2_Phys"
+      "symbol": "ftSk_SpecialLw_Phys"
     },
     {
       "id": 1184,
-      "symbol": "ftZd_SpecialLw_Anim"
+      "symbol": "ftSk_SpecialNCancel_Anim"
     },
     {
       "id": 1185,
-      "symbol": "ftZd_SpecialLw_Coll"
+      "symbol": "ftSk_SpecialNCancel_Coll"
     },
     {
       "id": 1186,
-      "symbol": "ftZd_SpecialLw_IASA"
+      "symbol": "ftSk_SpecialNCancel_IASA"
     },
     {
       "id": 1187,
-      "symbol": "ftZd_SpecialLw_Phys"
+      "symbol": "ftSk_SpecialNCancel_Phys"
     },
     {
       "id": 1188,
-      "symbol": "ftZd_SpecialN_Anim"
+      "symbol": "ftSk_SpecialNEnd_Anim"
     },
     {
       "id": 1189,
-      "symbol": "ftZd_SpecialN_Coll"
+      "symbol": "ftSk_SpecialNEnd_Coll"
     },
     {
       "id": 1190,
-      "symbol": "ftZd_SpecialN_IASA"
+      "symbol": "ftSk_SpecialNEnd_IASA"
     },
     {
       "id": 1191,
-      "symbol": "ftZd_SpecialN_Phys"
+      "symbol": "ftSk_SpecialNEnd_Phys"
     },
     {
       "id": 1192,
-      "symbol": "ftZd_SpecialSEnd_Anim"
+      "symbol": "ftSk_SpecialNLoop_Anim"
     },
     {
       "id": 1193,
-      "symbol": "ftZd_SpecialSEnd_Coll"
+      "symbol": "ftSk_SpecialNLoop_Coll"
     },
     {
       "id": 1194,
-      "symbol": "ftZd_SpecialSEnd_IASA"
+      "symbol": "ftSk_SpecialNLoop_IASA"
     },
     {
       "id": 1195,
-      "symbol": "ftZd_SpecialSEnd_Phys"
+      "symbol": "ftSk_SpecialNLoop_Phys"
     },
     {
       "id": 1196,
-      "symbol": "ftZd_SpecialSLoop_Anim"
+      "symbol": "ftSk_SpecialNStart_Anim"
     },
     {
       "id": 1197,
-      "symbol": "ftZd_SpecialSLoop_Coll"
+      "symbol": "ftSk_SpecialNStart_Coll"
     },
     {
       "id": 1198,
-      "symbol": "ftZd_SpecialSLoop_IASA"
+      "symbol": "ftSk_SpecialNStart_IASA"
     },
     {
       "id": 1199,
-      "symbol": "ftZd_SpecialSLoop_Phys"
+      "symbol": "ftSk_SpecialNStart_Phys"
     },
     {
       "id": 1200,
-      "symbol": "ftZd_SpecialSStart_Anim"
+      "symbol": "ftSk_SpecialSEnd_Anim"
     },
     {
       "id": 1201,
-      "symbol": "ftZd_SpecialSStart_Coll"
+      "symbol": "ftSk_SpecialSEnd_Coll"
     },
     {
       "id": 1202,
-      "symbol": "ftZd_SpecialSStart_IASA"
+      "symbol": "ftSk_SpecialSEnd_IASA"
     },
     {
       "id": 1203,
-      "symbol": "ftZd_SpecialSStart_Phys"
+      "symbol": "ftSk_SpecialSEnd_Phys"
     },
     {
       "id": 1204,
-      "symbol": "ftpickupitem_Anim"
+      "symbol": "ftSk_SpecialSStart_Anim"
     },
     {
       "id": 1205,
-      "symbol": "ftpickupitem_Coll"
+      "symbol": "ftSk_SpecialSStart_Coll"
     },
     {
       "id": 1206,
-      "symbol": "ftpickupitem_IASA"
+      "symbol": "ftSk_SpecialSStart_IASA"
     },
     {
       "id": 1207,
+      "symbol": "ftSk_SpecialSStart_Phys"
+    },
+    {
+      "id": 1208,
+      "symbol": "ftSk_SpecialS_Anim"
+    },
+    {
+      "id": 1209,
+      "symbol": "ftSk_SpecialS_Coll"
+    },
+    {
+      "id": 1210,
+      "symbol": "ftSk_SpecialS_IASA"
+    },
+    {
+      "id": 1211,
+      "symbol": "ftSk_SpecialS_Phys"
+    },
+    {
+      "id": 1212,
+      "symbol": "ftZd_SpecialAirHiStart_0_Anim"
+    },
+    {
+      "id": 1213,
+      "symbol": "ftZd_SpecialAirHiStart_0_Coll"
+    },
+    {
+      "id": 1214,
+      "symbol": "ftZd_SpecialAirHiStart_0_IASA"
+    },
+    {
+      "id": 1215,
+      "symbol": "ftZd_SpecialAirHiStart_0_Phys"
+    },
+    {
+      "id": 1216,
+      "symbol": "ftZd_SpecialAirHiStart_1_Anim"
+    },
+    {
+      "id": 1217,
+      "symbol": "ftZd_SpecialAirHiStart_1_Coll"
+    },
+    {
+      "id": 1218,
+      "symbol": "ftZd_SpecialAirHiStart_1_IASA"
+    },
+    {
+      "id": 1219,
+      "symbol": "ftZd_SpecialAirHiStart_1_Phys"
+    },
+    {
+      "id": 1220,
+      "symbol": "ftZd_SpecialAirHi_Anim"
+    },
+    {
+      "id": 1221,
+      "symbol": "ftZd_SpecialAirHi_Coll"
+    },
+    {
+      "id": 1222,
+      "symbol": "ftZd_SpecialAirHi_IASA"
+    },
+    {
+      "id": 1223,
+      "symbol": "ftZd_SpecialAirHi_Phys"
+    },
+    {
+      "id": 1224,
+      "symbol": "ftZd_SpecialAirLw2_Anim"
+    },
+    {
+      "id": 1225,
+      "symbol": "ftZd_SpecialAirLw2_Coll"
+    },
+    {
+      "id": 1226,
+      "symbol": "ftZd_SpecialAirLw2_IASA"
+    },
+    {
+      "id": 1227,
+      "symbol": "ftZd_SpecialAirLw2_Phys"
+    },
+    {
+      "id": 1228,
+      "symbol": "ftZd_SpecialAirLw_Anim"
+    },
+    {
+      "id": 1229,
+      "symbol": "ftZd_SpecialAirLw_Coll"
+    },
+    {
+      "id": 1230,
+      "symbol": "ftZd_SpecialAirLw_IASA"
+    },
+    {
+      "id": 1231,
+      "symbol": "ftZd_SpecialAirLw_Phys"
+    },
+    {
+      "id": 1232,
+      "symbol": "ftZd_SpecialAirN_Anim"
+    },
+    {
+      "id": 1233,
+      "symbol": "ftZd_SpecialAirN_Coll"
+    },
+    {
+      "id": 1234,
+      "symbol": "ftZd_SpecialAirN_IASA"
+    },
+    {
+      "id": 1235,
+      "symbol": "ftZd_SpecialAirN_Phys"
+    },
+    {
+      "id": 1236,
+      "symbol": "ftZd_SpecialAirSEnd_Anim"
+    },
+    {
+      "id": 1237,
+      "symbol": "ftZd_SpecialAirSEnd_Coll"
+    },
+    {
+      "id": 1238,
+      "symbol": "ftZd_SpecialAirSEnd_IASA"
+    },
+    {
+      "id": 1239,
+      "symbol": "ftZd_SpecialAirSEnd_Phys"
+    },
+    {
+      "id": 1240,
+      "symbol": "ftZd_SpecialAirSLoop_Anim"
+    },
+    {
+      "id": 1241,
+      "symbol": "ftZd_SpecialAirSLoop_Coll"
+    },
+    {
+      "id": 1242,
+      "symbol": "ftZd_SpecialAirSLoop_IASA"
+    },
+    {
+      "id": 1243,
+      "symbol": "ftZd_SpecialAirSLoop_Phys"
+    },
+    {
+      "id": 1244,
+      "symbol": "ftZd_SpecialAirSStart_Anim"
+    },
+    {
+      "id": 1245,
+      "symbol": "ftZd_SpecialAirSStart_Coll"
+    },
+    {
+      "id": 1246,
+      "symbol": "ftZd_SpecialAirSStart_IASA"
+    },
+    {
+      "id": 1247,
+      "symbol": "ftZd_SpecialAirSStart_Phys"
+    },
+    {
+      "id": 1248,
+      "symbol": "ftZd_SpecialHiStart_0_Anim"
+    },
+    {
+      "id": 1249,
+      "symbol": "ftZd_SpecialHiStart_0_Coll"
+    },
+    {
+      "id": 1250,
+      "symbol": "ftZd_SpecialHiStart_0_IASA"
+    },
+    {
+      "id": 1251,
+      "symbol": "ftZd_SpecialHiStart_0_Phys"
+    },
+    {
+      "id": 1252,
+      "symbol": "ftZd_SpecialHiStart_1_Anim"
+    },
+    {
+      "id": 1253,
+      "symbol": "ftZd_SpecialHiStart_1_Coll"
+    },
+    {
+      "id": 1254,
+      "symbol": "ftZd_SpecialHiStart_1_IASA"
+    },
+    {
+      "id": 1255,
+      "symbol": "ftZd_SpecialHiStart_1_Phys"
+    },
+    {
+      "id": 1256,
+      "symbol": "ftZd_SpecialHi_Anim"
+    },
+    {
+      "id": 1257,
+      "symbol": "ftZd_SpecialHi_Coll"
+    },
+    {
+      "id": 1258,
+      "symbol": "ftZd_SpecialHi_IASA"
+    },
+    {
+      "id": 1259,
+      "symbol": "ftZd_SpecialHi_Phys"
+    },
+    {
+      "id": 1260,
+      "symbol": "ftZd_SpecialLw2_Anim"
+    },
+    {
+      "id": 1261,
+      "symbol": "ftZd_SpecialLw2_Coll"
+    },
+    {
+      "id": 1262,
+      "symbol": "ftZd_SpecialLw2_IASA"
+    },
+    {
+      "id": 1263,
+      "symbol": "ftZd_SpecialLw2_Phys"
+    },
+    {
+      "id": 1264,
+      "symbol": "ftZd_SpecialLw_Anim"
+    },
+    {
+      "id": 1265,
+      "symbol": "ftZd_SpecialLw_Coll"
+    },
+    {
+      "id": 1266,
+      "symbol": "ftZd_SpecialLw_IASA"
+    },
+    {
+      "id": 1267,
+      "symbol": "ftZd_SpecialLw_Phys"
+    },
+    {
+      "id": 1268,
+      "symbol": "ftZd_SpecialN_Anim"
+    },
+    {
+      "id": 1269,
+      "symbol": "ftZd_SpecialN_Coll"
+    },
+    {
+      "id": 1270,
+      "symbol": "ftZd_SpecialN_IASA"
+    },
+    {
+      "id": 1271,
+      "symbol": "ftZd_SpecialN_Phys"
+    },
+    {
+      "id": 1272,
+      "symbol": "ftZd_SpecialSEnd_Anim"
+    },
+    {
+      "id": 1273,
+      "symbol": "ftZd_SpecialSEnd_Coll"
+    },
+    {
+      "id": 1274,
+      "symbol": "ftZd_SpecialSEnd_IASA"
+    },
+    {
+      "id": 1275,
+      "symbol": "ftZd_SpecialSEnd_Phys"
+    },
+    {
+      "id": 1276,
+      "symbol": "ftZd_SpecialSLoop_Anim"
+    },
+    {
+      "id": 1277,
+      "symbol": "ftZd_SpecialSLoop_Coll"
+    },
+    {
+      "id": 1278,
+      "symbol": "ftZd_SpecialSLoop_IASA"
+    },
+    {
+      "id": 1279,
+      "symbol": "ftZd_SpecialSLoop_Phys"
+    },
+    {
+      "id": 1280,
+      "symbol": "ftZd_SpecialSStart_Anim"
+    },
+    {
+      "id": 1281,
+      "symbol": "ftZd_SpecialSStart_Coll"
+    },
+    {
+      "id": 1282,
+      "symbol": "ftZd_SpecialSStart_IASA"
+    },
+    {
+      "id": 1283,
+      "symbol": "ftZd_SpecialSStart_Phys"
+    },
+    {
+      "id": 1284,
+      "symbol": "ftpickupitem_Anim"
+    },
+    {
+      "id": 1285,
+      "symbol": "ftpickupitem_Coll"
+    },
+    {
+      "id": 1286,
+      "symbol": "ftpickupitem_IASA"
+    },
+    {
+      "id": 1287,
       "symbol": "ftpickupitem_Phys"
     }
   ],
