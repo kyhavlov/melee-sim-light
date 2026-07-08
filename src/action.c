@@ -2185,6 +2185,82 @@ static inline void shieldbreak_update_anim_callback_pre_input(MslBatch* batch,
   }
 }
 
+static inline void damagesong_update_anim_callback_pre_input(MslBatch* batch,
+                                                             const MslCommonParams* c,
+                                                             size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  const uint16_t a0 = batch->state.action_id[idx];
+  if (a0 != (uint16_t)MSL_ACT_DAMAGE_SONG && a0 != (uint16_t)MSL_ACT_DAMAGE_SONG_WAIT &&
+      a0 != (uint16_t)MSL_ACT_DAMAGE_SONG_RV) {
+    return;
+  }
+  if (batch->state.hitlag_started_frame[idx] != 0) {
+    return;
+  }
+  const uint32_t anim_u32 = batch->state.animation_index[idx];
+  const float end = (anim_u32 <= 0xFFFFu)
+                        ? msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim_u32)
+                        : 0.0f;
+  const uint8_t anim_done =
+      (uint8_t)(end > 0.0f && msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]) >= end);
+  if (a0 == (uint16_t)MSL_ACT_DAMAGE_SONG_RV) {
+    // ftCo_DamageSongRv_Anim: anim end -> ft_8008A2BC Wait.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::ftCo_DamageSongRv_Anim
+    if (anim_done) {
+      guard_enter_wait(batch, idx);
+    }
+    return;
+  }
+  // DamageSong/DamageSongWait share inlineB0: fp->grab_timer -= x63C; ftCommon_GrabMash(x640);
+  // timer expiry -> DamageSongRv. DamageSong additionally hands to the Wait loop on anim end.
+  // The lazy timer reconstruction mirrors the Furafura reseed shape: DamageSong's elapsed frames
+  // are the action_frame; the Wait loop adds the (per-char) FuraSleepStart length; the mash
+  // history is unobservable.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::{inlineA0,inlineB0,
+  //   ftCo_DamageSong_Anim,ftCo_DamageSongWait_Anim}
+  float timer = batch->state.capture_grab_timer[idx];
+  if (!(timer > 0.0f)) {
+    const int victim_p = (int)(idx % (size_t)MSL_MAX_PLAYERS);
+    const float slot = (float)(victim_p + 1);
+    const float handicap = (float)batch->state.handicap[idx];
+    timer = c->damagesong_timer_base +
+            c->damagesong_timer_handicap_mul * (c->damagesong_timer_handicap_base - handicap) +
+            c->damagesong_timer_slot_mul * (c->damagesong_timer_slot_base - slot) +
+            batch->state.percent[idx] * c->damagesong_timer_percent_mul;
+    float elapsed = (float)batch->state.action_frame[idx];
+    if (a0 == (uint16_t)MSL_ACT_DAMAGE_SONG_WAIT) {
+      const float start_len =
+          msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_FURA_SLEEP_START);
+      if (start_len > 0.0f) {
+        elapsed += start_len;
+      }
+    }
+    if (elapsed > 0.0f) {
+      timer -= elapsed * c->damagesong_timer_decrement;
+    }
+  }
+  timer -= c->damagesong_timer_decrement;
+  if (furafura_grab_mash_active(batch, c, idx)) {
+    timer -= c->damagesong_mash_decrement;
+  }
+  batch->state.capture_grab_timer[idx] = timer;
+  if (timer <= 0.0f) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_DAMAGE_SONG_RV;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_FURA_SLEEP_END;
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    batch->state.capture_grab_timer[idx] = 0.0f;
+    return;
+  }
+  if (a0 == (uint16_t)MSL_ACT_DAMAGE_SONG && anim_done) {
+    // ftCo_800C3390: SkipMatAnim|SkipColAnim into the sleep loop at frame 0 rate 1.
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_DAMAGE_SONG_WAIT;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_FURA_SLEEP_LOOP;
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  }
+}
+
 void action_update_anim_callback_pre_input_fighter(const MslFighterCallbackContext* ctx) {
   if (ctx == NULL || ctx->batch == NULL) {
     return;
@@ -2247,6 +2323,7 @@ void action_update_anim_callback_pre_input_fighter(const MslFighterCallbackConte
   }
   rebound_update_anim_callback_pre_input(batch, idx);
   shieldbreak_update_anim_callback_pre_input(batch, c, idx);
+  damagesong_update_anim_callback_pre_input(batch, c, idx);
   guard_update_grounded_anim_callback_pre_input(batch, idx);
   throw_flow_update_anim_callback_pre_input(batch, bi, p);
 }

@@ -438,6 +438,19 @@ void combat_clank_register_same_hit_group(MslBatch* batch, int bi, int attacker,
                                           int hb_id, uint16_t defender_iid);
 uint8_t combat_mtx34_inverse_point(const float m[12], float x, float y, float z, float* out_x,
                                    float* out_y, float* out_z);
+// Sleep elements (6/7) connect at an authored 0-damage payload (Sing): ftColl processes the
+// dmg=0 capsule, the kb formula's +18 constant keeps kb_applied nonzero, and ftCo_8008E908
+// routes the victim into DamageSong. The generic zero-damage skips must not drop these contacts.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::ftCo_800C318C
+static inline uint8_t combat_hitbox_sleep_element_zero_damage(const MslBatch* batch, size_t hb_i) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint8_t el = batch->state.hitbox_element[hb_i];
+  return (uint8_t)((el == 6u || el == 7u) && batch->state.hitbox_damage[hb_i] == 0.0f);
+}
+
 uint8_t combat_is_damage_or_firefox_launch_victim_action(uint8_t char_id, uint16_t action_id);
 uint8_t combat_is_damage_air_action(uint16_t action_id);
 uint8_t combat_residual_frame_start_hitcapsule_owner(const MslBatch* batch, size_t idx);

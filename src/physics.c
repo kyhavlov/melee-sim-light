@@ -486,6 +486,11 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint8_t char
     case MSL_ACT_ATTACK_LW4:
     case MSL_ACT_DOWN_BOUND_U:
     case MSL_ACT_DOWN_BOUND_D:
+    // Sleep (DamageSong family): all three Phys callbacks are ft_80084F3C.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c
+    case MSL_ACT_DAMAGE_SONG:
+    case MSL_ACT_DAMAGE_SONG_WAIT:
+    case MSL_ACT_DAMAGE_SONG_RV:
       return 1;
     default:
       return 0;

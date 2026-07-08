@@ -403,6 +403,18 @@ def main() -> None:
         "capture_grab_timer_slot_mul": float(_f32_be(buf, ft_common_abs + 0x360)),
         "capture_grab_timer_slot_base": float(_f32_be(buf, ft_common_abs + 0x364)),
         "capture_grab_timer_percent_mul": float(_f32_be(buf, ft_common_abs + 0x368)),
+        # Sleep (DamageSong, Sing's victim family): inlineA0 duration terms + per-frame decrement
+        # + mash step + the element-7 multiplier.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::{inlineA0,inlineB0}
+        "damagesong_timer_base": float(_f32_be(buf, ft_common_abs + 0x624)),
+        "damagesong_timer_handicap_mul": float(_f32_be(buf, ft_common_abs + 0x628)),
+        "damagesong_timer_handicap_base": float(_f32_be(buf, ft_common_abs + 0x62C)),
+        "damagesong_timer_slot_mul": float(_f32_be(buf, ft_common_abs + 0x630)),
+        "damagesong_timer_slot_base": float(_f32_be(buf, ft_common_abs + 0x634)),
+        "damagesong_timer_percent_mul": float(_f32_be(buf, ft_common_abs + 0x638)),
+        "damagesong_timer_decrement": float(_f32_be(buf, ft_common_abs + 0x63C)),
+        "damagesong_mash_decrement": float(_f32_be(buf, ft_common_abs + 0x640)),
+        "damagesong_element7_mul": float(_f32_be(buf, ft_common_abs + 0x644)),
         "capture_cut_escape_speed": float(_f32_be(buf, ft_common_abs + 0x370)),
         "capture_jump_escape_speed_x": float(_f32_be(buf, ft_common_abs + 0x374)),
         "capture_jump_escape_speed_y": float(_f32_be(buf, ft_common_abs + 0x378)),

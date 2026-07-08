@@ -176,6 +176,25 @@ shared-fix queue.
   re-arm rehits and rollout-vs-shield x18F4/x21F8 spin-reversal
   (8014222C) unmodeled (victim-side weak-hit turnaround machinery).
 
+- 2026-07-08 (later): **DamageSong victim family live (297-299).** Sing's
+  sleep now has a consumer: combat routes element-6/7 hits into DamageSong
+  at the damage-state selection (ftCo_8008E908 shape; the x2228_b2 gate is
+  sandbag-only, and the grounded-only behavior is the Sing hitbox's own
+  hit_grounded-only payload). Duration = the inlineA0 formula (x624-x644
+  extracted to common params; slot = victim index + 1 per the capture
+  convention; element 7 scales by x644=4). The machine mirrors Furafura:
+  shared capture_grab_timer lane, -x63C/frame, grab-mash -x640, lazy
+  timer reconstruction from action_frame for reseed (the Wait loop adds
+  the per-char FuraSleepStart anim length), FuraSleepEnd -> Wait.
+  Phys = ft_80084F3C via the common-ground-friction-only list.
+  COMBAT-SHARED change (element-scoped): 0-damage capsules with sleep
+  elements now pass the zero-damage admission gates (the +18 kb constant
+  keeps kb_applied nonzero so the full path runs); no existing char
+  authors 0-damage element-6/7 hitboxes, and validate-all stayed
+  byte-identical. NO replay in the suite lands a Sing — 4 unit tests own
+  the family (formula duration incl. percent scaling, mash shortening,
+  airborne immunity via the hitbox flag). Suite total unchanged (3826).
+
 ### Rollout survey (2026-07-07 decomp skim; implement next)
 
 ftPr_SpecialN.c is ~1470 lines. mv.pr.specialn lanes (types.h): x0 charge

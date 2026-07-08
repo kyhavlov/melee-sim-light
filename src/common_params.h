@@ -312,6 +312,20 @@ typedef struct MslCommonParams {
   float furafura_timer_base;          // p_ftCommonData->x2FC
   float furafura_timer_decrement;     // p_ftCommonData->x300
   float furafura_mash_decrement;      // p_ftCommonData->x304
+  // Sleep (DamageSong; Sing's victim family).
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c
+  // - entry: ftCommon_InitGrab(fp, 0, pct*x638 + x628*(x62C-handicap) + x624 +
+  //   x630*(x634-slot)); element 7 scales by x644
+  // - anim: fp->grab_timer -= x63C; ftCommon_GrabMash(fp, x640); exit at <= 0
+  float damagesong_timer_base;           // p_ftCommonData->x624
+  float damagesong_timer_handicap_mul;   // p_ftCommonData->x628
+  float damagesong_timer_handicap_base;  // p_ftCommonData->x62C
+  float damagesong_timer_slot_mul;       // p_ftCommonData->x630
+  float damagesong_timer_slot_base;      // p_ftCommonData->x634
+  float damagesong_timer_percent_mul;    // p_ftCommonData->x638
+  float damagesong_timer_decrement;      // p_ftCommonData->x63C
+  float damagesong_mash_decrement;       // p_ftCommonData->x640
+  float damagesong_element7_mul;         // p_ftCommonData->x644
   // Shield size scaling (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::inlineB0)
   float shield_size_lightshield_min;  // p_ftCommonData->x2D4 (shield_size_lightshield_min)
   float shield_size_lightshield_max;  // p_ftCommonData->x2D8 (shield_size_lightshield_max)

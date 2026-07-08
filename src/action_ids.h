@@ -86,6 +86,12 @@ typedef enum MslActionId {
   MSL_ACT_DAMAGE_FLY_TOP = 0x005A,   // ftCo_MS_DamageFlyTop
   MSL_ACT_DAMAGE_FLY_ROLL = 0x005B,  // ftCo_MS_DamageFlyRoll
 
+  // Sleep (Sing victim family).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c
+  MSL_ACT_DAMAGE_SONG = 0x0129,       // ftCo_MS_DamageSong (297)
+  MSL_ACT_DAMAGE_SONG_WAIT = 0x012A,  // ftCo_MS_DamageSongWait (298)
+  MSL_ACT_DAMAGE_SONG_RV = 0x012B,    // ftCo_MS_DamageSongRv (299)
+
   // Shield / Guard (subset).
   MSL_ACT_GUARD_ON = 0x00B2,              // ftCo_MS_GuardOn
   MSL_ACT_GUARD = 0x00B3,                 // ftCo_MS_Guard
@@ -583,6 +589,9 @@ typedef enum MslSubmotionId {
   MSL_SM_DAMAGE_FLY_LW = 179,    // ftCo_SM_DamageFlyLw
   MSL_SM_DAMAGE_FLY_TOP = 180,   // ftCo_SM_DamageFlyTop
   MSL_SM_DAMAGE_FLY_ROLL = 181,  // ftCo_SM_DamageFlyRoll
+  MSL_SM_FURA_SLEEP_START = 206,  // ftCo_SM_FuraSleepStart
+  MSL_SM_FURA_SLEEP_LOOP = 207,   // ftCo_SM_FuraSleepLoop
+  MSL_SM_FURA_SLEEP_END = 208,    // ftCo_SM_FuraSleepEnd
 
   // Downed / knockdown (suite-present subset).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.

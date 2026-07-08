@@ -1273,6 +1273,33 @@ static inline void combat_damage_enter_state(
       //   ftCo_8009F0F0,ftCo_8009F184,ftCo_DownDamage_Coll}
       batch->state.on_ground[d_idx] = 0u;
     }
+  } else if (source_hb_valid != 0u && c != NULL &&
+             (batch->state.hitbox_element[source_hb_i] == 6u ||
+              batch->state.hitbox_element[source_hb_i] == 7u)) {
+    // Sleep elements: ftCo_8008E908 routes elements 6/7 into ftCo_800C318C (DamageSong) instead
+    // of the generic ftCo_8008DCE0 selection (the x2228_b2 gate is sandbag-only). Melee's only
+    // fighter sleep hitbox is Sing (element 6, hit_grounded-only payload); element 7 scales the
+    // duration by x644. The duration lands in the shared grab_timer lane (ftCommon_InitGrab),
+    // slot = victim player index + 1 (the capture_grab_timer_init convention).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::{ftCo_800C318C,inlineA0}
+    act = (uint16_t)MSL_ACT_DAMAGE_SONG;
+    sm = (uint32_t)MSL_SM_FURA_SLEEP_START;
+    const int victim_p = (int)(d_idx % (size_t)MSL_MAX_PLAYERS);
+    const float slot = (float)(victim_p + 1);
+    const float handicap = (float)batch->state.handicap[d_idx];
+    float timer = c->damagesong_timer_base +
+                  c->damagesong_timer_handicap_mul *
+                      (c->damagesong_timer_handicap_base - handicap) +
+                  c->damagesong_timer_slot_mul * (c->damagesong_timer_slot_base - slot) +
+                  batch->state.percent[d_idx] * c->damagesong_timer_percent_mul;
+    if (batch->state.hitbox_element[source_hb_i] == 7u) {
+      timer *= c->damagesong_element7_mul;
+    }
+    batch->state.capture_grab_timer[d_idx] = timer;
+    // ftCommon_InitGrab resets the grab-mash sign latches.
+    batch->state.grab_mash_stick_x_sign[d_idx] = 0;
+    batch->state.grab_mash_stick_y_sign[d_idx] = 0;
   } else if (sev == 3u) {
     // High-knockback / tumble-style damage states.
     //
@@ -2263,7 +2290,12 @@ static inline uint8_t combat_body_damage_producer_build(const MslBatch* batch, s
   if (stale_mult != 1.0f) {
     hb_dmg *= stale_mult;
   }
-  return combat_damage_product_set_applied(out, hb_dmg);
+  if (combat_damage_product_set_applied(out, hb_dmg)) {
+    return 1u;
+  }
+  // 0-damage sleep-element capsules still produce a (0-percent) accepted hit so the full
+  // ProcessHit path can route the victim into DamageSong.
+  return combat_hitbox_sleep_element_zero_damage(batch, hb_i);
 }
 
 static inline uint8_t combat_item_damage_product_build(const MslBatch* batch, size_t a_idx,
@@ -5997,12 +6029,14 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         //
         // In our BODY-only pass (no percent/KB yet), treat hitboxes with nonpositive extracted
         // damage as non-damaging contacts and do not select them for hitlag/attribution writes.
-        if (!(hdmg > 0.0f)) {
+        // Exception: 0-damage sleep-element capsules (Sing) stay live contacts.
+        const uint8_t sleep_zero_dmg_contact = combat_hitbox_sleep_element_zero_damage(batch, hb_i);
+        if (!(hdmg > 0.0f) && !sleep_zero_dmg_contact) {
           continue;
         }
 
         const int int_dmg = combat_get_env_dmg(hdmg);
-        if (int_dmg <= 0) {
+        if (int_dmg <= 0 && !sleep_zero_dmg_contact) {
           continue;
         }
         // Shield precedence (BODY path): if the hitbox intersects the defender shield bubble, do

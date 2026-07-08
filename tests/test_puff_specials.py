@@ -470,3 +470,106 @@ def test_rollout_on_hit_enters_nhit_with_backward_hop() -> None:
         float(a["puff_rollout_hit_vel_y"]), abs=0.1
     )
     assert ACT_LANDING_FALL_SPECIAL in acts[hi:], f"NHit landing takes the special lag: {acts[-8:]}"
+
+
+# ---------------------------------------------------------------------------
+# DamageSong victim family (297..299; Sing's sleep effect)
+# ---------------------------------------------------------------------------
+# Anchors: refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c and the ftCo_8008E908
+# element-6/7 dispatch. No suite replay carries a landed Sing; these tests own the family.
+
+ACT_DAMAGE_SONG = 297
+ACT_DAMAGE_SONG_WAIT = 298
+ACT_DAMAGE_SONG_RV = 299
+
+
+def _common() -> dict:
+    return json.loads((ROOT / "data" / "common" / "ft_common_data.json").read_text())
+
+
+def _mk_inputs2(p0: dict | None = None, p1: dict | None = None) -> np.ndarray:
+    inp = np.zeros((1,), dtype=INPUT_DTYPE)
+    for k, v in (p0 or {}).items():
+        inp["p"][0, 0][k] = v
+    for k, v in (p1 or {}).items():
+        inp["p"][0, 1][k] = v
+    return inp.view(np.uint8).reshape((1, INPUT_DTYPE.itemsize))
+
+
+def _sing_seed(fox_percent: float = 0.0, fox_air: bool = False, handicap: int = 9) -> np.ndarray:
+    seed = _ground_seed(facing=1, pos_x=0.0, fox_x=8.0)
+    seed["percent"][0, 1] = np.float32(fox_percent)
+    seed["handicap"][0, :2] = np.uint8(handicap)
+    if fox_air:
+        seed["on_ground"][0, 1] = np.uint8(0)
+        seed["pos_y"][0, 1] = np.float32(500.0)
+        seed["action_id"][0, 1] = np.uint16(ACT_FALL)
+        seed["animation_index"][0, 1] = np.uint32(SM_FALL)
+    return seed
+
+
+def _song_timer_expect(c: dict, percent: float, victim_slot: int, handicap: int) -> float:
+    return (
+        c["damagesong_timer_base"]
+        + c["damagesong_timer_handicap_mul"] * (c["damagesong_timer_handicap_base"] - handicap)
+        + c["damagesong_timer_slot_mul"] * (c["damagesong_timer_slot_base"] - victim_slot)
+        + percent * c["damagesong_timer_percent_mul"]
+    )
+
+
+def test_sing_puts_grounded_victim_to_sleep_for_formula_duration() -> None:
+    # Element-6 grounded hit -> DamageSong with grab_timer = the inlineA0 duration; the start
+    # anim hands to the sleep loop; expiry -> DamageSongRv -> Wait.
+    c = _common()
+    b_up = _mk_inputs2(p0={"buttons": BTN_B, "main_y": 127})
+    idle = _mk_inputs2()
+    outs = _run(_sing_seed(), [b_up] + [idle] * 320)
+    acts1 = [int(o["action_id"][1]) for o in outs]
+    si = acts1.index(ACT_DAMAGE_SONG)
+    assert 27 <= si <= 34, f"Sing's frame-28 hitbox must sleep grounded fox: first sleep row {si}"
+    assert ACT_DAMAGE_SONG_WAIT in acts1[si:], "start anim must hand to the sleep loop"
+    ri = acts1.index(ACT_DAMAGE_SONG_RV)
+    dur = ri - si
+    expect = _song_timer_expect(c, 0.0, victim_slot=2, handicap=9)
+    assert abs(dur - expect) <= 3, f"sleep duration {dur} vs formula {expect}"
+    assert ACT_WAIT in acts1[ri:], f"DamageSongRv must exit to Wait: {acts1[-6:]}"
+
+
+def test_sing_sleep_duration_scales_with_percent() -> None:
+    c = _common()
+    b_up = _mk_inputs2(p0={"buttons": BTN_B, "main_y": 127})
+    idle = _mk_inputs2()
+    outs = _run(_sing_seed(fox_percent=50.0), [b_up] + [idle] * 420)
+    acts1 = [int(o["action_id"][1]) for o in outs]
+    si = acts1.index(ACT_DAMAGE_SONG)
+    ri = acts1.index(ACT_DAMAGE_SONG_RV)
+    expect = _song_timer_expect(c, 50.0, victim_slot=2, handicap=9)
+    assert abs((ri - si) - expect) <= 3, f"sleep duration {ri - si} vs formula {expect}"
+
+
+def test_sing_mash_shortens_sleep() -> None:
+    # ftCommon_GrabMash: each stick sign flip past the mash threshold takes x640 (7) extra
+    # frames off the timer.
+    b_up = _mk_inputs2(p0={"buttons": BTN_B, "main_y": 127})
+    idle = _mk_inputs2()
+    mash = [
+        _mk_inputs2(p1={"main_x": 127 if (i % 2 == 0) else -127}) for i in range(320)
+    ]
+    outs_idle = _run(_sing_seed(), [b_up] + [idle] * 320)
+    outs_mash = _run(_sing_seed(), [b_up] + mash)
+    a_idle = [int(o["action_id"][1]) for o in outs_idle]
+    a_mash = [int(o["action_id"][1]) for o in outs_mash]
+    d_idle = a_idle.index(ACT_DAMAGE_SONG_RV) - a_idle.index(ACT_DAMAGE_SONG)
+    d_mash = a_mash.index(ACT_DAMAGE_SONG_RV) - a_mash.index(ACT_DAMAGE_SONG)
+    assert d_mash < d_idle - 20, f"mash must shorten sleep: idle {d_idle} mash {d_mash}"
+
+
+def test_sing_does_not_sleep_airborne_victim() -> None:
+    # The Sing hitbox payload is hit_grounded-only (hit_aerial False); an airborne fox never
+    # enters the sleep family.
+    b_up = _mk_inputs2(p0={"buttons": BTN_B, "main_y": 127})
+    idle = _mk_inputs2()
+    # Keep fox airborne through the whole frame-28..126 hitbox window.
+    outs = _run(_sing_seed(fox_air=True), [b_up] + [idle] * 130)
+    acts1 = [int(o["action_id"][1]) for o in outs]
+    assert ACT_DAMAGE_SONG not in acts1, f"airborne fox must not sleep: {sorted(set(acts1))}"

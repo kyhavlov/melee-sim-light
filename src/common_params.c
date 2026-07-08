@@ -411,6 +411,15 @@ int common_params_init(void) {
       json_get_f32(buf, "furafura_timer_base", &g_params.furafura_timer_base) != 0 ||
       json_get_f32(buf, "furafura_timer_decrement", &g_params.furafura_timer_decrement) != 0 ||
       json_get_f32(buf, "furafura_mash_decrement", &g_params.furafura_mash_decrement) != 0 ||
+      json_get_f32(buf, "damagesong_timer_base", &g_params.damagesong_timer_base) != 0 ||
+      json_get_f32(buf, "damagesong_timer_handicap_mul", &g_params.damagesong_timer_handicap_mul) != 0 ||
+      json_get_f32(buf, "damagesong_timer_handicap_base", &g_params.damagesong_timer_handicap_base) != 0 ||
+      json_get_f32(buf, "damagesong_timer_slot_mul", &g_params.damagesong_timer_slot_mul) != 0 ||
+      json_get_f32(buf, "damagesong_timer_slot_base", &g_params.damagesong_timer_slot_base) != 0 ||
+      json_get_f32(buf, "damagesong_timer_percent_mul", &g_params.damagesong_timer_percent_mul) != 0 ||
+      json_get_f32(buf, "damagesong_timer_decrement", &g_params.damagesong_timer_decrement) != 0 ||
+      json_get_f32(buf, "damagesong_mash_decrement", &g_params.damagesong_mash_decrement) != 0 ||
+      json_get_f32(buf, "damagesong_element7_mul", &g_params.damagesong_element7_mul) != 0 ||
       json_get_f32(buf, "shield_size_lightshield_min", &g_params.shield_size_lightshield_min) !=
           0 ||
       json_get_f32(buf, "shield_size_lightshield_max", &g_params.shield_size_lightshield_max) !=
