@@ -38,6 +38,9 @@ static inline float pr_facing_dir(const MslBatch* batch, size_t idx) {
 static uint8_t puff_b_entry_admissible(const MslBatch* batch, size_t idx, uint16_t a);
 static void pr_enter_pound(MslBatch* batch, size_t idx, uint8_t on_ground);
 static void pr_enter_rest(MslBatch* batch, size_t idx, uint8_t on_ground);
+static void pr_enter_sing(MslBatch* batch, size_t idx, uint8_t on_ground);
+static inline uint8_t pr_action_is_sing(uint16_t a);
+static inline uint8_t pr_action_is_sing_grounded(uint16_t a);
 static inline uint8_t pr_action_is_rest(uint16_t a);
 static inline uint8_t pr_action_is_rest_grounded(uint16_t a);
 
@@ -76,14 +79,14 @@ void puff_specials_update_pre_physics(MslBatch* batch) {
         continue;
       }
 
-      // ---- Rest Anim callbacks --------------------------------------------
-      if (pr_action_is_rest(a)) {
+      // ---- Rest / Sing Anim callbacks ------------------------------------
+      if (pr_action_is_rest(a) || pr_action_is_sing(a)) {
         // Grounded end -> ft_8008A2BC Wait; air end -> ftCo_Fall_Enter. Same-proc destination
         // IASA runs like the Pound exits below.
         // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialLw.c::{ftPr_SpecialLw_Anim,
         //   ftPr_SpecialAirLw_Anim}
         if (pr_anim_finished(cid, puff_special_submotion(a), batch->state.anim_frame_f32[idx])) {
-          if (pr_action_is_rest_grounded(a)) {
+          if (pr_action_is_rest_grounded(a) || pr_action_is_sing_grounded(a)) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -160,6 +163,11 @@ void puff_specials_update_pre_physics(MslBatch* batch) {
               batch->state.speed_ground_x_self[idx] *= ch->side_special_ground_entry_vel_mul;
             }
             pr_enter_pound(batch, idx, on_ground);
+            continue;
+          }
+          // Up-B zone -> Sing.
+          if (sy >= c->special_stick_y_threshold) {
+            pr_enter_sing(batch, idx, on_ground);
             continue;
           }
           // Down-B zone -> Rest. Aerial chain checks the down zone before side; grounded
@@ -331,6 +339,38 @@ static void pr_enter_rest(MslBatch* batch, size_t idx, uint8_t on_ground) {
   batch->state.special_cmd2[idx] = 0u;
 }
 
+// Sing (ftPr_SpecialHi 365/367 grounded, 366/368 air; L/R variant by facing). Same state
+// shape as Rest: grounded F3C friction / air 84EEC phys, Wait / Fall exits, frame-preserving
+// phase flips. The element-6 sleep hitbox (frames 28..126 with size rekeys) rides the generic
+// script machinery; the VICTIM DamageSong family is the remaining consumer (documented gap
+// until the sleep-victim machine lands).
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialHi.c
+static void pr_enter_sing(MslBatch* batch, size_t idx, uint8_t on_ground) {
+  const uint8_t facing_right = batch->state.facing[idx] ? 1u : 0u;
+  const uint16_t act =
+      on_ground
+          ? (facing_right ? (uint16_t)MSL_ACT_PR_SPECIAL_HI_R : (uint16_t)MSL_ACT_PR_SPECIAL_HI_L)
+          : (facing_right ? (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_R
+                          : (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_L);
+  batch->state.action_id[idx] = act;
+  batch->state.animation_index[idx] = (uint32_t)puff_special_submotion(act);
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_tick_once(batch, idx);
+  batch->state.special_cmd0[idx] = 0u;
+  batch->state.special_cmd1[idx] = 0u;
+  batch->state.special_cmd2[idx] = 0u;
+}
+
+static inline uint8_t pr_action_is_sing(uint16_t a) {
+  return (uint8_t)(a >= (uint16_t)MSL_ACT_PR_SPECIAL_HI_L &&
+                   a <= (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_R);
+}
+
+static inline uint8_t pr_action_is_sing_grounded(uint16_t a) {
+  return (uint8_t)(a == (uint16_t)MSL_ACT_PR_SPECIAL_HI_L ||
+                   a == (uint16_t)MSL_ACT_PR_SPECIAL_HI_R);
+}
+
 static inline uint8_t pr_action_is_rest(uint16_t a) {
   return (uint8_t)(a == (uint16_t)MSL_ACT_PR_SPECIAL_LW_L ||
                    a == (uint16_t)MSL_ACT_PR_SPECIAL_LW_R ||
@@ -455,6 +495,8 @@ uint8_t puff_specials_phys(MslBatch* batch, size_t idx) {
       // cmd1 == 2: hand ownership to the generic common-air path (ft_80084DB0).
       return 0u;
     }
+    case MSL_ACT_PR_SPECIAL_HI_L:
+    case MSL_ACT_PR_SPECIAL_HI_R:
     case MSL_ACT_PR_SPECIAL_LW_L:
     case MSL_ACT_PR_SPECIAL_LW_R:
       if (batch->state.on_ground[idx] == 0u) {
@@ -478,6 +520,8 @@ uint8_t puff_specials_phys(MslBatch* batch, size_t idx) {
         batch->state.speed_ground_x_self[idx] = nv;
       }
       return 1u;
+    case MSL_ACT_PR_SPECIAL_AIR_HI_L:
+    case MSL_ACT_PR_SPECIAL_AIR_HI_R:
     case MSL_ACT_PR_SPECIAL_AIR_LW_L:
     case MSL_ACT_PR_SPECIAL_AIR_LW_R: {
       if (batch->state.on_ground[idx] != 0u) {
@@ -519,6 +563,10 @@ uint8_t puff_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
     dest = (uint16_t)MSL_ACT_PR_SPECIAL_AIR_LW_L;
   } else if (a == (uint16_t)MSL_ACT_PR_SPECIAL_LW_R) {
     dest = (uint16_t)MSL_ACT_PR_SPECIAL_AIR_LW_R;
+  } else if (a == (uint16_t)MSL_ACT_PR_SPECIAL_HI_L) {
+    dest = (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_L;
+  } else if (a == (uint16_t)MSL_ACT_PR_SPECIAL_HI_R) {
+    dest = (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_R;
   } else {
     return 0u;
   }
@@ -539,6 +587,10 @@ uint8_t puff_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {
     dest = (uint16_t)MSL_ACT_PR_SPECIAL_LW_L;
   } else if (a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_LW_R) {
     dest = (uint16_t)MSL_ACT_PR_SPECIAL_LW_R;
+  } else if (a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_L) {
+    dest = (uint16_t)MSL_ACT_PR_SPECIAL_HI_L;
+  } else if (a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_R) {
+    dest = (uint16_t)MSL_ACT_PR_SPECIAL_HI_R;
   } else {
     return 0u;
   }

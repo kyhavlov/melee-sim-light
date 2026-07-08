@@ -261,3 +261,25 @@ def test_air_rest_exits_to_fall() -> None:
     acts = [int(o["action_id"][0]) for o in outs]
     assert acts[0] == ACT_PR_AIR_LW_R
     assert ACT_FALL in acts[100:] or ACT_FALL_AERIAL in acts[100:], f"tail: {acts[-6:]}"
+
+
+ACT_PR_HI_R = 367
+ACT_PR_AIR_HI_R = 368
+
+
+def test_grounded_sing_enters_and_exits_to_wait() -> None:
+    seed = _seed(pos_y=0.0, facing=1)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1)
+    b_up = _mk_inputs(buttons=0x0200, main_y=127)
+    outs = _run(seed, [b_up] + [_mk_inputs()] * 260)
+    acts = [int(o["action_id"][0]) for o in outs]
+    assert acts[0] == ACT_PR_HI_R, f"up-B facing right must enter SpecialHiR: {acts[:4]}"
+    assert ACT_WAIT in acts[100:], f"Sing must return to Wait: {acts[-8:]}"
+
+
+def test_air_sing_enters_air_variant() -> None:
+    b_up = _mk_inputs(buttons=0x0200, main_y=127)
+    outs = _run(_seed(pos_y=700.0, facing=1), [b_up] + [_mk_inputs()] * 3)
+    assert int(outs[0]["action_id"][0]) == ACT_PR_AIR_HI_R

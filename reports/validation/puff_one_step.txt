@@ -8,8 +8,8 @@ validation.profile.ignored: state_flags[4]&0x80 reason=Slippi fp+0x221F camera-s
 
 == replays/validation/puff/Game_20250705T002244.slpz ==
 Records: 10417  Players/scored per record: 2  Total player-frames: 20834
-mismatch.action_id: 70 / 20834 (0.003360)
-mismatch.action_frame: 71 / 20834 (0.003408)
+mismatch.action_id: 66 / 20834 (0.003168)
+mismatch.action_frame: 66 / 20834 (0.003168)
 mismatch.on_ground: 52 / 20834 (0.002496)
 mismatch.facing: 10 / 20834 (0.000480)
 mismatch.stocks: 0 / 20834 (0.000000)
@@ -20,9 +20,9 @@ mismatch.hitstun: 8 / 20834 (0.000384)
 mismatch.l_cancel: 17 / 20834 (0.000816)
 mismatch.hurtbox_state: 17 / 20834 (0.000816)
 mismatch.ground_id: 20 / 20834 (0.000960)
-mismatch.animation_index: 69 / 20834 (0.003312)
+mismatch.animation_index: 65 / 20834 (0.003120)
 mismatch.instance_hit_by: 5 / 20834 (0.000240)
-mismatch.instance_id: 45 / 20834 (0.002160)
+mismatch.instance_id: 40 / 20834 (0.001920)
 mismatch.last_attack_landed: 2 / 20834 (0.000096)
 mismatch.combo_count: 2 / 20834 (0.000096)
 mismatch.last_hit_by: 16 / 20834 (0.000768)
@@ -33,11 +33,11 @@ mismatch.item_state: 0 / 156255 (0.000000)
 mismatch.item_owner: 0 / 156255 (0.000000)
 mismatch.item_instance_id: 0 / 156255 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 24 / 20834 (0.001152)
-err.pos_x: mae=0.008869 p95=0.000000 max=7.298981
-err.pos_y: mae=0.034626 p95=0.000000 max=62.004349
-err.speed_air_x_self: mae=0.001725 p95=0.000000 max=5.261856
+err.pos_x: mae=0.008594 p95=0.000000 max=7.298981
+err.pos_y: mae=0.034263 p95=0.000000 max=62.004349
+err.speed_air_x_self: mae=0.001588 p95=0.000000 max=5.261856
 err.speed_ground_x_self: mae=0.001621 p95=0.000000 max=1.972828
-err.speed_y_self: mae=0.002276 p95=0.000000 max=2.610000
+err.speed_y_self: mae=0.001927 p95=0.000000 max=2.610000
 err.speed_x_attack: mae=0.000276 p95=0.000000 max=2.452745
 err.speed_y_attack: mae=0.000668 p95=0.000000 max=2.915345
 err.percent: mae=0.002059 p95=0.000000 max=10.919998
@@ -46,10 +46,10 @@ err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 536 / 1260457
-overall.strict_discrete_mismatch: 560 / 1260457
+overall.discrete_mismatch: 518 / 1260457
+overall.strict_discrete_mismatch: 542 / 1260457
 overall.ignored_discrete_mismatch: 24
-overall.float_norm_mae_p95: 0.00046211
+overall.float_norm_mae_p95: 0.00043436
 
 == replays/validation/puff/Game_20251218T162123.slpz ==
 Records: 2128  Players/scored per record: 2  Total player-frames: 4256
@@ -98,8 +98,8 @@ overall.float_norm_mae_p95: 66.57051156
 
 == replays/validation/puff/Game_20260313T121034.slpz ==
 Records: 5153  Players/scored per record: 2  Total player-frames: 10306
-mismatch.action_id: 26 / 10306 (0.002523)
-mismatch.action_frame: 21 / 10306 (0.002038)
+mismatch.action_id: 25 / 10306 (0.002426)
+mismatch.action_frame: 20 / 10306 (0.001941)
 mismatch.on_ground: 41 / 10306 (0.003978)
 mismatch.facing: 7 / 10306 (0.000679)
 mismatch.stocks: 0 / 10306 (0.000000)
@@ -110,9 +110,9 @@ mismatch.hitstun: 4 / 10306 (0.000388)
 mismatch.l_cancel: 10 / 10306 (0.000970)
 mismatch.hurtbox_state: 6 / 10306 (0.000582)
 mismatch.ground_id: 6 / 10306 (0.000582)
-mismatch.animation_index: 25 / 10306 (0.002426)
+mismatch.animation_index: 24 / 10306 (0.002329)
 mismatch.instance_hit_by: 2 / 10306 (0.000194)
-mismatch.instance_id: 12 / 10306 (0.001164)
+mismatch.instance_id: 11 / 10306 (0.001067)
 mismatch.last_attack_landed: 2 / 10306 (0.000194)
 mismatch.combo_count: 4 / 10306 (0.000388)
 mismatch.last_hit_by: 9 / 10306 (0.000873)
@@ -124,10 +124,10 @@ mismatch.item_owner: 2 / 77295 (0.000026)
 mismatch.item_instance_id: 2 / 77295 (0.000026)
 ignored_mismatch.state_flags[4]&0x80: 12 / 10306 (0.001164)
 err.pos_x: mae=0.002479 p95=0.000000 max=5.566338
-err.pos_y: mae=0.005676 p95=0.000000 max=5.274204
+err.pos_y: mae=0.005639 p95=0.000000 max=5.274204
 err.speed_air_x_self: mae=0.000077 p95=0.000000 max=0.366500
 err.speed_ground_x_self: mae=0.001232 p95=0.000000 max=1.350000
-err.speed_y_self: mae=0.003252 p95=0.000000 max=2.596000
+err.speed_y_self: mae=0.003217 p95=0.000000 max=2.596000
 err.speed_x_attack: mae=0.000155 p95=0.000000 max=1.596826
 err.speed_y_attack: mae=0.000027 p95=0.000000 max=0.279563
 err.percent: mae=0.001346 p95=0.000000 max=6.370003
@@ -136,10 +136,10 @@ err.item_pos_x: mae=0.029272 p95=0.000000 max=15.325284
 err.item_pos_y: mae=0.080175 p95=0.000000 max=26.537884
 err.item_vel_x: mae=0.002366 p95=0.000000 max=0.782609
 err.item_vel_y: mae=0.021016 p95=0.000000 max=6.956114
-overall.discrete_mismatch: 245 / 623513
-overall.strict_discrete_mismatch: 257 / 623513
+overall.discrete_mismatch: 241 / 623513
+overall.strict_discrete_mismatch: 253 / 623513
 overall.ignored_discrete_mismatch: 12
-overall.float_norm_mae_p95: 0.00025803
+overall.float_norm_mae_p95: 0.00025673
 
 == replays/validation/puff/Game_20260318T101341.slpz ==
 Records: 8804  Players/scored per record: 2  Total player-frames: 17608
@@ -188,8 +188,8 @@ overall.float_norm_mae_p95: 421.63078078
 
 == replays/validation/puff/Game_20260325T101917.slpz ==
 Records: 16556  Players/scored per record: 2  Total player-frames: 33112
-mismatch.action_id: 58 / 33112 (0.001752)
-mismatch.action_frame: 43 / 33112 (0.001299)
+mismatch.action_id: 57 / 33112 (0.001721)
+mismatch.action_frame: 42 / 33112 (0.001268)
 mismatch.on_ground: 117 / 33112 (0.003533)
 mismatch.facing: 5 / 33112 (0.000151)
 mismatch.stocks: 0 / 33112 (0.000000)
@@ -200,9 +200,9 @@ mismatch.hitstun: 6 / 33112 (0.000181)
 mismatch.l_cancel: 14 / 33112 (0.000423)
 mismatch.hurtbox_state: 5 / 33112 (0.000151)
 mismatch.ground_id: 12 / 33112 (0.000362)
-mismatch.animation_index: 58 / 33112 (0.001752)
+mismatch.animation_index: 57 / 33112 (0.001721)
 mismatch.instance_hit_by: 5 / 33112 (0.000151)
-mismatch.instance_id: 28 / 33112 (0.000846)
+mismatch.instance_id: 27 / 33112 (0.000815)
 mismatch.last_attack_landed: 5 / 33112 (0.000151)
 mismatch.combo_count: 2 / 33112 (0.000060)
 mismatch.last_hit_by: 12 / 33112 (0.000362)
@@ -214,10 +214,10 @@ mismatch.item_owner: 13 / 248340 (0.000052)
 mismatch.item_instance_id: 13 / 248340 (0.000052)
 ignored_mismatch.state_flags[4]&0x80: 97 / 33112 (0.002929)
 err.pos_x: mae=0.003978 p95=0.000000 max=3.959999
-err.pos_y: mae=0.015076 p95=0.000000 max=6.505476
+err.pos_y: mae=0.015051 p95=0.000000 max=6.505476
 err.speed_air_x_self: mae=0.000129 p95=0.000000 max=1.440000
 err.speed_ground_x_self: mae=0.000714 p95=0.000000 max=1.736103
-err.speed_y_self: mae=0.000457 p95=0.000000 max=2.482000
+err.speed_y_self: mae=0.000433 p95=0.000000 max=2.482000
 err.speed_x_attack: mae=0.000507 p95=0.000000 max=7.759328
 err.speed_y_attack: mae=0.000488 p95=0.000000 max=7.493096
 err.percent: mae=0.002164 p95=0.000000 max=28.000000
@@ -226,10 +226,10 @@ err.item_pos_x: mae=0.063843 p95=0.000000 max=88.087967
 err.item_pos_y: mae=0.067519 p95=0.100000 max=53.042221
 err.item_vel_x: mae=0.010808 p95=0.000000 max=4.000000
 err.item_vel_y: mae=0.018908 p95=0.100000 max=2.828428
-overall.discrete_mismatch: 576 / 2003276
-overall.strict_discrete_mismatch: 673 / 2003276
+overall.discrete_mismatch: 572 / 2003276
+overall.strict_discrete_mismatch: 669 / 2003276
 overall.ignored_discrete_mismatch: 97
-overall.float_norm_mae_p95: 0.00034464
+overall.float_norm_mae_p95: 0.00034360
 
 == replays/validation/puff/Game_20260522T210033.slpz ==
 Records: 4862  Players/scored per record: 2  Total player-frames: 9724
@@ -323,8 +323,8 @@ overall.float_norm_mae_p95: 201.85244586
 
 == replays/validation/puff/Game_20260612T031848.slpz ==
 Records: 11267  Players/scored per record: 2  Total player-frames: 22534
-mismatch.action_id: 86 / 22534 (0.003816)
-mismatch.action_frame: 81 / 22534 (0.003595)
+mismatch.action_id: 85 / 22534 (0.003772)
+mismatch.action_frame: 80 / 22534 (0.003550)
 mismatch.on_ground: 66 / 22534 (0.002929)
 mismatch.facing: 7 / 22534 (0.000311)
 mismatch.stocks: 0 / 22534 (0.000000)
@@ -335,9 +335,9 @@ mismatch.hitstun: 6 / 22534 (0.000266)
 mismatch.l_cancel: 42 / 22534 (0.001864)
 mismatch.hurtbox_state: 10 / 22534 (0.000444)
 mismatch.ground_id: 49 / 22534 (0.002174)
-mismatch.animation_index: 85 / 22534 (0.003772)
+mismatch.animation_index: 84 / 22534 (0.003728)
 mismatch.instance_hit_by: 8 / 22534 (0.000355)
-mismatch.instance_id: 40 / 22534 (0.001775)
+mismatch.instance_id: 39 / 22534 (0.001731)
 mismatch.last_attack_landed: 5 / 22534 (0.000222)
 mismatch.combo_count: 4 / 22534 (0.000178)
 mismatch.last_hit_by: 19 / 22534 (0.000843)
@@ -348,11 +348,11 @@ mismatch.item_state: 6 / 169005 (0.000036)
 mismatch.item_owner: 10 / 169005 (0.000059)
 mismatch.item_instance_id: 11 / 169005 (0.000065)
 ignored_mismatch.state_flags[4]&0x80: 115 / 22534 (0.005103)
-err.pos_x: mae=0.000800 p95=0.000000 max=1.490753
-err.pos_y: mae=0.004144 p95=0.000000 max=5.344368
+err.pos_x: mae=0.000748 p95=0.000000 max=1.159624
+err.pos_y: mae=0.004064 p95=0.000000 max=5.344368
 err.speed_air_x_self: mae=0.000670 p95=0.000000 max=1.015704
 err.speed_ground_x_self: mae=0.004349 p95=0.000000 max=2.488403
-err.speed_y_self: mae=0.001166 p95=0.000000 max=3.400000
+err.speed_y_self: mae=0.001089 p95=0.000000 max=3.400000
 err.speed_x_attack: mae=0.000190 p95=0.000000 max=1.845421
 err.speed_y_attack: mae=0.000217 p95=0.000000 max=2.751563
 err.percent: mae=0.002491 p95=0.000000 max=13.799999
@@ -361,10 +361,10 @@ err.item_pos_x: mae=0.284130 p95=0.000000 max=100.405457
 err.item_pos_y: mae=0.090333 p95=0.000000 max=39.539070
 err.item_vel_x: mae=0.022825 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.008684 p95=0.000000 max=6.956114
-overall.discrete_mismatch: 766 / 1363307
-overall.strict_discrete_mismatch: 881 / 1363307
+overall.discrete_mismatch: 762 / 1363307
+overall.strict_discrete_mismatch: 877 / 1363307
 overall.ignored_discrete_mismatch: 115
-overall.float_norm_mae_p95: 108.66442560
+overall.float_norm_mae_p95: 108.66442251
 
 == replays/validation/puff/Game_20260616T153208.slpz ==
 Records: 3962  Players/scored per record: 2  Total player-frames: 7924
@@ -413,8 +413,8 @@ overall.float_norm_mae_p95: 0.00033720
 
 == replays/validation/puff/diamond-diamond-78251f79d12df3bcdb1d4abe.slpz ==
 Records: 10788  Players/scored per record: 2  Total player-frames: 21576
-mismatch.action_id: 60 / 21576 (0.002781)
-mismatch.action_frame: 55 / 21576 (0.002549)
+mismatch.action_id: 57 / 21576 (0.002642)
+mismatch.action_frame: 52 / 21576 (0.002410)
 mismatch.on_ground: 50 / 21576 (0.002317)
 mismatch.facing: 7 / 21576 (0.000324)
 mismatch.stocks: 0 / 21576 (0.000000)
@@ -425,9 +425,9 @@ mismatch.hitstun: 6 / 21576 (0.000278)
 mismatch.l_cancel: 14 / 21576 (0.000649)
 mismatch.hurtbox_state: 14 / 21576 (0.000649)
 mismatch.ground_id: 24 / 21576 (0.001112)
-mismatch.animation_index: 60 / 21576 (0.002781)
+mismatch.animation_index: 57 / 21576 (0.002642)
 mismatch.instance_hit_by: 1 / 21576 (0.000046)
-mismatch.instance_id: 40 / 21576 (0.001854)
+mismatch.instance_id: 37 / 21576 (0.001715)
 mismatch.last_attack_landed: 0 / 21576 (0.000000)
 mismatch.combo_count: 1 / 21576 (0.000046)
 mismatch.last_hit_by: 12 / 21576 (0.000556)
@@ -438,11 +438,11 @@ mismatch.item_state: 0 / 161820 (0.000000)
 mismatch.item_owner: 0 / 161820 (0.000000)
 mismatch.item_instance_id: 0 / 161820 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 95 / 21576 (0.004403)
-err.pos_x: mae=0.006575 p95=0.000000 max=11.391720
-err.pos_y: mae=0.020882 p95=0.000000 max=13.299530
-err.speed_air_x_self: mae=0.000148 p95=0.000000 max=0.371800
+err.pos_x: mae=0.006568 p95=0.000000 max=11.391720
+err.pos_y: mae=0.020719 p95=0.000000 max=13.299530
+err.speed_air_x_self: mae=0.000147 p95=0.000000 max=0.371800
 err.speed_ground_x_self: mae=0.001214 p95=0.000000 max=1.350000
-err.speed_y_self: mae=0.002380 p95=0.000000 max=3.240000
+err.speed_y_self: mae=0.002220 p95=0.000000 max=3.240000
 err.speed_x_attack: mae=0.000084 p95=0.000000 max=1.068658
 err.speed_y_attack: mae=0.000435 p95=0.000000 max=3.288991
 err.percent: mae=0.000365 p95=0.000000 max=5.160000
@@ -451,10 +451,10 @@ err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 449 / 1305348
-overall.strict_discrete_mismatch: 544 / 1305348
+overall.discrete_mismatch: 437 / 1305348
+overall.strict_discrete_mismatch: 532 / 1305348
 overall.ignored_discrete_mismatch: 95
-overall.float_norm_mae_p95: 0.00025279
+overall.float_norm_mae_p95: 0.00024628
 
 == replays/validation/puff/master-diamond-d514ba67193e53290c8d1b83.slpz ==
 Records: 10763  Players/scored per record: 2  Total player-frames: 21526
@@ -502,7 +502,7 @@ overall.ignored_discrete_mismatch: 107
 overall.float_norm_mae_p95: 57.45180627
 
 == suite summary ==
-overall.discrete_mismatch: 3990 / 11717761
-overall.strict_discrete_mismatch: 4653 / 11717761
+overall.discrete_mismatch: 3948 / 11717761
+overall.strict_discrete_mismatch: 4611 / 11717761
 overall.ignored_discrete_mismatch: 663
-overall.float_norm_mae_p95: 82.80613452
+overall.float_norm_mae_p95: 82.80613037

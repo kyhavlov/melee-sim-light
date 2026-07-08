@@ -92,3 +92,37 @@ shared-fix queue.
   one-step discrete 8221 / 11717761 (7.0e-4), float p95 84.44.
   Next: Phase 3 multi-jump (341-345 dominate every replay), then
   specials Pound -> Rest -> Rollout -> Sing per the plan order.
+- 2026-07-07 (later): **Multi-jump + Pound + Rest + Sing(attacker) live;
+  one-step 8221 -> 3948.** Commits: multi-jump ladder (8221->4884; fp->x2D0
+  block, chain window cmd0@28 on F1-F4, held-input chaining, ft_800CB6EC
+  turnaround with the entry-tick convention, ft_80084E1C scaled drift +
+  x258 threshold, MissFoot-family Coll classing); Pound (->4467; falcon
+  aerial-punch shape: cmd0 impulse@12 stick-angled, cmd1 ladder 0/1/2,
+  ground FA8 root-motion phys, phase flips — the swap wiring initially had
+  an operator-precedence bug, unit test caught it); Rest (->3990; L/R
+  facing variants, script-driven frame-0 invincibility verified by test);
+  Sing attacker-side (->3948; same shape, element-6 sleep hitbox rides
+  generic machinery).
+  REMAINING for falcon-level parity:
+  1. DamageSong victim family (actions 297/298/299 = DamageSong/Wait/Rv,
+     SM 206/207/208 FuraSleepStart/Loop/End): combat element-6 handler on
+     GROUNDED victims -> ftCo_800C318C entry; sleep duration formula
+     inlineA0 uses p_ftCommonData x624/x628/x62C/x630/x634/x638 (+x63C
+     decrement, x640 mash step, x644 arg1 mul) — needs common-param
+     extraction; mash decrement reuses the grab-mash lanes. Producer-
+     scoped placement in puff_specials.c is fine (Sing is the ONLY
+     DamageSong producer in melee).
+  2. Rollout (346-362; ftPr_SpecialN.c): the charge machine — largest
+     remaining chunk. Grounded suite coverage exists only in the
+     FoD-vs-Fox game (346/348/350/351); air rollout has NO eligible
+     replay coverage (unit tests must carry it).
+  3. Phase 5 burn-down via the taxonomy recipe (falcon round-1 script
+     shape: collect_mismatch_events buckets by field x seed/ref/out
+     action), then classify the tail. Float p95 is still ~82 — dominated
+     by rollout-family rows most likely; re-check after Rollout lands.
+  4. Then TWO MORE chars from ~/replays/top14 (user goal): easiest by
+     census + article-count are DK (10 games, article-free, cargo-carry
+     reuses the falcon capture substrate) and Doc (10 games, ftDrMario
+     reuses ftMario code; megavitamin article like laser substrate) —
+     Luigi/Pikachu/Yoshi/Peach/Samus/ICs are heavier. Recommend DK then
+     Doc; both dumps already extracted at ~/replays/top14.
