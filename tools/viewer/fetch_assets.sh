@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MANIFEST="$ROOT/tools/viewer/assets/character_zips.tsv"
 CACHE_DIR="${MSL_VIEWER_ASSET_CACHE:-$ROOT/build/cache/viewer-zips}"
+LOCAL_ZIPS_DIR="$ROOT/refs/slippilab/public/zips"
 
 if ! command -v curl >/dev/null 2>&1; then
   echo "error: curl is required to fetch viewer assets" >&2
@@ -32,6 +33,14 @@ while IFS=$'\t' read -r filename expected_sha url; do
   out="$CACHE_DIR/$filename"
   if valid_cached_asset "$out" "$expected_sha"; then
     echo "viewer asset cached: $filename"
+    continue
+  fi
+
+  local_src="$LOCAL_ZIPS_DIR/$filename"
+  if valid_cached_asset "$local_src" "$expected_sha"; then
+    echo "viewer asset from refs/slippilab checkout: $filename"
+    cp "$local_src" "$out.tmp.$$"
+    mv "$out.tmp.$$" "$out"
     continue
   fi
 

@@ -1305,7 +1305,9 @@ dispatch (no ground specials in the replay), stuck DS landings, dead
 B-reverse, and airdodge-through-stage kills. You MUST:
 
 1. **Webplay viewer** (`make viewer`): add the character —
-   `tools/viewer/assets/character_zips.tsv` (zip + sha + slippilab URL),
+   `tools/viewer/assets/character_zips.tsv` (zip + sha + slippilab URL; sha
+   must match `refs/slippilab/public/zips/<char>.zip` if that checkout is
+   present, since `fetch_assets.sh` prefers it over the network),
    `tools/viewer/live/schema.js`, `tools/viewer/live/build_wasm.sh`
    `viewer_chars`, and main.js character wiring. Keep
    `tests/test_live_viewer_schema.py::test_live_viewer_supported_characters_have_packaged_animation_zips`
