@@ -1,5 +1,7 @@
 export const CHAR_FOX = 1;
+export const CHAR_FALCON = 2;
 export const CHAR_SHEIK = 7;
+export const CHAR_PUFF = 15;
 export const CHAR_FALCO = 22;
 export const CHAR_MARTH = 18;
 export const CHAR_ZELDA = 19;
@@ -25,6 +27,8 @@ export const SUPPORTED_CHARACTERS = Object.freeze([
   Object.freeze({ id: CHAR_ZELDA, label: "Zelda" }),
   Object.freeze({ id: CHAR_FALCO, label: "Falco" }),
   Object.freeze({ id: CHAR_MARTH, label: "Marth" }),
+  Object.freeze({ id: CHAR_FALCON, label: "Captain Falcon" }),
+  Object.freeze({ id: CHAR_PUFF, label: "Jigglypuff" }),
 ]);
 
 export const MATCH_CONFIG_SIZE = 36;

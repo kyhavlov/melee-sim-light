@@ -167,7 +167,7 @@
       "refs/melee/src/melee/it/it_2725.c::it_80275DFC",
       "refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,jobj.c}"
     ],
-    "stage_dat": "_iso/GrSt.dat",
+    "stage_dat": "data/_iso/GrSt.dat",
     "state0_anim_joint_rel": 185076,
     "yakumono_param_rel": 173188
   },

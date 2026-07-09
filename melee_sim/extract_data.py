@@ -25,6 +25,8 @@ _CHAR_GLOBS = {
     "fox": "*PlFx*.dat",
     "falco": "*PlFc*.dat",
     "marth": "*PlMs*.dat",
+    "falcon": "*PlCa*.dat",
+    "puff": "*PlPr*.dat",
     "sheik": "*PlSk*.dat",
     "zelda": "*PlZd*.dat",
 }
@@ -90,7 +92,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out-dir", type=Path, default=Path(".msl"), help="generated data directory")
     ap.add_argument("--iso-dir", type=Path, default=None, help="directory for extracted source DAT files")
     ap.add_argument("--force", action="store_true", help="rewrite already-extracted source DAT files")
-    ap.add_argument("--chars", type=str, default="fox,falco,marth,sheik", help="comma-separated characters")
+    ap.add_argument(
+        "--chars", type=str, default="fox,falco,marth,sheik,falcon,puff", help="comma-separated characters"
+    )
     ap.add_argument(
         "--stages",
         type=str,

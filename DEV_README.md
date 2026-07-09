@@ -48,7 +48,7 @@ a CLI argument. Then extract:
 ```bash
 uv run python -m melee_sim.extract_data \
   --iso SSBM.iso --out-dir data --iso-dir _iso \
-  --chars fox,falco,marth,sheik,zelda
+  --chars fox,falco,marth,sheik,zelda,falcon,puff
 ```
 
 Notes on the flags — both matter:

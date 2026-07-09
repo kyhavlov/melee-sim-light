@@ -13,7 +13,7 @@
       "refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec",
       "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate"
     ],
-    "stage_dat": "_iso/GrOp.dat",
+    "stage_dat": "data/_iso/GrOp.dat",
     "yakumono_param_rel": 78600
   },
   "stage_id": 28,
