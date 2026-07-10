@@ -390,6 +390,31 @@ def _load_f32_character_attr_lut_cached(data_root_text: str, key: str) -> np.nda
 def _load_f32_character_attr_lut(data_root: Path, key: str) -> np.ndarray:
     return _load_f32_character_attr_lut_cached(_path_cache_key(data_root), str(key))
 
+
+@functools.lru_cache(maxsize=None)
+def _multijump_ladder_lut_cached(data_root_text: str) -> tuple[np.ndarray, np.ndarray]:
+    """Per-char (first_action, rung_count) for the ftPr_MS_JumpAerialF1..F5 ladder block.
+
+    Multi-jump chars (puff; kirby later) replace the common JumpAerialF/B pair with five
+    char-range rung actions starting at the shared char action base 341. Presence keys on the
+    extracted fp->x2D0 stats block (puff_mjump_turn_frames) like the runtime has_multijump gate.
+    refs/melee/src/melee/ft/chara/ftCommon/forward.h (ftCo_MS_Count == 341)
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D730C
+    """
+    data_root = Path(data_root_text)
+    first = np.zeros(256, dtype=np.uint16)
+    count = np.zeros(256, dtype=np.uint8)
+    for char_id, name in manifest_registry_chars(data_root):
+        attrs = _load_character_attrs(data_root, name)
+        if 'puff_mjump_turn_frames' in attrs:
+            first[np.uint8(char_id)] = np.uint16(341)
+            count[np.uint8(char_id)] = np.uint8(5)
+    return first, count
+
+
+def _multijump_ladder_lut(data_root: Path) -> tuple[np.ndarray, np.ndarray]:
+    return _multijump_ladder_lut_cached(_path_cache_key(data_root))
+
 def _derive_common_fall_blend_seed(*, char_id_u8: np.ndarray, action_id_u16: np.ndarray, speed_air_x_self_f32: np.ndarray, facing_dir_f32: np.ndarray, air_drift_max_by_char: np.ndarray, threshold: float, lerp: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Derive prefix-causal mv.co.{fall,fallaerial,fallspecial}.x4/smid seed lanes."""
     try:

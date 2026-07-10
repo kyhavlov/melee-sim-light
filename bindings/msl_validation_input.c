@@ -480,8 +480,9 @@ PyObject* msl_validation_derive_input_history_suffix_py(PyObject* self, PyObject
   int act_fall_aerial_b = 0, act_fall_special = 0, act_fall_special_f = 0, act_fall_special_b = 0;
   int act_damage_fall = 0, act_attack_air_n = 0, act_attack_air_f = 0, act_attack_air_b = 0;
   int act_attack_air_hi = 0, act_attack_air_lw = 0, act_escape_air = 0;
+  int act_multijump_first = 0, act_multijump_count = 0;
   if (!PyArg_ParseTuple(
-          args, "OiOOOOOOOOOOOOOOOdddididddiOdiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", &seed_obj,
+          args, "OiOOOOOOOOOOOOOOOdddididddiOdiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", &seed_obj,
           &slot, &buttons_obj, &raw_main_x_obj, &raw_main_y_obj, &stick_x_obj, &stick_y_obj,
           &cstick_y_obj, &trigger_obj, &pressed_obj, &action_obj, &frame_obj, &facing_obj,
           &hitlag_obj, &speed_y_obj, &ground_obj, &reset_obj, &tilt_x, &tilt_y, &fastfall_stick,
@@ -493,7 +494,8 @@ PyObject* msl_validation_derive_input_history_suffix_py(PyObject* self, PyObject
           &act_jump_air_b, &act_fall, &act_fall_f, &act_fall_b, &act_fall_aerial,
           &act_fall_aerial_f, &act_fall_aerial_b, &act_fall_special, &act_fall_special_f,
           &act_fall_special_b, &act_damage_fall, &act_attack_air_n, &act_attack_air_f,
-          &act_attack_air_b, &act_attack_air_hi, &act_attack_air_lw, &act_escape_air)) {
+          &act_attack_air_b, &act_attack_air_hi, &act_attack_air_lw, &act_escape_air,
+          &act_multijump_first, &act_multijump_count)) {
     return NULL;
   }
   PyArrayObject* seed_arr = vh_require(seed_obj, NPY_UINT8, 2, "seed_u8");
@@ -605,7 +607,15 @@ PyObject* msl_validation_derive_input_history_suffix_py(PyObject* self, PyObject
     const uint16_t a = action[i];
     const bool is_dash = (int)a == act_dash;
     const bool is_jump_ground = (int)a == act_jump_f || (int)a == act_jump_b;
-    const bool is_jump_air = (int)a == act_jump_air_f || (int)a == act_jump_air_b;
+    // Multi-jump chars replace JumpAerialF/B with the ftPr_MS_JumpAerialF1..F5 rung block; every
+    // rung entry is a fresh ftCo_800D74A4 jump (clears fall_fast), and the rung Phys
+    // (ft_80084E1C) runs ftCommon_CheckFallFast like the common JumpAerial Phys. Without this,
+    // a pre-ladder fastfall stays latched through the whole ladder and every later aerial.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D74A4
+    // refs/melee/src/melee/ft/ft_084E.c::ft_80084E1C
+    const bool is_jump_air = (int)a == act_jump_air_f || (int)a == act_jump_air_b ||
+                             (act_multijump_count > 0 && (int)a >= act_multijump_first &&
+                              (int)a < act_multijump_first + act_multijump_count);
     const bool is_jump = is_jump_ground || is_jump_air;
     const uint16_t prev_a = i > 0 ? action[i - 1] : action[i];
     const bool pre_input_jump_entry = is_jump_ground && a != prev_a;

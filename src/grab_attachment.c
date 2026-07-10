@@ -503,26 +503,29 @@ static inline uint8_t thrown_static_x1a70_offsets(float* out_y, float* out_z, co
   if (out_y == NULL || out_z == NULL || batch == NULL) {
     return 0u;
   }
-  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[vidx]);
-  if (ch == NULL) {
-    return 0u;
-  }
-  float attach_local[3] = {0.0f, 0.0f, 0.0f};
-  if (anim_pose_get_local_translation(batch->state.char_id[vidx], (uint16_t)MSL_SM_WAIT1_0, 0u,
-                                      ch->grab_capture_anchor_part_id, attach_local) != 0) {
-    return 0u;
-  }
-  // Fighter_UnkUpdateVecFromBones_8006876C stores fp->x1A70 from the fighter's base TransN/XRotN
-  // offset. For Fox/Falco, the ISO part table exposes the same local rest offset at the mapped
-  // FtPart_TransN2 / grab attachment part. Use the local SRT lane, not the parent-composed matrix
-  // translation; Dolphin probes on Fox/Fox ThrowLw show x1A70.y is the raw -8.300001 local offset,
-  // not the baked XRotN world height or a model-scaled value.
+  // Fighter_UnkUpdateVecFromBones_8006876C stores fp->x1A70 as the world delta between TransN
+  // (part 1) and XRotN (part 2), sampled with lb_8000B1CC at the create pose. The Wait frame-0
+  // composed translations reproduce it exactly (fox: -8.300001, matching the Dolphin ThrowLw
+  // probe). The older shortcut read the mapped grab-anchor part's raw local SRT lane instead,
+  // which coincides on the spacie skeletons but is a different basis on Puff's (no ThrowN part;
+  // the TransN2 substitute at parts idx 48 hangs under part 3), placing thrown Puff ~10 units
+  // too high. Use the same TransN - XRotN quantity as the thrown-entry static path.
   // refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C
-  // refs/melee/src/melee/ft/ftparts.c::ftParts_GetBoneIndex
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
-  // data/characters/{fox,falco}.json `grab_capture_anchor_part_id`
-  *out_y = attach_local[1];
-  *out_z = attach_local[2];
+  float transn_x = 0.0f, transn_y = 0.0f, transn_z = 0.0f;
+  float xrotn_x = 0.0f, xrotn_y = 0.0f, xrotn_z = 0.0f;
+  if (pose_part_local_translation(&transn_x, &transn_y, &transn_z, batch->state.char_id[vidx],
+                                  (uint32_t)MSL_SM_WAIT1_0, 0.0f,
+                                  (uint16_t)MSL_FTPART_TRANSN) != 0 ||
+      pose_part_local_translation(&xrotn_x, &xrotn_y, &xrotn_z, batch->state.char_id[vidx],
+                                  (uint32_t)MSL_SM_WAIT1_0, 0.0f,
+                                  (uint16_t)MSL_FTPART_XROTN) != 0) {
+    return 0u;
+  }
+  (void)transn_x;
+  (void)xrotn_x;
+  *out_y = transn_y - xrotn_y;
+  *out_z = transn_z - xrotn_z;
   return 1u;
 }
 

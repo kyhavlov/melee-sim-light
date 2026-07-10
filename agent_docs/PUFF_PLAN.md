@@ -400,3 +400,35 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   105 (+2 streak breaks, one replay's best streak lengthened — downstream
   divergence wash of the source-verified ECB clamp, kept per the
   source-clear retention policy).
+- 2026-07-10: **Float-p95 triage + two owners: puff one-step 2365 -> 2324;
+  clean-row float error roughly halved.** Round-2 tooling: per-field
+  normalized-contribution split + clean-vs-discrete row split + per-action
+  float buckets (scratch under reports/triage/). VERDICT on the long-standing
+  "float p95 ~88" mystery: it is a METRIC ARTIFACT — the per-field normalizer
+  is ref-p95 clamped to 1e-6, and in Puff games speed_ground_x_self /
+  speed_*_attack are ~all-zero at ref-p95, so a few units of absolute error
+  (mostly ON discrete-mismatch rows) divide by 1e-6. Track absolute per-field
+  sums for puff instead. Two real clean-row owners fixed:
+  1. Thrown-victim x1A70 (~780 err, the largest float owner; ThrownLw victim
+     placed ~10 units high under falcon/sheik dthrow):
+     Fighter_UnkUpdateVecFromBones_8006876C's x1A70 is the WORLD delta
+     TransN(part 1) - XRotN(part 2) at the create pose; the older shortcut
+     read the mapped grab-anchor part's local SRT lane, which coincides on
+     spacie skeletons (-8.3 == the Dolphin probe) but is a different basis on
+     Puff (anchor part 48 hangs under part 3). thrown_static_x1a70_offsets now
+     computes the same TransN-XRotN quantity as the thrown-entry static path.
+     fox/falco -8.3 identical by construction.
+  2. fall_fast seed-lane latch (~150 rows: fastfall pinning vy to -1.6 on
+     RISING aerials): the input-history suffix derivation's jump-entry set
+     lacked the multijump rungs (341-345), so a pre-ladder fastfall stayed
+     latched through the whole ladder. ftCo_800D74A4 rung entries are fresh
+     jumps (clear fall_fast) and ft_80084E1C runs CheckFallFast; the native
+     derivation now takes an (act_multijump_first, count) range from a new
+     per-char ladder LUT (keys on puff_mjump_turn_frames like has_multijump).
+  Also: reports/validation/puff_rollout.txt added to the standing reports
+  (free-running first-mismatch 501 over 12 replays; falcon-suite ballpark).
+  REMAINING float buckets, all classified: Whispy wind-phase 0.2 rows in the
+  DL game (~250 rows; shared dream_whispy stage lane, NOT puff-owned),
+  DeadUpFallHitCamera drift (120 rows, cosmetic dead-state), CatchDash
+  constant 1.016 (78 rows, dash-grab momentum), fox-laser +3% percent rows on
+  KneeBend/Escape (missed weak-hit family), marth SpecialAirHi (marth lane).

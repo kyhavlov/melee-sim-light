@@ -61,6 +61,7 @@ from tools.slippi.validation_buffer_common import (  # noqa: F401
     _manifest_preprocess_tables,
     _load_u8_character_attr_lut_cached,
     _load_u8_character_attr_lut,
+    _multijump_ladder_lut,
     _load_f32_character_attr_lut_cached,
     _load_f32_character_attr_lut,
     _derive_common_fall_blend_seed,
@@ -493,6 +494,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     button_mask_dpad_up = 8
     button_mask_dpad_down = 4
     turn_frames_lut = _load_u8_character_attr_lut(data_root, 'turn_frames')
+    multijump_first_lut, multijump_count_lut = _multijump_ladder_lut(data_root)
     reflector_release_lag_lut = np.zeros(256, dtype=np.uint8)
     reflector_release_lag_lut[np.uint8(1)] = np.uint8(_load_character_attrs(data_root, 'fox')['reflector_release_lag_frames'])
     reflector_release_lag_lut[np.uint8(22)] = np.uint8(_load_character_attrs(data_root, 'falco')['reflector_release_lag_frames'])
@@ -737,7 +739,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         damage_tilt_timer_reset_post = damage_sdi_reset_post | damage_entry_reset_post
         import msl_binding
         turn_frames = turn_frames_lut[post_char]
-        tilt_timer_y_pre, tilt_timer_y_post, fall_fast_post, turn_has_turned = msl_binding.validation_derive_input_history_suffix(samples.seed_u8(), int(slot), pre_buttons_physical, pre_main_x, pre_main_y, stick_x, stick_y, cstick_y, trigger_unit, buttons_pressed, post_state, post_state_age, post_dir, post_hitlag, speed_y_self, post_on_ground, damage_tilt_timer_reset_post, float(lstick_tilt_x_thresh), float(lstick_tilt_y_thresh), float(fastfall_stick_threshold), int(fastfall_tilt_max_frames), float(tap_jump_threshold), int(tap_jump_tilt_max_frames), float(dash_run_jump_stick_y_threshold), float(tap_jump_release_threshold), float(dash_flick_abs), int(dash_flick_tilt_max_frames), turn_frames, float(common['powershield_reflect_trigger_min']), int(button_mask_a), int(button_mask_b), int(button_mask_xy), int(button_mask_dpad_up), int(button_mask_dpad_down), int(button_mask_lr), int(button_mask_z), int(act_guard_reflect), int(act_kneebend), int(act_dash), int(act_run), int(act_run_direct), int(act_run_brake), int(act_turn_run), int(act_turn), int(act_jump_f), int(act_jump_b), int(act_jump_aerial_f), int(act_jump_aerial_b), int(act_fall), int(act_fall_f), int(act_fall_b), int(act_fall_aerial), int(act_fall_aerial_f), int(act_fall_aerial_b), int(act_fall_special), int(act_fall_special_f), int(act_fall_special_b), int(act_damage_fall), int(act_attack_air_n), int(act_attack_air_f), int(act_attack_air_b), int(act_attack_air_hi), int(act_attack_air_lw), int(act_escape_air))
+        tilt_timer_y_pre, tilt_timer_y_post, fall_fast_post, turn_has_turned = msl_binding.validation_derive_input_history_suffix(samples.seed_u8(), int(slot), pre_buttons_physical, pre_main_x, pre_main_y, stick_x, stick_y, cstick_y, trigger_unit, buttons_pressed, post_state, post_state_age, post_dir, post_hitlag, speed_y_self, post_on_ground, damage_tilt_timer_reset_post, float(lstick_tilt_x_thresh), float(lstick_tilt_y_thresh), float(fastfall_stick_threshold), int(fastfall_tilt_max_frames), float(tap_jump_threshold), int(tap_jump_tilt_max_frames), float(dash_run_jump_stick_y_threshold), float(tap_jump_release_threshold), float(dash_flick_abs), int(dash_flick_tilt_max_frames), turn_frames, float(common['powershield_reflect_trigger_min']), int(button_mask_a), int(button_mask_b), int(button_mask_xy), int(button_mask_dpad_up), int(button_mask_dpad_down), int(button_mask_lr), int(button_mask_z), int(act_guard_reflect), int(act_kneebend), int(act_dash), int(act_run), int(act_run_direct), int(act_run_brake), int(act_turn_run), int(act_turn), int(act_jump_f), int(act_jump_b), int(act_jump_aerial_f), int(act_jump_aerial_b), int(act_fall), int(act_fall_f), int(act_fall_b), int(act_fall_aerial), int(act_fall_aerial_f), int(act_fall_aerial_b), int(act_fall_special), int(act_fall_special_f), int(act_fall_special_b), int(act_damage_fall), int(act_attack_air_n), int(act_attack_air_f), int(act_attack_air_b), int(act_attack_air_hi), int(act_attack_air_lw), int(act_escape_air), int(multijump_first_lut[post_char[0]]), int(multijump_count_lut[post_char[0]]))
         post_turn_has_turned_u8[:, slot] = turn_has_turned
         run_x0 = derive_run_x0(action_id=post_state, hitlag_u16=post_hitlag, run_x0_init_x430=float(common['run_x0_init_x430']), act_run=act_run, act_run_direct=act_run_direct, act_turn_run=act_turn_run)
         samples['seed_t']['run_x0'][:, slot] = run_x0[:-1]
