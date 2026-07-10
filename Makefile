@@ -57,6 +57,14 @@ PY_EXT_SUFFIX := $(shell $(PY) -c 'import sysconfig; print(sysconfig.get_config_
 PY_SOABI := $(shell $(PY) -c 'import sysconfig; print(sysconfig.get_config_var("SOABI") or "python")')
 PY_INCLUDE_FLAGS := $(shell $(PY) -c 'import sysconfig, numpy; paths=[numpy.get_include(), sysconfig.get_path("include"), sysconfig.get_path("platinclude")]; print(" ".join("-I"+p for p in dict.fromkeys(paths) if p))')
 PY_LINK_FLAGS := $(shell $(PY) -c 'import sysconfig; vals=[sysconfig.get_config_var(k) or "" for k in ("LDFLAGS","LIBS","SYSLIBS")]; print(" ".join(v for v in vals if v))')
+# macOS extension modules must leave Python symbols unresolved until load time
+# (CPython's own LDSHARED is `-bundle -undefined dynamic_lookup`); plain -shared
+# fails at link with missing _Py* symbols there.
+ifeq ($(shell uname -s),Darwin)
+NATIVE_SO_LINK_MODE := -bundle -undefined dynamic_lookup
+else
+NATIVE_SO_LINK_MODE := -shared
+endif
 NATIVE_SO := melee_sim/_native$(PY_EXT_SUFFIX)
 NATIVE_BUILD_DIR := build/native/$(PY_SOABI)
 NATIVE_OBJ_DIR := $(NATIVE_BUILD_DIR)/opt$(strip $(NATIVE_OPT))-lto$(strip $(LTO))
@@ -131,7 +139,7 @@ $(NATIVE_OBJ_DIR)/%.o: %.c Makefile $(NATIVE_CONFIG_STAMP) $(NATIVE_OBJECT_DEPS)
 
 $(NATIVE_SO): $(NATIVE_OBJS) $(NATIVE_SOURCE_LIST_DEPS) $(NATIVE_CONFIG_STAMP)
 	@mkdir -p "$(@D)"
-	$(BUILD_QUIET)$(CC) -shared $(if $(filter 1,$(strip $(LTO))),-flto,) $(filter %.o,$^) $(PY_LINK_FLAGS) -lm -o "$@"
+	$(BUILD_QUIET)$(CC) $(NATIVE_SO_LINK_MODE) $(if $(filter 1,$(strip $(LTO))),-flto,) $(filter %.o,$^) $(PY_LINK_FLAGS) -lm -o "$@"
 
 $(BUILD_STAMP): $(NATIVE_SO) $(BUILD_STAMP_DEPS)
 	@mkdir -p "$(@D)"
