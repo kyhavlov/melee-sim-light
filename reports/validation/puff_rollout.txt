@@ -45,8 +45,8 @@ rollout.first_mismatch_seeded_total: 6
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=2.97871 rec=2095 p=1 seed/ref/out=45.0923/51.0971/54.0758 actions=29/29/29 category=unclassified
-  2. pos_y max_err=2.28882e-05 rec=551 p=1 seed/ref/out=69.0005/71.2841/71.2841 actions=87/87/87 category=unclassified
-  3. speed_ground_x_self max_err=3.12924e-06 rec=1675 p=0 seed/ref/out=-0.519814/-0.42778/-0.427777 actions=201/201/201 category=unclassified
+  2. pos_y max_err=9.91821e-05 rec=692 p=1 seed/ref/out=51.54/51.156/51.1561 actions=29/29/29 category=unclassified
+  3. speed_y_self max_err=7.62939e-06 rec=686 p=1 seed/ref/out=-1.09667/-1.09667/-1.09666 actions=12/12/12 category=unclassified
 rollout.float_top_downstream:
   1. speed_x_attack max_err=3.76442 rec=2126 p=1 seed/ref/out=3.81542/3.76442/0 actions=29/29/2 category=downstream_discrete_mismatch
   2. speed_air_x_self max_err=1.35 rec=2126 p=1 seed/ref/out=-1.35/-1.35/0 actions=29/29/2 category=downstream_discrete_mismatch
@@ -65,11 +65,11 @@ rollout.first_mismatch_total: 22
 rollout.first_mismatch_seeded_total: 13
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_y max_err=76.5999 rec=3217 p=1 seed/ref/out=200.044/200.044/123.444 actions=7/7/7 category=unclassified
+  1. pos_y max_err=51.0999 rec=3202 p=1 seed/ref/out=200.044/200.044/148.944 actions=7/7/7 category=unclassified
   2. pos_x max_err=4.83285 rec=4882 p=1 seed/ref/out=-71.349/-71.6561/-66.8232 actions=364/364/364 category=unclassified
   3. percent max_err=3.5 rec=2549 p=0 seed/ref/out=99.28/99.28/95.78 actions=88/88/88 category=unclassified
 rollout.float_top_downstream:
-  1. pos_y max_err=78.2999 rec=3218 p=1 seed/ref/out=200.044/200.044/121.744 actions=7/7/7 category=downstream_discrete_mismatch
+  1. pos_y max_err=51.0999 rec=3218 p=1 seed/ref/out=200.044/200.044/148.944 actions=7/7/7 category=downstream_discrete_mismatch
   2. percent max_err=11.83 rec=3605 p=1 seed/ref/out=20.01/31.84/20.01 actions=86/90/86 category=downstream_discrete_mismatch
   3. pos_x max_err=6.61678 rec=4063 p=1 seed/ref/out=-80.9606/-74.2891/-80.9059 actions=29/252/29 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:45
@@ -87,7 +87,7 @@ rollout.first_mismatch_total: 28
 rollout.first_mismatch_seeded_total: 19
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_y max_err=110.6 rec=3629 p=1 seed/ref/out=202.787/202.787/92.1875 actions=7/7/7 category=unclassified
+  1. pos_y max_err=51.0999 rec=3594 p=1 seed/ref/out=202.787/202.787/151.687 actions=7/7/7 category=unclassified
   2. pos_x max_err=28.1244 rec=5266 p=1 seed/ref/out=-84.4574/-83.7372/-111.862 actions=247/247/247 category=unclassified
   3. percent max_err=1.82 rec=6088 p=1 seed/ref/out=91.6/95.24/93.42 actions=90/90/90 category=unclassified
 rollout.float_top_downstream:
@@ -99,12 +99,12 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:649
 == replays/validation/puff/Game_20260325T101917.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1766
-rollout.streak_count: 55
+rollout.streak_count: 54
 rollout.streak_len.median: 145
 rollout.streak_len.p90: 971
 rollout.streak_len.p95: 1040
 rollout.streak_len.max: 1766
-rollout.first_mismatch_total: 54
+rollout.first_mismatch_total: 53
 rollout.first_mismatch_seeded_total: 33
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -173,8 +173,8 @@ rollout.first_mismatch_total: 42
 rollout.first_mismatch_seeded_total: 34
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_y max_err=110.6 rec=5909 p=1 seed/ref/out=183.35/183.35/72.7499 actions=7/7/7 category=unclassified
-  2. pos_x max_err=56.5026 rec=2202 p=0 seed/ref/out=-61.011/-60.0234/-116.526 actions=29/29/29 category=unclassified
+  1. pos_x max_err=56.5026 rec=2202 p=0 seed/ref/out=-61.011/-60.0234/-116.526 actions=29/29/29 category=unclassified
+  2. pos_y max_err=51.0999 rec=5874 p=1 seed/ref/out=183.35/183.35/132.25 actions=7/7/7 category=unclassified
   3. shield_hp max_err=4.2 rec=8930 p=1 seed/ref/out=59.44/52.86/48.66 actions=178/181/181 category=unclassified
 rollout.float_top_downstream:
   1. pos_x max_err=56.7537 rec=2203 p=0 seed/ref/out=-60.0234/-59.0435/-115.797 actions=29/42/29 category=downstream_discrete_mismatch
@@ -270,21 +270,21 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:130
 
 == suite summary ==
-overall.rollout.streak_count: 363
+overall.rollout.streak_count: 362
 overall.rollout.streak_len.median: 161
 overall.rollout.streak_len.p90: 700
 overall.rollout.streak_len.p95: 1036
 overall.rollout.streak_len.max: 2134
 overall.rollout.best_len.max: 2134
-overall.rollout.first_mismatch_total: 375
+overall.rollout.first_mismatch_total: 374
 overall.rollout.first_mismatch_seeded_total: 254
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
-  1. pos_y max_err=110.6 rec=3629 p=1 seed/ref/out=202.787/202.787/92.1875 actions=7/7/7 category=unclassified
-  2. pos_x max_err=77.0672 rec=6212 p=0 seed/ref/out=-114.964/-114.064/-191.131 actions=29/0/0 category=unclassified
+  1. pos_x max_err=77.0672 rec=6212 p=0 seed/ref/out=-114.964/-114.064/-191.131 actions=29/0/0 category=unclassified
+  2. pos_y max_err=51.0999 rec=3202 p=1 seed/ref/out=200.044/200.044/148.944 actions=7/7/7 category=unclassified
   3. speed_air_x_self max_err=7.1225 rec=2430 p=0 seed/ref/out=4.07/-3.0525/4.07 actions=358/358/358 category=unclassified
 overall.rollout.float_top_downstream:
-  1. pos_y max_err=78.2999 rec=3218 p=1 seed/ref/out=200.044/200.044/121.744 actions=7/7/7 category=downstream_discrete_mismatch
+  1. pos_y max_err=62.0043 rec=9211 p=0 seed/ref/out=-62.0042/-62.0042/9.91821e-05 actions=88/88/203 category=downstream_discrete_mismatch
   2. pos_x max_err=56.7537 rec=2203 p=0 seed/ref/out=-60.0234/-59.0435/-115.797 actions=29/42/29 category=downstream_discrete_mismatch
   3. percent max_err=28 rec=8448 p=0 seed/ref/out=52/80/52 actions=212/88/212 category=downstream_discrete_mismatch
 overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:6931

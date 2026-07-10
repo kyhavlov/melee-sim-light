@@ -933,7 +933,7 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       const float descent_prev_y = coll_prev_y;
       const float descent_cur_y = coll_cur_y;
       // Decomp: fp->x34_scale.y is initialized from Player_GetModelScale (per-character default
-      // scale in most cases). Older datasets may still seed fighter_scale_y as 1.0 for all
+      // scale in most cases). Older seed corpora may still seed fighter_scale_y as 1.0 for all
       // fighters; prefer the ISO-extracted per-character default in that case.
       // refs/melee/src/melee/ft/fighter.c (Player_GetModelScale init path)
       // src/api.h::MslSeed (fighter_scale_y note)

@@ -874,28 +874,88 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   }
 #undef MSL_GET_SHEIK_F32
 #undef MSL_GET_SHEIK_I32
-  // Zelda ftZelda_DatAttrs Down-B transform attrs. These are required only for Zelda: this pass
-  // supports Zelda through generic data plus ftZd_SpecialLw replay swaps, while unrelated
-  // characters keep zero defaults.
+  // Zelda ftZelda_DatAttrs special attrs. These are required only for Zelda; unrelated characters
+  // keep zero defaults.
   // refs/melee/src/melee/ft/chara/ftZelda/types.h::ftZelda_DatAttrs
-  // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{
-  //   ftZelda_SpecialLw_StartAction_Helper,ftZd_SpecialAirLw_Phys,ftZd_SpecialLw_8013B4D8}
+  // refs/melee/src/melee/ft/chara/ftZelda/ftZd_Special{N,S,Hi,Lw}.c
   const uint8_t require_zelda_special_attrs = (uint8_t)(char_id == (uint8_t)MSL_CHAR_ID_ZELDA);
 #define MSL_GET_ZELDA_F32(key, field)                                 \
   (require_zelda_special_attrs ? json_get_f32(buf, (key), &out.field) \
                                : json_get_f32_or_default(buf, (key), 0.0f, &out.field))
+#define MSL_GET_ZELDA_I32(key, field)                                 \
+  (require_zelda_special_attrs ? json_get_i32(buf, (key), &out.field) \
+                               : json_get_i32_or_default(buf, (key), 0, &out.field))
+#define MSL_GET_ZELDA_U16(key, field)                                 \
+  (require_zelda_special_attrs ? json_get_u16(buf, (key), &out.field) \
+                               : json_get_u16_or_default(buf, (key), 0, &out.field))
+  float zelda_refl_off[3] = {0.0f, 0.0f, 0.0f};
   if (MSL_GET_ZELDA_F32("zelda_transform_vel_x_divisor", zelda_transform_vel_x_divisor) != 0 ||
       MSL_GET_ZELDA_F32("zelda_transform_vel_y_divisor", zelda_transform_vel_y_divisor) != 0 ||
       MSL_GET_ZELDA_F32("zelda_transform_air_gravity", zelda_transform_air_gravity) != 0 ||
       MSL_GET_ZELDA_F32("zelda_transform_air_terminal_vel", zelda_transform_air_terminal_vel) !=
           0 ||
       MSL_GET_ZELDA_F32("zelda_transform_finish_start_frame", zelda_transform_finish_start_frame) !=
-          0) {
+          0 ||
+      MSL_GET_ZELDA_I32("zelda_nayru_air_gravity_delay_frames",
+                        zelda_nayru_air_gravity_delay_frames) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_nayru_air_vel_x_divisor", zelda_nayru_air_vel_x_divisor) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_nayru_air_gravity", zelda_nayru_air_gravity) != 0 ||
+      MSL_GET_ZELDA_I32("zelda_din_release_min_frames", zelda_din_release_min_frames) != 0 ||
+      MSL_GET_ZELDA_I32("zelda_din_end_min_frames", zelda_din_end_min_frames) != 0 ||
+      MSL_GET_ZELDA_I32("zelda_din_air_gravity_delay_frames", zelda_din_air_gravity_delay_frames) !=
+          0 ||
+      MSL_GET_ZELDA_I32("zelda_din_release_hold_min_frames", zelda_din_release_hold_min_frames) !=
+          0 ||
+      MSL_GET_ZELDA_F32("zelda_din_spawn_offset_x", zelda_din_spawn_offset_x) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_din_spawn_offset_y", zelda_din_spawn_offset_y) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_din_air_gravity", zelda_din_air_gravity) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_din_air_end_fallspecial_lag_frames",
+                        zelda_din_air_end_fallspecial_lag_frames) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_air_entry_vel_x_divisor",
+                        zelda_farore_air_entry_vel_x_divisor) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_air_entry_vel_y_divisor",
+                        zelda_farore_air_entry_vel_y_divisor) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_start_air_gravity", zelda_farore_start_air_gravity) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_start_air_terminal_vel",
+                        zelda_farore_start_air_terminal_vel) != 0 ||
+      MSL_GET_ZELDA_I32("zelda_farore_travel_frames", zelda_farore_travel_frames) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_ground_contact_min_frames",
+                        zelda_farore_ground_contact_min_frames) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_stick_mag_min", zelda_farore_stick_mag_min) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_travel_speed_stick_mul",
+                        zelda_farore_travel_speed_stick_mul) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_travel_speed_base", zelda_farore_travel_speed_base) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_air_end_drift_mul", zelda_farore_air_end_drift_mul) != 0 ||
+      MSL_GET_ZELDA_I32("zelda_farore_wall_bounce_degrees", zelda_farore_wall_bounce_degrees) !=
+          0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_end_vel_mul", zelda_farore_end_vel_mul) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_fallspecial_mobility_mul",
+                        zelda_farore_fallspecial_mobility_mul) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_farore_landing_lag_frames", zelda_farore_landing_lag_frames) != 0 ||
+      MSL_GET_ZELDA_U16("zelda_nayru_reflector_bone_id", zelda_nayru_reflector_bone_part_id) != 0 ||
+      MSL_GET_ZELDA_I32("zelda_nayru_reflector_max_damage", zelda_nayru_reflector_max_damage) !=
+          0 ||
+      (require_zelda_special_attrs
+           ? json_get_f32_array3(buf, "zelda_nayru_reflector_offset", zelda_refl_off)
+           : 0) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_nayru_reflector_size", zelda_nayru_reflector_size) != 0 ||
+      MSL_GET_ZELDA_F32("zelda_nayru_reflector_damage_mul", zelda_nayru_reflector_damage_mul) !=
+          0 ||
+      MSL_GET_ZELDA_F32("zelda_nayru_reflector_speed_mul", zelda_nayru_reflector_speed_mul) != 0 ||
+      (require_zelda_special_attrs
+           ? json_get_u8(buf, "zelda_nayru_reflector_behavior", &out.zelda_nayru_reflector_behavior)
+           : json_get_u8_or_default(buf, "zelda_nayru_reflector_behavior", 0,
+                                    &out.zelda_nayru_reflector_behavior)) != 0) {
     fprintf(stderr, "msl: char params Zelda special attr parse failed in %s\n", path);
     alloc_free(buf);
     return -1;
   }
+  out.zelda_nayru_reflector_offset_x = zelda_refl_off[0];
+  out.zelda_nayru_reflector_offset_y = zelda_refl_off[1];
+  out.zelda_nayru_reflector_offset_z = zelda_refl_off[2];
 #undef MSL_GET_ZELDA_F32
+#undef MSL_GET_ZELDA_I32
+#undef MSL_GET_ZELDA_U16
   // Captain Falcon ftCaptain_DatAttrs special attrs. Runtime-required for Falcon (the
   // Special{N,S,Hi,Lw} state machines consume them directly); zero defaults for the other
   // ext-attr layouts. The unk0/unk1/ext_x68/specials_unk* fields stay extraction-only until a

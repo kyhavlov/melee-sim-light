@@ -7,6 +7,8 @@ import numpy as np
 import pytest
 
 from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.replay_buffers_loader import load_replay_buffers, replay_buffer_byte_views
+from tools.slippi.suite_io import repo_root
 
 # src/hitboxes_tables.h (MSLHITB1 u16_6 bits)
 HIT_GROUNDED = 1 << 9
@@ -34,7 +36,9 @@ ACT_GUARD_ON = 0x00B2
 ACT_GUARD_SET_OFF = 0x00B5
 ACT_DAMAGE_N1 = 0x004E
 ACT_ATTACK_AIR_B = 0x0043
+ACT_DAMAGE_FLY_HI = 0x0057
 ACT_DAMAGE_FLY_TOP = 0x005A
+ACT_DAMAGE_FLY_ROLL = 0x005B
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -353,6 +357,65 @@ def test_combat_resolve_body_overlap_applies_percent_knockback_hitstun_and_enter
     finally:
         msl_binding.destroy(handle)
         del handle
+
+
+@pytest.mark.parametrize(
+    "damagefly_action",
+    [ACT_DAMAGE_FLY_HI, ACT_DAMAGE_FLY_TOP, ACT_DAMAGE_FLY_ROLL],
+)
+def test_combat_resolve_tiny_phantom_overlap_applies_in_damagefly_without_full_damage(
+    damagefly_action: int,
+) -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    def run_case(*, hurt_x: float) -> np.ndarray:
+        handle = msl_binding.init(batch_size=1, num_players=2)
+        try:
+            seed = _seed_base()
+            seed["on_ground"][0, :2] = np.uint8(0)
+            seed["action_id"][0, 1] = np.uint16(damagefly_action)
+            seed["hitstun"][0, 1] = np.uint16(10)
+            seed["percent"][0, 1] = np.float32(20.0)
+            seed["last_hit_by"][0, 1] = np.uint8(6)
+            seed["instance_hit_by"][0, 1] = np.uint16(0)
+            seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+            msl_binding.reseed_seed(handle, seed_bytes)
+
+            msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+            msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 1.0, 15.0, 1)
+            msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_AERIAL))
+            msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
+            msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+            msl_binding.debug_set_hurtcap_world(
+                handle, 0, 1, 0, hurt_x, 0.0, 0.0, hurt_x, 0.0, 0.0, 0.5
+            )
+            overlap = msl_binding.debug_body_matrix_overlap(handle, 0, 0, 0, 1, 0)
+            msl_binding.debug_combat_resolve(handle)
+            out = _read_compare(handle).copy()
+            return np.array((overlap,), dtype=np.float32), out
+        finally:
+            msl_binding.destroy(handle)
+
+    tiny_overlap, tiny = run_case(hurt_x=2.95)
+    assert 0.0 < float(tiny_overlap[0]) < _common_attr("phantom_overlap_max_x7a8")
+    assert float(tiny["percent"][1]) == pytest.approx(20.0)
+    assert int(tiny["action_id"][1]) == damagefly_action
+    assert int(tiny["hitstun"][1]) == 10
+    assert int(tiny["hitlag"][0]) == 0
+    assert int(tiny["hitlag"][1]) > 0
+    assert int(tiny["instance_hit_by"][1]) == 111
+
+    full_overlap, full = run_case(hurt_x=2.5)
+    assert float(full_overlap[0]) > _common_attr("phantom_overlap_max_x7a8")
+    assert float(full["percent"][1]) == pytest.approx(35.0)
+    assert int(full["hitlag"][0]) > 0
+    assert int(full["hitlag"][1]) > 0
 
 
 def test_combat_resolve_damage_calcvel_merges_after_x18ac_window() -> None:
@@ -1600,6 +1663,81 @@ def test_attackairb_live_hitcapsule_carry_suppresses_full_body_from_hitlist() ->
     early_callback = run_case(carry_hitlist=True, action_frame=9)
     assert int(early_callback["hitlag"][0]) > 0
     assert int(early_callback["hitlag"][1]) > 0
+
+
+@pytest.mark.integration
+def test_same_source_dense_hitlist_fills_per_hitbox_seed_gap_without_stale_suppressing() -> None:
+    # Game_20260625T033446 rec 5545 has p2's active group-0 HitCapsules carrying exact per-hitbox
+    # victims_1 for p3 and a dense same-group victim entry for p0. Source BODY writeback registers
+    # accepted victims across all active same-group HitCapsules through inlineB0/ftColl_80076808, so
+    # the dense p0 lane suppresses a repeated hit when ProcessHit attribution still names p2.
+    # Clearing the attribution or staling the dense iid is the negative: a dense group entry alone
+    # must not become a free rehit suppressor.
+    #
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,inlineB0,ftColl_80076808}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    import msl_binding
+
+    path = repo_root() / "replays/validation/doubles_recent/Game_20260625T033446.slpz"
+    ds = load_replay_buffers(
+        str(path),
+        ports=[1, 2, 3, 4],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    views = replay_buffer_byte_views(ds)
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    record = 5545
+    victim = 0
+
+    def run(seed: np.ndarray) -> np.ndarray:
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+        handle = msl_binding.init(
+            batch_size=1, num_players=4, ucf_enabled=1, ucf_cardinals_1_0_enabled=1
+        )
+        try:
+            msl_binding.reseed_seed_rollout(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+            msl_binding.step_input(
+                handle,
+                views.prev_input_t[record : record + 1, : int(sizes["input"])].copy(),
+                views.input_t[record : record + 1, : int(sizes["input"])].copy(),
+            )
+            msl_binding.write_compare(handle, out)
+            return out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        finally:
+            msl_binding.destroy(handle)
+
+    seed = np.array(ds.rows[record]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
+    assert int(seed["action_id"][0, victim]) == ACT_DAMAGE_FLY_HI
+    assert int(seed["hitlag"][0, victim]) == 1
+    assert int(seed["combat_hitlist_hb_valid"][0, 2, 0]) == 1
+    assert int(seed["combat_hitlist_hb_cd"][0, 2, 0, victim]) == 0
+    assert int(seed["combat_hitlist_cd"][0, 2, 0, victim]) == HITLIST_CD_INDEFINITE
+    assert int(seed["combat_hitlist_victim_iid"][0, 2, 0, victim]) == int(
+        seed["instance_id"][0, victim]
+    )
+
+    source_owned = run(seed.copy())
+    ref = ds.rows[record]["ref_t1"]
+    assert int(source_owned["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_DAMAGE_FLY_HI
+    assert int(source_owned["hitlag"][victim]) == int(ref["hitlag"][victim]) == 0
+    assert int(source_owned["hitstun"][victim]) == int(ref["hitstun"][victim]) == 54
+    assert float(source_owned["percent"][victim]) == pytest.approx(float(ref["percent"][victim]))
+
+    no_source = seed.copy()
+    no_source["last_hit_by"][0, victim] = np.uint8(6)
+    no_source["instance_hit_by"][0, victim] = np.uint16(0)
+    rehit_without_source = run(no_source)
+    assert int(rehit_without_source["action_id"][victim]) != ACT_DAMAGE_FLY_HI
+    assert float(rehit_without_source["percent"][victim]) > float(ref["percent"][victim])
+
+    stale_dense = seed.copy()
+    stale_dense["combat_hitlist_victim_iid"][0, 2, 0, victim] = np.uint16(123)
+    rehit_stale_iid = run(stale_dense)
+    assert int(rehit_stale_iid["action_id"][victim]) != ACT_DAMAGE_FLY_HI
+    assert float(rehit_stale_iid["percent"][victim]) > float(ref["percent"][victim])
 
 
 def test_combat_resolve_powershield_blocks_shield_hp_depletion_but_keeps_hitlag() -> None:

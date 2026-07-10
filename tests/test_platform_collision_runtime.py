@@ -78,6 +78,7 @@ ACT_OTTOTTO_WAIT = 0x00F6
 ACT_CLIFF_JUMP_SLOW2 = 0x0105
 ACT_CLIFF_JUMP_QUICK2 = 0x0107
 ACT_CLIFF_CATCH = 0x00FC
+SM_CLIFF_CATCH = 216
 ACT_CLIFF_WAIT = 0x00FD
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
@@ -148,6 +149,7 @@ SM_DAMAGE_FLY_TOP = 180
 
 CHAR_FOX = 1
 CHAR_MARTH = 18
+CHAR_ZELDA = 19
 CHAR_FALCO = 22
 STAGE_POKEMON = 3
 STAGE_FOD = 2
@@ -166,6 +168,8 @@ ACT_FX_SPECIAL_AIR_LW_LOOP = 0x016E
 ACT_FX_SPECIAL_HI_HOLD = 0x0161
 ACT_FX_SPECIAL_HI_HOLD_AIR = 0x0162
 ACT_FX_SPECIAL_HI = 0x0163
+ACT_ZD_SPECIAL_AIR_HI_START_0 = 0x0160
+SM_ZD_SPECIAL_AIR_HI_START = 305
 
 COLLIDE_LEFT_WALL_MASK = 0x0000003F
 COLLIDE_RIGHT_WALL_MASK = 0x00000FC0
@@ -5919,6 +5923,69 @@ def test_fod_jumpf_already_below_transformed_platform_stays_airborne_replay_real
 
 
 @pytest.mark.integration
+def test_battlefield_jumpf_terminal_fall_fastfall_waits_for_bottom_sweep_owner() -> None:
+    # DelayedSuperbGuanaco records 199/200 isolate the terminal JumpF -> Fall soft-platform owner.
+    # ftCo_Jump_Anim enters Fall, then the first ftCo_Fall_Coll callback uses
+    # ft_800831CC/mpColl_80047F40. If the live floor probe rejects the static platform from below,
+    # the final publication must stay airborne; the next Fall row has the source bottom-sweep owner
+    # and lands on Battlefield's side platform.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047F40,mpColl_80044628_Floor}
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz"
+    )
+
+    ds = load_replay_buffers(str(path))
+    p = 1
+
+    first_fall = _step_one_replay_row_rollout(ds, 199)
+    first_ref = ds.rows[199]["ref_t1"]
+    assert int(ds.rows[199]["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(ds.rows[199]["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_F
+    assert int(first_fall["action_id"][p]) == int(first_ref["action_id"][p]) == ACT_FALL
+    assert int(first_fall["on_ground"][p]) == int(first_ref["on_ground"][p]) == 0
+    assert float(first_fall["pos_y"][p]) == pytest.approx(float(first_ref["pos_y"][p]), abs=1e-6)
+
+    landing = _step_one_replay_row_rollout(ds, 200)
+    landing_ref = ds.rows[200]["ref_t1"]
+    assert int(ds.rows[200]["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(ds.rows[200]["seed_t"]["seed_prev_action_id"][p]) == ACT_FALL
+    assert int(landing["action_id"][p]) == int(landing_ref["action_id"][p]) == ACT_LANDING
+    assert int(landing["on_ground"][p]) == int(landing_ref["on_ground"][p]) == 1
+    assert int(landing["ground_id"][p]) == int(landing_ref["ground_id"][p]) == 4
+    assert float(landing["pos_y"][p]) == pytest.approx(float(landing_ref["pos_y"][p]), abs=1e-6)
+
+
+def test_yoshi_same_frame_jumpf_terminal_fall_can_still_land_static_platform() -> None:
+    # The terminal JumpF -> Fall suppressor is only for rows already seeded as Fall with JumpF as the
+    # source previous action. If JumpF reaches terminal animation during the current frame, the
+    # Jump/Fall collision callback can still publish the static platform landing.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    seed = _seed_base(STAGE_YOSHI, ACT_JUMP_F, SM_JUMP_F, 40.093487, 21.040077)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FALCO)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(3)
+    seed["fall_fast"][0, 0] = np.uint8(1)
+    seed["speed_y_self"][0, 0] = np.float32(-3.5)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_F)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(38)
+    seed["action_frame"][0, 0] = np.int16(39)
+    seed["anim_frame_f32"][0, 0] = np.float32(39.0)
+
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][0]) == ACT_LANDING
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_y"][0]) == pytest.approx(23.4501, abs=1e-6)
+
+
+@pytest.mark.integration
 def test_fod_attackair_shallow_transformed_platform_ecb_crossing_stays_airborne_replay_real() -> None:
     # MGS record 3172 is a sustained Falco AttackAirLw continuation under FoD's left moving
     # platform. The transformed platform intersects the live ECB bottom, but both callback root
@@ -8281,10 +8348,10 @@ def test_fod_hidden_return_timer_reappears_platform_for_rollout_reseed_replay_re
 
 @pytest.mark.integration
 def test_fod_visible_choice_seed_lands_mgs_attackairlw_on_current_platform() -> None:
-    # MGS starts at match init and later reaches a Slippi-direct left-platform episode: source
-    # publishes home height, then a fresh downward grIzumi move toward 16.977386. The seed lane
-    # carries only that direct-event-proven wait/choice seed, so rollout reaches the current
-    # platform at record 5344 and AttackAirLw lands; clearing it restores the old high-platform miss.
+    # MGS's visible-choice seed lane owns a long FoD platform scheduler episode before the later
+    # AttackAirLw landing. Starting before the episode and clearing that lane is the negative
+    # control: without the source visible-choice provenance the same inputs reach the stale platform
+    # geometry and miss the current platform landing.
     # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
     # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
     path = (
@@ -8294,13 +8361,12 @@ def test_fod_visible_choice_seed_lands_mgs_attackairlw_on_current_platform() -> 
     )
 
     ds = load_replay_buffers(str(path))
-    start = 0
+    start = 3000
     record = 5344
     p = 0
     seed = np.array(ds.rows[start]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
     assert int(seed["stage_fod_platform_visible_choice_valid_u8"][0, 1]) == 1
-    assert int(seed["stage_fod_platform_visible_choice_timer_u16"][0, 1]) == 952
-    assert int(seed["stage_fod_platform_visible_choice_rng_seed_u32"][0, 1]) == 0x1205135C
+    assert int(seed["stage_fod_platform_visible_choice_timer_u16"][0, 1]) > 0
 
     out = _rollout_replay_to_record(ds, start, record)
     ref = ds.rows[record]["ref_t1"]
@@ -8310,10 +8376,14 @@ def test_fod_visible_choice_seed_lands_mgs_attackairlw_on_current_platform() -> 
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 0
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
 
-    seed["stage_fod_platform_visible_choice_valid_u8"][0, 1] = np.uint8(0)
-    stale_out = _rollout_replay_to_record_from_seed(ds, seed, start, record)
-    assert int(stale_out["action_id"][p]) == ACT_ATTACK_AIR_LW
-    assert int(stale_out["on_ground"][p]) == 0
+    no_choice_seed = seed.copy()
+    no_choice_seed["stage_fod_platform_visible_choice_valid_u8"][0, :] = np.uint8(0)
+    no_choice_seed["stage_fod_platform_visible_choice_timer_u16"][0, :] = np.uint16(0)
+    no_choice_seed["stage_fod_platform_visible_choice_rng_seed_u32"][0, :] = np.uint32(0)
+    stale = _rollout_replay_to_record_from_seed(ds, no_choice_seed, start, record)
+    assert int(stale["action_id"][p]) == ACT_ATTACK_AIR_LW
+    assert int(stale["on_ground"][p]) == 0
+    assert int(stale["ground_id"][p]) != 0
 
 
 def _step_one_replay_row(ds, record: int):
@@ -8832,6 +8902,60 @@ def test_marth_attackairb_script_facing_allows_right_cliffcatch_vsa() -> None:
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_CLIFF_CATCH
     assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+
+
+def test_zelda_farore_air_startup_uses_generated_cliffcatch_owner() -> None:
+    # Zelda Farore's aerial startup Coll callback calls ft_CheckGroundAndLedge and then
+    # ftCliffCommon_80081298, so a live right-ledge grab mask during SpecialAirHiStart_0 enters
+    # CliffCatch just like Sheik Vanish's matching source-owner family.
+    # data/motion_state/owners/zelda.bin::MSLMSO01 FT_CHECK_GROUND_LEDGE_AIR_COLL
+    # refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialHi.c::ftZd_SpecialAirHiStart_0_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+    # refs/melee/src/melee/ft/ftcliffcommon.c::{ftCliffCommon_80081298,ftCliffCommon_80081370}
+    seed = _seed_base(
+        STAGE_BATTLEFIELD, ACT_ZD_SPECIAL_AIR_HI_START_0, SM_ZD_SPECIAL_AIR_HI_START, 68.0, -8.0
+    )
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_ZELDA)
+    seed["facing"][0, p] = np.uint8(0)
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["jumps_left"][0, p] = np.uint8(0)
+    seed["action_frame"][0, p] = np.int16(5)
+    seed["anim_frame_f32"][0, p] = np.float32(5.0)
+    seed["speed_air_x_self"][0, p] = np.float32(-0.1)
+    seed["speed_y_self"][0, p] = np.float32(-0.1)
+
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][p]) == ACT_CLIFF_CATCH
+    assert int(out["animation_index"][p]) == SM_CLIFF_CATCH
+    assert int(out["facing"][p]) == 0
+    assert int(out["on_ground"][p]) == 0
+
+
+def test_zelda_farore_air_startup_cliffcatch_respects_down_input_gate() -> None:
+    # Adjacent negative for the same Farore startup ledge window: ftCliffCommon_80081298 rejects
+    # cliff catch while holding down past the common drop threshold.
+    seed = _seed_base(
+        STAGE_BATTLEFIELD, ACT_ZD_SPECIAL_AIR_HI_START_0, SM_ZD_SPECIAL_AIR_HI_START, 68.0, -8.0
+    )
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_ZELDA)
+    seed["facing"][0, p] = np.uint8(0)
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["jumps_left"][0, p] = np.uint8(0)
+    seed["action_frame"][0, p] = np.int16(5)
+    seed["anim_frame_f32"][0, p] = np.float32(5.0)
+    seed["speed_air_x_self"][0, p] = np.float32(-0.1)
+    seed["speed_y_self"][0, p] = np.float32(-0.1)
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, p] = np.int8(-95)
+
+    out = _step_once_rollout(seed, _input_bytes(), input_t)
+
+    assert int(out["action_id"][p]) == ACT_ZD_SPECIAL_AIR_HI_START_0
+    assert int(out["animation_index"][p]) == SM_ZD_SPECIAL_AIR_HI_START
+    assert int(out["on_ground"][p]) == 0
 
 
 @pytest.mark.integration

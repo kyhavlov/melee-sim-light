@@ -70,6 +70,9 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/if/if_2F72.c::if_802F73C4
   // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
   uint8_t* opening_input_lock_timer;  // [batch]
+  // Global six-slot respawn-platform cooldown table (`FighterMatchInfo[i].x8`).
+  // refs/melee/src/melee/gm/gm_1601.c::{fn_8016758C,fn_80167638}
+  uint8_t* match_flow_respawn_slot_cooldown;  // [batch * MSL_RESPAWN_PLATFORM_SLOT_COUNT]
   // Global stale-attack-instance counter (decomp: plStale_IncrementAttackInstance).
   // One per environment in the batch (per-match global counter).
   // refs/melee/src/melee/pl/plstale.c::plStale_IncrementAttackInstance
@@ -352,7 +355,7 @@ typedef struct MslStateSoA {
   // Internal-only frame-start Damage hitstun snapshot. DamageFlyRoll_Anim decrements and tests
   // this motion-var lane inside its Anim callback, before later shared timer/IASA consumers.
   uint16_t* frame_start_hitstun;
-  // Replay-true previous action snapshot (t-1 -> t), seeded from dataset history for entry-shaped
+  // Replay-true previous action snapshot (t-1 -> t), seeded from validation history for entry-shaped
   // one-step rows. Separate from the runtime cache below.
   uint16_t* seed_prev_action_id;
   int16_t* seed_prev_action_frame;
@@ -433,7 +436,7 @@ typedef struct MslStateSoA {
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
   uint8_t* source_clear_grounded_damage_clear_phase;
   // Terminal source-owner phase for `source_clear_timer_x18c8 == 1` rows. One-step transient lane
-  // produced in dataset tooling; matching runtime owners may also park the source lane while
+  // produced in validation tooling; matching runtime owners may also park the source lane while
   // retiring the countdown.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
@@ -844,8 +847,7 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
   //   ftCo_RunBrake_Enter,ftCo_RunBrake_Anim}
   // data/common/ft_common_data.json::runbrake_anim_freeze_speed_threshold
-  uint8_t*
-      runbrake_freeze_x0;  // [batch * players], 0=clear, 1=frozen, 2=resume pending, 3=cmd1 consumed
+  uint8_t* runbrake_freeze_x0;  // [batch * players], 0=clear, 1=frozen, 3=cmd1 consumed
   // Dash IASA branch latch (decomp: fp->mv.co.dash.x4).
   // - Set by ftCo_Dash_Enter(arg1).
   // - ftCo_Dash_IASA uses (x4 != 0 && cur_anim_frame <= x44) for early-branch gating.
@@ -872,10 +874,12 @@ typedef struct MslStateSoA {
   uint8_t* specialn_blaster_loop_requested;
   uint16_t* specialn_charge_frames;
   uint16_t* speciallw_countered_damage;
-  // Sheik special hidden state. Needle count and the generic latch are live runtime lanes in this
-  // slice; the Vanish travel timer is seed-reconstructed by sheik_vanish_travel_timer_u8 because
-  // Special(Air)HiStart_1 freezes its animation after its explicit entry tick.
+  // Sheik/Zelda special hidden state. Needle count and the generic latch are live runtime lanes in
+  // this slice; the Sheik Vanish / Zelda Farore travel timer is seed-reconstructed by
+  // sheik_vanish_travel_timer_u8 because Special(Air)HiStart_1 freezes its animation after its
+  // explicit entry tick.
   // refs/melee/src/melee/ft/chara/ftSeak/types.h::ftSeak_FighterVars/ftSeak_MotionVars
+  // refs/melee/src/melee/ft/chara/ftZelda/types.h::ftZelda_MotionVars
   uint8_t* sheik_needle_count;   // fv.sk.x0, clamped 0..6
   uint8_t* sheik_special_timer;  // mv.sk.special{n,s,hi}.x0 compact timer
   uint8_t* sheik_special_timer_frame_start;
@@ -1536,6 +1540,21 @@ typedef struct MslStateSoA {
   uint8_t* item_hidden_body_hit_victim_port;   // [batch * MSL_MAX_ITEMS], 0xFF = none
   uint8_t* item_hidden_body_hit_hurt_height;   // [batch * MSL_MAX_ITEMS]
   uint8_t* item_hidden_callback_flags;         // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_callback_bounce_vel_y_index;       // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_callback_bounce_vel_x_index_sign;  // [batch * MSL_MAX_ITEMS]
+  // One-step/replay seed bridge for SetupBounce's hidden xDDC/xDE0 samples on the same source
+  // Logic109 callback that publishes a bounced Needle. This does not alter free-running gameplay:
+  // live callbacks still consume the source RNG sites, and these lanes are consumed/cleared with
+  // item_hidden_callback_flags in the matching item step.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   it_2725_Logic109_DmgDealt,it_2725_Logic109_DmgReceived,it_2725_Logic109_HitShield,
+  //   itSeakNeedleThrown_SetupBounce}
+  uint8_t* item_sheik_needle_callback_bounce_motion_valid;     // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_callback_bounce_gravity_index;    // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_callback_bounce_min_vel_y_index;  // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_stage_hit_seed_kind;              // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_stage_hit_vel_y_index;            // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_sheik_needle_stage_hit_vel_x_index_sign;       // [batch * MSL_MAX_ITEMS]
   // Sheik take-damage-dropped Needle hidden itemVar motion lanes (xDDC terminal min-y, xDE0
   // gravity). Live ftSk_SpecialN_80111FBC drops seed these from itSeakNeedleThrown_SetupDrop; replay
   // seeds of pre-existing state-1/4 Needles leave valid=0 and use visible-velocity reconstruction.
@@ -1545,6 +1564,15 @@ typedef struct MslStateSoA {
   float* item_sheik_needle_hidden_drop_min_vel_y;  // [batch * MSL_MAX_ITEMS]
   float* item_sheik_needle_hidden_drop_gravity;    // [batch * MSL_MAX_ITEMS]
   float* item_sheik_needle_hidden_drop_vel_x;      // [batch * MSL_MAX_ITEMS]
+  // Zelda Din's Fire itemVar state. The fire article uses xDD8/xDDC/xDE8/xDEC/xDF0; the explosion
+  // article uses xDD4 and xDD8 for charge and base hitbox size.
+  // refs/melee/src/melee/it/items/itzeldadinfire.c
+  // refs/melee/src/melee/it/items/itzeldadinfireexplode.c
+  float* item_zelda_din_charge;             // [batch * MSL_MAX_ITEMS]
+  float* item_zelda_din_angle_offset;       // [batch * MSL_MAX_ITEMS]
+  float* item_zelda_din_base_angle;         // [batch * MSL_MAX_ITEMS]
+  float* item_zelda_din_speed;              // [batch * MSL_MAX_ITEMS]
+  float* item_zelda_din_explode_base_size;  // [batch * MSL_MAX_ITEMS]
   // Sheik Side-B Chain Verlet link state (runtime-only, not serialized; reset on reseed).
   // refs/melee/src/melee/it/items/itseakchain.c::it_802BAF2C
   uint8_t* item_sheik_chain_links_valid;      // [batch * MSL_MAX_ITEMS]

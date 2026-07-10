@@ -21,7 +21,8 @@ ITEM_ARTICLE_MAGIC = b"MSLITAR1"
 # v15 (2026-06-19): adds Sheik thrown-Needle command-11 hitbox bone ids and article-JObj
 #   root-space XYZ offsets so BODY contact uses the source HitCapsule publication point.
 # v16 (2026-06-19): extends article hitbox flags with command-11 x40_b0 clank eligibility.
-ITEM_ARTICLE_VERSION = 16
+# v17 (2026-07-08): adds Zelda Din's Fire article/item-var attrs and explosion HitCapsule packet.
+ITEM_ARTICLE_VERSION = 17
 ITEM_ARTICLE_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1
 # Historical compatibility alias. The stored values are Slippi/CSS external character ids, not
 # GALE01 internal FighterKind ids.

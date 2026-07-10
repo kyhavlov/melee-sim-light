@@ -238,6 +238,9 @@ SEED_DTYPE = np.dtype(
         # Hidden fp+0x2218 byte for that same stock-share wait slot; Slippi publishes zeroes while
         # gm_16AE still has a live player entity whose Fighter reset does not clear x2218_b1/b5.
         ("match_flow_pending_rebirth_state_flags_2218", _arr("u1", MAX_PLAYERS)),
+        # Global respawn-platform slot cooldowns (`FighterMatchInfo[i].x8`).
+        # refs/melee/src/melee/gm/gm_1601.c::{fn_8016758C,fn_80167638}
+        ("match_flow_respawn_slot_cooldown", _arr("u1", 6)),
         # Match-start fighter input lock countdown (`fp->x221D_b4`).
         # refs/melee/src/melee/ft/ftlib.c::{ftLib_800867E8,ftLib_800868A4}
         # refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkInitLoad_80068914_Inner1}
@@ -549,6 +552,20 @@ SEED_DTYPE = np.dtype(
         ("item_hidden_body_hit_victim_port", _arr("u1", MAX_ITEMS)),
         ("item_hidden_body_hit_hurt_height", _arr("u1", MAX_ITEMS)),
         ("item_hidden_callback_flags", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_callback_bounce_vel_y_index", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_callback_bounce_vel_x_index_sign", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_motion_seed_kind", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_motion_vel_x_index_sign", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_motion_gravity_index", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_motion_min_vel_y_index", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_stage_hit_seed_kind", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_stage_hit_vel_y_index", _arr("u1", MAX_ITEMS)),
+        ("item_sheik_needle_stage_hit_vel_x_index_sign", _arr("u1", MAX_ITEMS)),
+        ("item_zelda_din_charge", _arr("<f4", MAX_ITEMS)),
+        ("item_zelda_din_angle_offset", _arr("<f4", MAX_ITEMS)),
+        ("item_zelda_din_base_angle", _arr("<f4", MAX_ITEMS)),
+        ("item_zelda_din_speed", _arr("<f4", MAX_ITEMS)),
+        ("item_zelda_din_explode_base_size", _arr("<f4", MAX_ITEMS)),
         # Prefix-causal Shy Guy dynamic-bone velocity scratch.
         # refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
         ("item_shyguy_prev_vel_y", _arr("<f4", MAX_ITEMS)),

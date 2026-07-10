@@ -243,7 +243,7 @@ uint8_t combat_attackairlw_strong_grounded_high_cap_rejects_lower_body_contact(
       // Strong DAir grounded hurt-height owner:
       // ftColl_80078C70 admits one hurt capsule per HitCapsule, then ftColl_8007A06C uses the
       // accepted DmgLogEntry's hurt height for DamageHi/N/Lw selection. On the supported
-      // Fox/Falco Run pose, replay-reconstructed lbColl_80006E58 can over-admit a lower torso
+      // Fox/Falco Run pose, seed-reconstructed lbColl_80006E58 can over-admit a lower torso
       // capsule while the same authored strong-Dair HitCapsule also has a concrete high-cap source
       // overlap. Preserve the source-selected high hurt-height owner by rejecting only that lower
       // candidate. Squat and grounded attacks keep their lower/neutral selected-height owners. The
@@ -324,7 +324,7 @@ uint8_t combat_attackairlw_strong_attacklw4_high_cap_sibling_rejects_body_contac
         // source hit still belongs to the frame-start down-smash callback/hurt pose. ftColl_80078C70
         // admits one BODY DmgLog entry per accepted HitCapsule, and ftColl_8007A06C consumes the
         // selected DmgLog hurt height for DamageFlyHi/N/Lw. On that frame-start down-smash pose, the
-        // replay-reconstructed lbColl matrix can over-select strong DAir hb0 against a high cap
+        // seed-reconstructed lbColl matrix can over-select strong DAir hb0 against a high cap
         // while the authored same-group strong DAir sibling has a current medium-cap source overlap.
         // Preserve that medium selected-height owner without changing strong DAir rows where the
         // sibling packet is absent.
@@ -2851,9 +2851,8 @@ uint8_t combat_hitcapsule_is_authored_same_group_primary(const MslBatch* batch, 
   // - `ftColl_80076ED8` receives the concrete HitCapsule selected by `ftColl_80078C70`, and
   //   `Fighter_ProcessHit` consumes that HitCapsule's authored damage/KB payload.
   // - Multi-capsule same-group scripts encode the source-selected primary capsule as the first
-  //   active maximum-damage HitCapsule in that group. Keep that capsule on the full BODY path;
-  //   later/equal siblings and lower-damage limb capsules may take the `coll_distance < x7A8`
-  //   phantom/tip-log branch.
+  //   active maximum-damage HitCapsule in that group. Keep that capsule on the full BODY path
+  //   outside active DamageFly's tiny-contact phantom/tip-log owner.
   // - This predicate is derived from active MSLHITB1 hitbox table fields (`damage`, `hit_group`,
   //   source HitCapsule id/order), rather than an action id / row slice.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
@@ -2984,9 +2983,13 @@ uint8_t combat_sheik_chain_same_frontier_later_hitbox_owns_body(
       continue;
     }
     if (batch->state.hitbox_damage[other_i] > damage) {
+      float other_x = batch->state.hitbox_x[other_i];
+      float other_y = batch->state.hitbox_y[other_i];
+      float other_z = batch->state.hitbox_z[other_i];
+      (void)sheik_chain_hitbox_world_pos(batch, a_idx, (uint8_t)other, &other_x, &other_y,
+                                         &other_z);
       if (!combat_body_overlap_lbColl_80006E58_scaffold(
-              batch, bi, attacker, other, batch->state.hitbox_x[other_i],
-              batch->state.hitbox_y[other_i], batch->state.hitbox_z[other_i],
+              batch, bi, attacker, other, other_x, other_y, other_z,
               batch->state.hitbox_radius[other_i], ax, ay, az, bx, by, bz, cr,
               batch->state.fighter_scale_y[msl_idx_player(bi, defender)])) {
         continue;
@@ -3211,7 +3214,7 @@ uint8_t combat_sheik_chain_damageflytop_high_horizon_suppresses_body(
   }
   // Same-source Chain airborne Damage continuation:
   // Source ftColl victims_1 state from the previous Chain BODY contact survives across the
-  // DamageAir/DamageFly callback horizon even when replay-reconstructed per-hitbox hitlists are
+  // DamageAir/DamageFly callback horizon even when seed-reconstructed per-hitbox hitlists are
   // cleared by a disable/reactivate edge. Suppress early high-hitstun same-source Chain BODY overlaps
   // until the current Chain hitlag terminal horizon; the terminal tail is then admitted by the
   // follow-up owner below (official demo rec341) while non-terminal rows (official demo rec330) stay

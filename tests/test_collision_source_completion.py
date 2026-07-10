@@ -4,6 +4,8 @@ import re
 from pathlib import Path
 from collections import Counter
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -115,6 +117,48 @@ def test_collision_inventory_accounts_for_every_retained_reject_and_suppression(
     assert "MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY" not in floor_sources
     assert "MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY" in historical_doc
     assert "was deleted after the trace111 audit" in historical_doc
+
+
+def _line_y(seg: dict, x: float) -> float:
+    dx = float(seg["x1"]) - float(seg["x0"])
+    if abs(dx) < 1e-7:
+        return float(seg["y0"])
+    t = (x - float(seg["x0"])) / dx
+    return float(seg["y0"]) + t * (float(seg["y1"]) - float(seg["y0"]))
+
+
+def test_stage_item_line_hit_point_shares_item_collision_semantics() -> None:
+    # The hit-point helper is the same item stage-line owner as the bool helper used by lasers and
+    # Sheik Needles. Cover endpoint, sloped floor, wall, ceiling, and the horizontal-floor direction
+    # rejection so it cannot drift into an independent raw-intersection predicate.
+    # refs/melee/src/melee/it/itgroundcoll.c::it_8026E9A4
+    import msl_binding
+
+    endpoint = msl_binding.stage_item_line_hit(31, -60.0, 5.0, -60.0, -5.0)
+    assert endpoint == pytest.approx({"x": -60.0, "y": 0.0}, abs=1e-5)
+
+    horizontal_floor_upward_miss = msl_binding.stage_item_line_hit(31, -64.0, -5.0, -64.0, 5.0)
+    assert horizontal_floor_upward_miss is None
+
+    sloped = msl_binding.stage_floor_segment(8, 2)
+    sx = (float(sloped["x0"]) + float(sloped["x1"])) * 0.5
+    sy = _line_y(sloped, sx)
+    sloped_hit = msl_binding.stage_item_line_hit(8, sx, sy + 6.0, sx, sy - 6.0)
+    assert sloped_hit == pytest.approx({"x": sx, "y": sy}, abs=1e-5)
+
+    wall = msl_binding.stage_left_wall_segment(28, 9)
+    wy = (float(wall["y0"]) + float(wall["y1"])) * 0.5
+    wx = _line_y({"x0": wall["y0"], "y0": wall["x0"], "x1": wall["y1"], "y1": wall["x1"]}, wy)
+    wall_hit = msl_binding.stage_item_line_hit(28, wx - 8.0, wy, wx + 8.0, wy)
+    assert wall_hit == pytest.approx({"x": wx, "y": wy}, abs=1e-5)
+
+    ceiling = msl_binding.stage_ceiling_segment(28, 6)
+    cy = float(ceiling["y0"])
+    ceiling_hit = msl_binding.stage_item_line_hit(28, 0.0, cy - 8.0, 0.0, cy + 8.0)
+    assert ceiling_hit == pytest.approx({"x": 0.0, "y": cy}, abs=1e-5)
+
+    adjacent_miss = msl_binding.stage_item_line_hit(28, 0.0, cy + 8.0, 0.0, cy + 16.0)
+    assert adjacent_miss is None
 
 
 def test_collision_closed_doc_has_no_unfinished_rows() -> None:

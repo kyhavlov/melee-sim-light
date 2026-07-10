@@ -41,7 +41,7 @@ def test_runtime_item_article_params_known_values() -> None:
     assert sheik["needle_hitbox_kbg"] == [34, 34, 34, 34]
     assert sheik["needle_hitbox_bkb"] == [24, 24, 24, 24]
     assert sheik["needle_hitbox_element"] == [3, 3, 3, 3]
-    # MSLITAR1 v16: command-11 hitbox JObj publication fields used by thrown-Needle BODY contact.
+    # MSLITAR1 v17: command-11 hitbox JObj publication fields used by thrown-Needle BODY contact.
     assert sheik["needle_hitbox_bone_id"] == [1, 1, 0, 0]
     assert sheik["needle_hitbox_jobj_x_offset"] == pytest.approx([0.0, 0.0, 0.0, 0.0])
     assert sheik["needle_hitbox_jobj_y_offset"] == pytest.approx([0.0, 0.0, 0.0, 0.0])
@@ -118,7 +118,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_needle_drop_record(
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 16
+    assert version == 17
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -156,7 +156,7 @@ def test_runtime_item_article_params_rejects_non_negative_sheik_needle_gravity(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 16
+    assert version == 17
     record_size = 24
     patched = False
     for i in range(count):
@@ -185,18 +185,56 @@ raise SystemExit(1)
 
 def test_runtime_item_article_params_rejects_stale_version(tmp_path: Path) -> None:
     # A stale local artifact must be rejected by the loader rather than read as current:
-    # MSLITAR1 is v15 for thrown-Needle command-11 JObj publication fields.
+    # MSLITAR1 is v17 for Zelda Din's Fire fields.
     data_dir = tmp_path / "data"
     dst = data_dir / "items" / "articles" / "fox_falco.bin"
     dst.parent.mkdir(parents=True)
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
-    buf[8:12] = (14).to_bytes(4, "little")  # the now-stale prior version
+    buf[8:12] = (16).to_bytes(4, "little")  # the now-stale prior version
     dst.write_bytes(bytes(buf))
 
     code = """
 import msl_binding
 try:
     msl_binding.item_article_params(1)
+except RuntimeError:
+    raise SystemExit(0)
+raise SystemExit(1)
+"""
+    env = dict(os.environ)
+    env["MSL_DATA_DIR"] = str(data_dir)
+    proc = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
+def test_runtime_item_article_params_rejects_missing_zelda_din_record(tmp_path: Path) -> None:
+    # Drop Zelda Din's fire item kind (field_id 230) and prove the loader rejects the artifact
+    # instead of letting Zelda SpecialS spawn a zero/default article.
+    # refs/melee/src/melee/it/items/itzeldadinfire.c
+    data_dir = tmp_path / "data"
+    dst = data_dir / "items" / "articles" / "fox_falco.bin"
+    dst.parent.mkdir(parents=True)
+    src = Path("data/items/articles/fox_falco.bin").read_bytes()
+
+    header = bytearray(src[:16])
+    version, count = struct.unpack_from("<II", header, 8)
+    assert version == 17
+    record_size = 24
+    records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
+
+    def is_zelda_din_fire_itkind(rec: bytes) -> bool:
+        char_id, char_domain, value_type, field_id = struct.unpack_from("<HBBH", rec, 0)
+        return (char_id, char_domain, value_type, field_id) == (18, 1, 1, 230)
+
+    kept = [rec for rec in records if not is_zelda_din_fire_itkind(rec)]
+    assert len(kept) == len(records) - 1
+    struct.pack_into("<I", header, 12, len(kept))
+    dst.write_bytes(bytes(header) + b"".join(kept))
+
+    code = """
+import msl_binding
+try:
+    msl_binding.item_article_params(19)
 except RuntimeError:
     raise SystemExit(0)
 raise SystemExit(1)
@@ -215,7 +253,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_needle_record(tmp_pat
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 16
+    assert version == 17
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -252,7 +290,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_hitbox_record(
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 16
+    assert version == 17
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -289,7 +327,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_vanish_active_window_
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 16
+    assert version == 17
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -325,7 +363,7 @@ def test_runtime_item_article_params_rejects_zero_sheik_chain_spawn_part_id(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 16
+    assert version == 17
     record_size = 24
     patched = False
     for i in range(count):
@@ -365,7 +403,7 @@ def test_runtime_item_article_params_rejects_missing_sheik_chain_attr_record(
 
     header = bytearray(src[:16])
     version, count = struct.unpack_from("<II", header, 8)
-    assert version == 16
+    assert version == 17
     record_size = 24
     records = [src[16 + i * record_size : 16 + (i + 1) * record_size] for i in range(count)]
 
@@ -401,7 +439,7 @@ def test_runtime_item_article_params_rejects_zero_sheik_vanish_spawn_part_id(
     buf = bytearray(Path("data/items/articles/fox_falco.bin").read_bytes())
 
     version, count = struct.unpack_from("<II", buf, 8)
-    assert version == 16
+    assert version == 17
     record_size = 24
     patched = False
     for i in range(count):

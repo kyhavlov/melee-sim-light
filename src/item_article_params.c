@@ -11,7 +11,7 @@
 #include "alloc.h"
 
 enum {
-  MSLITAR1_VERSION = 16,
+  MSLITAR1_VERSION = 17,
   MSLITAR1_CHAR_DOMAIN_SLIPPI_EXTERNAL_ID = 1,
   MSLITAR1_VALUE_U16 = 1,
   MSLITAR1_VALUE_U32 = 2,
@@ -116,6 +116,41 @@ enum {
       MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_LAST - MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_FIRST + 1u,
   MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_REQUIRED_MASK =
       (1u << MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_COUNT) - 1u,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRST = 230,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_ITKIND = 230,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_EXPLODE_ITKIND = 231,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_LIFETIME_FRAMES = 232,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_CHARGE_MAX_FRAMES = 233,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_SCALE_MIN = 234,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_SCALE_MAX = 235,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_INITIAL_ANGLE_OFFSET = 236,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_INITIAL_SPEED = 237,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_ACCEL = 238,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_SPEED_MAX = 239,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_STICK_THRESHOLD = 240,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_STICK_ANGLE_MUL = 241,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_ANGLE_MAX = 242,
+  MSLITAR1_FIELD_ZELDA_DIN_FIRE_RELEASE_LIFETIME_FRAMES = 243,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_CHARGE_MAX_FRAMES = 244,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_SCALE_MIN = 245,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_SCALE_MAX = 246,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_DAMAGE_BASE = 247,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_DAMAGE_CHARGE_MUL = 248,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_COUNT = 249,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_SIZE = 250,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_X_OFFSET = 251,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_Y_OFFSET = 252,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_Z_OFFSET = 253,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_ANGLE = 254,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_KBG = 255,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_WSK = 256,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_BKB = 257,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_ELEMENT = 258,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_SHIELD_DAMAGE = 259,
+  MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_FLAGS = 260,
+  MSLITAR1_FIELD_ZELDA_DIN_LAST = 260,
+  MSLITAR1_FIELD_ZELDA_DIN_COUNT =
+      MSLITAR1_FIELD_ZELDA_DIN_LAST - MSLITAR1_FIELD_ZELDA_DIN_FIRST + 1u,
 };
 
 typedef struct ItemArticleTable {
@@ -127,6 +162,7 @@ typedef struct ItemArticleTable {
   uint32_t sheik_vanish_hitbox_fields_seen;
   uint64_t sheik_needle_drop_bounce_fields_seen;
   uint32_t sheik_chain_attr_fields_seen;
+  uint32_t zelda_din_fields_seen;
   uint8_t loaded;
 } ItemArticleTable;
 
@@ -167,6 +203,8 @@ static uint8_t sim_char_from_slippi_external_id(uint16_t external_id) {
       return 7u;
     case 20:
       return 22u;
+    case 18:
+      return 19u;
     default:
       return 0u;
   }
@@ -472,6 +510,130 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
       if (value_type != MSLITAR1_VALUE_U16) return -1;
       rec->vanish_hitbox_remove_frame = (uint16_t)u32_value;
       break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_ITKIND:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->zelda_din_fire_itkind = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_EXPLODE_ITKIND:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->zelda_din_fire_explode_itkind = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_LIFETIME_FRAMES:
+      if (value_type != MSLITAR1_VALUE_U32) return -1;
+      rec->zelda_din_fire_lifetime_frames = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_RELEASE_LIFETIME_FRAMES:
+      if (value_type != MSLITAR1_VALUE_U32) return -1;
+      rec->zelda_din_fire_release_lifetime_frames = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_CHARGE_MAX_FRAMES:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_fire_charge_max_frames = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_SCALE_MIN:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_fire_scale_min = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_SCALE_MAX:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_fire_scale_max = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_INITIAL_ANGLE_OFFSET:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_fire_initial_angle_offset = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_INITIAL_SPEED:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_fire_initial_speed = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_ACCEL:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_fire_accel = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_SPEED_MAX:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_fire_speed_max = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_STICK_THRESHOLD:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_fire_stick_threshold = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_STICK_ANGLE_MUL:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_fire_stick_angle_mul = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_FIRE_ANGLE_MAX:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_fire_angle_max = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_CHARGE_MAX_FRAMES:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_explode_charge_max_frames = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_SCALE_MIN:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_explode_scale_min = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_SCALE_MAX:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_explode_scale_max = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_DAMAGE_BASE:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_explode_damage_base = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_DAMAGE_CHARGE_MUL:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_explode_damage_charge_mul = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_COUNT:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->zelda_din_explode_hitbox_count = (uint8_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_SIZE:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_explode_hitbox_size = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_X_OFFSET:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_explode_hitbox_x_offset = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_Y_OFFSET:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_explode_hitbox_y_offset = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_Z_OFFSET:
+      if (value_type != MSLITAR1_VALUE_F32) return -1;
+      rec->zelda_din_explode_hitbox_z_offset = f32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_ANGLE:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->zelda_din_explode_hitbox_angle = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_KBG:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->zelda_din_explode_hitbox_kbg = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_WSK:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->zelda_din_explode_hitbox_wsk = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_BKB:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->zelda_din_explode_hitbox_bkb = (uint16_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_ELEMENT:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->zelda_din_explode_hitbox_element = (uint8_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_SHIELD_DAMAGE:
+      if (value_type != MSLITAR1_VALUE_U16) return -1;
+      rec->zelda_din_explode_hitbox_shield_damage = (int8_t)(uint8_t)u32_value;
+      break;
+    case MSLITAR1_FIELD_ZELDA_DIN_EXPLODE_HITBOX_FLAGS:
+      if (value_type != MSLITAR1_VALUE_U32) return -1;
+      rec->zelda_din_explode_hitbox_flags = u32_value;
+      break;
     default:
       if (field_id >= MSLITAR1_FIELD_NEEDLE_HITBOX_DAMAGE_0 &&
           field_id <= MSLITAR1_FIELD_NEEDLE_HITBOX_FLAGS_3) {
@@ -650,6 +812,11 @@ static int apply_record(uint16_t char_id, uint8_t value_type, uint16_t field_id,
     g_tbl.sheik_chain_attr_fields_seen |=
         (uint32_t)1u << (uint32_t)(field_id - MSLITAR1_FIELD_SHEIK_CHAIN_ATTR_FIRST);
   }
+  if (char_id == 19u && field_id >= MSLITAR1_FIELD_ZELDA_DIN_FIRST &&
+      field_id <= MSLITAR1_FIELD_ZELDA_DIN_LAST) {
+    g_tbl.zelda_din_fields_seen |= (uint32_t)1u
+                                   << (uint32_t)(field_id - MSLITAR1_FIELD_ZELDA_DIN_FIRST);
+  }
   return 0;
 }
 
@@ -803,7 +970,18 @@ int item_article_params_init(void) {
       !(g_tbl.by_char[7].sheik_chain_segment_length > 0.0f) ||
       !(g_tbl.by_char[7].sheik_chain_attr_x4c > 0.0f) ||
       !isfinite(g_tbl.by_char[7].sheik_chain_initial_vel_x50) ||
-      !(g_tbl.by_char[7].sheik_chain_gravity > 0.0f)) {
+      !(g_tbl.by_char[7].sheik_chain_gravity > 0.0f) || !g_tbl.have_char[19] ||
+      g_tbl.zelda_din_fields_seen != ((uint32_t)1u << MSLITAR1_FIELD_ZELDA_DIN_COUNT) - 1u ||
+      g_tbl.by_char[19].zelda_din_fire_itkind == 0u ||
+      g_tbl.by_char[19].zelda_din_fire_explode_itkind == 0u ||
+      g_tbl.by_char[19].zelda_din_fire_lifetime_frames == 0u ||
+      g_tbl.by_char[19].zelda_din_fire_release_lifetime_frames == 0u ||
+      !(g_tbl.by_char[19].zelda_din_fire_charge_max_frames > 0.0f) ||
+      !(g_tbl.by_char[19].zelda_din_fire_speed_max > 0.0f) ||
+      !(g_tbl.by_char[19].zelda_din_explode_charge_max_frames > 0.0f) ||
+      !(g_tbl.by_char[19].zelda_din_explode_damage_base > 0.0f) ||
+      !(g_tbl.by_char[19].zelda_din_explode_hitbox_size > 0.0f) ||
+      g_tbl.by_char[19].zelda_din_explode_hitbox_count == 0u) {
     return -1;
   }
   g_tbl.loaded = 1u;
@@ -849,6 +1027,15 @@ const MslItemArticleParams* item_article_params_for_sheik_needle_throw_item_type
   const MslItemArticleParams* sheik = item_article_params_get(7u);
   if (sheik != NULL && sheik->needle_throw_itkind == type) {
     return sheik;
+  }
+  return NULL;
+}
+
+const MslItemArticleParams* item_article_params_for_zelda_din_item_type(uint16_t type) {
+  const MslItemArticleParams* zelda = item_article_params_get(19u);
+  if (zelda != NULL &&
+      (zelda->zelda_din_fire_itkind == type || zelda->zelda_din_fire_explode_itkind == type)) {
+    return zelda;
   }
   return NULL;
 }

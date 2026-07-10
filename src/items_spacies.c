@@ -639,7 +639,7 @@ uint8_t item_spawn_laser_freezes_stale_damage(const MslBatch* batch, int bi, int
       item_attack_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT) {
     // Runtime-only source order: the owner already landed this attack id before the current laser
     // create callback, but Slippi does not expose the just-created laser's frozen damage float.
-    // Keep this gate tied to the attack identity, not replay row or dataset identity.
+    // Keep this gate tied to the attack identity, not replay row or corpus identity.
     // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     // refs/melee/src/melee/it/itcoll.c::it_80272460
     return 1u;
@@ -2249,13 +2249,22 @@ uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii, size_t reflec
                                        int reflector_port, const MslLaserParams* lp,
                                        uint8_t laser_state, float x0, float y0, float x, float y,
                                        float ux, float uy, float sr, float laser_scale_z) {
-  if (!msl_char_id_is_spacie(batch->state.char_id[reflector_idx])) {
+  if (batch == NULL || lp == NULL) {
+    return 0u;
+  }
+  const uint8_t reflector_char = batch->state.char_id[reflector_idx];
+  const uint8_t reflector_is_spacie = msl_char_id_is_spacie(reflector_char);
+  const uint8_t reflector_is_zelda_nayru =
+      (reflector_char == (uint8_t)MSL_CHAR_ID_ZELDA &&
+       (batch->state.action_id[reflector_idx] == (uint16_t)MSL_ACT_ZD_SPECIAL_N ||
+        batch->state.action_id[reflector_idx] == (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_N) &&
+       batch->state.special_cmd0[reflector_idx] == 2u)
+          ? 1u
+          : 0u;
+  if (reflector_is_spacie == 0u && reflector_is_zelda_nayru == 0u) {
     // Char-family machine-entry gate, NOT an action-id collision: a successful reflect
     // contact INSTALLS the spacie SpecialLwHit state below (the fighter may currently be in
     // any Reflector state). Ownership of that state machine is a registry char property.
-    return 0u;
-  }
-  if (batch == NULL || lp == NULL) {
     return 0u;
   }
 
@@ -2282,6 +2291,8 @@ uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii, size_t reflec
     return 0u;
   }
 
+  const float hit_r = item_laser_reflect_hit_radius(sr, laser_scale_z);
+  const float contact_r = reflector_is_zelda_nayru != 0u ? hit_r : sr;
   uint8_t reflect_hit = 0u;
   const uint8_t off_n =
       (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
@@ -2295,8 +2306,8 @@ uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii, size_t reflec
     const float sy0 = y0 + (uy * s);
     const float sx = x + (ux * s);
     const float sy = y + (uy * s);
-    if (item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, sr, rx, ry, 0.0f,
-                                               rr)) {
+    if (item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, contact_r, rx, ry,
+                                               0.0f, rr)) {
       reflect_hit = 1u;
     }
   }
@@ -2309,16 +2320,17 @@ uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii, size_t reflec
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
   // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
   const uint16_t reflector_action = batch->state.action_id[reflector_idx];
-  const uint8_t shine_loop_origin_overlap =
+  const uint8_t origin_overlap_reflect_owner =
       (msl_motion_state_fx_special_kind(batch->state.char_id[reflector_idx], reflector_action) ==
            (uint8_t)MSL_FX_KIND_SPECIAL_LW_LOOP ||
        msl_motion_state_fx_special_kind(batch->state.char_id[reflector_idx], reflector_action) ==
-           (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_LOOP)
+           (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_LOOP ||
+       reflector_is_zelda_nayru != 0u)
           ? 1u
           : 0u;
-  if (!reflect_hit && shine_loop_origin_overlap) {
-    reflect_hit =
-        item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, sr, rx, ry, 0.0f, rr);
+  if (!reflect_hit && origin_overlap_reflect_owner) {
+    reflect_hit = item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, contact_r, rx,
+                                                         ry, 0.0f, rr);
   }
 
   if (!reflect_hit) {
@@ -2329,23 +2341,43 @@ uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii, size_t reflec
   // - ftColl_CreateReflectHit stores ReflectDesc.damage_mul / speed_mul.
   // - ftColl_80077464 writes both multipliers to item reflect snapshot (`item->xC6C` et al).
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
-  item_apply_shine_reflect_callback(batch, ii, reflector_idx);
   const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
   const int it = (int)(ii % (size_t)MSL_MAX_ITEMS);
-  const uint8_t hidden_body_before_reflect_callback =
-      item_stage_shine_reflected_laser_hidden_body_callback(
-          batch, bi, it, ii, reflector_port, lp, laser_state, x, y, batch->state.item_vel_x[ii],
-          batch->state.item_vel_y[ii], sr, laser_scale_z);
-  if (hidden_body_before_reflect_callback != 0u) {
-    batch->state.item_misc2[ii] = 0u;
-    batch->state.item_misc3[ii] = 0u;
+  float damage_mul = rch->reflector_damage_mul;
+  float speed_mul = rch->reflector_speed_mul;
+  if (reflector_is_zelda_nayru != 0u) {
+    damage_mul = rch->zelda_nayru_reflector_damage_mul;
+    speed_mul = rch->zelda_nayru_reflector_speed_mul;
+  }
+  if (reflector_is_spacie != 0u) {
+    item_apply_shine_reflect_callback(batch, ii, reflector_idx);
+    const uint8_t hidden_body_before_reflect_callback =
+        item_stage_shine_reflected_laser_hidden_body_callback(
+            batch, bi, it, ii, reflector_port, lp, laser_state, x, y, batch->state.item_vel_x[ii],
+            batch->state.item_vel_y[ii], sr, laser_scale_z);
+    if (hidden_body_before_reflect_callback != 0u) {
+      batch->state.item_misc2[ii] = 0u;
+      batch->state.item_misc3[ii] = 0u;
+      msl_item_reflect_commit_owner_snapshot_defer_speed(batch, ii, reflector_port);
+      msl_item_reflect_apply_direction_lane(batch, ii);
+      msl_item_reflect_set_damage_mul(batch, ii, damage_mul);
+      return 1u;
+    }
+  }
+  if (reflector_is_zelda_nayru != 0u) {
+    // Nayru's ReflectDesc follows the generic ftColl_80077464 -> Item_80269F14 ordering: the
+    // owner/xDA8 and damage multiplier are visible on the reflect frame, while the laser callback
+    // consumes the reflected direction on the next item update.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_CreateReflectHit}
+    // refs/melee/src/melee/it/item.c::Item_80269F14
+    // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_Reflected
     msl_item_reflect_commit_owner_snapshot_defer_speed(batch, ii, reflector_port);
     msl_item_reflect_apply_direction_lane(batch, ii);
-    msl_item_reflect_set_damage_mul(batch, ii, rch->reflector_damage_mul);
+    msl_item_reflect_set_damage_mul(batch, ii, damage_mul);
     return 1u;
   }
-  msl_item_reflect_apply_immediate_transfer(batch, ii, reflector_idx, reflector_port,
-                                            rch->reflector_damage_mul, rch->reflector_speed_mul);
+  msl_item_reflect_apply_immediate_transfer(batch, ii, reflector_idx, reflector_port, damage_mul,
+                                            speed_mul);
   return 1u;
 }
 
@@ -2630,6 +2662,24 @@ int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserP
   // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C504
   batch->state.item_misc0[ii] = slippi_metadata_low_byte_from_f32(0.0f);
   batch->state.item_misc1[ii] = slippi_metadata_low_byte_from_f32(ang);
+  if (is_blaster_throw != 0u) {
+    // Throw-side laser birth-frame owner:
+    // ftFx_Throw_Anim spawns the state1 article through it_8029C6CC from the fighter Anim
+    // callback. Immediate throw-hit cases can be consumed by the explicit callback/provenance lanes
+    // below, and the ordinary item GObj callback may still advance lifetime and run the generic
+    // fighter-contact pass on the birth frame. The marker only prevents double-applying motion when
+    // the spawn owner already advanced it.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,itFoxlaser_UnkMotion1_Phys}
+    batch->state.item_hidden_callback_flags[ii] =
+        (uint8_t)(batch->state.item_hidden_callback_flags[ii] |
+                  (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME);
+    if (apply_spawn_motion_step != 0u) {
+      batch->state.item_hidden_callback_flags[ii] =
+          (uint8_t)(batch->state.item_hidden_callback_flags[ii] |
+                    (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_MOTION_APPLIED);
+    }
+  }
   if (seed_hitlist_victim >= 0) {
     // Throw-laser pending-spawn item HitCapsule seed:
     // - ftFx_Throw_Anim spawns throw-side state1 lasers through it_8029C6CC, then item BODY
@@ -3380,23 +3430,49 @@ void lasers_update_and_collide(MslBatch* batch, int bi) {
     // Decomp refs:
     // - itfoxlaser.c::itFoxlaser_UnkMotion1_Anim (computes item->x40_vel from speed/angle)
     // - itfoxlaser.c::it_8029C504 (it_80275158 sets lifetime)
-    const float x0 = batch->state.item_pos_x[ii];
-    const float y0 = batch->state.item_pos_y[ii];
-    const float x = x0 + batch->state.item_vel_x[ii];
-    const float y = y0 + batch->state.item_vel_y[ii];
+    // Birth-frame throw laser ordering:
+    // - ftFx_Throw_Anim spawns state1 lasers through it_8029C6CC from the fighter Anim callback.
+    // - The item GObj callback can then run motion/lifetime/collision before post-frame item
+    //   serialization; the spawn marker therefore only prevents a second motion step when the
+    //   source callback was already applied at spawn. It is not a generic fighter-contact suppressor.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,itFoxlaser_UnkMotion1_Anim,
+    //   itFoxlaser_UnkMotion1_Phys,itFoxlaser_UnkMotion1_Coll}
+    const uint8_t spawned_this_frame =
+        (uint8_t)(batch->state.item_hidden_callback_flags[ii] &
+                  (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME);
+    const uint8_t spawned_motion_applied =
+        (uint8_t)(batch->state.item_hidden_callback_flags[ii] &
+                  (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_MOTION_APPLIED);
+    float x0 = batch->state.item_pos_x[ii];
+    float y0 = batch->state.item_pos_y[ii];
+    float x = x0 + batch->state.item_vel_x[ii];
+    float y = y0 + batch->state.item_vel_y[ii];
+    if (spawned_this_frame != 0u && spawned_motion_applied != 0u) {
+      x = x0;
+      y = y0;
+      x0 = x - batch->state.item_vel_x[ii];
+      y0 = y - batch->state.item_vel_y[ii];
+    }
     batch->state.item_pos_x[ii] = x;
     batch->state.item_pos_y[ii] = y;
+    if (spawned_this_frame != 0u) {
+      batch->state.item_hidden_callback_flags[ii] =
+          (uint8_t)(batch->state.item_hidden_callback_flags[ii] &
+                    (uint8_t) ~(uint8_t)(MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME |
+                                         MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_MOTION_APPLIED));
+    }
 
     // Blast-zone cull after motion integration.
     //
     // Decomp shape:
-    // - Item_802697D4 integrates position, then calls Item_802696CC (when cull flags are enabled).
+    // - Item_802697D4 integrates position, then calls Item_802696CC when cull flags are enabled.
     // - Item_802696CC destroys items that cross left/right/bottom blast boundaries.
     // refs/melee/src/melee/it/item.c::{Item_802697D4,Item_802696CC}
     //
-    // Sim scope: laser articles are always culled by left/right/bottom blast bounds in-suite.
-    // Top-bound cull in decomp uses a large constant gate (10000.0f) under a separate flag path and
-    // is intentionally left to lifetime/collision ownership until a full item-flag model is seeded.
+    // Sim scope: laser articles are culled by left/right/bottom blast bounds in-suite. Top-bound
+    // cull in decomp uses a large constant gate under a separate flag path and is left to
+    // lifetime/collision ownership until a full item-flag seed model is added.
     if (has_blast_bounds &&
         (x > blast_bounds.right || x < blast_bounds.left || y < blast_bounds.bottom)) {
       item_slot_clear(batch, ii);
@@ -3447,7 +3523,6 @@ void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
       continue;
     }
-
     // Collision: laser hitbox script defines multiple beam HitCapsules. Represent those active
     // slots as fixed-radius samples along the source projectile axis using generated
     // `hitbox_offsets_x`.
@@ -4264,7 +4339,7 @@ void lasers_update_and_collide(MslBatch* batch, int bi) {
         // the early sub-2.0 startup span and the current endpoint is still growing. Earlier ramp rows
         // (TVR 5545) wait for the next callback; seeded ShieldBounced rows use their explicit xC54/xC58
         // provenance above. This keeps the split tied to itFoxlaser_UnkMotion1_Anim's source scale
-        // lane, not a replay row id or dataset name.
+        // lane, not a replay row id or corpus name.
         // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}
         // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
         const uint8_t guard_hold_allow_interrupt_current_segment_handoff =
@@ -5669,13 +5744,15 @@ void lasers_update_and_collide(MslBatch* batch, int bi) {
               break;
             }
             if (exact_evaluated != 0u) {
-              if (use_swept_body == 0u || use_frame_start_lightshield_body_sample != 0u) {
+              if (use_swept_body == 0u || use_frame_start_lightshield_body_sample != 0u ||
+                  use_landing_fall_special_exact_z != 0u) {
                 // Once the source-shaped ftColl_8007925C -> lbColl_8000805C item BODY path has
                 // evaluated a no-sweep candidate, its miss is authoritative. The frame-start
                 // lightshield sample only selects the previous item HitCapsule endpoint consumed by
                 // source; falling through to the reduced replay-visible sphere/capsule fallback can
                 // re-admit authored beam-offset contacts that lbColl's matrix/local-radius test
-                // rejected.
+                // rejected. LandingFallSpecial uses the same exact-Z lbColl owner as the source
+                // floor-touching item BODY pass, so its evaluated miss is authoritative too.
                 // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
                 // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
                 // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
@@ -5736,7 +5813,8 @@ void lasers_update_and_collide(MslBatch* batch, int bi) {
                 break;
               }
               if (exact_evaluated != 0u) {
-                if (use_swept_body == 0u || use_frame_start_lightshield_body_sample != 0u) {
+                if (use_swept_body == 0u || use_frame_start_lightshield_body_sample != 0u ||
+                    use_landing_fall_special_exact_z != 0u) {
                   continue;
                 }
               }

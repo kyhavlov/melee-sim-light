@@ -645,6 +645,8 @@ static void fd_apply_floor_raw_links(uint32_t stage_id, MslStageFloorLine* lines
   for (size_t i = 0; i < n; i++) {
     lines[i].raw_prev_id = -1;
     lines[i].raw_next_id = -1;
+    lines[i].raw_prev_alt_id = -1;
+    lines[i].raw_next_alt_id = -1;
     lines[i].prev = -1;
     lines[i].next = -1;
     lines[i].has_prev_link = 0;
@@ -658,6 +660,13 @@ static void fd_apply_floor_raw_links(uint32_t stage_id, MslStageFloorLine* lines
     fd_oriented_source_links(seg_tmp, seg_n, (size_t)tmp_i, &prev_id, &next_id);
     lines[i].raw_prev_id = prev_id;
     lines[i].raw_next_id = next_id;
+    if (seg_tmp[(size_t)tmp_i].reversed) {
+      lines[i].raw_prev_alt_id = seg_tmp[(size_t)tmp_i].next_id1;
+      lines[i].raw_next_alt_id = seg_tmp[(size_t)tmp_i].prev_id1;
+    } else {
+      lines[i].raw_prev_alt_id = seg_tmp[(size_t)tmp_i].prev_id1;
+      lines[i].raw_next_alt_id = seg_tmp[(size_t)tmp_i].next_id1;
+    }
     int16_t graph_prev_id = -1;
     int16_t graph_next_id = -1;
     fd_oriented_active_floor_links(seg_tmp, seg_n, (size_t)tmp_i, &graph_prev_id, &graph_next_id);
@@ -930,6 +939,8 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .segment_i = s->segment_i,
           .raw_prev_id = -1,
           .raw_next_id = -1,
+          .raw_prev_alt_id = -1,
+          .raw_next_alt_id = -1,
           .has_alternate_endpoint_link =
               (uint8_t)((s->prev_id1 >= 0 || s->next_id1 >= 0) ? 1u : 0u),
           ._pad0 = {0},
@@ -3183,24 +3194,99 @@ static inline uint8_t stage_line_is_active_for_item_collision(uint8_t active_run
   return active_runtime_line ? 1u : 0u;
 }
 
-uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float y0, float x1,
-                                             float y1) {
+static inline uint8_t stage_segment_intersection_point(float ax0, float ay0, float ax1, float ay1,
+                                                       float bx0, float by0, float bx1, float by1,
+                                                       float* t_out, float* x_out, float* y_out) {
+  const float adx = ax1 - ax0;
+  const float ady = ay1 - ay0;
+  const float bdx = bx1 - bx0;
+  const float bdy = by1 - by0;
+  const float denom = (adx * bdy) - (ady * bdx);
+  if (denom == 0.0f) {
+    return 0u;
+  }
+  const float qx = bx0 - ax0;
+  const float qy = by0 - ay0;
+  const float t = ((qx * bdy) - (qy * bdx)) / denom;
+  const float u = ((qx * ady) - (qy * adx)) / denom;
+  if (t < 0.0f || t > 1.0f || u < 0.0f || u > 1.0f) {
+    return 0u;
+  }
+  if (t_out != NULL) {
+    *t_out = t;
+  }
+  if (x_out != NULL) {
+    *x_out = ax0 + adx * t;
+  }
+  if (y_out != NULL) {
+    *y_out = ay0 + ady * t;
+  }
+  return 1u;
+}
+
+static uint8_t stage_collision_item_line_query(uint32_t stage_id, float x0, float y0, float x1,
+                                               float y1, float* hit_x_out, float* hit_y_out) {
   const MslStageSlot* slot = stage_slot(stage_id);
   if (slot == NULL || !slot->loaded) {
     return 0;
   }
-  const MslStageFloorLine* segs = slot->floor_lines;
-  const size_t n = slot->floor_line_count;
-  const MslStageWallLine* left_walls = slot->left_wall_lines;
-  const size_t left_wall_n = slot->left_wall_line_count;
-  const MslStageWallLine* right_walls = slot->right_wall_lines;
-  const size_t right_wall_n = slot->right_wall_line_count;
-  const MslStageCeilingLine* ceilings = slot->ceiling_lines;
-  const size_t ceiling_n = slot->ceiling_line_count;
-  if (segs == NULL || n == 0) {
-    return 0;
+  float best_t = 2.0f;
+  float best_x = 0.0f;
+  float best_y = 0.0f;
+  uint8_t found = 0u;
+#define TRY_ITEM_LINE(SEG, HIT_EXPR)                                                      \
+  do {                                                                                    \
+    if (!stage_line_is_active_for_item_collision((SEG)->fighter_solid) || !(HIT_EXPR)) {  \
+      break;                                                                              \
+    }                                                                                     \
+    if (hit_x_out == NULL && hit_y_out == NULL) {                                         \
+      return 1u;                                                                          \
+    }                                                                                     \
+    float t__ = 0.0f, x__ = 0.0f, y__ = 0.0f;                                             \
+    if (stage_segment_intersection_point(x0, y0, x1, y1, (SEG)->x0, (SEG)->y0, (SEG)->x1, \
+                                         (SEG)->y1, &t__, &x__, &y__) &&                  \
+        t__ < best_t) {                                                                   \
+      best_t = t__;                                                                       \
+      best_x = x__;                                                                       \
+      best_y = y__;                                                                       \
+      found = 1u;                                                                         \
+    }                                                                                     \
+  } while (0)
+  for (size_t si = 0; si < slot->floor_line_count; si++) {
+    const MslStageFloorLine* seg = &slot->floor_lines[si];
+    TRY_ITEM_LINE(seg, stage_floor_segment_intersects_item(x0, y0, x1, y1, seg->x0, seg->y0,
+                                                           seg->x1, seg->y1));
   }
+  for (size_t si = 0; si < slot->left_wall_line_count; si++) {
+    const MslStageWallLine* seg = &slot->left_wall_lines[si];
+    TRY_ITEM_LINE(seg,
+                  stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1));
+  }
+  for (size_t si = 0; si < slot->right_wall_line_count; si++) {
+    const MslStageWallLine* seg = &slot->right_wall_lines[si];
+    TRY_ITEM_LINE(seg,
+                  stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1));
+  }
+  for (size_t si = 0; si < slot->ceiling_line_count; si++) {
+    const MslStageCeilingLine* seg = &slot->ceiling_lines[si];
+    TRY_ITEM_LINE(seg, stage_ceiling_segment_intersects_item(x0, y0, x1, y1, seg->x0, seg->y0,
+                                                             seg->x1, seg->y1));
+  }
+#undef TRY_ITEM_LINE
+  if (!found) {
+    return 0u;
+  }
+  if (hit_x_out != NULL) {
+    *hit_x_out = best_x;
+  }
+  if (hit_y_out != NULL) {
+    *hit_y_out = best_y;
+  }
+  return 1u;
+}
 
+uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float y0, float x1,
+                                             float y1) {
   // Treat the projectile as a point and intersect against stage collision segments.
   // Decomp laser collision calls it_8029C4D4 -> it_8026E9A4 against the active mpLib collision
   // line set, not a floor-only helper; FD ledge lasers can hit vertical wall segments below the
@@ -3211,43 +3297,12 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
   // refs/melee/src/melee/it/itgroundcoll.c::it_8026E9A4
   // refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
   // data/stages/bin/grps.bin::MSLSTG01 segments[*].fighter_solid
-  for (size_t si = 0; si < n; si++) {
-    const MslStageFloorLine* seg = &segs[si];
-    if (!stage_line_is_active_for_item_collision(seg->fighter_solid)) {
-      continue;
-    }
-    if (stage_floor_segment_intersects_item(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
-      return 1;
-    }
-  }
-  for (size_t si = 0; si < left_wall_n; si++) {
-    const MslStageWallLine* seg = &left_walls[si];
-    if (!stage_line_is_active_for_item_collision(seg->fighter_solid)) {
-      continue;
-    }
-    if (stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
-      return 1;
-    }
-  }
-  for (size_t si = 0; si < right_wall_n; si++) {
-    const MslStageWallLine* seg = &right_walls[si];
-    if (!stage_line_is_active_for_item_collision(seg->fighter_solid)) {
-      continue;
-    }
-    if (stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
-      return 1;
-    }
-  }
-  for (size_t si = 0; si < ceiling_n; si++) {
-    const MslStageCeilingLine* seg = &ceilings[si];
-    if (!stage_line_is_active_for_item_collision(seg->fighter_solid)) {
-      continue;
-    }
-    if (stage_ceiling_segment_intersects_item(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
-      return 1;
-    }
-  }
-  return 0;
+  return stage_collision_item_line_query(stage_id, x0, y0, x1, y1, NULL, NULL);
+}
+
+uint8_t stage_collision_item_line_hit_floor(uint32_t stage_id, float x0, float y0, float x1,
+                                            float y1, float* hit_x_out, float* hit_y_out) {
+  return stage_collision_item_line_query(stage_id, x0, y0, x1, y1, hit_x_out, hit_y_out);
 }
 
 static inline uint8_t stage_vertical_wall_intersects_sweep_source(float wall_x, float wall_y0,

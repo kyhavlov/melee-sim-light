@@ -530,6 +530,48 @@ typedef struct MslCharParams {
   float puff_rollout_turn_exit_vel_ratio;    // xD0
   float puff_rollout_wall_bounce_decay;      // xD4
   float puff_rollout_landing_lag;            // xD8
+
+  // Zelda ftZelda_DatAttrs special move attrs.
+  //
+  // Source of truth: ISO-extracted `data/characters/zelda.json`.
+  // Decomp: refs/melee/src/melee/ft/chara/ftZelda/types.h::ftZelda_DatAttrs
+  // refs/melee/src/melee/ft/chara/ftZelda/ftZd_Special{N,S,Hi,Lw}.c
+  int32_t zelda_nayru_air_gravity_delay_frames;
+  float zelda_nayru_air_vel_x_divisor;
+  float zelda_nayru_air_gravity;
+  int32_t zelda_din_release_min_frames;
+  int32_t zelda_din_end_min_frames;
+  int32_t zelda_din_air_gravity_delay_frames;
+  int32_t zelda_din_release_hold_min_frames;
+  float zelda_din_spawn_offset_x;
+  float zelda_din_spawn_offset_y;
+  float zelda_din_air_gravity;
+  float zelda_din_air_end_fallspecial_lag_frames;
+  float zelda_farore_air_entry_vel_x_divisor;
+  float zelda_farore_air_entry_vel_y_divisor;
+  float zelda_farore_start_air_gravity;
+  float zelda_farore_start_air_terminal_vel;
+  int32_t zelda_farore_travel_frames;
+  float zelda_farore_ground_contact_min_frames;
+  float zelda_farore_stick_mag_min;
+  float zelda_farore_travel_speed_stick_mul;
+  float zelda_farore_travel_speed_base;
+  float zelda_farore_air_end_drift_mul;
+  int32_t zelda_farore_wall_bounce_degrees;
+  float zelda_farore_end_vel_mul;
+  float zelda_farore_fallspecial_mobility_mul;
+  float zelda_farore_landing_lag_frames;
+  uint16_t zelda_nayru_reflector_bone_part_id;
+  uint16_t _pad_u16_zelda_nayru_reflector;
+  int32_t zelda_nayru_reflector_max_damage;
+  float zelda_nayru_reflector_offset_x;
+  float zelda_nayru_reflector_offset_y;
+  float zelda_nayru_reflector_offset_z;
+  float zelda_nayru_reflector_size;
+  float zelda_nayru_reflector_damage_mul;
+  float zelda_nayru_reflector_speed_mul;
+  uint8_t zelda_nayru_reflector_behavior;
+  uint8_t _pad_u8_zelda_nayru_reflector[3];
 } MslCharParams;
 
 int char_params_init(void);

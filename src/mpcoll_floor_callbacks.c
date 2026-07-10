@@ -1024,12 +1024,12 @@ uint8_t msl_mpcoll_800473cc_damage_stay_airborne_hard_floor_sweep(
     float prev_bottom_y, float cur_bottom_x, float cur_bottom_y, int prefer_line_idx,
     uint16_t* ground_id_out, float* contact_x_out, float* contact_y_out, float* floor_nx_out,
     float* floor_ny_out) {
-  if (batch == NULL || g == NULL || ground_id_out == NULL || contact_x_out == NULL ||
+  if (ctx == NULL || batch == NULL || g == NULL || ground_id_out == NULL || contact_x_out == NULL ||
       contact_y_out == NULL || floor_nx_out == NULL || floor_ny_out == NULL ||
       prefer_line_idx < 0 || (size_t)prefer_line_idx >= g->line_count) {
     return 0u;
   }
-  const uint16_t action_id = batch->state.action_id[idx];
+  const uint16_t action_id = ctx->action_id;
   const MslStageFloorLine* carried_line = &g->lines[(size_t)prefer_line_idx];
   const uint8_t carried_ordinary_hard_floor =
       (uint8_t)(carried_line->segment_i == batch->state.ground_id[idx] &&

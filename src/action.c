@@ -669,7 +669,7 @@ static inline void enter_guard_reflect_common_setup(MslBatch* batch, const MslCo
     return;
   }
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_REFLECT;
-  // Slippi post-frame `animation_index` is frequently -1 for shield states in our datasets.
+  // Slippi post-frame `animation_index` is frequently -1 for shield states in our validation rows.
   // Keep this consistent with replay seeds/refs so validation compares cleanly.
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   batch->state.guard_reflect_timer_x14[idx] = msl_guard_reflect_timer_x14_init(c);

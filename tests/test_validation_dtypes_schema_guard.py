@@ -50,6 +50,15 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "item_shield_bounce_valid" in SEED_DTYPE.fields
     assert "item_hidden_body_hit_victim_port" in SEED_DTYPE.fields
     assert "item_hidden_callback_flags" in SEED_DTYPE.fields
+    assert "item_sheik_needle_callback_bounce_vel_y_index" in SEED_DTYPE.fields
+    assert "item_sheik_needle_callback_bounce_vel_x_index_sign" in SEED_DTYPE.fields
+    assert "item_sheik_needle_motion_seed_kind" in SEED_DTYPE.fields
+    assert "item_sheik_needle_motion_vel_x_index_sign" in SEED_DTYPE.fields
+    assert "item_sheik_needle_motion_gravity_index" in SEED_DTYPE.fields
+    assert "item_sheik_needle_motion_min_vel_y_index" in SEED_DTYPE.fields
+    assert "item_sheik_needle_stage_hit_seed_kind" in SEED_DTYPE.fields
+    assert "item_sheik_needle_stage_hit_vel_y_index" in SEED_DTYPE.fields
+    assert "item_sheik_needle_stage_hit_vel_x_index_sign" in SEED_DTYPE.fields
     assert "source_clear_timer_x18c8" in SEED_DTYPE.fields
     assert "source_clear_owner_set_phase" in SEED_DTYPE.fields
     assert "source_clear_processhit_damage_pending_phase" in SEED_DTYPE.fields
@@ -99,6 +108,7 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "camera_box_radius_f32" in SEED_DTYPE.fields
     assert "camera_target_point_inside_stage_cam_bounds_u8" in SEED_DTYPE.fields
     assert "magnify_damage_counter_x1910" in SEED_DTYPE.fields
+    assert "match_flow_respawn_slot_cooldown" in SEED_DTYPE.fields
     assert "passivewall_timer" in SEED_DTYPE.fields
     assert "walljump_input_timer" in SEED_DTYPE.fields
     assert "walljump_wall_side_i8" in SEED_DTYPE.fields

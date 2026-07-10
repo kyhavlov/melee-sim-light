@@ -244,6 +244,8 @@ static PyMethodDef methods[] = {
     {"stage_static_query", msl_stage_static_query_py, METH_VARARGS,
      "stage_static_query(stage_id, checks, x0, y0, x1, y1, line_skip, joint_skip, joint_only) -> "
      "static mpLib-style line hit dict or None."},
+    {"stage_item_line_hit", msl_stage_item_line_hit_py, METH_VARARGS,
+     "stage_item_line_hit(stage_id, x0, y0, x1, y1) -> item stage-line hit point or None."},
     {"mpcoll_check_bounding_aabb", msl_mpcoll_check_bounding_aabb_py, METH_VARARGS,
      "mpcoll_check_bounding_aabb(prev_x, prev_y, cur_x, cur_y, prev_l, prev_r, prev_b, prev_t, "
      "cur_l, cur_r, cur_b, cur_t, flags, ledge_snap_x, ledge_snap_y, ledge_snap_h) -> dict"},
@@ -458,6 +460,9 @@ static PyMethodDef methods[] = {
      "threshold) -> uint8[:]"},
     {"derive_match_flow_timer", msl_derive_match_flow_timer_py, METH_VARARGS,
      "derive_match_flow_timer(action, port0, common timers...) -> uint8[:]"},
+    {"derive_match_flow_respawn_slot_cooldown", msl_derive_match_flow_respawn_slot_cooldown_py,
+     METH_VARARGS,
+     "derive_match_flow_respawn_slot_cooldown(action[:, players], shared_platform) -> uint8[:,6]"},
     {"derive_passivewall_timer", msl_derive_passivewall_timer_py, METH_VARARGS,
      "derive_passivewall_timer(action, frame, total_frames) -> uint8[:]"},
     {"derive_walljump_phase_seed_lanes", msl_derive_walljump_phase_seed_lanes_py, METH_VARARGS,
@@ -526,11 +531,13 @@ static PyMethodDef methods[] = {
     {"validation_derive_item_hidden_callback_buffers",
      msl_validation_derive_item_hidden_callback_buffers_py, METH_VARARGS,
      "validation_derive_item_hidden_callback_buffers(seed_u8, ref_u8, laser_lut, shield_lut, "
-     "players) -> None"},
+     "needle_lut, players) -> None"},
     {"validation_derive_item_reflect_damage_mul_buffers",
      msl_validation_derive_item_reflect_damage_mul_buffers_py, METH_VARARGS,
      "validation_derive_item_reflect_damage_mul_buffers(seed_u8, items_u8, replay fields, "
      "reflector LUT, powershield mul, players) -> None"},
+    {"validation_derive_zelda_din_buffers", msl_validation_derive_zelda_din_buffers_py,
+     METH_VARARGS, "validation_derive_zelda_din_buffers(seed_u8, items_u8, players) -> None"},
     {"validation_derive_yoshi_shyguy_buffers", msl_validation_derive_yoshi_shyguy_buffers_py,
      METH_VARARGS,
      "validation_derive_yoshi_shyguy_buffers(seed_u8, items_u8, frame_rng, params...) -> None"},

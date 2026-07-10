@@ -1134,7 +1134,16 @@ PyObject* msl_derive_combo_seed_fields_py(PyObject* self, PyObject* args) {
         const uint8_t v_in_hitstun =
             (flags_p[(fi * width + (npy_intp)v) * PyArray_DIM(state_flags, 2) + 3] &
              hitstun_mask_221c) != 0u;
-        if (!v_in_hitstun && combo_timer[v] == 0u) {
+        // Source order bridge for hidden fp->x2094/x2098 derivation:
+        // Fighter_8006A360 calls ftColl_800764DC before the Damage callback clears x221C_b6 and
+        // writes `victim->x2098 = p_ftCommonData->x4CC`. A post-frame row where hitstun just ended
+        // therefore still owns the attacker x2094 victim pointer even though the replay-visible
+        // hitstun bit is now clear.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+        const uint8_t v_ended_hitstun_this_row = (prev_in_hitstun[v] && !v_in_hitstun) ? 1u : 0u;
+        if (!v_in_hitstun && combo_timer[v] == 0u && !v_ended_hitstun_this_row) {
           combo_victim_port[p] = 0xFFu;
           combo_victim_iid[p] = 0u;
         }

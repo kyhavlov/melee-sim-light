@@ -36,6 +36,10 @@ uint8_t items_spawn_sheik_chain_article(MslBatch* batch, size_t owner_idx);
 uint8_t items_set_sheik_chain_article_state(MslBatch* batch, size_t owner_idx, uint8_t state);
 uint8_t items_activate_sheik_chain_hitcaps_on_entry(MslBatch* batch, size_t owner_idx);
 uint8_t items_destroy_sheik_chain_article(MslBatch* batch, size_t owner_idx);
+uint8_t items_spawn_zelda_din_fire_article(MslBatch* batch, size_t owner_idx, float spawn_offset_x,
+                                           float spawn_offset_y);
+uint8_t items_release_zelda_din_fire_article(MslBatch* batch, size_t owner_idx);
+uint8_t items_zelda_din_fire_article_live(const MslBatch* batch, size_t owner_idx);
 // World-space position of Sheik Chain fighter HitCapsule `hitbox_id` (0..3), taken from the solved
 // Verlet link the it_802BCB88 stride map assigns to it. Returns 1 and writes out_x/out_y/out_z if a
 // live, solved Chain article is owned by `fighter_idx`; else 0 (caller keeps the script/bone

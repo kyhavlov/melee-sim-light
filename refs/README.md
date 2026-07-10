@@ -15,6 +15,7 @@ The contents are gitignored but should be present locally.
 | `ucf/` | https://github.com/AltimorTASDK/UCF | UCF source code (pad buffer / 1.0 cardinals logic, etc.) |
 | `melee-disc/` | Extracted from SSBM.iso | Game filesystem (files/, sys/) - raw .dat file access |
 | `datasheet/` | slippi-wiki ID spreadsheet | Local export of character/stage/item IDs, action states, struct offsets, character attributes |
+| `slippilab/` | https://github.com/frankborden/slippilab | Slippi Lab replay viewer source. `public/zips/*.zip` are the pre-packaged per-character display assets consumed by `tools/viewer/assets/character_zips.tsv` - having this checkout present lets `tools/viewer/fetch_assets.sh` copy them locally instead of downloading from slippilab.com |
 
 ## Setup
 
@@ -27,6 +28,7 @@ git clone https://github.com/project-slippi/slippi-ssbm-asm.git
 git clone https://github.com/project-slippi/slippi-wiki.git
 git clone https://github.com/UnclePunch/UCF.git ucf
 git clone https://github.com/Gurvan/melee-anim-rs.git
+git clone https://github.com/frankborden/slippilab.git
 ```
 
 Initialize the pinned Ishiiruka probe checkout through git submodules:
@@ -70,6 +72,9 @@ When investigating desyncs or implementing new game mechanics:
   - `tools/dolphin/slp_scenario_probe.py` (patched replay windows)
 - Slippi post-frame field meanings (what the replay actually records):
   - `slippi-ssbm-asm/Recording/SendGamePostFrame.asm`
+- Webplay viewer per-character display zips (sourced from `slippilab/public/zips/` when this checkout exists, else fetched from slippilab.com):
+  - `tools/viewer/assets/character_zips.tsv`
+  - `tools/viewer/fetch_assets.sh`
 
 ## Investigation Guide (Slippi/UCF/Niche Code Paths)
 

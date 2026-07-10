@@ -14,7 +14,7 @@ def test_validation_native_wrappers_reject_invalid_num_players(num_players: int)
         )
     with pytest.raises(ValueError, match="num_players out of range"):
         msl_binding.validation_derive_item_hidden_callback_buffers(
-            None, None, None, None, num_players
+            None, None, None, None, None, num_players
         )
 
 

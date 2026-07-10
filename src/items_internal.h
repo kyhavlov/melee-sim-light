@@ -43,6 +43,9 @@
 enum {
   MSL_ITEM_HIDDEN_CALLBACK_CLEAR = 1u << 0u,
   MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_THIS_FRAME = 1u << 1u,
+  MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE = 1u << 2u,
+  MSL_ITEM_HIDDEN_CALLBACK_SPAWNED_MOTION_APPLIED = 1u << 3u,
+  MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_DESTROY = 1u << 4u,
 };
 
 enum {
@@ -208,6 +211,7 @@ uint8_t action_is_illusion_setphys(uint8_t char_id, uint16_t action_id_u16);
 uint8_t items_row_has_illusion_setphys_source(const MslBatch* batch, int bi, int num_players);
 void illusion_items_update_and_collide(MslBatch* batch, int bi);
 void lasers_update_and_collide(MslBatch* batch, int bi);
+void zelda_din_fire_update_and_collide(MslBatch* batch, int bi);
 void sheik_held_needles_update_anim_phase(MslBatch* batch, int bi);
 void sheik_chain_items_update_anim_phase(MslBatch* batch, int bi);
 void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int bi, int owner);

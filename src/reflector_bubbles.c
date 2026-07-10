@@ -17,6 +17,10 @@ static inline uint8_t is_fox_falco(uint8_t char_id) {
   return (char_id == (uint8_t)MSL_CHAR_ID_FOX) || (char_id == (uint8_t)MSL_CHAR_ID_FALCO);
 }
 
+static inline uint8_t action_is_zelda_nayru(uint16_t a) {
+  return (uint8_t)(a == (uint16_t)MSL_ACT_ZD_SPECIAL_N || a == (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_N);
+}
+
 static inline uint8_t action_is_shine_reflector_active(uint8_t char_id, uint16_t a) {
   // Suite-confirmed: Slippi reflect-active bit 0x10 is set in Loop/Hit/Turn but not Start/End.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwLoop_Enter (CreateReflectHit)
@@ -55,7 +59,7 @@ void reflector_bubbles_refresh(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint8_t cid = batch->state.char_id[idx];
-      if (!is_fox_falco(cid)) {
+      if (!is_fox_falco(cid) && cid != (uint8_t)MSL_CHAR_ID_ZELDA) {
         batch->state.reflector_x[idx] = batch->state.pos_x[idx];
         batch->state.reflector_y[idx] = batch->state.pos_y[idx];
         batch->state.reflector_radius[idx] = 0.0f;
@@ -68,7 +72,14 @@ void reflector_bubbles_refresh(MslBatch* batch) {
       }
 
       const uint16_t a = batch->state.action_id[idx];
-      const uint8_t active = action_is_shine_reflector_active(batch->state.char_id[idx], a);
+      const uint8_t zelda_nayru_active =
+          (cid == (uint8_t)MSL_CHAR_ID_ZELDA && action_is_zelda_nayru(a) &&
+           batch->state.special_cmd0[idx] == 2u)
+              ? 1u
+              : 0u;
+      const uint8_t active =
+          (uint8_t)(action_is_shine_reflector_active(batch->state.char_id[idx], a) != 0u ||
+                    zelda_nayru_active != 0u);
 
       float rx = batch->state.pos_x[idx];
       float ry = batch->state.pos_y[idx];
@@ -79,7 +90,16 @@ void reflector_bubbles_refresh(MslBatch* batch) {
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit (reflect_hit.bone/offset/size)
         const float scale_y = batch->state.fighter_scale_y[idx];
         const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-        rr = ch->reflector_size * scale_y;
+        const uint16_t reflector_bone = zelda_nayru_active != 0u
+                                            ? ch->zelda_nayru_reflector_bone_part_id
+                                            : ch->reflector_bone_part_id;
+        const float reflector_offset[3] = {
+            zelda_nayru_active != 0u ? ch->zelda_nayru_reflector_offset_x : ch->reflector_offset_x,
+            zelda_nayru_active != 0u ? ch->zelda_nayru_reflector_offset_y : ch->reflector_offset_y,
+            zelda_nayru_active != 0u ? ch->zelda_nayru_reflector_offset_z : ch->reflector_offset_z,
+        };
+        rr = (zelda_nayru_active != 0u ? ch->zelda_nayru_reflector_size : ch->reflector_size) *
+             scale_y;
 
         const uint32_t anim_u32 = batch->state.animation_index[idx];
         if (anim_u32 <= 0xFFFFu) {
@@ -89,8 +109,8 @@ void reflector_bubbles_refresh(MslBatch* batch) {
           const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
 
           float m[12];
-          if (anim_pose_get_matrix(cid, msid, frame, ch->reflector_bone_part_id, m) == 0) {
-            float off[3] = {ch->reflector_offset_x, ch->reflector_offset_y, ch->reflector_offset_z};
+          if (anim_pose_get_matrix(cid, msid, frame, reflector_bone, m) == 0) {
+            float off[3] = {reflector_offset[0], reflector_offset[1], reflector_offset[2]};
             float lx = 0.0f, ly = 0.0f, lz = 0.0f;
             msl_mtx34_mul_point(m, off, &lx, &ly, &lz);
             (void)lz;
@@ -131,7 +151,30 @@ void reflector_bubbles_refresh(MslBatch* batch) {
           ((a == (uint16_t)MSL_ACT_GUARD_REFLECT) || (prev_a == (uint16_t)MSL_ACT_GUARD_REFLECT))
               ? 1u
               : 0u;
-      if (override_shine) {
+      if (zelda_nayru_active != 0u) {
+        // Zelda Nayru's Love creates a ReflectDesc from cmd_var0's script window, not from a
+        // looping state family. ftColl_CreateReflectHit copies ReflectDesc.x20_behavior into
+        // fp+0x2218_b5.
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialN.c::{
+        //   ftZd_SpecialN_Anim,ftZd_SpecialAirN_Anim}
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+        f |= (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+        if (ch->zelda_nayru_reflector_behavior != 0) {
+          f |= (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR;
+        } else {
+          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR;
+        }
+        batch->state.state_flags[flags_i] = f;
+      } else if (cid == (uint8_t)MSL_CHAR_ID_ZELDA && action_is_zelda_nayru(a)) {
+        // ftZd_SpecialN_Anim clears fp->reflecting when the script cmd0 window is not active.
+        // The reflect bit is therefore owned for the full Nayru action, not just while the bubble
+        // exists, and stale replay seed carry must be cleared after cmd0 returns to zero.
+        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialN.c::{
+        //   ftZd_SpecialN_Anim,ftZd_SpecialAirN_Anim}
+        f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+        f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR;
+        batch->state.state_flags[flags_i] = f;
+      } else if (override_shine) {
         // SpecialLwStart is normally not reflect-active, but ftFx_SpecialLwStart_Pass creates a
         // ReflectDesc after changing to SpecialAirLwStart. Carry that already-live fp->reflecting
         // bit until the Start anim reaches Loop, without admitting fresh airborne Start entries.

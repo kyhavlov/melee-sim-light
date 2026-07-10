@@ -65,6 +65,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->stage_dream_whispy_wind_dir, 0, sizeof(uint8_t) * b);
   memset(state->stage_dream_whispy_wind_valid, 0, sizeof(uint8_t) * b);
   memset(state->stage_dream_whispy_wind_timer, 0, sizeof(uint16_t) * b);
+  memset(state->match_flow_respawn_slot_cooldown, 0,
+         sizeof(uint8_t) * b * (size_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT);
   memset(state->item_spawn_id_counter, 0, sizeof(uint32_t) * b);
   memset(state->dynamic_pose_state_valid, 0, sizeof(uint8_t) * bp);
   memset(state->camera_target_live_pose_valid, 0, sizeof(uint8_t) * bp);

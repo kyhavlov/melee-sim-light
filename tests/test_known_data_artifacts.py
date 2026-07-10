@@ -772,10 +772,10 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         assert f"needle_bounce_x_vel_{i}" in fields
     assert manifest["char_domain"]["name"] == "Slippi/CSS external character id"
 
-    # MSLITAR1 v16: v15's thrown-Needle command-11 hitbox/JObj publication fields remain present,
+    # MSLITAR1 v17: v15's thrown-Needle command-11 hitbox/JObj publication fields remain present,
     # and the article-hitbox flags lane now also carries x40_b0 clank eligibility.
-    assert ITEM_ARTICLE_VERSION == 16
-    assert manifest["version"] == 16
+    assert ITEM_ARTICLE_VERSION == 17
+    assert manifest["version"] == 17
     units = {row["id"]: row["name"] for row in manifest["units"]}
     assert units.get(11) == "scalar"
     chain_fields = [

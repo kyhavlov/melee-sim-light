@@ -131,7 +131,7 @@ CHARS: dict[str, CharInfo] = {
         submotion_dir="ftZelda",
         submotion_prefix="ftZd_SM_",
         has_articles=True,
-        exports_item_article_constants=False,
+        exports_item_article_constants=True,
     ),
 }
 

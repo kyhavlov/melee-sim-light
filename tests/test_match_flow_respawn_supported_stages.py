@@ -61,6 +61,80 @@ def _seed_dead_left(stage_id: int, port: int) -> np.ndarray:
     return seed
 
 
+def test_sustained_rebirth_preserves_carried_spawn_platform_target() -> None:
+    # Sustained Rebirth does not reload the static MSLSTG01 respawn X every frame. Vanilla carries
+    # the spawn-platform target in mv.co.common.x4 and recomputes self_vel after Rebirth_Anim
+    # decrements x0. A mid-Rebirth replay seed can recover that target from visible pos/vel/timer.
+    # refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_Rebirth_Anim,ftCo_Rebirth_Phys}
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(3)  # Pokemon Stadium static role has respawn x=0.
+    seed["num_players"][0] = np.uint8(4)
+    seed["stocks"][0, :4] = np.uint8(4)
+    seed["char_id"][0, :4] = np.uint8(CHAR_FOX)
+    seed["source_port0"][0, :4] = np.arange(4, dtype=np.uint8)
+    seed["fighter_scale_y"][0, :4] = np.float32(1.0)
+    seed["frame_speed_mul_f32"][0, :4] = np.float32(1.0)
+    seed["anim_frame_f32"][0, :4] = np.float32(58.0)
+    seed["ground_id"][0, :4] = np.uint16(0xFFFF)
+    seed["action_id"][0, :4] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, :4] = np.uint32(SM_WAIT)
+
+    seed["action_id"][0, 0] = np.uint16(ACT_REBIRTH)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT)
+    seed["action_frame"][0, 0] = np.int16(58)
+    seed["match_flow_timer"][0, 0] = np.uint8(2)
+    seed["pos_x"][0, 0] = np.float32(16.0)
+    seed["pos_y"][0, 0] = np.float32(61.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+    seed["speed_y_self"][0, 0] = np.float32(-1.0)
+
+    out = _step_once(seed, num_players=4)
+
+    assert int(out["action_id"][0]) == ACT_REBIRTH
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(0.0)
+    assert float(out["speed_y_self"][0]) == pytest.approx(-1.0)
+    assert float(out["pos_x"][0]) == pytest.approx(16.0)
+    assert float(out["pos_y"][0]) == pytest.approx(60.0)
+
+
+def test_rebirth_expiry_enters_rebirthwait_at_current_platform_pose() -> None:
+    # ftCo_800D5600 changes Rebirth -> RebirthWait at the current cur_pos, then RebirthWait_Phys
+    # owns self_vel.{x,y}. The sim does not preserve arbitrary seeded horizontal velocity through
+    # that physics owner.
+    # refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D5600,ftCo_RebirthWait_Phys}
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(3)  # Pokemon Stadium static role has respawn x=0.
+    seed["num_players"][0] = np.uint8(4)
+    seed["stocks"][0, :4] = np.uint8(4)
+    seed["char_id"][0, :4] = np.uint8(CHAR_FOX)
+    seed["source_port0"][0, :4] = np.arange(4, dtype=np.uint8)
+    seed["fighter_scale_y"][0, :4] = np.float32(1.0)
+    seed["frame_speed_mul_f32"][0, :4] = np.float32(1.0)
+    seed["anim_frame_f32"][0, :4] = np.float32(59.0)
+    seed["ground_id"][0, :4] = np.uint16(0xFFFF)
+    seed["action_id"][0, :4] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, :4] = np.uint32(SM_WAIT)
+
+    seed["action_id"][0, 0] = np.uint16(ACT_REBIRTH)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT)
+    seed["action_frame"][0, 0] = np.int16(59)
+    seed["match_flow_timer"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(16.0)
+    seed["pos_y"][0, 0] = np.float32(60.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(1.25)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-0.5)
+    seed["speed_y_self"][0, 0] = np.float32(-1.0)
+
+    out = _step_once(seed, num_players=4)
+
+    assert int(out["action_id"][0]) == 13
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(0.0)
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(0.0)
+    assert float(out["speed_y_self"][0]) == pytest.approx(0.0)
+    assert float(out["pos_x"][0]) == pytest.approx(16.0)
+    assert float(out["pos_y"][0]) == pytest.approx(60.0)
+
+
 @pytest.mark.parametrize("stage_id", LEGAL_STAGE_IDS)
 @pytest.mark.parametrize("port", range(4))
 def test_dead_to_rebirth_uses_mslstg01_respawn_and_world_zero_facing(stage_id: int, port: int) -> None:
@@ -97,3 +171,60 @@ def test_dead_to_rebirth_uses_mslstg01_respawn_and_world_zero_facing(stage_id: i
         abs=1e-5,
     )
     assert float(respawn_y) < float(cam_top)
+
+
+def test_shared_respawn_platform_uses_source_slot_cooldown_offset() -> None:
+    # Shared-platform stages use gm_1601.c::fn_80167638's global FighterMatchInfo slot cooldowns:
+    # first open slot, base Stage_80224E38(..., 0), x += 16.0f * lbl_803B7A44[slot],
+    # then slot.x8 = 0x90. Pokemon Stadium's extracted MSLSTG01 respawn points are identical,
+    # so a busy slot 0 pushes the new Rebirth to the +16 slot.
+    # refs/melee/src/melee/gm/gm_1601.c::{fn_8016758C,fn_80167638}
+    # refs/melee/build/GALE01/asm/melee/gm/gm_1601.s::lbl_803B7A44
+    seed = _seed_dead_left(3, 1)
+    seed["match_flow_respawn_slot_cooldown"][0, 0] = np.uint8(2)
+
+    out = _step_once(seed, num_players=4)
+
+    assert int(out["action_id"][1]) == ACT_REBIRTH
+    assert float(out["pos_x"][1]) == pytest.approx(16.0, abs=1e-5)
+    assert int(out["facing"][1]) == 0
+
+
+def test_per_port_respawn_stage_ignores_shared_slot_cooldown() -> None:
+    # Battlefield has distinct extracted MSLSTG01 respawn points, so it follows the normal
+    # per-port fn_8016719C/Stage_80224E38 owner instead of the shared cooldown table.
+    seed = _seed_dead_left(31, 1)
+    seed["match_flow_respawn_slot_cooldown"][0, 0] = np.uint8(2)
+
+    out = _step_once(seed, num_players=4)
+
+    assert int(out["action_id"][1]) == ACT_REBIRTH
+    assert float(out["pos_x"][1]) == pytest.approx(-40.0, abs=1e-5)
+
+
+def test_respawn_slot_cooldown_derivation_tracks_rebirth_edges() -> None:
+    # Native seed derivation mirrors the source slot table state so one-step reseeds can enter the
+    # same shared respawn slot without replay-row fitting.
+    msl_binding = pytest.importorskip("msl_binding")
+    wait = np.uint16(ACT_WAIT)
+    rebirth = np.uint16(ACT_REBIRTH)
+    actions = np.array(
+        [
+            [wait, wait],
+            [rebirth, wait],
+            [rebirth, wait],
+            [wait, rebirth],
+        ],
+        dtype=np.uint16,
+    )
+
+    got = msl_binding.derive_match_flow_respawn_slot_cooldown(actions, 1)
+
+    np.testing.assert_array_equal(got[0], np.array([0, 0, 0, 0, 0, 0], dtype=np.uint8))
+    np.testing.assert_array_equal(got[1], np.array([0x90, 0, 0, 0, 0, 0], dtype=np.uint8))
+    np.testing.assert_array_equal(got[2], np.array([0x8F, 0, 0, 0, 0, 0], dtype=np.uint8))
+    np.testing.assert_array_equal(got[3], np.array([0x8E, 0x90, 0, 0, 0, 0], dtype=np.uint8))
+    np.testing.assert_array_equal(
+        msl_binding.derive_match_flow_respawn_slot_cooldown(actions, 0),
+        np.zeros((4, 6), dtype=np.uint8),
+    )

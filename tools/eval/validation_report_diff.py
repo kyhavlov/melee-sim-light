@@ -480,6 +480,43 @@ def _is_one_step_float_only_ok(
     )
 
 
+def _report_replay_sections(
+    reports: dict[str, dict[str, dict[str, MetricValue]]], report: str
+) -> set[str]:
+    return {
+        section
+        for section in reports.get(report, {})
+        if section not in {"suite", "preamble"}
+    }
+
+
+def _report_replay_set_changed(
+    before: dict[str, dict[str, dict[str, MetricValue]]],
+    after: dict[str, dict[str, dict[str, MetricValue]]],
+    report: str,
+) -> bool:
+    before_sections = _report_replay_sections(before, report)
+    after_sections = _report_replay_sections(after, report)
+    return bool(before_sections and after_sections and before_sections != after_sections)
+
+
+def _is_suite_membership_distribution_only(
+    before: dict[str, dict[str, dict[str, MetricValue]]],
+    after: dict[str, dict[str, dict[str, MetricValue]]],
+    delta: MetricDelta,
+) -> bool:
+    # When a validation suite gains/removes replay sections, the report is a new coverage
+    # distribution. Suite aggregates and newly-added/removed replay sections are informational for
+    # that transition, but common replay sections remain hard locks.
+    if not _report_replay_set_changed(before, after, delta.report):
+        return False
+    if delta.section == "suite":
+        return True
+    before_sections = _report_replay_sections(before, delta.report)
+    after_sections = _report_replay_sections(after, delta.report)
+    return delta.section not in (before_sections & after_sections)
+
+
 def is_ignored_lane_only_strict_movement(
     before: dict[str, dict[str, dict[str, MetricValue]]],
     after: dict[str, dict[str, dict[str, MetricValue]]],
@@ -528,6 +565,9 @@ def classify_reds(
 
     for delta in rows:
         if not delta.is_regression:
+            continue
+        if _is_suite_membership_distribution_only(before, after, delta):
+            distribution_only.append(delta)
             continue
         if _is_rollout_distribution_reshuffle_ok(before, after, delta):
             continue
@@ -605,7 +645,10 @@ def print_red_classification(classification: RedClassification, *, top: int) -> 
     print("red classification:")
     _print_classification_group("hard reds", classification.hard, top=top)
     _print_classification_group(
-        "distribution-only reds", classification.distribution_only, top=top
+        "distribution-only reds",
+        classification.distribution_only,
+        top=top,
+        marker="distribution-only",
     )
     _print_classification_group(
         "ignored-lane-only movements (diagnostic, outside the scored profile)",
@@ -680,7 +723,9 @@ def print_report(
     for delta in rows:
         if not delta.is_regression:
             continue
-        if is_ignored_lane_only_strict_movement(before, after, delta):
+        if _is_suite_membership_distribution_only(before, after, delta):
+            non_regression_markers[delta] = "suite-membership"
+        elif is_ignored_lane_only_strict_movement(before, after, delta):
             non_regression_markers[delta] = "diagnostic"
         elif _is_rollout_distribution_reshuffle_ok(before, after, delta):
             non_regression_markers[delta] = "distribution-only"

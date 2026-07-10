@@ -64,7 +64,7 @@ static inline uint8_t timers_source_clear_downed_recovery_terminal_parks_owner(
   //   live x18C8 run from an earlier grounded motion; when the replay-visible terminal row is
   //   reached, source ownership parks with the timer inactive rather than clearing during rollout.
   // This mirrors the one-step terminal phase producer for the same decomp callback family without
-  // keying on a dataset, replay, or row id.
+  // keying on a corpus, replay, or row id.
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Passive.c,ftCo_PassiveStand.c}
   // refs/melee/src/melee/ft/ftmotionstates.c (Down*/Passive* callback rows)

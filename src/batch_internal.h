@@ -115,7 +115,7 @@ struct MslBatch {
 
   // Runtime-only collision-pose matrices sampled while building hurtcap endpoints. Combat's
   // ordinary BODY matrix-radius path consumes the same matrix later in the frame. This deliberately
-  // stays out of serialized state so existing replay datasets keep their schema.
+  // stays out of serialized state so existing replay corpora keep their schema.
   uint8_t* hurtcap_matrix_valid;  // [batch * players * caps]
   float* hurtcap_matrix;          // [batch * players * caps * 12]
 

@@ -1690,6 +1690,7 @@ Characters (Fox/Falco/Marth/Sheik/Zelda):
   - Purpose:
     - Collect stable, named item/article constants for Fox/Falco blaster, laser,
       illusion/phantasm, Sheik thrown Needle, Sheik Chain/Vanish article publication fields,
+      Zelda Din's Fire fire/explosion article fields,
       item-common item-damage facing, item-common shield bounce data, and the item-common
       reflect/half-life fraction.
     - `data/items/item_common.json::reflect_half_life_fraction` = `ItemCommonData::x4C_float` (0.5).
@@ -1702,7 +1703,7 @@ Characters (Fox/Falco/Marth/Sheik/Zelda):
     - This is a known-field table only; it does not classify item behavior from replay observations.
     - The file name is a legacy path; the table is no longer limited to Fox/Falco records.
   - Sources:
-    - `data/characters/{fox,falco,sheik}.json`
+    - `data/characters/{fox,falco,sheik,zelda}.json`
     - `data/items/item_common.json`
     - `refs/melee/src/melee/it/types.h`
     - `refs/melee/src/melee/it/forward.h::ItemKind`
@@ -1713,14 +1714,18 @@ Characters (Fox/Falco/Marth/Sheik/Zelda):
     - `refs/melee/src/melee/it/items/itseakchain.c::{itSeakChain_Spawn,it_802BB20C}`
     - `refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1C60,it_802B1D40}`
     - `refs/melee/src/melee/it/items/itseakneedlethrown.c`
+    - `refs/melee/src/melee/it/items/itzeldadinfire.c`
+    - `refs/melee/src/melee/it/items/itzeldadinfireexplode.c`
     - `refs/melee/src/melee/ft/chara/ft{Fox,Falco}/ftF{c,x}_Init.c` item-list registration
     - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_Init.c::ftSk_Init_OnLoad` item-list registration
+    - `refs/melee/src/melee/ft/chara/ftZelda/ftZd_Init.c::ftZd_Init_OnLoad` item-list registration
     - `refs/melee/src/melee/it/itcoll.c::it_8027163C` Article hurtbone copy
-  - Character id domain: Slippi/CSS external character id (`Fox=2`, `Sheik=19`, `Falco=20`), not
-    the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`, `Falco=22`).
-  - Binary layout: `MSLITAR1` v16
+  - Character id domain: Slippi/CSS external character id (`Fox=2`, `Zelda=18`, `Sheik=19`,
+    `Falco=20`), not the runtime `MslSeed` internal character id domain (`Fox=1`, `Sheik=7`,
+    `Zelda=19`, `Falco=22`).
+  - Binary layout: `MSLITAR1` v17
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 16`
+    - `u32 version = 17`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes
@@ -1822,6 +1827,16 @@ Characters (Fox/Falco/Marth/Sheik/Zelda):
     - v16 extends the article hitbox flags lane with command-11 `x40_b0` clank eligibility. This lets
       runtime distinguish BODY-enabled item HitCapsules from item/fighter HitCapsules that may enter
       `ftColl_80077970`; Sheik thrown-Needle state-0 hitboxes have BODY enabled but clank disabled.
+    - v17 adds Zelda Din's Fire fire/explosion article fields:
+      `zelda_din_fire_itkind`, `zelda_din_fire_explode_itkind`, fire lifetime/release lifetime,
+      fire charge/scale/initial angle/initial speed/accel/max speed/stick steering attrs, explosion
+      charge/scale/damage attrs, and the explosion state-0 HitCapsule fields (count, size, offsets,
+      angle, knockback, element, shield damage, target/contact flags). Runtime requires the Zelda
+      row to contain all v17 Din fields before `item_article_params_get(MSL_CHAR_ID_ZELDA)` can
+      serve Zelda special/item code; missing fields are loader failures, not zero/default fallbacks.
+      This packet intentionally does not model `itZeldaDinFire_Logic65_Reflected`: reflected Din
+      flips `itemVar.zeldadinfire.xDDC`, facing, JObj Y rotation, and velocity in source, but no
+      explicit sim hidden-state lane is retained until that owner is implemented end-to-end.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
 - `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:

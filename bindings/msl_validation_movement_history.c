@@ -3,6 +3,7 @@
 #include "msl_validation_movement_history.h"
 #include "msl_validation_history_common.h"
 
+#include "../src/api.h"
 #include "../src/input_axis.h"
 #include "../src/move_tables.h"
 #include "../src/mpcoll_ecb_points.h"
@@ -1227,6 +1228,59 @@ PyObject* msl_derive_match_flow_timer_py(PyObject* self, PyObject* args) {
     if (timer < 0) timer = 0;
     if (timer > 255) timer = 255;
     o[i] = (uint8_t)timer;
+  }
+  return (PyObject*)out;
+}
+
+PyObject* msl_derive_match_flow_respawn_slot_cooldown_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* action_obj = NULL;
+  int shared_platform = 0;
+  if (!PyArg_ParseTuple(args, "Oi", &action_obj, &shared_platform)) {
+    return NULL;
+  }
+  PyArrayObject* action =
+      require_contiguous_array(action_obj, NPY_UINT16, 2, "action_id_u16_by_player");
+  if (action == NULL) return NULL;
+  const npy_intp n = PyArray_DIM(action, 0);
+  const npy_intp players = PyArray_DIM(action, 1);
+  if (players <= 0 || players > MSL_MAX_PLAYERS) {
+    PyErr_SetString(PyExc_ValueError, "action_id_u16_by_player must have 1..4 player columns");
+    return NULL;
+  }
+  npy_intp dims[2] = {n, (npy_intp)MSL_RESPAWN_PLATFORM_SLOT_COUNT};
+  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(2, dims, NPY_UINT8, 0);
+  if (out == NULL) return NULL;
+  if (!shared_platform) {
+    return (PyObject*)out;
+  }
+
+  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  uint8_t* o = (uint8_t*)PyArray_DATA(out);
+  uint8_t cooldown[MSL_RESPAWN_PLATFORM_SLOT_COUNT] = {0};
+  for (npy_intp frame = 0; frame < n; frame++) {
+    for (uint8_t slot = 0u; slot < (uint8_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT; slot++) {
+      if (cooldown[slot] != 0u) {
+        cooldown[slot] = (uint8_t)(cooldown[slot] - 1u);
+      }
+    }
+    for (npy_intp p = 0; p < players; p++) {
+      const uint16_t cur = a[frame * players + p];
+      const uint16_t prev = (frame > 0) ? a[(frame - 1) * players + p] : 0xFFFFu;
+      if (cur != (uint16_t)MSL_ACT_REBIRTH || prev == (uint16_t)MSL_ACT_REBIRTH) {
+        continue;
+      }
+      uint8_t chosen = 0u;
+      for (uint8_t slot = 0u; slot < (uint8_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT; slot++) {
+        if (cooldown[slot] == 0u) {
+          chosen = slot;
+          break;
+        }
+      }
+      cooldown[chosen] = 0x90u;
+    }
+    memcpy(o + (size_t)frame * (size_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT, cooldown,
+           (size_t)MSL_RESPAWN_PLATFORM_SLOT_COUNT);
   }
   return (PyObject*)out;
 }

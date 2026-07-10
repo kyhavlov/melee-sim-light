@@ -317,26 +317,31 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
             raise RuntimeError('native msl_binding.derive_marth_counter_hitlag_floor_active is required; run `make build`') from exc
         return msl_binding.derive_marth_counter_hitlag_floor_active(_ascontiguousarray(char_id_u8, dtype=np.uint8), _ascontiguousarray(action_id_u16, dtype=np.uint16), _ascontiguousarray(state_flags_u8, dtype=np.uint8))
 
-    def _derive_sheik_vanish_travel_timer(*, char_id_u8: np.ndarray, action_id_u16: np.ndarray, sheik_internal_id: int | None, travel_frames: int) -> np.ndarray:
+    def _derive_teleport_travel_timer(*, char_id_u8: np.ndarray, action_id_u16: np.ndarray, sheik_internal_id: int | None, sheik_travel_frames: int, zelda_internal_id: int | None, zelda_travel_frames: int) -> np.ndarray:
         char_arr = np.asarray(char_id_u8, dtype=np.uint8)
         action_arr = np.asarray(action_id_u16, dtype=np.uint16)
         if char_arr.ndim == 2:
             out_2d = np.zeros(action_arr.shape, dtype=np.uint8)
             for slot in range(action_arr.shape[1]):
-                out_2d[:, slot] = _derive_sheik_vanish_travel_timer(char_id_u8=char_arr[:, slot], action_id_u16=action_arr[:, slot], sheik_internal_id=sheik_internal_id, travel_frames=travel_frames)
+                out_2d[:, slot] = _derive_teleport_travel_timer(char_id_u8=char_arr[:, slot], action_id_u16=action_arr[:, slot], sheik_internal_id=sheik_internal_id, sheik_travel_frames=sheik_travel_frames, zelda_internal_id=zelda_internal_id, zelda_travel_frames=zelda_travel_frames)
             return out_2d
         out = np.zeros(action_arr.shape[0], dtype=np.uint8)
-        if sheik_internal_id is None or travel_frames <= 0:
-            return out
-        travel = (char_arr == np.uint8(sheik_internal_id)) & ((action_arr == np.uint16(356)) | (action_arr == np.uint16(359)))
-        idx = np.flatnonzero(travel)
-        if idx.size == 0:
-            return out
-        split_at = np.flatnonzero(np.diff(idx) != 1) + 1
-        for seg in np.split(idx, split_at):
-            remaining = int(travel_frames) - np.arange(seg.size, dtype=np.int16)
-            remaining = np.clip(remaining, 1, 255).astype(np.uint8)
-            out[seg] = remaining
+        owners: list[tuple[int | None, int, tuple[int, ...]]] = [
+            (sheik_internal_id, int(sheik_travel_frames), (356, 359)),
+            (zelda_internal_id, int(zelda_travel_frames), (350, 353)),
+        ]
+        for internal_id, travel_frames, actions in owners:
+            if internal_id is None or int(internal_id) < 0 or travel_frames <= 0:
+                continue
+            travel = (char_arr == np.uint8(int(internal_id))) & np.isin(action_arr, np.asarray(actions, dtype=np.uint16))
+            idx = np.flatnonzero(travel)
+            if idx.size == 0:
+                continue
+            split_at = np.flatnonzero(np.diff(idx) != 1) + 1
+            for seg in np.split(idx, split_at):
+                remaining = int(travel_frames) - np.arange(seg.size, dtype=np.int16)
+                remaining = np.clip(remaining, 1, 255).astype(np.uint8)
+                out[seg] = remaining
         return out
 
     def _stale_multiplier_from_seed_queue(queue_index: int, queue_move_ids: np.ndarray, move_id: int) -> float:
@@ -370,6 +375,8 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     zelda_char_id = manifest_tables.zelda_char_id
     sheik_vanish_travel_frames = manifest_tables.sheik_vanish_travel_frames
     sheik_vanish_ground_contact_min_frames = manifest_tables.sheik_vanish_ground_contact_min_frames
+    zelda_farore_travel_frames = manifest_tables.zelda_farore_travel_frames
+    zelda_farore_ground_contact_min_frames = manifest_tables.zelda_farore_ground_contact_min_frames
     sheik_chain_release_min_frames = manifest_tables.sheik_chain_release_min_frames
     shield_meta = load_shield_tilt_table_meta()
     neutral_lut = np.zeros(256, dtype=np.uint16)
@@ -501,6 +508,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     reflector_damage_mul_lut = np.ones(256, dtype=np.float32)
     reflector_damage_mul_lut[np.uint8(1)] = np.float32(_load_character_attrs(data_root, 'fox')['reflector_damage_mul'])
     reflector_damage_mul_lut[np.uint8(22)] = np.float32(_load_character_attrs(data_root, 'falco')['reflector_damage_mul'])
+    reflector_damage_mul_lut[np.uint8(19)] = np.float32(_load_character_attrs(data_root, 'zelda')['zelda_nayru_reflector_damage_mul'])
     import msl_binding
     msl_binding.validation_init_static_buffers(samples.seed_u8(), samples.ref_u8(), frame_ids, frame_pre_random_seed, int(stage_id), int(num_players), int(is_teams), float(game.start.get('damage_ratio', 1.0)))
     if int(stage_id) == 2:
@@ -848,6 +856,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     illusion_lut = _u8_lut_from_items(tuple((int(k) for k in illusion_item_kinds)))
     msl_binding.validation_copy_item_rows_with_illusion(samples.seed_u8(), samples.ref_u8(), _structured_rows_as_bytes(items_fixed), _ascontiguousarray(post_action_id_u16, dtype=np.uint16), _ascontiguousarray(post_hitlag_u16_all, dtype=np.uint16), _ascontiguousarray(post_instance_hit_by_u16_all, dtype=np.uint16), _ascontiguousarray(illusion_ghost_pos1_x, dtype=np.float32), _ascontiguousarray(illusion_ghost_pos1_y, dtype=np.float32), illusion_lut, int(num_players))
     msl_binding.validation_derive_item_reflect_damage_mul_buffers(samples.seed_u8(), _structured_rows_as_bytes(items_fixed), _ascontiguousarray(post_action_id_u16, dtype=np.uint16), _ascontiguousarray(post_char_id_u8, dtype=np.uint8), _ascontiguousarray(post_state_flags_u8, dtype=np.uint8), _ascontiguousarray(reflector_damage_mul_lut, dtype=np.float32), float(common['powershield_reflect_damage_mul']), int(num_players))
+    msl_binding.validation_derive_zelda_din_buffers(samples.seed_u8(), _structured_rows_as_bytes(items_fixed), int(num_players))
     yoshi_params = _yoshi_shyguy_params()
     if int(stage_id) == int(yoshi_params.stage_id):
         yoshi_common = _item_common_params()
@@ -996,13 +1005,15 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     motion_entry_iid_override[motion_entry_override_mask] = post_instance_id[1:, :][motion_entry_override_mask]
     samples['seed_t']['motion_entry_instance_id_override_u16'][:, :] = motion_entry_iid_override
     samples['seed_t']['specialn_blaster_loop_requested'][:, :] = (specialn_blaster_loop_latch_owner | specialn_cmd0_edge_latch_owner).astype(np.uint8)
-    samples['seed_t']['sheik_vanish_travel_timer_u8'][:, :] = _derive_sheik_vanish_travel_timer(char_id_u8=samples['seed_t']['char_id'], action_id_u16=samples['seed_t']['action_id'], sheik_internal_id=sheik_char_id, travel_frames=sheik_vanish_travel_frames)
+    samples['seed_t']['sheik_vanish_travel_timer_u8'][:, :] = _derive_teleport_travel_timer(char_id_u8=samples['seed_t']['char_id'], action_id_u16=samples['seed_t']['action_id'], sheik_internal_id=sheik_char_id, sheik_travel_frames=sheik_vanish_travel_frames, zelda_internal_id=zelda_char_id, zelda_travel_frames=zelda_farore_travel_frames)
     sheik_vanish_floor_skip = _derive_sheik_vanish_floor_skip_segments(stage_id=int(stage_id), action_id_u16=samples['seed_t']['action_id'][:, :num_players], char_id_u8=samples['seed_t']['char_id'][:, :num_players], on_ground_u8=samples['seed_t']['on_ground'][:, :num_players], ground_id_u16=samples['seed_t']['ground_id'][:, :num_players], vanish_travel_timer_u8=samples['seed_t']['sheik_vanish_travel_timer_u8'][:, :num_players], pos_x_f32=samples['seed_t']['pos_x'][:, :num_players], pos_y_f32=samples['seed_t']['pos_y'][:, :num_players], sheik_internal_id=sheik_char_id, travel_frames=sheik_vanish_travel_frames, ground_contact_min_frames=sheik_vanish_ground_contact_min_frames, data_root=data_root)
+    zelda_farore_floor_skip = _derive_sheik_vanish_floor_skip_segments(stage_id=int(stage_id), action_id_u16=samples['seed_t']['action_id'][:, :num_players], char_id_u8=samples['seed_t']['char_id'][:, :num_players], on_ground_u8=samples['seed_t']['on_ground'][:, :num_players], ground_id_u16=samples['seed_t']['ground_id'][:, :num_players], vanish_travel_timer_u8=samples['seed_t']['sheik_vanish_travel_timer_u8'][:, :num_players], pos_x_f32=samples['seed_t']['pos_x'][:, :num_players], pos_y_f32=samples['seed_t']['pos_y'][:, :num_players], sheik_internal_id=zelda_char_id, travel_frames=zelda_farore_travel_frames, ground_contact_min_frames=zelda_farore_ground_contact_min_frames, data_root=data_root)
     current_floor_skip = samples['seed_t']['floor_skip_segment_id_u16'][:, :num_players]
     current_floor_skip_valid = current_floor_skip != np.uint16(65535)
-    sheik_floor_skip_valid = sheik_vanish_floor_skip != np.uint16(65535)
-    samples['seed_t']['floor_skip_segment_id_u16'][:, :num_players] = np.where(current_floor_skip_valid, current_floor_skip, sheik_vanish_floor_skip).astype(np.uint16)
-    samples['seed_t']['floor_skip_segment_valid_u8'][:, :num_players] = (current_floor_skip_valid | sheik_floor_skip_valid).astype(np.uint8)
+    teleport_floor_skip = np.where(sheik_vanish_floor_skip != np.uint16(65535), sheik_vanish_floor_skip, zelda_farore_floor_skip).astype(np.uint16)
+    teleport_floor_skip_valid = teleport_floor_skip != np.uint16(65535)
+    samples['seed_t']['floor_skip_segment_id_u16'][:, :num_players] = np.where(current_floor_skip_valid, current_floor_skip, teleport_floor_skip).astype(np.uint16)
+    samples['seed_t']['floor_skip_segment_valid_u8'][:, :num_players] = (current_floor_skip_valid | teleport_floor_skip_valid).astype(np.uint8)
     sheik_chain_article_present = np.zeros_like(samples['seed_t']['char_id'], dtype=np.uint8)
     if sheik_char_id is not None and int(sheik_char_id) >= 0:
         import msl_binding
@@ -1019,6 +1030,10 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         sheik_needle_shoot_rng_owner = np.any(sheik_needle_shoot_rng_owner_by_player, axis=1)
         if np.any(sheik_needle_shoot_rng_owner):
             samples['seed_t']['frame_pre_random_seed'][sheik_needle_shoot_rng_owner] = frame_pre_random_seed[1:][sheik_needle_shoot_rng_owner]
+    roles = msl_binding.stage_match_flow_roles(int(stage_id))
+    respawn_points = roles.get('respawn_points', [])
+    shared_respawn_platform = bool(respawn_points) and all(tuple(p) == tuple(respawn_points[0]) for p in respawn_points)
+    samples['seed_t']['match_flow_respawn_slot_cooldown'][:, :] = msl_binding.derive_match_flow_respawn_slot_cooldown(np.ascontiguousarray(post_action_id_u16[:, :int(num_players)], dtype=np.uint16), int(shared_respawn_platform))[:-1, :]
     samples['seed_t']['match_flow_pending_rebirth_char_id'][:, :] = _derive_match_flow_pending_rebirth_char_id(post_action_id_u16=post_action_id_u16, post_char_id_u8=post_char_id_u8, post_stocks_u8=post_stocks_u8_all, match_flow_timer_u8=match_flow_timer_u8_all, static_char_id_u8=static_char_id_u8, team_id_u8=team_id_u8, is_teams=bool(is_teams), num_players=int(num_players))[:-1, :]
     samples['seed_t']['match_flow_pending_rebirth_state_flags_2218'][:, :] = _derive_match_flow_pending_rebirth_state_flags_2218(post_action_id_u16=post_action_id_u16, post_char_id_u8=post_char_id_u8, post_stocks_u8=post_stocks_u8_all, post_state_flags_u8=post_state_flags_u8, match_flow_timer_u8=match_flow_timer_u8_all, static_char_id_u8=static_char_id_u8, team_id_u8=team_id_u8, is_teams=bool(is_teams), num_players=int(num_players))[:-1, :]
     if int(num_players) == 2:
@@ -1035,7 +1050,8 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     msl_binding.validation_derive_throw_laser_item_hitlist_buffers(_structured_rows_as_writable_bytes(samples['seed_t']), hitbox_mask_lut, int(num_players))
     laser_lut = _u8_lut_from_items(tuple((int(k) for k in laser_item_types)))
     shield_bounce_lut = _u8_lut_from_items(tuple((int(k) for k in shield_bounce_item_types)))
-    msl_binding.validation_derive_item_hidden_callback_buffers(_structured_rows_as_writable_bytes(samples['seed_t']), _structured_rows_as_bytes(samples['ref_t1']), laser_lut, shield_bounce_lut, int(num_players))
+    needle_lut = _u8_lut_from_items(tuple((int(k) for k in needle_throw_item_types)))
+    msl_binding.validation_derive_item_hidden_callback_buffers(_structured_rows_as_writable_bytes(samples['seed_t']), _structured_rows_as_bytes(samples['ref_t1']), laser_lut, shield_bounce_lut, needle_lut, int(num_players))
     pre_stick_x_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)
     pre_stick_y_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)
     grab_mash_x_sign_post = np.zeros((n_frames, 4), dtype=np.int8)

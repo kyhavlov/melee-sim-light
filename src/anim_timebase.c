@@ -1340,6 +1340,7 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         continue;
       }
 
+      uint8_t runbrake_set_rate_one_after_tick = 0u;
       if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_RUN_BRAKE && c != NULL) {
         const float cur_frame = msl_f32_from_q16_16(batch->state.anim_frame_fp_q16_16[idx]);
         const uint8_t runbrake_freeze_state = batch->state.runbrake_freeze_x0[idx];
@@ -1347,29 +1348,33 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
             (uint8_t)(runbrake_freeze_state != 3u &&
                       move_tables_runbrake_cmd1_active(batch->state.char_id[idx], cur_frame) != 0u);
         const float speed_abs = fabsf(batch->state.speed_ground_x_self[idx]);
-        if (runbrake_freeze_state == 2u) {
-          batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
-          batch->state.runbrake_freeze_x0[idx] = 3u;
+        if (runbrake_freeze_state == 1u) {
+          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+          if (speed_abs <= c->runbrake_anim_freeze_speed_threshold) {
+            runbrake_set_rate_one_after_tick = 1u;
+            batch->state.runbrake_freeze_x0[idx] = 3u;
+          }
         } else if (cmd1 != 0u && runbrake_freeze_state == 0u &&
                    speed_abs >= c->runbrake_anim_freeze_speed_threshold) {
           // ftCo_RunBrake_Anim: when cmd_vars[1] is set and |gr_vel| is still above
           // p_ftCommonData->x42C, source calls ftAnim_SetAnimRate(0) and sets
           // mv.co.runbrake.x0. While that latch is set, the AObj stays frozen until |gr_vel| is
-          // below-or-equal to x42C, at which point source resumes and clears cmd_vars[1].
-          // The SetAnimRate(1) resume affects the next AObj tick, so state value 2 preserves the
-          // final frozen frame before value 3 suppresses the script-derived cmd_vars[1] pulse.
+          // below-or-equal to x42C, at which point source calls ftAnim_SetAnimRate(1) and clears
+          // cmd_vars[1]. The cmd-var event is visible at the callback's current frame before the
+          // AObj add publishes the next action_frame, so the freeze suppresses the frame-11 tick.
+          // If the command first fires when gr_vel is already at the zero x42C threshold, source
+          // still publishes that one frozen command frame, then the consumed command resumes on the
+          // next AObj tick; sustained high-speed brakes keep the x0 latch until a later callback.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
           //   ftCo_RunBrake_Enter,ftCo_RunBrake_Anim}
           // data/scripts/<char>.bin::MSLFTSC1 ftCo_SM_RunBrake set_cmd_var(idx=1,value=1)
           // data/common/ft_common_data.json::runbrake_anim_freeze_speed_threshold
           batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-          batch->state.runbrake_freeze_x0[idx] = 1u;
-        } else if (cmd1 != 0u && runbrake_freeze_state == 1u) {
           if (speed_abs <= c->runbrake_anim_freeze_speed_threshold) {
-            batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-            batch->state.runbrake_freeze_x0[idx] = 2u;
+            runbrake_set_rate_one_after_tick = 1u;
+            batch->state.runbrake_freeze_x0[idx] = 3u;
           } else {
-            batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+            batch->state.runbrake_freeze_x0[idx] = 1u;
           }
         } else if (cmd1 != 0u && batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
           batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
@@ -1442,6 +1447,10 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       }
 
       msl_anim_timebase_recompute_derived(batch, idx);
+      if (runbrake_set_rate_one_after_tick != 0u &&
+          batch->state.action_id[idx] == (uint16_t)MSL_ACT_RUN_BRAKE) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
+      }
       // Fall/FallAerial/FallSpecial Anim callback owner:
       // source advances the AObj timeline, then ftCo_Fall_Anim_Inner updates mv.co.*.x4 and
       // ftCo_800CC988 publishes the blended neutral/F/B JObj pose before BODY collision refresh.

@@ -788,6 +788,33 @@ PyObject* msl_stage_static_query_py(PyObject* self, PyObject* args) {
                        "normal_y", (double)hit.normal_y, "dist2", (double)hit.dist2);
 }
 
+PyObject* msl_stage_item_line_hit_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int stage_id_u = 0u;
+  double x0 = 0.0;
+  double y0 = 0.0;
+  double x1 = 0.0;
+  double y1 = 0.0;
+  if (!PyArg_ParseTuple(args, "Idddd", &stage_id_u, &x0, &y0, &x1, &y1)) {
+    return NULL;
+  }
+  if (stage_collision_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "stage_collision_init failed");
+    return NULL;
+  }
+  if (!stage_collision_require_stage((uint32_t)stage_id_u)) {
+    PyErr_SetString(PyExc_RuntimeError, "requested stage collision artifact is unavailable");
+    return NULL;
+  }
+  float hit_x = 0.0f;
+  float hit_y = 0.0f;
+  if (!stage_collision_item_line_hit_floor((uint32_t)stage_id_u, (float)x0, (float)y0, (float)x1,
+                                           (float)y1, &hit_x, &hit_y)) {
+    Py_RETURN_NONE;
+  }
+  return Py_BuildValue("{s:f,s:f}", "x", (double)hit_x, "y", (double)hit_y);
+}
+
 PyObject* msl_mpcoll_check_bounding_aabb_py(PyObject* self, PyObject* args) {
   (void)self;
   double prev_pos_x = 0.0;

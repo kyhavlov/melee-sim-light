@@ -447,9 +447,24 @@ static inline void damage_clear_terminal_post_hitlag_buffers(MslBatch* batch, si
   }
   batch->state.damage_jump_buffer_x14[idx] = 0u;
   batch->state.damage_meteor_cancel_eligible_x1a[idx] = 0u;
+  const MslCommonParams* c = msl_common_params();
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  const uint8_t had_hitstun =
+      (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN) ? 1u : 0u;
+  batch->state.hitstun[idx] = 0u;
   batch->state
       .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX] &=
       (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+  if (had_hitstun != 0u) {
+    // Decomp: Fighter_ChangeMotionState clears fp->x221C_b6 and writes
+    // fp->x2098 = p_ftCommonData->x4CC when the destination transition does not pass
+    // Ft_MF_SkipHitStun.  Damage callbacks that enter non-Damage states through that path must
+    // preserve the hidden post-hitstun combo window even though Slippi-visible hitstun is zero.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+    batch->state.combo_timer_x2098[idx] =
+        (c != NULL) ? c->combo_timer_post_hitstun_frames : (uint16_t)0;
+  }
 }
 
 static inline void damage_anim_clear_terminal_hitstun(MslBatch* batch, const MslCommonParams* c,
@@ -462,9 +477,7 @@ static inline void damage_anim_clear_terminal_hitstun(MslBatch* batch, const Msl
   // than moving the shared Fighter_8006A360 timer pass.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
   //   ftCo_DamageFlyRoll_Anim,ftCo_8008F744}
-  batch->state.hitstun[idx] = 0u;
-  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+  damage_clear_terminal_post_hitlag_buffers(batch, idx);
   batch->state.combo_timer_x2098[idx] =
       (c != NULL) ? c->combo_timer_post_hitstun_frames : (uint16_t)0;
 }
@@ -2236,9 +2249,7 @@ static inline void enter_fall_from_downdamage_anim(MslBatch* batch, size_t idx) 
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  batch->state.hitstun[idx] = 0u;
-  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+  damage_clear_terminal_post_hitlag_buffers(batch, idx);
 }
 
 static inline void clear_downed_damage_state(MslBatch* batch, size_t idx) {
@@ -3510,7 +3521,7 @@ void knockdown_update_post_collision(MslBatch* batch) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-            batch->state.hitstun[idx] = 0u;
+            damage_clear_terminal_post_hitlag_buffers(batch, idx);
             continue;
           }
           if (batch->state.hitstun[idx] > 0u) {
@@ -3552,7 +3563,7 @@ void knockdown_update_post_collision(MslBatch* batch) {
             // Replay lock: MotionlessAggressiveJay rec=385 keeps the DamageAir1 IASA lockout flag
             // live on seed but Landing_Enter_Basic has already cleared the replay-facing hitstun
             // lane on the destination row.
-            batch->state.hitstun[idx] = 0u;
+            damage_clear_terminal_post_hitlag_buffers(batch, idx);
             continue;
           }
           // Decomp: Damage_Coll fallback while grounded keeps Damage motion-state and applies the

@@ -26,7 +26,7 @@ from test_char_common_action_coverage import ACT_GUARD, _mk_inputs, _run, _seed_
 
 ACT_GUARD_REFLECT = 0x00B6
 from test_colldata_ecb_substrate import _colldata_ecb_dtype  # noqa: E402
-from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 from tests.replay_buffers_loader import load_replay_buffers  # noqa: E402
 from tools.slippi.item_article_data import item_article_values_by_sim_char  # noqa: E402
 
@@ -2555,6 +2555,197 @@ def test_sheik_bounced_needle_state4_anim_does_not_decrement_lifetime_negative()
     assert float(out["items"]["pos_y"][0]) > 20.0
 
 
+def test_sheik_bounced_needle_reseed_hitlag_freezes_exact_source_owner() -> None:
+    # Slippi does not serialize item->xCBC_hitlagFrames. When a replay seed starts after a Needle
+    # BODY callback has entered state 4, the victim-side hitlag/source lanes identify the same
+    # source item; reseed reconstructs item hitlag so Item_802697D4 remains frozen for this step.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    #   it_2725_Logic109_DmgDealt,itSeakneedlethrown_UnkMotion4_Phys}
+    # refs/melee/src/melee/it/item.c::{checkHitLag,Item_802697D4}
+    seed = _seed_base("sheik")
+    _install_sheik_item(
+        seed,
+        item_type=ITEM_SHEIK_NEEDLE_THROWN,
+        state=4,
+        timer=120.0,
+        vel_x=0.0,
+        vel_y=2.0,
+    )
+    seed["hitlag"][0, 1] = np.uint8(4)
+    seed["hitstun"][0, 1] = np.uint16(12)
+    seed["last_hit_by"][0, 1] = np.uint8(0)
+    seed["instance_hit_by"][0, 1] = np.uint16(17)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == 4
+    assert float(out["items"]["pos_y"][0]) == pytest.approx(20.0)
+    assert float(out["items"]["vel_y"][0]) == pytest.approx(2.0)
+
+
+def test_sheik_bounced_needle_reseed_hitlag_requires_item_instance_negative() -> None:
+    # Adjacent negative: victim hitlag alone is not enough to freeze every state-4 Needle. The
+    # bridge requires the victim's source instance to match this exact item identity.
+    seed = _seed_base("sheik")
+    _install_sheik_item(
+        seed,
+        item_type=ITEM_SHEIK_NEEDLE_THROWN,
+        state=4,
+        timer=120.0,
+        vel_x=0.0,
+        vel_y=2.0,
+    )
+    seed["hitlag"][0, 1] = np.uint8(4)
+    seed["hitstun"][0, 1] = np.uint16(12)
+    seed["last_hit_by"][0, 1] = np.uint8(0)
+    seed["instance_hit_by"][0, 1] = np.uint16(999)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == 4
+    assert float(out["items"]["pos_y"][0]) > 20.0
+
+
+def test_sheik_bounced_needle_motion_seed_restores_hidden_xdd8_gravity() -> None:
+    # Reseed bridge for hidden state-4 itemVar motion lanes. A replay seed exposes visible velocity
+    # but not xDD8/xDE0; when preprocessing proves the next state-4 publication came from an
+    # unclamped Phys update, reseed restores those data-table samples.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion4_Phys
+    import msl_binding
+
+    article = msl_binding.item_article_params(7)
+    seed = _seed_base("sheik")
+    _install_sheik_item(
+        seed,
+        item_type=ITEM_SHEIK_NEEDLE_THROWN,
+        state=4,
+        timer=120.0,
+        vel_x=0.0,
+        vel_y=2.2,
+    )
+    seed["item_sheik_needle_motion_seed_kind"][0, 0] = np.uint8(1)
+    seed["item_sheik_needle_motion_vel_x_index_sign"][0, 0] = np.uint8(7)
+    seed["item_sheik_needle_motion_gravity_index"][0, 0] = np.uint8(2)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    vx = float(article["needle_bounce_x_vel"][7])
+    gy = float(article["needle_bounce_gravity"][2])
+    assert float(out["items"]["vel_x"][0]) == pytest.approx(vx)
+    assert float(out["items"]["vel_y"][0]) == pytest.approx(2.2 + gy)
+    assert float(out["items"]["pos_x"][0]) == pytest.approx(10.0 + vx)
+    assert float(out["items"]["pos_y"][0]) == pytest.approx(20.0 + 2.2 + gy)
+
+
+def test_sheik_bounced_needle_motion_seed_kind1_does_not_fabricate_terminal_y() -> None:
+    # Kind 1 proves xDD8/xDE0 only. It must not install or honor an xDDC terminal clamp unless
+    # preprocessing proved the full SetupBounce tuple.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion4_Phys
+    import msl_binding
+
+    article = msl_binding.item_article_params(7)
+    seed = _seed_base("sheik")
+    _install_sheik_item(
+        seed,
+        item_type=ITEM_SHEIK_NEEDLE_THROWN,
+        state=4,
+        timer=120.0,
+        vel_x=0.0,
+        vel_y=-2.65,
+    )
+    seed["item_sheik_needle_motion_seed_kind"][0, 0] = np.uint8(1)
+    seed["item_sheik_needle_motion_vel_x_index_sign"][0, 0] = np.uint8(7)
+    seed["item_sheik_needle_motion_gravity_index"][0, 0] = np.uint8(2)
+    seed["item_sheik_needle_motion_min_vel_y_index"][0, 0] = np.uint8(0)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    gy = float(article["needle_bounce_gravity"][2])
+    assert float(out["items"]["vel_y"][0]) == pytest.approx(-2.65 + gy)
+
+
+def test_sheik_bounced_needle_motion_seed_hitlag_freezes_item() -> None:
+    # Adjacent seed bridge kind: if the next same-item state-4 publication is unchanged despite
+    # nonzero velocity, preprocessing restores hidden item hitlag so Item_802697D4 does not run.
+    seed = _seed_base("sheik")
+    _install_sheik_item(
+        seed,
+        item_type=ITEM_SHEIK_NEEDLE_THROWN,
+        state=4,
+        timer=120.0,
+        vel_x=1.4,
+        vel_y=2.2,
+    )
+    seed["item_sheik_needle_motion_seed_kind"][0, 0] = np.uint8(2)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert float(out["items"]["pos_x"][0]) == pytest.approx(10.0)
+    assert float(out["items"]["pos_y"][0]) == pytest.approx(20.0)
+    assert float(out["items"]["vel_x"][0]) == pytest.approx(1.4)
+    assert float(out["items"]["vel_y"][0]) == pytest.approx(2.2)
+
+
+def test_sheik_bounced_needle_motion_seed_hitlag_resumes_with_hidden_lanes() -> None:
+    # Bridge kind 3 is the hitlag-freeze bridge plus proven SetupBounce xDD8/xDDC/xDE0 table lanes.
+    # The first step freezes in item hitlag; after the hidden hitlag clears, state-4 Phys uses those
+    # source lanes instead of visible-velocity gravity recovery.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    #   itSeakNeedleThrown_SetupBounce,itSeakneedlethrown_UnkMotion4_Phys}
+    import msl_binding
+
+    article = msl_binding.item_article_params(7)
+    seed = _seed_base("sheik")
+    _install_sheik_item(
+        seed,
+        item_type=ITEM_SHEIK_NEEDLE_THROWN,
+        state=4,
+        timer=120.0,
+        vel_x=0.0,
+        vel_y=2.7,
+    )
+    seed["item_sheik_needle_motion_seed_kind"][0, 0] = np.uint8(3)
+    seed["item_sheik_needle_motion_vel_x_index_sign"][0, 0] = np.uint8(0)
+    seed["item_sheik_needle_motion_gravity_index"][0, 0] = np.uint8(1)
+    seed["item_sheik_needle_motion_min_vel_y_index"][0, 0] = np.uint8(5)
+
+    outs = _run(seed, [_mk_inputs(), _mk_inputs()])
+    assert float(outs[0]["items"]["pos_y"][0]) == pytest.approx(20.0)
+    assert float(outs[0]["items"]["vel_y"][0]) == pytest.approx(2.7)
+    assert float(outs[1]["items"]["vel_x"][0]) == pytest.approx(float(article["needle_bounce_x_vel"][0]))
+    assert float(outs[1]["items"]["vel_y"][0]) == pytest.approx(
+        2.7 + float(article["needle_bounce_gravity"][1])
+    )
+    assert float(outs[1]["items"]["pos_y"][0]) == pytest.approx(
+        20.0 + 2.7 + float(article["needle_bounce_gravity"][1])
+    )
+
+
+def test_sheik_bounced_needle_motion_seed_kind3_clamps_proven_terminal_y() -> None:
+    # Kind 3 carries the proven xDD8/xDDC/xDE0 tuple, so after hidden item hitlag clears the Phys
+    # callback clamps to the restored xDDC terminal sample.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    #   itSeakNeedleThrown_SetupBounce,itSeakneedlethrown_UnkMotion4_Phys}
+    import msl_binding
+
+    article = msl_binding.item_article_params(7)
+    seed = _seed_base("sheik")
+    _install_sheik_item(
+        seed,
+        item_type=ITEM_SHEIK_NEEDLE_THROWN,
+        state=4,
+        timer=120.0,
+        vel_x=0.0,
+        vel_y=-2.65,
+    )
+    seed["item_sheik_needle_motion_seed_kind"][0, 0] = np.uint8(3)
+    seed["item_sheik_needle_motion_vel_x_index_sign"][0, 0] = np.uint8(0)
+    seed["item_sheik_needle_motion_gravity_index"][0, 0] = np.uint8(2)
+    seed["item_sheik_needle_motion_min_vel_y_index"][0, 0] = np.uint8(0)
+
+    outs = _run(seed, [_mk_inputs(), _mk_inputs()])
+    assert float(outs[1]["items"]["vel_y"][0]) == pytest.approx(
+        float(article["needle_bounce_min_vel_y"][0])
+    )
+
+
 def test_sheik_bounced_needle_clears_on_generic_item_bottom_blast_bound() -> None:
     # Generic item proc order for thrown Needles is Phys/integration, then Item_802696CC blast-bound
     # destruction. Item creation enables side/bottom cleanup by default (xDCC_flag.b3=1, b4567=15),
@@ -2796,8 +2987,13 @@ def test_sheik_needle_damage_callback_specials_without_chain_does_not_fire() -> 
 def test_sheik_needle_seed_lane_clears_on_visible_damage_action() -> None:
     import msl_binding
 
-    # Damage after a SpecialN state clears the count (callback was installed); damage after a common
-    # action does not (no installed callback), so a stored count survives a non-special hit.
+    # Damage immediately after SpecialN clears the count through the installed ftSk_Init_80110198
+    # callback. Fighter_ChangeMotionState clears the callback on ordinary motion changes, so this
+    # bridge is only immediate hidden source state, not an arbitrary visible-action gap.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_Init.c::ftSk_Init_80110198
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    #   setDmgCallbacks,ftSk_SpecialN_80111FBC,ftSk_SpecialN_801120D4}
     char = np.full((3, 1), 7, dtype=np.uint8)
     no_chain = np.zeros((3, 1), dtype=np.uint8)
     action = np.array([[ACT_SK_SPECIAL_N_LOOP], [ACT_DAMAGE_N_1], [ACT_WAIT]], dtype=np.uint16)
@@ -2807,11 +3003,33 @@ def test_sheik_needle_seed_lane_clears_on_visible_damage_action() -> None:
     assert [int(v) for v in count[:, 0]] == [1, 0, 0]
     assert [int(v) for v in timer[:, 0]] == [0, 0, 0]
 
-    # prev_action is Wait (no installed callback): the count built during the Loop survives the hit.
+
+def test_sheik_needle_seed_lane_common_gap_keeps_count_but_clears_callback() -> None:
+    import msl_binding
+
+    # fv.sk.x0 survives after Cancel exits, but the installed damage/death callback is cleared by
+    # the ordinary motion-state handoff. Later damage therefore must not clear the stored count.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
+    #   ftSk_SpecialNCancel_Anim,ftSk_SpecialN_80111FBC}
+    char = np.full((4, 1), 7, dtype=np.uint8)
+    no_chain = np.zeros((4, 1), dtype=np.uint8)
+    action = np.array(
+        [[ACT_SK_SPECIAL_N_LOOP], [ACT_SK_SPECIAL_N_CANCEL], [ACT_FALL], [ACT_DAMAGE_N_1]],
+        dtype=np.uint16,
+    )
+    frame = np.array([[0], [0], [0], [0]], dtype=np.int16)
+
+    count, timer = msl_binding.derive_sheik_needle_seed_lanes(char, action, frame, no_chain, 7)
+    assert [int(v) for v in count[:, 0]] == [1, 1, 1, 1]
+    assert [int(v) for v in timer[:, 0]] == [0, 0, 0, 0]
+
     action_common = np.array(
         [[ACT_SK_SPECIAL_N_LOOP], [ACT_WAIT], [ACT_DAMAGE_N_1]], dtype=np.uint16
     )
-    count2, _ = msl_binding.derive_sheik_needle_seed_lanes(char, action_common, frame, no_chain, 7)
+    count2, _ = msl_binding.derive_sheik_needle_seed_lanes(
+        char[:3], action_common, frame[:3], no_chain[:3], 7
+    )
     assert [int(v) for v in count2[:, 0]] == [1, 1, 1]
 
 
@@ -2833,7 +3051,9 @@ def test_sheik_needle_seed_lane_chain_callback_installed_clears_count() -> None:
     count, _ = msl_binding.derive_sheik_needle_seed_lanes(char, action, frame, chain_present, 7)
     assert [int(v) for v in count[:, 0]] == [1, 1, 0]
 
-    # No live Chain article -> SpecialS did not install the callback -> count survives the hit.
+    # No live Chain article on this SpecialS row means SpecialS did not install the callback, and
+    # the motion change into SpecialS cleared the previous SpecialN callback.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
     no_chain = np.zeros((3, 1), dtype=np.uint8)
     count2, _ = msl_binding.derive_sheik_needle_seed_lanes(char, action, frame, no_chain, 7)
     assert [int(v) for v in count2[:, 0]] == [1, 1, 1]
@@ -3083,6 +3303,374 @@ def test_sheik_thrown_needle_dmgdealt_fate_is_deterministic_in_synthetic_rng() -
                 )
             )
         assert outcomes[0] == outcomes[1]
+
+
+def _needle_body_destroy_rng_hw() -> int:
+    for hw in range(0, 24):
+        seed = _seed_needle_over_fox_defender()
+        seed["frame_pre_random_seed"][0] = np.uint32(hw << 16)
+        out = _run(seed, [_mk_inputs()])[0]
+        if int(out["items"]["exists"][0]) == 0:
+            return hw
+    raise AssertionError("no synthetic destroy seed found")
+
+
+def _needle_body_bounce_rng_hw() -> int:
+    for hw in range(0, 24):
+        seed = _seed_needle_over_fox_defender()
+        seed["frame_pre_random_seed"][0] = np.uint32(hw << 16)
+        out = _run(seed, [_mk_inputs()])[0]
+        if int(out["items"]["exists"][0]) == 1 and int(out["items"]["state"][0]) == 4:
+            return hw
+    raise AssertionError("no synthetic bounce seed found")
+
+
+def test_sheik_needle_damage_callback_seed_bridge_forces_exact_bounce_sample() -> None:
+    # One-step replay/provenance bridge for the hidden Logic109 bounce sample: validation can prove
+    # from a same item spawn/instance state-0 -> state-4 publication that this callback bounced and
+    # which data-table visible x/y samples were published. Runtime consumes the normal RNG sites but
+    # substitutes only those source-table samples for this exact seeded item slot.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    #   it_2725_Logic109_DmgDealt,itSeakNeedleThrown_SetupBounce}
+    import msl_binding
+
+    article = msl_binding.item_article_params(7)
+    y_idx = 0
+    x_idx = 0
+    seed = _seed_needle_over_fox_defender()
+    seed["frame_pre_random_seed"][0] = np.uint32(_needle_body_bounce_rng_hw() << 16)
+    seed["item_hidden_callback_flags"][0, 0] = np.uint8(1 << 2)
+    seed["item_sheik_needle_callback_bounce_vel_y_index"][0, 0] = np.uint8(y_idx)
+    seed["item_sheik_needle_callback_bounce_vel_x_index_sign"][0, 0] = np.uint8(x_idx | 0x80)
+
+    pct0 = float(seed["percent"][0, 1])
+    out = _run(seed, [_mk_inputs()])[0]
+    assert float(out["percent"][1]) == pytest.approx(pct0 + 3.0, abs=0.01)
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == 4
+    assert float(out["items"]["vel_y"][0]) == pytest.approx(
+        abs(float(article["needle_bounce_min_vel_y"][y_idx]))
+    )
+    assert float(out["items"]["vel_x"][0]) == pytest.approx(
+        -float(article["needle_bounce_x_vel"][x_idx])
+    )
+
+
+def test_sheik_needle_damage_callback_seed_bridge_forces_destroy_outcome() -> None:
+    # Matching one-step counterpart to the bounce bridge: if the same state-0 Needle spawn/instance
+    # disappears after a player-contact Logic109 callback, validation has proven the source
+    # HSD_Randi(3)!=0 destroy branch. The bridge consumes the source fate RNG site but restores that
+    # hidden callback result for this seeded item slot only.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt
+    seed = _seed_needle_over_fox_defender()
+    seed["frame_pre_random_seed"][0] = np.uint32(_needle_body_bounce_rng_hw() << 16)
+    seed["item_hidden_callback_flags"][0, 0] = np.uint8(1 << 4)
+
+    pct0 = float(seed["percent"][0, 1])
+    out = _run(seed, [_mk_inputs()])[0]
+    assert float(out["percent"][1]) == pytest.approx(pct0 + 3.0, abs=0.01)
+    assert int(out["items"]["exists"][0]) == 0
+
+
+def test_sheik_needle_damage_callback_seed_indices_without_flag_are_inert_negative() -> None:
+    # Adjacent negative: zero-filled/default seed rows must not treat index 0 as a valid bridge, and
+    # indices alone cannot force the callback. The explicit hidden-callback flag is the provenance
+    # signal.
+    seed = _seed_needle_over_fox_defender()
+    seed["frame_pre_random_seed"][0] = np.uint32(_needle_body_destroy_rng_hw() << 16)
+    seed["item_sheik_needle_callback_bounce_vel_y_index"][0, 0] = np.uint8(3)
+    seed["item_sheik_needle_callback_bounce_vel_x_index_sign"][0, 0] = np.uint8(5 | 0x80)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["items"]["exists"][0]) == 0
+
+
+def _run_needle_two_steps(seed: np.ndarray) -> np.void:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_bytes = seed.view(np.uint8).reshape((1, int(sizes["seed"]))).copy()
+    input_bytes = _mk_inputs().view(np.uint8).reshape((1, int(sizes["input"]))).copy()
+    out_bytes = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, input_bytes, input_bytes)
+        msl_binding.step_input(handle, input_bytes, input_bytes)
+        msl_binding.write_compare(handle, out_bytes)
+    finally:
+        msl_binding.destroy(handle)
+    return out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+
+
+def _run_needle_two_steps_replay_frame_rng(seed: np.ndarray) -> np.void:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_bytes = seed.view(np.uint8).reshape((1, int(sizes["seed"]))).copy()
+    input_bytes = _mk_inputs().view(np.uint8).reshape((1, int(sizes["input"]))).copy()
+    out_bytes = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed_rollout(handle, seed_bytes)
+        msl_binding.step_input_replay_frame_rng(handle, seed_bytes, input_bytes, input_bytes)
+        msl_binding.step_input_replay_frame_rng(handle, seed_bytes, input_bytes, input_bytes)
+        msl_binding.write_compare(handle, out_bytes)
+    finally:
+        msl_binding.destroy(handle)
+    return out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+
+
+def _needle_delayed_body_seed(*, rng_hw: int) -> np.ndarray:
+    seed = _seed_needle_over_fox_defender(defender_x=20.0)
+    seed["frame_pre_random_seed"][0] = np.uint32(rng_hw << 16)
+    seed["items"]["pos_x"][0, 0] = np.float32(0.0)
+    seed["items"]["pos_y"][0, 0] = np.float32(8.0)
+    seed["items"]["vel_x"][0, 0] = np.float32(20.0)
+    seed["items"]["vel_y"][0, 0] = np.float32(0.0)
+    seed["item_hidden_callback_flags"][0, 0] = np.uint8(1 << 1)  # spawned_this_frame
+    return seed
+
+
+def _needle_delayed_body_destroy_rng_hw() -> int:
+    for hw in range(0, 64):
+        out = _run_needle_two_steps(_needle_delayed_body_seed(rng_hw=hw))
+        if int(out["items"]["exists"][0]) == 0:
+            return hw
+    raise AssertionError("no delayed-body destroy RNG seed found")
+
+
+def _needle_delayed_body_bounce_rng_hw() -> int:
+    for hw in range(0, 64):
+        out = _run_needle_two_steps(_needle_delayed_body_seed(rng_hw=hw))
+        if int(out["items"]["exists"][0]) == 1 and int(out["items"]["state"][0]) == 4:
+            return hw
+    raise AssertionError("no delayed-body bounce RNG seed found")
+
+
+def test_sheik_needle_callback_seed_bridge_expires_after_missed_spawn_step() -> None:
+    # One-step callback bridges must be consumed-or-cleared on their seeded item slot. The first frame
+    # is a spawn-publication frame with the Needle far from the defender, so no Logic109 contact owns
+    # the seeded bridge. On frame two the Needle reaches BODY contact; the stale bridge must not force
+    # the earlier bounce sample and normal RNG still owns the destroy outcome.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    #   it_802AFD8C,it_2725_Logic109_DmgDealt,itSeakNeedleThrown_SetupBounce}
+    seed = _needle_delayed_body_seed(rng_hw=_needle_delayed_body_destroy_rng_hw())
+    seed["item_hidden_callback_flags"][0, 0] = np.uint8((1 << 1) | (1 << 2))
+    seed["item_sheik_needle_callback_bounce_vel_y_index"][0, 0] = np.uint8(3)
+    seed["item_sheik_needle_callback_bounce_vel_x_index_sign"][0, 0] = np.uint8(5 | 0x80)
+
+    out = _run_needle_two_steps(seed)
+    assert int(out["items"]["exists"][0]) == 0
+
+
+def test_sheik_needle_callback_seed_bridge_is_reseed_boundary_only_replay_frame_rng() -> None:
+    # The replay-frame helper may be used for later rollout frames, but the Needle callback bridge
+    # is one-step seed provenance. After the spawn-publication item step misses and clears it, a
+    # later replay-frame RNG step with the same stale seed row must not reinstall either bounce or
+    # destroy fate.
+    seed_bounce = _needle_delayed_body_seed(rng_hw=_needle_delayed_body_destroy_rng_hw())
+    seed_bounce["item_hidden_callback_flags"][0, 0] = np.uint8((1 << 1) | (1 << 2))
+    seed_bounce["item_sheik_needle_callback_bounce_vel_y_index"][0, 0] = np.uint8(3)
+    seed_bounce["item_sheik_needle_callback_bounce_vel_x_index_sign"][0, 0] = np.uint8(5 | 0x80)
+    out_bounce = _run_needle_two_steps_replay_frame_rng(seed_bounce)
+    assert int(out_bounce["items"]["exists"][0]) == 0
+
+    seed_destroy = _needle_delayed_body_seed(rng_hw=_needle_delayed_body_bounce_rng_hw())
+    seed_destroy["item_hidden_callback_flags"][0, 0] = np.uint8((1 << 1) | (1 << 4))
+    out_destroy = _run_needle_two_steps_replay_frame_rng(seed_destroy)
+    assert int(out_destroy["items"]["exists"][0]) == 1
+    assert int(out_destroy["items"]["state"][0]) == 4
+
+
+def _needle_delayed_stage_seed(*, rng_hw: int) -> np.ndarray:
+    seed = _seed_needle_over_fox_defender(defender_x=200.0)
+    seed["stage_id"][0] = np.uint32(31)  # Battlefield
+    seed["frame_pre_random_seed"][0] = np.uint32(rng_hw << 16)
+    seed["items"]["pos_x"][0, 0] = np.float32(0.0)
+    seed["items"]["pos_y"][0, 0] = np.float32(5.0)
+    seed["items"]["vel_x"][0, 0] = np.float32(0.0)
+    seed["items"]["vel_y"][0, 0] = np.float32(-10.0)
+    seed["item_hidden_callback_flags"][0, 0] = np.uint8(1 << 1)  # spawned_this_frame
+    return seed
+
+
+def _needle_delayed_stage_stick_rng_hw() -> int:
+    for hw in range(0, 64):
+        out = _run_needle_two_steps(_needle_delayed_stage_seed(rng_hw=hw))
+        if int(out["items"]["exists"][0]) == 1 and int(out["items"]["state"][0]) == 2:
+            return hw
+    raise AssertionError("no delayed-stage stick RNG seed found")
+
+
+def test_sheik_needle_stage_hit_seed_bridge_expires_after_missed_spawn_step() -> None:
+    # Same one-step lifetime for stage-hit bridge samples: a spawn-publication frame cannot carry the
+    # bridge to a later stage Coll. The second frame crosses Battlefield's active item collision floor
+    # and must use the normal HSD_Randi(5) stick branch rather than stale state-4 bounce samples.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    #   it_802AFD8C,itSeakNeedleThrown_CheckGroundHit,itSeakNeedleThrown_SetupBounce}
+    seed = _needle_delayed_stage_seed(rng_hw=_needle_delayed_stage_stick_rng_hw())
+    seed["item_sheik_needle_stage_hit_seed_kind"][0, 0] = np.uint8(2)
+    seed["item_sheik_needle_stage_hit_vel_y_index"][0, 0] = np.uint8(3)
+    seed["item_sheik_needle_stage_hit_vel_x_index_sign"][0, 0] = np.uint8(5 | 0x80)
+
+    out = _run_needle_two_steps(seed)
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == 2
+
+
+def test_sheik_needle_stage_hit_seed_bridge_is_reseed_boundary_only_replay_frame_rng() -> None:
+    # Same stale-lane guard for state-0 stage-hit provenance: the seed row is authoritative only on
+    # the reseed boundary. A later replay-frame RNG step must use live stage collision/RNG fate.
+    seed = _needle_delayed_stage_seed(rng_hw=_needle_delayed_stage_stick_rng_hw())
+    seed["item_sheik_needle_stage_hit_seed_kind"][0, 0] = np.uint8(2)
+    seed["item_sheik_needle_stage_hit_vel_y_index"][0, 0] = np.uint8(3)
+    seed["item_sheik_needle_stage_hit_vel_x_index_sign"][0, 0] = np.uint8(5 | 0x80)
+
+    out = _run_needle_two_steps_replay_frame_rng(seed)
+    assert int(out["items"]["exists"][0]) == 1
+    assert int(out["items"]["state"][0]) == 2
+
+
+def _derive_single_item_hidden_callback_row(seed: np.ndarray, ref: np.ndarray) -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    assert int(sizes["seed"]) == SEED_DTYPE.itemsize
+    assert int(sizes["compare"]) == COMPARE_DTYPE.itemsize
+    laser_lut = np.zeros((65536,), dtype=np.uint8)
+    shield_lut = np.zeros((65536,), dtype=np.uint8)
+    needle_lut = np.zeros((65536,), dtype=np.uint8)
+    needle_lut[ITEM_SHEIK_NEEDLE_THROWN] = np.uint8(1)
+    msl_binding.validation_derive_item_hidden_callback_buffers(
+        seed.view(np.uint8).reshape((1, SEED_DTYPE.itemsize)),
+        ref.view(np.uint8).reshape((1, COMPARE_DTYPE.itemsize)),
+        laser_lut,
+        shield_lut,
+        needle_lut,
+        2,
+    )
+
+
+def _needle_stage_derivation_seed() -> np.ndarray:
+    seed = _seed_needle_over_fox_defender(defender_x=200.0)
+    seed["stage_id"][0] = np.uint32(31)  # Battlefield
+    seed["items"]["pos_x"][0, 0] = np.float32(0.0)
+    seed["items"]["pos_y"][0, 0] = np.float32(1.0)
+    seed["items"]["vel_x"][0, 0] = np.float32(0.0)
+    seed["items"]["vel_y"][0, 0] = np.float32(-60.0)
+    return seed
+
+
+def _needle_ref_from_seed(seed: np.ndarray, *, state: int, vel_x: float = 0.0, vel_y: float = 0.0):
+    ref = np.zeros((1,), dtype=COMPARE_DTYPE)
+    ref["items"][0, 0] = seed["items"][0, 0]
+    ref["items"]["state"][0, 0] = np.uint8(state)
+    ref["items"]["vel_x"][0, 0] = np.float32(vel_x)
+    ref["items"]["vel_y"][0, 0] = np.float32(vel_y)
+    return ref
+
+
+def test_sheik_needle_stage_hit_derivation_marks_bounce_and_stick_only_on_stage_sweep() -> None:
+    # Source owner for state-0 stage-hit bridges is the Coll callback sweep through an active
+    # item-colliding stage line. Same-identity state-4 alone is not enough because Clanked/
+    # DmgReceived/Logic109 can also enter state 4.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    #   itSeakneedlethrown_UnkMotion0_Coll,itSeakNeedleThrown_CheckGroundHit}
+    import msl_binding
+
+    article = msl_binding.item_article_params(7)
+    bounce_y = abs(float(article["needle_bounce_min_vel_y"][3]))
+    bounce_x = -float(article["needle_bounce_x_vel"][5])
+
+    seed_bounce = _needle_stage_derivation_seed()
+    ref_bounce = _needle_ref_from_seed(seed_bounce, state=4, vel_x=bounce_x, vel_y=bounce_y)
+    _derive_single_item_hidden_callback_row(seed_bounce, ref_bounce)
+    assert int(seed_bounce["item_sheik_needle_stage_hit_seed_kind"][0, 0]) == 2
+    assert int(seed_bounce["item_sheik_needle_stage_hit_vel_y_index"][0, 0]) == 3
+    assert int(seed_bounce["item_sheik_needle_stage_hit_vel_x_index_sign"][0, 0]) == (5 | 0x80)
+
+    seed_stick = _needle_stage_derivation_seed()
+    ref_stick = _needle_ref_from_seed(seed_stick, state=2)
+    _derive_single_item_hidden_callback_row(seed_stick, ref_stick)
+    assert int(seed_stick["item_sheik_needle_stage_hit_seed_kind"][0, 0]) == 1
+
+    seed_old_sweep_only = _needle_stage_derivation_seed()
+    seed_old_sweep_only["items"]["pos_y"][0, 0] = np.float32(-1.0)
+    seed_old_sweep_only["items"]["vel_y"][0, 0] = np.float32(-60.0)
+    ref_old_sweep_only = _needle_ref_from_seed(
+        seed_old_sweep_only, state=4, vel_x=bounce_x, vel_y=bounce_y
+    )
+    _derive_single_item_hidden_callback_row(seed_old_sweep_only, ref_old_sweep_only)
+    assert int(seed_old_sweep_only["item_sheik_needle_stage_hit_seed_kind"][0, 0]) == 0
+
+
+def test_sheik_needle_derivation_keeps_player_callback_and_nonstage_state4_separate() -> None:
+    # Player callback state-4 remains a Logic109 callback bridge when fighter contact is visible.
+    # The adjacent negative has same-identity state4 but no stage-line sweep and no player contact,
+    # so it must not be reclassified as a stage-hit bridge.
+    # refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+    #   it_2725_Logic109_DmgDealt,itSeakNeedleThrown_CheckGroundHit}
+    import msl_binding
+
+    article = msl_binding.item_article_params(7)
+    bounce_y = abs(float(article["needle_bounce_min_vel_y"][3]))
+    bounce_x = -float(article["needle_bounce_x_vel"][5])
+
+    seed_player = _seed_needle_over_fox_defender(defender_x=20.0)
+    ref_player = _needle_ref_from_seed(seed_player, state=4, vel_x=bounce_x, vel_y=bounce_y)
+    ref_player["hitlag"][0, 1] = np.uint16(5)
+    ref_player["instance_hit_by"][0, 1] = seed_player["items"]["instance_id"][0, 0]
+    _derive_single_item_hidden_callback_row(seed_player, ref_player)
+    assert int(seed_player["item_hidden_callback_flags"][0, 0]) & (1 << 2)
+    assert int(seed_player["item_sheik_needle_stage_hit_seed_kind"][0, 0]) == 0
+
+    seed_nonstage = _needle_stage_derivation_seed()
+    seed_nonstage["items"]["pos_y"][0, 0] = np.float32(25.0)
+    seed_nonstage["items"]["vel_y"][0, 0] = np.float32(0.0)
+    ref_nonstage = _needle_ref_from_seed(seed_nonstage, state=4, vel_x=bounce_x, vel_y=bounce_y)
+    _derive_single_item_hidden_callback_row(seed_nonstage, ref_nonstage)
+    assert int(seed_nonstage["item_hidden_callback_flags"][0, 0]) == 0
+    assert int(seed_nonstage["item_sheik_needle_stage_hit_seed_kind"][0, 0]) == 0
+
+
+def test_sheik_needle_stage_hit_derivation_initializes_stage_data_without_sim_handle() -> None:
+    code = r'''
+import numpy as np
+import msl_binding
+from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
+from tests.test_sheik_specials import (
+    ITEM_SHEIK_NEEDLE_THROWN,
+    _needle_ref_from_seed,
+    _needle_stage_derivation_seed,
+)
+
+seed = _needle_stage_derivation_seed()
+seed["items"]["pos_y"][0, 0] = np.float32(1.0)
+seed["items"]["vel_y"][0, 0] = np.float32(-60.0)
+article = msl_binding.item_article_params(7)
+ref = _needle_ref_from_seed(
+    seed,
+    state=4,
+    vel_x=-float(article["needle_bounce_x_vel"][5]),
+    vel_y=abs(float(article["needle_bounce_min_vel_y"][3])),
+)
+laser_lut = np.zeros((65536,), dtype=np.uint8)
+shield_lut = np.zeros((65536,), dtype=np.uint8)
+needle_lut = np.zeros((65536,), dtype=np.uint8)
+needle_lut[ITEM_SHEIK_NEEDLE_THROWN] = np.uint8(1)
+msl_binding.validation_derive_item_hidden_callback_buffers(
+    seed.view(np.uint8).reshape((1, SEED_DTYPE.itemsize)),
+    ref.view(np.uint8).reshape((1, COMPARE_DTYPE.itemsize)),
+    laser_lut,
+    shield_lut,
+    needle_lut,
+    2,
+)
+assert int(seed["item_sheik_needle_stage_hit_seed_kind"][0, 0]) == 2
+'''
+    proc = subprocess.run([sys.executable, "-c", code], cwd=ROOT, text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
 
 
 def _seed_needle_over_shielding_fox_defender(*, needle_x: float = 20.0, needle_y: float = 8.0):
@@ -4454,6 +5042,50 @@ def test_sheik_chain_article_tracks_owner_freerun() -> None:
     rel_band = max(rels) - min(rels)
     assert rel_band < 8.0, rels
     assert rel_band < 0.25 * owner_move, (rel_band, owner_move)
+
+
+def test_sheik_chain_reseed_public_identity_does_not_carry_private_hitcaps() -> None:
+    # Normal reseed serializes the public Chain article identity/state, not the private ItemLink
+    # array or it_802BCB88 HitCapsule frontier. Reusing a handle across seeds must therefore clear
+    # live Chain internals even when the new seed has the same public item type/owner/instance/spawn.
+    # refs/melee/src/melee/it/items/itseakchain.c::{it_802BC080,it_802BCB88}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base("sheik")
+        seed["pos_x"][0, 1] = np.float32(400.0)
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        prev = _mk_inputs()
+        for inp in _chain_whip_frames():
+            msl_binding.step_input(handle, prev, inp)
+            prev = inp
+            if msl_binding.sheik_chain_debug(handle, 0, 0) is not None:
+                break
+        live_dbg = msl_binding.sheik_chain_debug(handle, 0, 0)
+        assert live_dbg is not None
+
+        msl_binding.write_compare(handle, out_bytes)
+        live = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        chain_slots = _chain_slots(live)
+        assert chain_slots, "live Chain article missing from public snapshot"
+        slot = chain_slots[0]
+
+        public_only = _seed_base("sheik")
+        public_only["items"][0, slot] = live["items"][slot]
+        public_only["item_hidden_body_hit_victim_port"][0, slot] = np.uint8(1)
+        public_only["item_hidden_body_hit_hurt_height"][0, slot] = np.float32(8.0)
+
+        msl_binding.reseed_seed(
+            handle, public_only.view(np.uint8).reshape((1, seed_stride)).copy()
+        )
+        assert msl_binding.sheik_chain_debug(handle, 0, 0) is None
+    finally:
+        msl_binding.destroy(handle)
 
 
 def test_sheik_chain_aerial_entry_freerun() -> None:

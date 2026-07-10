@@ -71,6 +71,7 @@ FALCO = Path("data/motion_state/owners/falco.bin")
 MANIFEST = Path("data/motion_state/owners/callback_symbols.json")
 MARTH = Path("data/motion_state/owners/marth.bin")
 SHEIK = Path("data/motion_state/owners/sheik.bin")
+ZELDA = Path("data/motion_state/owners/zelda.bin")
 SOURCE_ARTIFACT_OWNERS = Path("tools/extraction/source_artifacts/motion_state/owners")
 
 
@@ -794,6 +795,38 @@ def test_sheik_vanish_motion_state_callbacks_publish_source_collision_owners() -
     assert has(0x0165, CLASS_FT800827A0_EDGE_SNAP_COLL)
     assert not has(0x0163, CLASS_FT800827A0_EDGE_SNAP_COLL)
     assert not has(0x0164, CLASS_FT800827A0_EDGE_SNAP_COLL)
+
+
+@pytest.mark.integration
+def test_zelda_farore_motion_state_callbacks_publish_source_collision_owners() -> None:
+    zelda = read_mslmso01_v1(ZELDA)
+    symbols = read_callback_manifest(MANIFEST)
+
+    def cb_name(action_id: int, lane: str) -> str:
+        cb_id = getattr(zelda, f"{lane}_cb_id")[action_id]
+        return symbols[int(cb_id)]
+
+    def has(action_id: int, bit: int) -> bool:
+        return bool(int(zelda.class_bits[action_id]) & bit)
+
+    # Zelda Farore's aerial start/travel/end callbacks call ft_CheckGroundAndLedge and then
+    # ftCliffCommon_80081298, matching Sheik Vanish's generated owner class.
+    # refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialHi.c::{
+    #   ftZd_SpecialAirHiStart_0_Coll,ftZd_SpecialAirHiStart_1_Coll,ftZd_SpecialAirHi_Coll}
+    for action_id, coll_cb in (
+        (0x0160, "ftZd_SpecialAirHiStart_0_Coll"),
+        (0x0161, "ftZd_SpecialAirHiStart_1_Coll"),
+        (0x0162, "ftZd_SpecialAirHi_Coll"),
+    ):
+        assert cb_name(action_id, "coll") == coll_cb
+        assert has(action_id, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)
+        assert int(zelda.fx_special_kind[action_id]) == 0
+
+    # Grounded Farore start/end callbacks use the grounded stage-collision owners, not the airborne
+    # ft_CheckGroundAndLedge cliff-catch callback path.
+    assert not has(0x015D, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)
+    assert not has(0x015E, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)
+    assert not has(0x015F, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)
 
 
 @pytest.mark.integration
