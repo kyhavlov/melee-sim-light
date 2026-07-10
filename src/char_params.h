@@ -506,6 +506,7 @@ typedef struct MslCharParams {
   float puff_rollout_air_min_vel;            // x5C
   float puff_rollout_turn_stick_threshold;   // x68
   float puff_rollout_turn_roll_rate;         // x6C
+  float puff_rollout_turn_coll_vel_threshold;  // x74 (Turn_Coll ground-check selector)
   float puff_rollout_landing_vy_scale;       // x78
   float puff_rollout_bounce_vy_threshold;    // x7C
   float puff_rollout_damage_base;            // x80

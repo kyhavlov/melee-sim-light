@@ -49,6 +49,16 @@ void msl_locomotion_enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t
 uint8_t msl_locomotion_puff_multijump_enter(MslBatch* batch, const MslCharParams* ch, size_t idx,
                                             float stick_x, float facing_dir);
 
+// Aerial jump entry from an IASA priority chain (ftCo_800D7100 shape): edge-shaped jump input
+// enters JumpAerialF/B, with multi-jump chars source-routed into the ftCo_800D730C ladder.
+// Exported for non-locomotion IASA owners such as RebirthWait.
+// refs/melee/src/melee/ft/ft_0D4D.c::ftCo_RebirthWait_IASA
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+uint8_t msl_locomotion_try_enter_jump_aerial_from_iasa(MslBatch* batch, const MslCommonParams* c,
+                                                       const MslCharParams* ch, size_t idx,
+                                                       uint8_t jump_input, float stick_x,
+                                                       float facing_dir);
+
 // ftCo_Fall_Enter entry and the modeled non-special tail of ftCo_Fall_IASA_Inner. Character
 // modules that source-enter Fall from an Anim callback should run their character-special
 // ftCo_SpecialAir_CheckInput equivalent before calling the tail.

@@ -1348,6 +1348,35 @@ uint8_t puff_rollout_air_release_land_or_bounce(MslBatch* batch, size_t idx) {
   return 2u;
 }
 
+uint8_t puff_rollout_turn_coll_edge_snap(const MslBatch* batch, size_t idx) {
+  // |gr_vel| <= x74 selects the ft_80082978 wrapper whose floor-miss branch runs
+  // mpColl_8004A45C_Floor (endpoint snap, stays grounded); above it ft_80082888's flags=0
+  // branch loses the floor and the Coll swaps to SpecialAirNStartTurn.
+  // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialNTurn_Coll
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B21C,mpColl_8004B3F0,mpColl_8004A45C_Floor}
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_PUFF ||
+      batch->state.action_id[idx] != (uint16_t)MSL_ACT_PR_SPECIAL_N_TURN) {
+    return 0u;
+  }
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+  if (ch == NULL) {
+    return 0u;
+  }
+  return (uint8_t)(fabsf(batch->state.speed_ground_x_self[idx]) <=
+                   ch->puff_rollout_turn_coll_vel_threshold);
+}
+
+void puff_rollout_on_cliff_catch(MslBatch* batch, size_t idx) {
+  // ftPr_SpecialAirNChargeRelease_Coll's catch inline: consume the mv facing latch, then the
+  // second ftCliffCommon_80081370 call re-asserts stage-side facing, so the generic catch's
+  // facing stands; only the latch consumption is observable (scale/rot resets are cosmetic).
+  // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialAirNChargeRelease_Coll
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_PUFF) {
+    return;
+  }
+  batch->state.puff_rollout_facing_restore[idx] = 0;
+}
+
 // Ground <-> air phase flips preserve the animation frame (13D590/13D5F0).
 // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialS.c::{ftPr_SpecialS_8013D590,
 //   ftPr_SpecialS_8013D5F0}
@@ -1482,6 +1511,10 @@ void puff_specials_reseed_init(MslBatch* batch, int batch_index) {
     // does not carry. Reseed starts with no armed window: a reversed-jump seed row inside the
     // ~turn_frames entry window will miss the pending mid-window facing flip (documented
     // approximation; the flip itself is replay-visible one row later and self-corrects).
+    // Reconstructing the ladder from the CURRENT stick was tried and measured worse on the
+    // specials suite: entry-time arming is not derivable from the seeded row (released-stick
+    // armed windows miss, and post-entry stick reversals false-arm — 8 net new facing rows).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D74A4
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
     batch->state.puff_mjump_turn_timer[idx] = 0u;
 

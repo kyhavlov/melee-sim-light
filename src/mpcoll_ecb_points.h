@@ -119,8 +119,14 @@ static inline void msl_ecb_bottom_world_point_sample(MslEcbBottomWorldPoint* out
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_Fixed
   const int frame_i = (int)frame_u16;
-  const float rel_y =
+  float rel_y =
       lock_bottom_to_zero ? 0.0f : msl_ecb_bottom_rel_y(char_id, animation_index, frame_i);
+  // mpColl_LoadECB_JObj clamps the desired bottom to the root (`if (bottom_y < 0) bottom_y = 0`);
+  // fighters have no Fixed-source writers, so the clamp is unconditional for fighter packets.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+  if (rel_y < 0.0f) {
+    rel_y = 0.0f;
+  }
   out->x = pos_x;
   out->y = pos_y + rel_y;
   out->rel_y = rel_y;
@@ -148,6 +154,14 @@ static inline void msl_ecb_world_points_sample(MslEcbWorldPoints* out, uint8_t c
 
   float bottom_rel_y =
       lock_bottom_to_zero ? 0.0f : msl_ecb_bottom_rel_y(char_id, animation_index, frame_i);
+  // mpColl_LoadECB_JObj clamps the desired bottom to the root: `if (bottom_y < 0) bottom_y = 0`
+  // (the flags&1 arm forces 0). Fighters always use the JObj ECB source (the Fixed source has
+  // no fighter writers), so a posed joint below TransN (e.g. Puff's dair legs) never lowers the
+  // desired ECB bottom.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+  if (bottom_rel_y < 0.0f) {
+    bottom_rel_y = 0.0f;
+  }
   const float top_rel_y = ext.max_y;
 
   float left_rel_x = 0.0f;

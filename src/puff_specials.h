@@ -99,3 +99,16 @@ uint8_t puff_rollout_try_floor_loss_swap(MslBatch* batch, size_t idx);
 // air with the collision-corrected root). Returns 0 when not applicable.
 // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialAirNChargeRelease_Coll
 uint8_t puff_rollout_air_release_land_or_bounce(MslBatch* batch, size_t idx);
+
+// AirChargeRelease cliff-catch tail: the catch inline consumes the mv facing latch before
+// re-running ftCliffCommon_80081370, which sets facing toward the stage; the net observable on
+// the generic catch is only the consumed latch (model scale/rot resets are cosmetic).
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialAirNChargeRelease_Coll
+void puff_rollout_on_cliff_catch(MslBatch* batch, size_t idx);
+
+// ftPr_SpecialNTurn_Coll ground-check selector: at |gr_vel| <= attr x74 the turn uses
+// ft_80082978, whose mpColl_8004A45C_Floor endpoint snap keeps the fighter grounded at the
+// floor edge (the EDGE_SNAP phase); above the threshold ft_80082888 lets the floor loss fire.
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialNTurn_Coll
+// refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B21C,mpColl_8004B3F0,mpColl_8004A45C_Floor}
+uint8_t puff_rollout_turn_coll_edge_snap(const MslBatch* batch, size_t idx);

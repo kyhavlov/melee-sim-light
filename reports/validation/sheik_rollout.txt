@@ -158,13 +158,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 == replays/validation/sheik/PaleMajorEchidna.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 3118
-rollout.streak_count: 16
-rollout.streak_len.median: 436
+rollout.streak_count: 17
+rollout.streak_len.median: 415
 rollout.streak_len.p90: 1676
 rollout.streak_len.p95: 3118
 rollout.streak_len.max: 3118
-rollout.first_mismatch_total: 15
-rollout.first_mismatch_seeded_total: 12
+rollout.first_mismatch_total: 16
+rollout.first_mismatch_seeded_total: 13
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=12.9365 rec=3309 p=0 seed/ref/out=0.681917/0.828417/-12.1081 actions=67/67/67 category=unclassified
@@ -178,19 +178,19 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:134
 
 == replays/validation/sheik/RuralReasonableRat.slpz ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1557
-rollout.streak_count: 28
-rollout.streak_len.median: 244
+rollout.best_len: 1585
+rollout.streak_count: 27
+rollout.streak_len.median: 259
 rollout.streak_len.p90: 695
 rollout.streak_len.p95: 1007
-rollout.streak_len.max: 1557
-rollout.first_mismatch_total: 30
+rollout.streak_len.max: 1585
+rollout.first_mismatch_total: 29
 rollout.first_mismatch_seeded_total: 18
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=5.325 rec=8602 p=1 seed/ref/out=27.2001/32.9331/38.2581 actions=88/88/88 category=unclassified
   2. percent max_err=1.82 rec=267 p=0 seed/ref/out=2/2/3.82 actions=90/90/90 category=unclassified
-  3. pos_x max_err=0.977779 rec=5269 p=0 seed/ref/out=52.4469/53.2686/52.2908 actions=181/181/181 category=unclassified
+  3. pos_x max_err=0.977802 rec=5269 p=0 seed/ref/out=52.4469/53.2686/52.2908 actions=181/181/181 category=unclassified
 rollout.float_top_downstream:
   1. pos_y max_err=11.2064 rec=8619 p=1 seed/ref/out=43.6864/43.1937/54.4001 actions=88/88/183 category=downstream_discrete_mismatch
   2. percent max_err=9.1 rec=5942 p=1 seed/ref/out=28/28/37.1 actions=14/14/80 category=downstream_discrete_mismatch
@@ -200,12 +200,12 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:170
 == replays/validation/sheik/SnarlingHelplessBeaver.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1876
-rollout.streak_count: 32
-rollout.streak_len.median: 174
+rollout.streak_count: 33
+rollout.streak_len.median: 181
 rollout.streak_len.p90: 680
 rollout.streak_len.p95: 1049
 rollout.streak_len.max: 1876
-rollout.first_mismatch_total: 32
+rollout.first_mismatch_total: 33
 rollout.first_mismatch_seeded_total: 10
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -340,7 +340,7 @@ rollout.first_mismatch_seeded_total: 5
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=18.0001 rec=3751 p=0 seed/ref/out=72.8369/72.0003/90.0004 actions=4/4/4 category=unclassified
-  2. pos_x max_err=4.76093 rec=8038 p=0 seed/ref/out=-138.093/-137.335/-132.574 actions=38/38/38 category=unclassified
+  2. pos_x max_err=4.76094 rec=8038 p=0 seed/ref/out=-138.093/-137.335/-132.574 actions=38/38/38 category=unclassified
   3. percent max_err=3.64 rec=7385 p=0 seed/ref/out=74.64/74.64/71 actions=90/90/90 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=15 rec=2310 p=0 seed/ref/out=64.1/79.1/64.1 actions=38/88/29 category=downstream_discrete_mismatch
@@ -367,18 +367,18 @@ rollout.float_top_errors:
 rollout.float_top_downstream:
   1. pos_x max_err=44.6077 rec=2460 p=1 seed/ref/out=52.8946/53.2825/8.67482 actions=90/88/90 category=downstream_discrete_mismatch
   2. percent max_err=18 rec=6613 p=0 seed/ref/out=23/41/23 actions=237/90/237 category=downstream_discrete_mismatch
-  3. speed_x_attack max_err=4.13671 rec=2460 p=1 seed/ref/out=0.397243/3.7488/-0.387912 actions=90/88/90 category=downstream_discrete_mismatch
+  3. speed_x_attack max_err=4.13671 rec=2460 p=1 seed/ref/out=0.397243/3.7488/-0.387911 actions=90/88/90 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:669
 
 == replays/validation/sheik/ZestyPreciousTurtle.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1354
-rollout.streak_count: 27
+rollout.streak_count: 28
 rollout.streak_len.median: 157
-rollout.streak_len.p90: 823
-rollout.streak_len.p95: 1010
+rollout.streak_len.p90: 802
+rollout.streak_len.p95: 823
 rollout.streak_len.max: 1354
-rollout.first_mismatch_total: 26
+rollout.first_mismatch_total: 27
 rollout.first_mismatch_seeded_total: 13
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -429,14 +429,14 @@ rollout.float_top_errors:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:54
 
 == suite summary ==
-overall.rollout.streak_count: 465
-overall.rollout.streak_len.median: 260
-overall.rollout.streak_len.p90: 946
+overall.rollout.streak_count: 467
+overall.rollout.streak_len.median: 259
+overall.rollout.streak_len.p90: 934
 overall.rollout.streak_len.p95: 1293
 overall.rollout.streak_len.max: 3169
 overall.rollout.best_len.max: 3169
-overall.rollout.first_mismatch_total: 472
-overall.rollout.first_mismatch_seeded_total: 269
+overall.rollout.first_mismatch_total: 474
+overall.rollout.first_mismatch_seeded_total: 270
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=129.105 rec=3633 p=0 seed/ref/out=11.6665/9.93194/139.037 actions=7/7/7 category=unclassified

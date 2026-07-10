@@ -990,6 +990,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       MSL_GET_MJUMP_F32("puff_rollout_turn_stick_threshold", puff_rollout_turn_stick_threshold) !=
           0 ||
       MSL_GET_MJUMP_F32("puff_rollout_turn_roll_rate", puff_rollout_turn_roll_rate) != 0 ||
+      MSL_GET_MJUMP_F32("puff_rollout_turn_coll_vel_threshold",
+                        puff_rollout_turn_coll_vel_threshold) != 0 ||
       MSL_GET_MJUMP_F32("puff_rollout_landing_vy_scale", puff_rollout_landing_vy_scale) != 0 ||
       MSL_GET_MJUMP_F32("puff_rollout_bounce_vy_threshold", puff_rollout_bounce_vy_threshold) !=
           0 ||

@@ -134,7 +134,7 @@ err.percent: mae=0.000252 p95=0.000000 max=1.820000
 err.shield_hp: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_x: mae=0.016358 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.056702 p95=0.000000 max=18.343994
-err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000152
+err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000153
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000045
 overall.discrete_mismatch: 11 / 1236862
 overall.strict_discrete_mismatch: 36 / 1236862
@@ -179,7 +179,7 @@ err.percent: mae=0.000029 p95=0.000000 max=0.239998
 err.shield_hp: mae=0.000001 p95=0.000000 max=0.000717
 err.item_pos_x: mae=0.007896 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000126
-err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000213
+err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000212
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000126
 overall.discrete_mismatch: 7 / 948277
 overall.strict_discrete_mismatch: 27 / 948277

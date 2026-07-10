@@ -12,6 +12,7 @@
 #include "common_params.h"
 #include "input_axis.h"
 #include "instance_id.h"
+#include "locomotion.h"
 #include "stage_collision.h"
 #include "state_flags.h"
 #include "staling.h"
@@ -1219,19 +1220,43 @@ void match_flow_update_post_input(MslBatch* batch) {
                     (stick_y < -c->crouch_stick_threshold) ||
                     (stick_f <= c->turn_stick_x_threshold) || (stick_f >= c->walk_stick_threshold));
 
+      // ftCo_800CB870 closes the RebirthWait_IASA priority group: a jump input on the platform
+      // enters JumpAerial, with multi-jump chars routed into the ftCo_800D730C ladder. Modeled
+      // subset: MULTI-JUMP chars on an X/Y press edge only (replay-verified: Puff's halo Y-press
+      // enters JumpAerialF1). The common JumpAerial arm stays unmodeled: a locked fox manual
+      // trace shows an X press edge on the halo NOT jumping (the real game stayed in RebirthWait
+      // and fell on the later stick-turn input), which the plain ft_did_jump chain cannot
+      // explain; do not admit the common path until that trace is decomp-explained. The tap-up
+      // arm is likewise not admitted (x671 freshness is not source-comparable in this
+      // same-frame-entry phase and admitting it regressed the same locked trace).
+      // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_RebirthWait_IASA
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{ftCo_800CB870,ft_did_jump}
+      const MslCharParams* rb_ch = msl_char_params_fast(batch->state.char_id[idx]);
+      const uint8_t jump_aerial_input = (rb_ch != NULL && rb_ch->has_multijump &&
+                                         (buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0u)
+                                            ? 1u
+                                            : 0u;
+
       if (!want_fall) {
         // RebirthWait priority IASA can still enter aerial specials before the fallback Fall
-        // branches. The common helper checks SpecialAir before Fall/guard/walk-like exits.
+        // branches. The common helper checks SpecialAir before the jump and Fall/guard-like
+        // exits.
         // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_RebirthWait_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-        if (blaster_try_enter_air_from_iasa_subset(batch, c, idx) != 0u) {
+        if (blaster_try_enter_air_from_iasa_subset(batch, c, idx) != 0u ||
+            (rb_ch != NULL &&
+             msl_locomotion_try_enter_jump_aerial_from_iasa(batch, c, rb_ch, idx, jump_aerial_input,
+                                                            stick_x, facing_dir) != 0u)) {
           rebirth_wait_apply_exit_colanim(batch, idx, c);
           batch->state.match_flow_timer[idx] = 0;
         }
         continue;
       }
 
-      if (blaster_try_enter_air_from_iasa_subset(batch, c, idx) != 0u) {
+      if (blaster_try_enter_air_from_iasa_subset(batch, c, idx) != 0u ||
+          (rb_ch != NULL &&
+           msl_locomotion_try_enter_jump_aerial_from_iasa(batch, c, rb_ch, idx, jump_aerial_input,
+                                                          stick_x, facing_dir) != 0u)) {
         rebirth_wait_apply_exit_colanim(batch, idx, c);
         batch->state.match_flow_timer[idx] = 0;
         continue;

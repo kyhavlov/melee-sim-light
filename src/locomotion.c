@@ -3006,6 +3006,14 @@ static inline uint8_t locomotion_puff_multijump_try_enter(MslBatch* batch,
   return msl_locomotion_puff_multijump_enter(batch, ch, idx, stick_x, facing_dir);
 }
 
+uint8_t msl_locomotion_try_enter_jump_aerial_from_iasa(MslBatch* batch, const MslCommonParams* c,
+                                                       const MslCharParams* ch, size_t idx,
+                                                       uint8_t jump_input, float stick_x,
+                                                       float facing_dir) {
+  return locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_input, stick_x, facing_dir,
+                                               /*block_from_jump_aerial=*/0u);
+}
+
 uint8_t msl_locomotion_puff_multijump_enter(MslBatch* batch, const MslCharParams* ch, size_t idx,
                                             float stick_x, float facing_dir) {
   // ftCo_800D74A4: action = F1 + jumps_used - 1, self_vel = (stick_x * x8, x14[jumps_used - 1]),
@@ -6111,9 +6119,12 @@ void locomotion_update_post_collision(MslBatch* batch) {
       if (was_ground && !now_ground && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
           marth_special_try_ground_to_air_swap(batch, idx)) {
         // Marth grounded special floor loss swaps to the aerial variant at the preserved
-        // animation frame (ftCommon_8007D5D4: lose the ground jump).
+        // animation frame (ftCommon_8007D5D4: lose the ground jump + ECB bottom lock).
         // refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Lw}.c (grounded Coll handlers)
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
         batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+        batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
+        batch->state.ecb_lock_timer[idx] = 10u;
         continue;
       }
       if (was_ground && !now_ground && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_PUFF &&
@@ -6121,8 +6132,12 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // Rollout grounded floor loss -> air variant at the preserved frame. Unlike the
         // falcon-shape swap below, ftCommon_8007D5D4 zeroes gr_vel WITHOUT transferring it to
         // self_vel (the air Phys recomputes the roll speed from charge); lane effects are owned
-        // by the module hook.
+        // by the module hook. The shared 7D5D4 bundle still consumes the ground jump and starts
+        // the ECB bottom lock.
         // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c (grounded *_Coll paths)
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+        batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
+        batch->state.ecb_lock_timer[idx] = 10u;
         continue;
       }
       if (was_ground && !now_ground &&
@@ -6131,9 +6146,13 @@ void locomotion_update_post_collision(MslBatch* batch) {
            (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_PUFF &&
             puff_special_try_ground_to_air_swap(batch, idx)))) {
         // Falcon grounded special floor loss swaps to the aerial variant at the preserved
-        // animation frame (ftCommon_8007D5D4 + ftCommon_ClampAirDrift in source).
+        // animation frame (ftCommon_8007D5D4 + ftCommon_ClampAirDrift in source). The 7D5D4
+        // bundle consumes the ground jump and starts the ECB bottom lock.
         // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialN_Coll
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
         batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+        batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
+        batch->state.ecb_lock_timer[idx] = 10u;
         continue;
       }
       if (was_ground && !now_ground &&
@@ -6142,14 +6161,24 @@ void locomotion_update_post_collision(MslBatch* batch) {
         const float floor_loss_self_x = batch->state.speed_ground_x_self[idx];
         if (sheik_special_try_ground_to_air_swap(batch, idx)) {
           // Sheik/Zelda grounded transform-special floor loss swaps to source air variants at
-          // preserved animation frame, matching the Coll callbacks' ftCommon_8007D5D4 bundle.
-          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c
-          // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c
+          // preserved animation frame, matching the Coll callbacks' ftCommon_8007D5D4 bundle
+          // (which also consumes the ground jump and starts the ECB bottom lock). The Vanish
+          // (SpecialHi) family routes through ftCommon_8007D60C instead, which does NEITHER.
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Lw}.c
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c (ftCommon_8007D60C)
+          // refs/melee/src/melee/ft/chara/ftZelda/{ftZd_SpecialLw.c,ftZd_SpecialHi.c}
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_8007D60C}
           batch->state.speed_air_x_self[idx] = floor_loss_self_x;
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.on_ground[idx] = 0u;
           batch->state.ground_id[idx] = 0xFFFFu;
           batch->state.speed_y_self[idx] = 0.0f;
+          if (a != (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_0 &&
+              a != (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_1 &&
+              a != (uint16_t)MSL_ACT_SK_SPECIAL_HI) {
+            batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
+            batch->state.ecb_lock_timer[idx] = 10u;
+          }
           continue;
         }
       }

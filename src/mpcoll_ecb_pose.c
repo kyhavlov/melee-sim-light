@@ -408,7 +408,11 @@ float mpcoll_pose_ecb_bottom_rel_y(uint8_t char_id, uint32_t anim, uint16_t fram
   if (force_zero_bottom) {
     return 0.0f;
   }
-  return msl_ecb_bottom_rel_y(char_id, anim, (int)frame_u16);
+  // mpColl_LoadECB_JObj clamps the desired bottom to the root (`if (bottom_y < 0) bottom_y = 0`);
+  // fighters have no Fixed-source writers, so the clamp is unconditional for fighter packets.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+  const float v = msl_ecb_bottom_rel_y(char_id, anim, (int)frame_u16);
+  return (v < 0.0f) ? 0.0f : v;
 }
 
 float mpcoll_action_pose_ecb_bottom_rel_y(uint8_t char_id, uint16_t action_id, int16_t action_frame,

@@ -687,8 +687,7 @@ PURIN_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
     # Rollout (ftPr_SpecialN): charge machine + roll speed/decay + turn + landing tail.
     # Offsets/types from refs/melee/src/melee/ft/chara/ftPurin/types.h::ftPurinAttributes;
     # consumers in refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c. Not extracted
-    # (cosmetic/unmodeled): x70 turn efSync period, x74 Turn_Coll coll-helper velocity gate,
-    # x9C hitCapsuleToggle side-bit period.
+    # (cosmetic/unmodeled): x70 turn efSync period, x9C hitCapsuleToggle side-bit period.
     ("puff_rollout_turn_budget_frames", 0x34, "i32"),
     ("puff_rollout_turn_budget_hit_cost", 0x38, "i32"),
     ("puff_rollout_air_grav", 0x3C, "f32"),
@@ -701,6 +700,10 @@ PURIN_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
     ("puff_rollout_air_min_vel", 0x5C, "f32"),
     ("puff_rollout_turn_stick_threshold", 0x68, "f32"),
     ("puff_rollout_turn_roll_rate", 0x6C, "f32"),
+    # x74: ftPr_SpecialNTurn_Coll ground-check selector — |gr_vel| > x74 uses ft_80082888
+    # (floor loss live), else ft_80082978 whose mpColl_8004A45C_Floor endpoint snap keeps the
+    # turn grounded at the floor edge.
+    ("puff_rollout_turn_coll_vel_threshold", 0x74, "f32"),
     ("puff_rollout_landing_vy_scale", 0x78, "f32"),
     ("puff_rollout_bounce_vy_threshold", 0x7C, "f32"),
     ("puff_rollout_damage_base", 0x80, "f32"),

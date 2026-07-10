@@ -20,6 +20,7 @@
 #include "jump_input.h"
 #include "locomotion.h"
 #include "match_flow.h"
+#include "puff_specials.h"
 #include "sheik_specials.h"
 #include "stage_collision.h"
 
@@ -132,6 +133,22 @@ static inline uint8_t is_airborne_action_with_cliffcatch_check(uint8_t char_id, 
       default:
         break;
     }
+  }
+  // Puff cliff-catch Coll family: the multijump ladder shares ftCo_JumpAerialF1_Coll
+  // (ft_80082F28, MissFoot shape), air Sing runs ftCliffCommon_80081298 after its landing fork,
+  // and Rollout AirChargeRelease runs it on the no-landing path after wall-bounce handling (the
+  // grounded/landed cases are excluded here by the caller's on_ground skip). The other Puff air
+  // specials (air Pound/Rest via ft_80081D0C, the remaining air Rollout states, NHit) have no
+  // cliff catch in their Coll callbacks. Direction modes (BOTH for air Sing, roll direction for
+  // AirChargeRelease) are owned by the env-flag producer.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_JumpAerialF1_Coll
+  // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialHi.c::ftPr_SpecialAirHi_Coll
+  // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialAirNChargeRelease_Coll
+  if (char_id == (uint8_t)MSL_CHAR_ID_PUFF && a >= 341u && a <= 372u) {
+    return (uint8_t)(puff_action_is_multijump(char_id, a) ||
+                     a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_L ||
+                     a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_R ||
+                     a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_CHARGE_RELEASE);
   }
   switch (a) {
     // Pass / platform drop collision uses the MissFoot-style common-air wrapper, which runs
@@ -1365,6 +1382,12 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
         batch->state.speed_x_attack[idx] = 0.0f;
         batch->state.speed_y_attack[idx] = 0.0f;
         batch->state.stage_ledge_occupant_right[bi] = (int8_t)p;
+      }
+      // Rollout AirChargeRelease catch tail (latch consumption).
+      // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialAirNChargeRelease_Coll
+      if (a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_CHARGE_RELEASE &&
+          batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_PUFF) {
+        puff_rollout_on_cliff_catch(batch, idx);
       }
     }
   }

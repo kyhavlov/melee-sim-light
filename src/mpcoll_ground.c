@@ -28,6 +28,7 @@
 #include "move_tables.h"
 #include "msl_math.h"
 #include "mtx34.h"
+#include "puff_specials.h"
 #include "sheik_specials.h"
 #include "specialhi_pose.h"
 #include "state_flags.h"
@@ -176,9 +177,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
       MslMpcollContext mpcoll_ctx = mpcoll_context_make(batch, bi, idx, stage_id, g, cg, lwg, rwg);
       const uint16_t action_id = mpcoll_ctx.action_id;
       const uint16_t prev_action_id = mpcoll_ctx.prev_action_id;
-      const MslMpcollSourcePhases source_phases = mpcoll_source_phases_for_motion_state(
+      MslMpcollSourcePhases source_phases = mpcoll_source_phases_for_motion_state(
           mpcoll_ctx.char_id, action_id,
           mpcoll_ft_check_ground_ledge_uses_no_ledge_path(batch, idx));
+      if (puff_rollout_turn_coll_edge_snap(batch, idx)) {
+        // Branch-shaped owner the static MSLMSO01 table cannot carry: ftPr_SpecialNTurn_Coll
+        // picks its ground-check wrapper by |gr_vel| vs attr x74; at or below the threshold the
+        // mpColl_8004A45C_Floor endpoint snap (EDGE_SNAP phase) keeps the turn grounded.
+        // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialNTurn_Coll
+        source_phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_EDGE_SNAP;
+      }
       mpcoll_floor_probe_clear(batch, idx);
 
       // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4

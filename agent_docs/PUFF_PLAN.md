@@ -347,3 +347,56 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   charge, xBC roll-rate scale, xC0 release vel scale, xC4 turn accel, xC8
   slope influence, xCC min-damage speed, xD0 turn exit ratio, xD4 wall
   bounce decay, xD8 landing lag.
+- 2026-07-09: **specials.slpz intake + burn-down: puff suite one-step 3958 -> 2365
+  (specials.slpz alone 361 -> 56; strict 377 -> 72).** User-recorded Puff-ditto
+  Battlefield session registered in replays/suites/puff.json; it filled the air
+  Rollout (354-358), SpecialNFull (349), air Sing/Rest, and DamageSong victim
+  gaps. Six owners fixed off the collect_mismatch_events taxonomy:
+  1. Cliff-catch Coll family (~130 events): air Sing (366/368) Coll ends in
+     ftCliffCommon_80081298 with CLIFFCATCH_BOTH (fd=0 both ledge sides), the
+     multijump ladder shares ftCo_JumpAerialF1_Coll (ft_80082F28, facing-dir
+     boxes), and Rollout AirChargeRelease (358) passes the ROLL direction
+     (mv x34.x) into ft_8008239C — eligibility in ledge.c, direction modes in
+     mpcoll_env.c, catch-tail latch consume via puff_rollout_on_cliff_catch.
+  2. NTurn edge cling (30 events): ftPr_SpecialNTurn_Coll picks its wrapper by
+     |gr_vel| vs new attr x74 (puff_rollout_turn_coll_vel_threshold, extracted
+     end-to-end); at/below it mpColl_8004A45C_Floor endpoint-snaps and STAYS
+     GROUNDED — wired as a dynamic MSL_MPCOLL_PHASE_EDGE_SNAP OR at the
+     mpcoll_ground phase derivation (the static MSLMSO01 table cannot carry a
+     velocity-conditional owner). Ref never enters AirNTurn (359).
+  3. DamageSong entry side effects (~40 events): Fighter_ProcessHit gates BOTH
+     sides' hitlag on nonzero applied damage (Sing is 0-damage), and
+     ftCo_8008E908's element-6/7 arm enters via ftCo_800C318C which bypasses
+     ftCo_8008DCE0 entirely — no KB install, no self-vel clear, no hitstun, no
+     victim facing flip, no post-entry anim tick. New sleep_element_entry
+     routing in combat.c (combat_damage_enter_damagesong).
+  4. GLOBAL ECB desired-bottom clamp (~50 events incl. the dair-early-landing
+     family): mpColl_LoadECB_JObj clamps `bottom_y < 0 -> 0` and fighters have
+     no Fixed-source writers; Puff's dair/uair posed joints dip ~2 below TransN
+     and were landing 2 units early. Clamped in msl_ecb_world_points_sample /
+     msl_ecb_bottom_world_point_sample / mpcoll_pose_ecb_bottom_rel_y.
+     fox/falco FD one-step verified byte-identical to HEAD.
+  5. ftCommon_8007D5D4 floor-loss bundle on ALL char-special ground->air swaps
+     (marth/falcon/sheik-zelda/puff rollout): consume the ground jump
+     (jumps_left = max-1) + 10-frame ECB bottom lock.
+  6. RebirthWait jump exit (ftCo_800CB870 closes the IASA priority group):
+     modeled subset is MULTIJUMP chars on an X/Y press edge only (puff's halo
+     Y-press enters the F1 ladder; new exported
+     msl_locomotion_try_enter_jump_aerial_from_iasa wired into match_flow).
+     The common JumpAerial arm and the tap-up arm are deliberately unmodeled:
+     both regressed the locked fox manual trace (an X edge on the halo did
+     NOT jump in the real game — unexplained by the plain ft_did_jump chain).
+  REMAINING specials.slpz tail (72 strict / 56 normal): 8 JumpF facing rows
+  (turnaround window reseed debt — reconstruction from the current stick was
+  tried and measured WORSE: entry-time arming is not derivable per-row), 3
+  NLoop->NFull (Loop charge reseed debt; needs a smash-charge-style seed lane),
+  ~13 state_flags[4]&0x80 rows (ignored bit), 3 RebirthWait->Fall timeout af
+  convention, 2 AirNRelease landing fork, 2 NTurn true-exit rows (documented
+  pre_turn one-miss), singles. Env note: this machine's suite baselines carry
+  a two-float-digit item_vel_x delta vs committed reports (verified HEAD
+  reproduces it; compiler FP environment). Cross-suite: aggregate one-step
+  6526 -> 6525; sheik/marth/doubles one-step discrete unchanged (small pos
+  float MAE improvements); sheik free-running rollout first-mismatch 103 ->
+  105 (+2 streak breaks, one replay's best streak lengthened — downstream
+  divergence wash of the source-verified ECB clamp, kept per the
+  source-clear retention policy).

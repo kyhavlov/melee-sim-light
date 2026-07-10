@@ -573,3 +573,194 @@ def test_sing_does_not_sleep_airborne_victim() -> None:
     outs = _run(_sing_seed(fox_air=True), [b_up] + [idle] * 130)
     acts1 = [int(o["action_id"][1]) for o in outs]
     assert ACT_DAMAGE_SONG not in acts1, f"airborne fox must not sleep: {sorted(set(acts1))}"
+
+
+# ---------------------------------------------------------------------------
+# Cliff catch during air Sing / Rollout air release / the multijump ladder
+# ---------------------------------------------------------------------------
+# Coll ledge modes: the multijump ladder shares ftCo_JumpAerialF1_Coll (ft_80082F28,
+# facing-direction ledge boxes); air Sing passes CLIFFCATCH_BOTH (0) into
+# ft_CheckGroundAndLedge so BOTH ledge sides are live regardless of facing; Rollout
+# AirChargeRelease passes the roll direction (mv x34.x) into ft_8008239C. Air Pound/Rest use
+# ft_80081D0C (no ledge).
+# refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_JumpAerialF1_Coll
+# refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialHi.c::ftPr_SpecialAirHi_Coll
+# refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialAirNChargeRelease_Coll
+# refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialLw.c::ftPr_SpecialAirLw_Coll
+
+from tests.stage_metadata_helpers import fd_stage_segments  # noqa: E402
+
+ACT_CLIFF_CATCH = 0x00FC
+ACT_PR_AIR_HI_L = 366
+SM_PR_AIR_HI_L = 320
+SM_PR_AIR_HI_R = 322
+ACT_PR_AIR_LW_R = 372
+SM_PR_AIR_LW_R = 326
+SM_PR_AIR_N_RELEASE = 312
+SM_PR_JUMP_F1 = 295
+
+
+def _fd_left_ledge() -> tuple[float, float]:
+    best_x = float("inf")
+    pt = None
+    for seg in fd_stage_segments():
+        if seg.get("kind") != "floor" or bool(seg.get("platform")) or not bool(seg.get("ledge")):
+            continue
+        for k in (("x0", "y0"), ("x1", "y1")):
+            x, y = float(seg[k[0]]), float(seg[k[1]])
+            if x < best_x:
+                best_x = x
+                pt = (x, y)
+    assert pt is not None
+    return pt
+
+
+def _ledge_seed(action: int, msid: int, *, facing: int, vx: float = 0.0,
+                frame: float = 10.0) -> np.ndarray:
+    lx, ly = _fd_left_ledge()
+    a = _attrs()
+    seed = _seed(pos_y=float(ly - a["ledge_snap_y"]), facing=facing)
+    seed["pos_x"][0, 0] = np.float32(lx - 1.0)
+    seed["action_id"][0, 0] = np.uint16(action)
+    seed["action_frame"][0, 0] = np.int16(int(frame))
+    seed["anim_frame_f32"][0, 0] = np.float32(frame)
+    seed["animation_index"][0, 0] = np.uint32(msid)
+    seed["speed_y_self"][0, 0] = np.float32(-1.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(vx)
+    return seed
+
+
+def test_air_sing_catches_ledge_both_facings() -> None:
+    # CLIFFCATCH_BOTH: the left-ledge box is live even when facing away from stage.
+    for action, msid, facing in (
+        (ACT_PR_AIR_HI_R, SM_PR_AIR_HI_R, 1),
+        (ACT_PR_AIR_HI_L, SM_PR_AIR_HI_L, 0),
+    ):
+        outs = _run(_ledge_seed(action, msid, facing=facing), [_mk_inputs()])
+        assert int(outs[0]["action_id"][0]) == ACT_CLIFF_CATCH, (
+            f"air Sing {action} facing {facing} must ledge-catch"
+        )
+
+
+def test_air_rest_does_not_ledge_catch() -> None:
+    # ftPr_SpecialAirLw_Coll uses ft_80081D0C: no cliff catch site.
+    outs = _run(_ledge_seed(ACT_PR_AIR_LW_R, SM_PR_AIR_LW_R, facing=1), [_mk_inputs()])
+    assert int(outs[0]["action_id"][0]) != ACT_CLIFF_CATCH
+
+
+def test_multijump_ledge_catch_is_facing_gated() -> None:
+    # ftCo_JumpAerialF1_Coll (ft_80082F28): facing-direction ledge boxes, so the left ledge
+    # only catches while facing into stage (+X).
+    outs = _run(_ledge_seed(ACT_PR_F1, SM_PR_JUMP_F1, facing=1), [_mk_inputs()])
+    assert int(outs[0]["action_id"][0]) == ACT_CLIFF_CATCH
+    outs = _run(_ledge_seed(ACT_PR_F1, SM_PR_JUMP_F1, facing=0), [_mk_inputs()])
+    assert int(outs[0]["action_id"][0]) != ACT_CLIFF_CATCH
+
+
+def test_rollout_air_release_ledge_catch_follows_roll_direction() -> None:
+    # ft_8008239C(dir = x34.x): the ledge boxes key on the roll direction, not facing. The
+    # frozen release row reconstructs dir from the velocity sign, so rolling toward the stage
+    # (+X at the left ledge) catches even facing away, and rolling away never catches.
+    # Small +X speed keeps the post-integration ECB bottom short of the ledge x (the
+    # mpColl_80044164 `bottom.x < edge.x` gate).
+    outs = _run(
+        _ledge_seed(ACT_PR_AIR_N_RELEASE, SM_PR_AIR_N_RELEASE, facing=0, vx=0.5, frame=0.0),
+        [_mk_inputs()],
+    )
+    assert int(outs[0]["action_id"][0]) == ACT_CLIFF_CATCH, "roll toward stage must catch"
+    outs = _run(
+        _ledge_seed(ACT_PR_AIR_N_RELEASE, SM_PR_AIR_N_RELEASE, facing=1, vx=-0.5, frame=0.0),
+        [_mk_inputs()],
+    )
+    assert int(outs[0]["action_id"][0]) != ACT_CLIFF_CATCH, "roll away from stage must not catch"
+
+
+ACT_PR_AIR_N_START_TURN = 359
+SM_PR_N_TURN = 305
+
+
+def _turn_edge_seed(gr_vel: float) -> np.ndarray:
+    lx, ly = _fd_left_ledge()
+    seed = _ground_seed(facing=1, pos_x=float(lx + 0.5))
+    seed["pos_y"][0, 0] = np.float32(ly)
+    seed["action_id"][0, 0] = np.uint16(ACT_PR_N_TURN)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_PR_N_TURN)
+    seed["speed_ground_x_self"][0, 0] = np.float32(gr_vel)
+    return seed
+
+
+def test_rollout_turn_slow_coll_edge_snaps_and_stays_grounded() -> None:
+    # ftPr_SpecialNTurn_Coll at |gr_vel| <= x74: ft_80082978's mpColl_8004A45C_Floor endpoint
+    # snap pins the turn to the floor edge instead of losing the floor.
+    # refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialNTurn_Coll
+    lx, _ = _fd_left_ledge()
+    outs = _run(_turn_edge_seed(-2.0), [_mk_inputs()])
+    o = outs[0]
+    assert int(o["action_id"][0]) == ACT_PR_N_TURN, "slow turn must stay grounded at the edge"
+    assert int(o["on_ground"][0]) == 1
+    assert float(o["pos_x"][0]) >= lx - 1e-3
+
+def test_rollout_turn_fast_coll_loses_floor_to_air_turn() -> None:
+    # Above x74 the ft_80082888 wrapper lets the floor loss fire: grounded Turn swaps to
+    # SpecialAirNStartTurn at the preserved frame.
+    a = _attrs()
+    thr = float(a["puff_rollout_turn_coll_vel_threshold"])
+    outs = _run(_turn_edge_seed(-(thr + 2.0)), [_mk_inputs()])
+    assert int(outs[0]["action_id"][0]) == ACT_PR_AIR_N_START_TURN
+    assert int(outs[0]["on_ground"][0]) == 0
+
+
+def test_sing_contact_applies_no_hitlag_hitstun_or_facing_flip() -> None:
+    # ftCo_8008E908 element-6 arm -> ftCo_800C318C: the 0-damage sleep contact starts no hitlag
+    # on either side (Fighter_ProcessHit gates hitlag on nonzero applied damage), never reaches
+    # ftCo_8008DCE0 (no hitstun, no victim facing flip), and 800C318C does not run the post-entry
+    # anim tick (the entry row publishes action frame 0).
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::ftCo_800C318C
+    b_up = _mk_inputs2(p0={"buttons": BTN_B, "main_y": 127})
+    idle = _mk_inputs2()
+    seed = _sing_seed()
+    # Victim standing to the RIGHT of Puff facing right (fox_x=8): fox facing right too, so a
+    # generic damage entry would flip fox to face the attacker (left). Sleep must not.
+    seed["facing"][0, 1] = np.uint8(1)
+    outs = _run(seed, [b_up] + [idle] * 40)
+    acts1 = [int(o["action_id"][1]) for o in outs]
+    si = acts1.index(ACT_DAMAGE_SONG)
+    o = outs[si]
+    assert int(o["action_frame"][1]) == 0, "800C318C entry row publishes frame 0 (no entry tick)"
+    assert int(o["hitlag"][1]) == 0, "0-damage sleep contact must not start victim hitlag"
+    assert int(o["hitlag"][0]) == 0, "0-damage sleep contact must not start attacker hitlag"
+    assert int(o["hitstun"][1]) == 0, "sleep entry bypasses ftCo_8008DCE0 hitstun"
+    assert int(o["facing"][1]) == 1, "sleep entry must not flip victim facing"
+
+
+ACT_ATTACK_AIR_LW = 69
+SM_ATTACK_AIR_LW = 72
+ACT_LANDING_AIR_LW = 74
+
+
+def test_dair_posed_ecb_bottom_below_root_does_not_land_early() -> None:
+    # Puff's dair pose dips the ECB source joints ~2 units below TransN, but
+    # mpColl_LoadECB_JObj clamps the desired bottom to the root (`bottom_y < 0 -> 0`), so landing
+    # only fires when the ROOT sweep crosses the floor.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+    def dair_seed(y0: float) -> np.ndarray:
+        seed = _seed(pos_y=y0)
+        seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_LW)
+        seed["action_frame"][0, 0] = np.int16(12)
+        seed["anim_frame_f32"][0, 0] = np.float32(12.0)
+        seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_AIR_LW)
+        seed["speed_y_self"][0, 0] = np.float32(-1.0)
+        return seed
+
+    # Root ends the step above the FD floor (y=0): the posed bottom (-2.15 at frame 13) would
+    # cross, the clamped bottom must not.
+    outs = _run(dair_seed(1.5), [_mk_inputs()])
+    assert int(outs[0]["action_id"][0]) == ACT_ATTACK_AIR_LW, "clamped bottom must not land early"
+    assert int(outs[0]["on_ground"][0]) == 0
+    # Root crossing the floor lands normally.
+    outs = _run(dair_seed(0.5), [_mk_inputs()])
+    assert int(outs[0]["action_id"][0]) == ACT_LANDING_AIR_LW
+    assert int(outs[0]["on_ground"][0]) == 1

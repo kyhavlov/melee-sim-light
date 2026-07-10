@@ -270,6 +270,11 @@ typedef struct MslCombatProcessHitResolved {
   uint8_t hitlag_sets_x221a;
   uint8_t hitlag_allows_sdi;
   uint8_t update_bookkeeping;
+  // ftCo_8008E908 element-6/7 arm: the victim enters DamageSong through ftCo_800C318C, bypassing
+  // ftCo_8008DCE0 (no KB install, no self-vel clear, no hitstun, no facing flip, no entry tick).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::ftCo_800C318C
+  uint8_t sleep_element_entry;
   uint8_t source_hb_valid;
   uint8_t source_cap_valid;
   uint8_t source_is_item_hit;

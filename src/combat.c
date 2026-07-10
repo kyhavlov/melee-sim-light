@@ -1273,33 +1273,6 @@ static inline void combat_damage_enter_state(
       //   ftCo_8009F0F0,ftCo_8009F184,ftCo_DownDamage_Coll}
       batch->state.on_ground[d_idx] = 0u;
     }
-  } else if (source_hb_valid != 0u && c != NULL &&
-             (batch->state.hitbox_element[source_hb_i] == 6u ||
-              batch->state.hitbox_element[source_hb_i] == 7u)) {
-    // Sleep elements: ftCo_8008E908 routes elements 6/7 into ftCo_800C318C (DamageSong) instead
-    // of the generic ftCo_8008DCE0 selection (the x2228_b2 gate is sandbag-only). Melee's only
-    // fighter sleep hitbox is Sing (element 6, hit_grounded-only payload); element 7 scales the
-    // duration by x644. The duration lands in the shared grab_timer lane (ftCommon_InitGrab),
-    // slot = victim player index + 1 (the capture_grab_timer_init convention).
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::{ftCo_800C318C,inlineA0}
-    act = (uint16_t)MSL_ACT_DAMAGE_SONG;
-    sm = (uint32_t)MSL_SM_FURA_SLEEP_START;
-    const int victim_p = (int)(d_idx % (size_t)MSL_MAX_PLAYERS);
-    const float slot = (float)(victim_p + 1);
-    const float handicap = (float)batch->state.handicap[d_idx];
-    float timer = c->damagesong_timer_base +
-                  c->damagesong_timer_handicap_mul *
-                      (c->damagesong_timer_handicap_base - handicap) +
-                  c->damagesong_timer_slot_mul * (c->damagesong_timer_slot_base - slot) +
-                  batch->state.percent[d_idx] * c->damagesong_timer_percent_mul;
-    if (batch->state.hitbox_element[source_hb_i] == 7u) {
-      timer *= c->damagesong_element7_mul;
-    }
-    batch->state.capture_grab_timer[d_idx] = timer;
-    // ftCommon_InitGrab resets the grab-mash sign latches.
-    batch->state.grab_mash_stick_x_sign[d_idx] = 0;
-    batch->state.grab_mash_stick_y_sign[d_idx] = 0;
   } else if (sev == 3u) {
     // High-knockback / tumble-style damage states.
     //
@@ -1829,10 +1802,69 @@ static inline void combat_processhit_apply_hitlag_after_entry(
   }
 }
 
+static inline void combat_damage_enter_damagesong(const MslCommonParams* c, MslBatch* batch,
+                                                  const MslCombatProcessHitResolved* ev) {
+  // Sleep elements: ftCo_8008E908 routes elements 6/7 into ftCo_800C318C (DamageSong) instead
+  // of the generic ftCo_8008DCE0 selection (the x2228_b2 gate is sandbag-only). Melee's only
+  // fighter sleep hitbox is Sing (element 6, hit_grounded-only payload); element 7 scales the
+  // duration by x644. The duration lands in the shared grab_timer lane (ftCommon_InitGrab),
+  // slot = victim player index + 1 (the capture_grab_timer_init convention).
+  //
+  // ftCo_800C318C bypasses everything else 8008DCE0 owns: no KB velocity install, no
+  // self-velocity clear, no hitstun, no victim facing flip, no x14/meteor/tilt clears, and no
+  // post-entry ftAnim_8006EBA4 tick (the entry row publishes action frame 0).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::{ftCo_800C318C,inlineA0}
+  const size_t d_idx = ev->d_idx;
+  const uint16_t pre_damage_action = batch->state.action_id[d_idx];
+  if (msl_action_is_cliff_any(pre_damage_action)) {
+    // ftCo_8008E908 writes the cliff-owned ledge cooldown before the element routing.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
+    const uint16_t cooldown = c->ledge_cooldown_frames;
+    batch->state.ledge_cooldown[d_idx] = (cooldown > 0xFFu) ? 0xFFu : (uint8_t)cooldown;
+  }
+  batch->state.action_id[d_idx] = (uint16_t)MSL_ACT_DAMAGE_SONG;
+  batch->state.animation_index[d_idx] = (uint32_t)MSL_SM_FURA_SLEEP_START;
+  const int victim_p = (int)(d_idx % (size_t)MSL_MAX_PLAYERS);
+  const float slot = (float)(victim_p + 1);
+  const float handicap = (float)batch->state.handicap[d_idx];
+  float timer = c->damagesong_timer_base +
+                c->damagesong_timer_handicap_mul *
+                    (c->damagesong_timer_handicap_base - handicap) +
+                c->damagesong_timer_slot_mul * (c->damagesong_timer_slot_base - slot) +
+                batch->state.percent[d_idx] * c->damagesong_timer_percent_mul;
+  if (ev->source_hb_valid != 0u && batch->state.hitbox_element[ev->source_hb_i] == 7u) {
+    timer *= c->damagesong_element7_mul;
+  }
+  batch->state.capture_grab_timer[d_idx] = timer;
+  // ftCommon_InitGrab resets the grab-mash sign latches.
+  batch->state.grab_mash_stick_x_sign[d_idx] = 0;
+  batch->state.grab_mash_stick_y_sign[d_idx] = 0;
+  // Fighter_ChangeMotionState reset clears fp->x221B_b0 (shield descriptor active).
+  // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState reset block)
+  {
+    const size_t flags_i = d_idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+    batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+  }
+  msl_anim_timebase_enter(batch, d_idx, 0.0f, 1.0f);
+}
+
 static inline void combat_processhit_apply_resolved_damage(const MslCommonParams* c,
                                                            MslBatch* batch,
                                                            const MslCombatProcessHitResolved* ev) {
   if (c == NULL || batch == NULL || ev == NULL) {
+    return;
+  }
+
+  if (ev->sleep_element_entry != 0u) {
+    // ftCo_8008E908 element-6/7 arm: DamageSong entry through ftCo_800C318C, bypassing the
+    // generic KB/hitstun/facing aftermath below. Victim hitlag keeps the ProcessHit damage gate
+    // (ev->d_hl is 0 for the 0-damage Sing capsule).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
+    combat_damage_enter_damagesong(c, batch, ev);
+    combat_processhit_apply_hitlag_after_entry(batch, ev);
+    combat_processhit_write_source(batch, ev);
+    combat_processhit_apply_bookkeeping(batch, ev);
     return;
   }
 
@@ -2374,6 +2406,14 @@ static inline void combat_body_damage_producer_apply_attacker_side(
   }
   const MslCommonParams* c = msl_common_params();
   if (c == NULL) {
+    return;
+  }
+
+  // Fighter_ProcessHit's deal-hitlag consumer is the `else if (fp->dmg.x1914)` arm; a 0-damage
+  // contact (Sing's sleep capsule) leaves x1914 at 0, so neither attacker hitlag nor
+  // deal_dmg_cb fires.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  if (prod->env_dmg <= 0) {
     return;
   }
 
@@ -2928,8 +2968,14 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   const size_t d_idx = e->d_idx;
   const size_t a_idx = e->a_idx;
   const float d_hitlag_mul = combat_hitlag_mul_from_element(c, e->element);
+  // Fighter_ProcessHit gates victim hitlag on nonzero applied damage (`if (bool1)`, with bool1
+  // holding dmg.x183C_applied): a 0-damage accepted BODY contact (Sing's element-6 sleep
+  // capsule) starts no victim hitlag.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   const uint16_t d_hl =
-      combat_calc_hitlag_frames(c, scratch->max_env_dmg, e->defender_motion_id, d_hitlag_mul);
+      (scratch->max_env_dmg > 0)
+          ? combat_calc_hitlag_frames(c, scratch->max_env_dmg, e->defender_motion_id, d_hitlag_mul)
+          : 0u;
   const uint16_t d_hl_prev = batch->state.hitlag[d_idx];
   const uint8_t d_hl_increased = (d_hl > d_hl_prev) ? 1u : 0u;
 
@@ -3022,10 +3068,19 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   const float collision_facing_dir_1 =
       (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one;
   const float defender_facing_dir_1 = collision_facing_dir_1;
+  // ftCo_8008E908 element-6/7 arm: the sleep consumer never reaches ftCo_8008DCE0, so the
+  // victim facing flip below does not run for sleep entries.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
+  const uint8_t sleep_element_entry =
+      (uint8_t)(!downed_damage_contact_facing_owner &&
+                (batch->state.hitbox_element[e->hb_i] == 6u ||
+                 batch->state.hitbox_element[e->hb_i] == 7u));
   const float post_damage_facing_dir = downed_damage_contact_facing_owner
                                            ? (batch->state.facing[d_idx] ? one : -one)
                                            : collision_facing_dir_1;
-  batch->state.facing[d_idx] = (uint8_t)(post_damage_facing_dir > 0.0f);
+  if (!sleep_element_entry) {
+    batch->state.facing[d_idx] = (uint8_t)(post_damage_facing_dir > 0.0f);
+  }
 
   const float kb_x = -x * defender_facing_dir_1;
   const float kb_y = y;
@@ -3087,6 +3142,7 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   ev.hitlag_mode = MSL_PROCESS_HITLAG_ASSIGN_IF_POSITIVE;
   ev.hitlag_sets_x221a = 1u;
   ev.hitlag_allows_sdi = 1u;
+  ev.sleep_element_entry = sleep_element_entry;
   combat_processhit_apply_resolved_damage(c, batch, &ev);
 
   const uint16_t defender_iid_post = batch->state.instance_id[d_idx];

@@ -900,6 +900,20 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
           fd_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL) {
         fd = 0.0f;
       }
+      // Puff Coll direction modes: air Sing passes CLIFFCATCH_BOTH (0) into
+      // ft_CheckGroundAndLedge, so both ledge sides are live regardless of facing; Rollout
+      // AirChargeRelease passes the roll direction (mv x34.x) into ft_8008239C, not facing.
+      // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialHi.c::ftPr_SpecialAirHi_Coll
+      // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialAirNChargeRelease_Coll
+      if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_PUFF) {
+        const uint16_t pr_a = batch->state.action_id[idx];
+        if (pr_a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_L ||
+            pr_a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_R) {
+          fd = 0.0f;
+        } else if (pr_a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_CHARGE_RELEASE) {
+          fd = (batch->state.puff_rollout_dir[idx] < 0) ? -1.0f : 1.0f;
+        }
+      }
       // Decomp: mpColl_80046904 runs inside the mpColl_80043754 substep loop, which updates:
       // - cd->prev_pos (previous substep position)
       // - cd->cur_pos  (current substep position after collision correction)
