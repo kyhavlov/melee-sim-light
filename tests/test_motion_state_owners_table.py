@@ -39,6 +39,7 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE,
     CLASS2_FALL_LIKE_ACTION,
     CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA,
+    CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL,
     CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST,
     CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS,
     CLASS2_GUARD_STATE,
@@ -63,13 +64,19 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL,
     CLASS_SPECIALHI,
 )
-from tools.slippi.motion_state_owners import VERSION, read_callback_manifest, read_mslmso01_v1
+from tools.slippi.motion_state_owners import (
+    HEADER_BYTES,
+    VERSION,
+    read_callback_manifest,
+    read_mslmso01_v1,
+)
 
 
 FOX = Path("data/motion_state/owners/fox.bin")
 FALCO = Path("data/motion_state/owners/falco.bin")
 MANIFEST = Path("data/motion_state/owners/callback_symbols.json")
 MARTH = Path("data/motion_state/owners/marth.bin")
+FALCON = Path("data/motion_state/owners/falcon.bin")
 SHEIK = Path("data/motion_state/owners/sheik.bin")
 SOURCE_ARTIFACT_OWNERS = Path("tools/extraction/source_artifacts/motion_state/owners")
 
@@ -250,6 +257,7 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x001D,
         0x001E,
         0x001F,
+        0x0020,
         0x0021,
         0x0022,
         0x00CA,
@@ -797,6 +805,117 @@ def test_sheik_vanish_motion_state_callbacks_publish_source_collision_owners() -
 
 
 @pytest.mark.integration
+def test_falcon_raptor_motion_state_callbacks_publish_source_collision_owners() -> None:
+    falcon = read_mslmso01_v1(FALCON)
+    symbols = read_callback_manifest(MANIFEST)
+
+    def cb_name(action_id: int, lane: str) -> str:
+        cb_id = getattr(falcon, f"{lane}_cb_id")[action_id]
+        return symbols[int(cb_id)]
+
+    def has(action_id: int, bit: int) -> bool:
+        return bool(int(falcon.class_bits[action_id]) & bit)
+
+    # Raptor Boost start switches source helpers from cmd_vars[2]:
+    # cmd2 live uses ft_80082708/B108; cmd2 clear uses ft_80084104/B2DC edge snap. The generated
+    # table publishes the superset and runtime narrows it from the extracted script timeline.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialSStart_Coll
+    # data/moves/falcon.json::specials_by_msid.303 set_cmd_var(idx=2,value={1,0})
+    assert cb_name(0x015D, "coll") == "ftCa_SpecialSStart_Coll"
+    assert has(0x015D, CLASS_FX_SPECIALS_GROUND_B108_COLL)
+    assert has(0x015D, CLASS_FT800827A0_EDGE_SNAP_COLL)
+
+    # Raptor Boost hit-punch does not branch on cmd_vars[2]; it always calls ft_80082708.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialS_Coll
+    assert cb_name(0x015E, "coll") == "ftCa_SpecialS_Coll"
+    assert has(0x015E, CLASS_FX_SPECIALS_GROUND_B108_COLL)
+    assert not has(0x015E, CLASS_FT800827A0_EDGE_SNAP_COLL)
+
+    # Aerial Raptor Start/Hit call ft_80081D0C directly. This owner also controls whether a live
+    # ftCommon ECB lock can preserve desired.bottom through the collision callback.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+    #   ftCa_SpecialAirSStart_Coll,ftCa_SpecialAirS_Coll}
+    for action_id, coll_cb in (
+        (0x015F, "ftCa_SpecialAirSStart_Coll"),
+        (0x0160, "ftCa_SpecialAirS_Coll"),
+    ):
+        assert cb_name(action_id, "coll") == coll_cb
+        assert has(action_id, CLASS_FT80081D0C_AIR_COLL)
+
+
+@pytest.mark.integration
+def test_falcon_kick_landing_end_publishes_source_collision_owner() -> None:
+    falcon = read_mslmso01_v1(FALCON)
+    symbols = read_callback_manifest(MANIFEST)
+
+    action_id = 0x0168
+    coll_cb = symbols[int(falcon.coll_cb_id[action_id])]
+    assert coll_cb == "ftCa_SpecialAirLwEnd_Coll"
+    # ftCa_SpecialAirLwEnd_Coll -> ft_80084104 -> ft_800827A0/mpColl_8004B2DC.
+    # This is the grounded landing-skid state; the adjacent airborne backflip state has its own
+    # doColl landing callback and must not inherit the endpoint-snap owner.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+    #   ftCa_SpecialAirLwEnd_Coll,ftCa_SpecialAirLwEndAir_Coll}
+    assert int(falcon.class_bits[action_id]) & CLASS_FT800827A0_EDGE_SNAP_COLL
+    assert not int(falcon.class_bits[0x0169]) & CLASS_FT800827A0_EDGE_SNAP_COLL
+
+
+@pytest.mark.integration
+def test_falcon_dive_motion_state_callbacks_publish_source_collision_owners() -> None:
+    falcon = read_mslmso01_v1(FALCON)
+    symbols = read_callback_manifest(MANIFEST)
+
+    def cb_name(action_id: int, lane: str) -> str:
+        cb_id = getattr(falcon, f"{lane}_cb_id")[action_id]
+        return symbols[int(cb_id)]
+
+    def has(action_id: int, bit: int) -> bool:
+        return bool(int(falcon.class_bits[action_id]) & bit)
+
+    def has2(action_id: int, bit: int) -> bool:
+        return bool(int(falcon.class2_bits[action_id]) & bit)
+
+    # Falcon Dive ground/air Coll callbacks run doAirColl on the airborne branch:
+    # ft_CheckGroundAndLedge -> mpColl_800473CC. Keep this generated so floor/wall/ceiling
+    # publication uses the same callback-local CollData owner as other SpecialHi families.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{
+    #   ftCa_SpecialHi_Coll,ftCa_SpecialAirHi_Coll}
+    for action_id, coll_cb in (
+        (0x0161, "ftCa_SpecialHi_Coll"),
+        (0x0162, "ftCa_SpecialAirHi_Coll"),
+    ):
+        assert cb_name(action_id, "coll") == coll_cb
+        assert has(action_id, CLASS_SPECIALHI)
+        assert has(action_id, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)
+        assert has2(action_id, CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL)
+
+    # Throw0 uses the direct airborne floor wrapper after its Anim callback refreshes the
+    # five-frame common ECB lock.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{
+    #   ftCa_SpecialHiThrow0_Anim,ftCa_SpecialHiThrow0_Coll}
+    assert cb_name(0x0164, "coll") == "ftCa_SpecialHiThrow0_Coll"
+    assert has(0x0164, CLASS_FT80081D0C_AIR_COLL)
+
+
+@pytest.mark.integration
+def test_falcon_direct_air_special_callbacks_publish_source_collision_owner() -> None:
+    falcon = read_mslmso01_v1(FALCON)
+    symbols = read_callback_manifest(MANIFEST)
+
+    for action_id, coll_cb in (
+        (0x015C, "ftCa_SpecialAirN_Coll"),
+        (0x0165, "ftCa_SpecialLw_Coll"),
+        (0x0166, "ftCa_SpecialLwEnd_Coll"),
+        (0x0167, "ftCa_SpecialAirLw_Coll"),
+        (0x0169, "ftCa_SpecialAirLwEndAir_Coll"),
+        (0x016A, "ftCa_SpecialLwEndAir_Coll"),
+    ):
+        callback_id = int(falcon.coll_cb_id[action_id])
+        assert symbols[callback_id] == coll_cb
+        assert int(falcon.class_bits[action_id]) & CLASS_FT80081D0C_AIR_COLL
+
+
+@pytest.mark.integration
 def test_sheik_chain_motion_state_callbacks_publish_source_collision_owners() -> None:
     sheik = read_mslmso01_v1(SHEIK)
     symbols = read_callback_manifest(MANIFEST)
@@ -1002,6 +1121,13 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
             bits |= CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE
         if phys_cb in {"ftCo_CliffCatch_Phys", "ftCo_CliffJump1_Phys", "ftCo_CliffWait_Phys"}:
             bits |= CLASS2_CLIFF_HOLD_PHYS_SNAP
+        if coll_cb in {
+            "ftFx_SpecialAirHi_Coll",
+            "ftFx_SpecialHiFall_Coll",
+            "ftCa_SpecialHi_Coll",
+            "ftCa_SpecialAirHi_Coll",
+        }:
+            bits |= CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL
         if (
             anim_cb == "ftCo_Wait_Anim"
             or anim_cb == "ftCo_Landing_Anim"
@@ -1107,7 +1233,7 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
 
 def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> None:
     stale = tmp_path / "fox.bin"
-    buf = bytearray(60)
+    buf = bytearray(HEADER_BYTES)
     buf[0:8] = b"MSLMSO01"
     struct.pack_into("<I", buf, 8, VERSION - 1)
     struct.pack_into("<H", buf, 12, 1)
@@ -1115,6 +1241,30 @@ def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> Non
 
     with pytest.raises(ValueError, match="unsupported MSLMSO01 version"):
         read_mslmso01_v1(stale)
+
+
+@pytest.mark.parametrize("size", [60, 63])
+def test_motion_state_owner_reader_rejects_truncated_current_header(
+    tmp_path: Path, size: int
+) -> None:
+    path = tmp_path / "truncated.bin"
+    buf = bytearray(size)
+    buf[0:8] = b"MSLMSO01"
+    struct.pack_into("<I", buf, 8, VERSION)
+    path.write_bytes(bytes(buf))
+
+    with pytest.raises(ValueError, match="MSLMSO01 table too small"):
+        read_mslmso01_v1(path)
+
+
+def test_motion_state_owner_reader_rejects_table_offsets_inside_header(tmp_path: Path) -> None:
+    path = tmp_path / "bad-offset.bin"
+    buf = bytearray(FOX.read_bytes())
+    struct.pack_into("<I", buf, 16, HEADER_BYTES - 4)
+    path.write_bytes(bytes(buf))
+
+    with pytest.raises(ValueError, match="MSLMSO01 bad table offset"):
+        read_mslmso01_v1(path)
 
 
 def test_runtime_rejects_stale_motion_state_owner_tables(tmp_path: Path) -> None:
@@ -1136,7 +1286,7 @@ def test_runtime_rejects_stale_motion_state_owner_tables(tmp_path: Path) -> None
     for ch in ("fox", "falco"):
         stale = data_dir / "motion_state" / "owners" / f"{ch}.bin"
         stale.parent.mkdir(parents=True, exist_ok=True)
-        buf = bytearray(60)
+        buf = bytearray(HEADER_BYTES)
         buf[0:8] = b"MSLMSO01"
         struct.pack_into("<I", buf, 8, VERSION - 1)
         struct.pack_into("<H", buf, 12, 1)
@@ -1187,6 +1337,28 @@ def test_motion_state_owner_source_artifacts_match_generated_data() -> None:
         assert (SOURCE_ARTIFACT_OWNERS / rel).read_bytes() == (
             Path("data/motion_state/owners") / rel
         ).read_bytes(), rel
+
+
+def test_motion_state_owner_partial_extraction_uses_packaged_callback_namespace(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "owners"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.extraction.extract_motion_state_owners",
+            "--melee_decomp",
+            "refs/melee",
+            "--out_dir",
+            str(out_dir),
+            "--chars",
+            "fox,falco",
+        ],
+        check=True,
+    )
+    for rel in ("fox.bin", "falco.bin", "callback_symbols.json"):
+        assert (out_dir / rel).read_bytes() == (SOURCE_ARTIFACT_OWNERS / rel).read_bytes(), rel
 
 
 def test_fx_special_kind_matches_anim_callback_symbols() -> None:

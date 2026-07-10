@@ -44,6 +44,7 @@
     "COMMON_GROUNDED_COLL": 1,
     "FALL_LIKE_ACTION": 128,
     "FRESH_GUARDON_ITEM_SHIELDDESC_IASA": 32,
+    "FT_CHECK_GROUND_LEDGE_BOTH_COLL": 32768,
     "GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST": 8192,
     "GROUND_LOCOMOTION_FLOOR_LOSS": 1024,
     "GUARD_STATE": 256,
@@ -4924,5 +4925,5 @@
       "symbol": "ftpickupitem_Phys"
     }
   ],
-  "version": 20
+  "version": 21
 }

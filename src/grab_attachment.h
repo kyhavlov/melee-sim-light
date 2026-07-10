@@ -58,6 +58,16 @@ void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int batch_index, i
 void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int batch_index, int victim_p,
                                                      int owner_p, float release_anim_frame,
                                                      uint8_t owner_pose_facing);
+
+// Falcon Dive grounded-victim release anchor helper.
+//
+// Decomp-shaped usage:
+// - When the Falcon Dive victim was grounded, ftCo_800DDDE4 treats Falcon as the constrained
+//   fighter (fp4) and the victim as the anchor owner (fp3), samples fp3 FtPart_TransN2, applies
+//   Falcon's static x1A70 offsets, and then runs mpColl_800471F8 on Falcon.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+void grab_attachment_apply_falcon_dive_ground_release_anchor_now(MslBatch* batch, int batch_index,
+                                                                 int falcon_p, int victim_p);
 void grab_attachment_query_thrown_anchor_world(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, int batch_index, int victim_p,
                                                int owner_p);

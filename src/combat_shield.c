@@ -270,28 +270,10 @@ void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-  const uint8_t char_id = batch->state.char_id[idx];
-  const uint32_t anim = batch->state.animation_index[idx];
-  const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
-  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-  MslEcbWorldPoints desired_ecb = {0};
-  msl_ecb_world_points_sample(&desired_ecb, char_id, anim, frame, facing_dir,
-                              batch->state.pos_x[idx], batch->state.pos_y[idx], 0u);
-  msl_ecb_world_points_preserve_locked_desired_bottom_rel_y(
-      &desired_ecb, batch->state.pos_x[idx], batch->state.pos_y[idx],
-      batch->state.coll_desired_ecb_bottom_valid[idx],
-      batch->state.coll_desired_ecb_bottom_rel_y[idx]);
-  batch->state.coll_desired_ecb_bottom_rel_y[idx] = desired_ecb.bottom_rel_y;
-  batch->state.coll_desired_ecb_top_rel_y[idx] = desired_ecb.top_rel_y;
-  batch->state.coll_desired_ecb_left_rel_x[idx] = desired_ecb.left_rel_x;
-  batch->state.coll_desired_ecb_right_rel_x[idx] = desired_ecb.right_rel_x;
-  batch->state.coll_desired_ecb_side_rel_y[idx] = desired_ecb.side_rel_y;
-  batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
-  batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
-      (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130;
+  msl_ftcommon_lock_ecb_8007d5d4(batch, idx);
   batch->state.on_ground[idx] = 0u;
+  batch->state.speed_ground_x_self[idx] = 0.0f;
   batch->state.pos_z[idx] = 0.0f;
-  batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR;
   // Narrow ownership parity for this lane: keep existing velocity ownership in its current
   // systems and source jumpsUsed parity here (jumps_left=max_jumps-1).
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4

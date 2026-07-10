@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from melee_sim.hsd_archive import parse_hsd_archive
+from tools.extraction.extract_fighter_hitboxes import FORMAT_VERSION as HITBOX_VERSION
 from tools.extraction.extract_fighter_parts import ANCHOR_IDS
 from tools.extraction.extract_fighter_script_timeline import EVENT_IDS, RUNTIME_OWNER_EVENT_KINDS
 from tools.extraction.extract_item_articles import (
@@ -43,7 +44,6 @@ from tools.extraction.known_data_artifacts import (
     ITEM_ARTICLE_VERSION,
     PART_MAGIC,
     PART_VERSION,
-    SCRIPT_LEGACY_JSON_VERSION,
     SCRIPT_MAGIC,
     SCRIPT_VERSION,
     STAGE_MAGIC,
@@ -600,6 +600,7 @@ def test_character_overlay_masks_survive_fresh_extraction() -> None:
     cases = {
         "fox": (1, 0, 0, 0, 0),
         "falco": (22, 0, 0, 0, 0),
+        "falcon": (2, 1 << 3, 0, 1 << 1, 0),
         "marth": (18, (1 << 0) | (1 << 3), (1 << 15) | (1 << 16), 1 << 1, 0),
         "sheik": (7, 1 << 3, 0, 1 << 0, 1),
         "zelda": (19, 0, 0, 0, 1),
@@ -620,14 +621,19 @@ def test_character_overlay_masks_survive_fresh_extraction() -> None:
 
 
 @pytest.mark.integration
-def test_sheik_zelda_overlay_masks_survive_fresh_character_attr_extraction(
+def test_newchar_overlay_masks_survive_fresh_character_attr_extraction(
     tmp_path: Path,
 ) -> None:
-    required = [Path("_iso/PlCo.dat"), Path("_iso/PlSk.dat"), Path("_iso/PlZd.dat")]
+    required = [
+        Path("_iso/PlCo.dat"),
+        Path("_iso/PlCa.dat"),
+        Path("_iso/PlSk.dat"),
+        Path("_iso/PlZd.dat"),
+    ]
     missing = [p for p in required if not p.exists()]
     if missing:
         pytest.skip(
-            "missing local _iso assets for Sheik/Zelda character attr extraction: "
+            "missing local _iso assets for new-character attr extraction: "
             + ", ".join(str(p) for p in missing)
         )
 
@@ -642,10 +648,12 @@ def test_sheik_zelda_overlay_masks_survive_fresh_character_attr_extraction(
             "--out-dir",
             str(out_dir),
             "--chars",
-            "sheik,zelda",
+            "falcon,sheik,zelda",
         ],
         check=True,
     )
+    falcon_attrs = json.loads((out_dir / "falcon.json").read_text(encoding="utf-8"))
+    assert int(falcon_attrs["throw_release_mpcoll_floor_publication_mask"]) == (1 << 3)
     attrs = json.loads((out_dir / "sheik.json").read_text(encoding="utf-8"))
     assert int(attrs["throw_release_mpcoll_floor_publication_mask"]) == (1 << 3)
     assert int(attrs["common_fall_blended_ecb_seed_mask"]) == (1 << 0)
@@ -670,12 +678,12 @@ def test_sheik_zelda_overlay_masks_survive_fresh_character_attr_extraction(
     assert float(zelda_attrs["zelda_transform_air_gravity"]) > 0.0
     data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("characters",))
     chars_dir = data_dir / "characters"
-    for name in ("fox", "falco", "marth", "falcon"):
+    for name in ("fox", "falco", "marth"):
         (chars_dir / f"{name}.json").write_text(
             Path(f"data/characters/{name}.json").read_text(encoding="utf-8"),
             encoding="utf-8",
         )
-    for name in ("sheik", "zelda"):
+    for name in ("falcon", "sheik", "zelda"):
         (chars_dir / f"{name}.json").write_text(
             (out_dir / f"{name}.json").read_text(encoding="utf-8"),
             encoding="utf-8",
@@ -1441,11 +1449,34 @@ def test_runtime_stage_lookup_caches_match_mslstg01_for_supported_stages() -> No
 def test_runtime_move_tables_reject_stale_mslftsc1(tmp_path: Path) -> None:
     root_data = Path("data").resolve()
     data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("scripts",))
-    for name in ("fox.bin", "falco.bin"):
-        buf = bytearray((root_data / "scripts" / name).read_bytes())
-        if name == "fox.bin":
+    for path in sorted((root_data / "scripts").glob("*.bin")):
+        buf = bytearray(path.read_bytes())
+        if path.name == "fox.bin":
             buf[8:12] = (SCRIPT_VERSION - 1).to_bytes(4, "little")
-        (data_dir / "scripts" / name).write_bytes(bytes(buf))
+        (data_dir / "scripts" / path.name).write_bytes(bytes(buf))
+
+    code = """
+import msl_binding
+try:
+    msl_binding.init(batch_size=1, num_players=2)
+except Exception:
+    raise SystemExit(0)
+raise SystemExit(1)
+"""
+    env = dict(os.environ)
+    env["MSL_DATA_DIR"] = str(data_dir)
+    proc = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
+def test_runtime_hitboxes_reject_stale_mslhitb1(tmp_path: Path) -> None:
+    root_data = Path("data").resolve()
+    data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("hitboxes",))
+    for path in sorted((root_data / "hitboxes").glob("*.bin")):
+        buf = bytearray(path.read_bytes())
+        if path.name == "fox.bin":
+            buf[8:12] = (HITBOX_VERSION - 1).to_bytes(4, "little")
+        (data_dir / "hitboxes" / path.name).write_bytes(bytes(buf))
 
     code = """
 import msl_binding
@@ -2065,7 +2096,7 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
             "unsupported MSLSTIO1 version",
         ),
         (DREAM_WHISPY_MAGIC, DREAM_WHISPY_VERSION, read_mslwhsp1, "unsupported MSLWHSP1 version"),
-        (SCRIPT_MAGIC, SCRIPT_LEGACY_JSON_VERSION, read_mslftsc1_v1, "unsupported MSLFTSC1 version"),
+        (SCRIPT_MAGIC, SCRIPT_VERSION, read_mslftsc1_v1, "unsupported MSLFTSC1 version"),
     ],
 )
 def test_known_data_artifact_readers_reject_stale_versions(tmp_path: Path, magic, version, reader, match) -> None:

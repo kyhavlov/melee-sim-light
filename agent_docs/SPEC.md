@@ -946,6 +946,16 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll},
   refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C,ft_80081DD4},
   refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80046904,mpColl_80044838_Floor});
+- AttackAir carried hard-floor root projection (2026-07-09): the `mpColl_80044838_Floor`
+  projection slice under `AttackAir_Coll -> ft_80082C74 -> mpColl_800471F8` is a sustained
+  same-action owner. It may consume a carried static hard-floor `CollData.floor.index` only when
+  the previous callback action snapshot (`seed_prev_action_id`) is the same AttackAir action.
+  Fresh entries from `PassiveWallJump`, Fall, or JumpAerial must rely on a real
+  `mpColl_80044628_Floor` bottom sweep; visible `ground_id` plus root-below-floor state is not
+  enough and causes walljump -> aerial teleports to the floor above.
+  (`src/mpcoll_ground.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll,
+  refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C},
+  refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor});
 - Shared floor-sweep publication (2026-05-22): airborne and moving-platform floor contacts now
   flow through an explicit `MslMpcollFloorSweepResult` / callback-local floor result packet before
   late rejection and final writeback. This models the source order where `mpColl_80044628_Floor`
@@ -2125,8 +2135,8 @@ Counts note:
 #### Unique `animation_index` set (seed_t + ref_t1)
 
 “Extracted tables” columns indicate whether we currently have ISO/movescript-derived artifacts keyed by this `animation_index` (msid):
-- Hitboxes: `data/hitboxes/{fox,falco}.bin` (`MSLHITB1 v1`)
-- Script owner events: `data/scripts/{fox,falco}.bin` (`MSLFTSC1 v2`), cached by
+- Hitboxes: `data/hitboxes/{fox,falco}.bin` (`MSLHITB1 v2`)
+- Script owner events: `data/scripts/{fox,falco}.bin` (`MSLFTSC1 v3`), cached by
   `src/move_tables.c` for hit status, hurtbox state masks, airborne-state events, x221C state
   flags, command-variable windows/pulses, and IASA/throw/script hitbox products.
 
@@ -2760,7 +2770,7 @@ GuardSetOff -> Guard overlap nudge:
 | Read first (decomp) | Data artifacts (ISO-derived) | Code owner / gaps |
 |---|---|---|
 | `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70` (fighter-vs-fighter collision pass) | `data/hurtcaps/{fox,falco}.bin` (`MSLHURT1 v1`) + `data/anims/{fox,falco}*.bin` (pose) | `src/hurtboxes.c`, `src/hurtcaps_tables.c`, `src/anim_pose.c` |
-| `refs/melee/src/melee/ft/ftaction.c::ftAction_80073240` (script timers use `cur_anim_frame`) | `data/hitboxes/{fox,falco}.bin` (`MSLHITB1 v1`) | `src/hitboxes.c`, `src/hitboxes_tables.c` |
+| `refs/melee/src/melee/ft/ftaction.c::ftAction_80073240` (script timers use `cur_anim_frame`) | `data/hitboxes/{fox,falco}.bin` (`MSLHITB1 v2`) | `src/hitboxes.c`, `src/hitboxes_tables.c` |
 | `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c` (shield bubble placement) | `data/shields/{fox,falco}.bin` (shield-tilt table) | `src/shields.c` (placement) |
 
 - Stopped non-loop fighter AObj terminal pose:
@@ -7589,3 +7599,37 @@ Manual set13 / character special-source fixes:
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`
   - `refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904}`
   - `data/stages/bin/*.bin::MSLSTG01 floor adjacent_{left,right}_wall + ledge metadata`
+
+Falcon Kick jump refresh and down-throw release placement:
+- `ftCa_SpecialAirLw_Anim` calls `ftCommon_8007D5D4` before entering
+  `SpecialAirLwEndAir`. Because that common helper writes `x1968_jumpsUsed = 1`, an aerial
+  Falcon Kick restores Falcon's one aerial jump even when it was already spent. The same write
+  applies when a ground-started kick finishes airborne and when the kick enters its wall-rebound
+  state. Runtime now carries the complete common ground-to-air jump/ECB bundle at all three
+  callback sites. Falcon-suite vanilla transitions from `SpecialAirLw` to `SpecialAirLwEndAir`
+  independently show `jumps_left 0 -> 1`.
+- Grounded `SpecialLw -> SpecialLwEnd` completion calls `ftCommon_8007D7FC`, whose
+  `ftCommon_8007D6A4` tail writes `jumpsUsed = 0`, clears fastfall, and unlocks ECB before the
+  destination state. Runtime applies those absolute writes at the callback boundary rather than
+  depending on valid grounded seed invariants; a synthetic stale-lane test locks the repair.
+- The grounded `SpecialAirLwEnd` landing-skid state is not one of the same-action Falcon Kick
+  phase flips. Its `ftCa_SpecialAirLwEnd_Coll` callback delegates to `ft_80084104`, so an attached
+  floor is retained through the B2DC endpoint owner, while actual floor loss enters `Fall` through
+  `ftCo_Fall_Enter` and then applies the same absolute `jumpsUsed = 1` ground-to-air bundle. The
+  generated `MSLMSO01` `FT800827A0_EDGE_SNAP_COLL` class now carries that callback owner; focused
+  positive/negative tests lock both supported-floor persistence and absent-floor Fall entry.
+- Falcon `ThrowLw` uses the extracted `65` degree, `7` damage throw hit, but its attached victim
+  pose is below the floor at release. `ftCo_800DDDE4` publishes the selected release root through
+  `mpColl_800471F8` before `ftCo_800DE7C0` installs the upward launch. Falcon ThrowLw is therefore
+  included in the table-backed `throw_release_mpcoll_floor_publication_mask`; without that owner,
+  rollout integrated from the raw below-floor pose and falsely entered `DownBound` one frame later.
+  Falcon-suite release rows verify the floor-level launch followed by the ten-frame common ECB
+  lock, while the existing Fox/Falco downward-throw controls remain outside the publication mask.
+- Source anchors:
+  - `refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{ftCa_SpecialLw_Anim_inline,ftCa_SpecialAirLw_Anim,ftCa_SpecialLw_Coll,ftCa_SpecialAirLwEnd_Coll}`
+  - `refs/melee/src/melee/ft/ft_081B.c::ft_80084104`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter`
+  - `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0`
+  - `data/moves/falcon.json::moves.ftCo_SM_ThrowLw`

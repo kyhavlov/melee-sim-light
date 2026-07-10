@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
-from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
+from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_GUARD_SET_OFF = 0x00B5
 
 # src/hitboxes_tables.h (MSLHITB1 u16_6 bits)
 HIT_GROUNDED = 1 << 9
+X42_FIGHTER_INTERACTION = 1 << 0
+X42_ITEM_INTERACTION = 1 << 1
+X42_INTERACTION_VALID = 1 << 2
+
+DEBUG_SHIELD_ACCEPT = 0
+DEBUG_SHIELD_REJECT_HITBOX_DISABLED = 6
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -62,6 +70,16 @@ def _common_attr(name: str) -> float:
 
 def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:
     return np.zeros((batch, input_stride), dtype=np.uint8)
+
+
+def _read_compare(handle) -> np.void:
+    import msl_binding
+
+    compare_stride = int(msl_binding.sizes()["compare"])
+    assert compare_stride == COMPARE_DTYPE.itemsize
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    msl_binding.write_compare(handle, out)
+    return out.view(COMPARE_DTYPE).reshape((1,))[0]
 
 
 def _seed_base() -> np.ndarray:
@@ -215,6 +233,83 @@ def test_debug_shield_candidate_decisions_reports_pair_and_hitbox_rejects() -> N
         ]
         assert len(hb01) == 4
         assert all(int(r["reject_reason"]) == 6 for r in hb01)
+    finally:
+        msl_binding.destroy(handle)
+
+
+@pytest.mark.parametrize(
+    ("interaction_flags", "expected_reason", "expect_shield_hit"),
+    [
+        (
+            X42_INTERACTION_VALID | X42_ITEM_INTERACTION,
+            DEBUG_SHIELD_REJECT_HITBOX_DISABLED,
+            False,
+        ),
+        (
+            X42_INTERACTION_VALID | X42_ITEM_INTERACTION | X42_FIGHTER_INTERACTION,
+            DEBUG_SHIELD_ACCEPT,
+            True,
+        ),
+    ],
+)
+def test_shield_x42_b5_diagnostic_matches_runtime_mutation(
+    interaction_flags: int, expected_reason: int, expect_shield_hit: bool
+) -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+
+        neutral = _mk_input_bytes(1, input_stride)
+        shield = _mk_input_bytes(1, input_stride)
+        shield.view(INPUT_DTYPE).reshape((1,))["p"]["l"][0, 1] = TRIGGER_FULL
+        msl_binding.step_input(handle, neutral, shield)
+
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy, shz, shr = (float(v) for v in bubbles[1])
+        assert shr > 0.0
+
+        msl_binding.debug_set_hitlag(handle, 0, 0, 0)
+        msl_binding.debug_set_hitlag(handle, 0, 1, 0)
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, shx, shy, shz, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(
+            handle, 0, 0, 0, int(HIT_GROUNDED | interaction_flags)
+        )
+
+        raw, count = msl_binding.debug_shield_candidate_decisions(handle, 0, 64)
+        rows = raw.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count]
+        hitbox_rows = rows[
+            (rows["source_kind"] == 0)
+            & (rows["attacker"] == 0)
+            & (rows["defender"] == 1)
+            & (rows["hitbox_id"] == 0)
+        ]
+        assert len(hitbox_rows) == 1
+        assert int(hitbox_rows[0]["hitbox_enabled"]) == 1
+        assert int(hitbox_rows[0]["reject_reason"]) == expected_reason
+        assert int(hitbox_rows[0]["overlap_shield"]) == int(expect_shield_hit)
+
+        before = _read_compare(handle).copy()
+        msl_binding.debug_combat_resolve(handle)
+        after = _read_compare(handle)
+
+        if expect_shield_hit:
+            assert float(after["shield_hp"][1]) < float(before["shield_hp"][1])
+            assert int(after["hitlag"][0]) > 0
+            assert int(after["hitlag"][1]) > 0
+            assert int(after["action_id"][1]) == ACT_GUARD_SET_OFF
+        else:
+            assert float(after["shield_hp"][1]) == pytest.approx(float(before["shield_hp"][1]))
+            assert int(after["hitlag"][0]) == int(before["hitlag"][0]) == 0
+            assert int(after["hitlag"][1]) == int(before["hitlag"][1]) == 0
+            assert int(after["action_id"][1]) == int(before["action_id"][1])
     finally:
         msl_binding.destroy(handle)
 

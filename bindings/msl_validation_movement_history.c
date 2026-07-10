@@ -3,6 +3,9 @@
 #include "msl_validation_movement_history.h"
 #include "msl_validation_history_common.h"
 
+#include "../src/action_ids.h"
+#include "../src/escapeair_collision_owner.h"
+#include "../src/ids.h"
 #include "../src/input_axis.h"
 #include "../src/move_tables.h"
 #include "../src/mpcoll_ecb_points.h"
@@ -260,56 +263,225 @@ PyObject* msl_derive_dash_x4_py(PyObject* self, PyObject* args) {
   return (PyObject*)out;
 }
 
-PyObject* msl_derive_ecb_lock_timer_py(PyObject* self, PyObject* args) {
+typedef struct ValidationEcbLockRefresh {
+  uint8_t timer;
+  uint8_t owner;
+} ValidationEcbLockRefresh;
+
+static inline ValidationEcbLockRefresh validation_ecb_lock_refresh(uint8_t timer, uint8_t owner) {
+  const ValidationEcbLockRefresh refresh = {timer, owner};
+  return refresh;
+}
+
+static inline uint8_t validation_falcon_ground_special_floor_loss_proven(uint16_t prev_action,
+                                                                         uint16_t action) {
+  // These action pairs are direct outputs of collision callbacks that call ftCommon_8007D5D4.
+  // Same-action rows are required where the helper changes only ground_or_air; Falcon Punch also
+  // changes to its authored aerial motion state. Damage* output is not floor-loss proof.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialN_Coll
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHi_Coll
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+  //   ftCa_SpecialLw_Coll,ftCa_SpecialLwEnd_Coll}
+  if (prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_N) {
+    return action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_N ? 1u : 0u;
+  }
+  if (prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+      prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI ||
+      prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_LW ||
+      prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END ||
+      prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END_AIR) {
+    return action == prev_action ? 1u : 0u;
+  }
+  return 0u;
+}
+
+static inline uint8_t validation_falcon_ground_special_damage_output(uint16_t prev_action,
+                                                                     uint16_t action) {
+  const uint8_t grounded_special =
+      (uint8_t)(prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_N ||
+                prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_S_START ||
+                prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_S ||
+                prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI ||
+                prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH ||
+                prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_LW ||
+                prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END ||
+                prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END_AIR);
+  const uint8_t damage_output =
+      (uint8_t)(action == (uint16_t)MSL_ACT_DAMAGE_FALL || msl_py_damage_action_any(action));
+  return (uint8_t)(grounded_special && damage_output);
+}
+
+static ValidationEcbLockRefresh validation_falcon_ecb_lock_post_refresh(
+    uint8_t char_id, uint16_t action, int16_t action_frame, uint16_t prev_action,
+    uint8_t prev_ground, uint8_t action_entry) {
+  const uint8_t no_owner = (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE;
+  const uint8_t seeded_owner = (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130;
+  const uint8_t live_owner = (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_FTCOMMON;
+  if (char_id != (uint8_t)MSL_CHAR_ID_FALCON) {
+    return validation_ecb_lock_refresh(0xFFu, no_owner);
+  }
+
+  // Anim/IASA callbacks run before Fighter_procMap, so 10/5-frame locks publish as 9/4 after the
+  // same-frame decrement. Collision callbacks run inside Fighter_procMap after that decrement and
+  // publish the full 10/5. These bounded Falcon owners cannot be recovered from a generic visible
+  // ground->air edge alone.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+  //   ftCa_SpecialAirS_Enter,ftCa_SpecialAirSStart_Anim,ftCa_SpecialAirS_Anim,
+  //   ftCa_SpecialSStart_Coll,ftCa_SpecialS_Coll}
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHiThrow0_Anim
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+  //   ftCa_SpecialLw_Anim_inline,ftCa_SpecialAirLw_Anim,ftCa_SpecialLw_Coll}
+  if (action == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW) {
+    if (!action_entry || action_frame > 0) {
+      return validation_ecb_lock_refresh(4u, live_owner);
+    }
+    // Dive release can run ftCommon_8007D5D4 before entering Throw0; its first visible row has not
+    // yet run Throw0_Anim's recurring five-frame refresh.
+    return validation_ecb_lock_refresh(9u, live_owner);
+  }
+  if (prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW) {
+    // Throw0_Anim refreshes the five-frame lock before either anim-end -> Fall or a later
+    // Fighter_ProcessHit interruption can replace the visible action.
+    // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHiThrow0_Anim
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ProcessHit_8006D1EC}
+    return validation_ecb_lock_refresh(4u, live_owner);
+  }
+  if (action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START && action_entry) {
+    return validation_ecb_lock_refresh(4u, live_owner);
+  }
+  if ((prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START ||
+       prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S) &&
+      (action == (uint16_t)MSL_ACT_FALL || action == (uint16_t)MSL_ACT_FALL_SPECIAL ||
+       action == (uint16_t)MSL_ACT_FALL_SPECIAL_F || action == (uint16_t)MSL_ACT_FALL_SPECIAL_B)) {
+    return validation_ecb_lock_refresh(4u, live_owner);
+  }
+  const uint8_t raptor_ground_floor_loss_output =
+      (uint8_t)(action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START ||
+                action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S || action == (uint16_t)MSL_ACT_FALL ||
+                action == (uint16_t)MSL_ACT_FALL_SPECIAL ||
+                action == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
+                action == (uint16_t)MSL_ACT_FALL_SPECIAL_B);
+  if (prev_ground && raptor_ground_floor_loss_output &&
+      (prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_S_START ||
+       prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_S)) {
+    // Only the Raptor Coll callback's floor-loss outputs own ftCommon_8007D60C. Incoming damage
+    // can also follow a grounded Raptor row, but its ordinary ground-to-air bundle owns the
+    // ten-frame lock instead.
+    // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+    //   ftCa_SpecialSStart_Coll,ftCa_SpecialS_Coll}
+    // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_8007D60C}
+    return validation_ecb_lock_refresh(5u, live_owner);
+  }
+  if (action_entry && (action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_LW_END_AIR ||
+                       action == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END_AIR)) {
+    return validation_ecb_lock_refresh(9u, live_owner);
+  }
+  if (action_entry && action == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW1) {
+    return validation_ecb_lock_refresh(10u, live_owner);
+  }
+  if (prev_ground && (prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_N ||
+                      prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                      prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI ||
+                      prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH ||
+                      prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_LW ||
+                      prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END ||
+                      prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END_AIR)) {
+    // Grounded special -> airborne Damage* still carries a ten-frame lock because incoming
+    // ProcessHit runs after procMap, but that timer does not prove the special Coll callback took
+    // its floor-loss branch. Only the exact source-backed pairs above promote owner 4.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_procMap,Fighter_ProcessHit_8006D1EC}
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    const uint8_t owner = validation_falcon_ground_special_floor_loss_proven(prev_action, action)
+                              ? live_owner
+                              : seeded_owner;
+    return validation_ecb_lock_refresh(10u, owner);
+  }
+  return validation_ecb_lock_refresh(0xFFu, no_owner);
+}
+
+PyObject* msl_derive_ecb_lock_state_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* ground_obj = NULL;
   PyObject* action_obj = NULL;
+  PyObject* char_obj = NULL;
+  PyObject* action_frame_obj = NULL;
   int lock_frames = 10;
   int act_jump_f = 0;
   int act_jump_b = 0;
   int act_jump_aerial_f = 0;
   int act_jump_aerial_b = 0;
-  if (!PyArg_ParseTuple(args, "OOiiiii", &ground_obj, &action_obj, &lock_frames, &act_jump_f,
-                        &act_jump_b, &act_jump_aerial_f, &act_jump_aerial_b)) {
+  if (!PyArg_ParseTuple(args, "OOOOiiiii", &ground_obj, &action_obj, &char_obj, &action_frame_obj,
+                        &lock_frames, &act_jump_f, &act_jump_b, &act_jump_aerial_f,
+                        &act_jump_aerial_b)) {
     return NULL;
   }
   PyArrayObject* ground = require_contiguous_array(ground_obj, NPY_UINT8, 1, "on_ground_u8");
   PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
-  if (ground == NULL || action == NULL) return NULL;
+  PyArrayObject* char_arr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
+  PyArrayObject* action_frame =
+      require_contiguous_array(action_frame_obj, NPY_INT16, 1, "action_frame_i16");
+  if (ground == NULL || action == NULL || char_arr == NULL || action_frame == NULL) return NULL;
   const npy_intp n = PyArray_SIZE(ground);
-  if (PyArray_SIZE(action) != n) {
-    PyErr_SetString(PyExc_ValueError, "action_id_u16 must match on_ground_u8 length");
+  if (PyArray_SIZE(action) != n || PyArray_SIZE(char_arr) != n || PyArray_SIZE(action_frame) != n) {
+    PyErr_SetString(PyExc_ValueError,
+                    "action_id_u16/char_id_u8/action_frame_i16 must match on_ground_u8 length");
     return NULL;
   }
   if (lock_frames < 0) lock_frames = 0;
   if (lock_frames > 255) lock_frames = 255;
   const int set_post = lock_frames > 0 ? lock_frames - 1 : 0;
   npy_intp dims[1] = {n};
-  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
-  if (out == NULL) return NULL;
+  PyArrayObject* out_timer = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  PyArrayObject* out_owner = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  if (out_timer == NULL || out_owner == NULL) {
+    Py_XDECREF(out_timer);
+    Py_XDECREF(out_owner);
+    return NULL;
+  }
   const uint8_t* g = (const uint8_t*)PyArray_DATA(ground);
   const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
-  uint8_t* out_p = (uint8_t*)PyArray_DATA(out);
+  const uint8_t* char_p = (const uint8_t*)PyArray_DATA(char_arr);
+  const int16_t* af = (const int16_t*)PyArray_DATA(action_frame);
+  uint8_t* timer_p = (uint8_t*)PyArray_DATA(out_timer);
+  uint8_t* owner_p = (uint8_t*)PyArray_DATA(out_owner);
   int timer = 0;
+  uint8_t owner = (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE;
   bool prev_ground = n > 0 && g[0] != 0u;
   for (npy_intp i = 0; i < n; i++) {
     const bool cur_ground = g[i] != 0u;
     const int cur_action = (int)a[i];
     const int prev_action = i > 0 ? (int)a[i - 1] : cur_action;
+    const int16_t prev_af = i > 0 ? af[i - 1] : af[i];
+    const uint8_t action_entry =
+        (uint8_t)(i > 0 ? (cur_action != prev_action || af[i] < prev_af) : (af[i] <= 0));
     const bool is_jump = cur_action == act_jump_f || cur_action == act_jump_b ||
                          cur_action == act_jump_aerial_f || cur_action == act_jump_aerial_b;
     const bool jump_entry = i > 0 && is_jump && cur_action != prev_action;
+    const ValidationEcbLockRefresh falcon_refresh = validation_falcon_ecb_lock_post_refresh(
+        char_p[i], a[i], af[i], (uint16_t)prev_action, prev_ground ? 1u : 0u, action_entry);
     if (cur_ground) {
       timer = 0;
+      owner = (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE;
+    } else if (falcon_refresh.timer != 0xFFu) {
+      timer = falcon_refresh.timer;
+      owner = falcon_refresh.owner;
     } else if (jump_entry || (i > 0 && prev_ground)) {
       timer = set_post;
+      owner = timer != 0 ? (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130
+                         : (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE;
     } else if (timer > 0) {
       timer -= 1;
+      if (timer == 0) {
+        owner = (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE;
+      }
     }
-    out_p[i] = (uint8_t)timer;
+    timer_p[i] = (uint8_t)timer;
+    owner_p[i] = owner;
     prev_ground = cur_ground;
   }
-  return (PyObject*)out;
+  return Py_BuildValue("NN", (PyObject*)out_timer, (PyObject*)out_owner);
 }
 
 PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args) {
@@ -320,10 +492,12 @@ PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args) {
   PyObject* anim_frame_obj = NULL;
   PyObject* ground_obj = NULL;
   PyObject* lock_obj = NULL;
+  PyObject* lock_owner_obj = NULL;
   int act_jump_aerial_f = MSL_ACT_JUMP_AERIAL_F;
   int act_jump_aerial_b = MSL_ACT_JUMP_AERIAL_B;
-  if (!PyArg_ParseTuple(args, "OOOOOO|ii", &char_obj, &action_obj, &anim_obj, &anim_frame_obj,
-                        &ground_obj, &lock_obj, &act_jump_aerial_f, &act_jump_aerial_b)) {
+  if (!PyArg_ParseTuple(args, "OOOOOOO|ii", &char_obj, &action_obj, &anim_obj, &anim_frame_obj,
+                        &ground_obj, &lock_obj, &lock_owner_obj, &act_jump_aerial_f,
+                        &act_jump_aerial_b)) {
     return NULL;
   }
   PyArrayObject* char_arr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
@@ -334,8 +508,10 @@ PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args) {
       require_contiguous_array(anim_frame_obj, NPY_FLOAT32, 1, "anim_frame_f32");
   PyArrayObject* ground_arr = require_contiguous_array(ground_obj, NPY_UINT8, 1, "on_ground_u8");
   PyArrayObject* lock_arr = require_contiguous_array(lock_obj, NPY_UINT8, 1, "ecb_lock_timer_u8");
+  PyArrayObject* lock_owner_arr =
+      require_contiguous_array(lock_owner_obj, NPY_UINT8, 1, "ecb_lock_owner_u8");
   if (char_arr == NULL || action_arr == NULL || anim_arr == NULL || anim_frame_arr == NULL ||
-      ground_arr == NULL || lock_arr == NULL) {
+      ground_arr == NULL || lock_arr == NULL || lock_owner_arr == NULL) {
     return NULL;
   }
   if (ecb_table_init() != 0) {
@@ -345,16 +521,16 @@ PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args) {
   const npy_intp n = PyArray_SIZE(char_arr);
   if (PyArray_SIZE(action_arr) != n || PyArray_SIZE(anim_arr) != n ||
       PyArray_SIZE(anim_frame_arr) != n || PyArray_SIZE(ground_arr) != n ||
-      PyArray_SIZE(lock_arr) != n) {
+      PyArray_SIZE(lock_arr) != n || PyArray_SIZE(lock_owner_arr) != n) {
     PyErr_SetString(PyExc_ValueError, "ECB lock-bottom inputs must have matching length");
     return NULL;
   }
   npy_intp dims[1] = {n};
   PyArrayObject* bottom_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
-  PyArrayObject* valid_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
-  if (bottom_arr == NULL || valid_arr == NULL) {
+  PyArrayObject* owner_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  if (bottom_arr == NULL || owner_arr == NULL) {
     Py_XDECREF(bottom_arr);
-    Py_XDECREF(valid_arr);
+    Py_XDECREF(owner_arr);
     return NULL;
   }
 
@@ -364,12 +540,13 @@ PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args) {
   const float* anim_frame_p = (const float*)PyArray_DATA(anim_frame_arr);
   const uint8_t* ground_p = (const uint8_t*)PyArray_DATA(ground_arr);
   const uint8_t* lock_p = (const uint8_t*)PyArray_DATA(lock_arr);
+  const uint8_t* lock_owner_p = (const uint8_t*)PyArray_DATA(lock_owner_arr);
   float* bottom_p = (float*)PyArray_DATA(bottom_arr);
-  uint8_t* valid_p = (uint8_t*)PyArray_DATA(valid_arr);
+  uint8_t* owner_p = (uint8_t*)PyArray_DATA(owner_arr);
 
   float desired_bottom = 0.0f;
   uint8_t desired_valid = 0u;
-  uint8_t episode_airjump_lock = 0u;
+  uint8_t episode_preserves_desired_bottom = 0u;
   uint8_t prev_lock = 0u;
   const uint16_t jaf = (uint16_t)((uint32_t)act_jump_aerial_f & 0xFFFFu);
   const uint16_t jab = (uint16_t)((uint32_t)act_jump_aerial_b & 0xFFFFu);
@@ -381,7 +558,7 @@ PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args) {
     if (ground_p[i] != 0u) {
       desired_bottom = 0.0f;
       desired_valid = 1u;
-      episode_airjump_lock = 0u;
+      episode_preserves_desired_bottom = 0u;
       prev_lock = lock_p[i];
       continue;
     }
@@ -389,26 +566,41 @@ PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args) {
       const uint8_t lock_start = (i == 0 || prev_lock == 0u || lock_p[i] > prev_lock) ? 1u : 0u;
       if (lock_start) {
         const uint16_t action = action_p[i];
-        episode_airjump_lock = (action == jaf || action == jab) ? 1u : 0u;
+        const uint16_t prev_action = i > 0 ? action_p[i - 1] : action;
+        const uint8_t lock_owner = msl_escapeair_locked_bottom_owner_normalize(lock_owner_p[i]);
+        const uint8_t falcon_special_damage_owner =
+            (uint8_t)(i > 0 && ground_p[i - 1] != 0u && char_id == (uint8_t)MSL_CHAR_ID_FALCON &&
+                      lock_owner == (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130 &&
+                      validation_falcon_ground_special_damage_output(prev_action, action));
+        // Both common lock helpers preserve the existing desired bottom. Trust the established
+        // air-jump seed family, a prefix-proven live ftCommon episode, and the bounded generic
+        // ground-to-air owner reconstructed when ProcessHit interrupts a grounded Falcon special.
+        // A timer-only generic row is not enough to publish hidden-bottom provenance.
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_8007D60C}
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+        episode_preserves_desired_bottom =
+            (uint8_t)(action == jaf || action == jab ||
+                      lock_owner == (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_FTCOMMON ||
+                      falcon_special_damage_owner);
       }
       if (!desired_valid) {
         desired_bottom = pose_bottom;
         desired_valid = 1u;
       }
-      if (episode_airjump_lock) {
+      if (episode_preserves_desired_bottom) {
         bottom_p[i] = desired_bottom;
-        valid_p[i] = 1u;
+        owner_p[i] = msl_escapeair_locked_bottom_owner_normalize(lock_owner_p[i]);
       }
       prev_lock = lock_p[i];
       continue;
     }
     desired_bottom = pose_bottom;
     desired_valid = 1u;
-    episode_airjump_lock = 0u;
+    episode_preserves_desired_bottom = 0u;
     prev_lock = 0u;
   }
 
-  PyObject* ret = Py_BuildValue("(NN)", bottom_arr, valid_arr);
+  PyObject* ret = Py_BuildValue("(NN)", bottom_arr, owner_arr);
   return ret;
 }
 
@@ -1455,23 +1647,38 @@ PyObject* msl_derive_entry_end_fall_lock_py(PyObject* self, PyObject* args) {
   return (PyObject*)out;
 }
 
+static bool vh_postframe_iasa_ran(const uint8_t* hitlag, npy_intp i) {
+  if (i == 0) return hitlag[i] == 0u;
+  // Priority 0 decrements a prior post-frame x195c=1 and clears x2219_b5 before priority 3
+  // Fighter_Spaghetti_8006AD10 publishes input edges and invokes the IASA/input callback. A later
+  // collision can then install new hitlag, so 1 -> N is an IASA frame even though both adjacent
+  // post-frame snapshots are positive. Prior values >1 prove priority 3 was frozen unless the
+  // current snapshot is zero after another source-owned exit path.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_Spaghetti_8006AD10,
+  //   Fighter_ProcessHit_8006D1EC,Fighter_8006D10C}
+  return hitlag[i - 1] <= 1u || hitlag[i] == 0u;
+}
+
 PyObject* msl_derive_jab_rapid_count_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* action_obj = NULL;
+  PyObject* hitlag_obj = NULL;
   PyObject* released_obj = NULL;
   PyObject* pressed_obj = NULL;
   int button_mask_a = 0;
-  if (!PyArg_ParseTuple(args, "OOOi", &action_obj, &released_obj, &pressed_obj, &button_mask_a)) {
+  if (!PyArg_ParseTuple(args, "OOOOi", &action_obj, &hitlag_obj, &released_obj, &pressed_obj,
+                        &button_mask_a)) {
     return NULL;
   }
   PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT8, 1, "hitlag_u8");
   PyArrayObject* released =
       require_contiguous_array(released_obj, NPY_UINT16, 1, "buttons_released_u16");
   PyArrayObject* pressed =
       require_contiguous_array(pressed_obj, NPY_UINT16, 1, "buttons_pressed_u16");
-  if (action == NULL || released == NULL || pressed == NULL) return NULL;
+  if (action == NULL || hitlag == NULL || released == NULL || pressed == NULL) return NULL;
   const npy_intp n = PyArray_SIZE(action);
-  if (PyArray_SIZE(released) != n || PyArray_SIZE(pressed) != n) {
+  if (PyArray_SIZE(hitlag) != n || PyArray_SIZE(released) != n || PyArray_SIZE(pressed) != n) {
     PyErr_SetString(PyExc_ValueError, "jab rapid count inputs must have equal lengths");
     return NULL;
   }
@@ -1479,6 +1686,7 @@ PyObject* msl_derive_jab_rapid_count_py(PyObject* self, PyObject* args) {
   PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
   if (out == NULL) return NULL;
   const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  const uint8_t* hl = (const uint8_t*)PyArray_DATA(hitlag);
   const uint16_t* rel = (const uint16_t*)PyArray_DATA(released);
   const uint16_t* prs = (const uint16_t*)PyArray_DATA(pressed);
   uint8_t* o = (uint8_t*)PyArray_DATA(out);
@@ -1495,12 +1703,117 @@ PyObject* msl_derive_jab_rapid_count_py(PyObject* self, PyObject* args) {
       count = 0u;
     }
     if (jab && !entered_attack11) {
-      if (((rel[i] | prs[i]) & mask) != 0u && count < 255u) count++;
+      // Physical A edges advance fp->x1A54 only on frames whose IASA callback ran.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
+      if (vh_postframe_iasa_ran(hl, i) && ((rel[i] | prs[i]) & mask) != 0u && count < 255u) {
+        count++;
+      }
       o[i] = count;
     }
     prev = cur;
   }
   return (PyObject*)out;
+}
+
+PyObject* msl_derive_attack100_seed_latches_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* char_obj = NULL;
+  PyObject* action_obj = NULL;
+  PyObject* action_frame_obj = NULL;
+  PyObject* hitlag_obj = NULL;
+  PyObject* released_obj = NULL;
+  PyObject* pressed_obj = NULL;
+  int button_mask_a = 0;
+  if (!PyArg_ParseTuple(args, "OOOOOOi", &char_obj, &action_obj, &action_frame_obj, &hitlag_obj,
+                        &released_obj, &pressed_obj, &button_mask_a)) {
+    return NULL;
+  }
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* action_frame =
+      require_contiguous_array(action_frame_obj, NPY_INT16, 1, "action_frame_i16");
+  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT8, 1, "hitlag_u8");
+  PyArrayObject* released =
+      require_contiguous_array(released_obj, NPY_UINT16, 1, "buttons_released_u16");
+  PyArrayObject* pressed =
+      require_contiguous_array(pressed_obj, NPY_UINT16, 1, "buttons_pressed_u16");
+  if (chr == NULL || action == NULL || action_frame == NULL || hitlag == NULL || released == NULL ||
+      pressed == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(action);
+  if (PyArray_SIZE(chr) != n || PyArray_SIZE(action_frame) != n || PyArray_SIZE(hitlag) != n ||
+      PyArray_SIZE(released) != n || PyArray_SIZE(pressed) != n) {
+    PyErr_SetString(PyExc_ValueError, "Attack100 latch inputs must have equal lengths");
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed for Attack100 seed latches");
+    return NULL;
+  }
+  npy_intp dims[1] = {n};
+  PyArrayObject* out_x0 = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  PyArrayObject* out_x4 = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  if (out_x0 == NULL || out_x4 == NULL) {
+    Py_XDECREF(out_x0);
+    Py_XDECREF(out_x4);
+    return NULL;
+  }
+
+  const uint8_t* c = (const uint8_t*)PyArray_DATA(chr);
+  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  const int16_t* af = (const int16_t*)PyArray_DATA(action_frame);
+  const uint8_t* hl = (const uint8_t*)PyArray_DATA(hitlag);
+  const uint16_t* rel = (const uint16_t*)PyArray_DATA(released);
+  const uint16_t* prs = (const uint16_t*)PyArray_DATA(pressed);
+  uint8_t* x0_out = (uint8_t*)PyArray_DATA(out_x0);
+  uint8_t* x4_out = (uint8_t*)PyArray_DATA(out_x4);
+  uint8_t x0 = 0u;
+  uint8_t x4 = 0u;
+  uint16_t prev_action = 0xFFFFu;
+  int16_t prev_action_frame = -1;
+  const uint16_t mask = (uint16_t)((uint32_t)button_mask_a & 0xFFFFu);
+  for (npy_intp i = 0; i < n; i++) {
+    const uint16_t cur = a[i];
+    if (cur != 0x0030u) {
+      x0 = 0u;
+      x4 = 0u;
+    } else {
+      if (prev_action != 0x0030u) {
+        x0 = 0u;
+        x4 = 0u;
+      }
+      if (move_tables_attack100_loop_end_check_crossed(c[i], prev_action_frame, af[i]) != 0u) {
+        // Attack100Loop_Anim consumes mv.co.attack100.x4 before the current IASA callback.
+        // If replay remains in the Loop state after this checkpoint, either x4 saved the loop or
+        // the callback did not take the pickup branch; both source paths clear x4 post-callback.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Loop_Anim
+        // data/moves/<char>.json moves["ftCo_SM_Attack100Loop"].events set_throw_flags
+        x4 = 0u;
+      }
+      // The replay-visible Attack100Loop run has an initial script pass that should not arm the
+      // end-check latch; x0 becomes visible to the checkpoint owner after the loop wraps back to
+      // frame 0. Preserve that prefix-causal hidden latch until the loop exits.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Loop_Anim
+      if (prev_action == 0x0030u && af[i] < prev_action_frame) {
+        x0 = 1u;
+      }
+      // Physical A edges set x4 only on frames whose IASA callback ran.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Loop_IASA
+      if (vh_postframe_iasa_ran(hl, i) && ((rel[i] | prs[i]) & mask) != 0u) {
+        x4 = 1u;
+      }
+      x0_out[i] = x0;
+      x4_out[i] = x4;
+    }
+    prev_action = cur;
+    prev_action_frame = af[i];
+  }
+
+  PyObject* tuple = Py_BuildValue("NN", (PyObject*)out_x0, (PyObject*)out_x4);
+  return tuple;
 }
 
 PyObject* msl_derive_walk_anim_source_vel_py(PyObject* self, PyObject* args) {

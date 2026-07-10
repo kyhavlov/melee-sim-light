@@ -11,6 +11,9 @@
 // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071820,ftAction_80071950,ftAction_80071974,ftAction_80073008,ftAction_80073240}
 int script_events_init(void);
 
+// Binary artifact schema version expected by this runtime.
+uint32_t script_events_format_version(void);
+
 typedef enum MslScriptEventKind {
   MSL_SCRIPT_EVENT_CREATE_HITBOX = 1,
   MSL_SCRIPT_EVENT_SET_HITBOX_DAMAGE = 2,
@@ -98,6 +101,11 @@ typedef struct MslScriptEvent {
       float damage;
       uint8_t idx;
     } hitbox_damage;
+    struct {
+      uint8_t idx;
+      uint8_t type;
+      uint8_t value;
+    } hitbox_interaction;
     struct {
       uint8_t state;
     } state;

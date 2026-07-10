@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from tools.extraction.char_registry import CHAR_PL_DAT, CHARS
+from tools.extraction.char_registry import CHARS
 import json
 import shutil
 import subprocess
@@ -12,12 +12,30 @@ from importlib import resources
 from pathlib import Path
 
 from tools.extraction.extract_attack_id_move_id import FORMAT_VERSION as ATTACK_ID_MOVE_ID_VERSION
+from tools.extraction.extract_ecb_bottom import ECB_VERSION as ECB_BOTTOM_VERSION
+from tools.extraction.extract_ecb_extents import ECB_VERSION as ECB_EXTENTS_VERSION
+from tools.extraction.extract_fighter_anims import (
+    CAPTURE_CAPTAIN_ANIM_DONOR_CHARACTER,
+    DATA_SCHEMA_VERSION as FIGHTER_ANIMS_VERSION,
+)
+from tools.extraction.extract_fighter_hitboxes import FORMAT_VERSION as FIGHTER_HITBOXES_VERSION
 from tools.extraction.extract_motion_state_owners import FORMAT_VERSION as MOTION_STATE_OWNERS_VERSION
+from tools.extraction.known_data_artifacts import SCRIPT_VERSION as FIGHTER_SCRIPTS_VERSION
 
 
 FTCO_SM_DAMAGEAIR2 = 175
 FTCO_SM_DAMAGEAIR3 = 176
 # Decomp: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+
+DATA_SCHEMA_VERSIONS = {
+    "attack_id_move_id": ATTACK_ID_MOVE_ID_VERSION,
+    "ecb_bottom": ECB_BOTTOM_VERSION,
+    "ecb_extents": ECB_EXTENTS_VERSION,
+    "fighter_anims": FIGHTER_ANIMS_VERSION,
+    "fighter_hitboxes": FIGHTER_HITBOXES_VERSION,
+    "fighter_scripts": FIGHTER_SCRIPTS_VERSION,
+    "motion_state_owners": MOTION_STATE_OWNERS_VERSION,
+}
 
 _RUN_TIMINGS: list[tuple[str, float]] | None = None
 
@@ -61,10 +79,7 @@ def _write_data_manifest(out_root: Path, *, chars: list[str], stages: list[str])
     payload = {
         "magic": "MSLDATA1",
         "version": 1,
-        "schemas": {
-            "attack_id_move_id": ATTACK_ID_MOVE_ID_VERSION,
-            "motion_state_owners": MOTION_STATE_OWNERS_VERSION,
-        },
+        "schemas": dict(DATA_SCHEMA_VERSIONS),
         "chars": list(chars),
         "stages": list(stages),
     }
@@ -81,9 +96,8 @@ def main(argv: list[str] | None = None) -> None:
         type=str,
         default=None,
         help=(
-            "comma-separated characters (fox,falco,...). Default: every character in "
-            "tools/extraction/char_registry.py. A subset writes a manifest without the omitted "
-            "characters, and preprocessing then refuses replays that use them."
+            "comma-separated characters. Runtime data roots require every character in "
+            "tools/extraction/char_registry.py; use individual extractors for debug subsets."
         ),
     )
     ap.add_argument(
@@ -113,13 +127,22 @@ def main(argv: list[str] | None = None) -> None:
     def out(rel: str) -> Path:
         return out_root / rel
 
+    registry_chars = list(CHARS)
     if args.chars is None:
-        # Registry-driven default: a data tree that silently omits a supported character
-        # poisons every per-character preprocessing map for that character (the manifest is
-        # the source of truth downstream), so the full registry is the only safe default.
-        chars = list(CHARS.keys())
+        requested_chars = registry_chars
     else:
-        chars = [c.strip() for c in args.chars.split(",") if c.strip()]
+        requested_chars = [c.strip() for c in args.chars.split(",") if c.strip()]
+    unknown_chars = sorted(set(requested_chars) - set(registry_chars))
+    if unknown_chars:
+        raise SystemExit(f"unsupported character key(s): {unknown_chars!r}")
+    if len(requested_chars) != len(registry_chars) or set(requested_chars) != set(registry_chars):
+        raise SystemExit(
+            "runtime data roots require the full character registry: "
+            f"{','.join(registry_chars)}. Use individual extraction modules for debug subsets."
+        )
+    # Normalize user-provided full sets to registry order so manifests and generator scheduling are
+    # deterministic.
+    chars = registry_chars
     timings: list[tuple[str, float]] | None = [] if args.timings else None
     _RUN_TIMINGS = timings
     melee_decomp_args = ["--melee_decomp", str(args.melee_decomp)] if has_melee_decomp else []
@@ -135,10 +158,17 @@ def main(argv: list[str] | None = None) -> None:
         iso_dir / "ItCo.dat",
         "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*ItCo.dat' --out-dir _iso",
     )
+    fighter_dats: list[str] = []
     for ch in chars:
-        dat = CHAR_PL_DAT.get(ch)
-        if dat is None:
-            raise SystemExit(f"unsupported character for now: {ch}")
+        info = CHARS[ch]
+        fighter_dats.extend((info.pl_dat, info.aj_dat, info.costume_dat))
+
+    # CaptureCaptain applies Falcon's FigaTree to every captured fighter skeleton. Keep the donor
+    # inputs explicit even though full-registry runtime builds also include Falcon as a target.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+    donor = CHARS[CAPTURE_CAPTAIN_ANIM_DONOR_CHARACTER]
+    fighter_dats.extend((donor.pl_dat, donor.aj_dat))
+    for dat in dict.fromkeys(fighter_dats):
         _require(
             iso_dir / dat,
             f"uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*{dat}' --out-dir _iso",

@@ -87,7 +87,7 @@ rollout.first_mismatch_seeded_total: 15
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=34.48 rec=2687 p=1 seed/ref/out=-90.5372/-92.9491/-58.4691 actions=35/35/35 category=unclassified
-  2. pos_x max_err=4.13831 rec=3109 p=0 seed/ref/out=-39.516/-41.5206/-37.3823 actions=88/88/88 category=unclassified
+  2. pos_x max_err=4.1383 rec=2934 p=0 seed/ref/out=14.89/13.09/17.2283 actions=21/21/21 category=unclassified
   3. percent max_err=1 rec=3671 p=0 seed/ref/out=108.79/108.79/107.79 actions=0/0/0 category=unclassified
 rollout.float_top_downstream:
   1. pos_y max_err=34.48 rec=2700 p=1 seed/ref/out=-122.946/-125.446/-90.966 actions=35/0/35 category=downstream_discrete_mismatch
@@ -282,7 +282,7 @@ rollout.first_mismatch_seeded_total: 9
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=2.4105 rec=6106 p=1 seed/ref/out=-61.4743/-63.7702/-61.3597 actions=35/35/35 category=unclassified
-  2. pos_x max_err=1.25256 rec=8653 p=1 seed/ref/out=-67.9117/-69.1643/-70.4168 actions=24/43/43 category=unclassified
+  2. pos_x max_err=1.25257 rec=8653 p=1 seed/ref/out=-67.9117/-69.1643/-70.4168 actions=24/43/43 category=unclassified
   3. percent max_err=1 rec=5423 p=1 seed/ref/out=99.27/99.27/100.27 actions=38/38/38 category=unclassified
 rollout.float_top_downstream:
   1. pos_y max_err=17.0174 rec=5709 p=1 seed/ref/out=-13.0364/-17.0085/0.0089 actions=91/91/191 category=downstream_discrete_mismatch
@@ -324,7 +324,7 @@ rollout.first_mismatch_seeded_total: 6
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=18.0006 rec=9661 p=0 seed/ref/out=72.8454/71.9998/90.0004 actions=4/4/4 category=unclassified
-  2. pos_x max_err=4.656 rec=8679 p=0 seed/ref/out=-45.3014/-44.5746/-39.9186 actions=233/233/233 category=unclassified
+  2. pos_x max_err=4.65599 rec=8679 p=0 seed/ref/out=-45.3014/-44.5746/-39.9186 actions=233/233/233 category=unclassified
   3. percent max_err=2 rec=5783 p=1 seed/ref/out=120.46/120.46/118.46 actions=350/350/350 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=14 rec=3530 p=0 seed/ref/out=97/111/97 actions=60/90/60 category=downstream_discrete_mismatch

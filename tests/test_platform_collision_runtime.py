@@ -71,6 +71,7 @@ ACT_DOWN_BOUND_D = 0x00BF
 ACT_DOWN_WAIT_U = 0x00B8
 ACT_DOWN_FOWARD_U = 0x00BC
 ACT_PASSIVE = 0x00C7
+ACT_PASSIVE_WALL_JUMP = 0x00CB
 ACT_PASSIVE_STAND_F = 0x00C8
 ACT_PASS = 0x00F4
 ACT_OTTOTTO = 0x00F5
@@ -147,6 +148,7 @@ SM_DAMAGE_AIR_2 = 174
 SM_DAMAGE_FLY_TOP = 180
 
 CHAR_FOX = 1
+CHAR_FALCON = 2
 CHAR_MARTH = 18
 CHAR_FALCO = 22
 STAGE_POKEMON = 3
@@ -6490,6 +6492,46 @@ def test_fd_attackair_carried_connected_hard_floor_root_projection_lands() -> No
     assert int(restored_only_out["on_ground"][p]) == 0
     assert int(restored_only_out["ground_id"][p]) == 2
     assert int(restored_only_colldata["floor_result_valid"][p]) == 0
+
+
+def test_fd_attackair_entry_from_walljump_does_not_project_stale_hard_floor() -> None:
+    # Webplay walljump -> immediate aerial incident: PassiveWallJump can carry a hard-floor
+    # CollData.floor id while the root is far below that floor. Source AttackAir_Coll still runs
+    # ft_80082C74/mpColl_800471F8 after the aerial entry, but the carried-floor
+    # mpColl_80044838_Floor root projection belongs to sustained same-action AttackAir, not to a
+    # fresh handoff from PassiveWallJump. A real bottom sweep is still allowed elsewhere; this case
+    # has no previous/current ECB bottom crossing and must stay airborne instead of teleporting up.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,
+    #   mpColl_80044838_Floor}
+    seed = _seed_base(STAGE_FD, ACT_ATTACK_AIR_HI, SM_ATTACK_AIR_HI, -71.30, -40.42)
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_FALCON)
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["ground_id"][0, p] = np.uint16(1)
+    seed["action_frame"][0, p] = np.int16(1)
+    seed["anim_frame_f32"][0, p] = np.float32(1.0)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_PASSIVE_WALL_JUMP)
+    seed["seed_prev_action_frame"][0, p] = np.int16(1)
+    seed["speed_air_x_self"][0, p] = np.float32(-1.37)
+    seed["speed_y_self"][0, p] = np.float32(2.71)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(-71.30)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-40.42)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(p, -71.30, -40.42, True),
+        prev_action_runtime=(p, ACT_PASSIVE_WALL_JUMP)
+    )
+
+    assert int(out["action_id"][p]) == ACT_ATTACK_AIR_HI
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == 1
+    assert float(out["pos_y"][p]) < -35.0
+    assert int(colldata["floor_result_valid"][p]) == 0
+    assert int(colldata["floor_result_mode"][p]) != FLOOR_MODE_ROOT_PROJECTION
 
 
 @pytest.mark.integration

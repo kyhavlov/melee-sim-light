@@ -116,7 +116,7 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
     }
 
 
-def _write_minimal_ssanim(path: Path, *, version: int = 4, msid: int = 2, part_id: int = 0) -> None:
+def _write_minimal_ssanim(path: Path, *, version: int = 5, msid: int = 2, part_id: int = 0) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     ident = (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
     path.write_bytes(
@@ -249,11 +249,11 @@ def _parse_ssdynn01_or_skip(path: Path) -> dict[str, object]:
     except ValueError as exc:
         pytest.skip(
             f"stale or unsupported local dynamic artifact: {path}: {exc}. "
-            "Run `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`."
+            "Run `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop`."
         )
 
 
-def test_runtime_rejects_stale_ssanim01_v3_artifacts() -> None:
+def test_runtime_rejects_stale_ssanim01_v4_artifacts() -> None:
     import msl_binding
 
     exclude = {
@@ -269,11 +269,11 @@ def test_runtime_rejects_stale_ssanim01_v3_artifacts() -> None:
 
     build_dir = Path("build")
     build_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="ssanim-v3-stale-", dir=build_dir) as tmp_raw:
+    with tempfile.TemporaryDirectory(prefix="ssanim-v4-stale-", dir=build_dir) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
-        _write_minimal_ssanim(data_dir / "anims/fox.bin", version=3)
-        _write_minimal_ssanim(data_dir / "anims/falco.bin", version=3)
+        _write_minimal_ssanim(data_dir / "anims/fox.bin", version=4)
+        _write_minimal_ssanim(data_dir / "anims/falco.bin", version=4)
 
         old_data_dir = os.environ.get("MSL_DATA_DIR")
         try:

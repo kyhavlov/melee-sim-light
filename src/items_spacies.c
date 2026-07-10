@@ -2503,7 +2503,7 @@ int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserP
     //   recomposed under the same fighter_scale_y * model_scaling convention as the sampled matrix.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,it_8029C6CC}
-    // data/anims/{fox,falco}.bin SSANIM01 v4 TransN tail, read by anim_pose_get_transn()
+    // data/anims/{fox,falco}.bin SSANIM01 v5 TransN tail, read by anim_pose_get_transn()
     // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowLw"]["events"]
     float transn_xyz[3] = {0.0f, 0.0f, 0.0f};
     if (anim_pose_get_transn(char_id, msid, frame, transn_xyz) == 0) {

@@ -6,6 +6,7 @@
 #include "anim_timebase.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "ecb_tables.h"
 #include "mpcoll_ground.h"
 #include "move_tables.h"
 #include "mtx34.h"
@@ -967,6 +968,135 @@ void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int bi, in
   batch->state.pos_x[vidx] = fmaf(batch->state.grab_offset_z[vidx], facing_dir * scale_y, ax);
   batch->state.pos_y[vidx] = batch->state.grab_offset_y[vidx] * scale_y + ay;
   batch->state.pos_z[vidx] = 0.0f;
+}
+
+static inline void throw_release_colldata_last_pos_from_sample_owner(float* out_x, float* out_y,
+                                                                     const MslBatch* batch,
+                                                                     size_t owner_idx) {
+  if (out_x == NULL || out_y == NULL || batch == NULL) {
+    return;
+  }
+  float bottom_rel_y = batch->state.coll_ecb_bottom_rel_y[owner_idx];
+  float top_rel_y = batch->state.coll_ecb_top_rel_y[owner_idx];
+  if (!isfinite(bottom_rel_y) || !isfinite(top_rel_y)) {
+    const uint32_t anim = batch->state.animation_index[owner_idx];
+    const int frame = (int)msl_anim_frame_floor_u16(
+        msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[owner_idx]));
+    bottom_rel_y = msl_ecb_bottom_rel_y(batch->state.char_id[owner_idx], anim, frame);
+    top_rel_y = msl_ecb_top_rel_y(batch->state.char_id[owner_idx], anim, frame);
+  }
+
+  // ftCo_800DDDE4 writes released-fighter CollData.last_pos from the selected sample owner
+  // (fp3) plus inline3=0 and inline2=0.5*(fp3->coll_data.ecb.top.y + bottom.y), then calls
+  // mpColl_800471F8 on the constrained fighter.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  *out_x = batch->state.pos_x[owner_idx];
+  *out_y = batch->state.pos_y[owner_idx] + 0.5f * (top_rel_y + bottom_rel_y);
+}
+
+void grab_attachment_apply_falcon_dive_ground_release_anchor_now(MslBatch* batch, int bi,
+                                                                 int falcon_p, int victim_p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (falcon_p < 0 || falcon_p >= num_players || victim_p < 0 || victim_p >= num_players ||
+      falcon_p == victim_p) {
+    return;
+  }
+
+  const size_t fidx = msl_idx_player(bi, falcon_p);
+  const size_t vidx = msl_idx_player(bi, victim_p);
+
+  float x1a70_y = 0.0f;
+  float x1a70_z = 0.0f;
+  {
+    float transn_x = 0.0f;
+    float transn_y = 0.0f;
+    float transn_z = 0.0f;
+    float xrotn_x = 0.0f;
+    float xrotn_y = 0.0f;
+    float xrotn_z = 0.0f;
+    const uint8_t have_transn_xrotn =
+        (uint8_t)(pose_part_local_translation(&transn_x, &transn_y, &transn_z,
+                                              batch->state.char_id[fidx], (uint32_t)MSL_SM_WAIT1_0,
+                                              0.0f, (uint16_t)MSL_FTPART_TRANSN) == 0 &&
+                  pose_part_local_translation(&xrotn_x, &xrotn_y, &xrotn_z,
+                                              batch->state.char_id[fidx], (uint32_t)MSL_SM_WAIT1_0,
+                                              0.0f, (uint16_t)MSL_FTPART_XROTN) == 0);
+    if (have_transn_xrotn) {
+      // Fighter_Create initializes fp->x1A70 from TransN - XRotN. Prefer that source vector for
+      // Falcon Dive's constrained-attacker path; grab_capture_anchor_part_id is a separate helper
+      // substrate for attached victim anchors.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C
+      x1a70_y = transn_y - xrotn_y;
+      x1a70_z = transn_z - xrotn_z;
+    } else if (!thrown_static_x1a70_offsets(&x1a70_y, &x1a70_z, batch, fidx)) {
+      return;
+    }
+    (void)transn_x;
+    (void)xrotn_x;
+  }
+
+  float ax = batch->state.pos_x[vidx];
+  float ay = batch->state.pos_y[vidx];
+  float az = batch->state.pos_z[vidx];
+  const float victim_scale_y = pose_model_scale_y(batch, vidx);
+  uint16_t victim_anchor_part = (uint16_t)MSL_FTPART_TRANSN2;
+  const MslCharParams* victim_ch = msl_char_params_fast(batch->state.char_id[vidx]);
+  if (victim_ch != NULL) {
+    victim_anchor_part = victim_ch->grab_capture_anchor_part_id;
+  }
+  // Falcon Dive grounded-victim release uses the victim's FtPart_TransN2 mapping, i.e. the same
+  // character-data grab/capture anchor part used by capture/throw attachment owners.
+  //
+  // Source owner:
+  // - ftCo_800DDDE4 sets fp3=victim/fp4=Falcon when attacker x221B_b7 is true.
+  // - lb_8000B1CC(fp3->parts[FtPart_TransN2].joint, ..., &vec) samples this anchor, then
+  //   fp4->cur_pos is set from `vec + fp4->x1A70` before mpColl_800471F8.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // refs/melee/src/melee/ft/forward.h::Fighter_Part
+  // CaptureCaptain's generated target-character row cross-bakes Falcon's donor FigaTree onto the
+  // victim skeleton, matching Fighter_ChangeMotionState(..., arg3=Falcon). This keeps the sampled
+  // TransN2 joint character- and facing-correct without a replay-fit root offset.
+  // tools/extraction/extract_fighter_anims.py::_figatree_source_character
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  if (pose_part_origin_world_f32_facing_yrot90(
+          &ax, &ay, &az, batch, vidx, batch->state.animation_index[vidx],
+          batch->state.anim_frame_f32[vidx], victim_anchor_part, batch->state.pos_x[vidx],
+          batch->state.pos_y[vidx], batch->state.pos_z[vidx], victim_scale_y,
+          batch->state.facing[vidx]) != 0 &&
+      pose_part_origin_world_facing_yrot90(
+          &ax, &ay, &az, batch->state.char_id[vidx], batch->state.animation_index[vidx],
+          batch->state.anim_frame_f32[vidx], victim_anchor_part, batch->state.pos_x[vidx],
+          batch->state.pos_y[vidx], batch->state.pos_z[vidx], victim_scale_y,
+          batch->state.facing[vidx]) != 0) {
+    return;
+  }
+  const float falcon_scale_y = attachment_offset_scale_y(batch, fidx);
+  if (!(falcon_scale_y > 0.0f)) {
+    return;
+  }
+  const float facing_dir = batch->state.facing[fidx] ? 1.0f : -1.0f;
+  batch->state.pos_x[fidx] = fmaf(x1a70_z, facing_dir * falcon_scale_y, ax);
+  batch->state.pos_y[fidx] = x1a70_y * falcon_scale_y + ay;
+  batch->state.pos_z[fidx] = 0.0f;
+
+  float source_last_x = batch->state.pos_x[vidx];
+  float source_last_y = batch->state.pos_y[vidx];
+  throw_release_colldata_last_pos_from_sample_owner(&source_last_x, &source_last_y, batch, vidx);
+  MslMpcollFloorMaskResult release_floor = {0};
+  if (mpcoll_800471f8_throw_release_root_floor_probe(batch, fidx, source_last_x, source_last_y,
+                                                     &release_floor)) {
+    batch->state.floor_sweep_prev_pos_x[fidx] = source_last_x;
+    batch->state.floor_sweep_prev_pos_y[fidx] = source_last_y;
+    batch->state.floor_sweep_prev_source_owned[fidx] = 1u;
+    batch->state.floor_sweep_prev_runtime_owned[fidx] = 1u;
+    batch->state.pos_x[fidx] = release_floor.corrected_pos_x;
+    batch->state.pos_y[fidx] = release_floor.corrected_pos_y;
+    batch->state.ground_id[fidx] = release_floor.ground_id;
+  }
 }
 
 static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float* out_z,

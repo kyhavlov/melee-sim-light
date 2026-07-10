@@ -283,6 +283,19 @@ def _manifest_preprocess_tables(data_root_text: str) -> _ManifestPreprocessTable
                 lag_by_msid: dict[int, float] = {}
                 for m in _msids('up_air', 'main') | _msids('up_ground', 'main'):
                     lag_by_msid[m] = float(attrs['falcon_specialhi_landing_lag'])
+                # SpecialHiThrow0_Coll enters LandingFallSpecial directly with the same
+                # ftCaptainAttributes::specialhi_landing_lag as Falcon Dive floor contact. Resolve
+                # its submotion through the generated callback owner instead of duplicating the
+                # character's raw MotionState/submotion ids in preprocessing.
+                # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHiThrow0_Coll
+                callback_symbols = read_callback_manifest(data_root / 'motion_state' / 'owners' / 'callback_symbols.json')
+                throw0_coll_ids = {callback_id for callback_id, symbol in callback_symbols.items() if symbol == 'ftCa_SpecialHiThrow0_Coll'}
+                if len(throw0_coll_ids) != 1:
+                    raise ValueError(f'expected one ftCa_SpecialHiThrow0_Coll callback id, got {sorted(throw0_coll_ids)}')
+                throw0_coll_id = next(iter(throw0_coll_ids))
+                for action_id, coll_cb_id in enumerate(owners_tbl.coll_cb_id):
+                    if int(coll_cb_id) == int(throw0_coll_id):
+                        lag_by_msid[int(owners_tbl.submotion_id[action_id])] = float(attrs['falcon_specialhi_landing_lag'])
                 for m in _msids('side_air', 'start'):
                     lag_by_msid[m] = float(attrs['falcon_specials_miss_landing_lag'])
                 for m in _msids('side_air', 'main'):

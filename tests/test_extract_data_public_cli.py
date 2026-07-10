@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
+
+import pytest
 
 from melee_sim import extract_data
 from tools.extraction import build_data
+from tools.extraction.char_registry import CHARS
 from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso01_v1
 
 
@@ -38,22 +42,76 @@ def test_extract_data_does_not_require_decomp_before_iso_extract(tmp_path, monke
     assert "--melee-decomp" not in calls[0]
 
 
+def test_extract_data_rejects_partial_runtime_character_roots(tmp_path, monkeypatch):
+    iso = tmp_path / "GALE01.iso"
+    iso.write_bytes(b"fake")
+    out_dir = tmp_path / "msl"
+    monkeypatch.setattr(
+        extract_data,
+        "list_files",
+        lambda _iso: pytest.fail("partial-root rejection must happen before ISO scanning"),
+    )
+
+    with pytest.raises(SystemExit, match="runtime data roots require the full character registry"):
+        extract_data.main(
+            ["--iso", str(iso), "--out-dir", str(out_dir), "--chars", "fox,falco"]
+        )
+    assert not out_dir.exists()
+
+
+def test_build_data_rejects_partial_runtime_character_roots(tmp_path):
+    with pytest.raises(SystemExit, match="runtime data roots require the full character registry"):
+        build_data.main(
+            [
+                "--iso-dir",
+                str(tmp_path / "iso"),
+                "--out-dir",
+                str(tmp_path / "data"),
+                "--chars",
+                "fox,falco",
+            ]
+        )
+
+
+@pytest.mark.parametrize("missing_name", ["PlFxAJ.dat", "PlFxNr.dat", "PlCaAJ.dat"])
+def test_build_data_preflights_target_and_donor_animation_dats(
+    tmp_path, monkeypatch, missing_name
+):
+    iso_dir = tmp_path / "iso"
+    iso_dir.mkdir()
+    required = {"PlCo.dat", "ItCo.dat"}
+    for info in CHARS.values():
+        required.update((info.pl_dat, info.aj_dat, info.costume_dat))
+    for name in sorted(required - {missing_name}):
+        (iso_dir / name).write_bytes(b"fake")
+    monkeypatch.setattr(
+        build_data,
+        "_run",
+        lambda *_args, **_kwargs: pytest.fail("DAT preflight must finish before generators run"),
+    )
+
+    with pytest.raises(SystemExit, match=missing_name):
+        build_data.main(
+            [
+                "--iso-dir",
+                str(iso_dir),
+                "--out-dir",
+                str(tmp_path / "data"),
+                "--chars",
+                ",".join(CHARS),
+            ]
+        )
+
+
 def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monkeypatch):
     iso_dir = tmp_path / "iso"
     out_dir = tmp_path / "data"
     missing_decomp = tmp_path / "missing_decomp"
     iso_dir.mkdir()
-    for name in (
-        "PlCo.dat",
-        "ItCo.dat",
-        "PlFx.dat",
-        "PlFc.dat",
-        "PlMs.dat",
-        "PlCa.dat",
-        "PlSk.dat",
-        "PlZd.dat",
-        "GrNLa.dat",
-    ):
+    required = {"PlCo.dat", "ItCo.dat", "GrNLa.dat"}
+    for info in CHARS.values():
+        required.update((info.pl_dat, info.aj_dat, info.costume_dat))
+    for name in sorted(required):
         (iso_dir / name).write_bytes(b"fake")
 
     commands: list[list[str]] = []
@@ -72,7 +130,7 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
             "--stages",
             "grnla",
             "--chars",
-            "fox,falco,marth,falcon,sheik,zelda",
+            ",".join(reversed(CHARS)),
             "--melee-decomp",
             str(missing_decomp),
         ]
@@ -98,14 +156,16 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     from tools.extraction.extract_attack_id_move_id import FORMAT_VERSION as ATTACK_ID_MOVE_ID_VERSION
     from tools.extraction.extract_motion_state_owners import FORMAT_VERSION as MOTION_STATE_OWNER_VERSION
 
-    assert f'"motion_state_owners": {MOTION_STATE_OWNER_VERSION}' in manifest.read_text(encoding="utf-8")
+    manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
+    assert manifest_payload["chars"] == list(CHARS)
+    assert manifest_payload["schemas"] == build_data.DATA_SCHEMA_VERSIONS
+    assert len(manifest_payload["schemas"]) == 7
     # The manifest alone is not enough: the packaged no-decomp artifacts must THEMSELVES be
     # at the runtime version, or Python preflight passes and native init then rejects the
     # bins (the v16-packaged/v17-runtime skew class). Check the copied headers.
-    import json as _json
     import struct as _struct
 
-    for ch in ("fox", "falco", "marth", "falcon", "sheik", "zelda"):
+    for ch in CHARS:
         b = (out_dir / "staling" / "move_id" / f"{ch}.bin").read_bytes()
         assert b[:8] == b"MSLSTID1"
         assert _struct.unpack_from("<I", b, 8)[0] == 1, (
@@ -124,7 +184,7 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
             f"packaged {ch}.bin is not MSLMSO01 v{MOTION_STATE_OWNER_VERSION} - regenerate "
             "tools/extraction/source_artifacts/motion_state/owners/"
         )
-    symbols = _json.loads(
+    symbols = json.loads(
         (out_dir / "motion_state" / "owners" / "callback_symbols.json").read_text(encoding="utf-8")
     )
     assert int(symbols["version"]) == MOTION_STATE_OWNER_VERSION

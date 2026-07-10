@@ -100,6 +100,7 @@ MSL_STATE_FIELD(coll_escapeair_floor_producer_runtime, uint8_t, bp, (size_t)MSL_
 MSL_STATE_FIELD(coll_floor_result_valid, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_source, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_mode, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(coll_a678_edge_runtime, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_segment_id, uint16_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_contact_x, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_contact_y, float, bp, (size_t)MSL_MAX_PLAYERS)

@@ -6,6 +6,10 @@
 // This is init-only and may allocate; hot-path queries must remain allocation-free.
 int ecb_table_init(void);
 
+// Binary artifact schema versions expected by this runtime.
+uint32_t ecb_bottom_tables_format_version(void);
+uint32_t ecb_extents_tables_format_version(void);
+
 // Returns the fighter-local ECB bottom Y offset for a given (char_id, animation_index, action_frame).
 //
 // - `char_id` follows Slippi post-frame `character` (GALE01), e.g. Fox=1, Falco=22.
@@ -26,7 +30,7 @@ typedef struct {
   // - min_x/max_x correspond to left/right extrema.
   // - min_y/max_y correspond to bottom/top extrema.
   //
-  // NOTE: These are extracted from fighter-local SSANIM01 v4 matrices with TransN translation removed
+  // NOTE: These are extracted from fighter-local SSANIM01 v5 matrices with TransN translation removed
   // (tools/extraction/extract_fighter_anims.py). Callers should mirror X based on facing if needed.
   float min_x;
   float max_x;

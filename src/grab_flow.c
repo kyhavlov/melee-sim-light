@@ -18,6 +18,7 @@
 #include "input_axis.h"
 #include "mpcoll_ground.h"
 #include "move_tables.h"
+#include "state_flags.h"
 #include "trigger_input.h"
 
 static inline void capturewait_anim_callback_apply(MslBatch* batch, const MslCommonParams* c,
@@ -1359,6 +1360,15 @@ static void grab_flow_falcon_dive_catch_connect(MslBatch* batch, int bi, int own
   batch->state.special_cmd1[oidx] = 0u;
   batch->state.special_cmd2[oidx] = 0u;
   batch->state.falcon_specialhi_x221b_b7[oidx] = victim_on_ground;
+  {
+    const size_t flags_i =
+        oidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+    if (victim_on_ground) {
+      batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_221B_B7;
+    } else {
+      batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_B7;
+    }
+  }
   // Both connect owners zero EVERY attacker velocity lane (self, anim, ground, kb, shield-kb)
   // through ftCommon_8007E2FC; SpecialHiCatch_Phys is empty, so the attacker hangs with zero
   // velocity until doCatchAnim's throw entry.
@@ -1389,8 +1399,17 @@ static void grab_flow_falcon_dive_catch_connect(MslBatch* batch, int bi, int own
   {
     const size_t flags_i =
         vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-    batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_B3;
-    batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
+    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+  }
+  {
+    const size_t flags_i =
+        vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+    if (victim_on_ground) {
+      batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_221B_B7;
+    } else {
+      batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_B7;
+    }
   }
   catch_connect_apply_post_shield_release_recharge(batch, msl_common_params(), vidx,
                                                    victim_pre_connect_action);
@@ -1574,12 +1593,12 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
     const size_t flags_i =
         vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-    batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_B3;
+    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
   }
   catch_connect_apply_post_shield_release_recharge(batch, msl_common_params(), vidx,
                                                    victim_pre_connect_action);
   const size_t flags_i = vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 
   // Decomp has a single victim_gobj pointer per owner; keep exactly one attached victim link.
   for (int p = 0; p < num_players; p++) {

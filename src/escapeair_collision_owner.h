@@ -8,6 +8,10 @@ typedef enum MslEscapeAirLockedBottomOwner {
   MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130 = 1u,
   MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_SOFT_OR_TRANSFORM = 2u,
   MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_HARD_FLOOR = 3u,
+  // Live ftCommon_8007D5D4/8007D60C CollData_X130_Locked owner. The enum predates the shared
+  // common-helper modeling; retain its storage/API name while distinguishing this general source
+  // owner from replay-seeded EscapeAir reconstruction.
+  MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_FTCOMMON = 4u,
 } MslEscapeAirLockedBottomOwner;
 
 typedef struct MslEscapeAirCollEpisode {
@@ -49,6 +53,10 @@ static inline uint8_t msl_escapeair_locked_bottom_owner_is_live_hard_floor(uint8
   return (uint8_t)(owner == (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_HARD_FLOOR);
 }
 
+static inline uint8_t msl_escapeair_locked_bottom_owner_is_live_ftcommon(uint8_t owner) {
+  return (uint8_t)(owner == (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_FTCOMMON);
+}
+
 static inline uint8_t msl_escapeair_locked_bottom_owner_for_live_jumpaerial_entry(
     uint8_t stage_has_soft_platform_floor) {
   return stage_has_soft_platform_floor
@@ -61,6 +69,7 @@ static inline uint8_t msl_escapeair_locked_bottom_owner_normalize(uint8_t owner)
     case MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_SOFT_OR_TRANSFORM:
     case MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_HARD_FLOOR:
     case MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130:
+    case MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_FTCOMMON:
       return owner;
     case MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE:
     default:

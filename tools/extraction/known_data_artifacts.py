@@ -31,7 +31,9 @@ STAGE_ITEM_OBJECT_VERSION = 4
 DREAM_WHISPY_MAGIC = b"MSLWHSP1"
 DREAM_WHISPY_VERSION = 1
 SCRIPT_MAGIC = b"MSLFTSC1"
-SCRIPT_VERSION = 2
+# v3 makes set_hitbox_interaction a required typed event. The byte layout is unchanged from v2,
+# but v2 tables can silently omit Falcon's source x42_b5/x42_b7 mutations.
+SCRIPT_VERSION = 3
 SCRIPT_LEGACY_JSON_VERSION = 1
 
 SCRIPT_EVENT_NAMES = {
@@ -796,6 +798,9 @@ def _decode_script_payload(kind_id: int, payload: bytes) -> dict:
     if kind == "set_hitbox_damage":
         idx, damage = struct.unpack_from("<Bxxxf", payload, 0)
         return {"idx": int(idx), "damage": float(damage)}
+    if kind == "set_hitbox_interaction":
+        idx, interaction_type, value = struct.unpack_from("<BBB", payload, 0)
+        return {"idx": int(idx), "type": int(interaction_type), "value": int(value)}
     if kind in {"set_airborne_state", "set_hit_status", "set_all_hurt_state", "set_jab_rapid"}:
         (state,) = struct.unpack_from("<B", payload, 0)
         return {"state": int(state)}
@@ -881,7 +886,7 @@ def _decode_script_payload(kind_id: int, payload: bytes) -> dict:
         for bit, name in _SCRIPT_CREATE_HITBOX_FLAG_NAMES.items():
             hb[name] = bool(int(flags) & bit)
         return {"hitbox": hb}
-    raise ValueError(f"unsupported MSLFTSC1 v2 payload kind {kind_id}")
+    raise ValueError(f"unsupported MSLFTSC1 v{SCRIPT_VERSION} payload kind {kind_id}")
 
 
 def read_mslftsc1_v1(path: Path) -> ScriptTimelineMetadata:

@@ -23,7 +23,7 @@ On the Marth/newchar branch, make sure the local data directory includes Marth
 before building:
 
 ```bash
-uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco,marth
+uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop
 ```
 
 `make viewer-build` writes a self-contained browser asset tree under

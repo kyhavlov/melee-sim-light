@@ -71,7 +71,11 @@ def test_missing_default_data_dir_error_is_actionable(monkeypatch, tmp_path) -> 
 
 
 def test_data_manifest_schema_mismatch_error_is_actionable(tmp_path) -> None:
-    runtime = env_batch_module._native.data_schema_versions()
+    from tools.extraction.build_data import DATA_SCHEMA_VERSIONS
+
+    runtime = {str(k): int(v) for k, v in env_batch_module._native.data_schema_versions().items()}
+    assert runtime == DATA_SCHEMA_VERSIONS
+    assert len(runtime) == 7
     manifest = {
         "magic": "MSLDATA1",
         "version": 1,

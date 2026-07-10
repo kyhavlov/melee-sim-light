@@ -201,6 +201,12 @@ typedef struct MslStateSoA {
   uint8_t* coll_floor_result_valid;
   uint8_t* coll_floor_result_source;
   uint8_t* coll_floor_result_mode;
+  // Runtime-only proof that the current map callback took mpColl_8004A678_Floor's edge-release
+  // branch. The wrapper consumes its floor result before locomotion resolves Ottotto, so carry this
+  // one callback result explicitly instead of reconstructing it from replay/history state.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004A678_Floor,mpColl_8004B4B0}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+  uint8_t* coll_a678_edge_runtime;
   uint16_t* coll_floor_result_segment_id;
   float* coll_floor_result_contact_x;
   float* coll_floor_result_contact_y;

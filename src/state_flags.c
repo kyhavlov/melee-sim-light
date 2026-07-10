@@ -11,6 +11,7 @@
 #include "batch_internal.h"
 #include "common_params.h"
 #include "char_params.h"
+#include "falcon_specials.h"
 #include "guard_lifecycle.h"
 #include "marth_specials.h"
 #include "motion_state_owners.h"
@@ -132,6 +133,11 @@ static inline uint8_t state_flags_2218_attack12_allow_interrupt_action(uint16_t 
   return (uint8_t)(action_id == (uint16_t)MSL_ACT_ATTACK_12);
 }
 
+static inline uint8_t state_flags_2218_falcon_special_allow_interrupt_action(uint8_t char_id,
+                                                                             uint16_t action_id) {
+  return (uint8_t)(char_id == (uint8_t)MSL_CHAR_ID_FALCON && falcon_action_is_special(action_id));
+}
+
 static inline uint8_t state_flags_action_allow_interrupt_at_frame(uint8_t char_id,
                                                                   uint16_t action_id, float frame) {
   if (state_flags_2218_allow_interrupt_attackair_action(action_id)) {
@@ -143,6 +149,10 @@ static inline uint8_t state_flags_action_allow_interrupt_at_frame(uint8_t char_i
   }
   if (action_id == (uint16_t)MSL_ACT_ESCAPE_N || action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
     return move_tables_escape_allow_interrupt(char_id, action_id, frame);
+  }
+  if (state_flags_2218_falcon_special_allow_interrupt_action(char_id, action_id)) {
+    return move_tables_special_allow_interrupt_at_frame(char_id,
+                                                        falcon_special_submotion(action_id), frame);
   }
   return 0u;
 }
@@ -816,6 +826,20 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
                                                (float)batch->state.action_frame[idx])) {
           f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
         }
+      } else if (state_flags_2218_falcon_special_allow_interrupt_action(batch->state.char_id[idx],
+                                                                        action_id)) {
+        // Falcon special scripts can set fp->allow_interrupt even when their IASA callback does
+        // not consume it. Falcon Punch is the motivating case: ftCa_SpecialN_IASA is empty, but
+        // its script emits allow_interrupt and Slippi publishes fp+0x2218_b0 post-frame.
+        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::{
+        //   ftCa_SpecialN_Anim,ftCa_SpecialN_IASA}
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+        // data/moves/falcon.json specials_by_msid[301].events allow_interrupt
+        if (move_tables_special_allow_interrupt_at_frame(batch->state.char_id[idx],
+                                                         falcon_special_submotion(action_id),
+                                                         allow_interrupt_anim_probe)) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+        }
       }
       if (allow_interrupt_known) {
         if (allow_interrupt) {
@@ -891,16 +915,17 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B2;
         }
       } else if (action_id == (uint16_t)MSL_ACT_ATTACK_100_START &&
-                 prev_action_2218 == (uint16_t)MSL_ACT_ATTACK_12 &&
+                 (prev_action_2218 == (uint16_t)MSL_ACT_ATTACK_12 ||
+                  prev_action_2218 == (uint16_t)MSL_ACT_ATTACK_13) &&
                  batch->state.prev_action_frame[idx] >= 0) {
-        // Attack12_Anim can set x2218_b2 from the extracted set_jab_rapid command before
-        // Attack12_IASA enters Attack100Start in the same fighter proc. Attack100Start itself does
-        // not author that command bit, so carry only the live Attack12 script result.
+        // Attack12/Attack13 Anim can set x2218_b2 from the extracted set_jab_rapid command before
+        // IASA enters Attack100Start in the same fighter proc. Attack100Start itself does not
+        // author that command bit, so carry only the live source script result.
         // refs/melee/src/melee/ft/ftaction.c::ftAction_80071B28
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{
-        //   ftCo_Attack12_Anim,ftCo_Attack12_IASA}
+        //   ftCo_Attack12_Anim,ftCo_Attack12_IASA,ftCo_Attack13_Anim,ftCo_Attack13_IASA}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Start_IASA
-        // data/scripts/{fox,falco,sheik}.bin ftCo_SM_Attack12 events set_jab_rapid
+        // data/scripts/{fox,falco,sheik,falcon}.bin ftCo_SM_Attack{12,13} events set_jab_rapid
         const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);
         if (move_tables_jab_rapid_active(batch->state.char_id[idx], prev_action_2218,
                                          source_frame)) {

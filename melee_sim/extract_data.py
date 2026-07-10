@@ -9,6 +9,8 @@ from importlib import metadata
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
+from tools.extraction.char_registry import CHARS
+
 from .iso import extract_file, find_files, list_files
 
 
@@ -21,14 +23,8 @@ _STAGE_DAT_BY_KEY = {
     "grop": "GrOp.dat",
 }
 
-_CHAR_GLOBS = {
-    "fox": "*PlFx*.dat",
-    "falcon": "*PlCa*.dat",
-    "falco": "*PlFc*.dat",
-    "marth": "*PlMs*.dat",
-    "sheik": "*PlSk*.dat",
-    "zelda": "*PlZd*.dat",
-}
+_RUNTIME_CHARS = tuple(CHARS)
+_CHAR_GLOBS = {name: f"*{Path(info.pl_dat).stem}*.dat" for name, info in CHARS.items()}
 
 
 def _path_from_direct_url() -> Path | None:
@@ -94,8 +90,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument(
         "--chars",
         type=str,
-        default="fox,falco,marth,falcon,sheik,zelda",
-        help="comma-separated characters",
+        default=",".join(_RUNTIME_CHARS),
+        help="comma-separated characters; runtime data roots require the full registry",
     )
     ap.add_argument(
         "--stages",
@@ -118,6 +114,12 @@ def main(argv: list[str] | None = None) -> None:
     unknown_chars = [c for c in chars if c not in _CHAR_GLOBS]
     if unknown_chars:
         raise SystemExit(f"unsupported character key(s): {unknown_chars!r}")
+    if len(chars) != len(_RUNTIME_CHARS) or set(chars) != set(_RUNTIME_CHARS):
+        raise SystemExit(
+            "runtime data roots require the full character registry: "
+            f"{','.join(_RUNTIME_CHARS)}. Use individual extraction modules for debug subsets."
+        )
+    chars = list(_RUNTIME_CHARS)
     unknown_stages = [s for s in stages if s not in _STAGE_DAT_BY_KEY]
     if unknown_stages:
         raise SystemExit(f"unsupported stage key(s): {unknown_stages!r}")

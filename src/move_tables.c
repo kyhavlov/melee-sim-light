@@ -750,6 +750,11 @@ uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
   return 0u;
 }
 
+uint8_t move_tables_special_allow_interrupt_at_frame(uint8_t char_id, uint16_t msid,
+                                                     float cur_anim_frame_f32) {
+  return allow_interrupt_active(char_id, msid, cur_anim_frame_f32);
+}
+
 uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {
   return cmd_var_active(char_id, (uint16_t)MSL_SM_ESCAPE_AIR, 0u, 1u, cur_anim_frame_f32);
 }

@@ -496,7 +496,9 @@ static uint8_t yoshi_shyguy_select_knocked_state_source_hitbox(MslBatch* batch, 
         continue;
       }
       const uint16_t flags = batch->state.hitbox_flags[hb_i];
-      if ((flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
+      // refs/melee/src/melee/it/itcoll.c::it_8026D564 (fighter HitCapsule x42_b7 item gate)
+      if (!msl_hitbox_x42_b7_enabled(flags) ||
+          (flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
           (flags & (uint16_t)MSL_HITBOX_FLAG_HIT_AERIAL) == 0u) {
         continue;
       }
@@ -968,7 +970,9 @@ static uint8_t yoshi_shyguy_try_fighter_hitbox_hit(MslBatch* batch, int bi, int 
         continue;
       }
       const uint16_t flags = batch->state.hitbox_flags[hb_i];
-      if ((flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
+      // refs/melee/src/melee/it/itcoll.c::it_8026D564 (fighter HitCapsule x42_b7 item gate)
+      if (!msl_hitbox_x42_b7_enabled(flags) ||
+          (flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
           (flags & (uint16_t)MSL_HITBOX_FLAG_HIT_AERIAL) == 0u) {
         continue;
       }

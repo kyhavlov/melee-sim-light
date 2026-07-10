@@ -13,12 +13,12 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 == replays/validation/doubles_recent/Game_20260509T152622.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1075
-rollout.streak_count: 33
+rollout.streak_count: 32
 rollout.streak_len.median: 234
 rollout.streak_len.p90: 645
 rollout.streak_len.p95: 938
 rollout.streak_len.max: 1075
-rollout.first_mismatch_total: 33
+rollout.first_mismatch_total: 32
 rollout.first_mismatch_seeded_total: 17
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -33,13 +33,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:389
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == suite summary ==
-overall.rollout.streak_count: 33
+overall.rollout.streak_count: 32
 overall.rollout.streak_len.median: 234
 overall.rollout.streak_len.p90: 645
 overall.rollout.streak_len.p95: 938
 overall.rollout.streak_len.max: 1075
 overall.rollout.best_len.max: 1075
-overall.rollout.first_mismatch_total: 33
+overall.rollout.first_mismatch_total: 32
 overall.rollout.first_mismatch_seeded_total: 17
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:

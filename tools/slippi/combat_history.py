@@ -132,7 +132,10 @@ class AnimPoseDB:
     """
 
     _MAGIC = b"SSANIM01"
-    _VERSION = 4
+    # v5 retains v4's byte layout and adds a generation contract for cross-character donor rows.
+    # Keep this focused reader strict so stale v4 pose artifacts cannot silently omit
+    # CaptureCaptain's Falcon-donor matrices.
+    _VERSION = 5
     _MAT_BYTES = 12 * 4
 
     def __init__(self, buf: bytes):
@@ -304,7 +307,9 @@ def derive_combat_hitlist_seed_fields(
     specialhi_rotate_model_f32: np.ndarray | None = None,
     specialhi_rotate_model_valid_u8: np.ndarray | None = None,
     percent: np.ndarray | None = None,
+    items: np.ndarray | None = None,
     include_per_hitbox: bool = False,
+    include_processhit_producers: bool = False,
     include_replay_only_shield_admission: bool = False,
     include_replay_only_body_admission: bool = False,
     data_root: str | Path = "data",
@@ -379,10 +384,15 @@ def derive_combat_hitlist_seed_fields(
         if specialhi_rotate_model_valid_u8 is not None
         else None,
         np.ascontiguousarray(percent, dtype=np.float32) if percent is not None else None,
+        (
+            np.ascontiguousarray(items).view(np.uint8).reshape((len(items), -1))
+            if items is not None
+            else None
+        ),
         int(bool(include_per_hitbox)),
         int(bool(include_replay_only_shield_admission)),
         int(bool(include_replay_only_body_admission)),
     )
     if include_per_hitbox:
-        return out
+        return out if include_processhit_producers else out[:6]
     return out[0], out[1]

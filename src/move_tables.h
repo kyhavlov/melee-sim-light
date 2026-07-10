@@ -208,6 +208,14 @@ float move_tables_grounded_smash_charge_damage_mul(uint8_t char_id, uint16_t gro
 uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
                                            float cur_anim_frame_f32);
 
+// Returns whether an extracted character-special script emitted `allow_interrupt` at the given
+// submotion frame. This exposes the generic ftAction_80071950 command lane for character specials
+// whose IASA callback may ignore the bit while Slippi still publishes fp+0x2218_b0.
+//
+// Source of truth: data/moves/<char>.json specials_by_msid[msid].events allow_interrupt.
+uint8_t move_tables_special_allow_interrupt_at_frame(uint8_t char_id, uint16_t msid,
+                                                     float cur_anim_frame_f32);
+
 // Returns whether EscapeAir command-script cmd_var[0] is active at the given cur_anim_frame.
 //
 // Decomp:

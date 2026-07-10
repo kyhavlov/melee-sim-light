@@ -3,14 +3,16 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 
+from tools.extraction.extract_fighter_hitboxes import FORMAT_VERSION as HITBOX_VERSION
+
 
 def _iter_u16_7_from_mslhitb1(path: Path):
     buf = path.read_bytes()
     if buf[:8] != b"MSLHITB1":
         raise AssertionError(f"{path}: bad magic {buf[:8]!r}")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if int(ver) != 1:
-        raise AssertionError(f"{path}: unsupported version {ver} (want 1)")
+    if int(ver) != HITBOX_VERSION:
+        raise AssertionError(f"{path}: unsupported version {ver} (want {HITBOX_VERSION})")
     (entry_count,) = struct.unpack_from("<I", buf, 12)
 
     idx_base = 16

@@ -75,7 +75,7 @@ rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=0.423203 rec=2030 p=0 seed/ref/out=-87.599/-88.0314/-88.4546 actions=27/27/27 category=unclassified
   2. shield_hp max_err=0.209999 rec=6802 p=1 seed/ref/out=60/59.79/60 actions=178/235/235 category=unclassified
-  3. speed_air_x_self max_err=0.000421375 rec=1251 p=0 seed/ref/out=2.04/-0.365898/-0.366319 actions=181/181/181 category=unclassified
+  3. speed_ground_x_self max_err=0.000421375 rec=1248 p=0 seed/ref/out=2.2/-0.445898/-0.446319 actions=21/181/181 category=unclassified
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:168
 
 == suite summary ==

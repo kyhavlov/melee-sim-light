@@ -14,11 +14,11 @@
 #include "batch_internal.h"
 #include "msl_math.h"
 
-// SSANIM01 v4 is written by tools/extraction/extract_fighter_anims.py.
+// SSANIM01 v5 is written by tools/extraction/extract_fighter_anims.py.
 enum {
   ANIM_MAGIC_LEN = 8,
   ANIM_HDR_BASE_BYTES = 16,  // magic[8] + ver[u32] + joint_count[u16] + anim_count[u16]
-  ANIM_VERSION_V4 = 4,
+  ANIM_VERSION_V5 = 5,
   ANIM_DYN_VERSION_V4 = 4,
   ANIM_DYN_VERSION_V5 = 5,
   ANIM_DYN_VERSION_V6 = 6,
@@ -117,6 +117,8 @@ typedef struct {
 
 static MslAnimPoseTable g_table_by_char[256];
 static int g_loaded = 0;
+
+uint32_t anim_pose_data_schema_version(void) { return 2u; }
 
 static uint16_t read_u16_le(const uint8_t* p) {
   uint16_t v = 0;
@@ -1251,7 +1253,7 @@ static int load_pose_for_char(const char* data_dir, const char* rel_path, uint8_
     return -1;
   }
   const uint32_t ver = read_u32_le(buf + 8);
-  if (ver != (uint32_t)ANIM_VERSION_V4) {
+  if (ver != (uint32_t)ANIM_VERSION_V5) {
     alloc_free(buf);
     return -1;
   }

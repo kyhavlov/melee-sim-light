@@ -152,6 +152,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->coll_escapeair_floor_producer_runtime, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_source, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_a678_edge_runtime, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_segment_id, 0xFF, sizeof(uint16_t) * bp);
   memset(state->coll_stage_prev_ground_id, 0xFF, sizeof(uint16_t) * bp);
   memset(state->coll_floor_result_contact_x, 0, sizeof(float) * bp);

@@ -896,19 +896,22 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     # Probe-backed gameplay overlay:
     # ftCo_800DDDE4 always samples a selected capture/throw anchor, but the observed
     # mpColl_800471F8 floor-publication subset is not equivalent to the anchor part id.
-    # Marth ThrowF/ThrowLw and Sheik ThrowLw publish the floor-hit substep root before damage
-    # entry; Marth ThrowB and Fox/Falco controls do not. Keep the source-completion discriminator
-    # explicit so future characters with the same anchor id do not inherit this path accidentally.
+    # Marth ThrowF/ThrowLw, Sheik ThrowLw, and Falcon ThrowLw publish the floor-hit substep root
+    # before damage entry; Marth ThrowB and Fox/Falco controls do not. Keep the source-completion
+    # discriminator explicit so characters with the same anchor id do not inherit this path.
     # Bit order: ThrowF, ThrowB, ThrowHi, ThrowLw.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
     # refs/Ishiiruka engine-dump-v12-probes ftCo_800DDDE4 probe:
     #   IPW 1231..1233/10031, ParallelFamiliarZebra 1427..1429, FSP 9061..9067,
-    #   RuralReasonableRat 3168.
+    #   RuralReasonableRat 3168; Falcon-suite vanilla release rows including
+    #   Game_20260509T030948 375/2508/3019 and Game_20260505T215428 329/527.
     throw_release_mpcoll_floor_publication_mask = 0
     if ftdata_symbol == "ftDataMars":
         throw_release_mpcoll_floor_publication_mask = (1 << 0) | (1 << 3)
     if ftdata_symbol == "ftDataSeak":
+        throw_release_mpcoll_floor_publication_mask = 1 << 3
+    if ftdata_symbol == "ftDataCaptain":
         throw_release_mpcoll_floor_publication_mask = 1 << 3
     # Source-callsite gameplay overlay:
     # ftCo_80096900 stores arg1 into mv.co.fallspecial.xC. Marth Dolphin Slash calls it with
@@ -933,7 +936,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     #   ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
     common_fall_blended_ecb_seed_mask = 0
-    if ftdata_symbol == "ftDataMars":
+    if ftdata_symbol in ("ftDataMars", "ftDataCaptain"):
         common_fall_blended_ecb_seed_mask = 1 << 1
     if ftdata_symbol == "ftDataSeak":
         common_fall_blended_ecb_seed_mask = 1 << 0

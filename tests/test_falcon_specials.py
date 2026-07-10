@@ -1,9 +1,8 @@
-"""Falcon Punch (ftCa_SpecialN) decomp-anchored unit tests.
+"""Captain Falcon character-mechanic decomp-anchored unit tests.
 
-Anchors: refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c and
-data/moves/falcon.json::specials_by_msid.{301,302}. Replay verification: the falcon suite
-(replays/suites/falcon.json) contains SpecialN/SpecialAirN rows; these tests cover the input
--> entry -> impulse -> exit chain that replay reseeds cannot exercise live.
+Anchors: refs/melee/src/melee/ft/chara/ftCaptain and data/moves/falcon.json. Replay verification:
+the Falcon suite covers the steady callback rows; these tests cover full input-to-outcome chains
+and source-owner boundaries that replay reseeds cannot exercise live.
 """
 
 from __future__ import annotations
@@ -218,6 +217,12 @@ def test_air_specialn_lands_into_grounded_variant_at_preserved_frame() -> None:
     assert ACT_WAIT in acts, "swapped grounded punch must still exit to Wait at anim end"
     # No Landing action between the variants (frame-preserving swap, not a landing).
     assert 0x002A not in acts[ai:gi + 1]
+    # The preserved-frame state swap selects grounded SpecialN's FigaTree; the destination TransN
+    # slice owns the landing-frame ground velocity.
+    assert abs(float(outs[gi]["speed_ground_x_self"][0])) > 1e-4
+    assert float(outs[gi]["speed_ground_x_self"][0]) == pytest.approx(
+        float(outs[gi]["speed_air_x_self"][0]), abs=1e-7
+    )
 
 
 def test_side_b_does_not_enter_falcon_punch() -> None:
@@ -251,6 +256,9 @@ ACT_FC_AIR_LW_END = 360
 ACT_FC_AIR_LW_END_AIR = 361
 ACT_FC_LW_END_AIR = 362
 ACT_FC_HI_THROW1 = 363
+ACT_DAMAGE_FLY_TOP = 0x005A
+ACT_THROW_LW = 0x00DE
+ACT_THROWN_LW = 0x00F2
 
 DOWN_B = dict(buttons=BTN_B, main_y=-127)
 
@@ -274,20 +282,136 @@ def test_grounded_down_b_enters_falcon_kick_and_exits_through_end() -> None:
     assert ACT_WAIT in acts, "kick must settle into Wait"
     # The travel is anim-root-motion-owned: meaningful forward distance.
     assert float(outs[40]["pos_x"][0]) > -40.0
+    # Fighter_ChangeMotionState clamps the outgoing root velocity to the character's run terminal
+    # before SpecialLwEnd's ft_80084F3C high-speed friction step.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLwEnd_Phys
+    attrs = _attrs()
+    common = json.loads((ROOT / "data/common/ft_common_data.json").read_text())
+    expected_end_speed = float(attrs["dash_run_terminal_velocity"]) - (
+        float(attrs["gr_friction"]) * float(common["high_speed_friction_mul"])
+    )
+    assert float(outs[li + 1]["speed_ground_x_self"][0]) == pytest.approx(
+        expected_end_speed, abs=1e-6
+    )
+
+
+def test_grounded_down_b_completion_refreshes_full_jumps() -> None:
+    # ftCa_SpecialLw_Anim_inline(condition=0) calls ftCommon_8007D7FC before entering
+    # SpecialLwEnd. Its D6A4 tail writes jumpsUsed=0, clears fastfall, and unlocks ECB. Seed stale
+    # values deliberately so the terminal callback, rather than normal grounded invariants, owns
+    # the replay-visible jump repair.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLw_Anim_inline
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+    seed = _seed_far(True)
+    seed["action_id"][0, 0] = np.uint16(ACT_FC_LW)
+    seed["animation_index"][0, 0] = np.uint32(311)
+    seed["action_frame"][0, 0] = np.int16(39)
+    seed["anim_frame_f32"][0, 0] = np.float32(39.0)
+    seed["jumps_left"][0, 0] = np.uint8(0)
+    seed["fall_fast"][0, 0] = np.uint8(1)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(4)
+    out = _run(seed, [_mk_inputs()])[0]
+
+    assert int(out["action_id"][0]) == ACT_FC_LW_END
+    assert int(out["jumps_left"][0]) == int(_attrs()["max_jumps"])
 
 
 def test_air_down_b_dive_lands_into_air_lw_end() -> None:
     # ftCa_SpecialAirLw dive (ft_80085134 anim-owned trajectory) -> landing doColl ->
     # SpecialAirLwEnd (frame 0, landing-lag rate) -> ft_8008A2BC Wait tail.
-    outs = _run(_seed_far(False, pos_y=60.0), [_mk_inputs(**DOWN_B)] + [_mk_inputs()] * 130)
+    seed = _seed_far(False, pos_y=60.0)
+    seed["jumps_left"][0, 0] = np.uint8(0)
+    outs = _run(seed, [_mk_inputs(**DOWN_B)] + [_mk_inputs()] * 130)
     acts = [int(o["action_id"][0]) for o in outs]
     assert acts[0] == ACT_FC_AIR_LW
     assert ACT_FC_AIR_LW_END in acts, f"air kick must land into AirLwEnd: {sorted(set(acts))}"
     assert ACT_WAIT in acts
     # No frame-preserving grounded-variant swap for the air kick (distinct motion state).
     assert ACT_FC_LW not in acts
+    landing = acts.index(ACT_FC_AIR_LW_END)
+    assert int(outs[landing]["jumps_left"][0]) == int(_attrs()["max_jumps"])
     # The dive descends (anim-driven; the animation hops slightly before the dive).
     assert float(outs[28]["pos_y"][0]) < 55.0
+
+
+def test_air_down_b_completion_restores_falcons_double_jump() -> None:
+    # ftCa_SpecialAirLw_Anim calls ftCommon_8007D5D4 before entering SpecialAirLwEndAir.
+    # The call is intentional even though Falcon is already airborne: jumpsUsed is reset to 1,
+    # so Slippi's jumps-left lane returns to max_jumps-1 after a previously spent double jump.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialAirLw_Anim
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    seed = _seed_far(False, pos_y=500.0)
+    seed["jumps_left"][0, 0] = np.uint8(0)
+    outs = _run(seed, [_mk_inputs(**DOWN_B)] + [_mk_inputs()] * 90)
+    acts = [int(o["action_id"][0]) for o in outs]
+    transition = acts.index(ACT_FC_AIR_LW_END_AIR)
+
+    assert acts[transition - 1] == ACT_FC_AIR_LW
+    assert int(outs[transition - 1]["jumps_left"][0]) == 0
+    assert int(outs[transition]["jumps_left"][0]) == int(_attrs()["max_jumps"]) - 1
+    # ftCa_SpecialAirLw_Anim changes state without ftAnim_8006EBA4, so the destination remains at
+    # its frame-0 entry value until its own next animation callback.
+    assert int(outs[transition]["action_frame"][0]) == 0
+
+
+def test_airborne_ground_kick_completion_restores_falcons_double_jump() -> None:
+    # The grounded kick can leave an edge without changing action. Its terminal Anim callback then
+    # calls the same ftCommon_8007D5D4 absolute jump write before entering SpecialLwEndAir.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLw_Anim_inline
+    seed = _seed_far(True)
+    seed["pos_x"][0, 0] = np.float32(82.0)
+    seed["jumps_left"][0, 0] = np.uint8(0)
+    outs = _run(seed, [_mk_inputs(**DOWN_B)] + [_mk_inputs()] * 90)
+    acts = [int(out["action_id"][0]) for out in outs]
+    transition = acts.index(ACT_FC_LW_END_AIR)
+
+    assert acts[transition - 1] == ACT_FC_LW
+    assert int(outs[transition - 1]["on_ground"][0]) == 0
+    assert int(outs[transition]["jumps_left"][0]) == int(_attrs()["max_jumps"]) - 1
+
+
+def test_air_kick_landing_end_floor_loss_enters_fall_and_consumes_ground_jump() -> None:
+    # SpecialAirLwEnd is grounded but its Coll callback is ftCa_SpecialAirLwEnd_Coll, which calls
+    # ft_80084104. Losing the floor therefore enters Fall through ftCo_Fall_Enter and its
+    # ftCommon_8007D5D4 ground-to-air bundle instead of carrying the landing-skid state airborne.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialAirLwEnd_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084104
+    seed = _seed_far(True)
+    seed["pos_x"][0, 0] = np.float32(84.0)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+    seed["action_id"][0, 0] = np.uint16(ACT_FC_AIR_LW_END)
+    seed["animation_index"][0, 0] = np.uint32(314)
+    seed["action_frame"][0, 0] = np.int16(3)
+    seed["anim_frame_f32"][0, 0] = np.float32(3.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(2.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(2.0)
+    # Model a grounded source whose current CollData floor disappeared (for example, a moving
+    # stage object no longer supporting the fighter). B2DC cannot retain an absent floor.
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    out = _run(seed, [_mk_inputs()])[0]
+
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["jumps_left"][0]) == int(_attrs()["max_jumps"]) - 1
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(
+        float(_attrs()["air_drift_max"]), abs=1e-6
+    )
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=1e-6)
+
+
+def test_air_kick_landing_end_keeps_ground_and_full_jumps_with_floor_support() -> None:
+    seed = _seed_far(True)
+    seed["action_id"][0, 0] = np.uint16(ACT_FC_AIR_LW_END)
+    seed["animation_index"][0, 0] = np.uint32(314)
+    seed["action_frame"][0, 0] = np.int16(3)
+    seed["anim_frame_f32"][0, 0] = np.float32(3.0)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    out = _run(seed, [_mk_inputs()])[0]
+
+    assert int(out["action_id"][0]) == ACT_FC_AIR_LW_END
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["jumps_left"][0]) == int(_attrs()["max_jumps"])
 
 
 def test_falcon_kick_on_hit_slowdown_scales_travel_velocity() -> None:
@@ -314,6 +438,107 @@ def test_falcon_kick_on_hit_slowdown_scales_travel_velocity() -> None:
     assert dx_hit < dx_ctl * (mod + 0.25), (
         f"post-hit travel dx {dx_hit:.2f} must be slowed vs control {dx_ctl:.2f} "
         f"(modifier {mod})")
+
+
+def test_falcon_kick_item_hurtbox_hit_runs_shared_deal_damage_callback() -> None:
+    # Fighter HitCapsule -> item hurtbox writes the same attacker x1914 lane as fighter BODY
+    # contact. Fighter_ProcessHit must therefore run Falcon Kick's deal_dmg_cb even when the only
+    # victim is a stage item. Use an extracted Yoshi Shy Guy hurtbox as the positive owner and an
+    # otherwise identical no-item rollout as the velocity control.
+    # refs/melee/src/melee/it/itcoll.c::it_802703E8
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialHi_800E400C
+    seed_hit = _seed_far(True)
+    seed_hit["stage_id"][0] = np.uint32(8)
+    seed_hit["pos_x"][0, 0] = np.float32(-40.0)
+    seed_hit["pos_x"][0, 1] = np.float32(50.0)
+    seed_hit["stage_yoshi_shyguy_valid_u8"][0] = np.uint8(1)
+    seed_hit["stage_yoshi_shyguy_timer_u16"][0] = np.uint16(120)
+    shyguy = seed_hit["items"][0, 0]
+    shyguy["exists"] = np.uint8(1)
+    shyguy["type"] = np.uint16(0xD2)
+    shyguy["state"] = np.uint8(1)
+    shyguy["owner"] = np.int8(-1)
+    shyguy["spawn_id"] = np.uint32(88)
+    shyguy["pos_x"] = np.float32(-35.0)
+    shyguy["pos_y"] = np.float32(0.0)
+    shyguy["direction"] = np.float32(1.0)
+
+    seed_control = seed_hit.copy()
+    seed_control["items"][0, 0]["exists"] = np.uint8(0)
+    frames = [_mk_inputs(**DOWN_B)] + [_mk_inputs()] * 70
+    hit = _run(seed_hit, frames)
+    control = _run(seed_control, frames)
+    hit_frame = next(i for i, out in enumerate(hit) if int(out["items"][0]["damage"]) > 0)
+    compare_frame = hit_frame + 8  # first frame after the eight-frame x1914 deal hitlag
+    hit_dx = float(hit[compare_frame + 4]["pos_x"][0]) - float(hit[compare_frame]["pos_x"][0])
+    control_dx = float(control[compare_frame]["pos_x"][0]) - float(
+        control[compare_frame - 4]["pos_x"][0]
+    )
+
+    assert hit_dx == pytest.approx(
+        control_dx * float(_attrs()["falcon_speciallw_on_hit_spd_modifier"]), abs=1e-4
+    )
+
+
+def test_falcon_kick_reseed_consumes_persisted_speciallw_friction() -> None:
+    # Validation preprocessing carries mv.ca.speciallw.friction after the victim has left
+    # hitlag/hitstun. A mid-kick seed must consume that explicit hidden lane rather than infer it
+    # from current victim state.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+    #   ftCa_SpecialHi_800E400C,ftCa_SpecialLw_Phys}
+    control = _seed_far(True)
+    control["action_id"][0, 0] = np.uint16(ACT_FC_LW)
+    control["animation_index"][0, 0] = np.uint32(311)
+    control["action_frame"][0, 0] = np.int16(20)
+    control["anim_frame_f32"][0, 0] = np.float32(20.0)
+    control["falcon_speciallw_friction"][0, 0] = np.float32(1.0)
+
+    slowed = control.copy()
+    slowed["falcon_speciallw_hits"][0, 0] = np.uint8(2)
+    slowed["falcon_speciallw_friction"][0, 0] = np.float32(0.36)
+
+    control_out = _run(control, [_mk_inputs()])[0]
+    slowed_out = _run(slowed, [_mk_inputs()])[0]
+    control_dx = float(control_out["pos_x"][0]) - float(control["pos_x"][0, 0])
+    slowed_dx = float(slowed_out["pos_x"][0]) - float(slowed["pos_x"][0, 0])
+    assert slowed_dx == pytest.approx(control_dx * 0.36, abs=1e-5)
+
+
+def test_falcon_down_throw_publishes_release_floor_before_upward_launch() -> None:
+    # Falcon ThrowLw's attached x1A70 pose finishes below the stage floor. On release,
+    # ftCo_800DDDE4 runs the selected-fighter mpColl_800471F8 publication before applying the
+    # extracted 65-degree throw hit. The victim therefore launches upward from floor level under
+    # ftCommon_8007D5D4's ECB lock instead of colliding into DownBound on the next frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
+    # data/moves/falcon.json::moves.ftCo_SM_ThrowLw
+    seed = _seed(True)
+    seed["pos_x"][0, 1] = np.float32(6.0)
+    seed["facing"][0, 1] = np.uint8(0)
+    idle = _mk_inputs()
+    script = (
+        [_mk_inputs(buttons=0x0010)] * 3
+        + [idle] * 18
+        + [_mk_inputs(main_y=-127)]
+        + [idle] * 40
+    )
+    outs = _run(seed, script)
+    release = next(
+        i
+        for i, out in enumerate(outs)
+        if int(out["action_id"][0]) == ACT_THROW_LW
+        and int(out["action_id"][1]) == ACT_DAMAGE_FLY_TOP
+    )
+
+    assert int(outs[release - 1]["action_id"][1]) == ACT_THROWN_LW
+    assert float(outs[release - 1]["pos_y"][1]) < 0.0
+    launched = outs[release : release + 5]
+    assert all(int(out["action_id"][1]) == ACT_DAMAGE_FLY_TOP for out in launched)
+    assert all(int(out["on_ground"][1]) == 0 for out in launched)
+    ys = [float(out["pos_y"][1]) for out in launched]
+    assert ys[0] > 0.0
+    assert all(y1 > y0 for y0, y1 in zip(ys[:-1], ys[1:], strict=True))
 
 
 # ---------------------------------------------------------------------------
@@ -358,6 +583,20 @@ def test_raptor_boost_ground_detect_transitions_to_hit_punch() -> None:
     assert ACT_WAIT in acts
 
 
+def test_raptor_boost_detect_ignores_coarse_dense_hitlist_seed() -> None:
+    # A replay-derived hit-group seed is not an exact HitCapsule victims_1 entry. The inert BODY
+    # path must still run lbColl admission and OnDetect; concrete per-hitbox entries remain live.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+    seed = _seed_vs(25.0)
+    seed["combat_hitlist_cd"][0, 0, 0, 1] = np.uint16(0xFFFF)
+    seed["combat_hitlist_victim_iid"][0, 0, 0, 1] = seed["instance_id"][0, 1]
+
+    outs = _run(seed, [_mk_inputs(**SIDE_B)] + [_mk_inputs()] * 40)
+
+    assert ACT_FC_S in [int(out["action_id"][0]) for out in outs]
+
+
 def test_raptor_boost_detects_shielding_opponent() -> None:
     # The inert shield-overlap branch writes the attacker's unk_gobj too, so Raptor Boost
     # connects on shield (the punch is then shielded).
@@ -387,12 +626,37 @@ def test_raptor_boost_detect_window_closes_at_cmd0_clear() -> None:
     assert float(outs[-1]["percent"][1]) == 0.0
 
 
+def test_raptor_boost_ground_floor_loss_clamps_to_air_drift() -> None:
+    # ftCa_SpecialSStart_Coll floor loss: ftCommon_8007D60C clears gr_vel/burns jumps, then
+    # ftCommon_ClampAirDrift clamps self_vel.x before ftCo_80096900 enters FallSpecial.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialSStart_Coll
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D60C,ftCommon_ClampAirDrift}
+    seed = _seed_vs(200.0)
+    seed["pos_x"][0, 0] = np.float32(83.0)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+    seed["action_id"][0, 0] = np.uint16(ACT_FC_S_START)
+    seed["animation_index"][0, 0] = np.uint32(303)
+    seed["action_frame"][0, 0] = np.int16(17)
+    seed["anim_frame_f32"][0, 0] = np.float32(17.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(5.2283)
+    seed["speed_air_x_self"][0, 0] = np.float32(5.2283)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["action_id"][0]) == ACT_FALL_SPECIAL
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["jumps_left"][0]) == 0
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(float(_attrs()["air_drift_max"]), abs=1e-6)
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=1e-6)
+
+
 def test_raptor_boost_air_miss_ends_in_freefall_landing() -> None:
     # ftCa_SpecialAirSStart_Anim miss end: ftCo_80096900(1,1,0,1,miss_lag) freefall ->
     # LandingFallSpecial.
     outs = _run(_seed_vs(200.0, grounded=False, y=80.0), [_mk_inputs(**SIDE_B)] + [_mk_inputs()] * 110)
     acts = [int(o["action_id"][0]) for o in outs]
     assert acts[0] == ACT_FC_AIR_S_START
+    assert int(outs[0]["jumps_left"][0]) == 0
+    assert float(outs[0]["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=1e-7)
     assert ACT_FALL_SPECIAL in acts or ACT_LANDING_FALL_SPECIAL in acts, (
         f"air miss must reach freefall/landing lag: {sorted(set(acts))}")
     assert ACT_FC_AIR_S not in acts
@@ -454,6 +718,42 @@ def test_air_up_b_enters_air_dive_and_double_jump_is_burned() -> None:
     assert ACT_FALL_SPECIAL in acts or ACT_LANDING_FALL_SPECIAL in acts
 
 
+def test_air_dive_reseed_preserves_source_overcap_velocity_branch() -> None:
+    # Slippi exposes the post-Phys sum of TransN and mv.ca.specialhi.vel. Reseed inversion must not
+    # clamp the recovered hidden velocity: ftCa_SpecialHi_Phys has an explicit over-cap deceleration
+    # branch and carries values above specialhi_horz_vel * air_drift_max into the next frame.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHi_Phys
+    seed = _seed(False, pos_y=400.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FC_AIR_HI)
+    seed["animation_index"][0, 0] = np.uint32(308)
+    seed["action_frame"][0, 0] = np.int16(20)
+    seed["anim_frame_f32"][0, 0] = np.float32(20.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(3.0)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    attrs = _attrs()
+    drift_cap = float(attrs["falcon_specialhi_horz_vel"]) * float(attrs["air_drift_max"])
+    assert int(out["action_id"][0]) == ACT_FC_AIR_HI
+    assert float(out["speed_air_x_self"][0]) > 2.0 * drift_cap
+
+
+def test_air_dive_anim_end_preserves_horizontal_velocity_into_fallspecial() -> None:
+    # ftCo_80096900's already-airborne branch changes state and consumes jumps but does not rewrite
+    # self_vel.x. The outgoing SpecialHi composite velocity therefore enters FallSpecial intact.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialAirHi_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{inline0,ftCo_80096900}
+    seed = _seed_far(False, pos_y=400.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FC_AIR_HI)
+    seed["animation_index"][0, 0] = np.uint32(308)
+    seed["action_frame"][0, 0] = np.int16(64)
+    seed["anim_frame_f32"][0, 0] = np.float32(64.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(2.5)
+
+    out = _run(seed, [_mk_inputs()])[0]
+    assert int(out["action_id"][0]) == ACT_FALL_SPECIAL
+    assert float(out["speed_air_x_self"][0]) > 2.0
+
+
 def test_dive_grabs_grounded_opponent_hits_and_throws() -> None:
     # Connect vs a GROUNDED victim (grab hitboxes at frame 13, before the frame-14 airborne
     # switch): grab_flow's falcon branch -> attacker SpecialHiCatch(355) with x221B_b7 (the
@@ -467,14 +767,40 @@ def test_dive_grabs_grounded_opponent_hits_and_throws() -> None:
     assert ACT_FC_HI_CATCH in acts, f"dive must connect: {sorted(set(acts))}"
     assert ACT_CAPTURE_CAPTAIN in o_acts, f"victim must be held: {sorted(set(o_acts))}"
     assert ACT_FC_HI_THROW in acts, "catch anim end must enter the throw"
-    # 5 (HiCatch scripted hit) + 12 (Throw0 release hitbox).
-    assert float(outs[-1]["percent"][1]) >= 16.0, (
-        f"held hit + release must deal 17%: {float(outs[-1]['percent'][1])}")
-    # Victim leaves the hold only through the release damage aftermath (DamageFly family),
+    release_i = acts.index(ACT_FC_HI_THROW)
+    assert int(outs[release_i]["jumps_left"][0]) == 1
+    assert float(outs[release_i]["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=1e-7)
+    # 5 (HiCatch scripted hit) + stale 12 (Throw0 release hitbox).
+    assert float(outs[-1]["percent"][1]) == pytest.approx(15.92, abs=1e-5)
+    # Victim leaves the hold only through the release damage aftermath,
     # never via Landing/Wait straight out of CaptureCaptain.
     li = max(i for i, a in enumerate(o_acts) if a == ACT_CAPTURE_CAPTAIN)
-    assert 0x0054 <= o_acts[li + 1] <= 0x005B or o_acts[li + 1] == ACT_FALL, (
+    assert 0x004B <= o_acts[li + 1] <= 0x005B or o_acts[li + 1] == ACT_FALL, (
         f"release must enter the damage aftermath: {o_acts[li:li+3]}")
+
+
+def test_grounded_dive_release_anchor_mirrors_with_facing() -> None:
+    right = _seed_vs(9.0)
+    left = _seed_vs(9.0)
+    left["pos_x"][0, :2] *= np.float32(-1.0)
+    left["facing"][0, 0] = np.uint8(0)
+    left["facing"][0, 1] = np.uint8(1)
+
+    inputs = [_mk_inputs(**UP_B)] + [_mk_inputs()] * 130
+    right_out = _run(right, inputs)
+    left_out = _run(left, inputs)
+    right_release = next(o for o in right_out if int(o["action_id"][0]) == ACT_FC_HI_THROW)
+    left_release = next(o for o in left_out if int(o["action_id"][0]) == ACT_FC_HI_THROW)
+
+    # ftCo_800DDDE4 samples the victim's mirrored TransN2 joint, then applies Falcon's x1A70.
+    # A fixed-sign release correction can match only one of these two source-equivalent cases.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    assert float(left_release["pos_x"][0]) == pytest.approx(
+        -float(right_release["pos_x"][0]), abs=1e-5
+    )
+    assert float(left_release["pos_y"][0]) == pytest.approx(
+        float(right_release["pos_y"][0]), abs=1e-5
+    )
 
 
 def test_dive_grabs_airborne_opponent_hanging_from_attacker() -> None:
@@ -502,7 +828,7 @@ def test_dive_grabs_airborne_opponent_hanging_from_attacker() -> None:
         assert abs(dy_victim - dy_attacker) < 3.0, (
             f"hanging victim must ride the attacker: victim dy {dy_victim:.2f} vs "
             f"attacker dy {dy_attacker:.2f}")
-    assert float(outs[-1]["percent"][1]) >= 16.0
+    assert float(outs[-1]["percent"][1]) == pytest.approx(15.92, abs=1e-5)
 
 
 def test_dive_whiff_beyond_reach_never_catches() -> None:

@@ -7,6 +7,8 @@
 void combat_resolve(MslBatch* batch);
 void combat_processhit_consume(MslBatch* batch);
 uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx);
+// Publish the fighter x1914 dealt-damage path: attacker hitlag plus any installed deal_dmg_cb.
+// refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
 void combat_apply_deal_hitlag_raw_damage(MslBatch* batch, size_t idx, int damage);
 int combat_hitbox_collision_env_damage(const MslBatch* batch, size_t idx, size_t hb_i);
 void combat_apply_deal_hitlag_hitbox_damage(MslBatch* batch, size_t idx, size_t hb_i);
@@ -39,6 +41,9 @@ typedef enum MslItemHitResult {
 // invincibility/intangibility gating (attacker hitlag may still apply).
 uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, int defender,
                                const MslThrowHitboxParams* p);
+uint8_t combat_apply_throw_hit_falcon_dive_release(MslBatch* batch, int batch_index, int attacker,
+                                                   int defender, const MslThrowHitboxParams* p,
+                                                   uint8_t thrower_owns_ground_to_air);
 
 // Apply a single item->fighter BODY hit using decomp-shaped damage/hitlag/hitstun/state-entry math.
 //

@@ -9,14 +9,17 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from tools.extraction.extract_fighter_anims import SSANIM_VERSION
+
 
 ANIM_MAGIC = b"SSANIM01"
-ANIM_VERSION = 4
+ANIM_VERSION = SSANIM_VERSION
 
 ECB_MAGIC = b"MSLECB01"
-ECB_VERSION = 3
+# v4 requires SSANIM01 v5 input semantics, including cross-baked source-donor animations.
+ECB_VERSION = 4
 
-# SSANIM01 v4 matrix record layout: <12f (3x4) => (m00,m01,m02,tx, m10,m11,m12,ty, m20,m21,m22,tz)
+# SSANIM01 v5 matrix record layout: <12f (3x4) => (m00,m01,m02,tx, m10,m11,m12,ty, m20,m21,m22,tz)
 # tools/extraction/extract_fighter_anims.py:_mtx_concat emits ty at float index 7.
 _MAT_BYTES = 12 * 4
 _MAT_TY_BYTE_OFF = 7 * 4
@@ -195,10 +198,10 @@ def _write_ecb_bottom_table(path: Path, anims: list[_EcbAnim]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Extract per-msid ECB bottom Y tables from SSANIM01 v4 matrices."
+        description="Extract per-msid ECB bottom Y tables from SSANIM01 v5 matrices."
     )
     ap.add_argument("--character", type=str, required=True, help="character key (fox,falco,...)")
-    ap.add_argument("--anims", type=Path, default=None, help="path to data/anims/<char>.bin (SSANIM01 v4)")
+    ap.add_argument("--anims", type=Path, default=None, help="path to data/anims/<char>.bin (SSANIM01 v5)")
     ap.add_argument(
         "--attrs",
         type=Path,

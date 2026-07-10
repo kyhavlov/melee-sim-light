@@ -81,6 +81,7 @@ PyObject* msl_debug_point_segment_dist2_py(PyObject* self, PyObject* args);
 PyObject* msl_pose_points_world_py(PyObject* self, PyObject* args);
 PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_hitlist_fighter_contains_py(PyObject* self, PyObject* args);
+PyObject* msl_debug_hitlist_item_contains_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_hitlist_fighter_capsule_py(PyObject* self, PyObject* args);
 PyObject* msl_hitlist_ring_demo_py(PyObject* self, PyObject* args);
 PyObject* msl_hitlist_insert_cd_demo_py(PyObject* self, PyObject* args);

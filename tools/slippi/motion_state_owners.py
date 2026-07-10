@@ -9,7 +9,8 @@ import numpy as np
 
 
 MAGIC = b"MSLMSO01"
-VERSION = 20
+VERSION = 21
+HEADER_BYTES = 8 + 4 + 2 + 2 + 4 * 12
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ class MotionStateOwners:
 
 def read_mslmso01_v1(path: Path) -> MotionStateOwners:
     b = path.read_bytes()
-    if len(b) < 60:
+    if len(b) < HEADER_BYTES:
         raise ValueError(f"MSLMSO01 table too small: {path}")
     if b[:8] != MAGIC:
         raise ValueError(f"bad MSLMSO01 magic in {path}: {b[:8]!r}")
@@ -57,7 +58,7 @@ def read_mslmso01_v1(path: Path) -> MotionStateOwners:
 
     def arr(off: int, dtype: str, nbytes: int) -> np.ndarray:
         end = off + action_count * nbytes
-        if off < 60 or end > len(b):
+        if off < HEADER_BYTES or end > len(b):
             raise ValueError(f"MSLMSO01 bad table offset in {path}: off={off} end={end}")
         return np.frombuffer(b, dtype=dtype, count=action_count, offset=off).copy()
 

@@ -5,6 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from tools.extraction.extract_fighter_hitboxes import FORMAT_VERSION as HITBOX_VERSION
+
 from tools.slippi.combat_history import (
     _localize_last_hit_by_for_native,
     derive_combat_hitlist_seed_fields,
@@ -228,18 +230,19 @@ def test_derive_ecb_lock_bottom_rel_y_preserves_desired_bottom_during_lock() -> 
     on_ground = np.array([0, 0, 0, 0], dtype=np.uint8)
     lock = np.array([0, 9, 8, 7], dtype=np.uint8)
 
-    bottom, valid = derive_ecb_lock_bottom_rel_y(
+    bottom, owner = derive_ecb_lock_bottom_rel_y(
         char_id_u8=char,
         action_id_u16=action,
         animation_index_u32=anim,
         anim_frame_f32=anim_frame,
         on_ground_u8=on_ground,
         ecb_lock_timer_u8=lock,
+        ecb_lock_owner_u8=np.array([0, 1, 1, 1], dtype=np.uint8),
     )
 
     assert bottom.dtype == np.float32
-    assert valid.dtype == np.uint8
-    assert valid.tolist() == [0, 1, 1, 1]
+    assert owner.dtype == np.uint8
+    assert owner.tolist() == [0, 1, 1, 1]
     import msl_binding
 
     preserved = float(msl_binding.ecb_bottom_rel_y(1, 20, 5))
@@ -256,17 +259,61 @@ def test_derive_ecb_lock_bottom_rel_y_clears_on_grounded_rows() -> None:
     on_ground = np.array([0, 1, 0], dtype=np.uint8)
     lock = np.array([0, 9, 8], dtype=np.uint8)
 
-    bottom, valid = derive_ecb_lock_bottom_rel_y(
+    bottom, owner = derive_ecb_lock_bottom_rel_y(
         char_id_u8=char,
         action_id_u16=action,
         animation_index_u32=anim,
         anim_frame_f32=anim_frame,
         on_ground_u8=on_ground,
         ecb_lock_timer_u8=lock,
+        ecb_lock_owner_u8=np.array([0, 1, 1], dtype=np.uint8),
     )
 
-    assert valid.tolist() == [0, 0, 0]
+    assert owner.tolist() == [0, 0, 0]
     assert float(bottom[2]) == pytest.approx(0.0)
+
+
+def test_derive_ecb_lock_bottom_rel_y_carries_falcon_alt_helper_owner() -> None:
+    # ftCommon_8007D60C sets the same CollData_X130_Locked bit as the ten-frame helper, so aerial
+    # Raptor must preserve the pre-entry desired bottom through its five-frame lock.
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C
+    char = np.array([2, 2, 2, 2], dtype=np.uint8)
+    action = np.array([0x001D, 0x015F, 0x015F, 0x002B], dtype=np.uint16)
+    anim = np.array([20, 305, 305, 36], dtype=np.uint32)
+    anim_frame = np.array([5.0, 0.0, 1.0, 0.0], dtype=np.float32)
+    on_ground = np.zeros((4,), dtype=np.uint8)
+    lock = np.array([0, 4, 3, 4], dtype=np.uint8)
+
+    bottom, owner = derive_ecb_lock_bottom_rel_y(
+        char_id_u8=char,
+        action_id_u16=action,
+        animation_index_u32=anim,
+        anim_frame_f32=anim_frame,
+        on_ground_u8=on_ground,
+        ecb_lock_timer_u8=lock,
+        ecb_lock_owner_u8=np.array([0, 4, 4, 4], dtype=np.uint8),
+    )
+
+    import msl_binding
+
+    preserved = float(msl_binding.ecb_bottom_rel_y(2, 20, 5))
+    assert owner.tolist() == [0, 4, 4, 4]
+    assert np.allclose(bottom[1:], np.float32(preserved), atol=1e-6)
+
+
+def test_derive_ecb_lock_bottom_rel_y_keeps_seeded_owner_for_special_damage_output() -> None:
+    bottom, owner = derive_ecb_lock_bottom_rel_y(
+        char_id_u8=np.full((3,), 2, dtype=np.uint8),
+        action_id_u16=np.array([0x0165, 0x0058, 0x0058], dtype=np.uint16),
+        animation_index_u32=np.array([311, 20, 20], dtype=np.uint32),
+        anim_frame_f32=np.array([5.0, 0.0, 1.0], dtype=np.float32),
+        on_ground_u8=np.array([1, 0, 0], dtype=np.uint8),
+        ecb_lock_timer_u8=np.array([0, 10, 9], dtype=np.uint8),
+        ecb_lock_owner_u8=np.array([0, 1, 1], dtype=np.uint8),
+    )
+
+    assert owner.tolist() == [0, 1, 1]
+    assert bottom.tolist() == pytest.approx([0.0, 0.0, 0.0], abs=1e-6)
 
 
 def test_derive_instance_id_counter_prefix_invariant() -> None:
@@ -2390,7 +2437,7 @@ def _read_hitbox_msid_frames(path: str, *, limit: int = 512) -> list[tuple[int, 
     if len(buf) < 16 or buf[:8] != b"MSLHITB1":
         raise ValueError("bad MSLHITB1")
     ver = int.from_bytes(buf[8:12], "little", signed=False)
-    if ver != 1:
+    if ver != HITBOX_VERSION:
         raise ValueError("unsupported MSLHITB1 version")
     entry_count = int.from_bytes(buf[12:16], "little", signed=False)
     index_base = 16
@@ -2694,6 +2741,164 @@ def test_derive_combat_hitlist_seed_fields_per_hitbox_schema_shape() -> None:
     assert not bool(np.any(shield_contact_kind))
 
 
+def _derive_falcon_kick_processhit_producer(
+    *,
+    defender_x: float = 0.0,
+    defender_invincible: bool = False,
+    attacker_hitlag: tuple[int, int] = (0, 3),
+    defender_hitlag: tuple[int, int] = (0, 0),
+    item_x: float | None = None,
+    frame_count: int = 2,
+) -> np.ndarray:
+    from tools.eval.validation_dtypes import SEED_DTYPE
+
+    z_u8 = np.zeros((frame_count, 4), dtype=np.uint8)
+    z_u16 = np.zeros((frame_count, 4), dtype=np.uint16)
+    z_u32 = np.zeros((frame_count, 4), dtype=np.uint32)
+    z_i16 = np.zeros((frame_count, 4), dtype=np.int16)
+    z_f32 = np.zeros((frame_count, 4), dtype=np.float32)
+
+    char_id = z_u8.copy()
+    char_id[:, :2] = np.array([2, 1], dtype=np.uint8)
+    action_id = z_u16.copy()
+    action_id[:, :2] = np.array([357, 14], dtype=np.uint16)
+    action_frame = z_i16.copy()
+    action_frame[:, :2] = np.array([14, 0], dtype=np.int16)
+    animation_index = z_u32.copy()
+    animation_index[:, :2] = np.array([311, 14], dtype=np.uint32)
+    facing = np.ones((frame_count, 4), dtype=np.uint8)
+    on_ground = z_u8.copy()
+    on_ground[:, :2] = np.uint8(1)
+    pos_x = z_f32.copy()
+    pos_x[:, 1] = np.float32(defender_x)
+    stocks = z_u8.copy()
+    stocks[:, :2] = np.uint8(4)
+    hurtbox_state = z_u8.copy()
+    if defender_invincible:
+        hurtbox_state[1, 1] = np.uint8(1)
+    hitlag = z_u16.copy()
+    hitlag[:2, 0] = np.asarray(attacker_hitlag, dtype=np.uint16)
+    hitlag[:2, 1] = np.asarray(defender_hitlag, dtype=np.uint16)
+    instance_id = z_u16.copy()
+    instance_id[:, :2] = np.array([20, 30], dtype=np.uint16)
+
+    items = np.zeros((frame_count, 15), dtype=SEED_DTYPE["items"].base)
+    if item_x is not None:
+        # Yoshi's Story Heiho kind and hurtcaps are extracted into MSLSTIO1.
+        items["exists"][:, 0] = np.uint8(1)
+        items["type"][:, 0] = np.uint16(0xD2)
+        items["state"][:, 0] = np.uint16(1)
+        items["owner"][:, 0] = np.int8(-1)
+        items["instance_id"][:, 0] = np.uint16(70)
+        items["spawn_id"][:, 0] = np.uint32(700)
+        items["pos_x"][:, 0] = np.float32(item_x)
+        items["state"][1:, 0] = np.uint16(3)
+        items["damage"][1:, 0] = np.uint16(10)
+
+    out = derive_combat_hitlist_seed_fields(
+        num_players=2,
+        is_teams=False,
+        team_id=z_u8,
+        char_id=char_id,
+        action_id=action_id,
+        action_frame=action_frame,
+        animation_index=animation_index,
+        facing=facing,
+        on_ground=on_ground,
+        pos_x=pos_x,
+        pos_y=z_f32,
+        fighter_scale_y=np.ones((frame_count, 4), dtype=np.float32),
+        guard_tilt_x8=z_u16,
+        guard_tilt_x4=z_f32,
+        stocks=stocks,
+        shield_hp=z_f32,
+        hurtbox_state=hurtbox_state,
+        hitlag=hitlag,
+        instance_id=instance_id,
+        input_buttons=z_u16,
+        input_l=z_u8,
+        input_r=z_u8,
+        anim_frame_f32=action_frame.astype(np.float32),
+        items=items,
+        include_per_hitbox=True,
+        include_processhit_producers=True,
+        data_root="data",
+    )
+    assert len(out) == 7
+    return out[-1]
+
+
+def test_falcon_kick_processhit_producer_requires_native_contact_provenance() -> None:
+    # Falcon SpecialLw's frame-14 hitboxes come from data/hitboxes/falcon.bin::MSLHITB1.
+    invincible_near = _derive_falcon_kick_processhit_producer(defender_invincible=True)
+    invincible_far = _derive_falcon_kick_processhit_producer(
+        defender_x=1000.0, defender_invincible=True
+    )
+    item_near = _derive_falcon_kick_processhit_producer(defender_x=1000.0, item_x=0.0)
+    item_far = _derive_falcon_kick_processhit_producer(defender_x=1000.0, item_x=1000.0)
+
+    assert int(invincible_near[1, 0]) == 1
+    assert int(item_near[1, 0]) == 1
+    assert int(invincible_far[1, 0]) == 0
+    assert int(item_far[1, 0]) == 0
+
+
+@pytest.mark.parametrize(
+    ("producer_kwargs", "expected_hits"),
+    [
+        ({"defender_invincible": True}, 1),
+        ({"defender_x": 1000.0, "item_x": 0.0}, 1),
+        ({"defender_x": 1000.0, "defender_invincible": True}, 0),
+        ({"defender_x": 1000.0, "item_x": 1000.0}, 0),
+    ],
+)
+def test_falcon_kick_native_processhit_producer_drives_seed_lane(
+    producer_kwargs: dict[str, object], expected_hits: int
+) -> None:
+    import msl_binding
+
+    from tools.eval.validation_dtypes import SEED_DTYPE
+
+    processhit_x1914 = _derive_falcon_kick_processhit_producer(
+        **producer_kwargs, frame_count=3
+    )
+    rows = np.zeros((2,), dtype=SEED_DTYPE)
+    rows["num_players"] = np.uint8(2)
+    rows["source_port0"][:, :2] = np.array([0, 1], dtype=np.uint8)
+    rows["char_id"][:, :2] = np.array([2, 1], dtype=np.uint8)
+    rows["action_id"][:, 0] = np.uint16(357)
+    rows["instance_id"][:, 0] = np.uint16(20)
+    rows["attack_id"][:, 0] = np.uint16(9)
+    rows["last_attack_landed"][:, 0] = np.uint8(9)
+
+    msl_binding.validation_derive_falcon_speciallw_seed_lanes(
+        rows.view(np.uint8).reshape((len(rows), SEED_DTYPE.itemsize)),
+        processhit_x1914,
+        2,
+        2,
+        357,
+        4,
+        0.6,
+    )
+
+    assert int(rows["falcon_speciallw_hits"][1, 0]) == expected_hits
+
+
+def test_falcon_kick_processhit_producer_accepts_new_victim_during_hitlag_tail() -> None:
+    got = _derive_falcon_kick_processhit_producer(
+        attacker_hitlag=(2, 1), defender_hitlag=(0, 3)
+    )
+
+    assert int(got[1, 0]) == 1
+
+
+def test_falcon_kick_processhit_producer_is_prefix_causal() -> None:
+    prefix = _derive_falcon_kick_processhit_producer(defender_invincible=True, frame_count=2)
+    extended = _derive_falcon_kick_processhit_producer(defender_invincible=True, frame_count=3)
+
+    assert np.array_equal(prefix, extended[: len(prefix)])
+
+
 def test_last_hit_by_raw_port_mapping_keeps_ambiguous_local_slots() -> None:
     # Out-of-range raw controller ports prove source_port0 ownership only on a replay-visible
     # damage onset from a prior shield-family row that also names the attacker's live instance.
@@ -2842,7 +3047,7 @@ def test_derive_combat_hitlist_seed_fields_is_prefix_invariant_wrt_shield_inputs
     buf = hb_path.read_bytes()
     assert buf[:8] == b"MSLHITB1"
     ver = struct.unpack_from("<I", buf, 8)[0]
-    assert ver == 1
+    assert ver == HITBOX_VERSION
     # Table format: [u16 msid][u16 count] then count records (see tools/slippi/combat_history.py::_read_hitbox_events).
     off = 16
     msid = None

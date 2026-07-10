@@ -7,6 +7,8 @@ from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 ACT_WAIT = 0x000E
+ACT_JUMP_AERIAL_F = 0x001B
+ACT_JUMP_AERIAL_B = 0x001C
 ACT_FALL = 0x001D
 ACT_DAMAGE_FLY_N = 0x0058
 ACT_ATTACK_11 = 0x002C
@@ -15,14 +17,20 @@ ACT_GUARD = 0x00B3
 ACT_PASS = 0x00F4
 ACT_ATTACK_AIR_N = 0x0041
 ACT_FX_SPECIAL_HI_FALL = 0x0166
+ACT_CA_SPECIAL_N = 0x015B
+ACT_CA_SPECIAL_AIR_N = 0x015C
+ACT_CA_SPECIAL_AIR_S_START = 0x015F
 
 SM_WAIT1_0 = 2
+SM_JUMP_AERIAL_B = 19
 SM_FALL = 20
 SM_ATTACK_11 = 46
 SM_ESCAPE_AIR = 44
 SM_FX_SPECIAL_HI_FALL = 311
+SM_CA_SPECIAL_AIR_N = 302
 
 CHAR_FOX = 1
+CHAR_FALCON = 2
 STAGE_FD = 32
 STAGE_FOD = 2
 STAGE_BATTLEFIELD = 31
@@ -30,6 +38,7 @@ STAGE_YOSHI = 8
 
 BUTTON_L = 0x0040
 BUTTON_A = 0x0100
+BUTTON_B = 0x0200
 
 FLOOR_RESULT_NONE = 0
 FLOOR_RESULT_DIRECT = 1
@@ -386,7 +395,9 @@ def _read_colldata_after_reseed(seed: np.ndarray) -> np.void:
         msl_binding.destroy(handle)
 
 
-def _step_with_colldata(seed: np.ndarray) -> tuple[np.void, np.void]:
+def _step_with_colldata(
+    seed: np.ndarray, current_input: np.ndarray | None = None
+) -> tuple[np.void, np.void]:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -396,7 +407,8 @@ def _step_with_colldata(seed: np.ndarray) -> tuple[np.void, np.void]:
     handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
     try:
         msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
-        msl_binding.step_input(handle, _input_bytes(), _input_bytes())
+        current = _input_bytes() if current_input is None else current_input
+        msl_binding.step_input(handle, _input_bytes(), current)
         msl_binding.write_compare(handle, compare)
         msl_binding.debug_write_colldata_ecb(handle, colldata)
         return (
@@ -405,6 +417,168 @@ def _step_with_colldata(seed: np.ndarray) -> tuple[np.void, np.void]:
         )
     finally:
         msl_binding.destroy(handle)
+
+
+def test_falcon_air_raptor_entry_publishes_five_frame_colldata_lock_owner() -> None:
+    # ftCa_SpecialAirS_Enter calls ftCommon_8007D60C before Fighter_procMap. The map phase decrements
+    # five to four, while CollData_X130_Locked continues to own the preserved desired bottom.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirS_Enter
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+    seed = _seed_base(STAGE_FD, ACT_FALL, SM_FALL, 0.0, 100.0)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FALCON)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["x676_x"][0, 0] = np.uint8(0xFE)
+    current = np.zeros((1,), dtype=INPUT_DTYPE)
+    current["p"][0, 0]["buttons"] = np.uint16(BUTTON_B)
+    current["p"][0, 0]["main_x"] = np.int8(80)
+
+    compare, colldata = _step_with_colldata(
+        seed, current.view(np.uint8).reshape((1, INPUT_DTYPE.itemsize))
+    )
+
+    assert int(compare["action_id"][0]) == ACT_CA_SPECIAL_AIR_S_START
+    assert int(colldata["desired_valid"][0]) == 1
+    assert int(colldata["desired_locked_owner"][0]) == 4
+
+
+def test_falcon_air_special_grounding_clears_timer_and_colldata_lock_owner() -> None:
+    # ftCa_SpecialAirN_Coll routes through ftCommon_8007D7FC/8007D6A4, whose UnlockECB tail clears
+    # both the countdown and CollData_X130_Locked on the landing publication.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Coll
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D6A4,ftCommon_UnlockECB}
+    seed = _seed_base(STAGE_FD, ACT_CA_SPECIAL_AIR_N, SM_CA_SPECIAL_AIR_N, 0.0, 3.0)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FALCON)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["speed_y_self"][0, 0] = np.float32(-1.0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_CA_SPECIAL_N)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(20)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(10)
+    seed["ecb_lock_bottom_owner_u8"][0, 0] = np.uint8(4)
+    seed["ecb_lock_bottom_rel_y_f32"][0, 0] = np.float32(0.0)
+
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    compare_bytes = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+    colldata_bytes = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        neutral = _input_bytes()
+        compare = None
+        colldata = None
+        saw_locked_airborne = False
+        for _ in range(8):
+            msl_binding.step_input(handle, neutral, neutral)
+            msl_binding.write_compare(handle, compare_bytes)
+            msl_binding.debug_write_colldata_ecb(handle, colldata_bytes)
+            compare = compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            colldata = colldata_bytes.view(_colldata_ecb_dtype()).reshape((1,))[0].copy()
+            if int(compare["on_ground"][0]) == 0 and int(colldata["desired_locked_owner"][0]) != 0:
+                saw_locked_airborne = True
+            if int(compare["on_ground"][0]) != 0:
+                break
+    finally:
+        msl_binding.destroy(handle)
+
+    assert compare is not None
+    assert colldata is not None
+    assert saw_locked_airborne
+
+    assert int(compare["action_id"][0]) == ACT_CA_SPECIAL_N
+    assert int(compare["on_ground"][0]) == 1
+    assert int(colldata["desired_locked_owner"][0]) == 0
+
+
+@pytest.mark.parametrize(
+    "jump_action",
+    (ACT_JUMP_AERIAL_F, ACT_JUMP_AERIAL_B),
+)
+def test_falcon_jumpaerial_escapeair_reseed_keeps_seeded_colldata_owner(jump_action: int) -> None:
+    # A valid CollData_X130 lock does not become a live Falcon-special owner merely because the
+    # fighter is Falcon. JumpAerial -> EscapeAir carries replay-seeded CollData provenance.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    seed = _seed_base(STAGE_FD, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, 0.0, 45.0)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FALCON)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(jump_action)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(3)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(6)
+    seed["ecb_lock_bottom_owner_u8"][0, 0] = np.uint8(1)
+    seed["ecb_lock_bottom_rel_y_f32"][0, 0] = np.float32(2.0)
+
+    snap = _read_colldata_after_reseed(seed)
+
+    assert int(snap["desired_locked_owner"][0]) == 1
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id", "prev_action_id", "lock_timer"),
+    (
+        (ACT_CA_SPECIAL_AIR_N, SM_CA_SPECIAL_AIR_N, ACT_CA_SPECIAL_N, 10),
+        (ACT_CA_SPECIAL_AIR_S_START, 305, ACT_FALL, 4),
+    ),
+)
+def test_falcon_special_reseed_uses_live_ftcommon_colldata_owner(
+    action_id: int, submotion_id: int, prev_action_id: int, lock_timer: int
+) -> None:
+    # These transitions directly prove Falcon's 10-frame or five-frame common-lock callback.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialN_Coll
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirS_Enter
+    seed = _seed_base(STAGE_FD, action_id, submotion_id, 0.0, 45.0)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FALCON)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(prev_action_id)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(3)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(lock_timer)
+    seed["ecb_lock_bottom_owner_u8"][0, 0] = np.uint8(4)
+    seed["ecb_lock_bottom_rel_y_f32"][0, 0] = np.float32(2.0)
+
+    snap = _read_colldata_after_reseed(seed)
+
+    assert int(snap["desired_locked_owner"][0]) == 4
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id"),
+    (
+        (ACT_CA_SPECIAL_AIR_N, SM_CA_SPECIAL_AIR_N),
+        (ACT_FALL, SM_FALL),
+    ),
+)
+def test_falcon_sustained_special_lock_reseed_keeps_prefix_derived_live_owner(
+    action_id: int, submotion_id: int
+) -> None:
+    # The lock writer can be several rows behind the reseed boundary. The explicit prefix-derived
+    # owner, not the adjacent action pair, preserves the live ftCommon episode.
+    seed = _seed_base(STAGE_FD, action_id, submotion_id, 0.0, 45.0)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FALCON)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(action_id)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(4)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(7)
+    seed["ecb_lock_bottom_owner_u8"][0, 0] = np.uint8(4)
+    seed["ecb_lock_bottom_rel_y_f32"][0, 0] = np.float32(2.0)
+
+    snap = _read_colldata_after_reseed(seed)
+
+    assert int(snap["desired_locked_owner"][0]) == 4
+
+
+def test_non_falcon_locked_reseed_keeps_seeded_colldata_owner() -> None:
+    seed = _seed_base(STAGE_FD, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, 0.0, 45.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_AERIAL_F)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(3)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(6)
+    seed["ecb_lock_bottom_owner_u8"][0, 0] = np.uint8(1)
+    seed["ecb_lock_bottom_rel_y_f32"][0, 0] = np.float32(2.0)
+
+    snap = _read_colldata_after_reseed(seed)
+
+    assert int(snap["desired_locked_owner"][0]) == 1
 
 
 def _read_colldata(handle: object) -> np.void:
@@ -501,7 +675,7 @@ def test_reseed_locked_desired_ecb_bottom_lane_preserves_source_bottom() -> None
     seed["ecb_lock_timer"][0, 0] = np.uint8(8)
     preserved = float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_ESCAPE_AIR, 6))
     seed["ecb_lock_bottom_rel_y_f32"][0, 0] = np.float32(preserved)
-    seed["ecb_lock_bottom_rel_y_valid_u8"][0, 0] = np.uint8(1)
+    seed["ecb_lock_bottom_owner_u8"][0, 0] = np.uint8(1)
 
     snap = _read_colldata_after_reseed(seed)
 
@@ -512,6 +686,38 @@ def test_reseed_locked_desired_ecb_bottom_lane_preserves_source_bottom() -> None
     assert float(snap["current_bottom_rel_y"][0]) == pytest.approx(
         float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_ESCAPE_AIR, 1))
     )
+
+
+def test_jumpaerial_advances_current_ecb_while_preserving_locked_desired_bottom() -> None:
+    import msl_binding
+
+    # mpColl_LoadECB_inline preserves only desired_ecb.bottom while CollData_X130_Locked is set;
+    # mpCollInterpolateECB still advances the independent current/previous objects. This distinction
+    # is required for a subsequent EscapeAir callback to sweep from the real JumpAerial bottom.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    seed = _seed_base(STAGE_FD, ACT_JUMP_AERIAL_B, SM_JUMP_AERIAL_B, 0.0, 100.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["action_frame"][0, 0] = np.int16(6)
+    seed["anim_frame_f32"][0, 0] = np.float32(6.0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_AERIAL_B)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(5)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(5)
+    preserved = float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_ESCAPE_AIR, 6))
+    seed["ecb_lock_bottom_rel_y_f32"][0, 0] = np.float32(preserved)
+    seed["ecb_lock_bottom_owner_u8"][0, 0] = np.uint8(1)
+
+    before = _read_colldata_after_reseed(seed)
+    _out, after = _step_with_colldata(seed)
+
+    assert float(after["prev_bottom_rel_y"][0]) == pytest.approx(
+        float(before["current_bottom_rel_y"][0])
+    )
+    assert float(after["current_bottom_rel_y"][0]) == pytest.approx(
+        float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_JUMP_AERIAL_B, 7))
+    )
+    assert float(after["desired_bottom_rel_y"][0]) == pytest.approx(preserved)
+    assert float(after["current_bottom_rel_y"][0]) != pytest.approx(preserved)
 
 
 def test_reseed_floor_skip_debug_exposes_only_source_platform_skip() -> None:

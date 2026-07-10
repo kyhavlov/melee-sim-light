@@ -9,9 +9,13 @@ from pathlib import Path
 import numpy as np
 
 from melee_sim.hsd_archive import HsdArchive, parse_hsd_archive
+from tools.extraction.char_registry import CHARS
 
 ISO_DIR = Path("_iso")
 DATA_DIR = Path("data")
+DATA_SCHEMA_VERSION = 2
+SSANIM_VERSION = 5
+CAPTURE_CAPTAIN_ANIM_DONOR_CHARACTER = "falcon"
 
 F32 = np.float32
 
@@ -950,6 +954,23 @@ def _special_anim_msids(character: str) -> list[int]:
     return sorted(set(out))
 
 
+def _figatree_source_character(character: str, msid: int) -> str:
+    """Return the fighter file whose FigaTree is applied to ``character``.
+
+    CaptureCaptain enters with Falcon's gobj as Fighter_ChangeMotionState's ``arg3`` animation
+    source. Vanilla therefore applies Falcon's TCaptainSpecialHi FigaTree to the captured fighter's
+    own skeleton. Cross-bake that donor tree into each target-character pose artifact so runtime
+    attachment and hurtbox queries consume the same source relation.
+
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+    refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    refs/melee/src/melee/ft/ftdata.c::ftData_80085CD8
+    """
+    if msid == 276:  # ftCo_SM_CaptureCaptain
+        return CAPTURE_CAPTAIN_ANIM_DONOR_CHARACTER
+    return character
+
+
 def _ftkind(character: str) -> int:
     # From doldecomp `enum FighterKind` ids (see prior ModelDb code).
     return {
@@ -1132,25 +1153,22 @@ def _default_costume_dat_and_joint(character: str) -> tuple[str, str]:
     `ft*Init_CostumeStrings` tables (e.g. ftFox/ftFx_Init.c).
     Runtime uses `CostumeListsForeachCharacter[fp->kind].costume_list[costume_id].joint`.
     """
+    info = CHARS.get(character)
+    if info is not None:
+        return info.costume_dat, info.costume_joint
     return {
-        "fox": ("PlFxNr.dat", "PlyFox5K_Share_joint"),
-        "falco": ("PlFcNr.dat", "PlyFalco5K_Share_joint"),
-        "sheik": ("PlSkNr.dat", "PlySeak5K_Share_joint"),
         "peach": ("PlPeNr.dat", "PlyPeach5K_Share_joint"),
-        "marth": ("PlMsNr.dat", "PlyMars5K_Share_joint"),
         "puff": ("PlPrNr.dat", "PlyPurin5K_Share_joint"),
-        "falcon": ("PlCaNr.dat", "PlyCaptain5K_Share_joint"),
-        "zelda": ("PlZdNr.dat", "PlyZelda5K_Share_joint"),
     }[character]
 
 
-def _load_parts_table(character: str) -> tuple[list[int], list[int], list[int]]:
+def _load_parts_table_for_ftkind(ftkind: int) -> tuple[list[int], list[int], list[int]]:
     """Return (part_to_joint, inserted_parts, joint_to_part).
 
     - `part_to_joint`: maps Fighter_Part ids to indices into fp->parts.
     - `inserted_parts`: indices into fp->parts that correspond to inserted joints
       (see `Fighter_804D6540` + `ftParts_8007506C`).
-    - `joint_to_part`: maps costume joint-tree indices (preorder traversal) to fp->parts indices.
+    - `joint_to_part`: maps indices into fp->parts back to semantic Fighter_Part ids.
     """
     plco = parse_hsd_archive((ISO_DIR / "PlCo.dat").read_bytes())
     ft_load_common = plco.get_public_offset("ftLoadCommonData")
@@ -1158,7 +1176,6 @@ def _load_parts_table(character: str) -> tuple[list[int], list[int], list[int]]:
         raise RuntimeError("PlCo.dat missing ftLoadCommonData")
     p_data = [_u32_be(plco.buf, ft_load_common + i * 4) for i in range(23)]
 
-    ftkind = _ftkind(character)
     ft_parts_table_abs = plco.data_base + p_data[4]
     ft_parts_tbl_ptr = _u32_be(plco.buf, ft_parts_table_abs + ftkind * 4)
     ft_parts_tbl_abs = plco.data_base + ft_parts_tbl_ptr
@@ -1188,6 +1205,10 @@ def _load_parts_table(character: str) -> tuple[list[int], list[int], list[int]]:
     inserted_parts = sorted(set(inserted_parts))
 
     return part_to_joint, inserted_parts, joint_to_part
+
+
+def _load_parts_table(character: str) -> tuple[list[int], list[int], list[int]]:
+    return _load_parts_table_for_ftkind(_ftkind(character))
 
 
 def _read_rest_srt_and_parents(character: str) -> tuple[
@@ -1325,7 +1346,9 @@ def _read_ftdata_x8_u8(character: str, rel_off: int) -> int:
     return int(arc.buf[off])
 
 
-def _msid_anim_entry(character: str, msid: int) -> tuple[str, int, int, int] | None:
+def _msid_anim_entry_full(
+    character: str, msid: int
+) -> tuple[str, int, int, int, int, int] | None:
     prefix = _fighter_prefix(character)
     base = ISO_DIR / f"{prefix}.dat"
     arc = parse_hsd_archive(base.read_bytes())
@@ -1350,7 +1373,22 @@ def _msid_anim_entry(character: str, msid: int) -> tuple[str, int, int, int] | N
     x4 = _u32_be(arc.buf, off + 0x04)
     x8 = _u32_be(arc.buf, off + 0x08)
     flags_u8 = int(arc.buf[off + 0x10])
-    return name, int(x4), int(x8), flags_u8
+    # Fighter_ChangeMotionState copies the full big-endian x10_animCurrFlags word to fp->x594.
+    # Its final byte's low six bits are fp->x597_bits, the FighterKind namespace used to map this
+    # FigaTree's nodes through ftPartsRemap. CaptureCaptain is the important cross-source case:
+    # Falcon supplies the animation archive, but x597 is FTKIND_NONE's canonical common skeleton.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006FE08,ftAnim_8006FCE4}
+    flags_word = _u32_be(arc.buf, off + 0x10)
+    source_part_bits = (flags_word >> 9) & 0x1FFF
+    source_ftkind = flags_word & 0x3F
+    return name, int(x4), int(x8), flags_u8, source_part_bits, source_ftkind
+
+
+def _msid_anim_entry(character: str, msid: int) -> tuple[str, int, int, int] | None:
+    """Return the legacy public animation-entry tuple used by sibling extractors."""
+    entry = _msid_anim_entry_full(character, msid)
+    return None if entry is None else entry[:4]
 
 
 def _collect_needed_parts_from_moves(character: str, moves_path: Path) -> tuple[list[int], list[int]]:
@@ -1696,13 +1734,22 @@ def _dynamic_catch_grabbable_owner_msids(
     return out
 
 
-def _node_mapping_for_parts(parts_num: int, skip_parts: list[int], fig: _FigaTree) -> tuple[list[int], list[int], list[int]]:
+def _node_mapping_for_parts(
+    parts_num: int,
+    inserted_parts: list[int],
+    fig: _FigaTree,
+    *,
+    enabled_inserted_bits: int = 0,
+) -> tuple[list[int], list[int], list[int]]:
     # Map FigaTree node indices onto part indices by skipping the same parts
-    # that are absent from the jobj traversal (ftParts_8007506C placeholders).
+    # that are absent from the JObj traversal. ftParts_8007506C returns one bit per inserted part;
+    # the part consumes a FigaTree node only when that bit is enabled in fp->x594_bits.
+    # refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FCE4
+    # refs/melee/src/melee/ft/ftparts.c::ftParts_8007506C
     is_skip = [False] * parts_num
-    for s in skip_parts:
-        if 0 <= s < parts_num:
-            is_skip[s] = True
+    for bit_i, part in enumerate(inserted_parts):
+        if 0 <= part < parts_num and (enabled_inserted_bits & (1 << bit_i)) == 0:
+            is_skip[part] = True
 
     node_to_part: list[int] = []
     p = 0
@@ -1725,6 +1772,57 @@ def _node_mapping_for_parts(parts_num: int, skip_parts: list[int], fig: _FigaTre
         acc += int(nframes)
 
     return node_to_part, part_to_node, track_base_by_node
+
+
+def _remap_figatree_nodes_to_target_parts(
+    *, target_character: str, source_ftkind: int, source_part_bits: int, fig: _FigaTree
+) -> tuple[list[int], list[int]]:
+    """Return target raw-part -> source node and source node track offsets.
+
+    Vanilla applies a FigaTree through ``ftPartsRemap(target_kind, fp->x597_bits, source_part)``.
+    The source kind comes from the animation entry's full ``x10_animCurrFlags`` word, not
+    necessarily from the fighter file that supplied the archive. CaptureCaptain demonstrates the
+    distinction: Falcon supplies the FigaTree, while x597 selects FTKIND_NONE's canonical common
+    skeleton. Raw part indices are character-specific, so the source raw part must map to a
+    semantic ``Fighter_Part`` and then to the target raw part.
+
+    refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FCE4
+    refs/melee/src/melee/ft/ftparts.c::ftPartsRemap
+    """
+    target_part_to_joint, target_skip_parts, _target_joint_to_part = _load_parts_table(
+        target_character
+    )
+    if source_ftkind == _ftkind(target_character):
+        _node_to_part, part_to_node, track_base_by_node = _node_mapping_for_parts(
+            len(target_part_to_joint),
+            target_skip_parts,
+            fig,
+            enabled_inserted_bits=source_part_bits,
+        )
+        return part_to_node, track_base_by_node
+
+    source_part_to_joint, source_skip_parts, source_joint_to_part = _load_parts_table_for_ftkind(
+        source_ftkind
+    )
+    _source_node_to_part, source_part_to_node, track_base_by_node = _node_mapping_for_parts(
+        len(source_part_to_joint),
+        source_skip_parts,
+        fig,
+        enabled_inserted_bits=source_part_bits,
+    )
+    target_part_to_node = [-1] * len(target_part_to_joint)
+    for source_raw_part, node_i in enumerate(source_part_to_node):
+        if node_i < 0 or source_raw_part >= len(source_joint_to_part):
+            continue
+        semantic_part = int(source_joint_to_part[source_raw_part])
+        if semantic_part == 0xFF or semantic_part >= len(target_part_to_joint):
+            continue
+        target_raw_part = int(target_part_to_joint[semantic_part])
+        if target_raw_part == 0xFF or target_raw_part >= len(target_part_to_node):
+            continue
+        target_part_to_node[target_raw_part] = int(node_i)
+    return target_part_to_node, track_base_by_node
 
 
 def extract_one_character(
@@ -1750,6 +1848,8 @@ def extract_one_character(
         raise SystemExit(f"unsupported character {character!r}")
 
     needed_parts, max_frame_by_move = _collect_needed_parts_from_moves(character, moves_path)
+    part_to_joint, skip_parts, joint_to_part = _load_parts_table(character)
+    parts_num = len(part_to_joint)
     # Always include TopN and TransN so we can:
     # - reference a stable root joint for ECB/hurtcaps
     # - recover decomp-style root-motion offsets (x68C_transNPos) from TransN translation.
@@ -1758,14 +1858,17 @@ def extract_one_character(
             needed_parts = [part] + needed_parts
 
     # Grab/capture victim attachment needs additional common Fighter_Part joints even if they are
-    # not referenced by moves/hurtcaps:
+    # not referenced by moves/hurtcaps. SSANIM part ids are raw fp->parts indices, so map the
+    # semantic Fighter_Part ids through this character's extracted ftPartsTable first:
     # - Victim attachment uses FtPart_XRotN (2) (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB464).
     # - Grab/capture setup constrains the victim XRotN to the grab owner's FtPart_TransN2 (52)
     #   (refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800DB368).
     # - Some grab/throw flows also consult FtPart_ThrowN (51) (refs/melee/src/melee/ft/forward.h::Fighter_Part).
-    for part in (2, 52, 51):  # FtPart_XRotN=2, FtPart_TransN2=52, FtPart_ThrowN=51
-        if part not in needed_parts:
-            needed_parts.append(part)
+    for ftpart in (2, 52, 51):  # FtPart_XRotN=2, FtPart_TransN2=52, FtPart_ThrowN=51
+        if 0 <= ftpart < len(part_to_joint):
+            part = int(part_to_joint[ftpart])
+            if part != 0xFF and 0 <= part < parts_num and part not in needed_parts:
+                needed_parts.append(part)
 
     # Include additional parts needed for post-frame fidelity beyond move hitboxes.
     #
@@ -1800,8 +1903,6 @@ def extract_one_character(
     part_rot, part_scl, part_pos, parent_part, part_flags = _read_rest_srt_and_parents(character)
     model_scaling, inv_scale_part = _read_model_scale_and_inv_part(character)
     inv_model_scale = 1.0 / model_scaling if abs(model_scaling) > 1.0e-6 else 1.0
-    part_to_joint, skip_parts, joint_to_part = _load_parts_table(character)
-    parts_num = len(part_to_joint)
     dynamic_sets = _read_fighter_dynamics(character)
     moves = json.loads(moves_path.read_text())
     # Runtime dynamic-pose state lanes (MSL_MAX_DYNAMIC_NODES per player) only carry chains that
@@ -1874,8 +1975,8 @@ def extract_one_character(
     aj_path = ISO_DIR / f"{prefix}AJ.dat"
     if not aj_path.exists():
         raise RuntimeError(f"missing animation DAT {aj_path} (extract from ISO first)")
-    aj_buf = aj_path.read_bytes()
-    aj_cache: dict[int, HsdArchive] = {}
+    aj_buf_by_character = {character: aj_path.read_bytes()}
+    aj_cache: dict[tuple[str, int], HsdArchive] = {}
 
     # Build anim data.
     joint_parts = needed_parts[:]  # store only the joints we directly need at runtime
@@ -1938,9 +2039,9 @@ def extract_one_character(
     debug_done = False
     with out_path.open("wb") as f, locals_path.open("wb") as f_loc, tracks_path.open("wb") as f_tr:
         f.write(b"SSANIM01")
-        # v4 adds stopped non-loop AObj terminal values while preserving the per-frame TransN tail
-        # (ftAnim x68C_transNPos) after matrices.
-        f.write(struct.pack("<I", 4))
+        # v5 preserves the v4 byte layout and requires source-donor cross-bakes such as
+        # CaptureCaptain in addition to stopped non-loop AObj terminal values and the TransN tail.
+        f.write(struct.pack("<I", SSANIM_VERSION))
         f.write(struct.pack("<H", len(joint_parts)))
         f.write(struct.pack("<H", len(wanted_msids)))
         f.write(bytes([p & 0xFF for p in joint_parts]))
@@ -1999,7 +2100,8 @@ def extract_one_character(
 
         for msid in wanted_msids:
             t_msid0 = time.perf_counter() if _TIMINGS is not None else 0.0
-            entry = _msid_anim_entry(character, int(msid))
+            source_character = _figatree_source_character(character, int(msid))
+            entry = _msid_anim_entry_full(source_character, int(msid))
             if entry is None:
                 t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
                 f.write(struct.pack("<H", int(msid) & 0xFFFF))
@@ -2018,8 +2120,18 @@ def extract_one_character(
                     _TIMINGS.msid_count += 1
                 continue
 
-            sym, base_off, _size, msid_flags_u8 = entry
-            if base_off < 0 or base_off + 0x20 > len(aj_buf):
+            source_aj_buf = aj_buf_by_character.get(source_character)
+            if source_aj_buf is None:
+                source_aj_path = ISO_DIR / f"{_fighter_prefix(source_character)}AJ.dat"
+                if not source_aj_path.exists():
+                    raise RuntimeError(
+                        f"missing donor animation DAT {source_aj_path} (extract from ISO first)"
+                    )
+                source_aj_buf = source_aj_path.read_bytes()
+                aj_buf_by_character[source_character] = source_aj_buf
+
+            sym, base_off, _size, msid_flags_u8, source_part_bits, source_ftkind = entry
+            if base_off < 0 or base_off + 0x20 > len(source_aj_buf):
                 t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
                 f.write(struct.pack("<H", int(msid) & 0xFFFF))
                 f.write(struct.pack("<H", 0))
@@ -2037,10 +2149,11 @@ def extract_one_character(
                     _TIMINGS.msid_count += 1
                 continue
 
-            arc = aj_cache.get(base_off)
+            cache_key = (source_character, base_off)
+            arc = aj_cache.get(cache_key)
             if arc is None:
-                arc = parse_hsd_archive(aj_buf, base=base_off)
-                aj_cache[base_off] = arc
+                arc = parse_hsd_archive(source_aj_buf, base=base_off)
+                aj_cache[cache_key] = arc
 
             fig_off = arc.get_public_offset(sym)
             if fig_off is None:
@@ -2062,7 +2175,12 @@ def extract_one_character(
                 continue
 
             fig = _read_figatree(arc, fig_off)
-            node_to_part, part_to_node, track_base_by_node = _node_mapping_for_parts(parts_num, skip_parts, fig)
+            part_to_node, track_base_by_node = _remap_figatree_nodes_to_target_parts(
+                target_character=character,
+                source_ftkind=source_ftkind,
+                source_part_bits=source_part_bits,
+                fig=fig,
+            )
 
             # Emit raw fobj track data for float-frame evaluation.
             tracks_by_part: dict[int, list[_FigaTrack]] = {}

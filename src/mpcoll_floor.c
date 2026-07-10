@@ -769,10 +769,12 @@ uint8_t action_uses_landing_floor_release_coll(uint16_t a) {
   // rather than the generic edge-snap helper path (mpColl_8004A45C_Floor).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
+  // refs/melee/src/melee/ft/ftmotionstates.c (ftCo_MS_LandingFallSpecial coll_cb)
   // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor,mpColl_8004A45C_Floor}
   // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 classes LANDING_COLL/LANDING_AIR_COLL)
-  return (uint8_t)(msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_LANDING_COLL) ||
+  return (uint8_t)(a == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL ||
+                   msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_LANDING_COLL) ||
                    msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_LANDING_AIR_COLL));
 }
 
@@ -939,12 +941,9 @@ uint8_t floor_line_normal_for_env(const MslBatch* batch, int bi, const MslStageF
   const MslStageFloorLine l = floor_line_world_for_env(batch, bi, g, line_idx);
   float nx = -(l.y1 - l.y0);
   float ny = l.x1 - l.x0;
-  const float len = sqrtf(nx * nx + ny * ny);
-  if (!(len > 0.0f)) {
+  if (!msl_psvec2_normalize(nx, ny, &nx, &ny)) {
     return 0u;
   }
-  nx /= len;
-  ny /= len;
   *nx_out = nx;
   *ny_out = ny;
   return 1u;
@@ -1237,11 +1236,7 @@ uint8_t floor_find_low_raw_floor_contact(const MslBatch* batch, size_t idx, int 
     const MslStageFloorLine l = floor_line_world_for_env(batch, bi, g, (int)li);
     float nx = -(l.y1 - l.y0);
     float ny = l.x1 - l.x0;
-    const float len = sqrtf(nx * nx + ny * ny);
-    if (len > 0.0f) {
-      nx /= len;
-      ny /= len;
-    } else {
+    if (!msl_psvec2_normalize(nx, ny, &nx, &ny)) {
       nx = 0.0f;
       ny = 1.0f;
     }
@@ -2082,11 +2077,7 @@ int msl_mplib_8004dd90_floor(const MslBatch* batch, int bi, const MslStageFloorG
   if (nx_out != NULL || ny_out != NULL) {
     float nx = -(y1 - y0);
     float ny = x1 - x0;
-    const float len = sqrtf(nx * nx + ny * ny);
-    if (len > 0.0f) {
-      nx /= len;
-      ny /= len;
-    } else {
+    if (!msl_psvec2_normalize(nx, ny, &nx, &ny)) {
       nx = 0.0f;
       ny = 1.0f;
     }
@@ -3950,11 +3941,7 @@ uint8_t msl_mpcheck_floor(const MslBatch* batch, size_t idx, int bi, const MslSt
       // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
       float nx = -(y1 - y0);
       float ny = x1 - x0;
-      const float len = sqrtf(nx * nx + ny * ny);
-      if (len > 0.0f) {
-        nx /= len;
-        ny /= len;
-      } else {
+      if (!msl_psvec2_normalize(nx, ny, &nx, &ny)) {
         nx = 0.0f;
         ny = 1.0f;
       }
@@ -4075,11 +4062,7 @@ uint8_t msl_mpcheck_hard_floor(const MslBatch* batch, size_t idx, int bi,
       best_iy = iy;
       float nx = -(y1 - y0);
       float ny = x1 - x0;
-      const float len = sqrtf(nx * nx + ny * ny);
-      if (len > 0.0f) {
-        nx /= len;
-        ny /= len;
-      } else {
+      if (!msl_psvec2_normalize(nx, ny, &nx, &ny)) {
         nx = 0.0f;
         ny = 1.0f;
       }

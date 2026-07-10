@@ -19,10 +19,12 @@
 #include "../src/hitboxes_tables.h"
 #include "../src/hurtcaps_tables.h"
 #include "../src/ids.h"
+#include "../src/item_article_params.h"
 #include "../src/attack_id_tables.h"
 #include "../src/move_tables.h"
 #include "../src/motion_state_owners.h"
 #include "../src/shield_tilt_table.h"
+#include "../src/stage_item_params.h"
 #include "../src/staling.h"
 #include "../src/state_flags.h"
 
@@ -1310,6 +1312,52 @@ static inline uint8_t msl_py_hitbox_hitbox_intersects_swept(const MslPyHbPrim* a
   return d2 <= (rr * rr) ? 1u : 0u;
 }
 
+static inline uint8_t msl_py_hitbox_item_hurtcap_intersects(const MslPyHbPrim* hb, float ax,
+                                                            float ay, float az, float bx, float by,
+                                                            float bz, float hurt_r) {
+  if (hb == NULL || hb->valid == 0u) return 0u;
+  const float hx0 = hb->prev_valid != 0u ? hb->prev_x : hb->x;
+  const float hy0 = hb->prev_valid != 0u ? hb->prev_y : hb->y;
+  const float hz0 = hb->prev_valid != 0u ? hb->prev_z : hb->z;
+  float d2 = 0.0f;
+  combat_segment_segment_dist2(hx0, hy0, hz0, hb->x, hb->y, hb->z, ax, ay, az, bx, by, bz, &d2,
+                               NULL, NULL);
+  const float rr = hb->r + hurt_r;
+  return d2 <= rr * rr ? 1u : 0u;
+}
+
+static inline uint8_t msl_py_item_same_instance(const MslItem* lhs, const MslItem* rhs) {
+  if (lhs == NULL || rhs == NULL || lhs->exists == 0u || rhs->exists == 0u ||
+      lhs->type != rhs->type) {
+    return 0u;
+  }
+  if (lhs->spawn_id != 0u || rhs->spawn_id != 0u) {
+    return lhs->spawn_id == rhs->spawn_id ? 1u : 0u;
+  }
+  return lhs->instance_id != 0u && lhs->instance_id == rhs->instance_id ? 1u : 0u;
+}
+
+static const MslItem* msl_py_find_prior_item(const MslItem* prev_items, const MslItem* cur) {
+  if (prev_items == NULL || cur == NULL) return NULL;
+  for (int slot = 0; slot < MSL_MAX_ITEMS; slot++) {
+    if (msl_py_item_same_instance(cur, &prev_items[slot])) return &prev_items[slot];
+  }
+  return NULL;
+}
+
+static inline uint8_t msl_py_hitbox_can_damage_item(const MslPyHbPrim* hb,
+                                                    uint8_t target_grounded) {
+  if (hb == NULL || hb->valid == 0u || !(hb->damage > 0.0f) ||
+      hb->element == (uint8_t)MSL_HIT_ELEMENT_CATCH ||
+      hb->element == (uint8_t)MSL_HIT_ELEMENT_INERT || !msl_hitbox_x42_b7_enabled(hb->flags) ||
+      (hb->flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u) {
+    return 0u;
+  }
+  const uint16_t target_flag = target_grounded != 0u ? (uint16_t)MSL_HITBOX_FLAG_HIT_GROUNDED
+                                                     : (uint16_t)MSL_HITBOX_FLAG_HIT_AERIAL;
+  return (hb->flags & target_flag) != 0u ? 1u : 0u;
+}
+
 static inline float msl_py_clamp01(float x) {
   if (x < 0.0f) {
     return 0.0f;
@@ -1404,14 +1452,16 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   PyObject* rotate_model_obj = Py_None;
   PyObject* rotate_valid_obj = Py_None;
   PyObject* percent_obj = Py_None;
+  PyObject* items_obj = Py_None;
   if (!PyArg_ParseTuple(
-          args, "iiOOOOOOOOOOOOOOOOOOOOOOOOOOOOiii", &num_players, &is_teams, &team_obj, &char_obj,
+          args, "iiOOOOOOOOOOOOOOOOOOOOOOOOOOOOOiii", &num_players, &is_teams, &team_obj, &char_obj,
           &action_obj, &action_frame_obj, &anim_obj, &facing_obj, &on_ground_obj, &pos_x_obj,
           &pos_y_obj, &scale_y_obj, &guard_x8_obj, &guard_x4_obj, &stocks_obj, &shield_hp_obj,
           &hurtbox_state_obj, &hitlag_obj, &last_hit_by_obj, &instance_hit_by_obj, &instance_id_obj,
           &input_buttons_obj, &input_l_obj, &input_r_obj, &turn_has_turned_obj, &anim_frame_obj,
-          &frame_speed_obj, &rotate_model_obj, &rotate_valid_obj, &percent_obj, &include_per_hitbox,
-          &include_replay_only_shield_admission, &include_replay_only_body_admission)) {
+          &frame_speed_obj, &rotate_model_obj, &rotate_valid_obj, &percent_obj, &items_obj,
+          &include_per_hitbox, &include_replay_only_shield_admission,
+          &include_replay_only_body_admission)) {
     return NULL;
   }
   if (num_players != 2 && num_players != 4) {
@@ -1466,6 +1516,11 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   OPT_ARR(rotate_valid, rotate_valid_obj, NPY_UINT8, "specialhi_rotate_model_valid_u8");
   OPT_ARR(percent, percent_obj, NPY_FLOAT32, "percent");
 #undef OPT_ARR
+  PyArrayObject* items = NULL;
+  if (items_obj != Py_None) {
+    items = require_contiguous_array_readonly(items_obj, NPY_UINT8, 2, "items_u8");
+    if (items == NULL) return NULL;
+  }
 
   const npy_intp n = PyArray_DIM(action_id, 0);
   const npy_intp width = PyArray_DIM(action_id, 1);
@@ -1505,10 +1560,16 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   if (rotate_valid != NULL) CHECK_DIMS(rotate_valid, "specialhi_rotate_model_valid_u8");
   if (percent != NULL) CHECK_DIMS(percent, "percent");
 #undef CHECK_DIMS
+  if (items != NULL && (PyArray_DIM(items, 0) != n ||
+                        PyArray_DIM(items, 1) < (npy_intp)(sizeof(MslItem) * MSL_MAX_ITEMS))) {
+    PyErr_SetString(PyExc_ValueError, "items_u8 must match frame count and MslItem row width");
+    return NULL;
+  }
 
   if (common_params_init() != 0 || char_params_init() != 0 || anim_pose_init() != 0 ||
       anim_table_init() != 0 || hitboxes_tables_init() != 0 || hurtcaps_tables_init() != 0 ||
-      shield_tilt_table_init() != 0) {
+      shield_tilt_table_init() != 0 ||
+      (items != NULL && (item_article_params_init() != 0 || stage_item_params_init() != 0))) {
     PyErr_SetString(PyExc_RuntimeError, "combat hitlist native tables failed to initialize");
     return NULL;
   }
@@ -1517,6 +1578,10 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
     PyErr_SetString(PyExc_RuntimeError, "common params unavailable");
     return NULL;
   }
+  const MslYoshiShyguyParams* shyguy_params =
+      items != NULL ? stage_item_params_yoshi_shyguy() : NULL;
+  const MslItemArticleParams* sheik_item_params =
+      items != NULL ? item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK) : NULL;
 
   npy_intp dims_dense[4] = {n, (npy_intp)MSL_MAX_PLAYERS, (npy_intp)MSL_HITLIST_GROUPS,
                             (npy_intp)MSL_MAX_PLAYERS};
@@ -1529,14 +1594,18 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   PyArrayObject* out_hb_cd = (PyArrayObject*)PyArray_ZEROS(4, dims_hb, NPY_UINT16, 0);
   PyArrayObject* out_hb_iid = (PyArrayObject*)PyArray_ZEROS(4, dims_hb, NPY_UINT16, 0);
   PyArrayObject* out_shield_kind = (PyArrayObject*)PyArray_ZEROS(4, dims_hb, NPY_UINT8, 0);
+  npy_intp dims_processhit[2] = {n, (npy_intp)MSL_MAX_PLAYERS};
+  PyArrayObject* out_processhit_x1914 =
+      (PyArrayObject*)PyArray_ZEROS(2, dims_processhit, NPY_UINT8, 0);
   if (out_cd == NULL || out_iid == NULL || out_hb_valid == NULL || out_hb_cd == NULL ||
-      out_hb_iid == NULL || out_shield_kind == NULL) {
+      out_hb_iid == NULL || out_shield_kind == NULL || out_processhit_x1914 == NULL) {
     Py_XDECREF(out_cd);
     Py_XDECREF(out_iid);
     Py_XDECREF(out_hb_valid);
     Py_XDECREF(out_hb_cd);
     Py_XDECREF(out_hb_iid);
     Py_XDECREF(out_shield_kind);
+    Py_XDECREF(out_processhit_x1914);
     return NULL;
   }
 
@@ -1576,6 +1645,8 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   const uint8_t* rotate_valid_p =
       rotate_valid != NULL ? (const uint8_t*)PyArray_DATA(rotate_valid) : NULL;
   const float* percent_p = percent != NULL ? (const float*)PyArray_DATA(percent) : NULL;
+  const uint8_t* items_p = items != NULL ? (const uint8_t*)PyArray_DATA(items) : NULL;
+  const size_t items_stride = items != NULL ? (size_t)PyArray_STRIDE(items, 0) : 0u;
 
   uint16_t* out_cd_p = (uint16_t*)PyArray_DATA(out_cd);
   uint16_t* out_iid_p = (uint16_t*)PyArray_DATA(out_iid);
@@ -1583,6 +1654,7 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   uint16_t* out_hb_cd_p = (uint16_t*)PyArray_DATA(out_hb_cd);
   uint16_t* out_hb_iid_p = (uint16_t*)PyArray_DATA(out_hb_iid);
   uint8_t* out_shield_kind_p = (uint8_t*)PyArray_DATA(out_shield_kind);
+  uint8_t* out_processhit_x1914_p = (uint8_t*)PyArray_DATA(out_processhit_x1914);
 
   uint16_t hitlist_cd[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS][MSL_MAX_PLAYERS] = {{{0}}};
   uint16_t hitlist_iid[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS][MSL_MAX_PLAYERS] = {{{0}}};
@@ -2064,9 +2136,11 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
           continue;
         }
         const uint8_t defender_no_damage = hurtbox_state_p[di] != 0u ? 1u : 0u;
-        if (sim_hitlag[attacker] != 0u || sim_hitlag[defender] != 0u) {
-          continue;
-        }
+        // Fighter_8006CB94 has no x2219_b5 hitlag gate. Frozen HitCapsules therefore continue to
+        // collide and can accept a different victim while the attacker remains in hitlag; the
+        // per-hitbox victim list, not hitlag, suppresses repeats.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
         const uint8_t defender_on_ground = on_ground_p[di] != 0u ? 1u : 0u;
         const uint8_t defender_hitlag_seen = hitlag_p != NULL ? (hitlag_p[di] > 0u ? 1u : 0u) : 1u;
         const uint8_t attacker_hitlag_seen = hitlag_p != NULL ? (hitlag_p[ai] > 0u ? 1u : 0u) : 1u;
@@ -2261,8 +2335,16 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
                     msl_py_calc_hitlag_frames(common, msl_py_get_env_dmg(hb->damage));
                 pending_count++;
               }
+              if (fi + 1 < n && hb->element != (uint8_t)MSL_HIT_ELEMENT_INERT &&
+                  hb->element != (uint8_t)MSL_HIT_ELEMENT_CATCH && hb->damage > 0.0f) {
+                out_processhit_x1914_p[(fi + 1) * MSL_MAX_PLAYERS + attacker] = 1u;
+              }
               did_hit = 1u;
               break;
+            }
+            if (hb->element != (uint8_t)MSL_HIT_ELEMENT_INERT &&
+                hb->element != (uint8_t)MSL_HIT_ELEMENT_CATCH && hb->damage > 0.0f) {
+              out_processhit_x1914_p[fi * MSL_MAX_PLAYERS + attacker] = 1u;
             }
             const uint16_t seeded = hb->rehit == 0u ? 0xFFFFu : (uint16_t)hb->rehit;
             for (int reg = 0; reg < MSL_MAX_HITBOXES; reg++) {
@@ -2290,6 +2372,81 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
           if (did_hit) {
             break;
           }
+        }
+      }
+    }
+
+    if (items_p != NULL && fi > 0) {
+      const MslItem* prev_items =
+          (const MslItem*)(const void*)(items_p + (size_t)(fi - 1) * items_stride);
+      const MslItem* cur_items = (const MslItem*)(const void*)(items_p + (size_t)fi * items_stride);
+      for (int item_slot = 0; item_slot < MSL_MAX_ITEMS; item_slot++) {
+        const MslItem* item = &cur_items[item_slot];
+        if (item->exists == 0u) continue;
+        const MslItem* prior = msl_py_find_prior_item(prev_items, item);
+        if (prior == NULL || item->damage <= prior->damage) continue;
+
+        const uint8_t is_shyguy =
+            stage_item_params_is_yoshi_shyguy_item_type(shyguy_params, item->type);
+        const uint8_t is_needle =
+            (uint8_t)(sheik_item_params != NULL && sheik_item_params->needle_throw_itkind != 0u &&
+                      item->type == sheik_item_params->needle_throw_itkind);
+        if ((!is_shyguy && !is_needle) || (is_shyguy && prior->state != 1u && prior->state != 4u) ||
+            (is_needle && prior->state != 0u && prior->state != 1u && prior->state != 2u &&
+             prior->state != 4u)) {
+          continue;
+        }
+
+        int candidate = -1;
+        int candidate_count = 0;
+        for (int attacker = 0; attacker < num_players; attacker++) {
+          if (is_needle && attacker == (int)prior->owner) continue;
+          uint8_t overlaps = 0u;
+          for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES && overlaps == 0u; hb_id++) {
+            const MslPyHbPrim* hb = &hitboxes[attacker][hb_id];
+            if (is_shyguy) {
+              if (!msl_py_hitbox_can_damage_item(hb, 0u)) continue;
+              for (uint16_t hi = 0; hi < shyguy_params->hurtbox_count && hi < 2u; hi++) {
+                const float ax = item->pos_x + shyguy_params->hurtbox_a_offset[hi][0];
+                const float ay = item->pos_y + shyguy_params->hurtbox_a_offset[hi][1];
+                const float az = shyguy_params->hurtbox_a_offset[hi][2];
+                const float bx = item->pos_x + shyguy_params->hurtbox_b_offset[hi][0];
+                const float by = item->pos_y + shyguy_params->hurtbox_b_offset[hi][1];
+                const float bz = shyguy_params->hurtbox_b_offset[hi][2];
+                const float hurt_r =
+                    shyguy_params->hurtbox_scale[hi] * shyguy_params->collision_ecb_scale;
+                if (msl_py_hitbox_item_hurtcap_intersects(hb, ax, ay, az, bx, by, bz, hurt_r)) {
+                  overlaps = 1u;
+                  break;
+                }
+              }
+            } else {
+              const uint8_t item_grounded = prior->state == 2u ? 1u : 0u;
+              if (!msl_py_hitbox_can_damage_item(hb, item_grounded)) continue;
+              const float ax = item->pos_x + sheik_item_params->needle_hurtbox_a_offset[0];
+              const float ay = item->pos_y + sheik_item_params->needle_hurtbox_a_offset[1];
+              const float az = sheik_item_params->needle_hurtbox_a_offset[2];
+              const float bx = item->pos_x + sheik_item_params->needle_hurtbox_b_offset[0];
+              const float by = item->pos_y + sheik_item_params->needle_hurtbox_b_offset[1];
+              const float bz = sheik_item_params->needle_hurtbox_b_offset[2];
+              overlaps = msl_py_hitbox_item_hurtcap_intersects(
+                  hb, ax, ay, az, bx, by, bz, sheik_item_params->needle_hurtbox_scale);
+            }
+          }
+          if (overlaps != 0u) {
+            candidate = attacker;
+            candidate_count++;
+          }
+        }
+
+        // Item damage has no Slippi attacker field. A unique source-gated hurtbox overlap is the
+        // bounded native provenance available for it_802703E8; ambiguous multi-fighter overlaps
+        // remain unowned rather than assigning every item damage transition to Falcon.
+        // refs/melee/src/melee/it/itcoll.c::{it_8026D564,it_802703E8}
+        // data/stage_items/yoshi_shyguy.bin::MSLSTIO1
+        // data/items/articles/fox_falco.bin::MSLITAR1
+        if (candidate_count == 1) {
+          out_processhit_x1914_p[fi * MSL_MAX_PLAYERS + candidate] = 1u;
         }
       }
     }
@@ -2398,8 +2555,8 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
     }
   }
 
-  return Py_BuildValue("NNNNNN", out_cd, out_iid, out_hb_valid, out_hb_cd, out_hb_iid,
-                       out_shield_kind);
+  return Py_BuildValue("NNNNNNN", out_cd, out_iid, out_hb_valid, out_hb_cd, out_hb_iid,
+                       out_shield_kind, out_processhit_x1914);
 }
 
 PyObject* msl_derive_specialhi_rotate_model_seed_lane_py(PyObject* self, PyObject* args) {

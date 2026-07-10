@@ -3293,6 +3293,32 @@ PyObject* msl_debug_hitlist_fighter_contains_py(PyObject* self, PyObject* args) 
   return PyLong_FromLong((long)present);
 }
 
+PyObject* msl_debug_hitlist_item_contains_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* capsule = NULL;
+  int batch_index = 0;
+  int item_slot = 0;
+  int hb_id = 0;
+  int victim = 0;
+  if (!PyArg_ParseTuple(args, "Oiiii", &capsule, &batch_index, &item_slot, &hb_id, &victim)) {
+    return NULL;
+  }
+  PyMslHandle* h = (PyMslHandle*)PyCapsule_GetPointer(capsule, "msl.Handle");
+  if (h == NULL || h->batch == NULL) {
+    PyErr_SetString(PyExc_ValueError, "invalid handle");
+    return NULL;
+  }
+
+  int present = 0;
+  const int err = msl_batch_debug_hitlist_item_contains(h->batch, batch_index, item_slot, hb_id,
+                                                        victim, &present);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_hitlist_item_contains failed: %d", err);
+    return NULL;
+  }
+  return PyLong_FromLong((long)present);
+}
+
 PyObject* msl_debug_hitlist_fighter_capsule_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* capsule = NULL;

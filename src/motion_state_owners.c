@@ -12,11 +12,11 @@
 
 enum {
   TABLE_MAGIC_LEN = 8,
-  TABLE_HDR_BYTES_V1 = 8 + 4 + 2 + 2 + 4 * 11,
+  TABLE_HDR_BYTES = 8 + 4 + 2 + 2 + 4 * 12,
 };
 
 static const uint8_t k_magic[TABLE_MAGIC_LEN] = {'M', 'S', 'L', 'M', 'S', 'O', '0', '1'};
-static const uint32_t k_format_version = 20;
+static const uint32_t k_format_version = 21;
 
 typedef struct {
   uint8_t* buf;
@@ -173,7 +173,7 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
     print_generate_hint(data_dir);
     return -1;
   }
-  if (sz < (size_t)TABLE_HDR_BYTES_V1) {
+  if (sz < (size_t)TABLE_HDR_BYTES) {
     fprintf(stderr, "msl: motion-state owner table header too small for char_id=%u: %s (sz=%zu)\n",
             (unsigned)char_id, path, sz);
     print_generate_hint(data_dir);
@@ -213,25 +213,31 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
   const uint32_t class2_bits_off = read_u32_le(buf + 52);
   const uint32_t class3_bits_off = read_u32_le(buf + 56);
   const uint32_t fx_special_kind_off = read_u32_le(buf + 60);
-  const uint32_t file_bytes = fx_special_kind_off + (uint32_t)action_count;
+  const uint64_t file_bytes = (uint64_t)fx_special_kind_off + (uint64_t)action_count;
 
-  if (file_bytes != (uint32_t)sz) {
+  if (file_bytes != (uint64_t)sz) {
     fprintf(stderr,
             "msl: motion-state owner table file size mismatch for char_id=%u: %s "
-            "(derived=%u actual=%zu)\n",
-            (unsigned)char_id, path, (unsigned)file_bytes, sz);
+            "(derived=%llu actual=%zu)\n",
+            (unsigned)char_id, path, (unsigned long long)file_bytes, sz);
     print_generate_hint(data_dir);
     alloc_free(buf);
     return -1;
   }
   const uint32_t u16_bytes = (uint32_t)action_count * 2u;
   const uint32_t u32_bytes = (uint32_t)action_count * 4u;
-  if (!range_ok(submotion_off, u16_bytes, sz) || !range_ok(x4_flags_off, u32_bytes, sz) ||
-      !range_ok(motion_word_off, u32_bytes, sz) || !range_ok(anim_cb_off, u16_bytes, sz) ||
-      !range_ok(iasa_cb_off, u16_bytes, sz) || !range_ok(phys_cb_off, u16_bytes, sz) ||
-      !range_ok(coll_cb_off, u16_bytes, sz) || !range_ok(cam_cb_off, u16_bytes, sz) ||
-      !range_ok(class_bits_off, u32_bytes, sz) || !range_ok(class2_bits_off, u32_bytes, sz) ||
-      !range_ok(class3_bits_off, u32_bytes, sz) ||
+  if (submotion_off < (uint32_t)TABLE_HDR_BYTES || x4_flags_off < (uint32_t)TABLE_HDR_BYTES ||
+      motion_word_off < (uint32_t)TABLE_HDR_BYTES || anim_cb_off < (uint32_t)TABLE_HDR_BYTES ||
+      iasa_cb_off < (uint32_t)TABLE_HDR_BYTES || phys_cb_off < (uint32_t)TABLE_HDR_BYTES ||
+      coll_cb_off < (uint32_t)TABLE_HDR_BYTES || cam_cb_off < (uint32_t)TABLE_HDR_BYTES ||
+      class_bits_off < (uint32_t)TABLE_HDR_BYTES || class2_bits_off < (uint32_t)TABLE_HDR_BYTES ||
+      class3_bits_off < (uint32_t)TABLE_HDR_BYTES ||
+      fx_special_kind_off < (uint32_t)TABLE_HDR_BYTES || !range_ok(submotion_off, u16_bytes, sz) ||
+      !range_ok(x4_flags_off, u32_bytes, sz) || !range_ok(motion_word_off, u32_bytes, sz) ||
+      !range_ok(anim_cb_off, u16_bytes, sz) || !range_ok(iasa_cb_off, u16_bytes, sz) ||
+      !range_ok(phys_cb_off, u16_bytes, sz) || !range_ok(coll_cb_off, u16_bytes, sz) ||
+      !range_ok(cam_cb_off, u16_bytes, sz) || !range_ok(class_bits_off, u32_bytes, sz) ||
+      !range_ok(class2_bits_off, u32_bytes, sz) || !range_ok(class3_bits_off, u32_bytes, sz) ||
       !range_ok(fx_special_kind_off, (uint32_t)action_count, sz)) {
     fprintf(stderr, "msl: motion-state owner table bad offsets for char_id=%u: %s\n",
             (unsigned)char_id, path);

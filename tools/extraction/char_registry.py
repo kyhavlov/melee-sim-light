@@ -23,6 +23,8 @@ class CharInfo:
     external_id: int
     pl_dat: str  # main fighter data archive in _iso
     aj_dat: str  # animation archive in _iso
+    costume_dat: str  # costume-0 model/skeleton archive in _iso
+    costume_joint: str  # public root joint symbol in costume_dat
     ftdata_symbol: str  # public symbol of the ftData root in pl_dat
     decomp_dir: str  # refs/melee/src/melee/ft/chara/<dir>
     decomp_prefix: str  # per-char function prefix (ftFx_, ftFc_, ftMs_, ...)
@@ -41,6 +43,8 @@ CHARS: dict[str, CharInfo] = {
         external_id=2,
         pl_dat="PlFx.dat",
         aj_dat="PlFxAJ.dat",
+        costume_dat="PlFxNr.dat",
+        costume_joint="PlyFox5K_Share_joint",
         ftdata_symbol="ftDataFox",
         decomp_dir="ftFox",
         decomp_prefix="ftFx_",
@@ -55,6 +59,8 @@ CHARS: dict[str, CharInfo] = {
         external_id=20,
         pl_dat="PlFc.dat",
         aj_dat="PlFcAJ.dat",
+        costume_dat="PlFcNr.dat",
+        costume_joint="PlyFalco5K_Share_joint",
         ftdata_symbol="ftDataFalco",
         decomp_dir="ftFalco",
         decomp_prefix="ftFc_",
@@ -69,6 +75,8 @@ CHARS: dict[str, CharInfo] = {
         external_id=9,
         pl_dat="PlMs.dat",
         aj_dat="PlMsAJ.dat",
+        costume_dat="PlMsNr.dat",
+        costume_joint="PlyMars5K_Share_joint",
         ftdata_symbol="ftDataMars",
         decomp_dir="ftMars",
         decomp_prefix="ftMs_",
@@ -83,6 +91,8 @@ CHARS: dict[str, CharInfo] = {
         external_id=0,
         pl_dat="PlCa.dat",
         aj_dat="PlCaAJ.dat",
+        costume_dat="PlCaNr.dat",
+        costume_joint="PlyCaptain5K_Share_joint",
         ftdata_symbol="ftDataCaptain",
         decomp_dir="ftCaptain",
         decomp_prefix="ftCa_",
@@ -97,6 +107,8 @@ CHARS: dict[str, CharInfo] = {
         external_id=19,
         pl_dat="PlSk.dat",
         aj_dat="PlSkAJ.dat",
+        costume_dat="PlSkNr.dat",
+        costume_joint="PlySeak5K_Share_joint",
         ftdata_symbol="ftDataSeak",
         decomp_dir="ftSeak",
         decomp_prefix="ftSk_",
@@ -111,6 +123,8 @@ CHARS: dict[str, CharInfo] = {
         external_id=18,
         pl_dat="PlZd.dat",
         aj_dat="PlZdAJ.dat",
+        costume_dat="PlZdNr.dat",
+        costume_joint="PlyZelda5K_Share_joint",
         ftdata_symbol="ftDataZelda",
         decomp_dir="ftZelda",
         decomp_prefix="ftZd_",

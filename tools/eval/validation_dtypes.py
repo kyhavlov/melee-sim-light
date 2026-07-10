@@ -111,7 +111,8 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
         # data/ecb/*
         ("ecb_lock_bottom_rel_y_f32", _arr("<f4", MAX_PLAYERS)),
-        ("ecb_lock_bottom_rel_y_valid_u8", _arr("u1", MAX_PLAYERS)),
+        # 0 unavailable; 1 replay-seeded CollData; 4 live ftCommon callback provenance.
+        ("ecb_lock_bottom_owner_u8", _arr("u1", MAX_PLAYERS)),
         # Hidden active-hitlag CollData.ecb envelope. This is the source collision envelope carried
         # into frozen Damage callbacks, which can differ from the replay-visible Damage pose.
         # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
@@ -231,6 +232,17 @@ SEED_DTYPE = np.dtype(
         # fp+0x1A54 Attack100 mash counter; prefix-causal hidden state for mid-jab reseeds.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
         ("jab_rapid_count", _arr("u1", MAX_PLAYERS)),
+        # mv.co.attack100.x0/x4 hidden latches for mid-loop rapid-jab reseeds.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+        #   ftCo_Attack100Loop_Anim,ftCo_Attack100Loop_IASA}
+        ("attack100_x0", _arr("u1", MAX_PLAYERS)),
+        ("attack100_x4", _arr("u1", MAX_PLAYERS)),
+        # Grounded Falcon Kick mv.ca.speciallw.{x0,friction}, reconstructed from the replay prefix.
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+        #   ftCa_SpecialLw_Enter,ftCa_SpecialHi_800E400C}
+        # refs/melee/src/melee/ft/fighter.c (deal_dmg_cb under fp->dmg.x1914)
+        ("falcon_speciallw_hits", _arr("u1", MAX_PLAYERS)),
+        ("falcon_speciallw_friction", _arr("<f4", MAX_PLAYERS)),
         ("match_flow_timer", _arr("u1", MAX_PLAYERS)),
         # Hidden fighter kind for stock-share / pending Rebirth rows where Slippi serializes the
         # inter-stock DeadDown slot with char_id=0 and stocks=0 until Rebirth becomes visible.

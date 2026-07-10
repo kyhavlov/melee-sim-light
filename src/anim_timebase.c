@@ -561,8 +561,12 @@ static inline uint8_t anim_timebase_anim_source_char_id(const MslBatch* batch, i
   // thrown victims of marth's up-throw 6 frames early).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState (arg3 anim source)
-  // Capture* victim states pass arg3=NULL and keep their own anims (ftCo_Attack100.c).
-  if (!msl_action_is_thrown_victim(batch->state.action_id[idx])) {
+  // Ordinary Capture* victim states pass arg3=NULL and keep their own anims. CaptureCaptain is
+  // the exception: ftCo_8009CA0C passes the Falcon attacker as arg3, exactly like Thrown* passes
+  // the thrower.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+  const uint16_t action = batch->state.action_id[idx];
+  if (!msl_action_is_thrown_victim(action) && action != (uint16_t)MSL_ACT_CAPTURE_CAPTAIN) {
     return batch->state.char_id[idx];
   }
   uint8_t owner_p = batch->state.grab_owner_port[idx];
@@ -1279,6 +1283,35 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
             // Dolphin Slash direct landing: LandingFallSpecial with MarsAttributes x2C.
             // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
             lag = (ch != NULL) ? ch->specialhi_landing_lag_frames : lag;
+          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                     (source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                      source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI ||
+                      source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW ||
+                      live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                      live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI ||
+                      live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW)) {
+            // Falcon Dive direct landing: doAirColl and SpecialHiThrow0_Coll enter
+            // LandingFallSpecial with ftCaptainAttributes::specialhi_landing_lag.
+            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{
+            //   doAirColl,ftCa_SpecialHiThrow0_Coll}
+            // data/characters/falcon.json::falcon_specialhi_landing_lag
+            lag = (ch != NULL) ? ch->falcon_specialhi_landing_lag : lag;
+          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                     (source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START ||
+                      live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START)) {
+            // Aerial Raptor Boost miss landing: ftCa_SpecialAirSStart_Coll enters
+            // LandingFallSpecial with ftCaptainAttributes::specials_miss_landing_lag.
+            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirSStart_Coll
+            // data/characters/falcon.json::falcon_specials_miss_landing_lag
+            lag = (ch != NULL) ? ch->falcon_specials_miss_landing_lag : lag;
+          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                     (source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S ||
+                      live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S)) {
+            // Aerial Raptor Boost hit landing: ftCa_SpecialAirS_Coll enters LandingFallSpecial
+            // with ftCaptainAttributes::specials_hit_landing_lag.
+            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirS_Coll
+            // data/characters/falcon.json::falcon_specials_hit_landing_lag
+            lag = (ch != NULL) ? ch->falcon_specials_hit_landing_lag : lag;
           } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
                      (source_prev_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI ||
                       live_prev_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI) &&

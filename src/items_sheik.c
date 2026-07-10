@@ -74,7 +74,9 @@ static inline uint8_t sheik_vanish_fresh_smoke_hitcapsule_hit_by_fighter(
       continue;
     }
     const uint16_t flags = batch->state.hitbox_flags[hb_i];
-    if ((flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C (fighter HitCapsule x42_b5 gate)
+    if (!msl_hitbox_x42_b5_enabled(flags) ||
+        (flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
         (flags & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0u) {
       continue;
     }
@@ -2140,7 +2142,9 @@ static uint8_t sheik_needle_try_fighter_hitbox_damage(MslBatch* batch, int bi, i
         continue;
       }
       const uint16_t flags = batch->state.hitbox_flags[hb_i];
-      if ((flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
+      // refs/melee/src/melee/it/itcoll.c::it_8026D564 (fighter HitCapsule x42_b7 item gate)
+      if (!msl_hitbox_x42_b7_enabled(flags) ||
+          (flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
           !sheik_needle_hitbox_targets_item_ground_state(flags, item_ga)) {
         continue;
       }
@@ -2600,7 +2604,9 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
           continue;
         }
         const uint16_t fflags = batch->state.hitbox_flags[fhb_i];
-        if ((fflags & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0u ||
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C (fighter HitCapsule x42_b5 gate)
+        if (!msl_hitbox_x42_b5_enabled(fflags) ||
+            (fflags & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0u ||
             (fflags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u) {
           continue;
         }
